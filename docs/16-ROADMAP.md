@@ -78,6 +78,10 @@ KFX C ABI, validator, and template repo; the AE Bridge exporter panel and Kiriko
 importer with the fidelity report ([11-AE-IMPORT.md](11-AE-IMPORT.md)); best-effort `.aep`
 structural import.
 
+Also in this phase: the migration-aware first-run screen (K-006,
+[07-UI-SPEC.md](07-UI-SPEC.md) §13.1) — it belongs alongside the AE Bridge, when
+switchers start arriving.
+
 **Gate 4**: a real community AE montage project imports via the Bridge with transforms,
 keyframes, retimes, and mapped effects intact and an honest per-item report; Twixtor OFX
 renders inside Kiriko; a deliberately crashing test plugin takes down its process, not Kiriko.

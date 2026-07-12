@@ -41,6 +41,13 @@ Spec: [15-DESIGN.md](15-DESIGN.md).
 UI copy, per the household mandate. UI strings go through an i18n table from day one so this
 is cheap to revisit.
 
+**K-006 · DECIDED · Migration-aware first run.** On first launch, one skippable screen asks
+which tools the user comes from (Vegas for ramps+effects / Vegas ramps + AE effects / AE for
+both / neither) and tunes defaults accordingly — chiefly the Retime graph lens (speed vs
+value), keymap preset offer, and which mapping tips show. One screen only, re-runnable from
+the command palette, every setting individually changeable. Added 2026-07-12 at Mack's
+request; post-v1 polish. Spec: [07-UI-SPEC.md](07-UI-SPEC.md) §13.1.
+
 ## Core model
 
 **K-020 · DECIDED · Layer-based model with a Sequence layer type.** Ordinary layers stay 1:1

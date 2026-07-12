@@ -519,6 +519,26 @@ Export window. Export never blocks editing; the queue runs in the background.
 
 ## 13. Onboarding and empty states
 
+### 13.1 First-run setup (K-006, post-v1 polish)
+
+On the very first launch only, before any project opens, one calm screen asks a single
+question: *"Where are you coming from?"* with four cards:
+
+| Choice | What it sets |
+|---|---|
+| **Vegas for speed ramps and effects** | Graph editor opens Retime in the **speed graph** by default; ramp preset shelf (Linear/Slow/Fast/Smooth/Sharp) pinned in the graph editor; *New Sequence layer* promoted in the Timeline empty-state hints; Vegas-mapping tips enabled (e.g. "velocity envelope → Retime speed graph"). |
+| **Vegas for speed ramps, AE for effects** | Speed graph default for Retime, **value graph** default for ordinary properties; AE-alternate keymap offered; both mapping tip sets enabled. The most common montage-scene split. |
+| **After Effects for both** | Value graph default everywhere; AE-alternate keymap offered; AE-mapping tips (e.g. "time remap → Retime", "track matte → matte dropdown"). |
+| **Neither / just starting** | Kiriko defaults; beginner-leaning rich tooltips enabled. |
+
+Rules: one screen, skippable (skip = Kiriko defaults), no account, no telemetry, nothing
+else asked. Every affected setting is an ordinary visible setting changeable later, and
+the chooser can be re-run from the command palette (*First-run setup*). This MUST remain
+a single screen — it is a preference primer, not a tour, and does not breach §13's
+no-wizard rule below.
+
+### 13.2 Empty states
+
 - **Empty project**: the Viewer area shows a single calm card with three actions —
   *Import footage*, *New composition*, *Open project* — plus recent projects and a note
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
@@ -531,8 +551,8 @@ Export window. Export never blocks editing; the queue runs in the background.
   concepts with Kiriko-specific behaviour (Retime, overrun, matte, adaptive degradation).
   Tooltips MUST never block input, auto-play media, or step users through forced tours.
   A single setting disables all tooltips.
-- No modal onboarding wizard. The empty states, tooltips, and command palette are the
-  onboarding surface.
+- No multi-step onboarding wizard or forced tour. The single first-run screen (§13.1),
+  empty states, tooltips, and command palette are the entire onboarding surface.
 
 ---
 
