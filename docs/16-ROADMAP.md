@@ -29,13 +29,18 @@ interaction budget throughout.
 
 Layers stack and animate: transform pipeline (4×4 from day one), keyframes with
 AE-compatible bezier maths, the graph editor (value + speed views), masks, blend modes,
-mattes, solids, Precomp layers with collapse, adjustment layers, basic text, the evaluation
+mattes, solids, Precomp layers with collapse, adjustment layers, basic text, the `three_d`
+switch with a basic one-node camera (parallax and smooth camera moves — the flow style's
+second-most-used technique; depth of field and lights arrive in phase 5), the evaluation
 graph with the three-tier content-hash cache and cache bars, background cache fill, export
 queue with H.264/HEVC (NVENC/AMF/QSV + software fallback) and the YouTube/vertical presets.
 
-**Gate 1**: build a five-layer animated composite (footage, text, solid, adjustment grade,
-precomp), see cache bars fill while idle, play it back at 1080p60 in real time from warm
-cache, export it and verify the export matches preview pixel-for-pixel at Full/fp16.
+**Gate 1**: build a six-layer animated composite (footage, text, solid, adjustment grade,
+precomp, and a keyframed 2.5D camera move over parallaxed layers), see cache bars fill
+while idle, play it back at 1080p60 in real time from warm cache, export it and verify the
+export matches preview pixel-for-pixel at Full/fp16. Graph-editor ergonomics get judged
+here too: easing a camera move must feel better than AE, not merely equivalent — this
+style is named after interpolation quality.
 
 ## Phase 2 — Retime
 
@@ -59,9 +64,10 @@ Tier-1 effect suite of [08-EFFECTS.md](08-EFFECTS.md): flow motion blur, glow, c
 browser, LUT loader, echo/trails, glitch basics. Per-layer motion blur. Preset save/load and
 import/export. Scopes panel.
 
-**Gate 3 — the v1 milestone (K-002, [00-VISION.md](00-VISION.md) §4)**: a montage editor
-completes a T3C-style edit start-to-finish in Kiriko alone and exports for YouTube; the full
-stacked look previews in real time at 1080p60 on the reference machine; a six-hour editing
+**Gate 3 — the v1 milestone (K-002, [00-VISION.md](00-VISION.md) §4)**: a flow-style editor
+completes an MVM-style edit start-to-finish in Kiriko alone — beat-marked cuts, flow ramps,
+a smooth camera move, a masked transition, the full stacked look — and exports for YouTube;
+the look previews in real time at 1080p60 on the reference machine; a six-hour editing
 session leaks no memory and never crashes. **This gate is v1.0.**
 
 ## Phase 4 — Extensibility
@@ -78,11 +84,13 @@ renders inside Kiriko; a deliberately crashing test plugin takes down its proces
 
 ## Phase 5 — AE parity march
 
-Ongoing, ordered by community demand: 2.5D cameras/lights/DOF in full, the tracker and
-stabiliser, keying and matte tools, tier-2 effects, text animators, shape operators
-(repeater et al.), variable mask feather, rotoscoping, the **Composer** audio workspace
-([09-AUDIO.md](09-AUDIO.md) §Composer), pitch-preserving audio retime, OFX GPU render suite,
-OCIO colour management, app scripting.
+Ongoing, ordered by community demand: 2.5D cameras/lights/DOF in full, game camera-path
+import (HLAE and friends — absorbing the flow scene's external tool chain), the tracker and
+stabiliser, keying and matte tools, rotoscoping (the flow style leans on hand-roto and
+multi-pass footage; depth-pass-aware compositing belongs here), a particle system, tier-2
+effects, text animators, shape operators (repeater et al.), variable mask feather, the
+**Composer** audio workspace ([09-AUDIO.md](09-AUDIO.md) §Composer), pitch-preserving audio
+retime, OFX GPU render suite, OCIO colour management, app scripting.
 
 **Gate 5 (rolling)**: each quarter, one published "made only in Kiriko" piece that
 previously required AE plus plugins.

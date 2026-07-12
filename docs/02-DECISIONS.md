@@ -1,7 +1,7 @@
 # Kiriko decision log
 
 **Status: canonical.** Numbered, append-only. Every entry is either **DECIDED** (locked by
-Mack) or **PROPOSED** (a strong default chosen during the July 2026 design sessions; veto by
+the project owner) or **PROPOSED** (a strong default chosen during the July 2026 design sessions; veto by
 editing the entry and noting why). Reversing a DECIDED entry requires a new entry that
 supersedes it — never edit history.
 
@@ -16,12 +16,17 @@ Ships and is optimised for Windows; the Rust/wgpu stack (K-010) means the app al
 macOS during development so the window can be watched while building. macOS/Linux releases are
 a possibility, never a priority.
 
-**K-002 · DECIDED · Primary audience: gaming-edit / montage editors first; full AE
-replacement over time.** v1 milestone: a T3C-style montage can be completed start-to-finish in
-Kiriko (import, beat-synced cutting, speed ramping with optical-flow slow motion,
-shake/glow/motion-blur/grade, export for YouTube). Long-term: Kiriko's own version of
-everything After Effects has. Roadmap gates are phrased as "can a montage editor do X yet"
-([16-ROADMAP.md](16-ROADMAP.md)).
+**K-002 · DECIDED · Primary audience: flow / MVM-style gaming editors first; full AE
+replacement over time.** Clarified 2026-07-12: the target lane is the smooth, cinematic
+style (the CoD movie-making "MVM" lineage and today's flow style — the project owner's own
+lane, per editors like stooh and starkerr), not classic kill-montage editing. This style is
+compositing and animation as much as cutting. v1 milestone: a flow-style edit can be
+completed start-to-finish in Kiriko (import high-fps captures, cut against the music with
+beat markers, speed ramping with optical-flow slow motion, a smooth 2.5D camera move, a
+masked transition, shake/glow/motion-blur/grade, export for YouTube). Long-term: Kiriko's
+own version of everything After Effects has. Consequence: graph-editor ergonomics, masking,
+and a basic camera join the v1 path ([16-ROADMAP.md](16-ROADMAP.md)); the effect staples of
+K-064 are unchanged. Roadmap gates are phrased as "can a flow-style editor do X yet".
 
 **K-003 · DECIDED · Licence: GPLv3.** Community contributions welcome; forks must stay open;
 official binaries may still be sold later. LICENSE file at repo root.

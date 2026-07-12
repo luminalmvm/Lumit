@@ -9,22 +9,32 @@ Status: design phase. This document is the why; the rest of [docs/](.) is the wh
 
 ## 1. The gap
 
-The gaming-edit and montage scene — velocity edits, beat-synced cuts, flow-interpolated slow
-motion, glow-and-shake aesthetics — runs on After Effects plus an ~$800 stack of third-party
-plugins (Twixtor, RSMB, Deep Glow, Sapphire), much of it pirated by a young audience that
-cannot afford it. Their daily experience is preview lag, RAM exhaustion, render queues, and
-crashes, in a tool whose retiming workflow they fight rather than use: many prefer Vegas
-Pro's ramp-and-cut velocity editing and round-trip between two or three applications to
-finish one montage. CapCut proved this audience will move instantly to anything that is
-fast and free; nothing fast and free is also deep.
+The gaming-edit scene runs on After Effects plus an ~$800 stack of third-party plugins
+(Twixtor, RSMB, Deep Glow, Sapphire, FilmConvert), much of it pirated by a young audience
+that cannot afford it. Kiriko's home lane within that scene is the **flow / MVM style** —
+the CoD movie-making ("MVM") lineage (codmvm.com), today curated by teams and taught across
+the T3C community: one- to three-minute music-video-style edits built from game footage,
+mood- and phrasing-driven rather than beat-hammering, defined by velocity ramps, synthetic
+camera moves, masked and morphing transitions, and identity colour grades. This is compositing and
+animation editing as much as cutting — a style literally named after interpolation quality.
+
+Its editors' daily experience is preview lag, RAM exhaustion, render-time blackmail on blur
+and retiming, and projects that grow until, in one editor's words, After Effects becomes
+"almost unusable" — plus an external tool chain (HLAE camera paths, Flowframes/RIFE
+interpolation pre-passes, re-encodes) bolted around AE's gaps, and a retiming workflow many
+fight rather than use, preferring Vegas Pro's ramp-and-cut editing. CapCut proved this
+audience will move instantly to anything that is fast and free; nothing fast and free is
+also deep.
 
 Kiriko is the deep tool built for them: After Effects' compositing model, Vegas' retiming
 soul, one application, GPU-first, open source (GPLv3).
 
 ## 2. Who it is for
 
-1. **First: montage / gaming-edit editors** (the T3C community and its neighbours). The v1
-   milestone is theirs — see §4.
+1. **First: flow / MVM-style gaming editors** (the smooth, cinematic lane of the T3C
+   community and its neighbours). Their editing is compositing and animation as much as
+   cutting: the graph editor, the camera, and masks are daily tools, not occasional ones.
+   The v1 milestone is theirs — see §4.
 2. **Then: anyone leaving After Effects.** Kiriko grows toward a full AE replacement, with
    its own version of everything AE has (decision K-002), an AE project importer, and OFX
    plugin support so existing tools come along.
@@ -54,10 +64,11 @@ Everything in the specs traces to one of these; a feature that serves none of th
 
 ## 4. The v1 milestone
 
-> A montage editor records gameplay tonight and publishes tomorrow, using only Kiriko:
-> import 120/240 fps captures, cut to the beat against auto beat markers, speed-ramp with
-> flow slow motion, apply shake/glow/motion-blur/grade, and export a YouTube-ready 1080p60
-> file — with real-time preview of the full look on an RTX 3060, and not one crash.
+> A flow-style editor records gameplay tonight and publishes tomorrow, using only Kiriko:
+> import 120/240 fps captures, cut against the music's phrasing with auto beat markers,
+> speed-ramp with flow slow motion, animate a smooth 2.5D camera move, build a masked
+> transition, apply shake/glow/motion-blur/grade, and export a YouTube-ready 1080p60 file —
+> with real-time preview of the full look on an RTX 3060, and not one crash.
 
 Phases and gates: [16-ROADMAP.md](16-ROADMAP.md).
 
