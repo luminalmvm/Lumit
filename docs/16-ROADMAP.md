@@ -102,7 +102,9 @@ previously required AE plus plugins.
 ## Phase 6 — Beyond parity
 
 The long ambitions (K-023): working directly in 3D, Blender scene import, deeper 3D
-compositing. Also: Lottie export, OpenTimelineIO interchange, render-farm/CLI export.
+compositing. Also: Lottie export, OpenTimelineIO interchange, render-farm/CLI export, and
+a first-class macOS/Metal release (K-033 — the engine already runs on Metal via wgpu;
+this adds VideoToolbox zero-copy, ProRes, the OFX Metal suite, and notarisation).
 Specified when we get there; the 4×4 transform core, rational time, and DAG engine were
 chosen so none of this requires a rewrite.
 

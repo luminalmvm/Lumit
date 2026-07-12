@@ -124,6 +124,16 @@ Spec: [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md).
 recommended.** CPU-only operation must work (slowly) for every built-in effect: each WGSL
 effect ships a CPU reference implementation, which doubles as its test oracle.
 
+**K-033 · DECIDED · Metal/macOS is a supported future target, already carried by the
+architecture.** The wgpu pipeline (K-011) compiles WGSL to Metal today — macOS builds run
+the full compositing path natively on Apple GPUs with no separate render backend. A proper
+Mac *release* (post-v1, demand-driven; refines K-001's "possibility, never a priority")
+additionally needs: VideoToolbox hardware decode/encode promoted from dev-convenience to
+first-class (zero-copy via IOSurface, [impl/media-io.md](impl/media-io.md) §4), ProRes
+workflows (Mac editors' mezzanine norm), the Metal branch of the OFX 1.5 GPU render suite
+([12-PLUGINS.md](12-PLUGINS.md) §2.4), and a notarised universal binary. Nothing in the
+engine may assume DX12-only. Added 2026-07-13 at Mack's request.
+
 **K-031 · DECIDED · Colour spaces are selectable; preview always matches export.** Working
 colour space is selectable per comp (with app-level defaults, and OCIO joining post-v1 per
 06), like AE — but with a hard parity guarantee: **what the Viewer shows at Full resolution
