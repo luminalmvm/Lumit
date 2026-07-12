@@ -32,3 +32,4 @@ Rules of engagement:
 | [ofx-host.md](ofx-host.md) | Hosting OpenFX from Rust: suites, property sets, action dispatch, out-of-process transport | 12 |
 | [beat-detection.md](beat-detection.md) | Spectral-flux onset detection, thresholding, BPM grid | 09 |
 | [expressions.md](expressions.md) | Embedding QuickJS-ng deterministically via rquickjs | 12 |
+| [phase-0-kickoff.md](phase-0-kickoff.md) | The cold-start build order: workspace scaffold and six runnable slices to Gate 0 | 16 |
