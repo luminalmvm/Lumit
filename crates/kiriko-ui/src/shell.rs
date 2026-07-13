@@ -43,7 +43,9 @@ pub fn default_layout() -> DockState<Panel> {
     let [centre, _timeline] = surface.split_below(
         NodeIndex::root(),
         0.68,
-        vec![Panel::Timeline, Panel::GraphEditor],
+        // The graph editor is a mode of the Timeline (bottom-right toggle),
+        // not a separate tab (K-070).
+        vec![Panel::Timeline],
     );
     // Project and Effect controls share the top-left dock (the AE model):
     // Project is front until an effect is added. Effects & Presets stays out
@@ -821,6 +823,15 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     }
     let rows_top = ui.cursor().top();
 
+    // Graph mode (K-070): the right area becomes the curve editor. The ruler
+    // above stays for scrubbing; the bottom-right toggle swaps the two views.
+    // (Per-property rows and a shared x-axis are the next step.)
+    if app.timeline_graph_mode {
+        graph_editor_panel(ui, theme, app);
+        timeline_mode_toggle(ui, theme, app);
+        return;
+    }
+
     for layer in &comp.layers {
         let (row_rect, row_resp) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::click());
@@ -1397,6 +1408,39 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     if let Some(op) = pending {
         app.commit(op);
     }
+    timeline_mode_toggle(ui, theme, app);
+}
+
+/// Layer-view / graph-view switch, bottom-right of the Timeline (K-070). Small
+/// glyphs for now; the designed icons come later.
+fn timeline_mode_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
+    let panel = ui.max_rect();
+    let r = egui::Rect::from_min_max(
+        egui::pos2(panel.right() - 58.0, panel.bottom() - 22.0),
+        egui::pos2(panel.right() - 6.0, panel.bottom() - 4.0),
+    );
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(r)
+            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+    );
+    child.set_clip_rect(r);
+    let graph = app.timeline_graph_mode;
+    if child
+        .selectable_label(graph, egui::RichText::new("〜").small())
+        .on_hover_text("Graph editor")
+        .clicked()
+    {
+        app.timeline_graph_mode = true;
+    }
+    if child
+        .selectable_label(!graph, egui::RichText::new("▤").small())
+        .on_hover_text("Layers")
+        .clicked()
+    {
+        app.timeline_graph_mode = false;
+    }
+    let _ = theme;
 }
 
 /// Footage preview: the frame fit to the surround, scrub bar, resolution picker.

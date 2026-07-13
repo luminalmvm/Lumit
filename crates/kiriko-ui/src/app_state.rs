@@ -612,6 +612,9 @@ pub struct AppState {
     pub last_display_scale: f32,
     /// Draggable width of the timeline's left (layer-controls) column, px.
     pub timeline_name_w: f32,
+    /// Timeline right area shows the graph editor (curves) instead of the
+    /// layer bars — a mode of the Timeline, not a separate panel (K-070).
+    pub timeline_graph_mode: bool,
     /// Kura's RAM tier for final comp frames (K-016): display-ready sRGB
     /// bytes keyed by content hash. Hash mismatch is the only invalidation.
     #[cfg(feature = "media")]
@@ -684,6 +687,7 @@ impl Default for AppState {
             view_pan: egui::Vec2::ZERO,
             last_display_scale: 1.0,
             timeline_name_w: 300.0,
+            timeline_graph_mode: false,
             #[cfg(feature = "media")]
             comp_frame_cache: kiriko_cache::ByteLru::new(512 * 1024 * 1024),
             #[cfg(feature = "media")]
