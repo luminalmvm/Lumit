@@ -153,6 +153,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   converts on the fly (a handful of multiplications per pixel), users never see anything
   but normal RGB values, and tests pin both promises: round-trips are exact and hue
   rotation provably never changes lightness.
+- `crates/kiriko-cache/` — **the cupboard with a size limit.** Rendered and decoded
+  frames get remembered so they're never computed twice; when the cupboard is full,
+  whatever was used longest ago gets thrown out first. The limit is in bytes, not item
+  counts — one 4K frame costs what sixty thumbnails cost, and budgeting any other way is
+  how apps balloon. This is the seed of the three-tier cache the whole engine design
+  revolves around.
+- `crates/kiriko-ui/src/export.rs` — **writing video files.** Every frame of a comp is
+  rendered through the *exact same* colour engine and compositor the Viewer uses, then
+  compressed to an .mp4. Using one shared path isn't laziness — it's the design's central
+  promise (what you preview IS what you export), and it runs on its own worker so the app
+  stays responsive while exporting, with live progress and a real cancel.
 - `crates/kiriko-audio/` — **playback and the clock.** The sound card asks for samples on
   its own strict schedule through a "realtime callback" — a tiny function that must never
   wait for anything (if it's ever late, you hear a glitch). The count of samples it has
