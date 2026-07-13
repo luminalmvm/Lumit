@@ -26,6 +26,9 @@ pub enum MenuAction {
     AddSolidLayer,
     AddTextLayer,
     AddCameraLayer,
+    AddMaskRectangle,
+    AddMaskEllipse,
+    AddMaskStar,
     CompSettings,
     ResetWorkspace,
 }
@@ -108,6 +111,13 @@ impl NativeMenu {
             &item("comp.camera", "Add camera layer", None),
             &item("comp.settings", "Composition settings…", None),
         ])?;
+        let mask = Submenu::new("Add mask", true);
+        mask.append_items(&[
+            &item("comp.mask.rect", "Rectangle", None),
+            &item("comp.mask.ellipse", "Ellipse", None),
+            &item("comp.mask.star", "Star", None),
+        ])?;
+        comp.append(&mask)?;
 
         let window = Submenu::new("Window", true);
         window.append_items(&[
@@ -145,6 +155,9 @@ impl NativeMenu {
                 "comp.solid" => Some(MenuAction::AddSolidLayer),
                 "comp.text" => Some(MenuAction::AddTextLayer),
                 "comp.camera" => Some(MenuAction::AddCameraLayer),
+                "comp.mask.rect" => Some(MenuAction::AddMaskRectangle),
+                "comp.mask.ellipse" => Some(MenuAction::AddMaskEllipse),
+                "comp.mask.star" => Some(MenuAction::AddMaskStar),
                 "comp.settings" => Some(MenuAction::CompSettings),
                 "window.reset" => Some(MenuAction::ResetWorkspace),
                 _ => None,

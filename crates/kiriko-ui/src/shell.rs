@@ -3012,6 +3012,9 @@ impl Shell {
                 MenuAction::AddSolidLayer => self.app.add_solid_layer(),
                 MenuAction::AddTextLayer => self.app.add_text_layer(),
                 MenuAction::AddCameraLayer => self.app.add_camera_layer(),
+                MenuAction::AddMaskRectangle => self.add_mask_to_selected(ShapeKind::Rectangle),
+                MenuAction::AddMaskEllipse => self.add_mask_to_selected(ShapeKind::Ellipse),
+                MenuAction::AddMaskStar => self.add_mask_to_selected(ShapeKind::Star),
                 MenuAction::CompSettings => {
                     if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
                         self.app.open_comp_settings(id);
@@ -3099,6 +3102,47 @@ impl Shell {
     }
 
     /// The composition settings dialogue (create + edit — K-068).
+    /// Add a mask of `kind` to the selected layer, centred (the menu path;
+    /// the toolbar's shape tool is the draw-a-box path).
+    fn add_mask_to_selected(&mut self, kind: ShapeKind) {
+        let doc = self.app.store.snapshot();
+        let Some(comp_id) = self.app.selected_comp else {
+            self.app.error = Some("select a composition first".into());
+            return;
+        };
+        let Some(comp) = doc.comp(comp_id) else {
+            return;
+        };
+        let Some(layer_id) = self.app.selected_layer else {
+            self.app.error = Some("select a layer first".into());
+            return;
+        };
+        let Some(layer) = comp.layers.iter().find(|l| l.id == layer_id) else {
+            return;
+        };
+        let (w, h) = mask_space(layer, &self.app, comp);
+        let mask = match kind {
+            ShapeKind::Rectangle => {
+                kiriko_core::mask::Mask::rectangle(w * 0.25, h * 0.25, w * 0.5, h * 0.5)
+            }
+            ShapeKind::Ellipse => {
+                kiriko_core::mask::Mask::ellipse(w * 0.5, h * 0.5, w * 0.3, h * 0.3)
+            }
+            ShapeKind::Star => {
+                kiriko_core::mask::Mask::star(w * 0.5, h * 0.5, w * 0.32, w * 0.14, 5)
+            }
+        };
+        let mut masks = layer.masks.clone();
+        masks.push(mask);
+        self.app.commit(kiriko_core::Op::SetLayerMasks {
+            comp: comp_id,
+            layer: layer_id,
+            masks,
+        });
+        #[cfg(feature = "media")]
+        self.app.refresh_preview();
+    }
+
     fn comp_dialog_modal(&mut self, ctx: &egui::Context) {
         let Some(dialog) = &mut self.app.comp_dialog else {
             return;
@@ -3632,6 +3676,18 @@ impl Shell {
                         self.app.add_camera_layer();
                         ui.close_menu();
                     }
+                    ui.separator();
+                    ui.add_enabled_ui(self.app.selected_layer.is_some(), |ui| {
+                        ui.menu_button("Add mask", |ui| {
+                            for kind in [ShapeKind::Rectangle, ShapeKind::Ellipse, ShapeKind::Star]
+                            {
+                                if ui.button(kind.label()).clicked() {
+                                    self.add_mask_to_selected(kind);
+                                    ui.close_menu();
+                                }
+                            }
+                        });
+                    });
                 });
                 ui.menu_button("Window", |ui| {
                     if ui.button("Reset workspace").clicked() {
