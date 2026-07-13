@@ -239,13 +239,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   (`camera_matrix` in the GPU crate) shared by preview and export, so a camera move
   can't look different in the exported file. A regression test proves both promises:
   z = 0 maps 1:1, and depth scales exactly as the formula says.
-- **The window layout** (K-073) — the picture (the Viewer) fills the middle with nothing
-  above it: no tab, no strip, just the image. Around it sit resizable panels — Project and
-  effect controls on the left (a small row of buttons switches between them), scopes on the
-  right, the Timeline along the bottom. Drag the edge between any two to resize. For now the
-  panels are fixed in place; being able to drag them around, tear them off into their own
-  windows, and pop the Viewer out come later. (Under the bonnet this dropped a third-party
-  "docking" library that always insisted on drawing a tab bar over the Viewer.)
+- **The window layout** (K-074) — the picture (the Viewer) fills the middle with nothing
+  above it: no tab, no strip, just the image. Around it sit the other panels, each with a
+  little title tab you can grab: Project and the effect panels on the left, scopes on the
+  right, the Timeline along the bottom. Drag a panel's tab to move it somewhere else — beside
+  another panel, stacked as tabs, above or below — so you can build the layout that suits you;
+  drag the edge between two panels to resize. The Viewer is the one panel with no tab, so it
+  always stays put as the bare picture. (Still to come: tearing a panel right out into its own
+  separate window.) Under the bonnet this uses a "tiling" layout engine that, unlike the
+  docking library we tried first, is happy to leave the Viewer without a tab bar.
 - The **Project panel** — AE-shaped (K-068): the selected item's details up top, the
   folder tree below, and drag-and-drop everywhere. Drag footage onto the Timeline or
   Viewer to make a layer; with no comp open yet, the composition dialogue appears

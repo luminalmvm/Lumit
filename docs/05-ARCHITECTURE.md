@@ -30,7 +30,7 @@ engine/media — mechanically enforceable rather than aspirational.
 | `kiriko-ofx` | OFX host: out-of-process plugin server, C ABI boundary, shared-memory/shared-texture frame transport. |
 | `kiriko-kfx` | KFX host (K-062). Shares the sandbox/IPC substrate with `kiriko-ofx`. |
 | `kiriko-project` | Serialisation: `.kir` container read/write, operation journal, autosave, relink, migrations. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
-| `kiriko-ui` | The egui shell: native panels (K-073; docking is the later target), timeline/graph-editor/Viewer widgets, theming per [15-DESIGN.md](15-DESIGN.md). |
+| `kiriko-ui` | The egui shell: a tiling dock (egui_tiles, K-074) with a bare Viewer, timeline/graph-editor/Viewer widgets, theming per [15-DESIGN.md](15-DESIGN.md). |
 | `kiriko-app` | The binary: winit event loop, wiring, session lifecycle, crash handler. |
 
 ### 1.1 Dependency direction rules

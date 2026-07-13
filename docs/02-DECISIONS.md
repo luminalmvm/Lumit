@@ -394,3 +394,18 @@ small Project / Effect controls / Effects & presets tab switcher so nothing is l
 returns later as real OS windows (egui viewports), a cleaner pop-out than dock floats. This
 supersedes the docking mandate in [07-UI-SPEC.md](07-UI-SPEC.md) §1 for v1, which now documents
 the eventual target. The `kiriko-ui` crate must keep the UI layer swappable regardless (K-012).
+
+**K-074 · DECIDED · Dockable tiling shell with a bare Viewer (supersedes K-073).** The
+window is a single tiling layout (egui_tiles): every panel except the Viewer carries a
+title tab and can be dragged to re-arrange the workspace; the **Viewer alone is a bare pane
+with no tab bar** (Mack, 2026-07-14: the viewport must have no top bit). This reverses
+K-073's "fixed native panels, no docking" — that was a stopgap taken because egui_dock draws
+a tab bar on every leaf; egui_tiles doesn't force a tab on a lone pane, so the Viewer can be
+bare *and* the other panels fully dockable. Mechanism: the Viewer is inserted as a direct
+child of a linear container (never a tab group) with `all_panes_must_have_tabs = false`;
+`prune_single_child_tabs = false` keeps single panels (Timeline, Scopes) showing their tab.
+Default layout: Project/effect-controls/effects-&-presets tab group (left), Viewer over a
+Timeline tab group (centre), Scopes (right). Still outstanding, tracked not done: pop-out of
+any panel into its **own OS window** (egui multi-viewport) — a follow-up phase; the tiling
+tree gives drag-rearrange today but not detached OS windows. Supersedes the v1-status note in
+[07-UI-SPEC.md](07-UI-SPEC.md) §1; keeps the UI layer swappable (K-012).

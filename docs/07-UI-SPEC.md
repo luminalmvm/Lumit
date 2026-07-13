@@ -17,12 +17,11 @@ the interface is truly the user's.
 
 ## 1. Application shell and docking
 
-> **v1 status (K-073):** the full docking system below is the *eventual* target, not the
-> current shell. v1 ships a fixed native-panel layout — a bare, tab-bar-free Viewer as the
-> central area with resizable Project/effects (left), Scopes (right) and Timeline (bottom)
-> regions — because the Viewer must have no tab bar and no library gives a per-panel tab-bar
-> toggle. Drag-to-dock, floating panels and pop-out (via real OS windows) come later. The
-> rest of this section describes that target.
+> **v1 status (K-074):** the shell is a tiling dock (egui_tiles). Every panel except the
+> Viewer carries a title tab and can be dragged to re-arrange the workspace; the Viewer is a
+> bare pane with no tab bar. This delivers most of the section below — tabs, drag-to-dock,
+> re-arrangeable layouts — with one part still outstanding: popping a panel out into its own
+> **OS window** (the drop-zones and floating-window rules below) is a later phase.
 
 ### 1.1 Frames, groups, tabs
 
