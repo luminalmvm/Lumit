@@ -727,47 +727,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         return;
     };
     let comp_id = comp.id;
-    ui.add_space(2.0);
-    ui.horizontal(|ui| {
-        // A compact comp switcher (the tab already names the open comp).
-        let comps: Vec<(uuid::Uuid, String)> = doc
-            .items
-            .iter()
-            .filter_map(|i| match i {
-                ProjectItem::Composition(c) => Some((c.id, c.name.clone())),
-                _ => None,
-            })
-            .collect();
-        bare_dropdown(
-            ui,
-            egui::RichText::new(&comp.name)
-                .small()
-                .strong()
-                .color(theme.text_secondary),
-            |ui| {
-                for (id, name) in &comps {
-                    if ui.selectable_label(*id == comp_id, name).clicked() {
-                        app.selected_comp = Some(*id);
-                        app.preview_comp = Some(*id);
-                        app.preview_frame = 0;
-                        #[cfg(feature = "media")]
-                        app.refresh_preview();
-                        ui.close_menu();
-                    }
-                }
-            },
-        );
-        ui.label(
-            egui::RichText::new(format!(
-                "{}×{} · {:.2} fps",
-                comp.width,
-                comp.height,
-                comp.frame_rate.fps()
-            ))
-            .small()
-            .color(theme.text_disabled),
-        );
-    });
+    // The dock tab already names the open comp; no redundant in-panel title,
+    // resolution or frame-rate line here (Mack).
     if comp.layers.is_empty() {
         ui.label(
             egui::RichText::new("Drag footage here to create the first layer.")
@@ -781,7 +742,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     let mut pending: Option<kiriko_core::Op> = None;
 
     // ---- ruler + time geometry (07-UI-SPEC Timeline) --------------------
-    let name_w = 230.0_f32;
+    let name_w = 340.0_f32;
     let duration = comp.duration.0.to_f64().max(1e-6);
     let frames = app.comp_frame_count(comp).max(1);
     let panel_left = ui.max_rect().left();
@@ -955,13 +916,38 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             );
         }
         let seconds_of = |x: f32| ((x - track_left) / track_w).clamp(0.0, 1.0) as f64 * duration;
-        ui.painter().text(
-            egui::pos2(row_rect.left() + 20.0, row_rect.center().y),
-            egui::Align2::LEFT_CENTER,
-            &layer.name,
-            egui::FontId::proportional(12.0),
-            theme.text_secondary,
+        // Left-column control strip on the title line: name + matte + blend +
+        // 3D + mute, clipped to the left column so nothing spills into the
+        // track area (Mack).
+        let left_rect = egui::Rect::from_min_max(
+            egui::pos2(row_rect.left() + 18.0, row_rect.top()),
+            egui::pos2(track_left - 6.0, row_rect.bottom()),
         );
+        let mut select_this = false;
+        ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
+            ui.set_clip_rect(left_rect);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if ui
+                    .add(
+                        egui::Label::new(
+                            egui::RichText::new(&layer.name)
+                                .small()
+                                .color(theme.text_secondary),
+                        )
+                        .truncate()
+                        .sense(egui::Sense::click()),
+                    )
+                    .clicked()
+                {
+                    select_this = true;
+                }
+                layer_switches_strip(ui, theme, comp, comp_id, layer, &mut pending);
+            });
+        });
+        if select_this {
+            app.selected_layer = Some(layer.id);
+        }
         let bar = egui::Rect::from_min_max(
             egui::pos2(x_of(layer.in_point.0.to_f64()), row_rect.top() + 2.0),
             egui::pos2(x_of(layer.out_point.0.to_f64()), row_rect.bottom() - 2.0),
@@ -981,6 +967,29 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 egui::FontId::monospace(8.0),
                 theme.text_muted,
             );
+        }
+        // Keyframe glyphs: a clay diamond on the bar at each keyframed time
+        // (across the layer's animated properties). Times are layer-local, so
+        // comp time = start_offset + keyframe time.
+        {
+            let off = layer.start_offset.0.to_f64();
+            let cy = bar.center().y;
+            for kt in layer_keyframe_times(layer) {
+                let x = x_of(off + kt);
+                if x >= bar.left() - 1.0 && x <= bar.right() + 1.0 {
+                    let d = 3.5;
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        vec![
+                            egui::pos2(x, cy - d),
+                            egui::pos2(x + d, cy),
+                            egui::pos2(x, cy + d),
+                            egui::pos2(x - d, cy),
+                        ],
+                        theme.accent,
+                        egui::Stroke::new(1.0_f32, theme.surface_0),
+                    ));
+                }
+            }
         }
         // Sequence layers show their clips as sub-bars; gaps show the darker
         // base bar; each edit point gets a clay tick.
@@ -1066,140 +1075,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             // the right of the separator stays for the bar and keyframes.
             ui.scope(|ui| {
                 ui.set_max_width(name_w - 10.0);
-                ui.indent(("matte", layer.id), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Matte").small().color(theme.text_muted));
-                        let current_name = layer
-                            .matte
-                            .as_ref()
-                            .and_then(|m| comp.layers.iter().find(|l| l.id == m.layer))
-                            .map(|l| l.name.clone())
-                            .unwrap_or_else(|| "None".into());
-                        let mut set: Option<Option<kiriko_core::model::MatteRef>> = None;
-                        bare_dropdown(ui, current_name, |ui| {
-                            if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
-                                set = Some(None);
-                                ui.close_menu();
-                            }
-                            for other in comp.layers.iter().filter(|l| l.id != layer.id) {
-                                let selected = layer.matte.is_some_and(|m| m.layer == other.id);
-                                if ui.selectable_label(selected, &other.name).clicked() {
-                                    set = Some(Some(kiriko_core::model::MatteRef {
-                                        layer: other.id,
-                                        channel: layer
-                                            .matte
-                                            .map(|m| m.channel)
-                                            .unwrap_or(kiriko_core::model::MatteChannel::Alpha),
-                                        inverted: layer.matte.is_some_and(|m| m.inverted),
-                                    }));
-                                    ui.close_menu();
-                                }
-                            }
-                        });
-                        if let Some(mut m) = layer.matte {
-                            let luma = matches!(m.channel, kiriko_core::model::MatteChannel::Luma);
-                            if ui
-                                .selectable_label(luma, egui::RichText::new("luma").small())
-                                .on_hover_text("Luma matte (else alpha)")
-                                .clicked()
-                            {
-                                m.channel = if luma {
-                                    kiriko_core::model::MatteChannel::Alpha
-                                } else {
-                                    kiriko_core::model::MatteChannel::Luma
-                                };
-                                set = Some(Some(m));
-                            }
-                            if ui
-                                .selectable_label(m.inverted, egui::RichText::new("invert").small())
-                                .clicked()
-                            {
-                                m.inverted = !m.inverted;
-                                set = Some(Some(m));
-                            }
-                        }
-                        if let Some(matte) = set {
-                            pending = Some(kiriko_core::Op::SetLayerMatte {
-                                comp: comp_id,
-                                layer: layer.id,
-                                matte,
-                            });
-                        }
-                        ui.separator();
-                        ui.label(egui::RichText::new("Blend").small().color(theme.text_muted));
-                        use kiriko_core::model::BlendMode;
-                        let blend_name = |b: BlendMode| match b {
-                            BlendMode::Normal => "Normal",
-                            BlendMode::Add => "Add",
-                            BlendMode::Multiply => "Multiply",
-                            BlendMode::Screen => "Screen",
-                            BlendMode::Overlay => "Overlay",
-                            BlendMode::SoftLight => "Soft light",
-                            BlendMode::HardLight => "Hard light",
-                            BlendMode::Lighten => "Lighten",
-                            BlendMode::Darken => "Darken",
-                        };
-                        bare_dropdown(ui, blend_name(layer.blend), |ui| {
-                            for mode in [
-                                BlendMode::Normal,
-                                BlendMode::Add,
-                                BlendMode::Multiply,
-                                BlendMode::Screen,
-                                BlendMode::Overlay,
-                                BlendMode::SoftLight,
-                                BlendMode::HardLight,
-                                BlendMode::Lighten,
-                                BlendMode::Darken,
-                            ] {
-                                if ui
-                                    .selectable_label(layer.blend == mode, blend_name(mode))
-                                    .clicked()
-                                {
-                                    if layer.blend != mode {
-                                        pending = Some(kiriko_core::Op::SetLayerBlend {
-                                            comp: comp_id,
-                                            layer: layer.id,
-                                            blend: mode,
-                                        });
-                                    }
-                                    ui.close_menu();
-                                }
-                            }
-                        });
-                        ui.separator();
-                        if ui
-                            .selectable_label(
-                                layer.switches.three_d,
-                                egui::RichText::new("3D").small(),
-                            )
-                            .on_hover_text(
-                                "Place this layer in z-space (needs a Camera layer to show depth)",
-                            )
-                            .clicked()
-                        {
-                            pending = Some(kiriko_core::Op::SetLayerThreeD {
-                                comp: comp_id,
-                                layer: layer.id,
-                                three_d: !layer.switches.three_d,
-                            });
-                        }
-                        // Mute: only meaningful for layers that carry sound.
-                        if matches!(layer.kind, kiriko_core::model::LayerKind::Footage { .. }) {
-                            ui.separator();
-                            let muted = !layer.switches.audible;
-                            if ui
-                                .selectable_label(muted, egui::RichText::new("Mute").small())
-                                .on_hover_text("Silence this layer in comp playback and export")
-                                .clicked()
-                            {
-                                pending = Some(kiriko_core::Op::SetLayerAudible {
-                                    comp: comp_id,
-                                    layer: layer.id,
-                                    audible: muted, // toggling: muted→audible
-                                });
-                            }
-                        }
-                    });
+                ui.indent(("layer-opts", layer.id), |ui| {
                     // Masks only appear once the layer has one (add via right-click or
                     // the toolbar's mask tool).
                     if !layer.masks.is_empty() {
@@ -1266,96 +1142,6 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                         });
                     });
                 }
-                if let kiriko_core::model::LayerKind::Footage { retime, .. } = &layer.kind {
-                    use kiriko_core::retime::Ease;
-                    // Current ramp: (start%, end%, ease). 100/100/Linear = none.
-                    let (v0, v1, ease) = retime
-                        .as_ref()
-                        .and_then(|r| r.single_ramp_view())
-                        .map(|(a, b, e)| (a * 100.0, b * 100.0, e))
-                        .unwrap_or((100.0, 100.0, Ease::Linear));
-                    let ease_name = |e: Ease| match e {
-                        Ease::Linear => "Linear",
-                        Ease::Slow => "Slow",
-                        Ease::Fast => "Fast",
-                        Ease::Smooth => "Smooth",
-                        Ease::Sharp => "Sharp",
-                    };
-                    ui.indent(("speed", layer.id), |ui| {
-                        let mut new_ramp: Option<(f64, f64, Ease)> = None;
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("Speed %")
-                                    .small()
-                                    .color(theme.text_muted),
-                            );
-                            let mut a = v0;
-                            let ra = ui.add(
-                                egui::DragValue::new(&mut a)
-                                    .speed(1.0)
-                                    .range(-800.0..=800.0),
-                            );
-                            ui.label(egui::RichText::new("→").small().color(theme.text_muted));
-                            let mut b = v1;
-                            let rb = ui.add(
-                                egui::DragValue::new(&mut b)
-                                    .speed(1.0)
-                                    .range(-800.0..=800.0),
-                            );
-                            if (ra.drag_stopped()
-                                || ra.lost_focus()
-                                || rb.drag_stopped()
-                                || rb.lost_focus())
-                                && (a != v0 || b != v1)
-                            {
-                                new_ramp = Some((a, b, ease));
-                            }
-                            // Ease only matters for an actual ramp (a != b).
-                            if (v0 - v1).abs() > f64::EPSILON {
-                                bare_dropdown(ui, ease_name(ease), |ui| {
-                                    for e in [
-                                        Ease::Linear,
-                                        Ease::Slow,
-                                        Ease::Fast,
-                                        Ease::Smooth,
-                                        Ease::Sharp,
-                                    ] {
-                                        if ui.selectable_label(e == ease, ease_name(e)).clicked() {
-                                            new_ramp = Some((v0, v1, e));
-                                            ui.close_menu();
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                        if let Some((a, b, e)) = new_ramp {
-                            // 100→100 Linear is identity: store no map at all.
-                            let retime = if (a - 100.0).abs() < f64::EPSILON
-                                && (b - 100.0).abs() < f64::EPSILON
-                            {
-                                None
-                            } else {
-                                let d = layer.out_point.0;
-                                let r = |pct: f64| {
-                                    kiriko_core::Rational::from_f64_on_grid(pct / 100.0, 1000)
-                                        .unwrap_or(kiriko_core::Rational::ONE)
-                                };
-                                Some(kiriko_core::retime::Retime::single_ramp(
-                                    d,
-                                    kiriko_core::Rational::ZERO,
-                                    r(a),
-                                    r(b),
-                                    e,
-                                ))
-                            };
-                            pending = Some(kiriko_core::Op::SetLayerRetime {
-                                comp: comp_id,
-                                layer: layer.id,
-                                retime,
-                            });
-                        }
-                    });
-                }
                 if let kiriko_core::model::LayerKind::Camera { zoom } = &layer.kind {
                     ui.indent(("camera", layer.id), |ui| {
                         ui.horizontal(|ui| {
@@ -1397,77 +1183,120 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     });
                 }
                 ui.indent(("transform", layer.id), |ui| {
-                    ui.collapsing(
+                    egui::CollapsingHeader::new(
                         egui::RichText::new("Transform")
                             .small()
                             .color(theme.text_muted),
-                        |ui| {
-                            egui::Grid::new(("txgrid", layer.id))
-                                .num_columns(2)
-                                .spacing(egui::vec2(12.0, 2.0))
-                                .show(ui, |ui| {
-                                    let is_camera = matches!(
-                                        layer.kind,
-                                        kiriko_core::model::LayerKind::Camera { .. }
-                                    );
-                                    let mut rows: Vec<(&str, TransformProp, f64)> = Vec::new();
-                                    // Origin (anchor): the point transforms pivot
-                                    // about. First, like AE. Cameras have no anchor.
-                                    if !is_camera {
-                                        rows.push(("Anchor x", TransformProp::AnchorX, 1.0));
-                                        rows.push(("Anchor y", TransformProp::AnchorY, 1.0));
-                                    }
+                    )
+                    .id_salt(("transform-hdr", layer.id))
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        // Footage speed: single value, here in Transform.
+                        if let kiriko_core::model::LayerKind::Footage { retime, .. } = &layer.kind {
+                            speed_row(ui, theme, comp_id, layer, retime, &mut pending);
+                        }
+                        egui::Grid::new(("txgrid", layer.id))
+                            .num_columns(2)
+                            .spacing(egui::vec2(12.0, 2.0))
+                            .show(ui, |ui| {
+                                let is_camera = matches!(
+                                    layer.kind,
+                                    kiriko_core::model::LayerKind::Camera { .. }
+                                );
+                                let mut rows: Vec<(&str, TransformProp, f64)> = Vec::new();
+                                // Origin (anchor): the point transforms pivot
+                                // about. First, like AE. Cameras have no anchor.
+                                if !is_camera {
+                                    rows.push(("Anchor x", TransformProp::AnchorX, 1.0));
+                                    rows.push(("Anchor y", TransformProp::AnchorY, 1.0));
+                                }
+                                rows.extend([
+                                    ("Position x", TransformProp::PositionX, 1.0),
+                                    ("Position y", TransformProp::PositionY, 1.0),
+                                    ("Scale x %", TransformProp::ScaleX, 0.5),
+                                    ("Scale y %", TransformProp::ScaleY, 0.5),
+                                    ("Rotation °", TransformProp::Rotation, 0.5),
+                                    ("Opacity %", TransformProp::Opacity, 0.5),
+                                ]);
+                                if layer.switches.three_d || is_camera {
                                     rows.extend([
-                                        ("Position x", TransformProp::PositionX, 1.0),
-                                        ("Position y", TransformProp::PositionY, 1.0),
-                                        ("Scale x %", TransformProp::ScaleX, 0.5),
-                                        ("Scale y %", TransformProp::ScaleY, 0.5),
-                                        ("Rotation °", TransformProp::Rotation, 0.5),
-                                        ("Opacity %", TransformProp::Opacity, 0.5),
+                                        ("Position z", TransformProp::PositionZ, 1.0),
+                                        ("Rotation x °", TransformProp::RotationX, 0.5),
+                                        ("Rotation y °", TransformProp::RotationY, 0.5),
                                     ]);
-                                    if layer.switches.three_d || is_camera {
-                                        rows.extend([
-                                            ("Position z", TransformProp::PositionZ, 1.0),
-                                            ("Rotation x °", TransformProp::RotationX, 0.5),
-                                            ("Rotation y °", TransformProp::RotationY, 0.5),
-                                        ]);
-                                    }
-                                    // Layer time at the playhead: where keyframes land
-                                    // (AE behaviour: editing an animated value writes a
-                                    // key at the current time).
-                                    let fps = comp.frame_rate.fps().max(1.0);
-                                    let lt = app.preview_frame as f64 / fps
-                                        - layer.start_offset.0.to_f64();
-                                    for (label, prop, speed) in rows {
-                                        let slot = layer.transform.get(prop);
-                                        let animated = slot.is_animated();
-                                        ui.horizontal(|ui| {
-                                            let clock = if animated { "⏱" } else { "◦" };
-                                            if ui
-                                                .selectable_label(
-                                                    animated,
-                                                    egui::RichText::new(clock).small(),
-                                                )
-                                                .on_hover_text(if animated {
-                                                    "Remove animation (freeze current value)"
-                                                } else {
-                                                    "Animate: keyframe at the playhead"
-                                                })
-                                                .clicked()
-                                            {
+                                }
+                                // Layer time at the playhead: where keyframes land
+                                // (AE behaviour: editing an animated value writes a
+                                // key at the current time).
+                                let fps = comp.frame_rate.fps().max(1.0);
+                                let lt =
+                                    app.preview_frame as f64 / fps - layer.start_offset.0.to_f64();
+                                for (label, prop, speed) in rows {
+                                    let slot = layer.transform.get(prop);
+                                    let animated = slot.is_animated();
+                                    ui.horizontal(|ui| {
+                                        let clock = if animated { "⏱" } else { "◦" };
+                                        if ui
+                                            .selectable_label(
+                                                animated,
+                                                egui::RichText::new(clock).small(),
+                                            )
+                                            .on_hover_text(if animated {
+                                                "Remove animation (freeze current value)"
+                                            } else {
+                                                "Animate: keyframe at the playhead"
+                                            })
+                                            .clicked()
+                                        {
+                                            let animation = if animated {
+                                                Animation::Static(slot.value_at(lt))
+                                            } else {
+                                                Animation::Keyframed(vec![
+                                                    kiriko_core::anim::Keyframe {
+                                                        time: rational_at(lt),
+                                                        value: slot.value_at(lt),
+                                                        interp_in:
+                                                            kiriko_core::anim::SideInterp::Linear,
+                                                        interp_out:
+                                                            kiriko_core::anim::SideInterp::Linear,
+                                                    },
+                                                ])
+                                            };
+                                            pending = Some(kiriko_core::Op::SetTransformProperty {
+                                                comp: comp_id,
+                                                layer: layer.id,
+                                                prop,
+                                                animation,
+                                            });
+                                        }
+                                        ui.label(
+                                            egui::RichText::new(label)
+                                                .small()
+                                                .color(theme.text_muted),
+                                        );
+                                    });
+                                    {
+                                        let committed = slot.value_at(lt);
+                                        let mut value = match app.prop_edit {
+                                            Some((l, p, v)) if l == layer.id && p == prop => v,
+                                            _ => committed,
+                                        };
+                                        let resp = ui.add(
+                                            egui::DragValue::new(&mut value)
+                                                .speed(speed)
+                                                .max_decimals(2),
+                                        );
+                                        if resp.dragged() || resp.has_focus() {
+                                            app.prop_edit = Some((layer.id, prop, value));
+                                        }
+                                        if resp.drag_stopped() || resp.lost_focus() {
+                                            if (value - committed).abs() > f64::EPSILON {
                                                 let animation = if animated {
-                                                    Animation::Static(slot.value_at(lt))
+                                                    Animation::Keyframed(upsert_key(
+                                                        slot, lt, value,
+                                                    ))
                                                 } else {
-                                                    Animation::Keyframed(vec![
-                                                kiriko_core::anim::Keyframe {
-                                                    time: rational_at(lt),
-                                                    value: slot.value_at(lt),
-                                                    interp_in:
-                                                        kiriko_core::anim::SideInterp::Linear,
-                                                    interp_out:
-                                                        kiriko_core::anim::SideInterp::Linear,
-                                                },
-                                            ])
+                                                    Animation::Static(value)
                                                 };
                                                 pending =
                                                     Some(kiriko_core::Op::SetTransformProperty {
@@ -1477,52 +1306,13 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                                         animation,
                                                     });
                                             }
-                                            ui.label(
-                                                egui::RichText::new(label)
-                                                    .small()
-                                                    .color(theme.text_muted),
-                                            );
-                                        });
-                                        {
-                                            let committed = slot.value_at(lt);
-                                            let mut value = match app.prop_edit {
-                                                Some((l, p, v)) if l == layer.id && p == prop => v,
-                                                _ => committed,
-                                            };
-                                            let resp = ui.add(
-                                                egui::DragValue::new(&mut value)
-                                                    .speed(speed)
-                                                    .max_decimals(2),
-                                            );
-                                            if resp.dragged() || resp.has_focus() {
-                                                app.prop_edit = Some((layer.id, prop, value));
-                                            }
-                                            if resp.drag_stopped() || resp.lost_focus() {
-                                                if (value - committed).abs() > f64::EPSILON {
-                                                    let animation = if animated {
-                                                        Animation::Keyframed(upsert_key(
-                                                            slot, lt, value,
-                                                        ))
-                                                    } else {
-                                                        Animation::Static(value)
-                                                    };
-                                                    pending = Some(
-                                                        kiriko_core::Op::SetTransformProperty {
-                                                            comp: comp_id,
-                                                            layer: layer.id,
-                                                            prop,
-                                                            animation,
-                                                        },
-                                                    );
-                                                }
-                                                app.prop_edit = None;
-                                            }
+                                            app.prop_edit = None;
                                         }
-                                        ui.end_row();
                                     }
-                                });
-                        },
-                    );
+                                    ui.end_row();
+                                }
+                            });
+                    });
                 });
             });
         }
@@ -2726,6 +2516,240 @@ fn build_comp_draws(
 }
 
 /// The layer's natural pixel space (mask coordinates live here).
+/// Compact matte / blend / 3D / mute controls for a layer's title line
+/// (left column). Sets `pending` on any change.
+fn layer_switches_strip(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    comp: &kiriko_core::model::Composition,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    pending: &mut Option<kiriko_core::Op>,
+) {
+    use kiriko_core::model::{BlendMode, MatteChannel, MatteRef};
+    // Matte: source pick + luma/invert flags, all under one compact dropdown.
+    let matte_label = layer
+        .matte
+        .as_ref()
+        .and_then(|m| comp.layers.iter().find(|l| l.id == m.layer))
+        .map(|l| format!("⬓ {}", l.name))
+        .unwrap_or_else(|| "⬓".into());
+    let mut set: Option<Option<MatteRef>> = None;
+    bare_dropdown(ui, egui::RichText::new(matte_label).small(), |ui| {
+        if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
+            set = Some(None);
+            ui.close_menu();
+        }
+        for other in comp.layers.iter().filter(|l| l.id != layer.id) {
+            let selected = layer.matte.is_some_and(|m| m.layer == other.id);
+            if ui.selectable_label(selected, &other.name).clicked() {
+                set = Some(Some(MatteRef {
+                    layer: other.id,
+                    channel: layer
+                        .matte
+                        .map(|m| m.channel)
+                        .unwrap_or(MatteChannel::Alpha),
+                    inverted: layer.matte.is_some_and(|m| m.inverted),
+                }));
+                ui.close_menu();
+            }
+        }
+        if let Some(mut m) = layer.matte {
+            ui.separator();
+            let luma = matches!(m.channel, MatteChannel::Luma);
+            if ui.selectable_label(luma, "Luma matte").clicked() {
+                m.channel = if luma {
+                    MatteChannel::Alpha
+                } else {
+                    MatteChannel::Luma
+                };
+                set = Some(Some(m));
+            }
+            if ui.selectable_label(m.inverted, "Inverted").clicked() {
+                m.inverted = !m.inverted;
+                set = Some(Some(m));
+            }
+        }
+    });
+    if let Some(matte) = set {
+        *pending = Some(kiriko_core::Op::SetLayerMatte {
+            comp: comp_id,
+            layer: layer.id,
+            matte,
+        });
+    }
+    let blend_name = |b: BlendMode| match b {
+        BlendMode::Normal => "Normal",
+        BlendMode::Add => "Add",
+        BlendMode::Multiply => "Multiply",
+        BlendMode::Screen => "Screen",
+        BlendMode::Overlay => "Overlay",
+        BlendMode::SoftLight => "Soft light",
+        BlendMode::HardLight => "Hard light",
+        BlendMode::Lighten => "Lighten",
+        BlendMode::Darken => "Darken",
+    };
+    bare_dropdown(
+        ui,
+        egui::RichText::new(blend_name(layer.blend)).small(),
+        |ui| {
+            for mode in [
+                BlendMode::Normal,
+                BlendMode::Add,
+                BlendMode::Multiply,
+                BlendMode::Screen,
+                BlendMode::Overlay,
+                BlendMode::SoftLight,
+                BlendMode::HardLight,
+                BlendMode::Lighten,
+                BlendMode::Darken,
+            ] {
+                if ui
+                    .selectable_label(layer.blend == mode, blend_name(mode))
+                    .clicked()
+                {
+                    if layer.blend != mode {
+                        *pending = Some(kiriko_core::Op::SetLayerBlend {
+                            comp: comp_id,
+                            layer: layer.id,
+                            blend: mode,
+                        });
+                    }
+                    ui.close_menu();
+                }
+            }
+        },
+    );
+    if ui
+        .selectable_label(layer.switches.three_d, egui::RichText::new("3D").small())
+        .on_hover_text("Place this layer in z-space (needs a Camera layer)")
+        .clicked()
+    {
+        *pending = Some(kiriko_core::Op::SetLayerThreeD {
+            comp: comp_id,
+            layer: layer.id,
+            three_d: !layer.switches.three_d,
+        });
+    }
+    if matches!(layer.kind, kiriko_core::model::LayerKind::Footage { .. }) {
+        let muted = !layer.switches.audible;
+        if ui
+            .selectable_label(muted, egui::RichText::new("Mute").small())
+            .on_hover_text("Silence this layer in playback and export")
+            .clicked()
+        {
+            *pending = Some(kiriko_core::Op::SetLayerAudible {
+                comp: comp_id,
+                layer: layer.id,
+                audible: muted,
+            });
+        }
+    }
+    let _ = theme;
+}
+
+/// Every keyframe time (layer-local seconds) across a layer's animated
+/// properties — for the timeline's keyframe glyphs.
+fn layer_keyframe_times(layer: &kiriko_core::model::Layer) -> Vec<f64> {
+    use kiriko_core::anim::Animation;
+    use kiriko_core::model::{LayerKind, TransformProp};
+    let mut times = Vec::new();
+    let mut collect = |anim: &Animation| {
+        if let Animation::Keyframed(keys) = anim {
+            times.extend(keys.iter().map(|k| k.time.to_f64()));
+        }
+    };
+    for prop in [
+        TransformProp::AnchorX,
+        TransformProp::AnchorY,
+        TransformProp::PositionX,
+        TransformProp::PositionY,
+        TransformProp::PositionZ,
+        TransformProp::ScaleX,
+        TransformProp::ScaleY,
+        TransformProp::Rotation,
+        TransformProp::RotationX,
+        TransformProp::RotationY,
+        TransformProp::Opacity,
+    ] {
+        collect(&layer.transform.get(prop).animation);
+    }
+    if let LayerKind::Camera { zoom } = &layer.kind {
+        collect(&zoom.animation);
+    }
+    times
+}
+
+/// A single "Speed %" row for a footage layer, inside Transform. Editing sets
+/// a constant-speed retime (100% clears it); ramps are shown read-only and
+/// edited in the graph editor (K-070).
+fn speed_row(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    retime: &Option<kiriko_core::retime::Retime>,
+    pending: &mut Option<kiriko_core::Op>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new("Speed %")
+                .small()
+                .color(theme.text_muted),
+        );
+        let current = retime
+            .as_ref()
+            .map(|r| r.speed_at(0.0) * 100.0)
+            .unwrap_or(100.0);
+        let id = egui::Id::new(("speed", layer.id));
+        let mut v = ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(current);
+        let resp = ui.add(
+            egui::DragValue::new(&mut v)
+                .speed(1.0)
+                .range(-800.0..=800.0)
+                .suffix(" %"),
+        );
+        if resp.dragged() || resp.has_focus() {
+            ui.data_mut(|d| d.insert_temp(id, v));
+        }
+        if resp.drag_stopped() || resp.lost_focus() {
+            if (v - current).abs() > 1e-6 {
+                let new_retime = if (v - 100.0).abs() < 1e-6 {
+                    None
+                } else {
+                    let d = layer.out_point.0;
+                    let speed = kiriko_core::Rational::from_f64_on_grid(v / 100.0, 1000)
+                        .unwrap_or(kiriko_core::Rational::ONE);
+                    Some(kiriko_core::retime::Retime::constant_speed(
+                        d,
+                        kiriko_core::Rational::ZERO,
+                        speed,
+                    ))
+                };
+                *pending = Some(kiriko_core::Op::SetLayerRetime {
+                    comp: comp_id,
+                    layer: layer.id,
+                    retime: new_retime,
+                });
+            }
+            ui.data_mut(|d| d.remove::<f64>(id));
+        }
+        // If the map is an actual ramp (start ≠ end), flag it read-only.
+        if retime
+            .as_ref()
+            .and_then(|r| r.single_ramp_view())
+            .is_some_and(|(a, b, _)| (a - b).abs() > 1e-9)
+        {
+            ui.label(
+                egui::RichText::new("ramp")
+                    .small()
+                    .color(theme.text_disabled),
+            )
+            .on_hover_text("Ramps are edited in the graph editor");
+        }
+    });
+}
+
 fn mask_space(
     layer: &kiriko_core::model::Layer,
     app: &AppState,
@@ -3751,8 +3775,11 @@ impl Shell {
             use crate::app_state::preview::PreviewResult;
             match newest {
                 Some(Ok(PreviewResult::Comp(cf))) if Some(cf.comp) == self.app.preview_comp => {
-                    let is_fill = self.app.fill_in_flight == Some((cf.comp, cf.frame))
-                        && cf.frame != self.app.preview_frame;
+                    // Only the frame under the playhead is presented; any other
+                    // frame (a background fill, or a stale render that arrived
+                    // after an edit moved on) is banked, never shown — otherwise
+                    // the viewport jumps to whatever fill just finished.
+                    let is_fill = cf.frame != self.app.preview_frame;
                     if let Some(gpu) = &mut self.gpu {
                         let doc = self.app.store.snapshot();
                         if let Some(comp) = doc.comp(cf.comp) {
@@ -4115,13 +4142,18 @@ impl Shell {
             preview_display,
             ..
         } = self;
-        DockArea::new(dock).style(style).show(
-            ctx,
-            &mut PanelViewer {
-                theme,
-                app,
-                preview_display: *preview_display,
-            },
-        );
+        DockArea::new(dock)
+            .style(style)
+            // No per-panel collapse/close-all twirls (Mack: remove everywhere).
+            .show_leaf_collapse_buttons(false)
+            .show_leaf_close_all_buttons(false)
+            .show(
+                ctx,
+                &mut PanelViewer {
+                    theme,
+                    app,
+                    preview_display: *preview_display,
+                },
+            );
     }
 }
