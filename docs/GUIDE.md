@@ -211,6 +211,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   workers glance at the wall between small steps and quietly stop if their ticket is
   stale. Nothing is ever force-killed. A test proves a deliberately slow job stops
   within 15 milliseconds of the number changing.
+- **The frame scheduler's brain (`kiriko-eval::schedule`)** — the decision rules for
+  smooth playback, written as plain arithmetic so tests can prove them. During playback
+  Kiriko renders frames ahead of the playhead onto a small shelf; each screen refresh
+  takes the newest shelf frame whose time has come, quietly binning ones the clock has
+  passed, and simply holds the last picture if rendering falls behind (sound never
+  waits). How far ahead to render adapts to how slow frames have actually been, between
+  8 and 16 frames. And in realtime mode, frames too slow for the frame budget drop to a
+  coarser preview resolution within a frame or two, earning it back only after a
+  sustained cheap stretch — quick to worsen, slow to improve, so the picture never
+  flickers between qualities. None of the real machinery (threads, the audio clock, the
+  GPU) lives here yet; this is the referee, and the players arrive later.
 - **Mask editing in the Viewer** — select a layer with masks and its outlines draw
   over the picture in clay, with a square handle on every vertex. Drag a handle and
   the outline follows your cursor live; let go and the pixels update — one undo step
