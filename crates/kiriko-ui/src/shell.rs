@@ -410,6 +410,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     for layer in &comp.layers {
         let (row_rect, _row_resp) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::hover());
+        let seconds_of = |x: f32| ((x - track_left) / track_w).clamp(0.0, 1.0) as f64 * duration;
         ui.painter().text(
             egui::pos2(row_rect.left() + 4.0, row_rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -436,6 +437,61 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 egui::FontId::monospace(8.0),
                 theme.text_muted,
             );
+        }
+
+        // Edge handles: drag to trim in/out (one SetLayerSpan op per release).
+        for out_edge in [false, true] {
+            let edge_x = if out_edge { bar.right() } else { bar.left() };
+            let handle = egui::Rect::from_center_size(
+                egui::pos2(edge_x, bar.center().y),
+                egui::vec2(8.0, bar.height()),
+            );
+            let resp = ui.interact(
+                handle,
+                ui.id().with(("trim", layer.id, out_edge)),
+                egui::Sense::drag(),
+            );
+            if resp.hovered() || resp.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            }
+            if resp.dragged() {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    app.trim_edit = Some((layer.id, out_edge, seconds_of(pos.x)));
+                }
+            }
+            if resp.drag_stopped() {
+                if let Some((id, is_out, secs)) = app.trim_edit.take() {
+                    if id == layer.id && is_out == out_edge {
+                        let (mut new_in, mut new_out) =
+                            (layer.in_point.0.to_f64(), layer.out_point.0.to_f64());
+                        if is_out {
+                            new_out = secs;
+                        } else {
+                            new_in = secs;
+                        }
+                        let min_len = 1.0 / comp.frame_rate.fps().max(1.0);
+                        if new_out - new_in >= min_len {
+                            pending = Some(kiriko_core::Op::SetLayerSpan {
+                                comp: comp_id,
+                                layer: layer.id,
+                                in_point: kiriko_core::time::CompTime(rational_at(new_in)),
+                                out_point: kiriko_core::time::CompTime(rational_at(new_out)),
+                                start_offset: layer.start_offset,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        // Live trim feedback: provisional edge drawn in clay.
+        if let Some((id, _is_out, secs)) = app.trim_edit {
+            if id == layer.id {
+                let x = x_of(secs);
+                ui.painter().line_segment(
+                    [egui::pos2(x, bar.top()), egui::pos2(x, bar.bottom())],
+                    egui::Stroke::new(2.0_f32, theme.accent),
+                );
+            }
         }
         ui.indent(("matte", layer.id), |ui| {
             ui.horizontal(|ui| {
