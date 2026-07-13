@@ -394,6 +394,40 @@ fn decode_target_width(
     specified
 }
 
+/// Frame visit order for the idle background cache fill: the playhead first,
+/// then a forward-biased walk — roughly three frames ahead of the playhead for
+/// every one behind — because playback and scrubbing usually head forwards, so
+/// the frames most likely to be viewed next should cache first (Mack). Every
+/// work-area frame appears exactly once.
+fn fill_walk_order(playhead: usize, start: usize, end: usize) -> Vec<usize> {
+    let mut order = Vec::new();
+    if end <= start || playhead < start || playhead >= end {
+        return order;
+    }
+    let span = end - start;
+    order.push(playhead);
+    let (mut ahead, mut behind) = (1usize, 1usize);
+    let mut k = 0usize;
+    while order.len() < span && k < span * 2 + 8 {
+        // One behind for every three ahead; when a side is exhausted the other
+        // takes over so every frame is still visited.
+        let want_behind = k % 4 == 3;
+        let forward = playhead + ahead;
+        if !want_behind && forward < end {
+            order.push(forward);
+            ahead += 1;
+        } else if let Some(f) = playhead.checked_sub(behind).filter(|f| *f >= start) {
+            order.push(f);
+            behind += 1;
+        } else if forward < end {
+            order.push(forward);
+            ahead += 1;
+        }
+        k += 1;
+    }
+    order
+}
+
 /// Pan-behind: the position that keeps a layer visually fixed when its origin
 /// (anchor) moves from `anchor` to `new_anchor`. Position places the anchor in
 /// comp space, so shifting the anchor by Δ in layer space must shift position
@@ -1915,26 +1949,20 @@ impl AppState {
         self.preview_engine.request_comp(comp_id, frame, jobs);
     }
 
-    /// The next work-area frame worth filling (nearest the playhead first),
-    /// or None when the work area is fully cached or unkeyable.
+    /// The next work-area frame worth filling (forward-biased from the
+    /// playhead), or None when the work area is fully cached or unkeyable.
     #[cfg(feature = "media")]
     pub fn next_fill_frame(&self, comp_id: Uuid) -> Option<usize> {
         let doc = self.store.snapshot();
         let comp = doc.comp(comp_id)?;
         let (start, end) = self.work_area_frames(comp);
         let playhead = self.preview_frame.clamp(start, end.saturating_sub(1));
-        // Outward walk: playhead, +1, -1, +2, -2… (fills what plays next).
-        let span = end - start;
-        (0..span * 2).find_map(|i| {
-            let offset = i.div_ceil(2);
-            let frame = if i % 2 == 0 {
-                playhead.checked_add(offset).filter(|f| *f < end)
-            } else {
-                playhead.checked_sub(offset).filter(|f| *f >= start)
-            }?;
-            let key = self.frame_key_for(comp_id, frame)?;
-            (!self.comp_frame_cache.contains_key(&key)).then_some(frame)
-        })
+        fill_walk_order(playhead, start, end)
+            .into_iter()
+            .find_map(|frame| {
+                let key = self.frame_key_for(comp_id, frame)?;
+                (!self.comp_frame_cache.contains_key(&key)).then_some(frame)
+            })
     }
 
     /// One number capturing the preview-quality state (memo key component).
@@ -2526,6 +2554,23 @@ mod tests {
         assert_eq!(decode_target_width(1920, true, true, 0.1, 1), Some(192));
         // A source already smaller than the cap needs no draft decode.
         assert_eq!(decode_target_width(320, true, false, 1.0, 1), None);
+    }
+
+    #[test]
+    fn fill_walk_is_forward_biased_and_complete() {
+        let order = fill_walk_order(5, 0, 10);
+        assert_eq!(order[0], 5); // the playhead caches first
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..10).collect::<Vec<_>>()); // every frame once
+                                                         // Of the four frames right after the playhead, at least three are ahead.
+        let ahead = order[1..5].iter().filter(|&&f| f > 5).count();
+        assert!(ahead >= 3, "expected a forward bias: {order:?}");
+        // Playhead at the work-area start: everything is ahead, no panic.
+        assert_eq!(fill_walk_order(0, 0, 4), vec![0, 1, 2, 3]);
+        // Degenerate spans return cleanly.
+        assert_eq!(fill_walk_order(0, 0, 1), vec![0]);
+        assert!(fill_walk_order(0, 0, 0).is_empty());
     }
 
     #[test]

@@ -292,6 +292,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   is shown — only where it sits — so Kiriko keeps the last decoded frame and simply re-arranges
   it with your in-progress value each tick, no re-decoding. The moment you let go, the edit is
   committed as a single undo step and the frame re-renders normally.
+- **Idle time is spent pre-caching nearby frames.** When you stop on a frame and aren't
+  playing or dragging, Kiriko quietly renders the frames around the playhead into the cache
+  at your chosen resolution, so stepping or scrubbing to them is instant instead of waiting
+  each time. It works outwards from the playhead but favours the frames *ahead* — roughly
+  three ahead for every one behind — because that's usually where you're going next. It fills
+  one frame at a time and any real request (a scrub, an edit) immediately takes priority.
 - **Mask editing in the Viewer** — select a layer with masks and its outlines draw
   over the picture in clay, with a square handle on every vertex. Drag a handle and
   the outline follows your cursor live; let go and the pixels update — one undo step
