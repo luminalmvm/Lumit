@@ -1147,6 +1147,22 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                 three_d: !layer.switches.three_d,
                             });
                         }
+                        // Mute: only meaningful for layers that carry sound.
+                        if matches!(layer.kind, kiriko_core::model::LayerKind::Footage { .. }) {
+                            ui.separator();
+                            let muted = !layer.switches.audible;
+                            if ui
+                                .selectable_label(muted, egui::RichText::new("Mute").small())
+                                .on_hover_text("Silence this layer in comp playback and export")
+                                .clicked()
+                            {
+                                pending = Some(kiriko_core::Op::SetLayerAudible {
+                                    comp: comp_id,
+                                    layer: layer.id,
+                                    audible: muted, // toggling: muted→audible
+                                });
+                            }
+                        }
                     });
                     // Masks only appear once the layer has one (add via right-click or
                     // the toolbar's mask tool).

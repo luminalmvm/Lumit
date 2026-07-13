@@ -73,6 +73,12 @@ pub enum Op {
         layer: Uuid,
         three_d: bool,
     },
+    /// Mute or unmute a layer's audio (the audible switch).
+    SetLayerAudible {
+        comp: Uuid,
+        layer: Uuid,
+        audible: bool,
+    },
     /// Replace a Text layer's document (exactly invertible).
     SetTextDocument {
         comp: Uuid,
@@ -273,6 +279,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 three_d: previous,
+            })
+        }
+        Op::SetLayerAudible {
+            comp,
+            layer,
+            audible,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.audible, *audible);
+            Ok(Op::SetLayerAudible {
+                comp: *comp,
+                layer: *layer,
+                audible: previous,
             })
         }
         Op::SetTextDocument {

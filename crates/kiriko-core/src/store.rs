@@ -403,6 +403,40 @@ mod tests {
         let layer = comp.layers.iter().find(|l| l.id == layer_id).unwrap();
         assert!(layer.switches.three_d);
 
+        // Mute round-trips the same way (audible defaults true).
+        store
+            .commit(Op::SetLayerAudible {
+                comp: comp_id,
+                layer: layer_id,
+                audible: false,
+            })
+            .unwrap();
+        assert!(
+            !store
+                .snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .switches
+                .audible
+        );
+        store.undo().unwrap();
+        assert!(
+            store
+                .snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .switches
+                .audible
+        );
+
         store.undo().unwrap();
         store.undo().unwrap();
         let doc = store.snapshot();
