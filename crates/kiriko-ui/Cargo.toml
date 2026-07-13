@@ -12,6 +12,7 @@ kiriko-audio = { path = "../kiriko-audio", optional = true }
 kiriko-cache = { path = "../kiriko-cache", optional = true }
 kiriko-gpu = { path = "../kiriko-gpu", optional = true }
 kiriko-media = { path = "../kiriko-media", optional = true }
+kiriko-text = { path = "../kiriko-text" }
 kiriko-project = { path = "../kiriko-project" }
 rfd = "0.15"
 uuid = { version = "1", features = ["v7"] }

@@ -196,6 +196,21 @@ pub enum LayerKind {
     Precomp {
         comp: Uuid,
     },
+    /// Editable styled text (v1: one run — docs/03-DATA-MODEL.md §9.1).
+    Text {
+        document: TextDocument,
+    },
+}
+
+/// v1 text: single run. Styled runs, fonts and animators follow the doc.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextDocument {
+    pub text: String,
+    /// Pixel size at natural scale.
+    pub size: f64,
+    pub fill: LinearColour,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Per-layer composite operator — the linear subset first

@@ -688,6 +688,35 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 }
             });
         });
+        if let kiriko_core::model::LayerKind::Text { document } = &layer.kind {
+            ui.indent(("text", layer.id), |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Text").small().color(theme.text_muted));
+                    let mut text = document.text.clone();
+                    let resp = ui.add(egui::TextEdit::singleline(&mut text).desired_width(180.0));
+                    let mut size = document.size;
+                    let size_resp = ui.add(
+                        egui::DragValue::new(&mut size)
+                            .speed(1.0)
+                            .range(4.0..=512.0)
+                            .suffix(" px"),
+                    );
+                    if (resp.lost_focus() && text != document.text)
+                        || (size_resp.drag_stopped() || size_resp.lost_focus())
+                            && (size - document.size).abs() > f64::EPSILON
+                    {
+                        let mut doc_new = document.clone();
+                        doc_new.text = text;
+                        doc_new.size = size;
+                        pending = Some(kiriko_core::Op::SetTextDocument {
+                            comp: comp_id,
+                            layer: layer.id,
+                            document: doc_new,
+                        });
+                    }
+                });
+            });
+        }
         ui.indent(("transform", layer.id), |ui| {
             ui.collapsing(
                 egui::RichText::new("Transform")
@@ -1328,6 +1357,15 @@ fn build_comp_draws(
                     (comp.width as f32, comp.height as f32),
                 )
             }),
+            LayerKind::Text { document } => in_span(layer).then(|| {
+                let fill = crate::export::solid_rgba(document.fill);
+                let r = kiriko_text::rasterise_line(
+                    &document.text,
+                    document.size as f32,
+                    [fill[0], fill[1], fill[2]],
+                );
+                (r.rgba, r.width, r.height, (r.width as f32, r.height as f32))
+            }),
             LayerKind::Precomp { .. } => None, // handled as Nested below
         };
         raw.map(|(mut rgba, w, h, natural)| {
@@ -1454,7 +1492,8 @@ fn mask_space(
 ) -> (f64, f64) {
     match &layer.kind {
         kiriko_core::model::LayerKind::Solid { .. }
-        | kiriko_core::model::LayerKind::Precomp { .. } => {
+        | kiriko_core::model::LayerKind::Precomp { .. }
+        | kiriko_core::model::LayerKind::Text { .. } => {
             (f64::from(comp.width), f64::from(comp.height))
         }
         #[cfg(feature = "media")]
@@ -1906,6 +1945,7 @@ impl Shell {
                 MenuAction::Redo => self.app.redo(),
                 MenuAction::NewComposition => self.app.new_composition(),
                 MenuAction::AddSolidLayer => self.app.add_solid_layer(),
+                MenuAction::AddTextLayer => self.app.add_text_layer(),
                 MenuAction::ResetWorkspace => self.dock = default_layout(),
             }
         }
@@ -2281,6 +2321,10 @@ impl Shell {
                     }
                     if ui.button("Add solid layer").clicked() {
                         self.app.add_solid_layer();
+                        ui.close_menu();
+                    }
+                    if ui.button("Add text layer").clicked() {
+                        self.app.add_text_layer();
                         ui.close_menu();
                     }
                 });

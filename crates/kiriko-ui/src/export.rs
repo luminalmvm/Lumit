@@ -161,6 +161,28 @@ impl Renderer<'_> {
                     natural: (parent_dims.0 as f32, parent_dims.1 as f32),
                 }))
             }
+            LayerKind::Text { document } => {
+                let fill = solid_rgba(document.fill);
+                let r = kiriko_text::rasterise_line(
+                    &document.text,
+                    document.size as f32,
+                    [fill[0], fill[1], fill[2]],
+                );
+                let mut rgba = r.rgba;
+                kiriko_core::mask::apply_masks(
+                    &mut rgba,
+                    r.width,
+                    r.height,
+                    f64::from(r.width),
+                    f64::from(r.height),
+                    &layer.masks,
+                );
+                let src = self.colour.upload_srgb8(self.gpu, &rgba, r.width, r.height);
+                Ok(Some(Prepared {
+                    tex: self.colour.linearise(self.gpu, &src),
+                    natural: (r.width as f32, r.height as f32),
+                }))
+            }
             LayerKind::Precomp { comp } => {
                 if visited.contains(comp) {
                     return Ok(None); // cycle guard: contribute nothing

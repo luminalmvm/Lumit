@@ -66,6 +66,12 @@ pub enum Op {
         layer: Uuid,
         masks: Vec<crate::mask::Mask>,
     },
+    /// Replace a Text layer's document (exactly invertible).
+    SetTextDocument {
+        comp: Uuid,
+        layer: Uuid,
+        document: crate::model::TextDocument,
+    },
     SetWorkArea {
         comp: Uuid,
         work_area: Option<(CompTime, CompTime)>,
@@ -191,6 +197,27 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 masks: previous,
+            })
+        }
+        Op::SetTextDocument {
+            comp,
+            layer,
+            document,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let crate::model::LayerKind::Text { document: current } = &mut l.kind else {
+                return Err(OpError::UnknownLayer);
+            };
+            let previous = std::mem::replace(current, document.clone());
+            Ok(Op::SetTextDocument {
+                comp: *comp,
+                layer: *layer,
+                document: previous,
             })
         }
         Op::SetWorkArea { comp, work_area } => {

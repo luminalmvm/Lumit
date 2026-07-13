@@ -24,6 +24,7 @@ pub enum MenuAction {
     Redo,
     NewComposition,
     AddSolidLayer,
+    AddTextLayer,
     ResetWorkspace,
 }
 
@@ -101,6 +102,7 @@ impl NativeMenu {
         comp.append_items(&[
             &item("comp.new", "New composition", cmd_shift(Code::KeyN)),
             &item("comp.solid", "Add solid layer", None),
+            &item("comp.text", "Add text layer", None),
         ])?;
 
         let window = Submenu::new("Window", true);
@@ -137,6 +139,7 @@ impl NativeMenu {
                 "edit.redo" => Some(MenuAction::Redo),
                 "comp.new" => Some(MenuAction::NewComposition),
                 "comp.solid" => Some(MenuAction::AddSolidLayer),
+                "comp.text" => Some(MenuAction::AddTextLayer),
                 "window.reset" => Some(MenuAction::ResetWorkspace),
                 _ => None,
             };

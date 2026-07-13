@@ -803,6 +803,56 @@ impl AppState {
         false
     }
 
+    /// Add a text layer with a starter document.
+    pub fn add_text_layer(&mut self) {
+        use kiriko_core::model::{
+            Layer, LayerKind, LinearColour, Switches, TextDocument, TransformGroup,
+        };
+        use kiriko_core::time::CompTime;
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            self.error = Some("select a composition first".into());
+            return;
+        };
+        let doc = self.store.snapshot();
+        let Some(comp) = doc.comp(comp_id) else {
+            return;
+        };
+        let transform = TransformGroup {
+            position_x: kiriko_core::anim::Property::fixed(f64::from(comp.width) * 0.5),
+            position_y: kiriko_core::anim::Property::fixed(f64::from(comp.height) * 0.5),
+            ..TransformGroup::default()
+        };
+        let layer = Layer {
+            id: Uuid::now_v7(),
+            name: "Text".into(),
+            kind: LayerKind::Text {
+                document: TextDocument {
+                    text: "Text".into(),
+                    size: 72.0,
+                    fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                    extra: serde_json::Map::new(),
+                },
+            },
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(comp.duration.0),
+            start_offset: CompTime(Rational::ZERO),
+            transform,
+            matte: None,
+            blend: Default::default(),
+            masks: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        self.commit(Op::AddLayer {
+            comp: comp_id,
+            index: 0,
+            layer: Box::new(layer),
+        });
+        self.preview_comp = Some(comp_id);
+        #[cfg(feature = "media")]
+        self.refresh_preview();
+    }
+
     /// Add a white comp-sized Solid layer (colour editing joins the layer
     /// properties panel).
     pub fn add_solid_layer(&mut self) {
@@ -1007,7 +1057,7 @@ impl AppState {
             }
             let lt = t - layer.start_offset.0.to_f64();
             match &layer.kind {
-                LayerKind::Solid { .. } => {}
+                LayerKind::Solid { .. } | LayerKind::Text { .. } => {}
                 LayerKind::Precomp { comp: nested_id } => {
                     if visited.contains(nested_id) {
                         continue; // cycle guard
