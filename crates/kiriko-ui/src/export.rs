@@ -1,22 +1,24 @@
-//! Export v0 (docs/06-RENDER-PIPELINE.md §7): render every comp frame through
-//! the compositor at full resolution and encode to H.264/mp4.
+//! Export (docs/06-RENDER-PIPELINE.md §7): render every work-area frame
+//! through the compositor at full resolution and encode to H.264/mp4.
 //!
 //! In plain terms: the same pixels the Viewer shows, written to a file — the
 //! preview-equals-export promise (K-031) holds because this path reuses the
-//! identical colour engine and compositor. Runs entirely on its own thread
-//! with its own decoders (K-017: the UI never waits); progress streams back,
-//! and cancel is a flag the loop checks every frame. The export queue,
-//! presets, and hardware encoders replace this single-shot v0.
+//! identical colour engine and compositor. Precomp layers render recursively:
+//! the nested comp becomes a texture the parent composites like any other
+//! source. Runs on its own thread with its own decoders (K-017); progress
+//! streams back; cancel is checked every frame.
 
 #![cfg(feature = "media")]
 
-use kiriko_core::model::{Document, LayerKind, MatteChannel, ProjectItem};
+use kiriko_core::model::{Composition, Document, LayerKind, MatteChannel, ProjectItem};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use uuid::Uuid;
+
+type Tex = egui_wgpu::wgpu::Texture;
 
 pub enum ExportEvent {
     Progress { frame: usize, total: usize },
@@ -43,7 +45,6 @@ pub struct ItemInfo {
     pub frames: usize,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn start(
     doc: Arc<Document>,
     comp_id: Uuid,
@@ -72,6 +73,233 @@ pub fn start(
     ExportHandle { events, cancel }
 }
 
+/// Renderer state carried down the precomp recursion.
+struct Renderer<'a> {
+    doc: &'a Document,
+    items: &'a HashMap<Uuid, ItemInfo>,
+    gpu: &'a kiriko_gpu::GpuContext,
+    colour: kiriko_gpu::ColourEngine,
+    compositor: kiriko_gpu::Compositor,
+    decoders: HashMap<Uuid, kiriko_media::VideoDecoder>,
+}
+
+/// A layer's source, prepared for compositing: a linear texture plus the
+/// natural pixel size its transform applies to.
+struct Prepared {
+    tex: Tex,
+    natural: (f32, f32),
+}
+
+impl Renderer<'_> {
+    /// Prepare one layer's source at comp time `t` (None = contributes
+    /// nothing). `parent_dims` sizes solids; `visited` guards precomp cycles.
+    fn prepare(
+        &mut self,
+        layer: &kiriko_core::model::Layer,
+        t: f64,
+        parent_dims: (u32, u32),
+        visited: &mut Vec<Uuid>,
+    ) -> Result<Option<Prepared>, String> {
+        if t < layer.in_point.0.to_f64() || t >= layer.out_point.0.to_f64() {
+            return Ok(None);
+        }
+        let lt = t - layer.start_offset.0.to_f64();
+        match &layer.kind {
+            LayerKind::Footage { item } => {
+                let Some(info) = self.items.get(item) else {
+                    return Ok(None);
+                };
+                let source_frame = ((lt * info.fps).round().max(0.0) as usize)
+                    .min(info.frames.saturating_sub(1));
+                if !self.decoders.contains_key(item) {
+                    let index = kiriko_media::index::build_frame_index(&info.path)
+                        .map_err(|e| e.to_string())?;
+                    let dec = kiriko_media::VideoDecoder::open(&info.path, index)
+                        .map_err(|e| e.to_string())?;
+                    self.decoders.insert(*item, dec);
+                }
+                let dec = self.decoders.get_mut(item).ok_or("decoder missing")?;
+                let mut px = dec
+                    .frame_rgba(source_frame, None)
+                    .map_err(|e| e.to_string())?;
+                kiriko_core::mask::apply_masks(
+                    &mut px.rgba,
+                    px.width,
+                    px.height,
+                    f64::from(px.width),
+                    f64::from(px.height),
+                    &layer.masks,
+                );
+                let src = self
+                    .colour
+                    .upload_srgb8(self.gpu, &px.rgba, px.width, px.height);
+                Ok(Some(Prepared {
+                    tex: self.colour.linearise(self.gpu, &src),
+                    natural: (px.width as f32, px.height as f32),
+                }))
+            }
+            LayerKind::Solid { colour } => {
+                let px = solid_rgba(*colour);
+                // Masked solids rasterise at parent resolution; plain ones tile.
+                let (w, h) = if layer.masks.is_empty() {
+                    (16, 16)
+                } else {
+                    parent_dims
+                };
+                let mut rgba = px_tile(&px, w, h);
+                kiriko_core::mask::apply_masks(
+                    &mut rgba,
+                    w,
+                    h,
+                    f64::from(parent_dims.0),
+                    f64::from(parent_dims.1),
+                    &layer.masks,
+                );
+                let src = self.colour.upload_srgb8(self.gpu, &rgba, w, h);
+                Ok(Some(Prepared {
+                    tex: self.colour.linearise(self.gpu, &src),
+                    natural: (parent_dims.0 as f32, parent_dims.1 as f32),
+                }))
+            }
+            LayerKind::Precomp { comp } => {
+                if visited.contains(comp) {
+                    return Ok(None); // cycle guard: contribute nothing
+                }
+                let Some(nested) = self.doc.comp(*comp) else {
+                    return Ok(None);
+                };
+                visited.push(*comp);
+                let tex = self.render_comp_linear(nested, lt, visited)?;
+                visited.pop();
+                Ok(Some(Prepared {
+                    tex,
+                    natural: (nested.width as f32, nested.height as f32),
+                }))
+            }
+        }
+    }
+
+    /// Render a whole comp at time `t` into a linear fp16 texture (recursive
+    /// through Precomp layers).
+    fn render_comp_linear(
+        &mut self,
+        comp: &Composition,
+        t: f64,
+        visited: &mut Vec<Uuid>,
+    ) -> Result<Tex, String> {
+        let dims = (comp.width, comp.height);
+        let mut prepared: HashMap<Uuid, Prepared> = HashMap::new();
+        for l in &comp.layers {
+            let needed = l.switches.visible
+                || comp.layers.iter().any(|c| {
+                    c.switches.visible && c.matte.as_ref().is_some_and(|m| m.layer == l.id)
+                });
+            if !needed {
+                continue;
+            }
+            if let Some(p) = self.prepare(l, t, dims, visited)? {
+                prepared.insert(l.id, p);
+            }
+        }
+
+        // Matte textures: the matte layer rendered alone into comp space.
+        let mut matte_tex: HashMap<Uuid, Tex> = HashMap::new();
+        for l in comp.layers.iter().filter(|l| l.switches.visible) {
+            if let Some(mr) = &l.matte {
+                if let (Some(src_layer), Some(mp)) = (
+                    comp.layers.iter().find(|x| x.id == mr.layer),
+                    prepared.get(&mr.layer),
+                ) {
+                    let mlt = t - src_layer.start_offset.0.to_f64();
+                    let mtr = &src_layer.transform;
+                    let rendered = self.compositor.composite(
+                        self.gpu,
+                        comp.width,
+                        comp.height,
+                        [0.0, 0.0, 0.0, 0.0],
+                        &[kiriko_gpu::CompositeLayer {
+                            texture: &mp.tex,
+                            size: mp.natural,
+                            position: (
+                                mtr.position_x.value_at(mlt) as f32,
+                                mtr.position_y.value_at(mlt) as f32,
+                            ),
+                            anchor: (
+                                mtr.anchor_x.value_at(mlt) as f32,
+                                mtr.anchor_y.value_at(mlt) as f32,
+                            ),
+                            scale: (
+                                mtr.scale_x.value_at(mlt) as f32,
+                                mtr.scale_y.value_at(mlt) as f32,
+                            ),
+                            rotation_deg: mtr.rotation.value_at(mlt) as f32,
+                            opacity: mtr.opacity.value_at(mlt) as f32,
+                            matte: None,
+                            blend: kiriko_gpu::Blend::Normal,
+                        }],
+                    );
+                    matte_tex.insert(l.id, rendered);
+                }
+            }
+        }
+
+        let mut draws: Vec<kiriko_gpu::CompositeLayer> = Vec::new();
+        for l in comp.layers.iter().rev() {
+            if !l.switches.visible {
+                continue;
+            }
+            let Some(p) = prepared.get(&l.id) else { continue };
+            let lt = t - l.start_offset.0.to_f64();
+            let tr = &l.transform;
+            draws.push(kiriko_gpu::CompositeLayer {
+                texture: &p.tex,
+                size: p.natural,
+                position: (
+                    tr.position_x.value_at(lt) as f32,
+                    tr.position_y.value_at(lt) as f32,
+                ),
+                anchor: (
+                    tr.anchor_x.value_at(lt) as f32,
+                    tr.anchor_y.value_at(lt) as f32,
+                ),
+                scale: (
+                    tr.scale_x.value_at(lt) as f32,
+                    tr.scale_y.value_at(lt) as f32,
+                ),
+                rotation_deg: tr.rotation.value_at(lt) as f32,
+                opacity: tr.opacity.value_at(lt) as f32,
+                matte: l.matte.as_ref().and_then(|mr| {
+                    matte_tex.get(&l.id).map(|mt| kiriko_gpu::MatteInput {
+                        texture: mt,
+                        luma: matches!(mr.channel, MatteChannel::Luma),
+                        inverted: mr.inverted,
+                    })
+                }),
+                blend: match l.blend {
+                    kiriko_core::model::BlendMode::Normal => kiriko_gpu::Blend::Normal,
+                    kiriko_core::model::BlendMode::Add => kiriko_gpu::Blend::Add,
+                    kiriko_core::model::BlendMode::Multiply => kiriko_gpu::Blend::Multiply,
+                    kiriko_core::model::BlendMode::Screen => kiriko_gpu::Blend::Screen,
+                },
+            });
+        }
+
+        let bg = comp.background.0;
+        Ok(self.compositor.composite(
+            self.gpu,
+            comp.width,
+            comp.height,
+            [
+                f64::from(bg[0]),
+                f64::from(bg[1]),
+                f64::from(bg[2]),
+                f64::from(bg[3]),
+            ],
+            &draws,
+        ))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run(
     doc: &Document,
@@ -97,8 +325,14 @@ fn run(
     };
     let total = end - first;
 
-    let colour = kiriko_gpu::ColourEngine::new(gpu);
-    let compositor = kiriko_gpu::Compositor::new(gpu);
+    let mut renderer = Renderer {
+        doc,
+        items,
+        gpu,
+        colour: kiriko_gpu::ColourEngine::new(gpu),
+        compositor: kiriko_gpu::Compositor::new(gpu),
+        decoders: HashMap::new(),
+    };
     let mut encoder = kiriko_media::Encoder::open_with_bitrate(
         out_path,
         comp.width,
@@ -109,207 +343,19 @@ fn run(
     )
     .map_err(|e| e.to_string())?;
 
-    let mut decoders: HashMap<Uuid, kiriko_media::VideoDecoder> = HashMap::new();
-
     for frame_n in 0..total {
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }
         let t = (first + frame_n) as f64 / fps;
-
-        // Layers needed at t: visible ones plus their matte sources.
-        let mut wanted: Vec<Uuid> = Vec::new();
-        for l in &comp.layers {
-            let in_span = t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
-            if l.switches.visible && in_span {
-                wanted.push(l.id);
-                if let Some(m) = &l.matte {
-                    if !wanted.contains(&m.layer) {
-                        wanted.push(m.layer);
-                    }
-                }
-            }
-        }
-
-        // Decode every needed layer's source frame (full resolution).
-        let mut pixels: HashMap<Uuid, kiriko_media::DecodedFrame> = HashMap::new();
-        for l in &comp.layers {
-            if !wanted.contains(&l.id) {
-                continue;
-            }
-            if t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
-                continue;
-            }
-            let item = match &l.kind {
-                LayerKind::Footage { item } => item,
-                LayerKind::Precomp { .. } => continue, // stage 2: recursion
-                LayerKind::Solid { colour } => {
-                    let px = solid_rgba(*colour);
-                    let mut rgba = px_tile(&px, comp.width, comp.height);
-                    kiriko_core::mask::apply_masks(
-                        &mut rgba,
-                        comp.width,
-                        comp.height,
-                        f64::from(comp.width),
-                        f64::from(comp.height),
-                        &l.masks,
-                    );
-                    pixels.insert(
-                        l.id,
-                        kiriko_media::DecodedFrame {
-                            width: comp.width,
-                            height: comp.height,
-                            rgba,
-                        },
-                    );
-                    continue;
-                }
-            };
-            let Some(info) = items.get(item) else {
-                continue;
-            };
-            let lt = t - l.start_offset.0.to_f64();
-            let source_frame =
-                ((lt * info.fps).round().max(0.0) as usize).min(info.frames.saturating_sub(1));
-            if !decoders.contains_key(item) {
-                let index = kiriko_media::index::build_frame_index(&info.path)
-                    .map_err(|e| e.to_string())?;
-                let dec = kiriko_media::VideoDecoder::open(&info.path, index)
-                    .map_err(|e| e.to_string())?;
-                decoders.insert(*item, dec);
-            }
-            let dec = decoders.get_mut(item).ok_or("decoder missing")?;
-            let mut px = dec
-                .frame_rgba(source_frame, None)
-                .map_err(|e| e.to_string())?;
-            kiriko_core::mask::apply_masks(
-                &mut px.rgba,
-                px.width,
-                px.height,
-                f64::from(px.width),
-                f64::from(px.height),
-                &l.masks,
-            );
-            pixels.insert(l.id, px);
-        }
-
-        // Linearised textures + matte textures, then composite bottom-up.
-        // (Mirror of the preview path; consolidated into the evaluator later.)
-        let linear: HashMap<Uuid, egui_wgpu::wgpu::Texture> = pixels
-            .iter()
-            .map(|(id, px)| {
-                let src = colour.upload_srgb8(gpu, &px.rgba, px.width, px.height);
-                (*id, colour.linearise(gpu, &src))
-            })
-            .collect();
-
-        let mut draws: Vec<kiriko_gpu::CompositeLayer> = Vec::new();
-        let mut matte_textures: Vec<(Uuid, egui_wgpu::wgpu::Texture)> = Vec::new();
-        for l in comp.layers.iter().rev() {
-            if !l.switches.visible || !linear.contains_key(&l.id) {
-                continue;
-            }
-            if let Some(mr) = &l.matte {
-                if let (Some(src_layer), Some(mtex)) = (
-                    comp.layers.iter().find(|x| x.id == mr.layer),
-                    linear.get(&mr.layer),
-                ) {
-                    let mlt = t - src_layer.start_offset.0.to_f64();
-                    let mtr = &src_layer.transform;
-                    let mp = &pixels[&mr.layer];
-                    let rendered = compositor.composite(
-                        gpu,
-                        comp.width,
-                        comp.height,
-                        [0.0, 0.0, 0.0, 0.0],
-                        &[kiriko_gpu::CompositeLayer {
-                            texture: mtex,
-                            size: (mp.width as f32, mp.height as f32),
-                            position: (
-                                mtr.position_x.value_at(mlt) as f32,
-                                mtr.position_y.value_at(mlt) as f32,
-                            ),
-                            anchor: (
-                                mtr.anchor_x.value_at(mlt) as f32,
-                                mtr.anchor_y.value_at(mlt) as f32,
-                            ),
-                            scale: (
-                                mtr.scale_x.value_at(mlt) as f32,
-                                mtr.scale_y.value_at(mlt) as f32,
-                            ),
-                            rotation_deg: mtr.rotation.value_at(mlt) as f32,
-                            opacity: mtr.opacity.value_at(mlt) as f32,
-                            matte: None,
-                            blend: kiriko_gpu::Blend::Normal,
-                        }],
-                    );
-                    matte_textures.push((l.id, rendered));
-                }
-            }
-        }
-        for l in comp.layers.iter().rev() {
-            if !l.switches.visible {
-                continue;
-            }
-            let Some(tex) = linear.get(&l.id) else {
-                continue;
-            };
-            let px = &pixels[&l.id];
-            let lt = t - l.start_offset.0.to_f64();
-            let tr = &l.transform;
-            draws.push(kiriko_gpu::CompositeLayer {
-                texture: tex,
-                size: (px.width as f32, px.height as f32),
-                position: (
-                    tr.position_x.value_at(lt) as f32,
-                    tr.position_y.value_at(lt) as f32,
-                ),
-                anchor: (
-                    tr.anchor_x.value_at(lt) as f32,
-                    tr.anchor_y.value_at(lt) as f32,
-                ),
-                scale: (
-                    tr.scale_x.value_at(lt) as f32,
-                    tr.scale_y.value_at(lt) as f32,
-                ),
-                rotation_deg: tr.rotation.value_at(lt) as f32,
-                opacity: tr.opacity.value_at(lt) as f32,
-                matte: l.matte.as_ref().and_then(|mr| {
-                    matte_textures
-                        .iter()
-                        .find(|(id, _)| *id == l.id)
-                        .map(|(_, mtex)| kiriko_gpu::MatteInput {
-                            texture: mtex,
-                            luma: matches!(mr.channel, MatteChannel::Luma),
-                            inverted: mr.inverted,
-                        })
-                }),
-                blend: match l.blend {
-                    kiriko_core::model::BlendMode::Normal => kiriko_gpu::Blend::Normal,
-                    kiriko_core::model::BlendMode::Add => kiriko_gpu::Blend::Add,
-                    kiriko_core::model::BlendMode::Multiply => kiriko_gpu::Blend::Multiply,
-                    kiriko_core::model::BlendMode::Screen => kiriko_gpu::Blend::Screen,
-                },
-            });
-        }
-
-        let bg = comp.background.0;
-        let linear_frame = compositor.composite(
-            gpu,
-            comp.width,
-            comp.height,
-            [
-                f64::from(bg[0]),
-                f64::from(bg[1]),
-                f64::from(bg[2]),
-                f64::from(bg[3]),
-            ],
-            &draws,
-        );
-        let shown = colour.display(gpu, &linear_frame);
-        let rgba = colour.readback8(gpu, &shown).map_err(|e| e.to_string())?;
+        let mut visited = vec![comp_id];
+        let linear = renderer.render_comp_linear(comp, t, &mut visited)?;
+        let shown = renderer.colour.display(gpu, &linear);
+        let rgba = renderer
+            .colour
+            .readback8(gpu, &shown)
+            .map_err(|e| e.to_string())?;
         encoder.write_rgba(&rgba).map_err(|e| e.to_string())?;
-
         let _ = tx.send(ExportEvent::Progress {
             frame: frame_n + 1,
             total,
@@ -339,9 +385,7 @@ pub fn solid_rgba(c: kiriko_core::model::LinearColour) -> [u8; 4] {
 }
 
 pub fn px_tile(px: &[u8; 4], w: u32, h: u32) -> Vec<u8> {
-    std::iter::repeat_n(*px, (w * h) as usize)
-        .flatten()
-        .collect()
+    std::iter::repeat_n(*px, (w * h) as usize).flatten().collect()
 }
 
 /// Collect the ItemInfo map from probed media (UI thread, cheap).
