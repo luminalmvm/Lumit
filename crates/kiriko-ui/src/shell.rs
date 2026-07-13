@@ -976,6 +976,20 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             });
         ui.separator();
         if ui
+            .selectable_label(!app.graph_speed_view, "Value")
+            .clicked()
+        {
+            app.graph_speed_view = false;
+        }
+        if ui
+            .selectable_label(app.graph_speed_view, "Speed")
+            .on_hover_text("The derivative view — editing here arrives with Retime")
+            .clicked()
+        {
+            app.graph_speed_view = true;
+        }
+        ui.separator();
+        if ui
             .small_button("Ease")
             .on_hover_text("Easy-ease every key of this curve (AE's F9)")
             .clicked()
@@ -1026,18 +1040,51 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         shown.sort_by_key(|k| k.time);
     }
 
-    // Curve polyline.
+    // Curve polyline: value, or its derivative in the speed lens (central
+    // difference at half-frame steps — display-first; exact closed forms
+    // arrive with Retime's segment maths).
     let samples = (rect.width() as usize / 2).max(16);
-    let points: Vec<egui::Pos2> = (0..=samples)
+    let fps_est = comp.frame_rate.fps().max(1.0);
+    let sample_at = |t: f64| -> f64 {
+        if app.graph_speed_view {
+            let h = 0.5 / fps_est;
+            let a = kiriko_core::anim::evaluate(&shown, t - h).unwrap_or(0.0);
+            let b = kiriko_core::anim::evaluate(&shown, t + h).unwrap_or(0.0);
+            (b - a) / (2.0 * h)
+        } else {
+            kiriko_core::anim::evaluate(&shown, t).unwrap_or(0.0)
+        }
+    };
+    let values: Vec<(f64, f64)> = (0..=samples)
         .map(|i| {
             let t = duration * i as f64 / samples as f64;
-            let v = kiriko_core::anim::evaluate(&shown, t).unwrap_or(0.0);
-            egui::pos2(x_of(t), y_of(v))
+            (t, sample_at(t))
         })
         .collect();
+    // The speed lens scales to its own sampled range.
+    let speed_y: Box<dyn Fn(f64) -> f32> = if app.graph_speed_view {
+        let (mut lo, mut hi) = values.iter().fold((f64::MAX, f64::MIN), |(l, h), (_, v)| {
+            (l.min(*v), h.max(*v))
+        });
+        let pad = ((hi - lo).abs().max(1.0)) * 0.15;
+        lo -= pad;
+        hi += pad;
+        Box::new(move |v: f64| rect.bottom() - (((v - lo) / (hi - lo)) as f32) * rect.height())
+    } else {
+        Box::new(y_of)
+    };
+    let points: Vec<egui::Pos2> = values
+        .iter()
+        .map(|(t, v)| egui::pos2(x_of(*t), speed_y(*v)))
+        .collect();
+    let stroke_colour = if app.graph_speed_view {
+        theme.curve[1]
+    } else {
+        theme.curve[0]
+    };
     ui.painter().add(egui::Shape::line(
         points,
-        egui::Stroke::new(1.5_f32, theme.curve[0]),
+        egui::Stroke::new(1.5_f32, stroke_colour),
     ));
 
     // Playhead (layer time).
@@ -1051,9 +1098,21 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         );
     }
 
-    // Keys: draggable squares; right-click removes; double-click adds.
+    // Keys: draggable squares (value lens); read-only ticks in the speed lens.
     let mut pending: Option<Vec<Keyframe>> = None;
+    if app.graph_speed_view {
+        for key in keys {
+            let x = x_of(key.time.to_f64());
+            ui.painter().line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                egui::Stroke::new(0.5_f32, theme.hairline_strong),
+            );
+        }
+    }
     for (idx, key) in keys.iter().enumerate() {
+        if app.graph_speed_view {
+            break; // speed-lens editing arrives with Retime's segment model
+        }
         let (kt, kv) = match app.graph_edit {
             Some((i, t, v)) if i == idx => (t, v),
             _ => (key.time.to_f64(), key.value),

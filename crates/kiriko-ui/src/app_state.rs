@@ -398,6 +398,9 @@ pub struct AppState {
     pub graph_prop: Option<kiriko_core::model::TransformProp>,
     /// In-flight keyframe drag: (key index, provisional layer-time, value).
     pub graph_edit: Option<(usize, f64, f64)>,
+    /// Graph editor lens: false = value graph, true = speed graph
+    /// (docs/01-GLOSSARY.md §3: two views of the same data, never separate).
+    pub graph_speed_view: bool,
     /// Comp shown in the Viewer (takes precedence over preview_item).
     pub preview_comp: Option<Uuid>,
     /// Wall-clock comp playback v0 (the frame scheduler replaces this):
@@ -455,6 +458,7 @@ impl Default for AppState {
             selected_layer: None,
             graph_prop: None,
             graph_edit: None,
+            graph_speed_view: false,
             preview_comp: None,
             comp_playback: None,
             preview_item: None,
