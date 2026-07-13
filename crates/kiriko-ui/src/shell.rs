@@ -860,6 +860,7 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         .unwrap_or(animated[0].0);
     app.graph_prop = Some(current);
 
+    let mut set_sides: Option<SideInterp> = None;
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(&layer.name).color(theme.text_secondary));
         egui::ComboBox::from_id_salt("graph-prop")
@@ -877,6 +878,21 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     }
                 }
             });
+        ui.separator();
+        if ui
+            .small_button("Ease")
+            .on_hover_text("Easy-ease every key of this curve (AE's F9)")
+            .clicked()
+        {
+            set_sides = Some(kiriko_core::anim::EASY_EASE);
+        }
+        if ui
+            .small_button("Linear")
+            .on_hover_text("Straighten every key of this curve")
+            .clicked()
+        {
+            set_sides = Some(SideInterp::Linear);
+        }
     });
 
     let slot = layer.transform.get(current);
@@ -1005,6 +1021,14 @@ fn graph_editor_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         }
     }
 
+    if let Some(sides) = set_sides {
+        let mut new_keys = keys.clone();
+        for k in &mut new_keys {
+            k.interp_in = sides;
+            k.interp_out = sides;
+        }
+        pending = Some(new_keys);
+    }
     if let Some(new_keys) = pending {
         let animation = if new_keys.is_empty() {
             Animation::Static(slot.value_at(0.0))
