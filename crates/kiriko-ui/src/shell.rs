@@ -742,11 +742,14 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     let mut pending: Option<kiriko_core::Op> = None;
 
     // ---- ruler + time geometry (07-UI-SPEC Timeline) --------------------
-    let name_w = 340.0_f32;
-    let duration = comp.duration.0.to_f64().max(1e-6);
-    let frames = app.comp_frame_count(comp).max(1);
     let panel_left = ui.max_rect().left();
     let panel_right = ui.max_rect().right();
+    // Draggable left-column width (Mack): clamp so it can't swallow the track.
+    let name_w = app
+        .timeline_name_w
+        .clamp(96.0, (panel_right - panel_left - 120.0).max(96.0));
+    let duration = comp.duration.0.to_f64().max(1e-6);
+    let frames = app.comp_frame_count(comp).max(1);
     let track_left = panel_left + name_w;
     let track_w = (panel_right - track_left - 8.0).max(40.0);
     let x_of = |seconds: f64| track_left + (seconds / duration) as f32 * track_w;
@@ -916,35 +919,69 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             );
         }
         let seconds_of = |x: f32| ((x - track_left) / track_w).clamp(0.0, 1.0) as f64 * duration;
-        // Left-column control strip on the title line: name + matte + blend +
-        // 3D + mute, clipped to the left column so nothing spills into the
-        // track area (Mack).
-        let left_rect = egui::Rect::from_min_max(
-            egui::pos2(row_rect.left() + 18.0, row_rect.top()),
-            egui::pos2(track_left - 6.0, row_rect.bottom()),
-        );
+        // Left-column subcolumns (Mack): [visibility][title…][matte][blend][3D]
+        // [mute]. Switches are right-anchored so they align across every row;
+        // the title flexes and truncates. Each is clipped to its slot, so a
+        // narrow column just crops controls off the edge.
+        let top = row_rect.top();
+        let bot = row_rect.bottom();
+        let edge = track_left - 6.0;
+        let slot = |x0: f32, x1: f32| {
+            egui::Rect::from_min_max(
+                egui::pos2(x0.max(row_rect.left() + 18.0), top),
+                egui::pos2(x1.max(x0 + 1.0), bot),
+            )
+        };
+        let is_footage = matches!(layer.kind, kiriko_core::model::LayerKind::Footage { .. });
+        let eye_r = slot(row_rect.left() + 18.0, row_rect.left() + 36.0);
+        let mute_r = slot(edge - 34.0, edge);
+        let td_r = slot(edge - 60.0, edge - 38.0);
+        let blend_r = slot(edge - 124.0, edge - 64.0);
+        let matte_r = slot(edge - 178.0, edge - 128.0);
+        let title_r = slot(row_rect.left() + 40.0, edge - 182.0);
+        let place = |ui: &mut egui::Ui, r: egui::Rect, add: &mut dyn FnMut(&mut egui::Ui)| {
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(r)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            );
+            child.set_clip_rect(r);
+            add(&mut child);
+        };
         let mut select_this = false;
-        ui.scope_builder(egui::UiBuilder::new().max_rect(left_rect), |ui| {
-            ui.set_clip_rect(left_rect);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                if ui
-                    .add(
-                        egui::Label::new(
-                            egui::RichText::new(&layer.name)
-                                .small()
-                                .color(theme.text_secondary),
-                        )
-                        .truncate()
-                        .sense(egui::Sense::click()),
-                    )
-                    .clicked()
-                {
-                    select_this = true;
-                }
-                layer_switches_strip(ui, theme, comp, comp_id, layer, &mut pending);
-            });
+        place(ui, eye_r, &mut |ui| {
+            visible_control(ui, theme, comp_id, layer, &mut pending)
         });
+        place(ui, title_r, &mut |ui| {
+            if ui
+                .add(
+                    egui::Label::new(
+                        egui::RichText::new(trim_title(&layer.name))
+                            .small()
+                            .color(theme.text_secondary),
+                    )
+                    .truncate()
+                    .sense(egui::Sense::click()),
+                )
+                .clicked()
+            {
+                select_this = true;
+            }
+        });
+        place(ui, matte_r, &mut |ui| {
+            matte_control(ui, comp, comp_id, layer, &mut pending)
+        });
+        place(ui, blend_r, &mut |ui| {
+            blend_control(ui, comp_id, layer, &mut pending)
+        });
+        place(ui, td_r, &mut |ui| {
+            three_d_control(ui, comp_id, layer, &mut pending)
+        });
+        if is_footage {
+            place(ui, mute_r, &mut |ui| {
+                mute_control(ui, comp_id, layer, &mut pending)
+            });
+        }
         if select_this {
             app.selected_layer = Some(layer.id);
         }
@@ -1317,13 +1354,34 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             });
         }
     }
-    // Vertical separator: layer options (left) from the track area (right).
+    // Vertical separator + drag handle: resizes the left column (Mack).
+    let sep_bottom = ui.cursor().top();
+    let sep_x = track_left - 4.0;
+    let handle = egui::Rect::from_min_max(
+        egui::pos2(sep_x - 3.0, rows_top),
+        egui::pos2(sep_x + 3.0, sep_bottom.max(rows_top + 1.0)),
+    );
+    let hresp = ui.interact(
+        handle,
+        ui.id().with("name-col-resize"),
+        egui::Sense::click_and_drag(),
+    );
+    if hresp.hovered() || hresp.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+    }
+    if hresp.dragged() {
+        app.timeline_name_w = (app.timeline_name_w + hresp.drag_delta().x).clamp(96.0, 900.0);
+    }
     ui.painter().line_segment(
-        [
-            egui::pos2(track_left - 4.0, rows_top),
-            egui::pos2(track_left - 4.0, ui.cursor().top()),
-        ],
-        egui::Stroke::new(1.0_f32, theme.hairline),
+        [egui::pos2(sep_x, rows_top), egui::pos2(sep_x, sep_bottom)],
+        egui::Stroke::new(
+            1.0_f32,
+            if hresp.hovered() || hresp.dragged() {
+                theme.accent
+            } else {
+                theme.hairline
+            },
+        ),
     );
     // Playhead over ruler and rows (clay, the one accent).
     if app.preview_comp == Some(comp_id) {
@@ -2518,24 +2576,64 @@ fn build_comp_draws(
 /// The layer's natural pixel space (mask coordinates live here).
 /// Compact matte / blend / 3D / mute controls for a layer's title line
 /// (left column). Sets `pending` on any change.
-fn layer_switches_strip(
+/// Trim a layer title for display: people type what they like, but past a
+/// cap the shown value ends with "…" (Mack).
+fn trim_title(name: &str) -> String {
+    const MAX: usize = 48;
+    if name.chars().count() <= MAX {
+        name.to_owned()
+    } else {
+        let mut s: String = name.chars().take(MAX - 1).collect();
+        s.push('…');
+        s
+    }
+}
+
+/// Visibility (eye) toggle — its own left-column subcolumn.
+fn visible_control(
     ui: &mut egui::Ui,
     theme: &Theme,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    pending: &mut Option<kiriko_core::Op>,
+) {
+    let vis = layer.switches.visible;
+    let glyph = if vis { "◉" } else { "○" };
+    let col = if vis {
+        theme.text_secondary
+    } else {
+        theme.text_disabled
+    };
+    if ui
+        .add(egui::Label::new(egui::RichText::new(glyph).color(col)).sense(egui::Sense::click()))
+        .on_hover_text("Show / hide this layer")
+        .clicked()
+    {
+        *pending = Some(kiriko_core::Op::SetLayerVisible {
+            comp: comp_id,
+            layer: layer.id,
+            visible: !vis,
+        });
+    }
+}
+
+/// Matte subcolumn: source pick + luma/invert flags under one dropdown.
+fn matte_control(
+    ui: &mut egui::Ui,
     comp: &kiriko_core::model::Composition,
     comp_id: uuid::Uuid,
     layer: &kiriko_core::model::Layer,
     pending: &mut Option<kiriko_core::Op>,
 ) {
-    use kiriko_core::model::{BlendMode, MatteChannel, MatteRef};
-    // Matte: source pick + luma/invert flags, all under one compact dropdown.
-    let matte_label = layer
+    use kiriko_core::model::{MatteChannel, MatteRef};
+    let label = layer
         .matte
         .as_ref()
         .and_then(|m| comp.layers.iter().find(|l| l.id == m.layer))
         .map(|l| format!("⬓ {}", l.name))
         .unwrap_or_else(|| "⬓".into());
     let mut set: Option<Option<MatteRef>> = None;
-    bare_dropdown(ui, egui::RichText::new(matte_label).small(), |ui| {
+    bare_dropdown(ui, egui::RichText::new(label).small(), |ui| {
         if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
             set = Some(None);
             ui.close_menu();
@@ -2578,7 +2676,11 @@ fn layer_switches_strip(
             matte,
         });
     }
-    let blend_name = |b: BlendMode| match b {
+}
+
+fn blend_name(b: kiriko_core::model::BlendMode) -> &'static str {
+    use kiriko_core::model::BlendMode;
+    match b {
         BlendMode::Normal => "Normal",
         BlendMode::Add => "Add",
         BlendMode::Multiply => "Multiply",
@@ -2588,7 +2690,17 @@ fn layer_switches_strip(
         BlendMode::HardLight => "Hard light",
         BlendMode::Lighten => "Lighten",
         BlendMode::Darken => "Darken",
-    };
+    }
+}
+
+/// Blend-mode subcolumn.
+fn blend_control(
+    ui: &mut egui::Ui,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    pending: &mut Option<kiriko_core::Op>,
+) {
+    use kiriko_core::model::BlendMode;
     bare_dropdown(
         ui,
         egui::RichText::new(blend_name(layer.blend)).small(),
@@ -2620,6 +2732,15 @@ fn layer_switches_strip(
             }
         },
     );
+}
+
+/// 3D-switch subcolumn.
+fn three_d_control(
+    ui: &mut egui::Ui,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    pending: &mut Option<kiriko_core::Op>,
+) {
     if ui
         .selectable_label(layer.switches.three_d, egui::RichText::new("3D").small())
         .on_hover_text("Place this layer in z-space (needs a Camera layer)")
@@ -2631,21 +2752,27 @@ fn layer_switches_strip(
             three_d: !layer.switches.three_d,
         });
     }
-    if matches!(layer.kind, kiriko_core::model::LayerKind::Footage { .. }) {
-        let muted = !layer.switches.audible;
-        if ui
-            .selectable_label(muted, egui::RichText::new("Mute").small())
-            .on_hover_text("Silence this layer in playback and export")
-            .clicked()
-        {
-            *pending = Some(kiriko_core::Op::SetLayerAudible {
-                comp: comp_id,
-                layer: layer.id,
-                audible: muted,
-            });
-        }
+}
+
+/// Mute subcolumn (footage layers).
+fn mute_control(
+    ui: &mut egui::Ui,
+    comp_id: uuid::Uuid,
+    layer: &kiriko_core::model::Layer,
+    pending: &mut Option<kiriko_core::Op>,
+) {
+    let muted = !layer.switches.audible;
+    if ui
+        .selectable_label(muted, egui::RichText::new("Mute").small())
+        .on_hover_text("Silence this layer in playback and export")
+        .clicked()
+    {
+        *pending = Some(kiriko_core::Op::SetLayerAudible {
+            comp: comp_id,
+            layer: layer.id,
+            audible: muted,
+        });
     }
-    let _ = theme;
 }
 
 /// Every keyframe time (layer-local seconds) across a layer's animated

@@ -561,6 +561,29 @@ mod tests {
                 .audible
         );
 
+        // Visibility round-trips the same way (visible defaults true).
+        let vis = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .switches
+                .visible
+        };
+        store
+            .commit(Op::SetLayerVisible {
+                comp: comp_id,
+                layer: layer_id,
+                visible: false,
+            })
+            .unwrap();
+        assert!(!vis(&store));
+        store.undo().unwrap();
+        assert!(vis(&store));
+
         store.undo().unwrap();
         store.undo().unwrap();
         let doc = store.snapshot();

@@ -610,6 +610,8 @@ pub struct AppState {
     pub view_pan: egui::Vec2,
     /// Screen pixels per native image pixel at last paint (Auto res input).
     pub last_display_scale: f32,
+    /// Draggable width of the timeline's left (layer-controls) column, px.
+    pub timeline_name_w: f32,
     /// Kura's RAM tier for final comp frames (K-016): display-ready sRGB
     /// bytes keyed by content hash. Hash mismatch is the only invalidation.
     #[cfg(feature = "media")]
@@ -681,6 +683,7 @@ impl Default for AppState {
             view_zoom: 1.0,
             view_pan: egui::Vec2::ZERO,
             last_display_scale: 1.0,
+            timeline_name_w: 300.0,
             #[cfg(feature = "media")]
             comp_frame_cache: kiriko_cache::ByteLru::new(512 * 1024 * 1024),
             #[cfg(feature = "media")]

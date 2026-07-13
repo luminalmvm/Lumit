@@ -86,6 +86,12 @@ pub enum Op {
         layer: Uuid,
         audible: bool,
     },
+    /// Show or hide a layer (the visible switch).
+    SetLayerVisible {
+        comp: Uuid,
+        layer: Uuid,
+        visible: bool,
+    },
     /// Replace a Text layer's document (exactly invertible).
     SetTextDocument {
         comp: Uuid,
@@ -327,6 +333,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 audible: previous,
+            })
+        }
+        Op::SetLayerVisible {
+            comp,
+            layer,
+            visible,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.visible, *visible);
+            Ok(Op::SetLayerVisible {
+                comp: *comp,
+                layer: *layer,
+                visible: previous,
             })
         }
         Op::SetTextDocument {
