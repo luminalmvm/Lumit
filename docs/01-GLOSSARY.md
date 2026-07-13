@@ -49,6 +49,12 @@ comp) plus a source in/out trim, a Retime, and per-clip render policies (frame i
 mode). Clips on the same Sequence layer never overlap; a cut between two clips is an **edit
 point**. Ordinary layers do not contain clips.
 
+**Anchor point** (a.k.a. the layer's **origin**) — the point, in the layer's own pixel
+coordinates, that the transform pivots about: scale and rotation happen around it, and
+**Position** places *it* in comp space. New layers default their anchor to the centre of
+their content, so a fresh layer sits centred and pivots about its middle (the AE default).
+The UI labels the two properties Anchor x / Anchor y.
+
 **Parenting** — a layer may name another layer as its parent; transforms concatenate. No cycles.
 
 **Switches** — per-layer toggles: visible, audible, solo, lock, shy, quality (draft/full),

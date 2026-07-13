@@ -371,6 +371,25 @@ fn decode_target_width(
     }
 }
 
+/// A transform whose origin (anchor) is the centre of a `nat_w`×`nat_h`
+/// object, placed at the centre of a `comp_w`×`comp_h` composition — the AE
+/// default so a new layer appears centred and pivots about its middle.
+fn centred_transform(
+    nat_w: f64,
+    nat_h: f64,
+    comp_w: u32,
+    comp_h: u32,
+) -> kiriko_core::model::TransformGroup {
+    use kiriko_core::anim::Property;
+    kiriko_core::model::TransformGroup {
+        anchor_x: Property::fixed(nat_w * 0.5),
+        anchor_y: Property::fixed(nat_h * 0.5),
+        position_x: Property::fixed(f64::from(comp_w) * 0.5),
+        position_y: Property::fixed(f64::from(comp_h) * 0.5),
+        ..Default::default()
+    }
+}
+
 fn rat(n: i64, d: i64) -> Rational {
     Rational::new(n, d).unwrap_or(Rational::ZERO)
 }
@@ -849,7 +868,7 @@ impl AppState {
     /// Add a footage item as a new top layer of the target comp
     /// (docs/16-ROADMAP.md phase 1: comps become buildable by hand).
     pub fn add_footage_to_comp(&mut self, item_id: Uuid) {
-        use kiriko_core::model::{Layer, LayerKind, Switches, TransformGroup};
+        use kiriko_core::model::{Layer, LayerKind, Switches};
         use kiriko_core::time::CompTime;
         let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
             self.error = Some("select a composition first".into());
@@ -880,6 +899,21 @@ impl AppState {
         #[cfg(not(feature = "media"))]
         let out = comp_dur;
 
+        // Origin (anchor) at the footage's centre, placed at the comp centre —
+        // so it appears centred and scales/rotates about its middle (AE model).
+        #[cfg(feature = "media")]
+        let (nat_w, nat_h) = match self.media.map.get(&item_id) {
+            Some(media::MediaStatus::Ready { probe, .. }) => probe
+                .video
+                .as_ref()
+                .map(|v| (f64::from(v.width), f64::from(v.height)))
+                .unwrap_or((f64::from(comp.width), f64::from(comp.height))),
+            _ => (f64::from(comp.width), f64::from(comp.height)),
+        };
+        #[cfg(not(feature = "media"))]
+        let (nat_w, nat_h) = (f64::from(comp.width), f64::from(comp.height));
+        let transform = centred_transform(nat_w, nat_h, comp.width, comp.height);
+
         let layer = Layer {
             id: Uuid::now_v7(),
             name: f.name.clone(),
@@ -887,7 +921,7 @@ impl AppState {
             in_point: CompTime(Rational::ZERO),
             out_point: CompTime(out),
             start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
+            transform,
             matte: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -906,7 +940,7 @@ impl AppState {
 
     /// Nest one comp inside another as a Precomp layer (cycle-guarded).
     pub fn add_precomp_to_comp(&mut self, nested_id: Uuid) {
-        use kiriko_core::model::{Layer, LayerKind, Switches, TransformGroup};
+        use kiriko_core::model::{Layer, LayerKind, Switches};
         use kiriko_core::time::CompTime;
         let Some(target_id) = self.preview_comp.or(self.selected_comp) else {
             self.error = Some("select a composition first".into());
@@ -925,6 +959,12 @@ impl AppState {
         } else {
             target.duration.0
         };
+        let transform = centred_transform(
+            f64::from(nested.width),
+            f64::from(nested.height),
+            target.width,
+            target.height,
+        );
         let layer = Layer {
             id: Uuid::now_v7(),
             name: nested.name.clone(),
@@ -932,7 +972,7 @@ impl AppState {
             in_point: CompTime(Rational::ZERO),
             out_point: CompTime(out),
             start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
+            transform,
             matte: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -1978,6 +2018,20 @@ mod tests {
     /// K-068: solids are assets auto-filed into a "Solids" folder that is
     /// followed by id (rename it, it still collects); comps auto-file into
     /// "Compositions"; each creation is one undo step.
+    #[test]
+    fn centred_transform_puts_origin_at_object_centre() {
+        // A 1920×1080 object in a 1280×720 comp: anchor at the object's
+        // centre, position at the comp's centre (AE default).
+        let tr = centred_transform(1920.0, 1080.0, 1280, 720);
+        assert_eq!(tr.anchor_x.value_at(0.0), 960.0);
+        assert_eq!(tr.anchor_y.value_at(0.0), 540.0);
+        assert_eq!(tr.position_x.value_at(0.0), 640.0);
+        assert_eq!(tr.position_y.value_at(0.0), 360.0);
+        // Scale/rotation stay neutral so only the origin/position changed.
+        assert_eq!(tr.scale_x.value_at(0.0), 100.0);
+        assert_eq!(tr.rotation.value_at(0.0), 0.0);
+    }
+
     #[test]
     fn auto_folders_collect_solids_and_comps() {
         let mut app = AppState::default();

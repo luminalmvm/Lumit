@@ -1264,18 +1264,25 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                 .num_columns(2)
                                 .spacing(egui::vec2(12.0, 2.0))
                                 .show(ui, |ui| {
-                                    let mut rows: Vec<(&str, TransformProp, f64)> = vec![
+                                    let is_camera = matches!(
+                                        layer.kind,
+                                        kiriko_core::model::LayerKind::Camera { .. }
+                                    );
+                                    let mut rows: Vec<(&str, TransformProp, f64)> = Vec::new();
+                                    // Origin (anchor): the point transforms pivot
+                                    // about. First, like AE. Cameras have no anchor.
+                                    if !is_camera {
+                                        rows.push(("Anchor x", TransformProp::AnchorX, 1.0));
+                                        rows.push(("Anchor y", TransformProp::AnchorY, 1.0));
+                                    }
+                                    rows.extend([
                                         ("Position x", TransformProp::PositionX, 1.0),
                                         ("Position y", TransformProp::PositionY, 1.0),
                                         ("Scale x %", TransformProp::ScaleX, 0.5),
                                         ("Scale y %", TransformProp::ScaleY, 0.5),
                                         ("Rotation °", TransformProp::Rotation, 0.5),
                                         ("Opacity %", TransformProp::Opacity, 0.5),
-                                    ];
-                                    let is_camera = matches!(
-                                        layer.kind,
-                                        kiriko_core::model::LayerKind::Camera { .. }
-                                    );
+                                    ]);
                                     if layer.switches.three_d || is_camera {
                                         rows.extend([
                                             ("Position z", TransformProp::PositionZ, 1.0),
@@ -1592,6 +1599,45 @@ fn mask_overlay(
 /// Pen tool (slice 2): while armed, Viewer clicks place vertices of a new
 /// mask on the selected layer; clicking the first vertex closes it into a
 /// mask (one undo); Escape cancels.
+/// Draw the selected 2D layer's origin (anchor point) as a small crosshair,
+/// so the pivot for scale/rotation is visible (AE shows the same target).
+#[cfg(feature = "media")]
+fn anchor_overlay(ui: &mut egui::Ui, theme: &Theme, app: &AppState, draw: egui::Rect, scale: f32) {
+    let Some(comp_id) = app.preview_comp else {
+        return;
+    };
+    let doc = app.store.snapshot();
+    let Some(comp) = doc.comp(comp_id) else {
+        return;
+    };
+    let Some(layer) = app
+        .selected_layer
+        .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+    else {
+        return;
+    };
+    if layer.switches.three_d || matches!(layer.kind, kiriko_core::model::LayerKind::Camera { .. })
+    {
+        return; // 3D anchor gizmo arrives with the object tools
+    }
+    let fps = comp.frame_rate.fps().max(1.0);
+    let lt = app.preview_frame as f64 / fps - layer.start_offset.0.to_f64();
+    let map = LayerMap::of(layer, lt, draw, scale);
+    let tr = &layer.transform;
+    let c = map.to_screen((tr.anchor_x.value_at(lt), tr.anchor_y.value_at(lt)));
+    let stroke = egui::Stroke::new(1.5_f32, theme.accent);
+    let r = 6.0;
+    ui.painter().circle_stroke(c, r, stroke);
+    ui.painter().line_segment(
+        [c - egui::vec2(r + 4.0, 0.0), c + egui::vec2(r + 4.0, 0.0)],
+        stroke,
+    );
+    ui.painter().line_segment(
+        [c - egui::vec2(0.0, r + 4.0), c + egui::vec2(0.0, r + 4.0)],
+        stroke,
+    );
+}
+
 /// Shape tool: drag a rubber-band in the Viewer to create a rectangle,
 /// ellipse or star mask (the current [`ShapeKind`]) on the selected layer.
 #[cfg(feature = "media")]
@@ -1886,6 +1932,8 @@ fn viewer_footage(
             pen_overlay(ui, theme, app, draw, scale, &view);
             #[cfg(feature = "media")]
             shape_overlay(ui, theme, app, draw, scale, &view);
+            #[cfg(feature = "media")]
+            anchor_overlay(ui, theme, app, draw, scale);
         }
     } else {
         ui.painter().text(

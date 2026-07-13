@@ -220,6 +220,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   click-to-place drawing: each click drops a vertex, clicking the first one (it grows a
   ring once closable) closes the shape into a mask, Escape cancels, right-click on any
   handle removes a vertex. Curved tangent handles are the remaining slice.
+- **Origin (anchor point)** — every layer's transform now starts with Anchor x / Anchor y:
+  the point the layer scales and rotates *about*, and the point Position places in the
+  comp. New layers default it to the centre of their content and sit centred in the comp
+  (the After Effects default), so a fresh clip spins about its middle rather than its
+  top-left corner. The selected layer shows its origin as a small clay crosshair in the
+  Viewer.
 - **The tool strip** — the row of buttons under the menu sets what a Viewer drag does,
   the way every editor's toolbar does. Select (V) and Hand (H) both pan the view for
   now (object selection comes with the object tools); Shape (Q) rubber-bands a new mask
