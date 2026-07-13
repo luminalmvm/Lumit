@@ -336,3 +336,30 @@ Timeline.** Three points from Mack (2026-07-13):
    moves where it starts — and this holds after the layer's start/in-point is later
    adjusted, because `place` is layer-time and the retime domain is unchanged. Locked by
    `kiriko-core::sequence` tests (`re_speeding_a_cut_clip_keeps_its_start_frame`).
+
+**K-071 · DECIDED · The sequenced layer is single-source, order-preserving, edited in its
+own timeline tab.** Refines the Sequence layer (K-020) per Mack (2026-07-13):
+
+- You **convert an imported-footage layer** into a *sequenced layer* (name pending — only
+  footage sources qualify). It opens in its **own, visually distinct timeline tab** showing
+  a **single row: that one source**. In the parent comp it reads as one layer — **a fancy
+  precomp**: comp-level transform/effects/masks apply to its assembled output, and the
+  layer's length **tracks the end of the assembled sequence** (the last piece's end).
+  Opening it swaps the Timeline into a distinct single-source editing view (a new window/
+  tab with a slightly different UI).
+- **Single source only, for now.** Every clip in a sequenced layer references the same
+  footage item. The general multi-source Vegas assembly (K-020's broader reading) is
+  **deferred** and may return.
+- **Operations**: cut, delete (with **gaps allowed** — a gap renders transparent), and
+  **retime per piece**. **No reordering / "no mixing footage time":** reading the pieces
+  left to right, source time never jumps backwards (`source_in` is non-decreasing by
+  timeline position). You remove and space pieces; you do not shuffle them.
+- **Why the order constraint**: it keeps comp-time -> source-time a clean forward mapping, so
+  a **camera tracker** (its own tool, not an effect) can run once on the **full, unaltered,
+  un-retimed** footage, and its track then **replays through the cuts and retimes** in the
+  comp, linked to the layer. The clip-resolution model (`kiriko-core::sequence`) is exactly
+  that mapping. If a track is linked, the ordering restriction may later be relaxed.
+- **Invariants (binding for now)**: single source (`sequence::single_source`), source-ordered
+  (`sequence::is_source_ordered`), gaps allowed, and the K-070 frame-pinning rule per clip.
+- Note: the inline razor shipped this session operates on the general model in the main
+  timeline; the dedicated-tab editing surface is the intended home and supersedes it.

@@ -150,6 +150,29 @@ pub fn resolve(clips: &[Clip], lt: f64) -> Option<(Uuid, ClipSource, f64)> {
     active_clip(clips, lt).map(|c| (c.id, c.source, c.source_time(lt)))
 }
 
+/// The single source shared by all clips, if they share one — a sequenced
+/// layer is single-source (K-071). None when empty or mixed.
+pub fn single_source(clips: &[Clip]) -> Option<ClipSource> {
+    let first = clips.first()?.source;
+    clips.iter().all(|c| c.source == first).then_some(first)
+}
+
+/// True when clips never jump backwards in the source as you read the layer
+/// left to right — "no mixing footage time" (K-071): `source_in` is
+/// non-decreasing by timeline position. Gaps are allowed; reordering is not.
+pub fn is_source_ordered(clips: &[Clip]) -> bool {
+    let mut by_place: Vec<&Clip> = clips.iter().collect();
+    by_place.sort_by(|a, b| {
+        a.place_start
+            .to_f64()
+            .partial_cmp(&b.place_start.to_f64())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    by_place
+        .windows(2)
+        .all(|w| w[0].source_in <= w[1].source_in)
+}
+
 /// Do any two clips overlap on the layer timeline? (docs/03-DATA-MODEL.md
 /// §5.3 invariant: clips MUST NOT overlap — this is the check editors run
 /// after a move before committing.)
@@ -275,6 +298,53 @@ mod tests {
         let mut moved = respeed.clone();
         moved.place_start = rat(5, 1);
         assert!((moved.source_time(5.0) - start_frame.to_f64()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn single_source_and_ordering_invariants() {
+        let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
+        // Two clips of the same source in order.
+        let c0 = Clip::new(
+            ClipSource::Footage(a),
+            rat(0, 1),
+            rat(2, 1),
+            rat(0, 1),
+            rat(2, 1),
+        );
+        let c1 = Clip::new(
+            ClipSource::Footage(a),
+            rat(2, 1),
+            rat(4, 1),
+            rat(3, 1),
+            rat(2, 1),
+        );
+        assert_eq!(
+            single_source(&[c0.clone(), c1.clone()]),
+            Some(ClipSource::Footage(a))
+        );
+        assert!(is_source_ordered(&[c0.clone(), c1.clone()]));
+        // A gap between them is fine (still ordered).
+        assert!(is_source_ordered(&[c0.clone(), c1.clone()]));
+        // Mixed sources → not single-source.
+        let other = Clip::new(
+            ClipSource::Footage(b),
+            rat(0, 1),
+            rat(2, 1),
+            rat(5, 1),
+            rat(2, 1),
+        );
+        assert_eq!(single_source(&[c0.clone(), other]), None);
+        assert_eq!(single_source(&[]), None);
+        // Reordered so a later timeline slot holds an earlier source moment →
+        // "mixing footage time", rejected.
+        let early_source_late_place = Clip::new(
+            ClipSource::Footage(a),
+            rat(0, 1),
+            rat(1, 1),
+            rat(6, 1),
+            rat(1, 1),
+        );
+        assert!(!is_source_ordered(&[c1, early_source_late_place]));
     }
 
     #[test]
