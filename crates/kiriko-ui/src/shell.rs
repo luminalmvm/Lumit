@@ -371,11 +371,8 @@ fn project_header(
                 let px = crate::pixels::solid_rgba(s.colour);
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-                ui.painter().rect_filled(
-                    rect,
-                    2.0,
-                    egui::Color32::from_rgba_unmultiplied(px[0], px[1], px[2], px[3]),
-                );
+                ui.painter()
+                    .rect_filled(rect, 2.0, crate::theme::document_colour(px));
                 ui.label(
                     egui::RichText::new(format!("{}×{}", s.width, s.height))
                         .monospace()

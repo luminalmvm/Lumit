@@ -164,3 +164,10 @@ impl Default for Theme {
         Self::dark()
     }
 }
+
+/// A colour that comes from the *document* (a solid's swatch, a comp
+/// background) rather than the design system. Lives here because this module
+/// is the only place allowed to construct egui colours (design lint).
+pub fn document_colour(rgba: [u8; 4]) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3])
+}
