@@ -132,10 +132,11 @@ pub fn build_frame_index(path: &Path) -> Result<FrameIndex, MediaError> {
     })
 }
 
-/// Test fixtures shared by index and decode tests.
-#[cfg(test)]
+/// Test fixtures shared by index/decode tests and downstream crates' tests
+/// (enable the `test-fixtures` feature).
+#[cfg(any(test, feature = "test-fixtures"))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-pub(crate) mod tests_support {
+pub mod tests_support {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 

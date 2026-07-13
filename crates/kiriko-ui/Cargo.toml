@@ -25,6 +25,7 @@ media = ["dep:kiriko-media"]
 muda = "0.15"
 
 [dev-dependencies]
+kiriko-media = { path = "../kiriko-media", features = ["test-fixtures"] }
 tempfile = "3"
 
 [lints]
