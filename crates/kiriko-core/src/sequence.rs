@@ -177,6 +177,42 @@ impl Clip {
         };
         Some((left, right))
     }
+
+    /// Slide the clip along the Sequence layer by `delta` (docs/04-RETIMING.md
+    /// §8.2): its position moves, but the source window, local time and retime
+    /// are untouched — the same frames play, just earlier or later on the row.
+    /// None if the clip would start before the layer origin, or on overflow.
+    pub fn slide(&self, delta: Rational) -> Option<Clip> {
+        let place_start = self.place_start.checked_add(delta).ok()?;
+        if place_start.is_negative() {
+            return None;
+        }
+        Some(Clip {
+            place_start,
+            ..self.clone()
+        })
+    }
+
+    /// Slip the source under the fixed clip by `delta` (docs/04-RETIMING.md
+    /// §8.2): the clip keeps its place and duration, but a different stretch of
+    /// the source plays. The trim window and every retime source position shift
+    /// by `delta` together, so the retime's shape is untouched; overrun is
+    /// re-evaluated at render time. None if the slip would read before the
+    /// source start, or on overflow.
+    pub fn slip(&self, delta: Rational) -> Option<Clip> {
+        let source_in = self.source_in.checked_add(delta).ok()?;
+        if source_in.is_negative() {
+            return None;
+        }
+        let source_out = self.source_out.checked_add(delta).ok()?;
+        let retime = self.retime.shift_source(delta)?;
+        Some(Clip {
+            source_in,
+            source_out,
+            retime,
+            ..self.clone()
+        })
+    }
 }
 
 /// The clip active at layer-local time `lt`, or None if `lt` is in a gap
@@ -307,6 +343,44 @@ mod tests {
         assert!((c.source_time(2.0) - 10.0).abs() < 1e-9); // clip start
         assert!((c.source_time(4.0) - 11.0).abs() < 1e-9); // half speed
         assert!((c.source_time(6.0) - 12.0).abs() < 1e-9); // clip end
+    }
+
+    #[test]
+    fn sliding_moves_the_clip_but_not_its_content() {
+        // Clip at layer [2,6), source [0,4). Slide +3 → layer [5,9), same source.
+        let src = Uuid::now_v7();
+        let c = clip(src, 2, 4);
+        let s = c.slide(rat(3, 1)).unwrap();
+        assert_eq!(s.place_start, rat(5, 1));
+        assert_eq!(s.place_duration, c.place_duration); // duration unchanged
+        assert_eq!(s.source_in, c.source_in); // source window untouched
+        assert_eq!(s.source_out, c.source_out);
+        // The same source moments play, just later on the row (map untouched).
+        assert!((s.source_time(5.0) - c.source_time(2.0)).abs() < 1e-9);
+        assert!((s.source_time(7.0) - c.source_time(4.0)).abs() < 1e-9);
+        // Sliding before the layer origin is refused.
+        assert!(c.slide(rat(-3, 1)).is_none());
+    }
+
+    #[test]
+    fn slipping_changes_the_source_but_not_the_place() {
+        // Clip at layer [2,6), source [0,4) at natural rate. Slip +1 shows
+        // source [1,5); the place is unchanged and every moment shifts by +1.
+        let src = Uuid::now_v7();
+        let c = clip(src, 2, 4);
+        let s = c.slip(rat(1, 1)).unwrap();
+        assert_eq!(s.place_start, c.place_start); // place held
+        assert_eq!(s.place_duration, c.place_duration);
+        assert_eq!(s.source_in, rat(1, 1)); // window shifted
+        assert_eq!(s.source_out, rat(5, 1));
+        for &lt in &[2.0, 4.0, 5.9] {
+            assert!(
+                (s.source_time(lt) - (c.source_time(lt) + 1.0)).abs() < 1e-9,
+                "@ {lt}"
+            );
+        }
+        // Slipping before the source start is refused.
+        assert!(c.slip(rat(-1, 1)).is_none());
     }
 
     #[test]

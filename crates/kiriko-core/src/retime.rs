@@ -733,6 +733,19 @@ impl Retime {
         Some(out)
     }
 
+    /// This retime with every source position shifted by `delta` — the slip
+    /// edit (docs/04-RETIMING.md §8.2): the source slides under a fixed clip, so
+    /// the map from local time to source is translated while its shape is
+    /// untouched. Local times, speeds and influences are unchanged; only the
+    /// boundary source positions move. None on rational overflow.
+    pub fn shift_source(&self, delta: Rational) -> Option<Retime> {
+        let mut r = self.clone();
+        for b in &mut r.boundaries {
+            b.s = b.s.checked_add(delta).ok()?;
+        }
+        Some(r)
+    }
+
     /// Structural sanity (docs/04-RETIMING.md §3 invariants): n + 1
     /// boundaries for n segments, first boundary at local time zero,
     /// boundary times strictly increasing.
@@ -1369,6 +1382,25 @@ mod tests {
         // Non-interior boundaries cannot be merged.
         assert!(rt.merge_boundary(0).is_none());
         assert!(rt.merge_boundary(2).is_none());
+    }
+
+    #[test]
+    fn shifting_source_translates_the_curve_without_reshaping_it() {
+        let r = Retime::single_ramp(rat(4, 1), rat(0, 1), rat(1, 1), rat(3, 1), Ease::Slow);
+        let shifted = r.shift_source(rat(5, 1)).unwrap();
+        for k in 0..=10 {
+            let t = 4.0 * f64::from(k) / 10.0;
+            // Every source position is 5s later.
+            assert!(
+                (shifted.evaluate(t) - (r.evaluate(t) + 5.0)).abs() < 1e-9,
+                "@ {t}"
+            );
+            // The speed profile (shape) is untouched by a constant shift.
+            assert!(
+                (shifted.speed_at(t) - r.speed_at(t)).abs() < 1e-9,
+                "speed @ {t}"
+            );
+        }
     }
 
     #[test]
