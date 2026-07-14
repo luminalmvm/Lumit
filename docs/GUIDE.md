@@ -298,6 +298,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   derivative). Both are editable, and they are the *same* data seen two ways (K-070): in the
   speed view you drag a key up or down to set how fast the value is moving at that moment,
   which is often the easier way to make motion feel right. Editing one view updates the other.
+  The value/speed switch lives in the timeline's **bottom bar** (its own little group next to
+  the zoom buttons, shown only in graph mode) rather than in each curve's header, because it
+  is one setting shared by every curve. The plot also carries a small **y-axis**: a few faint
+  gridlines down the left edge labelled with the value at that height — degrees or per cent
+  for the transform properties, `HH:MM:SS:FF` timecode or per cent for a Retime channel, and
+  units-per-second in a property's speed view. And the graph **follows your edits**: adding
+  or changing a keyframe anywhere in the timeline — a stopwatch click, scrubbing a value in a
+  property row, dragging a key — selects that layer and points the graph at that channel, so
+  the curve you see is always the one you just touched.
   A **retimed footage layer** also shows a **"Speed (Retime)"** entry here (K-075): its value
   view reads the source frame showing at each point as `HH:MM:SS:FF` timecode, its speed view
   reads playback speed per cent, and dragging a speed point in that lens authors a ramp — the

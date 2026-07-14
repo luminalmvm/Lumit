@@ -2294,6 +2294,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         );
     }
     if let Some(op) = pending {
+        follow_edit(app, &op); // the graph follows the key you just touched
         app.commit(op);
     }
     if let Some((v0, v1, ease)) = clip_ramp_edit {
@@ -2345,8 +2346,9 @@ fn graph_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState, rect: egui
 }
 
 /// The lane-view bottom bar spanning the lanes area: zoom controls (`− + Fit` +
-/// readout) on the left, the view toggle on the right, and a draggable horizontal
-/// scrollbar just above it (shown when zoomed in).
+/// readout) on the left — joined in graph mode by the value/speed lens toggle,
+/// its own group behind a hairline divider — the view toggle on the right, and
+/// a draggable horizontal scrollbar just above it (shown when zoomed in).
 fn timeline_bottom_bar(
     ui: &mut egui::Ui,
     theme: &Theme,
@@ -2397,10 +2399,11 @@ fn timeline_bottom_bar(
         theme.surface_1,
     );
 
-    // Zoom controls, bottom-left of the lanes.
+    // Zoom controls, bottom-left of the lanes (with room for the lens toggle
+    // that joins them in graph mode).
     let zr = egui::Rect::from_min_max(
         egui::pos2(track_left + 4.0, bar_top),
-        egui::pos2(track_left + 200.0, panel.bottom()),
+        egui::pos2((panel_right - 64.0).max(track_left + 8.0), panel.bottom()),
     );
     let mut zc = ui.new_child(
         egui::UiBuilder::new()
@@ -2436,6 +2439,52 @@ fn timeline_bottom_bar(
                 .small()
                 .color(theme.text_muted),
         );
+    }
+
+    // The value/speed lens toggle (graph mode only): one lens shared by every
+    // curve, so it lives here rather than in each plot's header. Its own group,
+    // split from the zoom cluster by a hairline divider. The wording follows
+    // the graphed channel: a retimed layer's Speed reads source timecode and
+    // per cent, a transform property reads its value and rate of change.
+    if app.timeline_graph_mode {
+        zc.add_space(10.0);
+        let x = zc.cursor().left();
+        zc.painter().line_segment(
+            [
+                egui::pos2(x, bar_top + 5.0),
+                egui::pos2(x, panel.bottom() - 5.0),
+            ],
+            egui::Stroke::new(1.0_f32, theme.hairline_strong),
+        );
+        zc.add_space(10.0);
+        let retime = app.graph_retime;
+        let (value_label, speed_label) = if retime {
+            ("Source", "Speed %")
+        } else {
+            ("Value", "Speed")
+        };
+        if zc
+            .selectable_label(!app.graph_speed_view, value_label)
+            .on_hover_text(if retime {
+                "Value lens — the source frame showing at each point (HH:MM:SS:FF)"
+            } else {
+                "Value lens — the property's value over time"
+            })
+            .clicked()
+        {
+            app.graph_speed_view = false;
+        }
+        if zc
+            .selectable_label(app.graph_speed_view, speed_label)
+            .on_hover_text(if retime {
+                "Derivative lens — playback speed per cent (Vegas-style)"
+            } else {
+                "The rate-of-change view — drag a key to set its speed (K-070)"
+            })
+            .clicked()
+        {
+            app.graph_speed_view = true;
+        }
     }
 
     // View toggle, bottom-right of the lanes.
@@ -3160,6 +3209,33 @@ fn graph_lane_rect(track_left: f32, track_w: f32, rows_top: f32, panel_bottom: f
     )
 }
 
+/// Select-on-edit: point the graph at whatever a timeline or graph edit just
+/// touched. Committing a transform-property or Retime op selects that layer
+/// and graphs that channel, so the curve follows the key you just added or
+/// moved — a stopwatch click, a value scrub, or a key drag all land you on
+/// the right graph. Ops that touch neither kind of channel pass through
+/// untouched; a Batch follows its first property op (linked scale edits lead
+/// with Scale x, matching a click on the row's name).
+fn follow_edit(app: &mut AppState, op: &kiriko_core::Op) {
+    match op {
+        kiriko_core::Op::SetTransformProperty { layer, prop, .. } => {
+            app.selected_layer = Some(*layer);
+            app.graph_prop = Some(*prop);
+            app.graph_retime = false;
+        }
+        kiriko_core::Op::SetLayerRetime { layer, .. } => {
+            app.selected_layer = Some(*layer);
+            app.graph_retime = true;
+        }
+        kiriko_core::Op::Batch { ops } => {
+            if let Some(first) = ops.first() {
+                follow_edit(app, first);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// The graph editor drawn into the timeline's lane area (07-UI-SPEC; K-070):
 /// the selected layer's picked channel as a live curve — the Retime speed
 /// channel for retimed footage (K-075), else a transform property. Keys drag
@@ -3236,9 +3312,9 @@ fn graph_plot_retime(
     src_fps: f64,
     rect: egui::Rect,
 ) {
-    // Header: the Source/Speed lens toggle, the Vegas default-lens setting, and
-    // (in the speed lens) the ramp-preset shelf that eases the segment under the
-    // playhead.
+    // Header: the Vegas default-lens setting and (in the speed lens) the
+    // ramp-preset shelf that eases the segment under the playhead. The
+    // Source/Speed lens toggle lives in the timeline's bottom bar.
     let mut preset_ease: Option<kiriko_core::retime::Ease> = None;
     let header = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), rect.top() + 22.0));
     {
@@ -3249,19 +3325,6 @@ fn graph_plot_retime(
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
         h.set_clip_rect(header);
-        if h.selectable_label(!app.graph_speed_view, "Source")
-            .on_hover_text("Value lens — the source frame showing at each point (HH:MM:SS:FF)")
-            .clicked()
-        {
-            app.graph_speed_view = false;
-        }
-        if h.selectable_label(app.graph_speed_view, "Speed %")
-            .on_hover_text("Derivative lens — playback speed per cent (Vegas-style)")
-            .clicked()
-        {
-            app.graph_speed_view = true;
-        }
-        h.separator();
         h.checkbox(&mut app.vegas_default_lens, "Vegas")
             .on_hover_text("Open the Speed channel to the speed-% lens by default (K-075)");
         // Ramp presets ease the speed segment under the playhead (§9.2).
@@ -3343,6 +3406,7 @@ fn graph_plot_retime(
     let (lo, hi) = (lo - pad, hi + pad);
     let y_of = |v: f64| rect.bottom() - (((v - lo) / (hi - lo)) as f32) * rect.height();
 
+    // Y-axis scale: labelled gridlines in the active lens's units.
     if speed_view {
         // The speed lens marks its 0% and 100% references.
         for val in [0.0_f64, 100.0] {
@@ -3352,22 +3416,12 @@ fn graph_plot_retime(
                 egui::Stroke::new(0.5_f32, theme.hairline),
             );
         }
+        graph_y_axis(ui, theme, rect, lo, hi, |v| format!("{v:.0}%"));
     } else {
-        // The value lens labels its source-time extent as frame timecode.
-        ui.painter().text(
-            egui::pos2(rect.left() + 4.0, rect.top() + 2.0),
-            egui::Align2::LEFT_TOP,
-            fmt_timecode_frames(hi, src_fps),
-            egui::FontId::monospace(10.0),
-            theme.text_muted,
-        );
-        ui.painter().text(
-            egui::pos2(rect.left() + 4.0, rect.bottom() - 2.0),
-            egui::Align2::LEFT_BOTTOM,
-            fmt_timecode_frames(lo.max(0.0), src_fps),
-            egui::FontId::monospace(10.0),
-            theme.text_muted,
-        );
+        // The value lens reads as source-frame timecode.
+        graph_y_axis(ui, theme, rect, lo, hi, |v| {
+            fmt_timecode_frames(v.max(0.0), src_fps)
+        });
     }
 
     // The curve.
@@ -3470,6 +3524,7 @@ fn graph_plot_retime(
     }
 
     if let Some(op) = pending {
+        follow_edit(app, &op); // the graph follows the key you just touched
         app.commit(op);
     }
 }
@@ -3483,6 +3538,61 @@ fn hint_in_rect(ui: &egui::Ui, theme: &Theme, rect: egui::Rect, msg: &str) {
         egui::FontId::proportional(12.0),
         theme.text_muted,
     );
+}
+
+/// Y-axis scale for a graph pane: a few horizontal gridlines with their values
+/// labelled down the left inside edge, in small muted monospace so the curve
+/// stays the focus. `fmt` turns a gridline's value into its label — the units
+/// live there (%, °, timecode, per second). Drawn before the curve, which
+/// paints over the gridlines.
+fn graph_y_axis(
+    ui: &egui::Ui,
+    theme: &Theme,
+    rect: egui::Rect,
+    lo: f64,
+    hi: f64,
+    fmt: impl Fn(f64) -> String,
+) {
+    const LINES: u32 = 4; // evenly spaced, clear of the pane's edges
+    for i in 1..=LINES {
+        let frac = i as f32 / (LINES + 1) as f32;
+        let y = rect.bottom() - frac * rect.height();
+        let v = lo + f64::from(frac) * (hi - lo);
+        ui.painter().line_segment(
+            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+            egui::Stroke::new(0.5_f32, theme.hairline),
+        );
+        ui.painter().text(
+            egui::pos2(rect.left() + 4.0, y - 1.0),
+            egui::Align2::LEFT_BOTTOM,
+            fmt(v),
+            egui::FontId::monospace(9.0),
+            theme.text_muted,
+        );
+    }
+}
+
+/// A y-axis value formatted to suit the axis span: whole numbers once the
+/// range is wide, more decimals as it narrows.
+fn fmt_axis_value(v: f64, span: f64) -> String {
+    if span.abs() >= 20.0 {
+        format!("{v:.0}")
+    } else if span.abs() >= 2.0 {
+        format!("{v:.1}")
+    } else {
+        format!("{v:.2}")
+    }
+}
+
+/// The unit a transform property's y-axis labels carry ("" for the pixel
+/// properties, which read cleaner bare).
+fn prop_unit(prop: kiriko_core::model::TransformProp) -> &'static str {
+    use kiriko_core::model::TransformProp as P;
+    match prop {
+        P::ScaleX | P::ScaleY | P::Opacity => "%",
+        P::Rotation | P::RotationX | P::RotationY => "°",
+        _ => "",
+    }
 }
 
 /// The glyph a keyframe draws with, coding its interpolation at a glance:
@@ -3517,9 +3627,10 @@ fn side_influence(side: kiriko_core::anim::SideInterp) -> f64 {
 }
 
 /// Draw one keyframed property's value/speed curve inside `rect`, with a
-/// compact Value/Speed + Ease/Linear header and draggable keys. In the speed
-/// lens each key's tangent is draggable (K-070); the derivative curve updates
-/// live and the release writes bezier speeds back to the keyframes.
+/// compact Ease/Linear header and draggable keys (the Value/Speed lens toggle
+/// lives in the timeline's bottom bar). In the speed lens each key's tangent
+/// is draggable (K-070); the derivative curve updates live and the release
+/// writes bezier speeds back to the keyframes.
 fn graph_plot(
     ui: &mut egui::Ui,
     theme: &Theme,
@@ -3532,7 +3643,8 @@ fn graph_plot(
     use kiriko_core::anim::{Animation, Keyframe, SideInterp};
     let layer_id = layer.id;
 
-    // Compact header: value/speed lens and blanket ease/linear.
+    // Compact header: blanket ease/linear (the value/speed lens toggle lives
+    // in the timeline's bottom bar).
     let header = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), rect.top() + 22.0));
     let mut set_sides: Option<SideInterp> = None;
     {
@@ -3542,16 +3654,6 @@ fn graph_plot(
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
         h.set_clip_rect(header);
-        if h.selectable_label(!app.graph_speed_view, "Value").clicked() {
-            app.graph_speed_view = false;
-        }
-        if h.selectable_label(app.graph_speed_view, "Speed")
-            .on_hover_text("The rate-of-change view — drag a key to set its speed (K-070)")
-            .clicked()
-        {
-            app.graph_speed_view = true;
-        }
-        h.separator();
         if h.small_button("Ease")
             .on_hover_text("Easy-ease every key of this curve (AE's F9)")
             .clicked()
@@ -3661,6 +3763,20 @@ fn graph_plot(
     let speed_of = move |y: f32| {
         s_lo + ((rect.bottom() - y) / rect.height()).clamp(0.0, 1.0) as f64 * (s_hi - s_lo)
     };
+    // Y-axis scale: labelled gridlines in the active lens's units — the value
+    // itself, or its rate of change per second in the speed lens.
+    {
+        let unit = prop_unit(current);
+        if app.graph_speed_view {
+            graph_y_axis(ui, theme, rect, s_lo, s_hi, |v| {
+                format!("{}{unit}/s", fmt_axis_value(v, s_hi - s_lo))
+            });
+        } else {
+            graph_y_axis(ui, theme, rect, vmin, vmax, |v| {
+                format!("{}{unit}", fmt_axis_value(v, vmax - vmin))
+            });
+        }
+    }
     let points: Vec<egui::Pos2> = values
         .iter()
         .map(|(t, v)| {
@@ -3876,12 +3992,14 @@ fn graph_plot(
         } else {
             Animation::Keyframed(new_keys)
         };
-        app.commit(kiriko_core::Op::SetTransformProperty {
+        let op = kiriko_core::Op::SetTransformProperty {
             comp: comp.id,
             layer: layer_id,
             prop: current,
             animation,
-        });
+        };
+        follow_edit(app, &op); // the graph follows the key you just touched
+        app.commit(op);
     }
 }
 
@@ -7417,6 +7535,93 @@ mod dock_tests {
         assert!((end - 50.0).abs() < 1.0, "end speed {end} ≈ 50");
         let start = edited.speed_at(1e-6) * 100.0;
         assert!((start - 100.0).abs() < 1.0, "start speed {start} ≈ 100");
+    }
+
+    // Select-on-edit: committing a property or Retime op from the timeline or
+    // graph points the graph at the channel that was just touched, so the curve
+    // follows the key you just added or moved.
+    #[test]
+    fn follow_edit_points_the_graph_at_the_touched_channel() {
+        use kiriko_core::anim::Animation;
+        use kiriko_core::model::TransformProp;
+        let comp = uuid::Uuid::from_u128(0xC0);
+        let layer = uuid::Uuid::from_u128(0x1A);
+        let mut app = AppState::default();
+
+        // A Retime edit selects the layer and graphs the Speed channel.
+        follow_edit(
+            &mut app,
+            &kiriko_core::Op::SetLayerRetime {
+                comp,
+                layer,
+                retime: None,
+            },
+        );
+        assert_eq!(app.selected_layer, Some(layer));
+        assert!(app.graph_retime);
+
+        // A transform-property edit swaps the graph to that property.
+        follow_edit(
+            &mut app,
+            &kiriko_core::Op::SetTransformProperty {
+                comp,
+                layer,
+                prop: TransformProp::Rotation,
+                animation: Animation::Static(0.0),
+            },
+        );
+        assert_eq!(app.selected_layer, Some(layer));
+        assert_eq!(app.graph_prop, Some(TransformProp::Rotation));
+        assert!(!app.graph_retime);
+
+        // A Batch follows its first property op (linked scale leads with x).
+        follow_edit(
+            &mut app,
+            &kiriko_core::Op::Batch {
+                ops: vec![
+                    kiriko_core::Op::SetTransformProperty {
+                        comp,
+                        layer,
+                        prop: TransformProp::ScaleX,
+                        animation: Animation::Static(100.0),
+                    },
+                    kiriko_core::Op::SetTransformProperty {
+                        comp,
+                        layer,
+                        prop: TransformProp::ScaleY,
+                        animation: Animation::Static(100.0),
+                    },
+                ],
+            },
+        );
+        assert_eq!(app.graph_prop, Some(TransformProp::ScaleX));
+
+        // Ops that touch neither kind of channel leave the graph alone.
+        follow_edit(
+            &mut app,
+            &kiriko_core::Op::RenameLayer {
+                comp,
+                layer: uuid::Uuid::from_u128(0x2B),
+                name: "other".into(),
+            },
+        );
+        assert_eq!(app.selected_layer, Some(layer));
+        assert_eq!(app.graph_prop, Some(TransformProp::ScaleX));
+        assert!(!app.graph_retime);
+    }
+
+    // The y-axis labels: decimals adapt to the axis span, and the unit comes
+    // from the property (per cent, degrees, bare for the pixel properties).
+    #[test]
+    fn y_axis_labels_format_to_span_and_unit() {
+        assert_eq!(fmt_axis_value(150.0, 300.0), "150");
+        assert_eq!(fmt_axis_value(1.25, 5.0), "1.2");
+        assert_eq!(fmt_axis_value(0.347, 0.5), "0.35");
+        use kiriko_core::model::TransformProp as P;
+        assert_eq!(prop_unit(P::Opacity), "%");
+        assert_eq!(prop_unit(P::ScaleX), "%");
+        assert_eq!(prop_unit(P::Rotation), "°");
+        assert_eq!(prop_unit(P::PositionX), "");
     }
 
     // Moving a layer shifts in/out AND start_offset by the same delta — a move,
