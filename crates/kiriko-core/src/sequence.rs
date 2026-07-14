@@ -15,7 +15,7 @@
 //! it into `LayerKind` and the render paths is the next step and lives
 //! elsewhere; cutting (§8) and the graph lenses (§9) build on top.
 
-use crate::retime::{Interpolation, Retime};
+use crate::retime::{Ease, Interpolation, Retime};
 use crate::time::Rational;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -105,6 +105,25 @@ impl Clip {
             .single_ramp_view()
             .filter(|(v0, v1, _)| (v0 - v1).abs() < 1e-9)
             .map(|(v0, _, _)| v0)
+    }
+
+    /// This clip with a single speed *ramp* — speed eases from `v0` to `v1`
+    /// across the clip — its place on the layer unchanged (beat-sync). The
+    /// montage velocity gesture; `source_out` follows from the ramp integral.
+    pub fn with_ramp(&self, v0: Rational, v1: Rational, ease: Ease) -> Clip {
+        let retime = Retime::single_ramp(self.place_duration, self.source_in, v0, v1, ease);
+        let source_out = retime.boundaries.last().map_or(self.source_out, |b| b.s);
+        Clip {
+            retime,
+            source_out,
+            ..self.clone()
+        }
+    }
+
+    /// The clip's ramp as `(start speed, end speed, ease)` when it is a single
+    /// Rate segment (constant or ramp); None for multi-segment / Map stores.
+    pub fn ramp_view(&self) -> Option<(f64, f64, Ease)> {
+        self.retime.single_ramp_view()
     }
 
     /// True when layer-local time `lt` (seconds) falls within this clip.
@@ -244,6 +263,22 @@ mod tests {
         assert_eq!(slow.constant_speed(), Some(0.5));
         // A plain clip reads as 1×.
         assert_eq!(base.constant_speed(), Some(1.0));
+    }
+
+    #[test]
+    fn with_ramp_sets_a_velocity_ramp() {
+        use crate::retime::Ease;
+        // 4 s clip from source 0, speed ramping 1× → 3× (Linear): source used =
+        // 4·[1 + (3−1)·E(1)] = 4·(1 + 2·0.5) = 8.
+        let base = clip(Uuid::now_v7(), 0, 4);
+        let ramp = base.with_ramp(rat(1, 1), rat(3, 1), Ease::Linear);
+        assert_eq!(ramp.place_duration, base.place_duration); // place held
+        assert_eq!(ramp.source_out, rat(8, 1));
+        let (v0, v1, ease) = ramp.ramp_view().unwrap();
+        assert!((v0 - 1.0).abs() < 1e-9 && (v1 - 3.0).abs() < 1e-9);
+        assert_eq!(ease, Ease::Linear);
+        // A ramp has no single constant speed.
+        assert_eq!(ramp.constant_speed(), None);
     }
 
     #[test]

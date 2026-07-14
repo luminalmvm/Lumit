@@ -1486,9 +1486,15 @@ impl AppState {
         self.refresh_preview();
     }
 
-    /// Set the selected clip's constant speed (percent; 100 = source rate) in
-    /// its Sequence layer, keeping its place on the layer (beat-sync covenant).
-    pub fn set_selected_clip_speed(&mut self, percent: f64) {
+    /// Set the selected clip's speed ramp (start/end percent; 100 = source
+    /// rate) with an ease, keeping its place on the layer (beat-sync covenant).
+    /// Equal start/end with a Linear ease is a plain constant speed.
+    pub fn set_selected_clip_ramp(
+        &mut self,
+        v0_pct: f64,
+        v1_pct: f64,
+        ease: kiriko_core::retime::Ease,
+    ) {
         use kiriko_core::model::LayerKind;
         let (Some(comp_id), Some(layer_id), Some(clip_id)) =
             (self.selected_comp, self.selected_layer, self.selected_clip)
@@ -1508,10 +1514,12 @@ impl AppState {
         let Some(idx) = clips.iter().position(|c| c.id == clip_id) else {
             return;
         };
-        let speed = kiriko_core::Rational::from_f64_on_grid(percent / 100.0, 1000)
-            .unwrap_or(kiriko_core::Rational::ONE);
+        let pct = |p: f64| {
+            kiriko_core::Rational::from_f64_on_grid(p / 100.0, 1000)
+                .unwrap_or(kiriko_core::Rational::ONE)
+        };
         let mut new_clips = clips.clone();
-        new_clips[idx] = new_clips[idx].with_speed(speed);
+        new_clips[idx] = new_clips[idx].with_ramp(pct(v0_pct), pct(v1_pct), ease);
         self.commit(Op::SetSequenceClips {
             comp: comp_id,
             layer: layer_id,

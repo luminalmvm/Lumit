@@ -215,6 +215,18 @@ fn text_field(
     (resp, buf)
 }
 
+/// Short label for a speed-ramp ease.
+fn ease_label(e: kiriko_core::retime::Ease) -> &'static str {
+    use kiriko_core::retime::Ease;
+    match e {
+        Ease::Linear => "Linear",
+        Ease::Slow => "Slow",
+        Ease::Fast => "Fast",
+        Ease::Smooth => "Smooth",
+        Ease::Sharp => "Sharp",
+    }
+}
+
 /// A dropdown that shows just its label — no down-caret (the house style).
 /// Returns whatever the menu closure produces.
 fn bare_dropdown<R>(
@@ -823,8 +835,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     }
     use kiriko_core::anim::Animation;
     let mut pending: Option<kiriko_core::Op> = None;
-    // A per-clip speed edit (percent), applied after the layer loop.
-    let mut clip_speed_edit: Option<f64> = None;
+    // A per-clip speed-ramp edit (start %, end %, ease), applied after the loop.
+    let mut clip_ramp_edit: Option<(f64, f64, kiriko_core::retime::Ease)> = None;
     // A per-clip frame-interpolation edit, applied after the layer loop.
     let mut clip_interp_edit: Option<kiriko_core::retime::Interpolation> = None;
 
@@ -1499,31 +1511,74 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     if let Some(cid) = app.selected_clip {
                         if let Some(clip) = clips.iter().find(|c| c.id == cid) {
                             ui.indent(("clipspeed", layer.id), |ui| {
+                                // Speed ramp: start % → end % with an ease (equal
+                                // ends = constant speed). The montage gesture.
                                 ui.horizontal(|ui| {
+                                    use kiriko_core::retime::Ease;
                                     ui.label(
-                                        egui::RichText::new("Clip speed %")
+                                        egui::RichText::new("Speed %")
                                             .small()
                                             .color(theme.text_muted),
                                     );
-                                    let current =
-                                        clip.constant_speed().map(|s| s * 100.0).unwrap_or(100.0);
-                                    let id = egui::Id::new(("clipspeedv", cid));
-                                    let mut v =
-                                        ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(current);
-                                    let resp = ui.add(
-                                        egui::DragValue::new(&mut v)
+                                    let (rv0, rv1, rease) = clip
+                                        .ramp_view()
+                                        .map(|(a, b, e)| (a * 100.0, b * 100.0, e))
+                                        .unwrap_or((100.0, 100.0, Ease::Linear));
+                                    let id0 = egui::Id::new(("clipv0", cid));
+                                    let mut s0 = ui.data(|d| d.get_temp::<f64>(id0)).unwrap_or(rv0);
+                                    let r0 = ui.add(
+                                        egui::DragValue::new(&mut s0)
+                                            .speed(1.0)
+                                            .range(-800.0..=800.0),
+                                    );
+                                    if r0.dragged() || r0.has_focus() {
+                                        ui.data_mut(|d| d.insert_temp(id0, s0));
+                                    }
+                                    ui.label(egui::RichText::new("→").small());
+                                    let id1 = egui::Id::new(("clipv1", cid));
+                                    let mut s1 = ui.data(|d| d.get_temp::<f64>(id1)).unwrap_or(rv1);
+                                    let r1 = ui.add(
+                                        egui::DragValue::new(&mut s1)
                                             .speed(1.0)
                                             .range(-800.0..=800.0)
                                             .suffix(" %"),
                                     );
-                                    if resp.dragged() || resp.has_focus() {
-                                        ui.data_mut(|d| d.insert_temp(id, v));
+                                    if r1.dragged() || r1.has_focus() {
+                                        ui.data_mut(|d| d.insert_temp(id1, s1));
                                     }
-                                    if resp.drag_stopped() || resp.lost_focus() {
-                                        if (v - current).abs() > 1e-6 {
-                                            clip_speed_edit = Some(v);
+                                    let mut new_ease = rease;
+                                    bare_dropdown(ui, ease_label(rease), |ui| {
+                                        for e in [
+                                            Ease::Linear,
+                                            Ease::Slow,
+                                            Ease::Fast,
+                                            Ease::Smooth,
+                                            Ease::Sharp,
+                                        ] {
+                                            if ui
+                                                .selectable_label(e == rease, ease_label(e))
+                                                .clicked()
+                                            {
+                                                new_ease = e;
+                                                ui.close_menu();
+                                            }
                                         }
-                                        ui.data_mut(|d| d.remove::<f64>(id));
+                                    });
+                                    let released = r0.drag_stopped()
+                                        || r0.lost_focus()
+                                        || r1.drag_stopped()
+                                        || r1.lost_focus();
+                                    if released
+                                        && ((s0 - rv0).abs() > 1e-6 || (s1 - rv1).abs() > 1e-6)
+                                    {
+                                        clip_ramp_edit = Some((s0, s1, rease));
+                                        ui.data_mut(|d| {
+                                            d.remove::<f64>(id0);
+                                            d.remove::<f64>(id1);
+                                        });
+                                    }
+                                    if new_ease != rease {
+                                        clip_ramp_edit = Some((s0, s1, new_ease));
                                     }
                                 });
                                 ui.horizontal(|ui| {
@@ -1699,8 +1754,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     if let Some(op) = pending {
         app.commit(op);
     }
-    if let Some(v) = clip_speed_edit {
-        app.set_selected_clip_speed(v);
+    if let Some((v0, v1, ease)) = clip_ramp_edit {
+        app.set_selected_clip_ramp(v0, v1, ease);
     }
     if let Some(interp) = clip_interp_edit {
         app.set_selected_clip_interp(interp);

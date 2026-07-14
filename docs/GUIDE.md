@@ -296,7 +296,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   keeps their ratio as you drag; the 🔓 button unlocks them into two separate rows for
   independent editing, and 🔗 re-locks. (Re-locking keeps whatever ratio the two currently
   have and loses nothing — a small, friendlier deviation from the original "relinking may
-  discard one axis" idea.) Footage layers also get a **Speed %** row with the same stopwatch:
+  discard one axis" idea.) A selected sequence clip's **Speed %** is a full ramp — a start
+  and end speed with an ease (Linear/Slow/Fast/Smooth/Sharp), equal ends being a plain
+  constant — so a single clip can rush in and settle; cut a clip into pieces and ramp each to
+  build the classic ramp-freeze-ramp velocity edit, edit points staying on the beat
+  (`Clip::with_ramp`, tested). Footage layers also get a **Speed %** row with the same stopwatch:
   turn it on and speed becomes keyframable, so you can slow-mo one moment and speed through
   another. Under the bonnet each speed keyframe becomes a segment of the retiming curve (a
   straight speed ramp between keys); the frame-accurate maths that keeps cuts on the beat is
