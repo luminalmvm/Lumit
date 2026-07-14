@@ -320,10 +320,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - **Getting around the Timeline** — the panel is split into the **layer outline** on the left
   (the stack of names, stopwatches and toggles) and the **lane area** on the right (the time
   ruler with each layer's bar on its own *lane*). Drag a layer's bar body to slide it earlier
-  or later in time (one undo per drag). Dragging a bar follows the cursor one-for-one at any
-  zoom, and the small "magnetic" pull towards nearby markers stays the same ~6 px on screen
-  however far in you are (both used to speed up with zoom, which felt like the timeline
-  slipping out from under the mouse). Zoom the time ruler with **Alt + wheel** — it zooms
+  or later in time (one undo per drag). Every drag in the lane area — moving a bar, trimming
+  an edge, scrubbing the ruler — follows the cursor one-for-one at any zoom, and the small
+  "magnetic" pull towards nearby markers stays the same ~6 px on screen however far in you
+  are (both used to speed up with zoom, which felt like the timeline slipping out from under
+  the mouse); a twirled-open layer's keyframe diamonds line up under its bar at any zoom
+  too. Zoom the time ruler with **Alt + wheel** — it zooms
   toward the cursor so the frame under the pointer stays put — and scroll it with **Shift +
   wheel** (or a trackpad's horizontal wheel); a plain wheel scrolls the rows up and down. Along
   the bottom of the lanes sits a small contained bar: `−`, `+` and **Fit** with the current

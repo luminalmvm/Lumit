@@ -1278,11 +1278,12 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     }
     if ruler_resp.clicked() || ruler_resp.dragged() {
         if let Some(pos) = ruler_resp.interact_pointer_pos() {
-            let frac = ((pos.x - track_left) / track_w).clamp(0.0, 1.0) as f64;
+            // Map the cursor through the displayed (zoomed, scrolled) time axis,
+            // so the playhead lands under the pointer at any zoom.
+            let raw = seconds_of(pos.x).clamp(0.0, duration);
             // Snap the scrub to a nearby marker (within ~6 px) so the playhead
             // lands on the beat (docs/impl/beat-detection.md grid assist).
-            let raw = frac * duration;
-            let threshold = 6.0 / track_w as f64 * duration;
+            let threshold = drag_secs(6.0, px_per_sec);
             let secs = kiriko_core::markers::snap_time(
                 rational_at(raw),
                 &comp.markers,
@@ -1749,7 +1750,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                         if let Some(pos) = resp.interact_pointer_pos() {
                             // Snap the trimmed edge to a nearby beat/marker (~6 px) so
                             // clips cut on the beat.
-                            let threshold = 6.0 / track_w as f64 * duration;
+                            let threshold = drag_secs(6.0, px_per_sec);
                             let secs = kiriko_core::markers::snap_time(
                                 rational_at(seconds_of(pos.x)),
                                 &comp.markers,
@@ -2176,7 +2177,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                             name_w,
                             track_left,
                             track_w,
-                            duration,
+                            px_per_sec,
+                            view_start,
                             viewport,
                             &mut pending,
                         );
@@ -4425,7 +4427,10 @@ struct RowCtx<'a> {
     viewport: egui::Rect,
     track_left: f32,
     track_w: f32,
-    duration: f64,
+    /// The displayed time axis (zoom + scroll), so property-row keyframe
+    /// diamonds sit exactly under the layer bars at any zoom.
+    px_per_sec: f64,
+    view_start: f64,
 }
 
 /// New (scale_x, scale_y) when the linked Scale control is dragged so x becomes
@@ -4493,7 +4498,8 @@ fn transform_property_rows(
     _name_w: f32,
     track_left: f32,
     track_w: f32,
-    duration: f64,
+    px_per_sec: f64,
+    view_start: f64,
     viewport: egui::Rect,
     pending: &mut Option<kiriko_core::Op>,
 ) {
@@ -4512,7 +4518,8 @@ fn transform_property_rows(
         viewport,
         track_left,
         track_w,
-        duration,
+        px_per_sec,
+        view_start,
     };
 
     // Footage speed is a keyframable property too (K-072): its own row above
@@ -4682,7 +4689,9 @@ fn draw_key_diamonds(
     keys: &[kiriko_core::anim::Keyframe],
 ) {
     let cy = row_rect.center().y;
-    let x_of = |s: f64| ctx.track_left + (s / ctx.duration.max(1e-6)) as f32 * ctx.track_w;
+    // The same displayed (zoomed, scrolled) axis as the layer bars, so a
+    // property's diamonds stay under its layer's keys at any zoom.
+    let x_of = |s: f64| ctx.track_left + ((s - ctx.view_start) * ctx.px_per_sec) as f32;
     for k in keys {
         let x = x_of(ctx.off + k.time.to_f64());
         if x >= ctx.track_left - 1.0 && x <= ctx.track_left + ctx.track_w + 1.0 {
