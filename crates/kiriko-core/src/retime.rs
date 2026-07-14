@@ -746,6 +746,49 @@ impl Retime {
         Some(r)
     }
 
+    /// Insert a freeze — a zero-speed hold of `duration` — at local time `at`,
+    /// keeping the clip's own duration fixed (docs/04-RETIMING.md §7.3). The
+    /// segment covering `at` is split there, a `Rate { 0, 0, Linear }` hold is
+    /// inserted, every later boundary shifts that far further along in local
+    /// time, and the map is cropped back to the original domain — so the tail
+    /// may be pushed off the end and newly overrun (which renders as a hold).
+    /// None when `at` is not strictly inside the domain, `duration` is not
+    /// positive, or the split at `at` is unsupported (a general-influence Map).
+    pub fn insert_freeze(&self, at: Rational, duration: Rational) -> Option<Retime> {
+        let d_orig = self.boundaries.last()?.t;
+        if at <= Rational::ZERO || at >= d_orig || duration <= Rational::ZERO {
+            return None;
+        }
+        let (left, right) = self.split_at(at)?;
+        let s_at = left.boundaries.last()?.s;
+        let freeze_end = at.checked_add(duration).ok()?;
+        let mut boundaries = left.boundaries.clone();
+        boundaries.push(Boundary::new(freeze_end, s_at));
+        // Right's local times shift by the freeze length; its first boundary
+        // (0, s_at) is the freeze end we just pushed, so skip it.
+        for b in right.boundaries.iter().skip(1) {
+            boundaries.push(Boundary::new(b.t.checked_add(freeze_end).ok()?, b.s));
+        }
+        let mut segments = left.segments.clone();
+        segments.push(RetimeSegment::Rate(RateSegment::new(
+            Rational::ZERO,
+            Rational::ZERO,
+            Ease::Linear,
+        )));
+        segments.extend(right.segments.iter().cloned());
+        let mut assembled = Retime {
+            boundaries,
+            segments,
+            allow_reverse: self.allow_reverse,
+            interpolation: self.interpolation.clone(),
+            extra: serde_json::Map::new(),
+        };
+        assembled.recompute_boundaries().ok()?;
+        // Crop back to the original clip duration: keep [0, d_orig].
+        let (cropped, _) = assembled.split_at(d_orig)?;
+        Some(cropped)
+    }
+
     /// Structural sanity (docs/04-RETIMING.md §3 invariants): n + 1
     /// boundaries for n segments, first boundary at local time zero,
     /// boundary times strictly increasing.
@@ -1401,6 +1444,31 @@ mod tests {
                 "speed @ {t}"
             );
         }
+    }
+
+    #[test]
+    fn inserting_a_freeze_holds_the_frame_and_crops_the_tail() {
+        // 1x from source 0 over [0,4]. Insert a 1s freeze at local time 1.
+        let r = Retime::constant_speed(rat(4, 1), rat(0, 1), rat(1, 1));
+        let f = r
+            .insert_freeze(rat(1, 1), rat(1, 1))
+            .expect("interior freeze");
+        f.validate().unwrap();
+        // The clip's duration is unchanged — the tail was cropped, not extended.
+        assert_eq!(f.boundaries.last().unwrap().t, rat(4, 1));
+        // Before the freeze plays as before.
+        assert!((f.evaluate(0.5) - 0.5).abs() < 1e-9);
+        // Across the freeze [1,2] the source is held at 1.
+        assert!((f.evaluate(1.5) - 1.0).abs() < 1e-9);
+        assert!((f.evaluate(2.0) - 1.0).abs() < 1e-9);
+        // After it, the source resumes at 1 and runs on at 1x.
+        assert!((f.evaluate(3.0) - 2.0).abs() < 1e-9);
+        // The original tail (source 3→4) was pushed off the end: at D the source
+        // is now 3, not 4.
+        assert!((f.evaluate(4.0) - 3.0).abs() < 1e-9);
+        // Freezes must land strictly inside, with a positive duration.
+        assert!(r.insert_freeze(rat(0, 1), rat(1, 1)).is_none());
+        assert!(r.insert_freeze(rat(1, 1), rat(0, 1)).is_none());
     }
 
     #[test]
