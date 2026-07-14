@@ -755,6 +755,11 @@ pub struct AppState {
     cache_bar_memo: Option<(CacheBarKey, std::sync::Arc<Vec<bool>>)>,
     last_autosave: Instant,
     comp_counter: usize,
+    /// Comps open as Timeline tabs, in tab order (07-UI-SPEC §4: one Timeline
+    /// panel, one tab per open comp). `selected_comp` names the active tab and
+    /// is always one of these when it is set. Session state, not saved in the
+    /// document.
+    pub open_comps: Vec<Uuid>,
 }
 
 impl Default for AppState {
@@ -835,6 +840,7 @@ impl Default for AppState {
             cache_bar_memo: None,
             last_autosave: Instant::now(),
             comp_counter: 0,
+            open_comps: Vec::new(),
             selected_item: None,
             mask_drag: None,
             tool: ToolMode::default(),
@@ -902,6 +908,10 @@ impl AppState {
             ProjectItem::Composition(c) => Some(c.id),
             _ => None,
         });
+        // Open the first comp as the sole Timeline tab; the rest open on demand.
+        self.open_comps = self.selected_comp.into_iter().collect();
+        self.preview_comp = None;
+        self.preview_item = None;
         self.store = DocumentStore::new(doc);
         self.path = path;
         self.dirty = dirty;
@@ -1861,11 +1871,68 @@ impl AppState {
         });
         ops.push(self.file_into_folder_op(folder_id, id, &ops));
         self.commit(Op::Batch { ops });
+        // A brand-new comp opens as the active Timeline tab and the viewed
+        // comp, so it is the target for the next add. Without this, items kept
+        // landing in a comp opened earlier: the old `preview_comp` lagged
+        // behind `selected_comp`, and there was no tab to switch back with.
+        self.open_comp(id);
+        if let Some(item) = dialog.pending_item {
+            self.add_item_to_comp(item);
+        }
+    }
+
+    /// Make `id` the active comp: shown in the Timeline and the Viewer, and
+    /// listed as an open Timeline tab. The Timeline shows one tab per open comp
+    /// (07-UI-SPEC §4), so opening a comp adds its tab rather than replacing
+    /// whichever comp was open before. No-op for a non-comp id.
+    pub fn open_comp(&mut self, id: Uuid) {
+        if self.store.snapshot().comp(id).is_none() {
+            return;
+        }
+        if !self.open_comps.contains(&id) {
+            self.open_comps.push(id);
+        }
         self.selected_comp = Some(id);
         self.selected_item = Some(id);
-        if let Some(item) = dialog.pending_item {
-            self.preview_comp = Some(id);
-            self.add_item_to_comp(item);
+        self.preview_comp = Some(id);
+        self.preview_item = None;
+        self.preview_frame = 0;
+        #[cfg(feature = "media")]
+        self.refresh_preview();
+    }
+
+    /// Close an open comp's Timeline tab. The comp itself stays in the project;
+    /// only its tab closes. If it was the active tab, its neighbour takes over
+    /// (or the Timeline empties when the last tab closes).
+    pub fn close_comp_tab(&mut self, id: Uuid) {
+        let Some(pos) = self.open_comps.iter().position(|c| *c == id) else {
+            return;
+        };
+        self.open_comps.remove(pos);
+        if self.selected_comp != Some(id) {
+            return;
+        }
+        // Prefer the tab that shifted into this slot (the one to the right),
+        // else the new last tab, else nothing left to show.
+        match self
+            .open_comps
+            .get(pos)
+            .or_else(|| self.open_comps.last())
+            .copied()
+        {
+            Some(next) => {
+                self.selected_comp = Some(next);
+                self.selected_item = Some(next);
+                self.preview_comp = Some(next);
+                self.preview_item = None;
+                self.preview_frame = 0;
+                #[cfg(feature = "media")]
+                self.refresh_preview();
+            }
+            None => {
+                self.selected_comp = None;
+                self.preview_comp = None;
+            }
         }
     }
 
@@ -3152,6 +3219,101 @@ mod tests {
         app.undo();
         let doc = app.store.snapshot();
         assert_eq!(doc.comp(comp_id).unwrap().width, 1920);
+    }
+
+    /// Regression: a freshly created composition is the active one, so the
+    /// next item dropped in lands in it — not in a comp opened earlier. The
+    /// bug was `preview_comp` (the add target) lagging behind `selected_comp`
+    /// after a second comp was created.
+    #[test]
+    fn a_new_composition_becomes_the_active_add_target() {
+        let mut app = AppState::default();
+
+        // First comp, with one footage layer.
+        app.new_composition();
+        app.confirm_comp_dialog();
+        let comp1 = app.selected_comp.unwrap();
+        app.import_paths(vec![std::path::PathBuf::from("clip.mp4")]);
+        let footage = app
+            .store
+            .snapshot()
+            .items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Footage(f) => Some(f.id),
+                _ => None,
+            })
+            .unwrap();
+        app.add_item_to_comp(footage);
+        assert_eq!(app.store.snapshot().comp(comp1).unwrap().layers.len(), 1);
+
+        // Second comp: creating it makes it the active comp everywhere.
+        app.new_composition();
+        app.confirm_comp_dialog();
+        let comp2 = app.selected_comp.unwrap();
+        assert_ne!(comp1, comp2);
+        assert_eq!(
+            app.preview_comp,
+            Some(comp2),
+            "a new comp should also become the viewed/edited comp"
+        );
+
+        // The next add must land in comp2, and must not touch comp1.
+        app.add_item_to_comp(footage);
+        let doc = app.store.snapshot();
+        assert_eq!(
+            doc.comp(comp2).unwrap().layers.len(),
+            1,
+            "layer must land in the newly created composition"
+        );
+        assert_eq!(
+            doc.comp(comp1).unwrap().layers.len(),
+            1,
+            "the earlier composition must not receive the new layer"
+        );
+    }
+
+    /// 07-UI-SPEC §4: the Timeline keeps one tab per open comp. Creating comps
+    /// opens their tabs; the active tab follows the newest; closing a tab hands
+    /// the active comp to a neighbour and never deletes the comp itself.
+    #[test]
+    fn comps_open_as_timeline_tabs_and_close_cleanly() {
+        let mut app = AppState::default();
+        app.new_composition();
+        app.confirm_comp_dialog();
+        let comp1 = app.selected_comp.unwrap();
+        app.new_composition();
+        app.confirm_comp_dialog();
+        let comp2 = app.selected_comp.unwrap();
+
+        // Both comps are open; the newest is active.
+        assert_eq!(app.open_comps, vec![comp1, comp2]);
+        assert_eq!(app.selected_comp, Some(comp2));
+        assert_eq!(app.preview_comp, Some(comp2));
+
+        // Switching back to the first comp's tab re-activates it without
+        // re-opening (no duplicate tab).
+        app.open_comp(comp1);
+        assert_eq!(app.open_comps, vec![comp1, comp2]);
+        assert_eq!(app.selected_comp, Some(comp1));
+
+        // Closing the active tab hands off to its neighbour; the comp survives.
+        app.close_comp_tab(comp1);
+        assert_eq!(app.open_comps, vec![comp2]);
+        assert_eq!(app.selected_comp, Some(comp2));
+        assert!(app.store.snapshot().comp(comp1).is_some());
+
+        // Closing the last tab empties the Timeline.
+        app.close_comp_tab(comp2);
+        assert!(app.open_comps.is_empty());
+        assert_eq!(app.selected_comp, None);
+        assert_eq!(app.preview_comp, None);
+
+        // Deleting a comp also drops its tab if it happened to be open.
+        app.open_comp(comp2);
+        app.commit(Op::RemoveItem { id: comp2 });
+        app.close_comp_tab(comp2);
+        assert!(app.open_comps.is_empty());
     }
 
     /// The slice 3 drill: save, edit past the save, crash (drop without
