@@ -791,6 +791,21 @@ fn icon_button(ui: &mut egui::Ui, theme: &Theme, icon: Icon, active: bool) -> eg
     resp
 }
 
+/// The identity glyph and §6.1 colour for a layer type — drawn on the layer's
+/// row so type reads at a glance (colour is never the only encoding: each type
+/// also carries its own glyph).
+fn layer_type_style(kind: &kiriko_core::model::LayerKind, theme: &Theme) -> (Icon, egui::Color32) {
+    use kiriko_core::model::LayerKind;
+    match kind {
+        LayerKind::Footage { .. } => (Icon::Footage, theme.layer.footage),
+        LayerKind::Sequence { .. } => (Icon::Sequence, theme.layer.sequence),
+        LayerKind::Precomp { .. } => (Icon::Comp, theme.layer.precomp),
+        LayerKind::Solid { .. } => (Icon::Solid, theme.layer.solid),
+        LayerKind::Text { .. } => (Icon::Text, theme.layer.text),
+        LayerKind::Camera { .. } => (Icon::Camera, theme.layer.camera),
+    }
+}
+
 /// One tree row (folders recurse). Rows are drag sources; folder rows are
 /// drop targets.
 #[allow(clippy::too_many_arguments)]
@@ -827,14 +842,10 @@ fn item_rows(
         .horizontal(|ui| {
             ui.add_space(12.0 * depth as f32 + 2.0);
             if is_folder {
-                let arrow = if open { "▾" } else { "▸" };
-                if ui
-                    .add(
-                        egui::Label::new(egui::RichText::new(arrow).small())
-                            .sense(egui::Sense::click()),
-                    )
-                    .clicked()
-                {
+                let (arrow_rect, arrow_resp) =
+                    ui.allocate_exact_size(egui::vec2(13.0, 14.0), egui::Sense::click());
+                crate::icons::disclosure(ui.painter(), arrow_rect, open, theme.text_muted);
+                if arrow_resp.clicked() {
                     open = !open;
                     ui.data_mut(|d| d.insert_temp(open_id, open));
                 }
@@ -1407,13 +1418,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             expanded = !expanded;
             ui.data_mut(|d| d.insert_temp(twirl_id, expanded));
         }
-        ui.painter().text(
-            tri.center(),
-            egui::Align2::CENTER_CENTER,
-            if expanded { "▾" } else { "▸" },
-            egui::FontId::proportional(11.0),
-            theme.text_muted,
-        );
+        crate::icons::disclosure(ui.painter(), tri, expanded, theme.text_muted);
         if app.selected_layer == Some(layer.id) {
             ui.painter().rect_filled(
                 egui::Rect::from_min_max(
@@ -1443,7 +1448,20 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         let td_r = slot(edge - 60.0, edge - 38.0);
         let blend_r = slot(edge - 124.0, edge - 64.0);
         let matte_r = slot(edge - 178.0, edge - 128.0);
-        let title_r = slot(row_rect.left() + 40.0, edge - 182.0);
+        let type_r = slot(row_rect.left() + 38.0, row_rect.left() + 56.0);
+        let title_r = slot(row_rect.left() + 58.0, edge - 182.0);
+        // Layer-type identity (15-DESIGN §6.1): a 3px colour tab on the row's
+        // left edge and the type glyph before the name, both in the type colour.
+        let (type_icon, type_col) = layer_type_style(&layer.kind, theme);
+        ui.painter().rect_filled(
+            egui::Rect::from_min_max(
+                egui::pos2(row_rect.left(), row_rect.top() + 1.0),
+                egui::pos2(row_rect.left() + 3.0, row_rect.bottom() - 1.0),
+            ),
+            0.0,
+            type_col,
+        );
+        crate::icons::paint(ui.painter(), type_r, type_icon, type_col, 1.4);
         let place = |ui: &mut egui::Ui, r: egui::Rect, add: &mut dyn FnMut(&mut egui::Ui)| {
             let mut child = ui.new_child(
                 egui::UiBuilder::new()
@@ -1474,7 +1492,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             }
         });
         place(ui, matte_r, &mut |ui| {
-            matte_control(ui, comp, comp_id, layer, &mut pending)
+            matte_control(ui, theme, comp, comp_id, layer, &mut pending)
         });
         place(ui, blend_r, &mut |ui| {
             blend_control(ui, comp_id, layer, &mut pending)
@@ -1484,7 +1502,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         });
         if is_footage {
             place(ui, mute_r, &mut |ui| {
-                mute_control(ui, comp_id, layer, &mut pending)
+                mute_control(ui, theme, comp_id, layer, &mut pending)
             });
         }
         if select_this {
@@ -3989,17 +4007,14 @@ fn visible_control(
     pending: &mut Option<kiriko_core::Op>,
 ) {
     let vis = layer.switches.visible;
-    let glyph = if vis { "◉" } else { "○" };
     let col = if vis {
         theme.text_secondary
     } else {
         theme.text_disabled
     };
-    if ui
-        .add(egui::Label::new(egui::RichText::new(glyph).color(col)).sense(egui::Sense::click()))
-        .on_hover_text("Show / hide this layer")
-        .clicked()
-    {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+    crate::icons::paint(ui.painter(), rect, Icon::Eye, col, 1.4);
+    if resp.on_hover_text("Show / hide this layer").clicked() {
         *pending = Some(kiriko_core::Op::SetLayerVisible {
             comp: comp_id,
             layer: layer.id,
@@ -4008,58 +4023,88 @@ fn visible_control(
     }
 }
 
-/// Matte subcolumn: source pick + luma/invert flags under one dropdown.
+/// Matte subcolumn: a labelled "Matte" dropdown (accent when a matte is set)
+/// with a drawn caret to show it opens a menu — source pick + luma/invert flags.
 fn matte_control(
     ui: &mut egui::Ui,
+    theme: &Theme,
     comp: &kiriko_core::model::Composition,
     comp_id: uuid::Uuid,
     layer: &kiriko_core::model::Layer,
     pending: &mut Option<kiriko_core::Op>,
 ) {
     use kiriko_core::model::{MatteChannel, MatteRef};
-    let label = layer
-        .matte
-        .as_ref()
-        .and_then(|m| comp.layers.iter().find(|l| l.id == m.layer))
-        .map(|l| format!("⬓ {}", l.name))
-        .unwrap_or_else(|| "⬓".into());
+    let has_matte = layer.matte.is_some();
+    let (rect, resp) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
+    let base = if has_matte {
+        theme.accent
+    } else {
+        theme.text_secondary
+    };
+    let colour = if resp.hovered() {
+        theme.text_primary
+    } else {
+        base
+    };
+    ui.painter().text(
+        rect.left_center() + egui::vec2(2.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        "Matte",
+        egui::FontId::proportional(11.0),
+        colour,
+    );
+    crate::icons::caret_down(
+        ui.painter(),
+        egui::pos2(rect.right() - 6.0, rect.center().y),
+        colour,
+    );
+    let popup_id = ui.make_persistent_id(("matte-popup", layer.id));
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup_id));
+    }
     let mut set: Option<Option<MatteRef>> = None;
-    bare_dropdown(ui, egui::RichText::new(label).small(), |ui| {
-        if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
-            set = Some(None);
-            ui.close_menu();
-        }
-        for other in comp.layers.iter().filter(|l| l.id != layer.id) {
-            let selected = layer.matte.is_some_and(|m| m.layer == other.id);
-            if ui.selectable_label(selected, &other.name).clicked() {
-                set = Some(Some(MatteRef {
-                    layer: other.id,
-                    channel: layer
-                        .matte
-                        .map(|m| m.channel)
-                        .unwrap_or(MatteChannel::Alpha),
-                    inverted: layer.matte.is_some_and(|m| m.inverted),
-                }));
-                ui.close_menu();
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &resp,
+        egui::PopupCloseBehavior::CloseOnClick,
+        |ui| {
+            ui.set_min_width(150.0);
+            if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
+                set = Some(None);
             }
-        }
-        if let Some(mut m) = layer.matte {
-            ui.separator();
-            let luma = matches!(m.channel, MatteChannel::Luma);
-            if ui.selectable_label(luma, "Luma matte").clicked() {
-                m.channel = if luma {
-                    MatteChannel::Alpha
-                } else {
-                    MatteChannel::Luma
-                };
-                set = Some(Some(m));
+            for other in comp.layers.iter().filter(|l| l.id != layer.id) {
+                let selected = layer.matte.is_some_and(|m| m.layer == other.id);
+                if ui.selectable_label(selected, &other.name).clicked() {
+                    set = Some(Some(MatteRef {
+                        layer: other.id,
+                        channel: layer
+                            .matte
+                            .map(|m| m.channel)
+                            .unwrap_or(MatteChannel::Alpha),
+                        inverted: layer.matte.is_some_and(|m| m.inverted),
+                    }));
+                }
             }
-            if ui.selectable_label(m.inverted, "Inverted").clicked() {
-                m.inverted = !m.inverted;
-                set = Some(Some(m));
+            if let Some(mut m) = layer.matte {
+                ui.separator();
+                let luma = matches!(m.channel, MatteChannel::Luma);
+                if ui.selectable_label(luma, "Luma matte").clicked() {
+                    m.channel = if luma {
+                        MatteChannel::Alpha
+                    } else {
+                        MatteChannel::Luma
+                    };
+                    set = Some(Some(m));
+                }
+                if ui.selectable_label(m.inverted, "Inverted").clicked() {
+                    m.inverted = !m.inverted;
+                    set = Some(Some(m));
+                }
             }
-        }
-    });
+        },
+    );
     if let Some(matte) = set {
         *pending = Some(kiriko_core::Op::SetLayerMatte {
             comp: comp_id,
@@ -4148,13 +4193,20 @@ fn three_d_control(
 /// Mute subcolumn (footage layers).
 fn mute_control(
     ui: &mut egui::Ui,
+    theme: &Theme,
     comp_id: uuid::Uuid,
     layer: &kiriko_core::model::Layer,
     pending: &mut Option<kiriko_core::Op>,
 ) {
     let muted = !layer.switches.audible;
-    if ui
-        .selectable_label(muted, egui::RichText::new("Mute").small())
+    let (icon, col) = if muted {
+        (Icon::Mute, theme.text_muted)
+    } else {
+        (Icon::Audio, theme.text_secondary)
+    };
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+    crate::icons::paint(ui.painter(), rect, icon, col, 1.4);
+    if resp
         .on_hover_text("Silence this layer in playback and export")
         .clicked()
     {
@@ -4244,13 +4296,8 @@ fn group_header_row(
     }
     let cy = rect.center().y;
     let tx = rect.left() + 22.0;
-    ui.painter().text(
-        egui::pos2(tx, cy),
-        egui::Align2::CENTER_CENTER,
-        if open { "▾" } else { "▸" },
-        egui::FontId::proportional(11.0),
-        theme.text_muted,
-    );
+    let tri = egui::Rect::from_center_size(egui::pos2(tx, cy), egui::vec2(12.0, 12.0));
+    crate::icons::disclosure(ui.painter(), tri, open, theme.text_muted);
     ui.painter().text(
         egui::pos2(tx + 10.0, cy),
         egui::Align2::LEFT_CENTER,

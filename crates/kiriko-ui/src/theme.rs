@@ -37,6 +37,22 @@ pub struct Theme {
     pub error: Color32,
     /// Graph-editor curve strokes (15-DESIGN §graph: the viz ramp).
     pub curve: [Color32; 4],
+    /// Layer-type identity colours (15-DESIGN §6.1).
+    pub layer: LayerColours,
+}
+
+/// Per-layer-type identity colours (docs/15-DESIGN.md §6.1): muted siblings,
+/// every one clearly quieter than `accent` so a full Timeline reads as organised
+/// rather than carnival. Each type carries its colour as a left-edge tab and the
+/// tint of its type glyph.
+#[derive(Clone, Copy)]
+pub struct LayerColours {
+    pub footage: Color32,
+    pub sequence: Color32,
+    pub precomp: Color32,
+    pub solid: Color32,
+    pub text: Color32,
+    pub camera: Color32,
 }
 
 impl Theme {
@@ -69,6 +85,14 @@ impl Theme {
                 Color32::from_rgb(0xe8, 0xa7, 0xb4),
                 Color32::from_rgb(0xd8, 0xcb, 0xa0),
             ],
+            layer: LayerColours {
+                footage: Color32::from_rgb(0x56, 0x70, 0x7f),  // steel
+                sequence: Color32::from_rgb(0x5a, 0x6a, 0x8c), // indigo
+                precomp: Color32::from_rgb(0x7a, 0x5a, 0x74),  // plum
+                solid: Color32::from_rgb(0x5c, 0x61, 0x65),    // neutral
+                text: Color32::from_rgb(0x8c, 0x84, 0x68),     // parchment
+                camera: Color32::from_rgb(0x80, 0x6f, 0x4a),   // dry gold
+            },
         }
     }
 

@@ -54,11 +54,23 @@ pub enum Icon {
     Comp,
     /// Solid item: a filled block of colour.
     Solid,
+    /// Sequence layer: clips cut back-to-back on a row.
+    Sequence,
+    /// Text layer: a capital T.
+    Text,
+    /// Camera layer: a video camera.
+    Camera,
+    /// Layer visibility switch: an eye.
+    Eye,
+    /// Audible layer: a speaker with sound waves.
+    Audio,
+    /// Muted layer: a speaker, struck through.
+    Mute,
 }
 
 impl Icon {
     /// Every variant, for exhaustive iteration (tests, palettes).
-    pub const ALL: [Icon; 19] = [
+    pub const ALL: [Icon; 25] = [
         Icon::Pointer,
         Icon::Move,
         Icon::Rectangle,
@@ -78,6 +90,12 @@ impl Icon {
         Icon::Footage,
         Icon::Comp,
         Icon::Solid,
+        Icon::Sequence,
+        Icon::Text,
+        Icon::Camera,
+        Icon::Eye,
+        Icon::Audio,
+        Icon::Mute,
     ];
 }
 
@@ -233,7 +251,89 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32, width: f
         Icon::Solid => {
             painter.rect_filled(Rect::from_min_max(p(0.22, 0.22), p(0.78, 0.78)), 2.0, color);
         }
+        Icon::Sequence => {
+            // Clips cut back-to-back on a row.
+            closed(&[(0.12, 0.32), (0.88, 0.32), (0.88, 0.68), (0.12, 0.68)]);
+            line(&[(0.38, 0.32), (0.38, 0.68)]);
+            line(&[(0.62, 0.32), (0.62, 0.68)]);
+        }
+        Icon::Text => {
+            line(&[(0.24, 0.28), (0.76, 0.28)]);
+            line(&[(0.5, 0.28), (0.5, 0.76)]);
+        }
+        Icon::Camera => {
+            closed(&[(0.12, 0.36), (0.62, 0.36), (0.62, 0.70), (0.12, 0.70)]);
+            closed(&[(0.62, 0.45), (0.84, 0.37), (0.84, 0.69), (0.62, 0.61)]);
+        }
+        Icon::Eye => {
+            // Almond outline with a pupil.
+            closed(&[
+                (0.10, 0.50),
+                (0.30, 0.32),
+                (0.50, 0.28),
+                (0.70, 0.32),
+                (0.90, 0.50),
+                (0.70, 0.68),
+                (0.50, 0.72),
+                (0.30, 0.68),
+            ]);
+            painter.add(Shape::circle_stroke(p(0.5, 0.5), b.width() * 0.13, stroke));
+        }
+        Icon::Audio => {
+            // Speaker box + cone, with two sound-wave arcs.
+            closed(&[
+                (0.14, 0.40),
+                (0.30, 0.40),
+                (0.46, 0.26),
+                (0.46, 0.74),
+                (0.30, 0.60),
+                (0.14, 0.60),
+            ]);
+            arc(0.46, 0.5, 0.20, -PI / 3.0, PI / 3.0);
+            arc(0.46, 0.5, 0.33, -PI / 3.0, PI / 3.0);
+        }
+        Icon::Mute => {
+            closed(&[
+                (0.14, 0.40),
+                (0.30, 0.40),
+                (0.46, 0.26),
+                (0.46, 0.74),
+                (0.30, 0.60),
+                (0.14, 0.60),
+            ]);
+            line(&[(0.58, 0.36), (0.86, 0.64)]);
+            line(&[(0.86, 0.36), (0.58, 0.64)]);
+        }
     }
+}
+
+/// A filled disclosure triangle: points right when closed, down when open. Drawn
+/// rather than a font glyph (`▸`/`▾`), because egui's bundled fonts don't carry
+/// those code points — so as glyphs the twirls simply vanish.
+pub fn disclosure(painter: &Painter, rect: Rect, open: bool, color: Color32) {
+    let s = rect.width().min(rect.height());
+    let b = Rect::from_center_size(rect.center(), Vec2::splat(s)).shrink(s * 0.30);
+    let p = |nx: f32, ny: f32| b.min + Vec2::new(nx * b.width(), ny * b.height());
+    let pts = if open {
+        vec![p(0.06, 0.28), p(0.94, 0.28), p(0.5, 0.86)]
+    } else {
+        vec![p(0.28, 0.06), p(0.86, 0.5), p(0.28, 0.94)]
+    };
+    painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
+}
+
+/// A small downward caret marking a control as a dropdown. Drawn, for the same
+/// font reason as [`disclosure`].
+pub fn caret_down(painter: &Painter, center: Pos2, color: Color32) {
+    painter.add(Shape::convex_polygon(
+        vec![
+            Pos2::new(center.x - 3.0, center.y - 1.5),
+            Pos2::new(center.x + 3.0, center.y - 1.5),
+            Pos2::new(center.x, center.y + 2.5),
+        ],
+        color,
+        Stroke::NONE,
+    ));
 }
 
 #[cfg(test)]
