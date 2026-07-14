@@ -382,6 +382,13 @@ for the property-row timeline restructure (07-UI-SPEC §5, K-070), from Mack (20
   graphs that property). Keyframe-interpolation glyphs (bezier/linear/hold) on each key are
   a later refinement; the near-term requirement is that keyframes are *shown where set*, on
   the property's row rather than the layer bar.
+- **Implemented 2026-07-14.** Per-property timeline rows, the Scale ratio lock, and
+  keyframable speed (via `Retime::from_speed_keyframes`/`speed_keyframes`) all shipped. Two
+  deliberate deviations from the above, both easy to revisit: (a) relinking scale keeps the
+  current ratio and loses nothing, rather than discarding an axis — the combined row can
+  represent any ratio, so the lossy rule was unnecessary; (b) keyframe-interpolation glyphs
+  and live-preview while dragging a *speed* key are still outstanding (speed edits re-decode
+  on commit). Clicking a transform property's name graphs it; speed graphing is not wired yet.
 
 **K-073 · DECIDED · v1 shell is a fixed native-panel layout, not a dock.** The Viewer is a
 bare, full-bleed central area with **no tab bar**; the Project/effects panel (left), Scopes
