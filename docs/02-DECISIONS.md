@@ -488,3 +488,24 @@ Consequences and limits, for now:
   (keyframe times are rational), so the beat-sync covenant (§4/§7) is unaffected.
 The "which lens a channel opens to" preference (K-076) stays; per-project lens customisation is
 still deferred.
+
+**K-079 · DECIDED · The graph editor pans and zooms; it shares the timeline's time axis and
+auto-fits vertically by default.** From Mack (2026-07-15). The curve editor previously mapped x
+over the whole comp duration and framed y purely by auto-fit, so neither axis scrolled. Now:
+- **Horizontal** follows the shared lane axis (07-UI-SPEC §4): the same pixels-per-second and
+  scrolled left edge as the layer bars, so **Alt-wheel** zooms and **Shift/horizontal-wheel**
+  scrolls the curve in step with the lanes. (This resolves the standing "share the lanes' zoomed
+  time axis" increment.) The value lens draws across the visible window for full resolution when
+  zoomed; the Velocity lens keeps a whole-duration axis for now.
+- **Vertical** auto-fits the whole curve by default (a bezier overshoot stays on screen). A plain
+  wheel over the graph pans the value range and **Ctrl-wheel** zooms it about the cursor, taking
+  over with a manual range (`graph_view_y`); a **Fit** button in the bottom bar restores auto-fit.
+  The manual range resets when the lens or graphed channel changes. Applies to the value lens
+  only.
+- **Independent scrolling:** the graph fills the lane area with the layer outline to its left, so
+  a wheel over the graph moves the graph while a wheel over the outline scrolls the layer list —
+  achieved by zeroing only `smooth_scroll_delta` (which the outline's ScrollArea reads) over the
+  graph, leaving `raw_scroll_delta` for the graph. The graph also gets its own vertical scrollbar
+  on its right edge when a manual range doesn't cover the whole curve.
+Not yet done: relocating the layer list's own built-in scrollbar onto the outline's edge (it
+still sits at the far right); that needs a custom outline scrollbar and is deferred.
