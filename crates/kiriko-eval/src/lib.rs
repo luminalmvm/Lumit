@@ -25,6 +25,7 @@ use kiriko_core::model::{Composition, Document, LayerKind, MatteChannel};
 use uuid::Uuid;
 
 pub mod epoch;
+pub mod graph;
 pub mod schedule;
 
 /// Bump when any rendering algorithm's output changes: every cached frame

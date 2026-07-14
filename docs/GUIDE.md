@@ -372,6 +372,16 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   folder (Kiriko remembers the folder itself, not its name). Compositions do the same
   with a Compositions folder. Multi-step creations like that land as a single undo
   step — a batch operation whose inverse is just the reversed inverses of its members.
+- **The evaluation graph (`kiriko-eval::graph`)** — before rendering, Kiriko lowers a
+  composition into a wiring diagram: for each layer a short chain of typed steps — fetch the
+  source, retime it, mask it, place it (transform), then blend it over everything beneath —
+  ending in a single "comp output". It is built bottom layer first, exactly the order the
+  picture is stacked up. The neat part is *folding*: a layer with no masks gets no mask step, a
+  footage layer with no retime gets no retime step, so the renderer never spends a moment on a
+  no-op. The diagram is rebuilt whenever you edit, and every render already in flight keeps the
+  diagram it started with, so an edit can never half-apply to a frame mid-render. Today this
+  builds the render's *shape* (tests prove the folding and the bottom-first order); turning each
+  step into pixels on the GPU is the next slice. This is the front half of **Togi**.
 - **Epochs (`kiriko-eval::epoch`)** — the cancellation mechanism the whole scheduler
   will stand on. Every scheduled job carries a ticket stamped with the number that was
   on the wall when it started; scrubbing or stopping turns the wall number over, and
