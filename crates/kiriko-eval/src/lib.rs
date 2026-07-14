@@ -400,6 +400,7 @@ mod tests {
             background: LinearColour([0.0, 0.0, 0.0, 1.0]),
             work_area: None,
             layers,
+            markers: Vec::new(),
             extra: serde_json::Map::new(),
         }
     }

@@ -102,6 +102,12 @@ pub enum Op {
         comp: Uuid,
         work_area: Option<(CompTime, CompTime)>,
     },
+    /// Replace a composition's whole marker list (coarse-grained, trivially
+    /// invertible — beat regeneration builds the new list and commits this).
+    SetCompMarkers {
+        comp: Uuid,
+        markers: Vec<crate::markers::Marker>,
+    },
     SetLayerBlend {
         comp: Uuid,
         layer: Uuid,
@@ -385,6 +391,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetWorkArea {
                 comp: *comp,
                 work_area: previous,
+            })
+        }
+        Op::SetCompMarkers { comp, markers } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.markers, markers.clone());
+            Ok(Op::SetCompMarkers {
+                comp: *comp,
+                markers: previous,
             })
         }
         Op::SetLayerBlend { comp, layer, blend } => {

@@ -80,6 +80,10 @@ pub struct Composition {
     pub work_area: Option<(CompTime, CompTime)>,
     /// Index 0 = top of the stack.
     pub layers: Vec<Layer>,
+    /// Timeline markers (cues, chapters, detected beats — docs/03-DATA-MODEL.md
+    /// §11), in no required order (snapping and drawing sort as needed).
+    #[serde(default)]
+    pub markers: Vec<crate::markers::Marker>,
     /// Unknown fields from newer Kiriko versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -506,6 +510,7 @@ mod tests {
             background: LinearColour([0.0, 0.0, 0.0, 1.0]),
             work_area: None,
             layers: Vec::new(),
+            markers: Vec::new(),
             extra: serde_json::Map::new(),
         };
         let cam = |name: &str, zoom: f64, z_pos: f64, visible: bool, in_s: i64, out_s: i64| Layer {

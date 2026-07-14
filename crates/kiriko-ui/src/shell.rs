@@ -5286,6 +5286,7 @@ mod geometry_tests {
             background: LinearColour::BLACK,
             work_area: None,
             layers: vec![layer.clone()],
+            markers: Vec::new(),
             extra: serde_json::Map::new(),
         };
         // Native 1920x1080, decoded 480x270 (zoomed out, quarter res).
@@ -5344,6 +5345,7 @@ mod geometry_tests {
             background: LinearColour::BLACK,
             work_area: None,
             layers: vec![layer.clone()],
+            markers: Vec::new(),
             extra: serde_json::Map::new(),
         };
 

@@ -134,6 +134,7 @@ mod tests {
             background: LinearColour::BLACK,
             work_area: None,
             layers: Vec::new(),
+            markers: Vec::new(),
             extra: serde_json::Map::new(),
         }
     }
