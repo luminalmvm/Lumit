@@ -47,6 +47,20 @@ Three companion pieces:
   reference code, traps, and test plans.
 - [docs/research/](docs/research/) — the research notes that informed the specs.
 
+## Building
+
+Kiriko builds on Windows and macOS with the stable Rust toolchain. The one outside
+dependency is **FFmpeg 7.1** (video/audio decode), plus **LLVM 18** on Windows for the
+binding generator.
+
+- **macOS**: `brew install ffmpeg@7`, then `cargo test --workspace`. The repo's
+  `.cargo/config.toml` points the build at the keg.
+- **Windows**: unzip a [BtbN FFmpeg 7.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)
+  under `%USERPROFILE%\ffmpeg\`, `winget install LLVM.LLVM --version 18.1.8`, then
+  `. .\scripts\win-dev-env.ps1 -Persist` to wire it up. `cargo run -p kiriko-app` launches.
+
+Full step-by-step, in plain English: [docs/GUIDE.md](docs/GUIDE.md) §8.
+
 ## Licence
 
 [GPLv3](LICENSE). Forks stay open; contributions welcome once implementation begins.

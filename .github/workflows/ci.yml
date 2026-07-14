@@ -32,21 +32,48 @@ jobs:
       - run: cargo test --workspace
 
   windows:
-    name: tests (Windows — the shipping target)
+    name: tests (Windows — the shipping target, with media)
     runs-on: windows-latest
+    env:
+      # BtbN "shared, GPL" build: GPL matches Kiriko's licence, shared gives the
+      # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
+      FFMPEG_ASSET: ffmpeg-n7.1-latest-win64-gpl-shared-7.1
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # FFmpeg 7.1 dev libs for kiriko-media. rusty_ffmpeg links the import libs in
+      # FFMPEG_LIBS_DIR and reads headers from FFMPEG_INCLUDE_DIR (it ignores
+      # pkg-config on Windows); the DLLs and the ffmpeg CLI (test fixtures) go on
+      # PATH. See docs/impl/phase-0-kickoff.md slice 4 and docs/GUIDE.md.
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$env:FFMPEG_ASSET.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
+          $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
+          "FFMPEG_LIBS_DIR=$root\lib"        >> $env:GITHUB_ENV
+          "FFMPEG_INCLUDE_DIR=$root\include" >> $env:GITHUB_ENV
+          "$root\bin"                        >> $env:GITHUB_PATH
+      # bindgen (via rusty_ffmpeg) needs libclang. Pin LLVM 18: bindgen 0.71 emits
+      # broken opaque structs against very new libclang (20+). Installed to a temp
+      # dir so it never clashes with any LLVM preinstalled on the runner.
+      - name: Install LLVM 18 (libclang for bindgen)
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.1.8"
+          directory: ${{ runner.temp }}/llvm
+      - name: Point bindgen at libclang
+        shell: pwsh
+        run: |
+          "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
       - uses: Swatinem/rust-cache@v2
-      # TODO(media-on-windows): kiriko-media needs FFmpeg dev libs here (BtbN
-      # shared build + FFMPEG_LIBS_DIR/FFMPEG_INCLUDE_DIR). Until the desktop
-      # dev setup lands, Windows builds without the media feature — tracked in
-      # docs/impl/phase-0-kickoff.md slice 4 notes.
-      - run: cargo test -p kiriko-core -p kiriko-project
-      # check (not test): kiriko-ui's dev-deps include the media fixtures,
-      # and dev-deps ignore feature flags; ui tests run on the macOS job.
-      - run: cargo check -p kiriko-ui --no-default-features
-      - run: cargo check -p kiriko-app --no-default-features
+      # The shipping target runs the full gate, media included — this is the parity
+      # the desktop-dev setup unlocked (previously Windows built --no-default-features).
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
   coverage:
     name: engine-crate coverage gate

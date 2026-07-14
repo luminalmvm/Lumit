@@ -498,3 +498,52 @@ unknown-field survival, autosave rotation, version refusal.
 
 When you hit something not covered here, ask any session "explain X in GUIDE.md terms and
 add it to the guide" — that's the standing arrangement.
+
+## 8. Building and running it on your machine
+
+To turn the source into a running app you need the Rust toolchain and one outside
+dependency: **FFmpeg**, the library that actually decodes and encodes video and audio.
+Kiriko doesn't reinvent that wheel; `kiriko-media` talks to FFmpeg. So the build needs
+FFmpeg present, and everyday `cargo` commands need to know where it is.
+
+There are two moving parts, and it helps to know why each exists:
+
+- **FFmpeg itself** — the video/audio engine. We use version 7.1. On Windows it comes as a
+  folder with three important sub-folders: `lib` (the "how to call in" stubs the build links
+  against), `include` (the description of what's callable), and `bin` (the actual `.dll`
+  files the finished app loads while it runs, plus the `ffmpeg` command-line tool the tests
+  use to make sample clips).
+- **libclang** — a translator. FFmpeg is written in C, and something has to read FFmpeg's
+  C descriptions and generate the matching Rust ones automatically. That translator is a
+  piece of the LLVM toolchain called libclang. One gotcha, learned the hard way: use
+  **LLVM 18**. A much newer LLVM makes the translator quietly produce nonsense (it turns
+  whole data structures into blanks), and the build fails with confusing errors. Pinning 18
+  avoids it.
+
+### On Windows (the shipping platform)
+
+1. Download `ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip` from the
+   [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases) page and unzip it
+   under your user folder, e.g. `C:\Users\you\ffmpeg\`. (GPL because Kiriko is GPL; "shared"
+   because we want the `.dll` files.)
+2. Install LLVM 18 and the Rust toolchain: `winget install LLVM.LLVM --version 18.1.8` and
+   `winget install Rustlang.Rustup`. Rust's default Windows setup links with Visual Studio's
+   C++ build tools, so having Visual Studio (or the standalone Build Tools) installed matters.
+3. From the repo root, run `. .\scripts\win-dev-env.ps1 -Persist`. That one script finds the
+   FFmpeg folder and LLVM, points the build at them, and (`-Persist`) remembers the settings
+   so every future terminal already knows. The leading dot is required — it means "apply
+   these to my current shell", not "run and forget".
+4. Now the normal commands work: `cargo run -p kiriko-app` to launch, `cargo test --workspace`
+   to run the whole test suite.
+
+### On macOS
+
+FFmpeg comes from Homebrew: `brew install ffmpeg@7`. The repo's `.cargo/config.toml` already
+points the build at it, and macOS ships the translator (libclang) as part of its developer
+tools, so there's nothing else to set up — `cargo test --workspace` just works.
+
+### What the robots check
+
+Every push, CI rebuilds and retests everything on both macOS and Windows, media included, so
+"it builds on my machine" can never quietly drift from "it builds for real". The Windows
+recipe above is exactly what CI does, written out by hand in `.github/workflows/ci.yml`.

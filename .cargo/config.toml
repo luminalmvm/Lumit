@@ -1,4 +1,9 @@
 # ffmpeg@7 is keg-only (deliberately not linked); builds resolve it explicitly.
 # CI installs the same formula, so this path is machine-portable across macOS.
+#
+# macOS only. rusty_ffmpeg ignores FFMPEG_PKG_CONFIG_PATH on Windows (that branch is
+# cfg(not(windows))), so this line is inert there and no per-machine path is committed.
+# Windows points the build at FFmpeg via FFMPEG_LIBS_DIR / FFMPEG_INCLUDE_DIR set outside
+# this file — see scripts/win-dev-env.ps1 and docs/GUIDE.md §8.
 [env]
 FFMPEG_PKG_CONFIG_PATH = "/opt/homebrew/opt/ffmpeg@7/lib/pkgconfig"

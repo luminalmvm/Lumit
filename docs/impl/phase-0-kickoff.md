@@ -75,6 +75,28 @@ untouched for its dependents). Windows CI builds `--no-default-features` (no med
 FFmpeg dev libs are set up there — the route is a BtbN shared build plus
 `FFMPEG_LIBS_DIR`/`FFMPEG_INCLUDE_DIR`, first task of desktop-dev setup.
 
+**Slice 4 update (2026-07-14) — media builds on Windows:** the desktop-dev setup landed.
+kiriko-media, and with it the whole workspace, now builds, lints, tests, and runs on
+Windows with the `media` feature on. The recipe:
+
+- **FFmpeg 7.1 dev libs**: BtbN `ffmpeg-n7.1-latest-win64-gpl-shared-7.1` (GPL matches our
+  licence; shared gives the import libs + DLLs). Point `FFMPEG_LIBS_DIR` at its `lib`,
+  `FFMPEG_INCLUDE_DIR` at its `include`, and put `bin` on `PATH` for the DLLs and the
+  ffmpeg CLI the test fixtures shell out to. rusty_ffmpeg's build script ignores
+  `FFMPEG_PKG_CONFIG_PATH` entirely on Windows (that branch is `cfg(not(windows))`), so the
+  macOS pkg-config path in `.cargo/config.toml` is inert here and needs no change.
+- **libclang for bindgen**: rusty_ffmpeg 0.16 generates its FFI with bindgen 0.71, which
+  needs `libclang` (`LIBCLANG_PATH`). Pin **LLVM 18** — against very new libclang (tested
+  with 22) bindgen 0.71 silently emits opaque structs (`AVFormatContext` and friends become
+  `{ _address: u8 }`), and rsmpeg then fails to compile against them. LLVM 18.1.8 generates
+  correct bindings.
+- **Local convenience**: `scripts/win-dev-env.ps1` discovers both and exports the variables
+  (`-Persist` to keep them). CI does the equivalent inline (see `.github/workflows/ci.yml`
+  `windows` job), pinning LLVM 18 via `install-llvm-action` into a temp dir.
+
+Windows CI now runs the full `clippy --workspace --all-targets` + `test --workspace` gate,
+media included — the shipping target no longer trails macOS.
+
 ## Slice 5 — decode → Viewer (runs: you can SEE footage)
 
 `kiriko-gpu` device + pool + NV12→linear shader + display-transform blit
