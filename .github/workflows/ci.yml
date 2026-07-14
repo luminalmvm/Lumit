@@ -14,7 +14,7 @@ jobs:
     name: fmt + clippy + tests (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -39,7 +39,7 @@ jobs:
       # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
       FFMPEG_ASSET: ffmpeg-n7.1-latest-win64-gpl-shared-7.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -79,7 +79,7 @@ jobs:
     name: engine-crate coverage gate
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -102,7 +102,7 @@ jobs:
     name: design-token lint (no hex literals outside the theme module)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: |
           hits=$(grep -rnE 'Color32::from_rgb|#[0-9a-fA-F]{6}' crates --include='*.rs' \
             | grep -v 'crates/kiriko-ui/src/theme.rs' || true)
