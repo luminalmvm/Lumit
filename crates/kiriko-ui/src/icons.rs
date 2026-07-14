@@ -307,6 +307,35 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32, width: f
     }
 }
 
+/// A filled disclosure triangle: points right when closed, down when open. Drawn
+/// rather than a font glyph (`▸`/`▾`), because egui's bundled fonts don't carry
+/// those code points — so as glyphs the twirls simply vanish.
+pub fn disclosure(painter: &Painter, rect: Rect, open: bool, color: Color32) {
+    let s = rect.width().min(rect.height());
+    let b = Rect::from_center_size(rect.center(), Vec2::splat(s)).shrink(s * 0.30);
+    let p = |nx: f32, ny: f32| b.min + Vec2::new(nx * b.width(), ny * b.height());
+    let pts = if open {
+        vec![p(0.06, 0.28), p(0.94, 0.28), p(0.5, 0.86)]
+    } else {
+        vec![p(0.28, 0.06), p(0.86, 0.5), p(0.28, 0.94)]
+    };
+    painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
+}
+
+/// A small downward caret marking a control as a dropdown. Drawn, for the same
+/// font reason as [`disclosure`].
+pub fn caret_down(painter: &Painter, center: Pos2, color: Color32) {
+    painter.add(Shape::convex_polygon(
+        vec![
+            Pos2::new(center.x - 3.0, center.y - 1.5),
+            Pos2::new(center.x + 3.0, center.y - 1.5),
+            Pos2::new(center.x, center.y + 2.5),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

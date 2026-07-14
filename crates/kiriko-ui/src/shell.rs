@@ -830,14 +830,10 @@ fn item_rows(
         .horizontal(|ui| {
             ui.add_space(12.0 * depth as f32 + 2.0);
             if is_folder {
-                let arrow = if open { "▾" } else { "▸" };
-                if ui
-                    .add(
-                        egui::Label::new(egui::RichText::new(arrow).small())
-                            .sense(egui::Sense::click()),
-                    )
-                    .clicked()
-                {
+                let (arrow_rect, arrow_resp) =
+                    ui.allocate_exact_size(egui::vec2(13.0, 14.0), egui::Sense::click());
+                crate::icons::disclosure(ui.painter(), arrow_rect, open, theme.text_muted);
+                if arrow_resp.clicked() {
                     open = !open;
                     ui.data_mut(|d| d.insert_temp(open_id, open));
                 }
@@ -1368,13 +1364,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             expanded = !expanded;
             ui.data_mut(|d| d.insert_temp(twirl_id, expanded));
         }
-        ui.painter().text(
-            tri.center(),
-            egui::Align2::CENTER_CENTER,
-            if expanded { "▾" } else { "▸" },
-            egui::FontId::proportional(11.0),
-            theme.text_muted,
-        );
+        crate::icons::disclosure(ui.painter(), tri, expanded, theme.text_muted);
         if app.selected_layer == Some(layer.id) {
             ui.painter().rect_filled(
                 egui::Rect::from_min_max(
@@ -1449,7 +1439,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             }
         });
         place(ui, matte_r, &mut |ui| {
-            matte_control(ui, comp, comp_id, layer, &mut pending)
+            matte_control(ui, theme, comp, comp_id, layer, &mut pending)
         });
         place(ui, blend_r, &mut |ui| {
             blend_control(ui, comp_id, layer, &mut pending)
@@ -3931,58 +3921,88 @@ fn visible_control(
     }
 }
 
-/// Matte subcolumn: source pick + luma/invert flags under one dropdown.
+/// Matte subcolumn: a labelled "Matte" dropdown (accent when a matte is set)
+/// with a drawn caret to show it opens a menu — source pick + luma/invert flags.
 fn matte_control(
     ui: &mut egui::Ui,
+    theme: &Theme,
     comp: &kiriko_core::model::Composition,
     comp_id: uuid::Uuid,
     layer: &kiriko_core::model::Layer,
     pending: &mut Option<kiriko_core::Op>,
 ) {
     use kiriko_core::model::{MatteChannel, MatteRef};
-    let label = layer
-        .matte
-        .as_ref()
-        .and_then(|m| comp.layers.iter().find(|l| l.id == m.layer))
-        .map(|l| format!("⬓ {}", l.name))
-        .unwrap_or_else(|| "⬓".into());
+    let has_matte = layer.matte.is_some();
+    let (rect, resp) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
+    let base = if has_matte {
+        theme.accent
+    } else {
+        theme.text_secondary
+    };
+    let colour = if resp.hovered() {
+        theme.text_primary
+    } else {
+        base
+    };
+    ui.painter().text(
+        rect.left_center() + egui::vec2(2.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        "Matte",
+        egui::FontId::proportional(11.0),
+        colour,
+    );
+    crate::icons::caret_down(
+        ui.painter(),
+        egui::pos2(rect.right() - 6.0, rect.center().y),
+        colour,
+    );
+    let popup_id = ui.make_persistent_id(("matte-popup", layer.id));
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup_id));
+    }
     let mut set: Option<Option<MatteRef>> = None;
-    bare_dropdown(ui, egui::RichText::new(label).small(), |ui| {
-        if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
-            set = Some(None);
-            ui.close_menu();
-        }
-        for other in comp.layers.iter().filter(|l| l.id != layer.id) {
-            let selected = layer.matte.is_some_and(|m| m.layer == other.id);
-            if ui.selectable_label(selected, &other.name).clicked() {
-                set = Some(Some(MatteRef {
-                    layer: other.id,
-                    channel: layer
-                        .matte
-                        .map(|m| m.channel)
-                        .unwrap_or(MatteChannel::Alpha),
-                    inverted: layer.matte.is_some_and(|m| m.inverted),
-                }));
-                ui.close_menu();
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &resp,
+        egui::PopupCloseBehavior::CloseOnClick,
+        |ui| {
+            ui.set_min_width(150.0);
+            if ui.selectable_label(layer.matte.is_none(), "None").clicked() {
+                set = Some(None);
             }
-        }
-        if let Some(mut m) = layer.matte {
-            ui.separator();
-            let luma = matches!(m.channel, MatteChannel::Luma);
-            if ui.selectable_label(luma, "Luma matte").clicked() {
-                m.channel = if luma {
-                    MatteChannel::Alpha
-                } else {
-                    MatteChannel::Luma
-                };
-                set = Some(Some(m));
+            for other in comp.layers.iter().filter(|l| l.id != layer.id) {
+                let selected = layer.matte.is_some_and(|m| m.layer == other.id);
+                if ui.selectable_label(selected, &other.name).clicked() {
+                    set = Some(Some(MatteRef {
+                        layer: other.id,
+                        channel: layer
+                            .matte
+                            .map(|m| m.channel)
+                            .unwrap_or(MatteChannel::Alpha),
+                        inverted: layer.matte.is_some_and(|m| m.inverted),
+                    }));
+                }
             }
-            if ui.selectable_label(m.inverted, "Inverted").clicked() {
-                m.inverted = !m.inverted;
-                set = Some(Some(m));
+            if let Some(mut m) = layer.matte {
+                ui.separator();
+                let luma = matches!(m.channel, MatteChannel::Luma);
+                if ui.selectable_label(luma, "Luma matte").clicked() {
+                    m.channel = if luma {
+                        MatteChannel::Alpha
+                    } else {
+                        MatteChannel::Luma
+                    };
+                    set = Some(Some(m));
+                }
+                if ui.selectable_label(m.inverted, "Inverted").clicked() {
+                    m.inverted = !m.inverted;
+                    set = Some(Some(m));
+                }
             }
-        }
-    });
+        },
+    );
     if let Some(matte) = set {
         *pending = Some(kiriko_core::Op::SetLayerMatte {
             comp: comp_id,
@@ -4173,13 +4193,8 @@ fn group_header_row(
     }
     let cy = rect.center().y;
     let tx = rect.left() + 22.0;
-    ui.painter().text(
-        egui::pos2(tx, cy),
-        egui::Align2::CENTER_CENTER,
-        if open { "▾" } else { "▸" },
-        egui::FontId::proportional(11.0),
-        theme.text_muted,
-    );
+    let tri = egui::Rect::from_center_size(egui::pos2(tx, cy), egui::vec2(12.0, 12.0));
+    crate::icons::disclosure(ui.painter(), tri, open, theme.text_muted);
     ui.painter().text(
         egui::pos2(tx + 10.0, cy),
         egui::Align2::LEFT_CENTER,
