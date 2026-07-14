@@ -45,10 +45,28 @@ impl eframe::App for KirikoApp {
     }
 }
 
+/// The GPU backend Kiriko drives, per K-011: DX12 on Windows, Metal on macOS
+/// (Vulkan is reserved for the future CUDA-interop path — docs/02-DECISIONS.md).
+///
+/// Pinning a single backend matters on Windows: eframe's default enumerates DX12,
+/// Vulkan and GL together, and on a hybrid-GPU machine wgpu can settle on a device
+/// that is lost on the first `Surface::present` — the window opens, then closes
+/// after about a second. Choosing one backend makes adapter selection deterministic.
+fn default_backends() -> eframe::wgpu::Backends {
+    use eframe::wgpu::Backends;
+    if cfg!(target_os = "windows") {
+        Backends::DX12
+    } else if cfg!(target_os = "macos") {
+        Backends::METAL
+    } else {
+        Backends::PRIMARY
+    }
+}
+
 fn main() -> eframe::Result<()> {
     // Boot begins as the splash card (K-008): small, frameless, centred; the
     // same window expands into the application when the boot log completes.
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         centered: true,
         persist_window: false,
         viewport: egui::ViewportBuilder::default()
@@ -60,9 +78,41 @@ fn main() -> eframe::Result<()> {
             .with_app_id("kiriko"),
         ..Default::default()
     };
+
+    // K-011 / docs/impl/gpu-foundation.md: one high-performance adapter on the
+    // platform's native backend. WGPU_BACKEND / WGPU_POWER_PREF still override,
+    // for debugging and the future Vulkan path.
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_options.wgpu_setup {
+        setup.instance_descriptor.backends =
+            eframe::wgpu::Backends::from_env().unwrap_or_else(default_backends);
+        setup.power_preference = eframe::wgpu::PowerPreference::from_env()
+            .unwrap_or(eframe::wgpu::PowerPreference::HighPerformance);
+    }
+
     eframe::run_native(
         "kiriko",
         options,
         Box::new(|cc| Ok(Box::new(KirikoApp::new(cc)))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_backends;
+    use eframe::wgpu::Backends;
+
+    // Guards K-011: on Windows the launch backend is DX12 alone. Enumerating
+    // Vulkan/GL alongside it caused intermittent device-loss on the first frame,
+    // so a regression back to PRIMARY must fail here.
+    #[test]
+    fn default_backend_matches_k011_for_this_platform() {
+        let backends = default_backends();
+        if cfg!(target_os = "windows") {
+            assert!(backends.contains(Backends::DX12));
+            assert!(!backends.contains(Backends::VULKAN));
+            assert!(!backends.contains(Backends::GL));
+        } else if cfg!(target_os = "macos") {
+            assert!(backends.contains(Backends::METAL));
+        }
+    }
 }
