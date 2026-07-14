@@ -55,9 +55,12 @@ pub mod preview {
         /// sizes the layer (auto res must not scale geometry with zoom).
         pub natural_w: u32,
         pub natural_h: u32,
-        /// Frame interpolation: `Some((ceil_frame, weight))` blends
-        /// `source_frame` with `ceil_frame` by `weight` (K-021 Blend policy).
+        /// Frame interpolation: `Some((ceil_frame, weight))` pairs
+        /// `source_frame` with `ceil_frame` at `weight` (K-021 Blend/Flow).
         pub blend: Option<(usize, f32)>,
+        /// When true, `blend`'s pair is combined with optical-flow synthesis
+        /// rather than a plain crossfade (K-021 Flow policy).
+        pub flow: bool,
     }
 
     pub struct CompLayerPixels {
@@ -252,7 +255,7 @@ pub mod preview {
                 target_width: job.target_width,
             };
             let px = decode(decoders, cache, &req)?;
-            // Blend policy: crossfade with the next source frame.
+            // Blend / Flow policy: combine with the next source frame.
             let rgba = if let Some((ceil, w)) = job.blend {
                 let req2 = Request {
                     generation: req.generation,
@@ -262,7 +265,17 @@ pub mod preview {
                     target_width: req.target_width,
                 };
                 let px2 = decode(decoders, cache, &req2)?;
-                crate::pixels::blend_rgba(&px.rgba, &px2.rgba, w)
+                if job.flow {
+                    kiriko_flow::interpolate(
+                        &px.rgba,
+                        &px2.rgba,
+                        px.width as usize,
+                        px.height as usize,
+                        w,
+                    )
+                } else {
+                    crate::pixels::blend_rgba(&px.rgba, &px2.rgba, w)
+                }
             } else {
                 px.rgba
             };
@@ -1508,10 +1521,9 @@ impl AppState {
         self.refresh_preview();
     }
 
-    /// Set the selected clip's frame interpolation (Nearest / Blend).
-    pub fn set_selected_clip_blend(&mut self, blend: bool) {
+    /// Set the selected clip's frame interpolation (Nearest / Blend / Flow).
+    pub fn set_selected_clip_interp(&mut self, interp: kiriko_core::retime::Interpolation) {
         use kiriko_core::model::LayerKind;
-        use kiriko_core::retime::Interpolation;
         let (Some(comp_id), Some(layer_id), Some(clip_id)) =
             (self.selected_comp, self.selected_layer, self.selected_clip)
         else {
@@ -1531,11 +1543,7 @@ impl AppState {
             return;
         };
         let mut new_clips = clips.clone();
-        new_clips[idx].interpolation = if blend {
-            Interpolation::Blend
-        } else {
-            Interpolation::Nearest
-        };
+        new_clips[idx].interpolation = interp;
         self.commit(Op::SetSequenceClips {
             comp: comp_id,
             layer: layer_id,
@@ -2283,13 +2291,14 @@ impl AppState {
                         ) = (doc.item(item), self.media.map.get(&item))
                         {
                             if let Some(video) = probe.video.as_ref() {
-                                let blend_on = kiriko_core::sequence::active_clip(clips, lt)
-                                    .is_some_and(|c| {
-                                        matches!(
-                                            c.interpolation,
-                                            kiriko_core::retime::Interpolation::Blend
-                                        )
-                                    });
+                                use kiriko_core::retime::Interpolation;
+                                let interp = kiriko_core::sequence::active_clip(clips, lt)
+                                    .map(|c| c.interpolation.clone());
+                                let blend_on = matches!(
+                                    interp,
+                                    Some(Interpolation::Blend | Interpolation::Flow(_))
+                                );
+                                let flow = matches!(interp, Some(Interpolation::Flow(_)));
                                 let (source_frame, blend) = crate::pixels::frame_pick(
                                     st,
                                     video.fps(),
@@ -2305,6 +2314,7 @@ impl AppState {
                                     natural_w: video.width,
                                     natural_h: video.height,
                                     blend,
+                                    flow,
                                 });
                             }
                         }
@@ -2338,9 +2348,11 @@ impl AppState {
                     // Retime maps local time → source time before frame pick;
                     // its interpolation policy decides nearest vs blend.
                     let source_time = retime.as_ref().map(|r| r.evaluate(lt)).unwrap_or(lt);
-                    let blend_on = retime.as_ref().is_some_and(|r| {
-                        matches!(r.interpolation, kiriko_core::retime::Interpolation::Blend)
-                    });
+                    use kiriko_core::retime::Interpolation;
+                    let interp = retime.as_ref().map(|r| &r.interpolation);
+                    let blend_on =
+                        matches!(interp, Some(Interpolation::Blend | Interpolation::Flow(_)));
+                    let flow = matches!(interp, Some(Interpolation::Flow(_)));
                     let (source_frame, blend) =
                         crate::pixels::frame_pick(source_time, video.fps(), *src_frames, blend_on);
                     jobs.push(preview::CompJob {
@@ -2352,6 +2364,7 @@ impl AppState {
                         natural_w: video.width,
                         natural_h: video.height,
                         blend,
+                        flow,
                     });
                 }
             }

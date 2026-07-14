@@ -130,15 +130,20 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   segment boundary keeps its source position as an exact fraction, so cutting and
   re-editing a ramp never drifts: a frame synced to a beat stays on the beat. The map
   only chooses *which* source moment shows; how in-between moments become pixels
-  (nearest, blend, optical flow) is a separate per-clip policy. **Nearest and Blend are
-  wired up now** (optical flow is later): a retimed footage layer's twirl-down has a
-  Frames toggle — Nearest shows the closest real frame (crisp, a touch stuttery in deep
-  slow-mo), Blend crossfades the two neighbouring frames by exactly how far between them the
-  moment falls (smoother, slightly ghosted). The frame-pick and the crossfade are one shared,
-  tested pair of functions (`frame_pick`/`blend_rgba`) used by *both* the preview and the
-  export, so a blended slow-mo frame is identical in each — the preview-equals-export promise
-  holds for interpolation too. The same Frames toggle appears per-clip on Sequence layers
-  (next to Clip speed %), so a single slowed clip can blend while its neighbours stay crisp.
+  (nearest, blend, optical flow) is a separate per-clip policy. **All three are wired up now**:
+  a retimed footage layer's twirl-down has a Frames toggle — Nearest shows the closest real
+  frame (crisp, a touch stuttery in deep slow-mo), Blend crossfades the two neighbouring frames
+  by how far between them the moment falls (smoother, slightly ghosted), and **Flow** invents a
+  genuine in-between frame by working out how everything *moved* between the two and dragging
+  each halfway (the real slow-mo trick). Flow lives in its own crate (`kiriko-flow`) — a pure,
+  deterministic CPU reference (pyramidal Lucas–Kanade motion estimation, then motion-compensated
+  synthesis with a graceful crossfade fallback where the motion is unreliable). It's the "oracle"
+  the later fast GPU version must match, and it's tested against known translations (motion
+  recovered to sub-pixel) and against a plain crossfade (sharper on textured motion). The
+  frame-pick and each interpolation are shared functions used by *both* preview and export, so a
+  slow-mo frame is identical in each — the preview-equals-export promise holds for interpolation
+  too. The same Frames toggle appears per-clip on Sequence layers (next to Clip speed %), so a
+  single slowed clip can flow-interpolate while its neighbours stay crisp.
   **This is wired up for
   Footage layers now**: a Speed % box in a footage layer's twirl-down retimes it (50% =
   half speed, and so on), and the same Retime map feeds preview, export, and the cache

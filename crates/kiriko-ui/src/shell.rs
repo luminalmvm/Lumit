@@ -825,8 +825,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     let mut pending: Option<kiriko_core::Op> = None;
     // A per-clip speed edit (percent), applied after the layer loop.
     let mut clip_speed_edit: Option<f64> = None;
-    // A per-clip frame-interpolation edit (true = Blend), applied after.
-    let mut clip_blend_edit: Option<bool> = None;
+    // A per-clip frame-interpolation edit, applied after the layer loop.
+    let mut clip_interp_edit: Option<kiriko_core::retime::Interpolation> = None;
 
     // ---- ruler + time geometry (07-UI-SPEC Timeline) --------------------
     let panel_left = ui.max_rect().left();
@@ -1527,23 +1527,32 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                     }
                                 });
                                 ui.horizontal(|ui| {
+                                    use kiriko_core::retime::{FlowParams, Interpolation};
                                     ui.label(
                                         egui::RichText::new("Frames")
                                             .small()
                                             .color(theme.text_muted),
                                     );
-                                    let is_blend = matches!(
-                                        clip.interpolation,
-                                        kiriko_core::retime::Interpolation::Blend
-                                    );
-                                    if ui.selectable_label(!is_blend, "Nearest").clicked()
-                                        && is_blend
-                                    {
-                                        clip_blend_edit = Some(false);
-                                    }
-                                    if ui.selectable_label(is_blend, "Blend").clicked() && !is_blend
-                                    {
-                                        clip_blend_edit = Some(true);
+                                    for (label, val, active) in [
+                                        (
+                                            "Nearest",
+                                            Interpolation::Nearest,
+                                            matches!(clip.interpolation, Interpolation::Nearest),
+                                        ),
+                                        (
+                                            "Blend",
+                                            Interpolation::Blend,
+                                            matches!(clip.interpolation, Interpolation::Blend),
+                                        ),
+                                        (
+                                            "Flow",
+                                            Interpolation::Flow(FlowParams::default()),
+                                            matches!(clip.interpolation, Interpolation::Flow(_)),
+                                        ),
+                                    ] {
+                                        if ui.selectable_label(active, label).clicked() && !active {
+                                            clip_interp_edit = Some(val);
+                                        }
                                     }
                                 });
                             });
@@ -1569,8 +1578,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                         retime: Some(rt), ..
                     } = &layer.kind
                     {
-                        use kiriko_core::retime::Interpolation;
-                        let is_blend = matches!(rt.interpolation, Interpolation::Blend);
+                        use kiriko_core::retime::{FlowParams, Interpolation};
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Frames")
@@ -1578,11 +1586,26 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                     .color(theme.text_muted),
                             );
                             let mut set: Option<Interpolation> = None;
-                            if ui.selectable_label(!is_blend, "Nearest").clicked() && is_blend {
-                                set = Some(Interpolation::Nearest);
-                            }
-                            if ui.selectable_label(is_blend, "Blend").clicked() && !is_blend {
-                                set = Some(Interpolation::Blend);
+                            for (label, val, active) in [
+                                (
+                                    "Nearest",
+                                    Interpolation::Nearest,
+                                    matches!(rt.interpolation, Interpolation::Nearest),
+                                ),
+                                (
+                                    "Blend",
+                                    Interpolation::Blend,
+                                    matches!(rt.interpolation, Interpolation::Blend),
+                                ),
+                                (
+                                    "Flow",
+                                    Interpolation::Flow(FlowParams::default()),
+                                    matches!(rt.interpolation, Interpolation::Flow(_)),
+                                ),
+                            ] {
+                                if ui.selectable_label(active, label).clicked() && !active {
+                                    set = Some(val);
+                                }
                             }
                             if let Some(interp) = set {
                                 let mut r = rt.clone();
@@ -1679,8 +1702,8 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     if let Some(v) = clip_speed_edit {
         app.set_selected_clip_speed(v);
     }
-    if let Some(b) = clip_blend_edit {
-        app.set_selected_clip_blend(b);
+    if let Some(interp) = clip_interp_edit {
+        app.set_selected_clip_interp(interp);
     }
     timeline_mode_toggle(ui, theme, app);
 }

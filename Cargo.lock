@@ -2484,6 +2484,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "kiriko-flow"
+version = "0.1.0"
+
+[[package]]
 name = "kiriko-gpu"
 version = "0.1.0"
 dependencies = [
@@ -2539,6 +2543,7 @@ dependencies = [
  "kiriko-cache",
  "kiriko-core",
  "kiriko-eval",
+ "kiriko-flow",
  "kiriko-gpu",
  "kiriko-media",
  "kiriko-project",
