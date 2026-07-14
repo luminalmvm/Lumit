@@ -1192,6 +1192,20 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
             let (new_ppx, _) = lane_view(track_w, duration, app.timeline_zoom, view_start);
             app.timeline_view_start = cursor_t - (cursor_x - track_left) as f64 / new_ppx.max(1e-6);
             consume(ui);
+        } else if app.timeline_graph_mode
+            && !app.graph_speed_view
+            && !mods.shift
+            && scroll.y.abs() > 0.01
+            && scroll.x.abs() <= 0.01
+        {
+            // Graph mode, value lens: the plain (or Ctrl-) wheel scrolls/zooms
+            // the *curve* vertically, not the layer list (K-079). The outline's
+            // ScrollArea reads `smooth_scroll_delta`, so zeroing only that frees
+            // the wheel for graph_plot (which reads `raw_scroll_delta`) — the
+            // graph and the layer list therefore scroll independently. A wheel
+            // over the outline column (left of the lane area) isn't in
+            // `lane_area`, so it still scrolls the list as before.
+            ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
         } else {
             // Horizontal scroll: a horizontal wheel (Shift-wheel arrives as
             // scroll.x on most platforms) or Shift + a vertical wheel. Plain
@@ -2451,6 +2465,7 @@ fn timeline_bottom_bar(
             .clicked()
         {
             app.graph_speed_view = false;
+            app.graph_view_y = None; // a manual range doesn't carry across lenses
         }
         if zc
             .selectable_label(app.graph_speed_view, speed_label)
@@ -2462,6 +2477,22 @@ fn timeline_bottom_bar(
             .clicked()
         {
             app.graph_speed_view = true;
+            app.graph_view_y = None;
+        }
+
+        // Fit toggle (K-079): the value graph auto-fits the curve vertically by
+        // default; scrolling or zooming it vertically takes over with a manual
+        // range, and this button snaps back to auto-fit. Lit while auto-fit is
+        // on. Only the value lens has a manual range.
+        if !app.graph_speed_view {
+            zc.add_space(10.0);
+            if zc
+                .selectable_label(app.graph_view_y.is_none(), "Fit")
+                .on_hover_text("Fit the curve to the graph height (auto). Scroll or zoom vertically to override.")
+                .clicked()
+            {
+                app.graph_view_y = None;
+            }
         }
 
         // Interpolation buttons for a graphed transform property (not the Retime
@@ -3701,6 +3732,32 @@ fn apply_tangent(
     }
 }
 
+/// A vertical wheel over the value graph, turned into the new y-range (K-079).
+/// A plain wheel (`ctrl` false) pans: the span is unchanged, both ends shift by
+/// `dy` scaled to the range (wheel up moves the view up). Ctrl-wheel zooms about
+/// `cursor_v`, which stays put while the span grows or shrinks (wheel up = zoom
+/// in). `height` is the plot height in pixels.
+fn graph_v_pan_zoom(
+    range: (f64, f64),
+    dy: f64,
+    ctrl: bool,
+    cursor_v: f64,
+    height: f64,
+) -> (f64, f64) {
+    let (lo, hi) = range;
+    let span = (hi - lo).max(1e-9);
+    if ctrl {
+        let factor = (-dy * 0.0015).exp(); // wheel up (dy > 0) shrinks the span
+        (
+            cursor_v - (cursor_v - lo) * factor,
+            cursor_v + (hi - cursor_v) * factor,
+        )
+    } else {
+        let dv = dy / height.max(1.0) * span;
+        (lo + dv, hi + dv)
+    }
+}
+
 /// The influence a unified partner handle needs so its on-screen *length* stays
 /// fixed while the dragged side's slope changes to `new_speed` — only the angle
 /// rotates, the length holds (Mack). `sx`/`sy` are screen px per unit time /
@@ -3967,7 +4024,14 @@ fn graph_plot(
         }
     }
     let pad = ((vmax - vmin).abs().max(1.0)) * 0.15;
-    let (vmin, vmax) = (vmin - pad, vmax + pad);
+    let auto_fit = (vmin - pad, vmax + pad);
+    // Remember the auto-fit so a first vertical scroll can seed a manual range
+    // from what's on screen; then honour any manual range the user scrolled or
+    // zoomed to (K-079). The Fit button clears `graph_view_y` back to None.
+    if !is_retime || !app.graph_speed_view {
+        app.graph_last_fit = Some(auto_fit);
+    }
+    let (vmin, vmax) = app.graph_view_y.unwrap_or(auto_fit);
     // x follows the shared timeline axis (K-079): the same pixels-per-second and
     // scrolled left edge as the lane bars, so panning/zooming the timeline moves
     // the curve in step. Keys outside the view clip to the lane area.
@@ -3979,6 +4043,30 @@ fn graph_plot(
     let v_of = |y: f32| {
         vmin + ((rect.bottom() - y) / rect.height()).clamp(0.0, 1.0) as f64 * (vmax - vmin)
     };
+
+    // Vertical scroll / zoom of the value graph (K-079): the outer wheel handler
+    // freed `raw_scroll_delta` for us (the outline list scrolls on its own).
+    // A plain wheel pans the value range; Ctrl-wheel zooms it around the cursor.
+    // Either takes over from auto-fit — the bottom-bar Fit button restores it.
+    if !app.graph_speed_view {
+        let (dy, ptr, ctrl) = ui.input(|i| {
+            (
+                i.raw_scroll_delta.y,
+                i.pointer.hover_pos(),
+                i.modifiers.ctrl || i.modifiers.command,
+            )
+        });
+        if dy.abs() > 0.01 && ptr.is_some_and(|p| rect.contains(p)) {
+            let cursor_v = v_of(ptr.map_or(rect.center().y, |p| p.y));
+            app.graph_view_y = Some(graph_v_pan_zoom(
+                (vmin, vmax),
+                dy as f64,
+                ctrl,
+                cursor_v,
+                rect.height() as f64,
+            ));
+        }
+    }
 
     // The plot background: a press-and-drag on empty space rubber-bands a
     // marquee; a plain click clears the selection; a double-click adds a key.
@@ -4505,6 +4593,66 @@ fn graph_plot(
         }
         pending = Some(new_keys);
     }
+
+    // A dedicated vertical scrollbar for the graph (K-079), on its right edge:
+    // it appears once you've taken a manual value range that doesn't cover the
+    // whole curve, and drags the value view up and down. It is independent of
+    // the layer list's own scrollbar further right — the graph and the layer
+    // list scroll separately.
+    if !app.graph_speed_view {
+        if let Some((vlo, vhi)) = app.graph_view_y {
+            let (clo, chi) = auto_fit;
+            let full_lo = clo.min(vlo);
+            let full_hi = chi.max(vhi);
+            let full = (full_hi - full_lo).max(1e-9);
+            let view = (vhi - vlo).max(1e-9);
+            if view < full - 1e-9 {
+                let x1 = rect.right() - 2.0;
+                let track = egui::Rect::from_min_max(
+                    egui::pos2(x1 - 5.0, rect.top() + 2.0),
+                    egui::pos2(x1, rect.bottom() - 2.0),
+                );
+                ui.painter().rect_filled(track, 3.0, theme.surface_1);
+                let top_frac = ((full_hi - vhi) / full) as f32;
+                let h_frac = (view / full) as f32;
+                let thumb = egui::Rect::from_min_max(
+                    egui::pos2(track.left(), track.top() + top_frac * track.height()),
+                    egui::pos2(
+                        track.right(),
+                        track.top() + (top_frac + h_frac) * track.height(),
+                    ),
+                );
+                let resp = ui.interact(
+                    thumb,
+                    ui.id().with(("graph-vscroll", layer_id)),
+                    egui::Sense::drag(),
+                );
+                let col = if resp.hovered() || resp.dragged() {
+                    theme.accent
+                } else {
+                    theme.text_muted
+                };
+                ui.painter().rect_filled(thumb, 3.0, col);
+                if resp.dragged() {
+                    // Drag down (positive Δy) moves the view to lower values;
+                    // the range is clamped to the curve's own extent.
+                    let dval =
+                        -(resp.drag_delta().y as f64) / track.height().max(1.0) as f64 * full;
+                    let (mut nlo, mut nhi) = (vlo + dval, vhi + dval);
+                    if nlo < full_lo {
+                        nhi += full_lo - nlo;
+                        nlo = full_lo;
+                    }
+                    if nhi > full_hi {
+                        nlo -= nhi - full_hi;
+                        nhi = full_hi;
+                    }
+                    app.graph_view_y = Some((nlo, nhi));
+                }
+            }
+        }
+    }
+
     if let Some(new_keys) = pending {
         let op = if is_retime {
             // Rebuild the Retime store from the edited Time keyframes (K-078).
@@ -5515,6 +5663,7 @@ fn prop_row(
         app.selected_layer = Some(ctx.layer.id);
         app.graph_prop = Some(prop);
         app.graph_retime = false; // switching to a transform property
+        app.graph_view_y = None; // re-fit for the newly graphed channel
     }
     {
         let committed = slot.value_at(ctx.lt);
@@ -5658,6 +5807,7 @@ fn combined_scale_row(
         app.selected_layer = Some(ctx.layer.id);
         app.graph_prop = Some(TransformProp::ScaleX);
         app.graph_retime = false; // switching to a transform property
+        app.graph_view_y = None; // re-fit for the newly graphed channel
     }
     if icon_button(&mut c, ctx.theme, Icon::Link, true)
         .on_hover_text("Unlink scale (edit x and y separately)")
@@ -6007,6 +6157,7 @@ fn speed_property_row(
     {
         app.selected_layer = Some(ctx.layer.id);
         app.graph_retime = true; // graph the Retime channel (K-075)
+        app.graph_view_y = None; // re-fit for the newly graphed channel
         app.graph_speed_view = app.vegas_default_lens; // open to the preferred lens
     }
 
@@ -8332,6 +8483,21 @@ mod dock_tests {
         apply_tangent(&mut k, false, 9.0, 0.4, false, None);
         assert_eq!(side_speed(k.interp_in), Some(9.0));
         assert_eq!(side_speed(k.interp_out), Some(-3.0)); // stays broken
+    }
+
+    // Vertical wheel maths (K-079): a plain wheel pans (span kept, view shifts);
+    // Ctrl-wheel zooms about the cursor value (cursor pinned, span changes).
+    #[test]
+    fn graph_vertical_pan_and_zoom() {
+        // Pan: span stays 10, wheel-up shifts the whole range up by dy/height·span.
+        let (lo, hi) = graph_v_pan_zoom((0.0, 10.0), 20.0, false, 5.0, 200.0);
+        assert!(((hi - lo) - 10.0).abs() < 1e-9); // span preserved
+        assert!((lo - 1.0).abs() < 1e-9 && (hi - 11.0).abs() < 1e-9); // shifted +1
+                                                                      // Zoom in about the cursor value 5 (wheel up): cursor stays, span shrinks.
+        let (zlo, zhi) = graph_v_pan_zoom((0.0, 10.0), 100.0, true, 5.0, 200.0);
+        assert!(zhi - zlo < 10.0); // zoomed in
+        let cursor_frac = (5.0 - zlo) / (zhi - zlo);
+        assert!((cursor_frac - 0.5).abs() < 1e-9); // cursor value pinned in view
     }
 
     // A unified partner handle rotates but keeps its on-screen length when the

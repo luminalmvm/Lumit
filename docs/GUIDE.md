@@ -318,6 +318,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   or changing a keyframe anywhere in the timeline — a stopwatch click, scrubbing a value in a
   property row, dragging a key — selects that layer and points the graph at that channel, so
   the curve you see is always the one you just touched.
+  **Panning and zooming the graph (K-079).** The graph now shares the timeline's time axis, so
+  **Alt + wheel** zooms and **Shift + wheel** (or a horizontal wheel) scrolls the curve left
+  and right in step with the layer bars. Up and down, the value view **auto-fits** the whole
+  curve by default — a bezier that overshoots its keys still stays fully on screen. A plain
+  wheel over the graph scrolls it vertically and **Ctrl + wheel** zooms the value range toward
+  the cursor; either one takes over from auto-fit, and the **Fit** button in the bottom bar
+  (lit while auto-fit is on) snaps back. Because the graph fills the lane area and the layer
+  outline sits to its left, a wheel over the graph moves the *graph* while a wheel over the
+  outline still scrolls the *layer list* — the two scroll independently.
   **Shaping a key (bezier handles).** New keys are **linear** — straight lines in, straight
   lines out. Select a key (click it, or marquee several) and press **F9**, or the **Bezier**
   button in the bottom bar, to *easy-ease* it — After Effects' smooth default. A bezier key

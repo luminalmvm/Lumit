@@ -774,6 +774,13 @@ pub struct AppState {
     /// Graph editor lens: false = value graph, true = speed graph
     /// (docs/01-GLOSSARY.md §3: two views of the same data, never separate).
     pub graph_speed_view: bool,
+    /// Manual value-lens y-range `(min, max)` when the user has scrolled or
+    /// zoomed the graph vertically (K-079). `None` = auto-fit to the curve (the
+    /// default); the bottom-bar Fit button clears it back to `None`.
+    pub graph_view_y: Option<(f64, f64)>,
+    /// The auto-fit y-range `graph_plot` computed last frame, so a first
+    /// vertical scroll can seed a manual range from what's on screen (K-079).
+    pub graph_last_fit: Option<(f64, f64)>,
     /// Graph the selected footage layer's Retime channel (K-075) rather than a
     /// transform property: value lens = source position as frame timecode,
     /// derivative lens = speed %.
@@ -905,6 +912,8 @@ impl Default for AppState {
             graph_tangent_edit: None,
             graph_set_interp: None,
             graph_speed_view: false,
+            graph_view_y: None,
+            graph_last_fit: None,
             graph_retime: false,
             vegas_default_lens: false,
             graph_retime_edit: None,
