@@ -3324,9 +3324,13 @@ fn graph_plot_retime(
     src_fps: f64,
     rect: egui::Rect,
 ) {
-    // Header: the Source/Speed lens toggle and the Vegas default-lens setting.
+    // Header: the Source/Speed lens toggle, the Vegas default-lens setting, and
+    // (in the speed lens) the ramp-preset shelf that eases the segment under the
+    // playhead.
+    let mut preset_ease: Option<kiriko_core::retime::Ease> = None;
     let header = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), rect.top() + 22.0));
     {
+        use kiriko_core::retime::Ease;
         let mut h = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(header)
@@ -3348,6 +3352,25 @@ fn graph_plot_retime(
         h.separator();
         h.checkbox(&mut app.vegas_default_lens, "Vegas")
             .on_hover_text("Open the Speed channel to the speed-% lens by default (K-075)");
+        // Ramp presets ease the speed segment under the playhead (§9.2).
+        if app.graph_speed_view {
+            h.separator();
+            h.label("Ramp");
+            for (label, ease) in [
+                ("Lin", Ease::Linear),
+                ("Slow", Ease::Slow),
+                ("Fast", Ease::Fast),
+                ("Smth", Ease::Smooth),
+                ("Shrp", Ease::Sharp),
+            ] {
+                if h.small_button(label)
+                    .on_hover_text("Ease the speed ramp under the playhead")
+                    .clicked()
+                {
+                    preset_ease = Some(ease);
+                }
+            }
+        }
     }
     let rect = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.top() + 22.0), rect.max);
     ui.painter().rect_filled(rect, 0.0, theme.surface_0);
@@ -3452,6 +3475,22 @@ fn graph_plot_retime(
 
     // Draggable speed-keyframe handles (K-075, 2b) — the speed lens only.
     let mut pending: Option<kiriko_core::Op> = None;
+
+    // Apply a ramp preset: ease the Rate segment under the playhead (§9.2).
+    // Works on any Rate segment, including one already eased; a no-op over a Map
+    // segment or when the playhead is outside the retime.
+    if let Some(ease) = preset_ease {
+        let lt = app.preview_frame as f64 / comp.frame_rate.fps().max(1.0)
+            - layer.start_offset.0.to_f64();
+        if let Some(new_rt) = retime.with_segment_ease(rational_at(lt.max(0.0)), ease) {
+            pending = Some(kiriko_core::Op::SetLayerRetime {
+                comp: comp.id,
+                layer: layer.id,
+                retime: Some(new_rt),
+            });
+        }
+    }
+
     if speed_view {
         for (idx, &(t, pct)) in kfs.iter().enumerate() {
             let shown_pct = match app.graph_retime_edit {
