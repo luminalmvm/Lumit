@@ -5,9 +5,13 @@ sRGB-vs-linear confusion, texture churn, and treating device-loss as exotic.
 
 ## 1. Device and adapter
 
-- Request adapter with `PowerPreference::HighPerformance`; backend DX12 on Windows, Metal
-  on macOS (`Backends::PRIMARY`). Store `AdapterInfo` — the degradation ladder and bug
-  workarounds key off vendor.
+- Request adapter with `PowerPreference::HighPerformance`; pin the backend explicitly —
+  `Backends::DX12` on Windows, `Backends::METAL` on macOS. Do **not** use `Backends::PRIMARY`
+  on Windows: it enumerates Vulkan and DX12 together, and on a hybrid-GPU machine wgpu can
+  end up on a device that is lost on the first present (the window opens, then vanishes after
+  a second). This is set on eframe's `WgpuConfiguration` in `kiriko-app` (`WGPU_BACKEND` still
+  overrides for debugging). Store `AdapterInfo` — the degradation ladder and bug workarounds
+  key off vendor.
 - Required features: `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` not needed; do require
   `TIMESTAMP_QUERY` (profiler) and `FLOAT32_FILTERABLE` optional-with-fallback. fp16
   storage/filtering (`Rgba16Float`) is core — no feature flag needed.
