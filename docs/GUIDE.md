@@ -323,13 +323,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   behaves like every other property — a stopwatch turns keyframing on (adding a key that holds
   the source frame showing at the playhead), and its value reads and edits as an
   `HH:MM:SS:FF` timecode: "which moment of the footage is on screen here". This is After
-  Effects' *Time Remap*. In the **Velocity** lens the same channel reads playback speed per
-  cent, and dragging a point authors a ramp — the Vegas gesture. They are two views of one
-  store: a straight line of value keys *is* a constant speed, a curve *is* a changing speed.
-  The channel opens to the Time view by default; a "Vegas" tick makes it open to Velocity.
+  Effects' *Time Remap*. Enabling it always yields at least the start and end keys — press
+  the stopwatch with the playhead at the layer's very start or end and those endpoint keys
+  simply appear (the stopwatch still lights; nothing is silently skipped). In the
+  **Velocity** lens the same channel reads playback speed per cent, and dragging a point
+  authors a ramp — the Vegas gesture. They are two views of one store: a straight line of
+  value keys *is* a constant speed, a curve *is* a changing speed. The channel opens to the
+  Time view by default; a "Vegas" tick makes it open to Velocity.
   A retimed layer also gains a small **Frames** row (its frame-interpolation choice —
-  Nearest / Blend / Flow); that row is always present on footage layers, greyed until there
-  is a retime to interpolate, so turning Retime on never makes the rows below it jump.
+  Nearest / Blend / Flow); an un-retimed layer has no such row, keeping plain layers compact.
 - **Property rows in the Timeline** (K-072) — twirl a layer open and each of its animatable
   properties (Position, Scale, Rotation, Opacity, and the 3D ones) gets its own row: on the
   left a stopwatch to turn animation on or off, the property's name, and its current value;

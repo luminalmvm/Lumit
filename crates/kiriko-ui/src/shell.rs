@@ -2153,21 +2153,15 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                         }
                     });
 
-                    // A retimed footage clip's frame-interpolation policy sits here as a
-                    // compact row; the Transform group header and its rows follow below.
-                    // A retimed footage clip shows its frame-interpolation policy here
+                    // A retimed footage layer shows its frame-interpolation policy here
                     // (K-021): Nearest is crisp; Blend crossfades neighbours for smoother
                     // slow motion. Only a retimed layer renders this row — every other
                     // layer has nothing here, so the Transform header sits right beneath.
-                    if let kiriko_core::model::LayerKind::Footage { retime, .. } = &layer.kind {
+                    if let kiriko_core::model::LayerKind::Footage {
+                        retime: Some(rt), ..
+                    } = &layer.kind
+                    {
                         use kiriko_core::retime::{FlowParams, Interpolation};
-                        // Present for every footage layer, not only retimed ones: enabling
-                        // Retime must not insert a row and shove the Transform group down
-                        // (the "jump" on the first Time keyframe). With no retime there is
-                        // nothing to interpolate, so the choices are inert and greyed.
-                        let cur = retime.as_ref().map(|r| r.interpolation.clone());
-                        let enabled = cur.is_some();
-                        let shown = cur.unwrap_or(Interpolation::Nearest);
                         ui.scope(|ui| {
                             ui.set_max_width(name_w - 10.0);
                             ui.indent(("txlabel", layer.id), |ui| {
@@ -2182,31 +2176,24 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                         (
                                             "Nearest",
                                             Interpolation::Nearest,
-                                            matches!(shown, Interpolation::Nearest),
+                                            matches!(rt.interpolation, Interpolation::Nearest),
                                         ),
                                         (
                                             "Blend",
                                             Interpolation::Blend,
-                                            matches!(shown, Interpolation::Blend),
+                                            matches!(rt.interpolation, Interpolation::Blend),
                                         ),
                                         (
                                             "Flow",
                                             Interpolation::Flow(FlowParams::default()),
-                                            matches!(shown, Interpolation::Flow(_)),
+                                            matches!(rt.interpolation, Interpolation::Flow(_)),
                                         ),
                                     ] {
-                                        if ui
-                                            .add_enabled(
-                                                enabled,
-                                                egui::SelectableLabel::new(active, label),
-                                            )
-                                            .clicked()
-                                            && !active
-                                        {
+                                        if ui.selectable_label(active, label).clicked() && !active {
                                             set = Some(val);
                                         }
                                     }
-                                    if let (Some(interp), Some(rt)) = (set, retime.as_ref()) {
+                                    if let Some(interp) = set {
                                         let mut r = rt.clone();
                                         r.interpolation = interp;
                                         pending = Some(kiriko_core::Op::SetLayerRetime {
@@ -5502,10 +5489,12 @@ fn speed_property_row(
     let speed_lens = app.graph_speed_view;
     let fps = ctx.fps;
     // Value-lens state: the source time at the playhead, and the value keys
-    // (every boundary) — "animated" here means the user has placed interior
-    // value keyframes, so more than the two endpoints exist.
+    // (every boundary). The Time stopwatch is ON as soon as any retime exists —
+    // like AE's Time Remap, enabling it always yields at least the start/end
+    // pair, and enabling at the very start or end of the layer simply re-pins
+    // an endpoint key (it must not read as "nothing happened").
     let value_keys = retime.as_ref().map(|r| r.value_keyframes());
-    let value_animated = value_keys.as_ref().is_some_and(|k| k.len() > 2);
+    let time_enabled = retime.is_some();
     let src_now = retime
         .as_ref()
         .map(|r| r.evaluate(ctx.lt))
@@ -5539,13 +5528,13 @@ fn speed_property_row(
             });
         }
     } else {
-        let hover = if value_animated {
+        let hover = if time_enabled {
             "Remove time keyframes (pass the source straight through)"
         } else {
             "Keyframe time: source time at the playhead"
         };
-        if stopwatch_button(&mut c, ctx.theme, value_animated, hover) {
-            let new_retime = if value_animated {
+        if stopwatch_button(&mut c, ctx.theme, time_enabled, hover) {
+            let new_retime = if time_enabled {
                 None
             } else {
                 let mut keys = value_keys
@@ -5657,7 +5646,9 @@ fn speed_property_row(
             .then(|| keys.as_ref().map(|k| k.iter().map(|(t, _)| *t).collect()))
             .flatten()
     } else {
-        value_animated.then(|| {
+        // Time lens: every boundary is a key, endpoints included — a freshly
+        // enabled channel shows its first and last keys straight away.
+        time_enabled.then(|| {
             value_keys
                 .as_ref()
                 .map(|k| k.iter().map(|(t, _)| *t).collect())
@@ -7938,6 +7929,28 @@ mod dock_tests {
         assert_eq!(keys.len(), 3);
         let r = Retime::from_value_keyframes(&keys).unwrap();
         assert!((r.evaluate(1.0) - 2.0).abs() < 1e-9);
+    }
+
+    // Regression: enabling Time keyframes with the playhead at the layer's very
+    // start or end re-pins an endpoint rather than adding an interior key — the
+    // store must still build (the stopwatch lights and the first/last keys
+    // show), not silently no-op.
+    #[test]
+    fn value_key_upsert_at_the_endpoints_still_builds() {
+        use kiriko_core::retime::Retime;
+        use kiriko_core::Rational;
+        let dur = Rational::new(4, 1).unwrap();
+        // Playhead at t = 0 on an un-retimed layer: keys stay the endpoint pair.
+        let mut keys = vec![(Rational::ZERO, Rational::ZERO), (dur, dur)];
+        upsert_value_key(&mut keys, 0.0, 0.0, dur, 24.0);
+        assert_eq!(keys.len(), 2);
+        let r = Retime::from_value_keyframes(&keys).unwrap();
+        assert!((r.evaluate(2.0) - 2.0).abs() < 1e-9); // identity pass-through
+                                                       // Playhead at t = dur (and past it — upsert clamps): same story.
+        let mut keys = vec![(Rational::ZERO, Rational::ZERO), (dur, dur)];
+        upsert_value_key(&mut keys, 5.0, 4.0, dur, 24.0);
+        assert_eq!(keys.len(), 2);
+        assert!(Retime::from_value_keyframes(&keys).is_some());
     }
 
     // K-075 2b: dragging a speed keyframe in the % lens (via speed_with_key)
