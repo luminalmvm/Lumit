@@ -799,9 +799,10 @@ fn icon_button(ui: &mut egui::Ui, theme: &Theme, icon: Icon, active: bool) -> eg
     resp
 }
 
-/// The identity glyph and §6.1 colour for a layer type — drawn on the layer's
-/// row so type reads at a glance (colour is never the only encoding: each type
-/// also carries its own glyph).
+/// The identity glyph and §6.1 colour for a layer type. No longer drawn in the
+/// outline (layer type reads from the lane bar's colour instead, Mack); kept for
+/// that planned per-type lane colouring.
+#[allow(dead_code)]
 fn layer_type_style(kind: &kiriko_core::model::LayerKind, theme: &Theme) -> (Icon, egui::Color32) {
     use kiriko_core::model::LayerKind;
     match kind {
@@ -1453,7 +1454,12 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 // Outline glyphs draw left of the lanes, so they paint through a
                 // viewport-clipped painter, not the lane clip (which would hide
                 // them). Child-UI columns (place/row_frame) already clip this way.
-                let outline_painter = ui.painter().with_clip_rect(viewport);
+                // NB: with_clip_rect INTERSECTS with the ui's current clip, which
+                // was narrowed to the lanes above — it would erase everything left
+                // of the lanes (the twirl and every outline glyph). set_clip_rect
+                // REPLACES the clip, so the full-width outline draws.
+                let mut outline_painter = ui.painter().clone();
+                outline_painter.set_clip_rect(viewport);
                 // Selection highlight is the background — drawn first so the twirl
                 // and glyphs on top of it stay visible.
                 if app.selected_layer == Some(layer.id) {
@@ -1473,7 +1479,16 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     egui::pos2(row_rect.left() + 2.0, row_rect.top()),
                     egui::vec2(16.0, row_rect.height()),
                 );
-                let tri_resp = ui.interact(tri, twirl_id.with("hit"), egui::Sense::click());
+                // The ui's clip is the lanes, and egui hit-tests against rect ∩ clip
+                // — so an outline interaction needs the clip widened, or the click
+                // never registers (this is why the twirl looked dead).
+                let tri_resp = {
+                    let saved = ui.clip_rect();
+                    ui.set_clip_rect(viewport);
+                    let r = ui.interact(tri, twirl_id.with("hit"), egui::Sense::click());
+                    ui.set_clip_rect(saved);
+                    r
+                };
                 if tri_resp.clicked() {
                     expanded = !expanded;
                     ui.data_mut(|d| d.insert_temp(twirl_id, expanded));
@@ -1506,20 +1521,9 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 let td_r = slot(edge - 60.0, edge - 38.0);
                 let blend_r = slot(edge - 124.0, edge - 64.0);
                 let matte_r = slot(edge - 178.0, edge - 128.0);
-                let type_r = slot(row_rect.left() + 38.0, row_rect.left() + 56.0);
+                // Layer type is encoded by the lane bar's colour (Mack) — no glyph
+                // or colour tab in the outline.
                 let title_r = slot(row_rect.left() + 58.0, edge - 182.0);
-                // Layer-type identity (15-DESIGN §6.1): a 3px colour tab on the row's
-                // left edge and the type glyph before the name, both in the type colour.
-                let (type_icon, type_col) = layer_type_style(&layer.kind, theme);
-                outline_painter.rect_filled(
-                    egui::Rect::from_min_max(
-                        egui::pos2(row_rect.left(), row_rect.top() + 1.0),
-                        egui::pos2(row_rect.left() + 3.0, row_rect.bottom() - 1.0),
-                    ),
-                    0.0,
-                    type_col,
-                );
-                crate::icons::paint(&outline_painter, type_r, type_icon, type_col, 1.4);
                 let place =
                     |ui: &mut egui::Ui, r: egui::Rect, add: &mut dyn FnMut(&mut egui::Ui)| {
                         let mut child = ui.new_child(
@@ -4510,9 +4514,10 @@ fn group_header_row(
     let mut open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(default_open);
     let (rect, resp) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
-    // A group header sits in the outline column (left of the lanes), so it paints
-    // through a viewport-clipped painter rather than the lane clip.
-    let p = ui.painter().with_clip_rect(viewport);
+    // A group header sits in the outline column (left of the lanes). set_clip_rect
+    // replaces the lane clip; with_clip_rect would intersect it and hide the row.
+    let mut p = ui.painter().clone();
+    p.set_clip_rect(viewport);
     if resp.hovered() {
         p.rect_filled(rect, 0.0, theme.surface_1);
     }
@@ -4705,8 +4710,11 @@ fn row_frame(ui: &mut egui::Ui, ctx: &RowCtx, highlight: bool) -> (egui::Rect, e
     let (row_rect, _resp) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::hover());
     if highlight {
-        // Left of the lanes → viewport clip, not the lane clip (which would hide it).
-        ui.painter().with_clip_rect(ctx.viewport).rect_filled(
+        // Left of the lanes → replace the clip; with_clip_rect would intersect the
+        // lane clip and hide this highlight.
+        let mut hp = ui.painter().clone();
+        hp.set_clip_rect(ctx.viewport);
+        hp.rect_filled(
             egui::Rect::from_min_max(
                 row_rect.min,
                 egui::pos2(ctx.track_left - 6.0, row_rect.bottom()),
