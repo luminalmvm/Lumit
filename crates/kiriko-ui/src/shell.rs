@@ -1137,22 +1137,39 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         egui::pos2(track_left, ui.max_rect().top()),
         egui::pos2(panel_right, ui.max_rect().bottom()),
     );
-    let (scroll_y, mods, hover) =
-        ui.input(|i| (i.raw_scroll_delta.y, i.modifiers, i.pointer.hover_pos()));
-    if scroll_y.abs() > 0.01 && hover.is_some_and(|p| lane_area.contains(p)) {
+    let (scroll, mods, hover) =
+        ui.input(|i| (i.raw_scroll_delta, i.modifiers, i.pointer.hover_pos()));
+    if hover.is_some_and(|p| lane_area.contains(p)) {
         let cursor_x = hover.map(|p| p.x).unwrap_or(track_left);
-        if mods.alt {
+        let consume = |ui: &mut egui::Ui| {
+            ui.input_mut(|i| {
+                i.raw_scroll_delta = egui::Vec2::ZERO;
+                i.smooth_scroll_delta = egui::Vec2::ZERO;
+            });
+        };
+        if mods.alt && scroll.y.abs() > 0.01 {
+            // Alt-wheel: zoom the time axis around the cursor.
             let cursor_t = view_start + (cursor_x - track_left) as f64 / px_per_sec.max(1e-6);
-            let factor = (scroll_y as f64 * 0.004).exp();
+            let factor = (scroll.y as f64 * 0.004).exp();
             app.timeline_zoom = (app.timeline_zoom * factor).clamp(1.0, 400.0);
             let (new_ppx, _) = lane_view(track_w, duration, app.timeline_zoom, view_start);
             app.timeline_view_start = cursor_t - (cursor_x - track_left) as f64 / new_ppx.max(1e-6);
-            ui.input_mut(|i| i.raw_scroll_delta = egui::Vec2::ZERO);
-            ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
-        } else if mods.shift {
-            app.timeline_view_start = view_start - scroll_y as f64 / px_per_sec.max(1e-6);
-            ui.input_mut(|i| i.raw_scroll_delta = egui::Vec2::ZERO);
-            ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
+            consume(ui);
+        } else {
+            // Horizontal scroll: a horizontal wheel (Shift-wheel arrives as
+            // scroll.x on most platforms) or Shift + a vertical wheel. Plain
+            // vertical wheel falls through to the ScrollArea.
+            let h = if scroll.x.abs() > 0.01 {
+                scroll.x
+            } else if mods.shift {
+                scroll.y
+            } else {
+                0.0
+            };
+            if h.abs() > 0.01 {
+                app.timeline_view_start = view_start - h as f64 / px_per_sec.max(1e-6);
+                consume(ui);
+            }
         }
     }
 
@@ -1325,6 +1342,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     ui.set_clip_rect(saved_clip);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .max_height((ui.available_height() - 38.0).max(48.0)) // leave the bottom bar + hscrollbar
         .id_salt(("timeline-lanes", comp_id))
         .show(ui, |ui| {
             // The scroll viewport (full width). Lane content clips to lane_area ∩ it;
@@ -1424,6 +1442,18 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 // viewport-clipped painter, not the lane clip (which would hide
                 // them). Child-UI columns (place/row_frame) already clip this way.
                 let outline_painter = ui.painter().with_clip_rect(viewport);
+                // Selection highlight is the background — drawn first so the twirl
+                // and glyphs on top of it stay visible.
+                if app.selected_layer == Some(layer.id) {
+                    outline_painter.rect_filled(
+                        egui::Rect::from_min_max(
+                            row_rect.min,
+                            egui::pos2(row_rect.left() + name_w - 4.0, row_rect.bottom()),
+                        ),
+                        3.0,
+                        theme.surface_2,
+                    );
+                }
                 // Disclosure twirl: layer options hide until opened (AE behaviour).
                 let twirl_id = ui.id().with(("twirl", layer.id));
                 let mut expanded = ui.data(|d| d.get_temp::<bool>(twirl_id).unwrap_or(false));
@@ -1437,16 +1467,6 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     ui.data_mut(|d| d.insert_temp(twirl_id, expanded));
                 }
                 crate::icons::disclosure(&outline_painter, tri, expanded, theme.text_muted);
-                if app.selected_layer == Some(layer.id) {
-                    outline_painter.rect_filled(
-                        egui::Rect::from_min_max(
-                            row_rect.min,
-                            egui::pos2(row_rect.left() + name_w - 4.0, row_rect.bottom()),
-                        ),
-                        3.0,
-                        theme.surface_2,
-                    );
-                }
                 // Left-column subcolumns (Mack): [visibility][title…][matte][blend][3D]
                 // [mute]. Switches are right-anchored so they align across every row;
                 // the title flexes and truncates. Each is clipped to its slot, so a
@@ -2240,25 +2260,26 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         app.set_selected_clip_interp(interp);
     }
     ui.set_clip_rect(saved_clip); // release the lane clip for the bottom bar
-    timeline_mode_toggle(ui, theme, app);
+    timeline_bottom_bar(
+        ui,
+        theme,
+        app,
+        track_left,
+        panel_right,
+        duration,
+        view_start,
+    );
 }
 
-/// Layer-view / graph-view switch, bottom-right of the Timeline (K-070). The
-/// node-graph view joins this row when the node system lands.
-fn timeline_mode_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
-    let panel = ui.max_rect();
-    let r = egui::Rect::from_min_max(
-        egui::pos2(panel.right() - 66.0, panel.bottom() - 26.0),
-        egui::pos2(panel.right() - 6.0, panel.bottom() - 2.0),
-    );
+/// The layer-view / graph-view switch (K-070), drawn right-anchored in `rect`.
+fn graph_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState, rect: egui::Rect) {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(r)
+            .max_rect(rect)
             .layout(egui::Layout::right_to_left(egui::Align::Center)),
     );
-    child.set_clip_rect(r);
+    child.set_clip_rect(rect);
     let graph = app.timeline_graph_mode;
-    // Right-to-left layout: the graph toggle is drawn first so it sits rightmost.
     if icon_button(&mut child, theme, Icon::GraphCurve, graph)
         .on_hover_text("Graph editor")
         .clicked()
@@ -2271,12 +2292,75 @@ fn timeline_mode_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     {
         app.timeline_graph_mode = false;
     }
+}
 
-    // Lane-area zoom controls, bottom-left (opposite the graph toggle): out / in /
-    // fit, with a zoom readout. Alt-wheel zooms too; Shift-wheel scrolls.
+/// Graph-view bottom: just the view toggle, bottom-right.
+fn timeline_mode_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
+    let panel = ui.max_rect();
+    let r = egui::Rect::from_min_max(
+        egui::pos2(panel.right() - 66.0, panel.bottom() - 26.0),
+        egui::pos2(panel.right() - 6.0, panel.bottom() - 2.0),
+    );
+    graph_toggle(ui, theme, app, r);
+}
+
+/// The lane-view bottom bar spanning the lanes area: zoom controls (`− + Fit` +
+/// readout) on the left, the view toggle on the right, and a draggable horizontal
+/// scrollbar just above it (shown when zoomed in).
+fn timeline_bottom_bar(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    app: &mut AppState,
+    track_left: f32,
+    panel_right: f32,
+    duration: f64,
+    view_start: f64,
+) {
+    let panel = ui.max_rect();
+    let bar_top = panel.bottom() - 24.0;
+    let sb_top = bar_top - 12.0;
+
+    // Horizontal scrollbar (meaningful only when zoomed in), just above the bar.
+    if app.timeline_zoom > 1.001 {
+        let track = egui::Rect::from_min_max(
+            egui::pos2(track_left, sb_top),
+            egui::pos2(panel_right - 2.0, sb_top + 8.0),
+        );
+        ui.painter().rect_filled(track, 3.0, theme.surface_1);
+        let visible = duration / app.timeline_zoom;
+        let fs = (view_start / duration.max(1e-6)) as f32;
+        let fl = (visible / duration.max(1e-6)) as f32;
+        let thumb = egui::Rect::from_min_max(
+            egui::pos2(track.left() + fs * track.width(), track.top()),
+            egui::pos2(track.left() + (fs + fl) * track.width(), track.bottom()),
+        );
+        let resp = ui.interact(thumb, ui.id().with("h-scrollbar"), egui::Sense::drag());
+        let col = if resp.hovered() || resp.dragged() {
+            theme.accent
+        } else {
+            theme.text_muted
+        };
+        ui.painter().rect_filled(thumb, 3.0, col);
+        if resp.dragged() {
+            let dsec = resp.drag_delta().x as f64 / track.width().max(1.0) as f64 * duration;
+            app.timeline_view_start = view_start + dsec;
+        }
+    }
+
+    // Controls-bar background across the lanes.
+    ui.painter().rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(track_left, bar_top),
+            egui::pos2(panel_right, panel.bottom()),
+        ),
+        0.0,
+        theme.surface_1,
+    );
+
+    // Zoom controls, bottom-left of the lanes.
     let zr = egui::Rect::from_min_max(
-        egui::pos2(panel.left() + 6.0, panel.bottom() - 26.0),
-        egui::pos2(panel.left() + 190.0, panel.bottom() - 2.0),
+        egui::pos2(track_left + 4.0, bar_top),
+        egui::pos2(track_left + 200.0, panel.bottom()),
     );
     let mut zc = ui.new_child(
         egui::UiBuilder::new()
@@ -2313,6 +2397,13 @@ fn timeline_mode_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 .color(theme.text_muted),
         );
     }
+
+    // View toggle, bottom-right of the lanes.
+    let gr = egui::Rect::from_min_max(
+        egui::pos2(panel_right - 60.0, bar_top),
+        egui::pos2(panel_right - 4.0, panel.bottom()),
+    );
+    graph_toggle(ui, theme, app, gr);
 }
 
 /// Footage preview: the frame fit to the surround, scrub bar, resolution picker.
