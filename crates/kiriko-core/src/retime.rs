@@ -789,6 +789,33 @@ impl Retime {
         Some(cropped)
     }
 
+    /// Convert the MapSegment covering local time `t` to a RateSegment by the
+    /// §5.2 fit, returning the updated retime and the maximum source-position
+    /// drift in seconds — a nonzero drift means the conversion is inexact and
+    /// the UI shows the "fitted" warning badge. The source advance Δs is pinned
+    /// exactly (C0 is never sacrificed). None when `t` is outside the domain,
+    /// the covering segment is already a Rate, or the map's speed cannot be
+    /// followed by any single ease (an interior sign change, or going negative
+    /// while reverse is disabled — docs/04-RETIMING.md §5.2 refusal).
+    pub fn with_segment_as_rate(&self, t: Rational) -> Option<(Retime, f64)> {
+        let i = self.segment_index_at(t)?;
+        let RetimeSegment::Map(seg) = &self.segments[i] else {
+            return None;
+        };
+        let (rate, drift) = fit_map_to_rate(
+            seg,
+            &self.boundaries[i],
+            &self.boundaries[i + 1],
+            self.allow_reverse,
+        )?;
+        let mut r = self.clone();
+        r.segments[i] = RetimeSegment::Rate(rate);
+        // The fitted rate reproduces Δs exactly, so recompute leaves every
+        // boundary source position where it was.
+        r.recompute_boundaries().ok()?;
+        Some((r, drift))
+    }
+
     /// Structural sanity (docs/04-RETIMING.md §3 invariants): n + 1
     /// boundaries for n segments, first boundary at local time zero,
     /// boundary times strictly increasing.
@@ -1149,6 +1176,140 @@ fn hermite_at(
     ))
 }
 
+/// Integrate `f` over [0, 1] by composite Simpson (N = 64). The §5.2 integrands
+/// are low-degree polynomials, so this is effectively exact.
+fn integrate(f: impl Fn(f64) -> f64) -> f64 {
+    const N: usize = 64;
+    let h = 1.0 / N as f64;
+    let mut sum = f(0.0) + f(1.0);
+    for i in 1..N {
+        let w = if i % 2 == 0 { 2.0 } else { 4.0 };
+        sum += w * f(f64::from(i as u32) * h);
+    }
+    sum * h / 3.0
+}
+
+/// Solve the 3×3 system `m·x = b` by Cramer's rule; None if near-singular.
+fn solve_3x3(m: [[f64; 3]; 3], b: [f64; 3]) -> Option<[f64; 3]> {
+    let det = |a: &[[f64; 3]; 3]| {
+        a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+            - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+            + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+    };
+    let d = det(&m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let mut out = [0.0; 3];
+    for (c, slot) in out.iter_mut().enumerate() {
+        let mut a = m;
+        for r in 0..3 {
+            a[r][c] = b[r];
+        }
+        *slot = det(&a) / d;
+    }
+    Some(out)
+}
+
+/// Fit a MapSegment to a RateSegment (docs/04-RETIMING.md §5.2): for each ease
+/// shape solve the constrained least squares `min ∫(v_fit − v_map)² du` subject
+/// to reproducing the mean speed (so Δs is pinned), keep the least-residual
+/// shape, then set `v1` rationally from that constraint so the source advance
+/// is reproduced *exactly*. Returns the rate and the maximum source drift in
+/// seconds (for the warning badge). None when no single ease can follow the
+/// map's speed: an interior sign change, or negative speed while reverse is off.
+fn fit_map_to_rate(
+    seg: &MapSegment,
+    lo: &Boundary,
+    hi: &Boundary,
+    allow_reverse: bool,
+) -> Option<(RateSegment, f64)> {
+    let (x, y) = map_control_points(seg, lo, hi);
+    let (t0, s0) = (lo.t.to_f64(), lo.s.to_f64());
+    let d = (hi.t.to_f64() - t0).max(1e-12);
+    let vmap = |u: f64| bezier_deriv(&y, u) / bezier_deriv(&x, u).max(1e-12);
+    // A single RateSegment cannot change speed sign, nor go negative while the
+    // reverse gate is off — refuse those (§5.2 step 4).
+    let (mut mn, mut mx) = (f64::INFINITY, f64::NEG_INFINITY);
+    for k in 0..=64 {
+        let v = vmap(f64::from(k) / 64.0);
+        mn = mn.min(v);
+        mx = mx.max(v);
+    }
+    if (mn < 0.0 && mx > 0.0) || (!allow_reverse && mn < 0.0) {
+        return None;
+    }
+    let c_avg = (hi.s.to_f64() - s0) / d; // mean speed = Δs / d
+    let mut best: Option<(Ease, f64, f64)> = None; // (ease, v0, drift)
+    let mut best_residual = f64::INFINITY;
+    for ease in [
+        Ease::Linear,
+        Ease::Slow,
+        Ease::Fast,
+        Ease::Smooth,
+        Ease::Sharp,
+    ] {
+        let phi0 = |u: f64| 1.0 - ease.small_e(u);
+        let phi1 = |u: f64| ease.small_e(u);
+        let (p0, p1) = (integrate(phi0), integrate(phi1));
+        let m = [
+            [
+                integrate(|u| phi0(u) * phi0(u)),
+                integrate(|u| phi0(u) * phi1(u)),
+                p0,
+            ],
+            [
+                integrate(|u| phi0(u) * phi1(u)),
+                integrate(|u| phi1(u) * phi1(u)),
+                p1,
+            ],
+            [p0, p1, 0.0],
+        ];
+        let b = [
+            integrate(|u| phi0(u) * vmap(u)),
+            integrate(|u| phi1(u) * vmap(u)),
+            c_avg,
+        ];
+        let Some([v0, v1, _]) = solve_3x3(m, b) else {
+            continue;
+        };
+        let residual = integrate(|u| {
+            let vf = v0 + (v1 - v0) * ease.small_e(u);
+            (vf - vmap(u)).powi(2)
+        });
+        let mut drift = 0.0_f64;
+        for k in 0..=64 {
+            let u = f64::from(k) / 64.0;
+            let f_fit = s0 + d * (v0 * u + (v1 - v0) * ease.big_e(u));
+            let f_map = bezier(&y, map_param_at(seg, &x, t0 + d * u));
+            drift = drift.max((f_fit - f_map).abs());
+        }
+        if residual < best_residual {
+            best_residual = residual;
+            best = Some((ease, v0, drift));
+        }
+    }
+    let (ease, v0_f, drift) = best?;
+    // Pin Δs exactly: a rational v0 from the fit, v1 solving the C0 constraint
+    // v0 + (v1 − v0)·E(1) = Δs/d.
+    let v0 = Rational::from_f64_on_grid(v0_f, Rational::FLICK_DEN).ok()?;
+    let c_rat =
+        hi.s.checked_sub(lo.s)
+            .ok()?
+            .checked_div(hi.t.checked_sub(lo.t).ok()?)
+            .ok()?;
+    let v1 = v0
+        .checked_add(
+            c_rat
+                .checked_sub(v0)
+                .ok()?
+                .checked_div(ease.e_at_1())
+                .ok()?,
+        )
+        .ok()?;
+    Some((RateSegment::new(v0, v1, ease), drift))
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -1469,6 +1630,45 @@ mod tests {
         // Freezes must land strictly inside, with a positive duration.
         assert!(r.insert_freeze(rat(0, 1), rat(1, 1)).is_none());
         assert!(r.insert_freeze(rat(1, 1), rat(0, 1)).is_none());
+    }
+
+    #[test]
+    fn fitting_a_map_back_to_a_rate_pins_the_endpoints() {
+        // Map(1,2,1/3,1/3) over [0,2] with source 0→3 is exactly a Linear rate
+        // {1,2} (its speed is v_map(u) = 1 + u), so the §5.2 fit recovers it.
+        let third = rat(1, 3);
+        let rt = store(
+            &[(rat(0, 1), rat(0, 1)), (rat(2, 1), rat(3, 1))],
+            vec![RetimeSegment::Map(MapSegment::new(
+                rat(1, 1),
+                rat(2, 1),
+                third,
+                third,
+            ))],
+        );
+        let (fitted, drift) = rt
+            .with_segment_as_rate(rat(1, 1))
+            .expect("map fits to a rate");
+        assert!(matches!(fitted.segments[0], RetimeSegment::Rate(_)));
+        // C0: the endpoints are pinned exactly.
+        assert_eq!(
+            fitted.boundaries.first().unwrap().s,
+            rt.boundaries.first().unwrap().s
+        );
+        assert_eq!(
+            fitted.boundaries.last().unwrap().s,
+            rt.boundaries.last().unwrap().s
+        );
+        // A map that is exactly a rate's cubic fits with negligible drift, and
+        // the curve matches across the whole segment.
+        assert!(drift < 1e-6, "drift {drift}");
+        for k in 0..=10 {
+            let t = 2.0 * f64::from(k) / 10.0;
+            assert!((fitted.evaluate(t) - rt.evaluate(t)).abs() < 1e-6, "@ {t}");
+        }
+        // A Rate segment is not a fit target.
+        let ramp = Retime::single_ramp(rat(2, 1), rat(0, 1), rat(1, 1), rat(2, 1), Ease::Linear);
+        assert!(ramp.with_segment_as_rate(rat(1, 1)).is_none());
     }
 
     #[test]
