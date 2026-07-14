@@ -363,6 +363,41 @@ impl Retime {
         Some(r)
     }
 
+    /// The earliest local time (seconds) at which this retime reaches
+    /// `source_duration` seconds of source — i.e. the clip runs out of media
+    /// and the boundary frame must be held (docs/04-RETIMING.md §7, the
+    /// beat-sync covenant: boundaries never move, so overrun is drawn, not
+    /// trimmed automatically). None if the source lasts the whole clip.
+    ///
+    /// Source time advances monotonically for a forward retime, so the crossing
+    /// is bisected inside the segment that straddles `source_duration` — exact
+    /// enough for the indicator, and robust for every ease.
+    pub fn overrun_local_time(&self, source_duration: Rational) -> Option<f64> {
+        let dur = source_duration.to_f64();
+        for i in 0..self.boundaries.len() {
+            if self.boundaries[i].s.to_f64() < dur {
+                continue;
+            }
+            if i == 0 {
+                return Some(0.0); // starts already past the source end
+            }
+            let (mut lo, mut hi) = (
+                self.boundaries[i - 1].t.to_f64(),
+                self.boundaries[i].t.to_f64(),
+            );
+            for _ in 0..40 {
+                let mid = 0.5 * (lo + hi);
+                if self.evaluate(mid) >= dur {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            return Some(hi);
+        }
+        None
+    }
+
     /// The speed keyframes (local time → speed) that reproduce this retime,
     /// when every segment is a Linear-ease Rate segment; None otherwise (eased
     /// or Map stores are edited in the graph editor, not as plain keys).
@@ -771,6 +806,21 @@ mod tests {
             &[(rat(0, 1), rat(1, 1)), (rat(0, 1), rat(2, 1))]
         )
         .is_none());
+    }
+
+    #[test]
+    fn overrun_marks_where_the_clip_runs_out_of_source() {
+        // 2× over a 4 s clip from source 0: source runs 0→8, so 4 s of source
+        // is used up at local time 2 s.
+        let r = Retime::constant_speed(rat(4, 1), rat(0, 1), rat(2, 1));
+        let t = r.overrun_local_time(rat(4, 1)).unwrap();
+        assert!((t - 2.0).abs() < 1e-3, "overrun at {t}");
+        // 1× over 4 s needs only 4 s of source; 10 s of media never runs out.
+        let slow = Retime::constant_speed(rat(4, 1), rat(0, 1), rat(1, 1));
+        assert!(slow.overrun_local_time(rat(10, 1)).is_none());
+        // Source-in already past the end → overruns from the very start.
+        let past = Retime::identity(rat(4, 1), rat(5, 1));
+        assert_eq!(past.overrun_local_time(rat(3, 1)), Some(0.0));
     }
 
     #[test]

@@ -136,7 +136,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   key — so a retimed clip previews, exports, and caches consistently. The Speed box is a
   ramp: a start speed → an end speed with an ease (Linear/Slow/Fast/Smooth/Sharp), so a
   clip can rush in and settle — the core montage gesture — not just play at one flat rate.
-  Sequence layers, the graph-editor lenses, and per-beat cutting come next.
+  When a retime speeds a clip up so much that it runs out of footage, `overrun_local_time`
+  reports the exact moment it runs dry — the point where the last frame gets held rather
+  than inventing more footage. It never trims the clip for you (boundaries must stay put so
+  cuts keep landing on the beat); the plan is to draw that point as a warning on the clip and
+  offer an explicit "trim to source end". Sequence layers, the graph-editor lenses, and
+  per-beat cutting come next.
 - `crates/kiriko-core/src/sequence.rs` — **Sequence layers (the model).** A Sequence layer
   is one timeline row holding clips laid end to end — Kiriko's Vegas-style editing surface.
   Each clip points at a source, carries its own trim and its own Retime ramp, and sits at
