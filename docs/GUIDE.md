@@ -138,9 +138,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   clip can rush in and settle — the core montage gesture — not just play at one flat rate.
   When a retime speeds a clip up so much that it runs out of footage, `overrun_local_time`
   reports the exact moment it runs dry — the point where the last frame gets held rather
-  than inventing more footage. It never trims the clip for you (boundaries must stay put so
-  cuts keep landing on the beat); the plan is to draw that point as a warning on the clip and
-  offer an explicit "trim to source end". Sequence layers, the graph-editor lenses, and
+  than inventing more footage. That point is now drawn on the clip as a kraft warning line
+  with the held tail hatched (kraft, never a red alarm — house rule), and right-clicking the
+  clip offers **Trim to source end** to cut it there. It never trims for you (boundaries must
+  stay put so cuts keep landing on the beat). Sequence layers, the graph-editor lenses, and
   per-beat cutting come next.
 - `crates/kiriko-core/src/sequence.rs` — **Sequence layers (the model).** A Sequence layer
   is one timeline row holding clips laid end to end — Kiriko's Vegas-style editing surface.

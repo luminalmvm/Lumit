@@ -992,6 +992,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         // menu, never scattered buttons).
         let mut ctx_op: Option<kiriko_core::Op> = None;
         let mut convert_layer = false;
+        let mut trim_to_source = false;
         row_resp.context_menu(|ui| {
             ui.menu_button("Add mask", |ui| {
                 let (w, h) = mask_space(layer, app, comp);
@@ -1041,10 +1042,27 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 convert_layer = true;
                 ui.close_menu();
             }
+            // Trim to source end (K-022) — only offered for a retimed clip.
+            if matches!(
+                layer.kind,
+                kiriko_core::model::LayerKind::Footage {
+                    retime: Some(_),
+                    ..
+                }
+            ) && ui.button("Trim to source end").clicked()
+            {
+                trim_to_source = true;
+                ui.close_menu();
+            }
         });
         if ctx_op.is_some() {
             pending = ctx_op;
             app.selected_layer = Some(layer.id);
+        }
+        if trim_to_source {
+            app.selected_layer = Some(layer.id);
+            #[cfg(feature = "media")]
+            app.trim_selected_to_source_end();
         }
         if convert_layer {
             app.selected_layer = Some(layer.id);
@@ -1165,6 +1183,43 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                 egui::FontId::monospace(8.0),
                 theme.text_muted,
             );
+        }
+        // Overrun (K-022): a retimed clip that outruns its source holds the
+        // last frame — mark where and hatch the held tail in warning kraft
+        // (never a red alarm — house rule). Boundaries never move on their own.
+        #[cfg(feature = "media")]
+        if let kiriko_core::model::LayerKind::Footage {
+            item,
+            retime: Some(rt),
+        } = &layer.kind
+        {
+            use crate::app_state::media::MediaStatus;
+            if let Some(MediaStatus::Ready { probe, frames, .. }) = app.media.map.get(item) {
+                if let Some(v) = probe.video.as_ref() {
+                    let src_dur = *frames as f64 / v.fps().max(1.0);
+                    if let Some(ot) = rt.overrun_local_time(rational_at(src_dur)) {
+                        let ox = x_of(layer.start_offset.0.to_f64() + ot);
+                        if ox > bar.left() && ox < bar.right() - 0.5 {
+                            let hatch = theme.warning.gamma_multiply(0.5);
+                            let mut hx = ox;
+                            while hx < bar.right() {
+                                ui.painter().line_segment(
+                                    [
+                                        egui::pos2(hx, bar.top()),
+                                        egui::pos2((hx + 6.0).min(bar.right()), bar.bottom()),
+                                    ],
+                                    egui::Stroke::new(1.0_f32, hatch),
+                                );
+                                hx += 6.0;
+                            }
+                            ui.painter().line_segment(
+                                [egui::pos2(ox, bar.top()), egui::pos2(ox, bar.bottom())],
+                                egui::Stroke::new(1.5_f32, theme.warning),
+                            );
+                        }
+                    }
+                }
+            }
         }
         // Keyframe glyphs: a clay diamond on the bar at each keyframed time
         // (across the layer's animated properties). Only when collapsed — when

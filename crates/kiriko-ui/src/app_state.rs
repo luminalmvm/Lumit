@@ -2459,6 +2459,62 @@ impl AppState {
         self.audio_loaded = None; // the footage buffer is no longer loaded
     }
 
+    /// Trim the selected retimed footage layer so it ends exactly where the
+    /// retime runs out of source (K-022): no auto-ripple — an explicit command
+    /// the overrun indicator invites. No-op with a note if it doesn't overrun.
+    #[cfg(feature = "media")]
+    pub fn trim_selected_to_source_end(&mut self) {
+        use kiriko_core::model::LayerKind;
+        use kiriko_core::time::CompTime;
+        use kiriko_core::Rational;
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            return;
+        };
+        let Some(layer_id) = self.selected_layer else {
+            return;
+        };
+        let doc = self.store.snapshot();
+        let Some(comp) = doc.comp(comp_id) else {
+            return;
+        };
+        let Some(layer) = comp.layers.iter().find(|l| l.id == layer_id) else {
+            return;
+        };
+        let LayerKind::Footage {
+            item,
+            retime: Some(rt),
+        } = &layer.kind
+        else {
+            self.error = Some("select a retimed footage layer".into());
+            return;
+        };
+        let src_dur = match self.media.map.get(item) {
+            Some(media::MediaStatus::Ready { probe, frames, .. }) => match probe.video.as_ref() {
+                Some(v) => *frames as f64 / v.fps().max(1.0),
+                None => return,
+            },
+            _ => return,
+        };
+        let src_r = Rational::from_f64_on_grid(src_dur, 1000).unwrap_or(Rational::ONE);
+        let Some(ot) = rt.overrun_local_time(src_r) else {
+            self.error = Some("this clip doesn't run out of source".into());
+            return;
+        };
+        let in_point = layer.in_point;
+        let start_offset = layer.start_offset;
+        let new_out = start_offset.0.to_f64() + ot;
+        let out_point =
+            CompTime(Rational::from_f64_on_grid(new_out, 1000).unwrap_or(layer.out_point.0));
+        self.commit(Op::SetLayerSpan {
+            comp: comp_id,
+            layer: layer_id,
+            in_point,
+            out_point,
+            start_offset,
+        });
+        self.refresh_preview();
+    }
+
     /// Drop a user marker at the playhead on the current composition.
     pub fn add_marker_at_playhead(&mut self) {
         let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
