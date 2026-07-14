@@ -239,7 +239,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   preferring the sensible 70–180 range so a fast track doesn't report double-time. A
   sensitivity dial trades more markers for fewer. It's the standard, well-understood
   approach done carefully — no AI guesswork — and it's tested against synthetic clicks at a
-  known tempo (every beat found, tempo within 2 BPM).
+  known tempo (every beat found, tempo within 2 BPM). A **grid assist** (`snap_to_grid`) then
+  nudges any beat that's within ~45 ms of the tempo grid exactly onto it — the grid's phase
+  is worked out from the beats themselves — which tidies away the small, unavoidable delay in
+  raw onset detection so markers land where a musician would tap. Onsets that fall well off
+  the grid (syncopation, fills) are left where they are.
 - **Markers** (`kiriko-core::markers`) — a marker is a labelled flag at a moment on a
   composition's timeline. Three kinds: ones you place (User), chapter divisions, and the
   Beat markers Kiriko detects from the music (each with a confidence). Re-running beat

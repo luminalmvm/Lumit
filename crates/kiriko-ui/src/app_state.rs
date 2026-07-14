@@ -2649,10 +2649,14 @@ impl AppState {
                 .collect();
             let samples = kiriko_audio::mix::mix_stereo(&placements, total_frames);
             let analysis = kiriko_audio::beat::analyse_stereo(&samples, rate, 1.5);
-            let beats: Vec<(f64, f32)> = analysis
-                .onsets
+            // Grid-assist: nudge near-grid onsets onto the tempo grid (≤45ms),
+            // which removes the small analysis latency without moving outliers.
+            let times: Vec<f64> = analysis.onsets.iter().map(|o| o.time).collect();
+            let snapped = kiriko_audio::beat::snap_to_grid(&times, analysis.bpm, 0.045);
+            let beats: Vec<(f64, f32)> = snapped
                 .iter()
-                .map(|o| (o.time, o.confidence))
+                .zip(&analysis.onsets)
+                .map(|(t, o)| (*t, o.confidence))
                 .collect();
             let _ = tx.send((comp_id, analysis.bpm, beats));
         });

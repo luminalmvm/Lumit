@@ -228,6 +228,40 @@ fn estimate_bpm(env: &[f32], env_fps: f64) -> f64 {
     env_fps * 60.0 / refined
 }
 
+/// Grid assist (docs/impl/beat-detection.md §3): snap onset times to the tempo
+/// grid implied by `bpm`. Each onset within `tolerance` seconds of a grid line
+/// moves onto it; the rest stay. The grid's phase is the circular mean of the
+/// onsets modulo the beat period, so the grid aligns to the actual beats and
+/// the small analysis latency in the raw onsets is removed. Returns the onsets
+/// unchanged if `bpm <= 0` or there are fewer than two.
+pub fn snap_to_grid(onsets: &[f64], bpm: f64, tolerance: f64) -> Vec<f64> {
+    if bpm <= 0.0 || onsets.len() < 2 {
+        return onsets.to_vec();
+    }
+    let period = 60.0 / bpm;
+    // Circular mean of the phases (onset mod period), so wrap-around near a
+    // beat boundary averages correctly.
+    let (mut sx, mut sy) = (0.0f64, 0.0f64);
+    for &t in onsets {
+        let angle = (t / period).rem_euclid(1.0) * std::f64::consts::TAU;
+        sx += angle.cos();
+        sy += angle.sin();
+    }
+    let phi = sy.atan2(sx).rem_euclid(std::f64::consts::TAU) / std::f64::consts::TAU * period;
+    onsets
+        .iter()
+        .map(|&t| {
+            let k = ((t - phi) / period).round();
+            let grid = phi + k * period;
+            if (t - grid).abs() <= tolerance {
+                grid
+            } else {
+                t
+            }
+        })
+        .collect()
+}
+
 /// Analyse a mono buffer at `rate` Hz for onsets and tempo. `sensitivity` is
 /// the peak-picking δ (1.5 is a sensible default).
 pub fn analyse_mono(mono: &[f32], rate: u32, sensitivity: f32) -> BeatAnalysis {
@@ -315,5 +349,31 @@ mod tests {
     #[test]
     fn stereo_downmix_averages_channels() {
         assert_eq!(downmix_stereo(&[1.0, 3.0, -2.0, 0.0]), vec![2.0, -1.0]);
+    }
+
+    #[test]
+    fn grid_snap_aligns_jittered_onsets() {
+        // Onsets a few ms off a 120 BPM grid (period 0.5 s).
+        let onsets = [0.008, 0.494, 1.006, 1.997, 2.489];
+        let snapped = snap_to_grid(&onsets, 120.0, 0.045);
+        // Consecutive snapped onsets are exact grid multiples apart.
+        for w in snapped.windows(2) {
+            let gap = w[1] - w[0];
+            let beats = (gap / 0.5).round();
+            assert!(
+                (gap - beats * 0.5).abs() < 1e-6,
+                "gap {gap} not on the grid: {snapped:?}"
+            );
+        }
+        // Nothing moved more than the tolerance.
+        for (o, s) in onsets.iter().zip(&snapped) {
+            assert!((o - s).abs() <= 0.045 + 1e-9);
+        }
+        // Beyond tolerance, an outlier is left alone.
+        let out = snap_to_grid(&[0.0, 0.5, 0.73], 120.0, 0.045);
+        assert!((out[2] - 0.73).abs() < 1e-9);
+        // Degenerate inputs pass through.
+        assert_eq!(snap_to_grid(&[1.0], 120.0, 0.045), vec![1.0]);
+        assert_eq!(snap_to_grid(&[1.0, 2.0], 0.0, 0.045), vec![1.0, 2.0]);
     }
 }
