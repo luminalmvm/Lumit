@@ -464,3 +464,27 @@ RateSegment speeds, prose, identifiers); "velocity" is permitted solely as this 
 derivative-lens label. The channel also behaves like any other property — it carries a
 stopwatch/keyframe control in the outline — and its **default lens is the value (Time) lens**
 (the Vegas-preference of K-075 defaults **off**), so the channel opens to Time.
+
+**K-078 · DECIDED · The Time (value) lens is a fully bezier-keyframed property, identical to
+any transform channel.** From Mack (2026-07-14), extending K-025/K-070/K-075/K-076. The Retime
+**Time** lens is not a special read-only view: it is the ordinary graph editor — draggable
+keys, gold tangent handles, F9 easy-ease, marquee, auto-fit — operating on source position over
+local time, exactly like Position or Scale. This is realised by mapping each pair of value
+keyframes to a **`MapSegment`** (the AE cubic already specified in K-025): a segment's control
+handles are the left key's out-tangent and the right key's in-tangent, using the *same*
+control-point construction as `anim::CubicSpan::from_ae`, so a Time curve renders **bit-for-bit**
+like the same keys on a transform property (regression-tested). The bridge is
+`Retime::from_source_keyframes` (keys → store) and `Retime::source_keyframes` (store → keys).
+Consequences and limits, for now:
+- A **Linear** side lies on the chord (influence ⅓), matching `anim::side_params`.
+- A **Hold** side is treated as Linear — a stepped Time Remap (freeze-then-jump) is future work,
+  since a single monotone `MapSegment` cannot express a step while keeping boundary C0 exact.
+- A **`RateSegment`** (an eased speed-lens ramp, or the identity store) displays as a straight
+  Linear side in the Time lens; dragging any handle there recommits the whole channel as
+  `MapSegment`s, so the eased *speed* shaping is replaced by explicit *value* tangents. The two
+  native vocabularies (Rate/Vegas vs Map/AE) still don't losslessly interconvert — editing in a
+  lens commits in that lens's vocabulary, which is the K-070 model working as intended.
+- Source positions round onto the flick grid on commit; local-time boundaries stay exact
+  (keyframe times are rational), so the beat-sync covenant (§4/§7) is unaffected.
+The "which lens a channel opens to" preference (K-076) stays; per-project lens customisation is
+still deferred.

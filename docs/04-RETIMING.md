@@ -432,6 +432,16 @@ descending (only with `allow_reverse`) is reverse.
 | Delete boundary | Merge per §5.4. | per §5.4 |
 | Numeric entry on a boundary | Fields for local timecode `t` and source timecode `s`; identical semantics to the corresponding drags. | none |
 
+The value lens is realised as the **ordinary graph editor** running on the source-position
+channel (K-078): `Retime::source_keyframes` reads the store into bezier keyframes (each
+MapSegment contributing its stored tangents, each RateSegment shown as a straight Linear side)
+and `Retime::from_source_keyframes` writes an edited keyframe list back as MapSegments, using
+the same control-point construction as `anim::CubicSpan::from_ae` — so a Time curve renders
+bit-for-bit like the identical keys on a transform property. Editing the Time lens therefore
+recommits the channel in the Map (AE) vocabulary; a Hold side is treated as Linear for now
+(a stepped Time Remap is future work, as it can't be one monotone MapSegment with exact C0
+boundaries).
+
 ### 9.2 Speed lens (derivative, Vegas-style semantics)
 
 The x axis is local time, y is speed in per cent; a reference line at 100%, the zero line

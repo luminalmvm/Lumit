@@ -400,6 +400,74 @@ impl Retime {
         Some(r)
     }
 
+    /// Build a value-lens retime from AE Time Remap keyframes: local time →
+    /// source time, each side carrying the same bezier tangent (`SideInterp`)
+    /// the transform graph uses (K-078). Every consecutive pair becomes a
+    /// [`MapSegment`] whose control handles are the left key's out-tangent and
+    /// the right key's in-tangent — the exact control-point construction of
+    /// [`crate::anim::CubicSpan::from_ae`] — so the source curve evaluates
+    /// identically to `anim::evaluate` over the same keys. A Linear side lies on
+    /// the chord (AE semantics); a Hold side is treated as Linear here (a
+    /// stepped Time Remap is future work). Source positions round onto the flick
+    /// grid. Needs ≥ 2 keys, the first at local time 0, strictly increasing
+    /// times; returns None otherwise (caller keeps its store).
+    pub fn from_source_keyframes(keys: &[crate::anim::Keyframe]) -> Option<Self> {
+        use crate::anim::SideInterp;
+        if keys.len() < 2 || keys[0].time != Rational::ZERO {
+            return None;
+        }
+        if keys.windows(2).any(|w| w[1].time <= w[0].time) {
+            return None;
+        }
+        let grid = Rational::FLICK_DEN;
+        let one_third = Rational::new(1, 3).ok()?;
+        let on_grid = |x: f64| Rational::from_f64_on_grid(x, grid).unwrap_or(Rational::ZERO);
+        let influence_of = |inf: f64| {
+            if (inf - 1.0 / 3.0).abs() < 1e-9 {
+                one_third // keep the exact 1/3 so the polynomial fast path holds
+            } else {
+                Rational::from_f64_on_grid(inf.clamp(1e-3, 1.0), grid).unwrap_or(one_third)
+            }
+        };
+        let boundaries = keys
+            .iter()
+            .map(|k| Boundary::new(k.time, on_grid(k.value)))
+            .collect();
+        let mut segments = Vec::with_capacity(keys.len() - 1);
+        let mut any_reverse = false;
+        for w in keys.windows(2) {
+            let dt = w[1].time.to_f64() - w[0].time.to_f64();
+            let chord = if dt > 0.0 {
+                (w[1].value - w[0].value) / dt
+            } else {
+                0.0
+            };
+            // A Linear/Hold side sits on the chord with influence ⅓ — the same
+            // convention `anim::side_params` uses, so the two curves agree.
+            let side = |si: SideInterp| -> (Rational, Rational) {
+                match si {
+                    SideInterp::Bezier { speed, influence } => {
+                        (on_grid(speed), influence_of(influence))
+                    }
+                    _ => (on_grid(chord), one_third),
+                }
+            };
+            let (m0, b0) = side(w[0].interp_out);
+            let (m1, b1) = side(w[1].interp_in);
+            any_reverse |= m0.is_negative() || m1.is_negative() || chord < 0.0;
+            segments.push(RetimeSegment::Map(MapSegment::new(m0, m1, b0, b1)));
+        }
+        let r = Self {
+            boundaries,
+            segments,
+            allow_reverse: any_reverse,
+            interpolation: Interpolation::default(),
+            extra: serde_json::Map::new(),
+        };
+        r.validate().ok()?;
+        Some(r)
+    }
+
     /// The earliest local time (seconds) at which this retime reaches
     /// `source_duration` seconds of source — i.e. the clip runs out of media
     /// and the boundary frame must be held (docs/04-RETIMING.md §7, the
@@ -462,6 +530,50 @@ impl Retime {
     /// (which only speaks for all-linear Rate stores).
     pub fn value_keyframes(&self) -> Vec<(Rational, Rational)> {
         self.boundaries.iter().map(|b| (b.t, b.s)).collect()
+    }
+
+    /// The value-lens keyframes with bezier tangents (local time → source time,
+    /// each side a `SideInterp`) — the inverse of [`Self::from_source_keyframes`],
+    /// so the value lens can draw and edit *any* store with the transform
+    /// graph's own handles (K-078). A [`MapSegment`] contributes its stored
+    /// tangents exactly; a [`RateSegment`] shows as a straight (Linear) side,
+    /// since its eased source advance has no single per-key tangent — dragging a
+    /// handle there recommits the whole channel through `from_source_keyframes`.
+    pub fn source_keyframes(&self) -> Vec<crate::anim::Keyframe> {
+        use crate::anim::{Keyframe, SideInterp};
+        let out_side = |seg: &RetimeSegment| match seg {
+            RetimeSegment::Map(m) => SideInterp::Bezier {
+                speed: m.m0.to_f64(),
+                influence: m.b0.to_f64(),
+            },
+            RetimeSegment::Rate(_) => SideInterp::Linear,
+        };
+        let in_side = |seg: &RetimeSegment| match seg {
+            RetimeSegment::Map(m) => SideInterp::Bezier {
+                speed: m.m1.to_f64(),
+                influence: m.b1.to_f64(),
+            },
+            RetimeSegment::Rate(_) => SideInterp::Linear,
+        };
+        let last = self.boundaries.len().saturating_sub(1);
+        self.boundaries
+            .iter()
+            .enumerate()
+            .map(|(i, b)| Keyframe {
+                time: b.t,
+                value: b.s.to_f64(),
+                interp_in: if i == 0 {
+                    SideInterp::Linear
+                } else {
+                    in_side(&self.segments[i - 1])
+                },
+                interp_out: if i == last {
+                    SideInterp::Linear
+                } else {
+                    out_side(&self.segments[i])
+                },
+            })
+            .collect()
     }
 
     /// The index of the segment covering local time `t`, or None if `t` is
@@ -1438,6 +1550,98 @@ mod tests {
             Retime::from_value_keyframes(&[(rat(0, 1), rat(0, 1)), (rat(0, 1), rat(1, 1))])
                 .is_none()
         );
+    }
+
+    #[test]
+    fn source_keyframes_evaluate_like_a_transform_property() {
+        // The whole point of K-078: a Time Remap built from bezier keyframes
+        // must render bit-for-bit like the same keys on a transform property.
+        use crate::anim::{Keyframe, SideInterp};
+        let keys = vec![
+            Keyframe {
+                time: rat(0, 1),
+                value: 0.0,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Bezier {
+                    speed: 0.0,
+                    influence: 1.0 / 3.0,
+                }, // easy-ease out
+            },
+            Keyframe {
+                time: rat(2, 1),
+                value: 3.0,
+                interp_in: SideInterp::Bezier {
+                    speed: 4.0,
+                    influence: 0.6,
+                },
+                interp_out: SideInterp::Bezier {
+                    speed: 4.0,
+                    influence: 0.4,
+                },
+            },
+            Keyframe {
+                time: rat(5, 1),
+                value: 1.0,
+                interp_in: SideInterp::Bezier {
+                    speed: 0.0,
+                    influence: 1.0 / 3.0,
+                },
+                interp_out: SideInterp::Linear,
+            },
+        ];
+        let r = Retime::from_source_keyframes(&keys).unwrap();
+        for i in 0..=50 {
+            let t = 5.0 * i as f64 / 50.0;
+            let want = crate::anim::evaluate(&keys, t).unwrap();
+            assert!(
+                (r.evaluate(t) - want).abs() < 1e-6,
+                "at t={t}: retime {} vs property {want}",
+                r.evaluate(t)
+            );
+        }
+    }
+
+    #[test]
+    fn source_keyframes_round_trip_their_tangents() {
+        // from_source_keyframes → source_keyframes returns the same tangents
+        // (within flick-grid rounding), so opening the graph on a curve you just
+        // committed shows the handles exactly where you left them.
+        use crate::anim::SideInterp;
+        let keys = Retime::from_source_keyframes(&[
+            crate::anim::Keyframe {
+                time: rat(0, 1),
+                value: 0.0,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Bezier {
+                    speed: 1.5,
+                    influence: 0.5,
+                },
+            },
+            crate::anim::Keyframe {
+                time: rat(3, 1),
+                value: 2.0,
+                interp_in: SideInterp::Bezier {
+                    speed: -0.5,
+                    influence: 0.25,
+                },
+                interp_out: SideInterp::Linear,
+            },
+        ])
+        .unwrap()
+        .source_keyframes();
+        assert_eq!(keys.len(), 2);
+        match keys[0].interp_out {
+            SideInterp::Bezier { speed, influence } => {
+                assert!((speed - 1.5).abs() < 1e-6 && (influence - 0.5).abs() < 1e-6);
+            }
+            other => panic!("expected bezier out, got {other:?}"),
+        }
+        match keys[1].interp_in {
+            SideInterp::Bezier { speed, influence } => {
+                assert!((speed - -0.5).abs() < 1e-6 && (influence - 0.25).abs() < 1e-6);
+            }
+            other => panic!("expected bezier in, got {other:?}"),
+        }
     }
 
     #[test]
