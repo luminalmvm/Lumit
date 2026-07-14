@@ -367,13 +367,20 @@ outline stays; each property gains an *include in graph* toggle.
 
 ### 5.2 Retime's two lenses
 
-For a layer's or clip's Retime (see [04-RETIMING.md](04-RETIMING.md)):
+A **retimed footage layer** exposes its Retime as a channel in the graph editor's left column,
+beside the transform properties (K-075). Sequence layers do **not**; their retiming is edited
+inside the sequenced-layer view (K-071, §4.x) — see K-075.
 
-- The **value lens** plots source time against layer/clip time (AE-style editing).
+- The **value lens** plots source position against layer/clip time, read as **frame timecode**
+  (`HH:MM:SS:FF` in the footage's own timebase — "which source frame is showing here"), not
+  seconds (AE-style editing).
 - The **speed lens** plots speed percentage against time (Vegas-style semantics). It is
   drawn **in the graph pane, below or instead of the value lens — never overlaid on the
   clip** in the Timeline (K-021). The clip itself only ever shows the read-only speed
   readout and overrun hatching (§4.4).
+- **Default lens**: a Vegas-editor preference chooses which lens the Speed channel opens to —
+  on, the speed (per-cent) lens; off, the frame-timecode (value) lens (K-075, generalising
+  K-021).
 - Edits in either lens write retime segments; switching lenses never converts or degrades
   data. Overrun regions render in both lenses as hatched spans beyond the source range.
 

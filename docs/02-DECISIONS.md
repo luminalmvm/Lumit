@@ -418,8 +418,38 @@ a tab bar on every leaf; egui_tiles doesn't force a tab on a lone pane, so the V
 bare *and* the other panels fully dockable. Mechanism: the Viewer is inserted as a direct
 child of a linear container (never a tab group) with `all_panes_must_have_tabs = false`;
 `prune_single_child_tabs = false` keeps single panels (Timeline, Scopes) showing their tab.
-Default layout: Project/effect-controls/effects-&-presets tab group (left), Viewer over a
-Timeline tab group (centre), Scopes (right). Pop-out into a panel's **own OS window** is
+Default layout: an upper band — Project/effect-controls/effects-&-presets tab group (left),
+the Viewer (centre), Scopes (right) — above a **full-width Timeline** tab group along the
+bottom (the Edit workspace of [07-UI-SPEC.md](07-UI-SPEC.md) §3; the Timeline is a direct
+child of the vertical root so it spans the whole window). Pop-out into a panel's **own OS
+window** is
 implemented: a tab's ⇱ button hides its tile in the dock (`Tiles::set_visible`) and renders
 it in an egui immediate viewport; closing that window docks it back. Supersedes the v1-status
 note in [07-UI-SPEC.md](07-UI-SPEC.md) §1; keeps the UI layer swappable (K-012).
+
+**K-075 · DECIDED · Retime is a graph-editor channel (footage layers): frame-timecode value
+lens, speed-% derivative lens, Vegas default-lens setting; sequence-layer retiming lives in
+the sequence view.** Confirmed by Mack (2026-07-14), building on K-021, K-070, K-071, K-072:
+
+- **Footage layers — Retime graphs like any other channel.** A retimed footage layer exposes
+  its Retime in the graph editor's left column beside the transform properties, using the same
+  two-lens machinery (K-070). The value and derivative lenses are two views of the **one**
+  retime store — the segment model of [04-RETIMING.md](04-RETIMING.md) stands; nothing is
+  re-stored as keyframes.
+  - **Value lens = source position as frame timecode** (`HH:MM:SS:FF` in the footage's own
+    timebase) — "which source frame is showing here" — not seconds or a percentage.
+    **Derivative lens = speed per cent** (Vegas-style). Editing either writes retime segments
+    ([04-RETIMING.md](04-RETIMING.md) §9); switching lenses never converts data.
+  - **A Vegas-editor preference picks the default lens.** On → the Speed channel opens to the
+    per-cent (derivative) lens; off → the frame-timecode (value) lens. This generalises
+    K-021's "opens the speed graph by default" into a user preference.
+- **Sequence layers do NOT get an editable Speed channel.** Their retiming is done *inside*
+  the sequenced-layer view (K-071): the view shows the single source as a layer you
+  cut/splice/move, with an **optional graph pane below it** — the layer stays visible on top,
+  so cutting/splicing continues while retiming, and the graph (the regular graph view)
+  reflects the sequence's retime, respecting the gaps between pieces. Documented here;
+  **implemented later** (a good candidate for a focused `fable` session, per Mack).
+- **Increments:** *2a* (now) — footage Retime graphable, both lenses + the setting + the
+  correct default lens; *2b* — the full [04-RETIMING.md](04-RETIMING.md) §9.2 in-graph segment
+  editing (RateSegment endpoint drags, compensating edits, Rate↔Map conversions); *2c* (later)
+  — the sequence-view graph pane.
