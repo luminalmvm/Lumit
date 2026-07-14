@@ -2131,16 +2131,11 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                         }
                     });
 
-                    // Transform label sits in the left column; the properties (and, for
-                    // footage, the keyframable Speed row) are full-width rows below.
+                    // A retimed footage clip's frame-interpolation policy sits here as a
+                    // compact row; the Transform group header and its rows follow below.
                     ui.scope(|ui| {
                         ui.set_max_width(name_w - 10.0);
                         ui.indent(("txlabel", layer.id), |ui| {
-                            ui.label(
-                                egui::RichText::new("Transform")
-                                    .small()
-                                    .color(theme.text_muted),
-                            );
                             // Frame interpolation for a retimed footage clip (K-021):
                             // Nearest is crisp; Blend crossfades neighbours for smoother
                             // slow motion (optical flow comes later).
@@ -4428,8 +4423,16 @@ fn group_header_row(
     viewport: egui::Rect,
 ) -> bool {
     let mut open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(default_open);
-    let (rect, resp) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
+    // The header lives in the outline, but the ui's clip is the lanes and egui
+    // hit-tests against rect ∩ clip — so widen the clip or the twirl won't click.
+    let (rect, resp) = {
+        let saved = ui.clip_rect();
+        ui.set_clip_rect(viewport);
+        let r =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
+        ui.set_clip_rect(saved);
+        r
+    };
     // A group header sits in the outline column (left of the lanes). set_clip_rect
     // replaces the lane clip; with_clip_rect would intersect it and hide the row.
     let mut p = ui.painter().clone();
