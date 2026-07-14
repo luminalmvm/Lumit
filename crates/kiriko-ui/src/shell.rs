@@ -2133,17 +2133,18 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
 
                     // A retimed footage clip's frame-interpolation policy sits here as a
                     // compact row; the Transform group header and its rows follow below.
-                    ui.scope(|ui| {
-                        ui.set_max_width(name_w - 10.0);
-                        ui.indent(("txlabel", layer.id), |ui| {
-                            // Frame interpolation for a retimed footage clip (K-021):
-                            // Nearest is crisp; Blend crossfades neighbours for smoother
-                            // slow motion (optical flow comes later).
-                            if let kiriko_core::model::LayerKind::Footage {
-                                retime: Some(rt), ..
-                            } = &layer.kind
-                            {
-                                use kiriko_core::retime::{FlowParams, Interpolation};
+                    // A retimed footage clip shows its frame-interpolation policy here
+                    // (K-021): Nearest is crisp; Blend crossfades neighbours for smoother
+                    // slow motion. Only a retimed layer renders this row — every other
+                    // layer has nothing here, so the Transform header sits right beneath.
+                    if let kiriko_core::model::LayerKind::Footage {
+                        retime: Some(rt), ..
+                    } = &layer.kind
+                    {
+                        use kiriko_core::retime::{FlowParams, Interpolation};
+                        ui.scope(|ui| {
+                            ui.set_max_width(name_w - 10.0);
+                            ui.indent(("txlabel", layer.id), |ui| {
                                 ui.horizontal(|ui| {
                                     ui.label(
                                         egui::RichText::new("Frames")
@@ -2182,9 +2183,9 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                                         });
                                     }
                                 });
-                            }
+                            });
                         });
-                    });
+                    }
                     // Transform group: its own twirl (open by default) revealing each
                     // animatable property as a timeline row — stopwatch/name/value in
                     // the left column, that property's keyframes on the track to the
