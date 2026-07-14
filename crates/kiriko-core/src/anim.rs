@@ -42,6 +42,37 @@ pub const EASY_EASE: SideInterp = SideInterp::Bezier {
     influence: 1.0 / 3.0,
 };
 
+impl Keyframe {
+    /// This keyframe made linear on both sides — straight lines to its
+    /// neighbours, the default for a fresh key.
+    pub fn to_linear(self) -> Keyframe {
+        Keyframe {
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+            ..self
+        }
+    }
+
+    /// This keyframe eased on both sides — the After Effects "easy ease" (F9):
+    /// speed 0, influence 1/3, so the curve arrives and leaves flat and the
+    /// tangent handles can then be dragged. The value is unchanged, so the curve
+    /// still passes exactly through the key.
+    pub fn to_bezier(self) -> Keyframe {
+        Keyframe {
+            interp_in: EASY_EASE,
+            interp_out: EASY_EASE,
+            ..self
+        }
+    }
+
+    /// True when either side is a bezier (an eased key), so the UI can show it
+    /// as a circle and give it tangent handles.
+    pub fn is_bezier(&self) -> bool {
+        matches!(self.interp_in, SideInterp::Bezier { .. })
+            || matches!(self.interp_out, SideInterp::Bezier { .. })
+    }
+}
+
 /// Evaluate a sorted keyframe list at time `t` (seconds, f64 — evaluation
 /// domain per the engineering rules; authoritative times stay rational).
 pub fn evaluate(keys: &[Keyframe], t: f64) -> Option<f64> {
@@ -274,6 +305,29 @@ mod tests {
             assert!(v >= prev - 1e-9, "not monotone at {i}: {v} < {prev}");
             prev = v;
         }
+    }
+
+    #[test]
+    fn linear_bezier_conversion_keeps_the_key_values() {
+        let k = key(rat(1, 1), 5.0, SideInterp::Linear);
+        assert!(!k.is_bezier());
+        let b = k.to_bezier();
+        assert!(b.is_bezier());
+        assert_eq!(b.interp_in, EASY_EASE);
+        assert_eq!(b.interp_out, EASY_EASE);
+        assert!((b.value - 5.0).abs() < 1e-12); // value unchanged
+        let l = b.to_linear();
+        assert!(!l.is_bezier());
+        assert_eq!(l.interp_in, SideInterp::Linear);
+        // Whether linear or eased, the curve still passes exactly through each key.
+        let eased = [
+            key(rat(0, 1), 0.0, SideInterp::Linear).to_bezier(),
+            key(rat(1, 1), 10.0, SideInterp::Linear).to_bezier(),
+            key(rat(2, 1), 0.0, SideInterp::Linear).to_bezier(),
+        ];
+        assert!((evaluate(&eased, 0.0).unwrap() - 0.0).abs() < 1e-9);
+        assert!((evaluate(&eased, 1.0).unwrap() - 10.0).abs() < 1e-9);
+        assert!((evaluate(&eased, 2.0).unwrap() - 0.0).abs() < 1e-9);
     }
 
     #[test]
