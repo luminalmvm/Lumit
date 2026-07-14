@@ -673,6 +673,66 @@ impl Retime {
         Some((left, right))
     }
 
+    /// Delete the interior boundary at index `j` (1 ≤ j ≤ n − 1), merging its
+    /// two neighbouring segments into one that spans the pinned outer
+    /// boundaries (docs/04-RETIMING.md §5.4). The merged segment is a
+    /// MapSegment carrying the outer one-sided speeds and influences — the
+    /// interior detail is smoothly discarded — unless both neighbours are
+    /// Linear Rate segments and a single Linear Rate reproduces the outer
+    /// source advance exactly, in which case it stays a Rate segment. The outer
+    /// boundaries never move and segments beyond them never change. None if `j`
+    /// is not an interior boundary.
+    pub fn merge_boundary(&self, j: usize) -> Option<Retime> {
+        if j == 0 || j + 1 >= self.boundaries.len() {
+            return None;
+        }
+        let third = Rational::new(1, 3).ok()?;
+        let (left, right) = (&self.segments[j - 1], &self.segments[j]);
+        let (lo, hi) = (&self.boundaries[j - 1], &self.boundaries[j + 1]);
+        // Outer one-sided speeds and influences (a Rate segment's ends are
+        // 1/3-influence by construction — the polynomial subclass).
+        let (m0, b0) = match left {
+            RetimeSegment::Rate(s) => (s.v0, third),
+            RetimeSegment::Map(s) => (s.m0, s.b0),
+        };
+        let (m1, b1) = match right {
+            RetimeSegment::Rate(s) => (s.v1, third),
+            RetimeSegment::Map(s) => (s.m1, s.b1),
+        };
+        // Special case: two Linear Rate neighbours whose single Linear Rate
+        // reproduces the outer Δs exactly may stay Rate.
+        let stays_rate = match (left, right) {
+            (RetimeSegment::Rate(l), RetimeSegment::Rate(r))
+                if l.ease == Ease::Linear && r.ease == Ease::Linear =>
+            {
+                let d = hi.t.checked_sub(lo.t).ok()?;
+                let ds = hi.s.checked_sub(lo.s).ok()?;
+                rate_advance(d, l.v0, r.v1, Ease::Linear).ok()? == ds
+            }
+            _ => false,
+        };
+        let merged = if stays_rate {
+            RetimeSegment::Rate(RateSegment::new(m0, m1, Ease::Linear))
+        } else {
+            RetimeSegment::Map(MapSegment::new(m0, m1, b0, b1))
+        };
+
+        let mut boundaries = self.boundaries.clone();
+        boundaries.remove(j);
+        let mut segments = self.segments.clone();
+        segments.remove(j);
+        segments[j - 1] = merged;
+        let mut out = Retime {
+            boundaries,
+            segments,
+            allow_reverse: self.allow_reverse,
+            interpolation: self.interpolation.clone(),
+            extra: serde_json::Map::new(),
+        };
+        out.recompute_boundaries().ok()?;
+        Some(out)
+    }
+
     /// Structural sanity (docs/04-RETIMING.md §3 invariants): n + 1
     /// boundaries for n segments, first boundary at local time zero,
     /// boundary times strictly increasing.
@@ -1251,6 +1311,64 @@ mod tests {
             ))],
         );
         assert_split_preserves_curve(&rt, rat(1, 1), 2.0);
+    }
+
+    #[test]
+    fn merging_two_collinear_linear_rates_stays_one_rate() {
+        // 100%→200% then 200%→300%: the mid slope matches, so it is one line.
+        let mut rt = store(
+            &[
+                (rat(0, 1), rat(0, 1)),
+                (rat(2, 1), rat(0, 1)),
+                (rat(4, 1), rat(0, 1)),
+            ],
+            vec![
+                rate(rat(1, 1), rat(2, 1), Ease::Linear),
+                rate(rat(2, 1), rat(3, 1), Ease::Linear),
+            ],
+        );
+        rt.recompute_boundaries().unwrap();
+        let m = rt.merge_boundary(1).expect("interior boundary merges");
+        assert_eq!(m.segments.len(), 1);
+        assert!(matches!(m.segments[0], RetimeSegment::Rate(_)));
+        // The curve was already a single line, so it is unchanged.
+        for k in 0..=20 {
+            let t = 4.0 * f64::from(k) / 20.0;
+            assert!((m.evaluate(t) - rt.evaluate(t)).abs() < 1e-9, "@ {t}");
+        }
+    }
+
+    #[test]
+    fn merging_a_kink_pins_the_outer_boundaries_and_speeds() {
+        // 100%→200% then 200%→100%: a kink, so the merge discards the interior
+        // and produces one MapSegment through the pinned outer boundaries.
+        let mut rt = store(
+            &[
+                (rat(0, 1), rat(0, 1)),
+                (rat(2, 1), rat(0, 1)),
+                (rat(4, 1), rat(0, 1)),
+            ],
+            vec![
+                rate(rat(1, 1), rat(2, 1), Ease::Linear),
+                rate(rat(2, 1), rat(1, 1), Ease::Linear),
+            ],
+        );
+        rt.recompute_boundaries().unwrap();
+        let m = rt.merge_boundary(1).expect("interior boundary merges");
+        assert_eq!(m.segments.len(), 1);
+        assert!(matches!(m.segments[0], RetimeSegment::Map(_)));
+        // Outer boundaries pinned (source and time both).
+        assert_eq!(
+            m.boundaries.first().unwrap(),
+            rt.boundaries.first().unwrap()
+        );
+        assert_eq!(m.boundaries.last().unwrap(), rt.boundaries.last().unwrap());
+        // Outer one-sided speeds preserved: 100% at each end.
+        assert!((m.speed_at(0.0) - 1.0).abs() < 1e-9);
+        assert!((m.speed_at(4.0) - 1.0).abs() < 1e-9);
+        // Non-interior boundaries cannot be merged.
+        assert!(rt.merge_boundary(0).is_none());
+        assert!(rt.merge_boundary(2).is_none());
     }
 
     #[test]
