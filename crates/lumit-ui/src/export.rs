@@ -488,13 +488,18 @@ fn run(
     let (tw, th) = (target.0 & !1, target.1 & !1);
     let (tw, th) = (tw.max(2), th.max(2));
     let resize = (tw, th) != (comp.width, comp.height);
-    let mut encoder = lumit_media::Encoder::open_with_bitrate(
+    let mut encoder = lumit_media::Encoder::open(
         out_path,
-        tw,
-        th,
-        i32::try_from(comp.frame_rate.fps().round() as i64).unwrap_or(60),
-        1,
-        bit_rate,
+        &lumit_media::encode::VideoSettings {
+            codec: lumit_media::encode::VideoCodec::H264,
+            width: tw,
+            height: th,
+            fps_num: i32::try_from(comp.frame_rate.fps().round() as i64).unwrap_or(60),
+            fps_den: 1,
+            bit_rate,
+            max_rate: None,
+        },
+        None,
     )
     .map_err(|e| e.to_string())?;
 

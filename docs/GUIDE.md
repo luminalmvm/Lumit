@@ -239,6 +239,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   Lumit fits the picture into that frame keeping its shape, adding black bars where the
   aspect ratios differ (a wide comp gets bars top and bottom in a vertical export). The
   fitting maths (`fit_contain` / `letterbox_resize` in `pixels.rs`) is unit-tested.
+- `crates/lumit-media/src/encode.rs` — **compressing the file, and how export picks an
+  encoder.** Compressing video is heavy work, and every GPU vendor ships a dedicated chip
+  for it: NVIDIA calls theirs NVENC, AMD has AMF, Intel has Quick Sync. They are far faster
+  than doing it on the CPU, but temperamental — a machine can have the NVIDIA *software*
+  installed with no NVIDIA card present, or the card can refuse because too many programs
+  are already encoding. So Lumit works down a ladder: try NVENC, then AMF, then Quick Sync,
+  then plain software (x264/x265, always works). And it doesn't just ask "are you there?" —
+  it *proves* each rung by encoding sixteen blank frames at the export's exact size before
+  trusting it, because these chips are notorious for saying yes and failing a moment later.
+  Whichever rung passes first does the export, and the finished dialogue tells you which
+  ("Encoded with NVENC"). The ladder order and the fallback rule are plain data plus a tiny
+  pure function, so the "hardware exists but won't open" cases are ordinary unit tests, and
+  one integration test runs the real ladder on whatever machine the tests run on. The same
+  module now also writes **HEVC** (H.265 — newer, smaller files than H.264 at the same
+  quality) and an **AAC audio track**, interleaved with the video the way streaming players
+  expect, with a `+faststart` flag so the file's table of contents sits at the front and
+  playback can begin before the download ends.
 - `crates/lumit-audio/` — **playback and the clock.** The sound card asks for samples on
   its own strict schedule through a "realtime callback" — a tiny function that must never
   wait for anything (if it's ever late, you hear a glitch). The count of samples it has
