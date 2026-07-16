@@ -783,8 +783,19 @@ pub struct AppState {
     pub graph_speed_view: bool,
     /// Manual value-lens y-range `(min, max)` when the user has scrolled or
     /// zoomed the graph vertically (K-079). `None` = auto-fit to the curve (the
-    /// default); the bottom-bar Fit button clears it back to `None`.
+    /// default); the bottom-bar Fit toggle clears it back to `None`.
     pub graph_view_y: Option<(f64, f64)>,
+    /// Whether the value graph keeps re-fitting its y-range to the curve every
+    /// frame (the bottom-bar Fit toggle, on by default). A vertical wheel,
+    /// Ctrl-wheel zoom or scrollbar drag switches it off and takes over via
+    /// `graph_view_y`; switching it back on clears the manual range.
+    pub graph_auto_fit: bool,
+    /// The plot height (px) the current manual `graph_view_y` was framed at.
+    /// When the timeline panel is resized the manual range grows or shrinks
+    /// about its centre by the height ratio, so the value scale (units per
+    /// pixel) holds — more height shows more curve, never a stretch. `None`
+    /// while auto-fitting, or until `graph_plot` stamps the live height.
+    pub graph_view_h: Option<f32>,
     /// The auto-fit y-range `graph_plot` computed last frame, so a first
     /// vertical scroll can seed a manual range from what's on screen (K-079).
     pub graph_last_fit: Option<(f64, f64)>,
@@ -921,6 +932,8 @@ impl Default for AppState {
             graph_set_interp: None,
             graph_speed_view: false,
             graph_view_y: None,
+            graph_auto_fit: true,
+            graph_view_h: None,
             graph_last_fit: None,
             graph_retime: false,
             vegas_default_lens: false,
@@ -973,6 +986,16 @@ impl AppState {
                 None
             }
         }
+    }
+
+    /// Back to auto-fit for the value graph (K-079): drop any manual y-range
+    /// (and the plot height it was framed at) so the graph re-fits the curve
+    /// continuously. Called when the graphed channel or lens changes — a fresh
+    /// channel always starts fitted — and by the Fit toggle switching back on.
+    pub fn graph_reset_fit(&mut self) {
+        self.graph_auto_fit = true;
+        self.graph_view_y = None;
+        self.graph_view_h = None;
     }
 
     /// All document mutation funnels through here: commit, journal, dirty.
