@@ -1,0 +1,16 @@
+[package]
+name = "luminal-eval"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[dependencies]
+luminal-core = { path = "../luminal-core" }
+blake3 = "1"
+uuid = { version = "1", features = ["v7"] }
+serde_json = "1"
+
+[dev-dependencies]
+
+[lints]
+workspace = true

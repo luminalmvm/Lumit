@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Set up the environment variables Kiriko's media crate needs to build on Windows.
+    Set up the environment variables Luminal's media crate needs to build on Windows.
 
 .DESCRIPTION
-    kiriko-media links FFmpeg 7.1 through rsmpeg. On Windows, rusty_ffmpeg's build
+    luminal-media links FFmpeg 7.1 through rsmpeg. On Windows, rusty_ffmpeg's build
     script links the import libraries named by FFMPEG_LIBS_DIR / FFMPEG_INCLUDE_DIR
     and generates its FFI with bindgen, which needs libclang (LIBCLANG_PATH). At run
     time the FFmpeg DLLs (and the ffmpeg CLI used by the test fixtures) must be on PATH.
@@ -113,7 +113,7 @@ if (($env:Path -split ';') -notcontains $bin) {
     $env:Path = "$bin;$env:Path"
 }
 
-Write-Host "Kiriko Windows dev environment set for this shell:" -ForegroundColor Green
+Write-Host "Luminal Windows dev environment set for this shell:" -ForegroundColor Green
 Write-Host "  FFMPEG_LIBS_DIR    = $libs"
 Write-Host "  FFMPEG_INCLUDE_DIR = $include"
 Write-Host "  LIBCLANG_PATH      = $clang"

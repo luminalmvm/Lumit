@@ -1,4 +1,4 @@
-# Kiriko engineering rules
+# Luminal engineering rules
 
 **Status: canonical and binding.** These rules apply to every line of code in this repository,
 whether written by a human or by an AI agent. They exist because the two product requirements —
@@ -38,10 +38,10 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 
 - Types crossing thread boundaries MUST be `Send`; shared read types MUST be `Sync` by
   construction (immutable), not by interior locking. `unsafe impl Send/Sync` is forbidden
-  outside `kiriko-gpu` and FFI boundary crates, and there requires a safety comment plus a
+  outside `luminal-gpu` and FFI boundary crates, and there requires a safety comment plus a
   test exercising the cross-thread path.
 - Prefer message passing and snapshot sharing over shared mutable state. A new `Mutex` or
-  `RwLock` in `kiriko-eval`, `kiriko-core`, or `kiriko-cache` hot paths requires review
+  `RwLock` in `luminal-eval`, `luminal-core`, or `luminal-cache` hot paths requires review
   sign-off naming who holds it, for how long, and why a channel does not work. Natron died
   of render-path locks; see [05-ARCHITECTURE.md](05-ARCHITECTURE.md) §8.
 
@@ -64,7 +64,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 ## 2. Time discipline
 
 - The four timebases in [01-GLOSSARY.md](01-GLOSSARY.md) §4 are **distinct newtypes** in
-  `kiriko-time`:
+  `luminal-time`:
 
   ```rust
   pub struct RationalTime { num: i64, den: i32 }   // seconds as num/den, den > 0
@@ -123,7 +123,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 - **Degradation over failure**: when a resource limit is hit, the resource governor's ladder
   in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) applies before any operation is
   refused, and refusal is a message, never an abort.
-- **GPU device-lost is a recoverable event, not an error.** Code touching `kiriko-gpu` MUST
+- **GPU device-lost is a recoverable event, not an error.** Code touching `luminal-gpu` MUST
   treat `DeviceLost` as a normal enum variant that triggers epoch recovery
   ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §5); it never propagates to the user as a crash
   or dialog on first occurrence.
@@ -133,7 +133,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 ## 5. Memory rules
 
 - **All frame-sized allocations go through the pooled allocators** (texture pool in
-  `kiriko-gpu`, frame arena in `kiriko-media`/CPU path), which account against the resource
+  `luminal-gpu`, frame arena in `luminal-media`/CPU path), which account against the resource
   governor's RAM/VRAM budgets. `Vec::with_capacity(width * height * …)` outside the pools is
   a review reject.
 - **No unbounded queues.** Every channel between threads is bounded; senders block, drop, or
@@ -159,7 +159,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   integrate(speed) ↔ differentiate(map) round-trips, monotone-segment invariants, overrun
   boundary behaviour (K-022: retime never moves edit points); for rational time (associativity,
   no drift over hour-long sums); for the command journal (apply → invert → apply = identity).
-- **Fuzzing** (cargo-fuzz, in CI on a schedule): the `.kir` deserialiser and journal
+- **Fuzzing** (cargo-fuzz, in CI on a schedule): the `.lum` deserialiser and journal
   replayer (arbitrary bytes MUST produce a typed error, never a panic or hang) and the OFX
   host boundary (malformed plugin responses, wrong-size frames, dead processes).
 - **Performance regression gates in CI**, on the reference machine (defined in
@@ -175,8 +175,8 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 
 - **Workspace lints** (`[workspace.lints]`): `rust_2024_idioms`, `clippy::all`,
   `clippy::pedantic` (curated allows), plus the §4 panic lints. Warnings are errors in CI.
-- **Unsafe policy:** `unsafe` is permitted only in `kiriko-gpu`, `kiriko-media`,
-  `kiriko-expr` FFI edges, and the plugin hosts — each block wrapped in a safe API within
+- **Unsafe policy:** `unsafe` is permitted only in `luminal-gpu`, `luminal-media`,
+  `luminal-expr` FFI edges, and the plugin hosts — each block wrapped in a safe API within
   its crate, carrying a `// SAFETY:` comment stating the invariant and who upholds it, and
   covered by a test (miri where the code is miri-able). `#![deny(unsafe_code)]` in every
   other crate.
@@ -206,7 +206,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   allocation) — they feed the scheduler's adaptive concurrency and the pre-emptive tiling of
   nodes that trend towards the TDR window ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §5).
 - Crash capture is out-of-process (Crashpad-style minidumps) and opt-in for telemetry;
-  Kiriko never phones home by default. DRED breadcrumbs are enabled in dev and beta builds
+  Luminal never phones home by default. DRED breadcrumbs are enabled in dev and beta builds
   only.
 - Every degradation-ladder step and device-lost recovery emits a user-visible, calm status
   line (per [15-DESIGN.md](15-DESIGN.md) — no red-alert states); silent degradation is a

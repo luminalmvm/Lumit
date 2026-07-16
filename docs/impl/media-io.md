@@ -10,7 +10,7 @@ classic NLE bugs: "scrubbing shows the wrong frame" and "4K playback melts the C
   **FFmpeg 7.x shared libs**; on Windows fetch gyan.dev/BtbN release builds in CI and ship
   the DLLs (LGPL build, dynamic linking — required for GPLv3-compatibility comfort and to
   swap builds); on the dev Mac, Homebrew ffmpeg. Pin the major version; wrap all direct
-  `ffi::` calls in one `kiriko-media::av` module so version bumps touch one file.
+  `ffi::` calls in one `luminal-media::av` module so version bumps touch one file.
 - Everything below uses libav directly (demux/decode); **never** shell out to the ffmpeg
   CLI for preview paths (process spawn per seek is where naive editors die). CLI use is
   acceptable for one-shot background proxy generation only.
@@ -68,7 +68,7 @@ GpuFrame }` with the CPU path as the always-working fallback:
   KEYED_MUTEX`), then open that NT handle on wgpu's DX12 device via
   `wgpu::hal::dx12::Device::texture_from_raw` + `OpenSharedHandle` — one GPU→GPU copy,
   zero CPU touches. Synchronise with the keyed mutex (acquire 0/release 1 convention).
-  This is the fiddliest code in the media layer: isolate in `kiriko-media::interop_dx`,
+  This is the fiddliest code in the media layer: isolate in `luminal-media::interop_dx`,
   feature-gated, always constructed alongside the baseline path so failure = fallback,
   not error. (Precedent: Cap ships exactly this pattern.)
 - macOS dev build: VideoToolbox gives `CVPixelBuffer`; `wgpu::hal::metal` can wrap its

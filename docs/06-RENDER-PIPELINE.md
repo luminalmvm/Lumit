@@ -1,6 +1,6 @@
 # 06 · Render pipeline
 
-**Status: canonical.** This document specifies how Kiriko turns a project into pixels:
+**Status: canonical.** This document specifies how Luminal turns a project into pixels:
 evaluation semantics, compositing, colour, caching, preview, export, and scopes. The
 process/thread architecture that hosts all of this is [05-ARCHITECTURE.md](05-ARCHITECTURE.md);
 the budgets it must meet are [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md). Terminology is
@@ -98,7 +98,7 @@ frame times; its own frame rate governs only its internal keyframe display.
 - 3D passes through: inner 3D layers join the parent's 3D set and are viewed through the
   parent's camera.
 
-**What forces an intermediate anyway** (collapse remains set but Kiriko renders the nested comp
+**What forces an intermediate anyway** (collapse remains set but Luminal renders the nested comp
 to a buffer at that point, at concatenated-transform resolution where possible): any effect on
 the Precomp layer; any mask on it; a blend mode other than Normal or opacity below 100% on the
 Precomp layer itself; the Precomp layer being consumed as a matte; preserve-underlying-
@@ -222,7 +222,7 @@ between saturated colours passes through muddy grey, and rotating hue in RGB cha
 brightness. Operations whose meaning is perceptual — gradient interpolation, keyframed
 colour properties, hue rotation, saturation — MUST convert linear RGB → Oklab (or its
 polar form OkLCh), operate, and convert back. The conversion pair lives in one module
-(`kiriko-gpu::oklab`, CPU + WGSL with byte-identical constants) and costs two 3×3 matrix
+(`luminal-gpu::oklab`, CPU + WGSL with byte-identical constants) and costs two 3×3 matrix
 multiplies and three cube roots per direction — cheap enough to inline per pixel in effect
 kernels. Hue rotation in OkLCh preserves the L axis by construction; the tests assert it.
 Compositing, blend modes' linear subset, and everything in §render-order stay in linear
@@ -372,7 +372,7 @@ recompute cost exceeds a readback-cost threshold, otherwise drops.
 
 ### 5.4 Disk cache format and location
 
-The disk cache lives in the project's sidecar folder (`<project>.kir-cache/`,
+The disk cache lives in the project's sidecar folder (`<project>.lum-cache/`,
 [10-FILE-FORMAT.md](10-FILE-FORMAT.md)), deletable at any time with no correctness effect:
 
 - `frames/<first two hex chars>/<hash>.kfr` — one file per entry: a small header (format
@@ -428,7 +428,7 @@ the work is kept. First (possibly degraded) frame within the scrub budget
 - **Render-ahead ring buffer**: playback renders ahead of the playhead into a bounded ring
   (target 8–16 frames, elastic with measured frame cost), fed by the same cache — a green-bar
   region costs a VRAM promotion only.
-- **Pre-roll**: on play, Kiriko fills a short ring segment before the first frame is presented
+- **Pre-roll**: on play, Luminal fills a short ring segment before the first frame is presented
   (bounded at ~150 ms) so playback starts clean instead of stuttering into speed.
 - **Sustained playback**: decode(N+k) ∥ evaluate(N+1…) ∥ present(N), bounded queues providing
   back-pressure. If the ring underruns, the degradation ladder engages before frames drop.
@@ -479,7 +479,7 @@ Nothing baked ever appears in the project document or is observable in the file 
 
 ### 7.3 Determinism
 
-Same project, same Kiriko version, same machine, same preset → identical output pixels, every
+Same project, same Luminal version, same machine, same preset → identical output pixels, every
 run. Therefore, normatively: adaptive degradation never applies to export; motion-blur sample
 counts come from the deterministic formula (§4); expressions are deterministic (K-063); every
 frame renders at full chosen quality regardless of load — under resource pressure export gets

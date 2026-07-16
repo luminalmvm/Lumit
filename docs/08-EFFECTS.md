@@ -235,7 +235,7 @@ detects engine motion blur upstream and contributes only source-motion blur on t
 ### 3.3 Glow — exposure-aware bloom (Deep Glow-class)
 
 **Why scene-linear matters.** Stock-AE-style glow looks grey because it thresholds and
-blurs display-referred pixels. Kiriko's glow operates on scene-linear energy: bright pixels
+blurs display-referred pixels. Luminal's glow operates on scene-linear energy: bright pixels
 bloom proportionally to how far above threshold they are, and additive recombination cannot
 band or clip prematurely.
 
@@ -463,7 +463,7 @@ suite stays small.
 - Serialised as a single shareable file (`.kpreset`, JSON payload zipped with any embedded
   small assets such as LUTs), machine-independent per K-065. Import by drag onto a layer,
   the Effect Controls panel, or the preset browser.
-- Kiriko ships a first-party library (grade presets §3.10, shake styles, zoom eases, glitch
+- Luminal ships a first-party library (grade presets §3.10, shake styles, zoom eases, glitch
   looks). Ship-with presets are data files, not code, and use only built-in effects.
 - **Community packs**: preset import MUST tolerate unknown effects (imported as inert
   placeholders with their parameters preserved, mirroring

@@ -1,6 +1,6 @@
 # Keyframe and Retime evaluation: the cubic solving that must not be fudged
 
-Two places in Kiriko evaluate x-monotone parametric cubics: property keyframes
+Two places in Luminal evaluate x-monotone parametric cubics: property keyframes
 ([03-DATA-MODEL.md](../03-DATA-MODEL.md) §6.2) and Retime MapSegments
 ([04-RETIMING.md](../04-RETIMING.md) §4.2). Both look like "just a bezier" and both have a
 trap: the curve is parametric in u, but you are asked for value-at-**time**, so every
@@ -91,7 +91,7 @@ in rationals; free-influence ones round the new boundary to the flick grid **by 
 
 1. Golden values against AE: export a comp from AE (Bridge JSON) containing every
    interpolation combination (linear/bezier/hold × influences 0.1%, 33.33%, 100%, easy
-   ease, spikes) and assert Kiriko's sampled values match AE's rendered motion within
+   ease, spikes) and assert Luminal's sampled values match AE's rendered motion within
    1e-4 of value range at every frame. This one test kills the whole class of "feels off".
 2. Property tests: solve_u(x(u)) == u to 1e-10 over random monotone cubics including
    dx = 0 endpoints; monotone in, monotone out.

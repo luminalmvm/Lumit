@@ -1,0 +1,22 @@
+[package]
+name = "luminal-media"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[features]
+# Exposes the ffmpeg-CLI test-fixture generator to downstream crates' tests.
+test-fixtures = []
+
+[dependencies]
+bincode = "1"
+blake3 = "1"
+rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg7_1", "link_system_ffmpeg"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

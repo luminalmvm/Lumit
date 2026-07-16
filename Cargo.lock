@@ -2437,126 +2437,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
-name = "kiriko-app"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "kiriko-ui",
-]
-
-[[package]]
-name = "kiriko-audio"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "kiriko-media",
- "parking_lot",
- "realfft",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "kiriko-cache"
-version = "0.1.0"
-
-[[package]]
-name = "kiriko-core"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "parking_lot",
- "proptest",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "uuid",
-]
-
-[[package]]
-name = "kiriko-eval"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "kiriko-core",
- "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "kiriko-flow"
-version = "0.1.0"
-
-[[package]]
-name = "kiriko-gpu"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "glam",
- "pollster",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
-name = "kiriko-media"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "blake3",
- "rsmpeg",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "kiriko-project"
-version = "0.1.0"
-dependencies = [
- "directories",
- "kiriko-core",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "kiriko-text"
-version = "0.1.0"
-dependencies = [
- "fontdue",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "kiriko-ui"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui-wgpu",
- "egui_tiles",
- "kiriko-audio",
- "kiriko-cache",
- "kiriko-core",
- "kiriko-eval",
- "kiriko-flow",
- "kiriko-gpu",
- "kiriko-media",
- "kiriko-project",
- "kiriko-text",
- "muda",
- "rfd",
- "serde",
- "serde_json",
- "tempfile",
- "uuid",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2641,6 +2521,126 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+
+[[package]]
+name = "luminal-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "luminal-ui",
+]
+
+[[package]]
+name = "luminal-audio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "luminal-media",
+ "parking_lot",
+ "realfft",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "luminal-cache"
+version = "0.1.0"
+
+[[package]]
+name = "luminal-core"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "parking_lot",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "luminal-eval"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "luminal-core",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "luminal-flow"
+version = "0.1.0"
+
+[[package]]
+name = "luminal-gpu"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "pollster",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
+name = "luminal-media"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "blake3",
+ "rsmpeg",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "luminal-project"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "luminal-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "luminal-text"
+version = "0.1.0"
+dependencies = [
+ "fontdue",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "luminal-ui"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui-wgpu",
+ "egui_tiles",
+ "luminal-audio",
+ "luminal-cache",
+ "luminal-core",
+ "luminal-eval",
+ "luminal-flow",
+ "luminal-gpu",
+ "luminal-media",
+ "luminal-project",
+ "luminal-text",
+ "muda",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
 
 [[package]]
 name = "mach2"

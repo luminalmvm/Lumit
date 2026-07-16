@@ -540,3 +540,17 @@ Known constraint: distributions still shipping FFmpeg 6 (e.g. Ubuntu 24.04 LTS) 
 without a newer FFmpeg; that is documented, not worked around. A Linux CI job joins the matrix
 when a maintainer can verify it; until then Linux support is best-effort docs + upstream-standard
 code (no platform-specific code paths exist today).
+
+**K-083 · DECIDED · The application is named Luminal; subsystems are Nova, Nebula and Pulsar.**
+From the owner (2026-07-16). Kiriko is renamed **Luminal** (the owner's handle; of light and of
+thresholds) across the entire application: UI strings, all living docs, crate names
+(`kiriko-*` → `luminal-*`), the project file extension (`.kir` → `.lum`, safe pre-release with
+no files in the wild), the brand asset filenames, and the GitHub repository
+(`luminalmvm/Kiriko` → `luminalmvm/Luminal`; old URLs redirect). The K-067 subsystem names are
+reversed in the same stroke — the Edo-kiriko craft register no longer fits — and replaced with
+an astral register: **Nova** (render pipeline, was Togi), **Nebula** (cache, was Kura),
+**Pulsar** (audio engine and its clock, was Hibiki). Historical records (this log's earlier
+entries, `docs/research/`) keep the old names verbatim; the hexagon cut-glass mark stays as an
+approved placeholder pending a Luminal redesign (noted in 15-DESIGN). The design-language
+overhaul that accompanies the rename (rerun-io-style look, colour scheme kept) is its own
+follow-up decision.

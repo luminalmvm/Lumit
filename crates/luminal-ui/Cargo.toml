@@ -1,0 +1,39 @@
+[package]
+name = "luminal-ui"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[dependencies]
+egui = "0.31"
+luminal-core = { path = "../luminal-core" }
+egui-wgpu = { version = "0.31", optional = true }
+luminal-audio = { path = "../luminal-audio", optional = true }
+luminal-cache = { path = "../luminal-cache", optional = true }
+luminal-eval = { path = "../luminal-eval", optional = true }
+luminal-gpu = { path = "../luminal-gpu", optional = true }
+luminal-flow = { path = "../luminal-flow", optional = true }
+luminal-media = { path = "../luminal-media", optional = true }
+luminal-text = { path = "../luminal-text" }
+luminal-project = { path = "../luminal-project" }
+rfd = "0.15"
+uuid = { version = "1", features = ["v7"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+egui_tiles = { version = "0.12", features = ["serde"] }
+
+[features]
+# "media" wires probing/frame-indexing (ffmpeg). Default on; Windows CI builds
+# --no-default-features until ffmpeg dev libs are set up there (tracked TODO).
+default = ["media"]
+media = ["dep:luminal-media", "dep:luminal-audio", "dep:luminal-cache", "dep:luminal-eval", "dep:luminal-gpu", "dep:luminal-flow", "dep:egui-wgpu"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = "0.15"
+
+[dev-dependencies]
+luminal-media = { path = "../luminal-media", features = ["test-fixtures"] }
+tempfile = "3"
+
+[lints]
+workspace = true

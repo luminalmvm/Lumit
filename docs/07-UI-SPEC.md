@@ -1,7 +1,7 @@
-# Kiriko UI specification
+# Luminal UI specification
 
 **Status: canonical.** This document specifies the structure and behaviour of every panel in
-Kiriko's interface. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly; locked
+Luminal's interface. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly; locked
 decisions in [02-DECISIONS.md](02-DECISIONS.md) are assumed. All colour, type, spacing, and
 iconography specifics are deferred to [15-DESIGN.md](15-DESIGN.md) — this document says *what
 exists and how it behaves*, never what it looks like.
@@ -64,7 +64,7 @@ the pending layout SHOULD be previewed as an outline before release.
 
 A **workspace** is a named, saveable arrangement of panels (glossary §7).
 
-- Kiriko MUST ship four workspace presets: **Edit**, **Effects**, **Colour**, **Audio**
+- Luminal MUST ship four workspace presets: **Edit**, **Effects**, **Colour**, **Audio**
   (§1.6). Preset workspaces MUST be restorable to their factory layout at any time
   (*Reset workspace*), individually, without touching user workspaces.
 - Layout changes MUST persist automatically to the active workspace across sessions.
@@ -82,7 +82,7 @@ A **workspace** is a named, saveable arrangement of panels (glossary §7).
 ### 1.5 Workspace state versus project state
 
 The AE lesson: a viewer locked to a specific comp is a reference to *project content*, so it
-cannot live in a workspace (AE silently drops such locks). Kiriko splits state explicitly:
+cannot live in a workspace (AE silently drops such locks). Luminal splits state explicitly:
 
 | Lives in the workspace (per user) | Lives in the project (`project.json` session block) |
 |---|---|
@@ -235,7 +235,7 @@ touching the file (K-024):
   switches all previews between proxy and original.
 - **Missing footage** shows a distinct badge and renders as a placeholder slate in comps
   (never a crash, never a silent black). The **relink flow**: *Relink…* opens a file picker;
-  on relinking one item, Kiriko MUST scan the chosen folder for the project's other missing
+  on relinking one item, Luminal MUST scan the chosen folder for the project's other missing
   items by filename and offer to batch-relink the matches. A *Find missing footage* search
   filter lists all missing items in one view.
 
@@ -464,7 +464,7 @@ as the dockable **Preview panel**.
 - **Loop modes**: loop work area (default) / play once / ping-pong.
 - **Cache status**: a readout of how much of the work area is preview-ready (backed by the
   cache bar), plus a *fill cache* action that renders the work area ahead of playback while
-  idle (K-016). Kiriko has no separate "RAM preview" ritual — playback always plays, using
+  idle (K-016). Luminal has no separate "RAM preview" ritual — playback always plays, using
   whatever is cached and rendering the rest, degrading before dropping (K-018); uncached
   playback keeps audio sync by frame-skipping and reports skipped frames in this readout.
 - **Audio mute** toggle.
@@ -559,9 +559,9 @@ question: *"Where are you coming from?"* with four cards:
 | **Vegas for speed ramps and effects** | Graph editor opens Retime in the **speed graph** by default; ramp preset shelf (Linear/Slow/Fast/Smooth/Sharp) pinned in the graph editor; *New Sequence layer* promoted in the Timeline empty-state hints; Vegas-mapping tips enabled (e.g. "velocity envelope → Retime speed graph"). |
 | **Vegas for speed ramps, AE for effects** | Speed graph default for Retime, **value graph** default for ordinary properties; AE-alternate keymap offered; both mapping tip sets enabled. The most common montage-scene split. |
 | **After Effects for both** | Value graph default everywhere; AE-alternate keymap offered; AE-mapping tips (e.g. "time remap → Retime", "track matte → matte dropdown"). |
-| **Neither / just starting** | Kiriko defaults; beginner-leaning rich tooltips enabled. |
+| **Neither / just starting** | Luminal defaults; beginner-leaning rich tooltips enabled. |
 
-Rules: one screen, skippable (skip = Kiriko defaults), no account, no telemetry, nothing
+Rules: one screen, skippable (skip = Luminal defaults), no account, no telemetry, nothing
 else asked. Every affected setting is an ordinary visible setting changeable later, and
 the chooser can be re-run from the command palette (*First-run setup*). This MUST remain
 a single screen — it is a preference primer, not a tour, and does not breach §13's
@@ -578,7 +578,7 @@ no-wizard rule below.
   and never return unprompted.
 - **Tooltips policy**: every icon control has a tooltip with its name and current shortcut,
   on a ~500 ms hover delay. Rich tooltips (a sentence + *Learn more* link) are reserved for
-  concepts with Kiriko-specific behaviour (Retime, overrun, matte, adaptive degradation).
+  concepts with Luminal-specific behaviour (Retime, overrun, matte, adaptive degradation).
   Tooltips MUST never block input, auto-play media, or step users through forced tours.
   A single setting disables all tooltips.
 - No multi-step onboarding wizard or forced tour. The single first-run screen (§13.1),
@@ -626,7 +626,7 @@ Binding, from the household mandate; these override convenience everywhere.
 The Settings window groups, minimum set — every value here is machine-local (never in the
 project file, [10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2):
 
-- **Performance**: RAM budget for Kiriko (default 60% of system, slider + absolute),
+- **Performance**: RAM budget for Luminal (default 60% of system, slider + absolute),
   VRAM budget (default 70%), CUDA acceleration on/off (per K-014 it is only ever an
   optional per-node accelerator; off = WGSL path, identical output), decoder pool size,
   worker thread cap, background cache fill on/off.
@@ -645,7 +645,7 @@ project file, [10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2):
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context
 display); the keymap serialises to a shareable file. An "After Effects" alternate preset
-ships for muscle-memory cases where Kiriko's default deviates. Notable deviations from AE:
+ships for muscle-memory cases where Luminal's default deviates. Notable deviations from AE:
 `J/K/L` are shuttle transport (the audience's NLE habit, per the layout brief), so keyframe
 navigation moves to `,`/`.`; Viewer zoom therefore lives on `Ctrl+=`/`Ctrl+-` and the wheel.
 

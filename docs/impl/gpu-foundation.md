@@ -1,6 +1,6 @@
 # GPU foundation: wgpu patterns that make or break the engine
 
-How to stand up `kiriko-gpu` so everything above it stays simple. The traps here are
+How to stand up `luminal-gpu` so everything above it stays simple. The traps here are
 sRGB-vs-linear confusion, texture churn, and treating device-loss as exotic.
 
 ## 1. Device and adapter
@@ -9,7 +9,7 @@ sRGB-vs-linear confusion, texture churn, and treating device-loss as exotic.
   `Backends::DX12` on Windows, `Backends::METAL` on macOS. Do **not** use `Backends::PRIMARY`
   on Windows: it enumerates Vulkan and DX12 together, and on a hybrid-GPU machine wgpu can
   end up on a device that is lost on the first present (the window opens, then vanishes after
-  a second). This is set on eframe's `WgpuConfiguration` in `kiriko-app` (`WGPU_BACKEND` still
+  a second). This is set on eframe's `WgpuConfiguration` in `luminal-app` (`WGPU_BACKEND` still
   overrides for debugging). Store `AdapterInfo` — the degradation ladder and bug workarounds
   key off vendor.
 - Required features: `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` not needed; do require
@@ -95,16 +95,16 @@ injects loss; do not ship recovery untested — it is the kind of code that sile
 
 ## 6. egui integration and the Viewer
 
-- Use `eframe` with the wgpu backend; Kiriko's renderer registers its output texture with
+- Use `eframe` with the wgpu backend; Luminal's renderer registers its output texture with
   `egui_wgpu::Renderer::register_native_texture` → paint as an `egui::Image` inside the
   Viewer panel. Re-register only when the texture object changes (pool swap), not per frame.
 - The Viewer's checkerboard, guides, gizmos are egui painting on top; the frame itself and
-  the display transform (§2) happen in Kiriko's blit **before** egui sees it, so egui's
+  the display transform (§2) happen in Luminal's blit **before** egui sees it, so egui's
   colour handling never touches pixel accuracy.
 - Multi-viewport (detached panels) via egui's native viewports; each extra viewport shares
   the one Device.
 - The neutral-surround rule ([15-DESIGN.md](../15-DESIGN.md)) is enforced here: the Viewer
-  panel background comes from the theme's `viewer_surround` token, drawn by Kiriko, not a
+  panel background comes from the theme's `viewer_surround` token, drawn by Luminal, not a
   generic egui frame.
 
 ## 7. Test plan

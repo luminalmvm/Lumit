@@ -1,6 +1,6 @@
 # Rational time: exact arithmetic without overflow
 
-Authoritative time in Kiriko is rational ([14-ENGINEERING-RULES.md](../14-ENGINEERING-RULES.md)).
+Authoritative time in Luminal is rational ([14-ENGINEERING-RULES.md](../14-ENGINEERING-RULES.md)).
 This note pins down the arithmetic, because naive rational code fails in exactly two ways:
 silent i64 overflow when denominators multiply, and non-canonical forms breaking equality
 and cache hashes. Both have shipped bugs in real NLEs.
@@ -88,7 +88,7 @@ timebase!(SourceTime); timebase!(ClipTime); timebase!(LayerTime); timebase!(Comp
 pub struct Duration(pub Rational); // shared, unsigned-by-convention
 ```
 
-Cross-timebase conversion functions live in one module (`kiriko-core::time::convert`) and
+Cross-timebase conversion functions live in one module (`luminal-core::time::convert`) and
 nowhere else: `comp_to_layer(t, layer) -> Option<LayerTime>` (None outside in/out),
 `layer_to_source` goes **through the Retime evaluator only**. No `Deref` to Rational —
 the friction is the feature.

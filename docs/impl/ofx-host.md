@@ -93,5 +93,5 @@ cached descriptor state; the render that died returns identity + badge.
    in one shipment.
 4. Crash isolation: plugin that segfaults on frame 100 → broker restarts, session
    continues, layer shows badge (the Gate-4 demo, [16-ROADMAP.md](../16-ROADMAP.md)).
-5. Real targets: Twixtor and RSMB demo builds render inside Kiriko matching their Vegas
+5. Real targets: Twixtor and RSMB demo builds render inside Luminal matching their Vegas
    output on the same input within codec tolerance.

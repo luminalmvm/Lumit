@@ -9,18 +9,18 @@ one runs.
 ## 0. Workspace scaffold
 
 ```
-kiriko/
+luminal/
 ├── Cargo.toml                 # [workspace], resolver = "2"
 └── crates/
-    ├── kiriko-core/           # Rational, timebases, document model, ops/journal
-    ├── kiriko-media/          # rsmpeg wrapper, frame index, decode pool
-    ├── kiriko-gpu/            # device, pool, blit, NV12 shader
-    ├── kiriko-audio/          # cpal stream, clock, mixer
-    ├── kiriko-cache/          # governor + RAM tier (VRAM/disk tiers arrive Phase 1)
-    ├── kiriko-eval/           # (Phase 1 — create the crate, leave it nearly empty)
-    ├── kiriko-project/        # .kir container, autosave, journal persistence
-    ├── kiriko-ui/             # egui shell, theme, docking, panels
-    └── kiriko-app/            # bin: wires everything
+    ├── luminal-core/           # Rational, timebases, document model, ops/journal
+    ├── luminal-media/          # rsmpeg wrapper, frame index, decode pool
+    ├── luminal-gpu/            # device, pool, blit, NV12 shader
+    ├── luminal-audio/          # cpal stream, clock, mixer
+    ├── luminal-cache/          # governor + RAM tier (VRAM/disk tiers arrive Phase 1)
+    ├── luminal-eval/           # (Phase 1 — create the crate, leave it nearly empty)
+    ├── luminal-project/        # .lum container, autosave, journal persistence
+    ├── luminal-ui/             # egui shell, theme, docking, panels
+    └── luminal-app/            # bin: wires everything
 ```
 
 Dependencies (take the latest compatible releases; majors as of writing): `wgpu` 24+,
@@ -38,7 +38,7 @@ Phase 1; the culture of red-blocks-merge starts now.
 ## Slice 1 — window, theme, docking (runs: empty shell)
 
 eframe app; implement the theme struct from [15-DESIGN.md](../15-DESIGN.md) §tokens
-(hex literals only inside `kiriko_ui::theme` — add the lint/CI grep immediately);
+(hex literals only inside `luminal_ui::theme` — add the lint/CI grep immediately);
 egui_dock layout with placeholder Project / Viewer / Timeline / Effect Controls panels in
 the default Edit workspace arrangement ([07-UI-SPEC.md](../07-UI-SPEC.md)); workspace
 save/restore to app settings. **Exit test**: panels drag/dock/float/restore; dark theme
@@ -54,7 +54,7 @@ Phase 1). Operations + journal + undo/redo on the arc-swap snapshot pattern
 ([playback-scheduler.md](playback-scheduler.md) §3). **Exit test**: scripted edit
 sequences undo/redo to identical snapshots; journal replays to the same hash.
 
-## Slice 3 — .kir container (runs: New/Open/Save works)
+## Slice 3 — .lum container (runs: New/Open/Save works)
 
 [10-FILE-FORMAT.md](../10-FILE-FORMAT.md) §1–2 and §4: manifest-first zip, stable-order
 project.json, unknown-field preservation (test it now — retrofitting is misery), atomic
@@ -76,7 +76,7 @@ FFmpeg dev libs are set up there — the route is a BtbN shared build plus
 `FFMPEG_LIBS_DIR`/`FFMPEG_INCLUDE_DIR`, first task of desktop-dev setup.
 
 **Slice 4 update (2026-07-14) — media builds on Windows:** the desktop-dev setup landed.
-kiriko-media, and with it the whole workspace, now builds, lints, tests, and runs on
+luminal-media, and with it the whole workspace, now builds, lints, tests, and runs on
 Windows with the `media` feature on. The recipe:
 
 - **FFmpeg 7.1 dev libs**: BtbN `ffmpeg-n7.1-latest-win64-gpl-shared-7.1` (GPL matches our
@@ -99,7 +99,7 @@ media included — the shipping target no longer trails macOS.
 
 ## Slice 5 — decode → Viewer (runs: you can SEE footage)
 
-`kiriko-gpu` device + pool + NV12→linear shader + display-transform blit
+`luminal-gpu` device + pool + NV12→linear shader + display-transform blit
 ([gpu-foundation.md](gpu-foundation.md) §1–3, §6; [media-io.md](media-io.md) §3–5,
 baseline decode path only — no D3D11 interop yet). Viewer panel shows a selected footage
 item; resolution picker (Full/Half/Third/Quarter) as true raster downsampling; zoom/fit;
@@ -110,7 +110,7 @@ frame seek exactness on the test corpus; scrub feels immediate at Half on 4K.
 index-guided seeking, hash-proven seek==sequential) and 5b (footage in the Viewer: fit
 display, scrub slider, resolution picker as decode-time downsampling, latest-wins
 background preview engine with end-to-end tests) are in. Remaining for slice-5 completion —
-updated 04:00: **kiriko-gpu now exists** with the linearise/display pipeline pair and the
+updated 04:00: **luminal-gpu now exists** with the linearise/display pipeline pair and the
 §7 colour round-trip golden passing on Metal (every byte value within 1 LSB; formats do
 the gamma, shaders contain none). Still to do: route the Viewer through it (register the
 display texture with egui via eframe's render state — an app-layer change) and the NV12
@@ -118,7 +118,7 @@ plane path once decode stops pre-converting via swscale.
 
 ## Slice 6 — playback + audio (runs: Gate 0 demo)
 
-`kiriko-audio` cpal stream + clock; decode-ahead ring; the frame scheduler loop with
+`luminal-audio` cpal stream + clock; decode-ahead ring; the frame scheduler loop with
 epochs ([playback-scheduler.md](playback-scheduler.md) §1, §4–5 — Cached mode only;
 Realtime mode needs the evaluator, Phase 1); Timeline panel showing the footage layer
 strip with in/out trim; J/K/L + Space transport. **Exit test**: Gate 0 in full

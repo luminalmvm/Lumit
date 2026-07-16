@@ -35,7 +35,7 @@ jobs:
     name: tests (Windows — the shipping target, with media)
     runs-on: windows-latest
     env:
-      # BtbN "shared, GPL" build: GPL matches Kiriko's licence, shared gives the
+      # BtbN "shared, GPL" build: GPL matches Luminal's licence, shared gives the
       # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
       FFMPEG_ASSET: ffmpeg-n7.1-latest-win64-gpl-shared-7.1
     steps:
@@ -43,7 +43,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # FFmpeg 7.1 dev libs for kiriko-media. rusty_ffmpeg links the import libs in
+      # FFmpeg 7.1 dev libs for luminal-media. rusty_ffmpeg links the import libs in
       # FFMPEG_LIBS_DIR and reads headers from FFMPEG_INCLUDE_DIR (it ignores
       # pkg-config on Windows); the DLLs and the ffmpeg CLI (test fixtures) go on
       # PATH. See docs/impl/phase-0-kickoff.md slice 4 and docs/GUIDE.md.
@@ -95,7 +95,7 @@ jobs:
       # Engine crates must hold the line; the threshold may rise, never fall.
       # UI crates join the gate once egui_kittest harness tests land.
       - run: >
-          cargo llvm-cov -p kiriko-core -p kiriko-project
+          cargo llvm-cov -p luminal-core -p luminal-project
           --fail-under-lines 75
 
   no-hex-outside-theme:
@@ -105,9 +105,9 @@ jobs:
       - uses: actions/checkout@v5
       - run: |
           hits=$(grep -rnE 'Color32::from_rgb|#[0-9a-fA-F]{6}' crates --include='*.rs' \
-            | grep -v 'crates/kiriko-ui/src/theme.rs' || true)
+            | grep -v 'crates/luminal-ui/src/theme.rs' || true)
           if [ -n "$hits" ]; then
-            echo "Colour values outside kiriko_ui::theme (docs/15-DESIGN.md):"
+            echo "Colour values outside luminal_ui::theme (docs/15-DESIGN.md):"
             echo "$hits"
             exit 1
           fi

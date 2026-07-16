@@ -1,0 +1,15 @@
+[package]
+name = "luminal-audio"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[dependencies]
+cpal = "0.15"
+luminal-media = { path = "../luminal-media" }
+parking_lot = "0.12"
+realfft = "3.5"
+thiserror = "2"
+
+[lints]
+workspace = true

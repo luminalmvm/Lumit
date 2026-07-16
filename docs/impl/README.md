@@ -1,6 +1,6 @@
 # Implementation notes
 
-These notes exist for one reason: some parts of Kiriko are genuinely hard or fiddly at a
+These notes exist for one reason: some parts of Luminal are genuinely hard or fiddly at a
 level the specs deliberately do not descend to, and the implementing model (or human)
 should not have to re-derive them. Each note pins down **exactly how** to build one hard
 thing: algorithm choice with rationale, data layouts, reference code sketches, the traps,

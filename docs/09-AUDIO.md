@@ -18,7 +18,7 @@ Out (explicitly, §7): audio effects, a mixing console, and audio retiming.
 
 ## 2. Import and decode
 
-- Kiriko MUST import any ffmpeg-decodable audio (via rsmpeg, K-013): mp3, AAC/m4a, wav,
+- Luminal MUST import any ffmpeg-decodable audio (via rsmpeg, K-013): mp3, AAC/m4a, wav,
   flac, ogg/opus, and the audio streams of any importable video container.
 - Audio items decode to **fp32 interleaved PCM at the engine's session sample rate**
   (default 48 kHz; resampled on decode via soxr-quality resampling). Source sample rate,
@@ -180,7 +180,7 @@ gain, fades, offset nudge (with beat snapping, §5).
 
 **Later still**: per-attachment send levels into a master chain (the first legitimate home
 for audio effects), ducking presets (music dips under SFX), and library packs shipping
-with Kiriko under a clear licence.
+with Luminal under a clear licence.
 
 **Sequencing.** The Composer ships after v1 ([16-ROADMAP.md](16-ROADMAP.md)); the only v1
 obligations it imposes are the ones already met above: property-shaped audio model, mixing

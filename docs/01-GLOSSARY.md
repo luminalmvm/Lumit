@@ -1,12 +1,12 @@
-# Kiriko glossary
+# Luminal glossary
 
 **Status: canonical.** Every document, UI string, code identifier, and commit message in this
 repository uses these terms exactly. If a concept is not named here, name it here first, then
 use it. Terminology drift is a bug; file it like one.
 
-Kiriko is layer-based like After Effects, with one deliberate extension (the Sequence layer,
+Luminal is layer-based like After Effects, with one deliberate extension (the Sequence layer,
 which brings Vegas-style cutting). Terms below note their AE/Vegas equivalents where that helps
-someone arriving from those tools, but the Kiriko term is the only one used in Kiriko.
+someone arriving from those tools, but the Luminal term is the only one used in Luminal.
 
 ---
 
@@ -14,11 +14,11 @@ someone arriving from those tools, but the Kiriko term is the only one used in K
 
 | Term | Definition |
 |---|---|
-| **Project** | The complete editable document: assets, compositions, settings. Serialised as a `.kir` file (see [10-FILE-FORMAT.md](10-FILE-FORMAT.md)). Exactly one project is open at a time. |
+| **Project** | The complete editable document: assets, compositions, settings. Serialised as a `.lum` file (see [10-FILE-FORMAT.md](10-FILE-FORMAT.md)). Exactly one project is open at a time. |
 | **Asset** | Anything importable that lives in the Project panel: footage items, audio items, image sequences, still images, and compositions themselves. |
-| **Footage item** | An asset referencing a media file on disk (video, image, image sequence). Kiriko never modifies the file; the project stores a reference plus interpretation settings (frame rate override, alpha interpretation, colour space tag). |
+| **Footage item** | An asset referencing a media file on disk (video, image, image sequence). Luminal never modifies the file; the project stores a reference plus interpretation settings (frame rate override, alpha interpretation, colour space tag). |
 | **Audio item** | An asset referencing an audio file. |
-| **Folder** | A grouping node in the Project panel. (AE calls this a folder too; Premiere calls it a bin — *bin* is not a Kiriko term.) |
+| **Folder** | A grouping node in the Project panel. (AE calls this a folder too; Premiere calls it a bin — *bin* is not a Luminal term.) |
 | **Composition (comp)** | A timeline with fixed resolution, frame rate, duration, and background colour, containing an ordered stack of layers. Comps can be nested via Precomp layers. |
 
 ## 2. Layers
@@ -33,7 +33,7 @@ and a blend mode.
 |---|---|
 | **Footage layer** | A layer whose source is exactly one footage item. Supports Retime (§4). The AE-style default. |
 | **Retimeable layer** | Collective term for the layer kinds that carry their own Retime: Footage layers and Precomp layers. (Clips carry Retime individually inside Sequence layers.) |
-| **Sequence layer** | A layer that contains an ordered run of **clips** cut back-to-back on its single row. This is Kiriko's Vegas-style editing surface: each clip has its own source, trim, and Retime. Effects, masks, transforms, and switches on a Sequence layer apply to its whole output, after clip retiming. |
+| **Sequence layer** | A layer that contains an ordered run of **clips** cut back-to-back on its single row. This is Luminal's Vegas-style editing surface: each clip has its own source, trim, and Retime. Effects, masks, transforms, and switches on a Sequence layer apply to its whole output, after clip retiming. |
 | **Precomp layer** | A layer whose source is another composition. The verb is **precompose**. Supports Retime (§4), as AE users expect of time-remapped precomps. |
 | **Solid layer** | A layer of flat colour at a fixed size. |
 | **Text layer** | Editable styled text. |
@@ -75,7 +75,7 @@ motion blur, adjustment, 3D, collapse (for Precomp layers). Defined in
 
 ## 4. Time and retiming
 
-Kiriko has four timebases. Being explicit about which one a number lives in is mandatory in
+Luminal has four timebases. Being explicit about which one a number lives in is mandatory in
 code and docs (see [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) on time types).
 
 | Timebase | Definition |
@@ -85,7 +85,7 @@ code and docs (see [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) on time ty
 | **Layer time** | Seconds from a layer's in point. |
 | **Comp time** | Seconds from the start of a composition. |
 
-**Retime** — Kiriko's single retiming system: a per-layer (Footage and Precomp layers) or
+**Retime** — Luminal's single retiming system: a per-layer (Footage and Precomp layers) or
 per-clip (Sequence layer) mapping from layer/clip time to source time, stored as an ordered list of
 **retime segments** (see [04-RETIMING.md](04-RETIMING.md)). Edited in the graph editor through
 either the value graph (AE-style time remapping) or the speed graph (Vegas-style velocity).
@@ -96,7 +96,7 @@ two views of Retime.
 |---|---|
 | **Speed** | The derivative of the retime map: 1.0 = normal, 0.0 = freeze, negative = reverse. The UI shows percentages (100%, 0%, −100%). The Retime graph channel *labels* its derivative lens **Velocity** and its value lens **Time** (K-076, Vegas/AE heritage); "speed" stays the term for the quantity itself. |
 | **Freeze** | A retime region of speed 0. |
-| **Overrun** | The state where a retime map requests source time beyond the media's end (or before its start). Kiriko renders a hold of the boundary frame and marks the region visibly in the timeline. Overrun never moves clip boundaries or edit points. |
+| **Overrun** | The state where a retime map requests source time beyond the media's end (or before its start). Luminal renders a hold of the boundary frame and marks the region visibly in the timeline. Overrun never moves clip boundaries or edit points. |
 | **Frame interpolation** | How non-integer source frames are synthesised: **nearest** (duplicate), **blend** (crossfade), or **flow** (optical-flow synthesis). A per-clip/per-layer render policy, independent of the retime map itself. |
 | **Stretch** | A layer-level uniform rate multiplier (AE's time stretch). Unlike Retime, stretch rescales the layer's keyframes. |
 
@@ -107,7 +107,7 @@ These three words are **not interchangeable**.
 | Term | Definition |
 |---|---|
 | **Render** | The engine producing pixels/samples for any purpose — preview or export. Internal act. |
-| **Preview** | Interactive playback inside Kiriko. Never writes user files. |
+| **Preview** | Interactive playback inside Luminal. Never writes user files. |
 | **Export** | Writing a deliverable media file via the export queue. Export may **bake** (flatten retimes, rasterise, pre-composite) for speed; baking exists only inside the export pipeline and never alters the project. |
 | **Evaluation graph** | The immutable DAG the layer stack compiles into for rendering. Users never see this term. |
 | **Cache** | Stored intermediate frames, in three tiers: **VRAM cache**, **RAM cache**, **disk cache**. Cache entries are keyed by content hash, never by timeline position. |
@@ -121,7 +121,7 @@ These three words are **not interchangeable**.
 | Term | Definition |
 |---|---|
 | **Mask** | A bezier path on a layer that gates its alpha, with feather, expansion, opacity, and a combine mode. |
-| **Matte** | Using another layer's alpha or luma to gate this layer. Any layer can be chosen as a matte from a dropdown (AE 2023-style); one matte layer can serve many layers. *Track matte* is the AE name; Kiriko says **matte**. |
+| **Matte** | Using another layer's alpha or luma to gate this layer. Any layer can be chosen as a matte from a dropdown (AE 2023-style); one matte layer can serve many layers. *Track matte* is the AE name; Luminal says **matte**. |
 | **Blend mode** | Per-layer composite operator (Normal, Add, Screen, Multiply, Overlay, …). Full list in [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md). |
 | **Effect** | One image (or audio) operation instance in a layer's **effect stack**, ordered top-to-bottom. Built-in effects, OFX plugins, and KFX plugins are all "effects" to the user. |
 | **Working space** | The engine's internal pixel format: scene-linear, premultiplied alpha, fp16 (fp32 opt-in per comp). |
@@ -135,7 +135,7 @@ These three words are **not interchangeable**.
 | **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. |
 | **Timeline** | The panel showing a comp's layer stack against time, with expandable property lanes, keyframes, and cache bars. |
 | **Work area** | The comp-time span used for preview and default export range. |
-| **Playhead** | The current-time indicator. *CTI* is not a Kiriko term. |
+| **Playhead** | The current-time indicator. *CTI* is not a Luminal term. |
 | **Scopes** | Waveform, vectorscope, histogram panels (GPU-computed). |
 | **Composer** | The planned audio workspace for sound design against the edit. See [09-AUDIO.md](09-AUDIO.md). |
 
@@ -143,8 +143,8 @@ These three words are **not interchangeable**.
 
 | Term | Definition |
 |---|---|
-| **KFX** | Kiriko's native plugin API: stable C ABI, sandboxed out-of-process execution. See [12-PLUGINS.md](12-PLUGINS.md). |
-| **OFX** | The OpenFX standard; Kiriko is an OFX host, which is how Twixtor, RSMB, Sapphire et al. run. |
+| **KFX** | Luminal's native plugin API: stable C ABI, sandboxed out-of-process execution. See [12-PLUGINS.md](12-PLUGINS.md). |
+| **OFX** | The OpenFX standard; Luminal is an OFX host, which is how Twixtor, RSMB, Sapphire et al. run. |
 | **Preset** | A saved, shareable configuration of effects/properties/animations, importable per layer. |
 
 ## 9. Words we do not use

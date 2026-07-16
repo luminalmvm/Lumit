@@ -1,6 +1,6 @@
 # 13 · Performance rules
 
-**Status: canonical.** Kiriko's defining promise is buttery real-time preview and no crashes,
+**Status: canonical.** Luminal's defining promise is buttery real-time preview and no crashes,
 ever, even under absurd load. This document makes that promise falsifiable: named reference
 hardware, numeric budgets against it, the single resource governor that owns memory, the
 ordered degradation ladder, device-loss recovery, obligations on effect authors, and the
@@ -63,7 +63,7 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 ### 2.1 Document-scale budgets (the "thousands of layers" mandate)
 
 After never-crashing, the project's founding grievance is that After Effects becomes
-barely responsive in intensive projects. **Kiriko's UI MUST remain fully interactive at
+barely responsive in intensive projects. **Luminal's UI MUST remain fully interactive at
 document scale**, independent of render load. The reference *stress document* for these
 budgets: 200 comps, 5,000 layers total (one comp holding 1,000), 250,000 keyframes,
 2,000 footage items.
@@ -73,7 +73,7 @@ budgets: 200 comps, 5,000 layers total (one comp holding 1,000), 250,000 keyfram
 | S1 | B1 (8 ms UI frame) holds against the stress document — timeline scroll/zoom, layer select, twirl-down, box-select of 10,000 keyframes | ≤ 8 ms |
 | S2 | Committing an edit (one op) with the stress document open | ≤ 16 ms |
 | S3 | Undo/redo of any single op, stress document | ≤ 16 ms |
-| S4 | Open the stress document (.kir → interactive) | ≤ 5 s |
+| S4 | Open the stress document (.lum → interactive) | ≤ 5 s |
 | S5 | Save the stress document | ≤ 2 s, non-blocking UI |
 | S6 | Graph editor open on a property with 50,000 keyframes: pan/zoom/box-select | ≤ 8 ms/frame |
 
@@ -113,7 +113,7 @@ One component owns memory. Nothing render-related allocates outside it.
   sum of caches, decode queues, and working buffers. Both user-overridable in preferences. The
   governor subscribes to DXGI video-memory budget-change notifications and to OS memory
   pressure, and shrinks its budgets live — Windows will demote VRAM allocations anyway when
-  another application competes; Kiriko yields before WDDM forces it.
+  another application competes; Luminal yields before WDDM forces it.
 - **Accounting**: every frame-sized allocation (cache entries, node output textures, decode
   buffers, ring buffers, staging) is registered with size, tier, and owner. The governor's
   ledger MUST equal reality; an unaccounted frame allocation fails code review
@@ -222,7 +222,7 @@ A built-in profiler, surfaced in the UI — After Effects' composition profiler 
 
 A local ring log records dropped frames, budget breaches, ladder transitions, device losses,
 and governor denials, with enough context to reproduce. An explicit "export diagnostics"
-action writes it to a file the user can attach to a bug report. **Kiriko never phones home**:
+action writes it to a file the user can attach to a bug report. **Luminal never phones home**:
 no automatic uploads, no analytics endpoints, no crash reporting service by default. This is a
 GPLv3 project; diagnostics belong to the user.
 

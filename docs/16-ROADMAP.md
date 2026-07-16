@@ -1,4 +1,4 @@
-# Kiriko roadmap
+# Luminal roadmap
 
 **Status: canonical.** Build order per decision K-002: gaming-edit MVP first, then the march
 to full AE replacement. Every phase ends at a **gate**: a user-visible capability plus
@@ -16,7 +16,7 @@ applies: ship the slice, never rewrite the world.
 
 The app exists: window, docking shell with the default workspace layout
 ([07-UI-SPEC.md](07-UI-SPEC.md)), dark Aizome theme ([15-DESIGN.md](15-DESIGN.md)), project
-new/open/save (`.kir` container, autosave, crash recovery), import of footage and audio,
+new/open/save (`.lum` container, autosave, crash recovery), import of footage and audio,
 Project panel, Viewer displaying footage with preview-resolution control, Timeline showing
 Footage layers with in/out trimming, playback of a single clip with sample-accurate audio,
 frame-indexed seeking.
@@ -65,7 +65,7 @@ browser, LUT loader, echo/trails, glitch basics. Per-layer motion blur. Preset s
 import/export. Scopes panel.
 
 **Gate 3 — the v1 milestone (K-002, [00-VISION.md](00-VISION.md) §4)**: a flow-style editor
-completes an MVM-style edit start-to-finish in Kiriko alone — beat-marked cuts, flow ramps,
+completes an MVM-style edit start-to-finish in Luminal alone — beat-marked cuts, flow ramps,
 a smooth camera move, a masked transition, the full stacked look — and exports for YouTube;
 the look previews in real time at 1080p60 on the reference machine; a six-hour editing
 session leaks no memory and never crashes. **This gate is v1.0.**
@@ -74,7 +74,7 @@ session leaks no memory and never crashes. **This gate is v1.0.**
 
 Expressions (QuickJS-ng, AE surface subset per [12-PLUGINS.md](12-PLUGINS.md)); the OFX host
 (out-of-process, CPU rendering first) proven against Twixtor, RSMB, and Sapphire demos; the
-KFX C ABI, validator, and template repo; the AE Bridge exporter panel and Kiriko-side
+KFX C ABI, validator, and template repo; the AE Bridge exporter panel and Luminal-side
 importer with the fidelity report ([11-AE-IMPORT.md](11-AE-IMPORT.md)); best-effort `.aep`
 structural import.
 
@@ -84,7 +84,7 @@ switchers start arriving.
 
 **Gate 4**: a real community AE montage project imports via the Bridge with transforms,
 keyframes, retimes, and mapped effects intact and an honest per-item report; Twixtor OFX
-renders inside Kiriko; a deliberately crashing test plugin takes down its process, not Kiriko.
+renders inside Luminal; a deliberately crashing test plugin takes down its process, not Luminal.
 
 ## Phase 5 — AE parity march
 
@@ -96,7 +96,7 @@ effects, text animators, shape operators (repeater et al.), variable mask feathe
 **Composer** audio workspace ([09-AUDIO.md](09-AUDIO.md) §Composer), pitch-preserving audio
 retime, OFX GPU render suite, OCIO colour management, app scripting.
 
-**Gate 5 (rolling)**: each quarter, one published "made only in Kiriko" piece that
+**Gate 5 (rolling)**: each quarter, one published "made only in Luminal" piece that
 previously required AE plus plugins.
 
 ## Phase 6 — Beyond parity

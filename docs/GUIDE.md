@@ -1,4 +1,4 @@
-# The plain-English guide to Kiriko's code
+# The plain-English guide to Luminal's code
 
 **Who this is for:** the project owner — someone who knows editing software inside-out but
 has never written Rust and hasn't worked with threads or GPUs directly. Read this once and
@@ -13,34 +13,34 @@ codebase, a plain-English section for it is added here in the same commit.
 
 ## 1. The 30-second map
 
-Kiriko is split into **crates** (Rust's word for a module/library — think of them as the
+Luminal is split into **crates** (Rust's word for a module/library — think of them as the
 app's departments). They live in `crates/`:
 
 | Crate | Job | Plain English |
 |---|---|---|
-| `kiriko-core` | Time, the document, undo | The project file's brain: what a comp/layer *is*, and every edit that can happen to it |
-| `kiriko-project` | `.kir` files, autosave, recovery | Saving and loading, and the "never lose work" machinery |
-| `kiriko-ui` | Everything you see | Panels, menus, the theme — the shell around the engine |
-| `kiriko-app` | The `main()` entry | Ten lines that open the window and start the UI |
-| `kiriko-media` | (coming) decoding video | Turning an .mp4 into frames |
-| `kiriko-gpu` | (coming) the GPU pipeline | Drawing and processing frames on the graphics card |
-| `kiriko-audio` | (coming) sound | Playback and the clock everything syncs to |
-| `kiriko-eval` | (coming) the render engine | Working out what each frame looks like |
-| `kiriko-cache` | (coming) caching | Remembering rendered frames so they're never rendered twice |
+| `luminal-core` | Time, the document, undo | The project file's brain: what a comp/layer *is*, and every edit that can happen to it |
+| `luminal-project` | `.lum` files, autosave, recovery | Saving and loading, and the "never lose work" machinery |
+| `luminal-ui` | Everything you see | Panels, menus, the theme — the shell around the engine |
+| `luminal-app` | The `main()` entry | Ten lines that open the window and start the UI |
+| `luminal-media` | (coming) decoding video | Turning an .mp4 into frames |
+| `luminal-gpu` | (coming) the GPU pipeline | Drawing and processing frames on the graphics card |
+| `luminal-audio` | (coming) sound | Playback and the clock everything syncs to |
+| `luminal-eval` | (coming) the render engine | Working out what each frame looks like |
+| `luminal-cache` | (coming) caching | Remembering rendered frames so they're never rendered twice |
 
-Three of these have proper names you'll see in the app and docs (decision K-067),
-drawn from the Edo-kiriko craft the project is named for: **Togi** (polishing) is the
-render pipeline — `kiriko-eval` + `kiriko-gpu` working together to turn the project's
-cuts into the picture; **Kura** (storehouse) is the cache; **Hibiki** (resonance) is the
-audio engine whose clock everything syncs to. Crate names stay plain `kiriko-*` — the
-names are for people, the identifiers are for code.
+Three of these have proper names you'll see in the app and docs (decision K-083),
+drawn from the same astral register as the app itself: **Nova** (a burst of new light) is
+the render pipeline — `luminal-eval` + `luminal-gpu` working together to turn the project's
+edits into the picture; **Nebula** (the cloud where material gathers) is the cache;
+**Pulsar** (the cosmic clock) is the audio engine whose clock everything syncs to. Crate
+names stay plain `luminal-*` — the names are for people, the identifiers are for code.
 
 **One rule ties them together:** the engine crates never depend on the UI. The UI asks the
 engine for things; the engine doesn't know the UI exists. That's why the UI could be
 replaced entirely without touching the engine — like swapping a car's dashboard without
 opening the engine bay.
 
-## 2. Rust in ten minutes, Kiriko edition
+## 2. Rust in ten minutes, Luminal edition
 
 You don't need to write Rust to read it. The handful of ideas that appear everywhere:
 
@@ -52,7 +52,7 @@ You don't need to write Rust to read it. The handful of ideas that appear everyw
 - **`Result` — errors are values, not explosions.** A function that can fail returns
   `Result<Thing, Error>`: either `Ok(thing)` or `Err(why)`. The caller *must* deal with
   both. You'll see `?` a lot — it means "if this failed, pass the error up to my caller".
-  Kiriko bans the shortcuts (`unwrap`/`panic`) that turn errors into crashes; the build
+  Luminal bans the shortcuts (`unwrap`/`panic`) that turn errors into crashes; the build
   literally fails if someone uses them in engine code.
 - **`Option`** is the same idea for "might not exist": `Some(comp)` or `None`. No
   null-pointer crashes, ever.
@@ -73,12 +73,12 @@ You don't need to write Rust to read it. The handful of ideas that appear everyw
 
 ## 3. Threads, in editing terms
 
-A thread is an independent worker inside the program. Kiriko's design gives each worker a
+A thread is an independent worker inside the program. Luminal's design gives each worker a
 fixed job (the full table is in [05-ARCHITECTURE.md](05-ARCHITECTURE.md)):
 
 - **The UI thread** is front-of-house: it draws the interface and responds to your mouse.
   The golden rule — it **never** does heavy work. Every stutter you've ever felt in AE is
-  some engineer breaking this rule. In Kiriko it's structural: the UI thread hands work to
+  some engineer breaking this rule. In Luminal it's structural: the UI thread hands work to
   others and carries on drawing.
 - **Worker threads** are the render farm: they evaluate frames, run effects, do maths.
   There are roughly as many as your CPU has cores.
@@ -105,17 +105,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 
 ## 4. What exists today, file by file
 
-- `crates/kiriko-core/src/time.rs` — **Rational time.** Times are stored as exact fractions
+- `crates/luminal-core/src/time.rs` — **Rational time.** Times are stored as exact fractions
   (`num/den`), never decimals, so frame maths is exact forever (a 3-hour NTSC timeline
   never drifts by a frame). The four "timebases" (source/clip/layer/comp time — glossary §4)
   are separate types, so mixing them up is a compile error, not a subtle bug.
-- `crates/kiriko-core/src/model.rs` — **What a project is.** Structs for the document,
+- `crates/luminal-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
-  Kiriko version adds — so old and new versions can share project files.
-- `crates/kiriko-core/src/ops.rs` — **Every possible edit, as data.** An edit is an `Op`
+  Luminal version adds — so old and new versions can share project files.
+- `crates/luminal-core/src/ops.rs` — **Every possible edit, as data.** An edit is an `Op`
   (AddLayer, SetLayerSpan…). Applying an op returns its exact inverse — that pair is what
   makes undo *provably* correct instead of hopefully correct.
-- `crates/kiriko-core/src/anim.rs` — **the keyframe engine.** Between two keyframes the
+- `crates/luminal-core/src/anim.rs` — **the keyframe engine.** Between two keyframes the
   value follows a bezier curve shaped by AE-style *speed* (units per second) and
   *influence* (how far each handle reaches). The subtle part: the curve is parametric, so
   "value at time t" first requires solving "where on the curve is x = t?" — done with a
@@ -123,7 +123,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   That solver quality is exactly what makes handles feel right in a graph editor at the
   extremes (AE's 100% influence "spike" case is a test here). Property tests fire
   thousands of random curves at it per CI run.
-- `crates/kiriko-core/src/retime.rs` — **the Retime maths.** One store per clip answers
+- `crates/luminal-core/src/retime.rs` — **the Retime maths.** One store per clip answers
   "when the clip's clock reads t, which moment of the source shows?". Speed ramps,
   freezes and slow motion are all segments of that one curve, and the editor's speed
   graph and value graph are two views of the same store — never two systems. Every
@@ -135,7 +135,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   frame (crisp, a touch stuttery in deep slow-mo), Blend crossfades the two neighbouring frames
   by how far between them the moment falls (smoother, slightly ghosted), and **Flow** invents a
   genuine in-between frame by working out how everything *moved* between the two and dragging
-  each halfway (the real slow-mo trick). Flow lives in its own crate (`kiriko-flow`) — a pure,
+  each halfway (the real slow-mo trick). Flow lives in its own crate (`luminal-flow`) — a pure,
   deterministic CPU reference (pyramidal Lucas–Kanade motion estimation, then motion-compensated
   synthesis with a graceful crossfade fallback where the motion is unreliable). It's the "oracle"
   the later fast GPU version must match, and it's tested against known translations (motion
@@ -157,8 +157,8 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   clip offers **Trim to source end** to cut it there. It never trims for you (boundaries must
   stay put so cuts keep landing on the beat). Sequence layers, the graph-editor lenses, and
   per-beat cutting come next.
-- `crates/kiriko-core/src/sequence.rs` — **Sequence layers (the model).** A Sequence layer
-  is one timeline row holding clips laid end to end — Kiriko's Vegas-style editing surface.
+- `crates/luminal-core/src/sequence.rs` — **Sequence layers (the model).** A Sequence layer
+  is one timeline row holding clips laid end to end — Luminal's Vegas-style editing surface.
   Each clip points at a source, carries its own trim and its own Retime ramp, and sits at
   an exact place on the row; clips never overlap and a gap shows through transparent. This
   file answers the one question the renderer asks — "which clip is under the playhead, and
@@ -187,21 +187,21 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   open in its own editing tab to cut and retime, where a camera track (run once on the
   full footage) can follow the edits. For now it converts in place, keeping the layer's
   id, transform, masks and any speed you'd set.
-- `crates/kiriko-core/src/store.rs` — **The document store**: applies ops, publishes
+- `crates/luminal-core/src/store.rs` — **The document store**: applies ops, publishes
   snapshots, keeps the undo/redo stacks.
-- `crates/kiriko-project/src/lib.rs` — **`.kir` files.** A `.kir` is a zip containing
+- `crates/luminal-project/src/lib.rs` — **`.lum` files.** A `.lum` is a zip containing
   readable JSON (rename one to `.zip` and look inside — genuinely). Saves are atomic:
   written to a temp file, flushed to disk, then renamed over the old file, so a crash
   mid-save can never destroy the previous save. The **journal** logs every edit to a side
   file the instant it happens; after a crash, replaying it restores your work.
-- `crates/kiriko-media/` — **reading media files** (via FFmpeg, the industry-standard
+- `crates/luminal-media/` — **reading media files** (via FFmpeg, the industry-standard
   media library). Two jobs so far: the *probe* (a file's vital statistics — resolution,
   frame rate, duration — shown under each item in the Project panel) and the *frame
   index* — a scan of the whole file that records where every frame and keyframe sits, so
   scrubbing can land on exactly the right frame. Indexing runs on a background thread
   (the UI never waits) and the result is cached on disk, keyed by a *fingerprint* of the
   file's content — change the file and the stale index is ignored automatically.
-- `crates/kiriko-gpu/` — **the colour foundation.** All engine maths happens on
+- `crates/luminal-gpu/` — **the colour foundation.** All engine maths happens on
   "light-linear" values (where adding two lights behaves like real light); files and
   screens use sRGB encoding. This crate owns the only two crossings between those worlds
   — decode-side linearise and display-side encode — and a "golden" test proves every
@@ -210,51 +210,51 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the bedrock of the preview-equals-export promise (K-031). The clever part: the shader
   contains no gamma maths at all — the GPU's texture formats do the conversions in
   hardware, so decode and encode can never drift apart.
-- `crates/kiriko-gpu/src/composite.rs` — **the compositor seed.** Each layer is a picture
+- `crates/luminal-gpu/src/composite.rs` — **the compositor seed.** Each layer is a picture
   on glass; the compositor stacks the glass on the GPU. Position/scale/rotation move each
   sheet (already as full 4×4 matrices, so 3D later needs no rewrite), opacity fades it,
   and stacking happens in linear light where combining images behaves like combining real
   light — a test proves the result differs from the naive approach by exactly the amount
   physics predicts. This is the beginning of the evaluator: the thing that will one day
   render whole comps with effects.
-- `crates/kiriko-gpu/src/oklab.rs` — **perceptual colour.** Two colour worlds, two jobs:
+- `crates/luminal-gpu/src/oklab.rs` — **perceptual colour.** Two colour worlds, two jobs:
   linear RGB is where *light* combines correctly (layering, glow, exposure), and Oklab is
   where *perception* behaves — a gradient interpolated in Oklab stays vivid where an RGB
-  gradient sags into grey, and rotating a hue in Oklab keeps its brightness. Kiriko
+  gradient sags into grey, and rotating a hue in Oklab keeps its brightness. Luminal
   converts on the fly (a handful of multiplications per pixel), users never see anything
   but normal RGB values, and tests pin both promises: round-trips are exact and hue
   rotation provably never changes lightness.
-- `crates/kiriko-cache/` — **the cupboard with a size limit.** Rendered and decoded
+- `crates/luminal-cache/` — **the cupboard with a size limit.** Rendered and decoded
   frames get remembered so they're never computed twice; when the cupboard is full,
   whatever was used longest ago gets thrown out first. The limit is in bytes, not item
   counts — one 4K frame costs what sixty thumbnails cost, and budgeting any other way is
   how apps balloon. This is the seed of the three-tier cache the whole engine design
   revolves around.
-- `crates/kiriko-ui/src/export.rs` — **writing video files.** Every frame of a comp is
+- `crates/luminal-ui/src/export.rs` — **writing video files.** Every frame of a comp is
   rendered through the *exact same* colour engine and compositor the Viewer uses, then
   compressed to an .mp4. Using one shared path isn't laziness — it's the design's central
   promise (what you preview IS what you export), and it runs on its own worker so the app
   stays responsive while exporting, with live progress and a real cancel. Besides the comp's
   own size you can pick an **export preset** — YouTube 1080p/4K, or vertical 1080×1920 — and
-  Kiriko fits the picture into that frame keeping its shape, adding black bars where the
+  Luminal fits the picture into that frame keeping its shape, adding black bars where the
   aspect ratios differ (a wide comp gets bars top and bottom in a vertical export). The
   fitting maths (`fit_contain` / `letterbox_resize` in `pixels.rs`) is unit-tested.
-- `crates/kiriko-audio/` — **playback and the clock.** The sound card asks for samples on
+- `crates/luminal-audio/` — **playback and the clock.** The sound card asks for samples on
   its own strict schedule through a "realtime callback" — a tiny function that must never
   wait for anything (if it's ever late, you hear a glitch). The count of samples it has
   played *is* the playback clock: video asks "what time is it?" every frame and shows
   whatever frame matches. One clock, owned by the audio hardware — that's why picture and
   sound can't drift apart, and it's the same design the full engine keeps forever.
-- **Composition audio and playback** (`kiriko-audio::mix`) — pressing Space on a comp now
+- **Composition audio and playback** (`luminal-audio::mix`) — pressing Space on a comp now
   plays it. A comp can have many layers that make sound, each starting at its own moment;
-  to play it, Kiriko decodes each one and lays them on a single strip at the right offset
+  to play it, Luminal decodes each one and lays them on a single strip at the right offset
   and trim, then adds them together (a mixing desk summing channels — `mix_stereo`). That
   one mixed track goes to the sound card, and its clock drives the picture, so a comp's
   video and audio stay locked exactly like a single clip's. The mixing happens on a
   background thread so pressing Space never stalls; a silent comp just plays on a plain
   timer instead. This retires the old stopgap where comp playback guessed the time from a
   wall clock.
-- **Beat detection** (`kiriko-audio::beat`) — the groundwork for cutting to the music. It
+- **Beat detection** (`luminal-audio::beat`) — the groundwork for cutting to the music. It
   slides a short window along the track and, at each step, measures how much *new* energy
   appeared since the last step (the "spectral flux"); a kick or snare makes that number
   spike, and the spikes are the onsets. Autocorrelating the spikes recovers the tempo (BPM),
@@ -266,9 +266,9 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   is worked out from the beats themselves — which tidies away the small, unavoidable delay in
   raw onset detection so markers land where a musician would tap. Onsets that fall well off
   the grid (syncopation, fills) are left where they are.
-- **Markers** (`kiriko-core::markers`) — a marker is a labelled flag at a moment on a
+- **Markers** (`luminal-core::markers`) — a marker is a labelled flag at a moment on a
   composition's timeline. Three kinds: ones you place (User), chapter divisions, and the
-  Beat markers Kiriko detects from the music (each with a confidence). Re-running beat
+  Beat markers Luminal detects from the music (each with a confidence). Re-running beat
   detection replaces only the Beat markers, so cues you dropped by hand are never disturbed.
   `snap_time` returns the nearest marker within a threshold (else the original time) — the
   basis for cuts landing exactly on the beat. All of this is exact-rational and unit-tested.
@@ -279,7 +279,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   on the beat.
 - **The timeline waveform** — a strip under the ruler draws the composition's mixed audio as
   a min/max envelope on the same time axis, so the beats sit right above the transients that
-  made them. It's built by `waveform_peaks` (in `kiriko-audio::mix`), which buckets the mono
+  made them. It's built by `waveform_peaks` (in `luminal-audio::mix`), which buckets the mono
   mixdown into (min, max) pairs — a pure, tested down-sample — computed once when the comp's
   audio is mixed for playback.
 - The **graph editor** — a toggle in the Timeline's bottom-right corner, like After
@@ -462,10 +462,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   already filled in from that footage. Solids are proper assets now — one "White solid"
   in the project can back fifty layers, and the first one you make creates a Solids
   folder that future solids follow even if you rename it or tuck it inside another
-  folder (Kiriko remembers the folder itself, not its name). Compositions do the same
+  folder (Luminal remembers the folder itself, not its name). Compositions do the same
   with a Compositions folder. Multi-step creations like that land as a single undo
   step — a batch operation whose inverse is just the reversed inverses of its members.
-- **The evaluation graph (`kiriko-eval::graph`)** — before rendering, Kiriko lowers a
+- **The evaluation graph (`luminal-eval::graph`)** — before rendering, Luminal lowers a
   composition into a wiring diagram: for each layer a short chain of typed steps — fetch the
   source, retime it, mask it, place it (transform), then blend it over everything beneath —
   ending in a single "comp output". It is built bottom layer first, exactly the order the
@@ -476,16 +476,16 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   diagram is rebuilt whenever you edit, and every render already in flight keeps the
   diagram it started with, so an edit can never half-apply to a frame mid-render. Today this
   builds the render's *shape* (tests prove the folding and the bottom-first order); turning each
-  step into pixels on the GPU is the next slice. This is the front half of **Togi**.
-- **Epochs (`kiriko-eval::epoch`)** — the cancellation mechanism the whole scheduler
+  step into pixels on the GPU is the next slice. This is the front half of **Nova**.
+- **Epochs (`luminal-eval::epoch`)** — the cancellation mechanism the whole scheduler
   will stand on. Every scheduled job carries a ticket stamped with the number that was
   on the wall when it started; scrubbing or stopping turns the wall number over, and
   workers glance at the wall between small steps and quietly stop if their ticket is
   stale. Nothing is ever force-killed. A test proves a deliberately slow job stops
   within 15 milliseconds of the number changing.
-- **The frame scheduler's brain (`kiriko-eval::schedule`)** — the decision rules for
+- **The frame scheduler's brain (`luminal-eval::schedule`)** — the decision rules for
   smooth playback, written as plain arithmetic so tests can prove them. During playback
-  Kiriko renders frames ahead of the playhead onto a small shelf; each screen refresh
+  Luminal renders frames ahead of the playhead onto a small shelf; each screen refresh
   takes the newest shelf frame whose time has come, quietly binning ones the clock has
   passed, and simply holds the last picture if rendering falls behind (sound never
   waits). How far ahead to render adapts to how slow frames have actually been, between
@@ -495,14 +495,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   flickers between qualities. None of the real machinery (threads, the audio clock, the
   GPU) lives here yet; this is the referee, and the players arrive later.
 - **Preview resolution never changes where things are.** To keep the picture responsive,
-  Kiriko can decode footage smaller than its true size — and "Auto" resolution decodes at
+  Luminal can decode footage smaller than its true size — and "Auto" resolution decodes at
   exactly the size the layer is shown on screen, so it gets sharper as you zoom in. That is
   purely a quality choice: a layer's *position and size in the composition* are always
   worked out from the footage's real pixel dimensions, not the shrunk-down preview copy. If
   they were ever worked out from the preview copy, a layer would appear to grow as you
   zoomed in — which is exactly the bug this rule exists to prevent.
 - **Scrubbing shows a draft instantly, then sharpens.** While you drag the playhead (on the
-  timeline ruler or the footage scrub bar), Kiriko decodes a small, quick version of each
+  timeline ruler or the footage scrub bar), Luminal decodes a small, quick version of each
   frame so the picture keeps up with your cursor — the same "keep moving, drop quality" idea
   the playback engine uses. The instant you let go, it reloads that one frame at whatever
   resolution you've chosen (Full, Half, Auto…). The quick draft frames are shown but never
@@ -513,18 +513,18 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   down. Dragging a keyframe in the graph editor does the same: the picture shows what the curve
   now gives *at the current frame* as you move the key. It can do this cheaply because moving or
   scaling a layer doesn't change *which* frame of the footage is shown — only where it sits — so
-  Kiriko keeps the last decoded frame and simply re-arranges it with your in-progress value each
+  Luminal keeps the last decoded frame and simply re-arranges it with your in-progress value each
   tick, no re-decoding. The moment you let go, the edit is committed as a single undo step and
   the frame re-renders normally.
 - **Idle time is spent pre-caching nearby frames.** When you stop on a frame and aren't
-  playing or dragging, Kiriko quietly renders the frames around the playhead into the cache
+  playing or dragging, Luminal quietly renders the frames around the playhead into the cache
   at your chosen resolution, so stepping or scrubbing to them is instant instead of waiting
   each time. It works outwards from the playhead but favours the frames *ahead* — roughly
   three ahead for every one behind — because that's usually where you're going next. It fills
   one frame at a time and any real request (a scrub, an edit) immediately takes priority.
   During playback it keeps warming *ahead of itself* too: the audio card's clock decides which
   frame to show and never waits, so whenever the frame under the playhead is already cached
-  Kiriko spends the spare moment decoding the next uncached frame a short way in front of the
+  Luminal spends the spare moment decoding the next uncached frame a short way in front of the
   clock (about a dozen frames' lookahead). That's why the first pass over a cold section can
   stutter but the work-area loop settles into perfectly smooth playback once round.
 - **Mask editing in the Viewer** — select a layer with masks and its outlines draw
@@ -559,11 +559,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - **Blend modes** — the full everyday set: Normal, Add, Multiply, Screen, Overlay,
   Soft light, Hard light, Lighten, Darken. Two families under the hood: Add and
   Multiply are physical light maths and run in linear; Screen, Overlay and the lights
-  are the Photoshop-era formulas people know by eye, so Kiriko runs them on encoded
+  are the Photoshop-era formulas people know by eye, so Luminal runs them on encoded
   values (running them in linear is tidier maths and the wrong look). Lighten and
   Darken are a simple per-channel max/min where the distinction doesn't matter. Every
   mode is pinned to its textbook formula by a GPU test.
-- **Colour depth, in one paragraph.** Kiriko's frames are "half float" (fp16) in linear
+- **Colour depth, in one paragraph.** Luminal's frames are "half float" (fp16) in linear
   light. Unlike AE's 16bpc — which is integer maths that clips at 1.0 — half float
   keeps brightness above 1.0 (a glow can genuinely overshoot) and negatives, which is
   what people switch AE to 32bpc for. Depth is one project-wide switch (8 / 16 float /
@@ -571,16 +571,16 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   depth, AE-style, via a small button at the foot of the Project panel. Full float
   doubles every frame's memory and roughly halves compositing throughput, so 16-float
   stays the default; the heavy maths inside effects can run wider internally either way.
-- `crates/kiriko-ui/src/theme.rs` — **the Aizome tokens.** The only file allowed to contain
+- `crates/luminal-ui/src/theme.rs` — **the Aizome tokens.** The only file allowed to contain
   colour values. Change a colour here, it changes everywhere.
-- `crates/kiriko-ui/src/icons.rs` — **the toolbar glyphs, drawn not downloaded.** Little
+- `crates/luminal-ui/src/icons.rs` — **the toolbar glyphs, drawn not downloaded.** Little
   pictures like the play triangle or the padlock aren't image files or a special font;
-  Kiriko *draws* each one from a few lines and curves every frame (design rule §5: flat
+  Luminal *draws* each one from a few lines and curves every frame (design rule §5: flat
   single-colour strokes, no emoji). The upside is they stay crisp at any size and always take
   the theme colour — so they dim on hover and go accent-orange when the tool is active, just
   like everything else. To add one, add a name to the `Icon` list and a small recipe of
   points in `paint`.
-- `crates/kiriko-ui/src/shell.rs` + `app_state.rs` — **the window**: panels, menus,
+- `crates/luminal-ui/src/shell.rs` + `app_state.rs` — **the window**: panels, menus,
   shortcuts, and the state glue (current project, dirty flag, autosave timer, recovery
   prompt).
 
@@ -645,7 +645,7 @@ unknown-field survival, autosave rotation, version refusal.
 | `Vec<T>` | A growable list of T |
 | `HashMap<K, V>` | A dictionary/lookup table |
 | `match` | A switch that must handle every case |
-| `async` | Not used in Kiriko's engine — we use threads and channels instead, deliberately |
+| `async` | Not used in Luminal's engine — we use threads and channels instead, deliberately |
 
 When you hit something not covered here, ask any session "explain X in GUIDE.md terms and
 add it to the guide" — that's the standing arrangement.
@@ -654,7 +654,7 @@ add it to the guide" — that's the standing arrangement.
 
 To turn the source into a running app you need the Rust toolchain and one outside
 dependency: **FFmpeg**, the library that actually decodes and encodes video and audio.
-Kiriko doesn't reinvent that wheel; `kiriko-media` talks to FFmpeg. So the build needs
+Luminal doesn't reinvent that wheel; `luminal-media` talks to FFmpeg. So the build needs
 FFmpeg present, and everyday `cargo` commands need to know where it is.
 
 There are two moving parts, and it helps to know why each exists:
@@ -675,7 +675,7 @@ There are two moving parts, and it helps to know why each exists:
 
 1. Download `ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip` from the
    [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases) page and unzip it
-   under your user folder, e.g. `C:\Users\you\ffmpeg\`. (GPL because Kiriko is GPL; "shared"
+   under your user folder, e.g. `C:\Users\you\ffmpeg\`. (GPL because Luminal is GPL; "shared"
    because we want the `.dll` files.)
 2. Install LLVM 18 and the Rust toolchain: `winget install LLVM.LLVM --version 18.1.8` and
    `winget install Rustlang.Rustup`. Rust's default Windows setup links with Visual Studio's
@@ -684,7 +684,7 @@ There are two moving parts, and it helps to know why each exists:
    FFmpeg folder and LLVM, points the build at them, and (`-Persist`) remembers the settings
    so every future terminal already knows. The leading dot is required — it means "apply
    these to my current shell", not "run and forget".
-4. Now the normal commands work: `cargo run -p kiriko-app` to launch, `cargo test --workspace`
+4. Now the normal commands work: `cargo run -p luminal-app` to launch, `cargo test --workspace`
    to run the whole test suite.
 
 ### On macOS
@@ -701,7 +701,7 @@ Linux finds FFmpeg the same way macOS does — by asking the system's package re
 generator reads), plus `pkg-config` and `clang`. On Debian 13 or Ubuntu 24.10 and newer
 that is one line: `sudo apt install pkg-config clang libavcodec-dev libavformat-dev
 libavutil-dev libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev`. On Arch:
-`sudo pacman -S ffmpeg clang pkgconf`. Then `cargo run -p kiriko-app` as usual.
+`sudo pacman -S ffmpeg clang pkgconf`. Then `cargo run -p luminal-app` as usual.
 
 One honest caveat: the build needs FFmpeg **7**, and some distributions still ship
 FFmpeg 6 — Ubuntu 24.04 LTS is the big one. On those, `cargo build` will complain about

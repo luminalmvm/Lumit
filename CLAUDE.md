@@ -1,6 +1,6 @@
-# Kiriko — instructions for AI-assisted work in this repo
+# Luminal — instructions for AI-assisted work in this repo
 
-Kiriko is a native, Windows-first motion-graphics and compositing editor (Rust + wgpu +
+Luminal is a native, Windows-first motion-graphics and compositing editor (Rust + wgpu +
 egui, GPLv3), specified docs-first. **The documents in `docs/` are canonical**: when code
 and docs disagree, the docs win; when a doc must change, change it in the same commit and —
 if it reverses a numbered decision — append to `docs/02-DECISIONS.md` (never edit history).
@@ -32,7 +32,7 @@ if it reverses a numbered decision — append to `docs/02-DECISIONS.md` (never e
 
 ## Design
 
-Kiriko follows the household Aizome design language in its **dark-first** adaptation —
+Luminal follows the household Aizome design language in its **dark-first** adaptation —
 `docs/15-DESIGN.md`, a recorded deviation (K-004) from the paper-light default in the
 household `HOUSEHOLD-DESIGN.md`. All colours come from the theme struct; hex literals in
 widget code are a defect. Voice: British English, sentence case, calm, no exclamation

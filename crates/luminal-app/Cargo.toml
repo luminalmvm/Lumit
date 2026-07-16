@@ -1,0 +1,21 @@
+[package]
+name = "luminal-app"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[[bin]]
+name = "luminal"
+path = "src/main.rs"
+
+[features]
+default = ["media"]
+media = ["luminal-ui/media"]
+
+[dependencies]
+luminal-ui = { path = "../luminal-ui", default-features = false }
+eframe = { version = "0.31", features = ["persistence", "wgpu"] }
+egui = "0.31"
+
+[lints]
+workspace = true

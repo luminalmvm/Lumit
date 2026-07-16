@@ -1,6 +1,6 @@
 # The flow engine: optical flow, frame synthesis, and flow motion blur
 
-The hardest algorithmic component in Kiriko, feeding Retime's flow interpolation
+The hardest algorithmic component in Luminal, feeding Retime's flow interpolation
 ([04-RETIMING.md](../04-RETIMING.md) §10) and the flow motion blur effect
 ([08-EFFECTS.md](../08-EFFECTS.md)). This note commits to specific algorithms so
 implementation is engineering, not research.

@@ -1,6 +1,6 @@
-# Kiriko design language
+# Luminal design language
 
-**Status: canonical.** This is Kiriko's `docs/DESIGN.md` in the household sense: the app-specific
+**Status: canonical.** This is Luminal's `docs/DESIGN.md` in the household sense: the app-specific
 design spec that stacks on top of the shared Aizome design language
 (`learningLanguageMachine/docs/HOUSEHOLD-DESIGN.md`). Panel inventory, docking behaviour, and
 interaction flows live in [07-UI-SPEC.md](07-UI-SPEC.md); this document owns colour, type,
@@ -12,8 +12,8 @@ RFC-2119 keywords (MUST, SHOULD, MAY) are used with their usual force.
 
 ## 1. Relationship to the household system
 
-Kiriko is a household app. It inherits the Aizome design language wholesale, with two recorded
-deviations (§1.2). Anyone who has used Michi, Mishka Hub, or Sukumo should recognise Kiriko as
+Luminal is a household app. It inherits the Aizome design language wholesale, with two recorded
+deviations (§1.2). Anyone who has used Michi, Mishka Hub, or Sukumo should recognise Luminal as
 a sibling within seconds — the same accent, the same type, the same restraint — even though it
 is a dense professional tool rather than a web app.
 
@@ -49,13 +49,13 @@ is a dense professional tool rather than a web app.
 ### 1.2 Recorded deviations
 
 - **KD-1 · Dark-first (= decision K-004, DECIDED).** The household default is paper-light with
-  a `.dark` night-print variant. Kiriko inverts this: dark is the native, first-built,
+  a `.dark` night-print variant. Luminal inverts this: dark is the native, first-built,
   first-polished theme, because a neutral dark surround preserves colour judgement against the
   Viewer — the industry-standard reasoning behind every grading suite. Light mode is a
   documented later option (§11), not a launch requirement.
 - **KD-2 · Hit-target compensation (PROPOSED; promote to the decision log per §Open
   questions).** The household accessibility gate demands ≥44px touch targets. In a timeline
-  where twenty layers must be visible at once, 44px rows are impossible. Kiriko's recorded
+  where twenty layers must be visible at once, 44px rows are impossible. Luminal's recorded
   compensation: dense-surface controls (timeline rows, keyframes, property lanes, graph editor
   handles) MUST be ≥24px in visual extent on their smaller axis **and** MUST carry ≥32px of
   interactive hit-slop; toolbar, transport, and dialog controls keep the full household ≥44px.
@@ -63,18 +63,18 @@ is a dense professional tool rather than a web app.
 
 ### 1.3 What does not apply
 
-Kiriko is a native desktop application, so the household web skeleton (React/Vite/Tailwind,
+Luminal is a native desktop application, so the household web skeleton (React/Vite/Tailwind,
 `sync-theme.sh`, FastAPI monorepo, Mishka Hub auth proxy, mobile bottom tab bar, PWA icon
 rules) does not apply. The Aizome *values* still derive from the canonical `theme.css`; when
-that file is repainted, Kiriko's theme struct SHOULD be re-derived in the same change wave.
+that file is repainted, Luminal's theme struct SHOULD be re-derived in the same change wave.
 Person-identity colours (person 1 = `clay`, person 2 = `sky`) have no meaning in a single-user
 pro tool, but `sky` remains reserved fleet-wide and MUST NOT be repurposed as a second accent.
 
 ## 2. The dark ramp
 
 The household dark theme ("night print") is a deliberately *tinted* deep indigo
-(`#0f1d2b` family). Kiriko MUST NOT use it as-is: a blue-cast surround skews the eye's white
-balance and corrupts grading decisions in the Viewer. Kiriko's ramp is therefore derived from
+(`#0f1d2b` family). Luminal MUST NOT use it as-is: a blue-cast surround skews the eye's white
+balance and corrupts grading decisions in the Viewer. Luminal's ramp is therefore derived from
 the night print by stripping chroma almost entirely — the indigo survives only as a whisper
 (chroma so low it reads as neutral at arm's length) — and the immediate Viewer surround drops
 to strictly neutral grey.
@@ -130,14 +130,14 @@ panels while being drag-undocked, and drag ghosts (clips or assets in flight).
 
 ### 3.1 Roles
 
-| Token | Value | Role in Kiriko |
+| Token | Value | Role in Luminal |
 |---|---|---|
 | `accent` (clay) | `#e05a72` | THE accent: primary buttons, selection, playhead, active tab, focused keyframes |
 | `accent_hover` (clay-deep) | `#ea7288` | Hover/active shift of the accent (lighter in dark, per household) |
 | `success` (olive) | `#5fcfae` | Success, completed exports, cache-bar family root (§6.3) |
 | `warning` (kraft) | `#dd9a82` | Warnings, overrun hatching, missing-footage placeholders, "close" feedback |
 | `error` (fig) | `#d1729c` | Errors — decode failures, export failures, invalid expressions. Never a harsh red |
-| `sky` | `#8ee3ef` | **Reserved** (household person-2 identity). Not used as a semantic role in Kiriko; the hex appears only via `viz_1` in charts/curves |
+| `sky` | `#8ee3ef` | **Reserved** (household person-2 identity). Not used as a semantic role in Luminal; the hex appears only via `viz_1` in charts/curves |
 | `disabled` (cloud) | `#6d8794` | Disabled glyphs where `text_disabled` is too quiet |
 | `fill_tonal` (oat) | `#24404f` → desaturated to `#2b3438` | Tonal fills behind informational chips |
 
@@ -169,7 +169,7 @@ passed by reference. Shape (illustrative — exact module layout per
 [05-ARCHITECTURE.md](05-ARCHITECTURE.md)):
 
 ```rust
-/// Every colour Kiriko ever paints. Constructed by `Theme::dark()` (and later
+/// Every colour Luminal ever paints. Constructed by `Theme::dark()` (and later
 /// `Theme::light()`). Widget code receives `&Theme` and never constructs colours.
 pub struct Theme {
     // surfaces (§2.1)
@@ -236,7 +236,7 @@ identifiers. This table is the contract:
 | `bg-paper-mid` | `surface_1` | cards/panels |
 | `bg-paper-deep` | `surface_2` | tracks/wells |
 | — (new) | `surface_3`, `surface_4` | dense tools need two extra steps |
-| — (new) | `viewer_surround` | Kiriko-only, grading-neutral |
+| — (new) | `viewer_surround` | Luminal-only, grading-neutral |
 | `text-ink` | `text_primary` | |
 | `text-ink-mid` | `text_secondary` | |
 | `text-ink-soft` | `text_muted` | |
@@ -247,13 +247,13 @@ identifiers. This table is the contract:
 | `kraft` | `warning` | |
 | `fig` | `error` | |
 | `cloud` | `disabled` | |
-| `oat` | `fill_tonal` | desaturated for Kiriko |
+| `oat` | `fill_tonal` | desaturated for Luminal |
 | `sky` | — | reserved; surfaces only via `curve[0]` |
 | `viz-1..4` | `curve[0..3]` | graph editor + scopes chrome accents |
 | `shadow-float` | `shadow_float` | floating chrome only |
 
-New Kiriko-only tokens (everything in §6) follow the household "Kakeibo rule": they live in
-Kiriko's theme alone and are promoted to the shared palette only if a second app ever wants
+New Luminal-only tokens (everything in §6) follow the household "Kakeibo rule": they live in
+Luminal's theme alone and are promoted to the shared palette only if a second app ever wants
 them.
 
 ## 5. Iconography
@@ -353,7 +353,7 @@ not a failure.
 
 ### 7.1 Scale
 
-Kiriko is a pro tool; the household 16px body default gives way to an 11–13px UI scale:
+Luminal is a pro tool; the household 16px body default gives way to an 11–13px UI scale:
 
 | Size | Face | Use |
 |---|---|---|
@@ -423,18 +423,18 @@ together separated by a single `hairline`; there are no gaps between docked pane
 
 - British English, sentence case, calm, no exclamation marks, no emoji. UI strings go through
   the i18n table (K-005).
-- The app is **"Kiriko"** — never abbreviated in UI. Features use glossary names exactly:
+- The app is **"Luminal"** — never abbreviated in UI. Features use glossary names exactly:
   Retime (not time remap), speed (not velocity), clip (not event), layer (not track), export
   (not render), playhead (not CTI). [01-GLOSSARY.md](01-GLOSSARY.md) §9 is binding for copy.
 - **Errors are banners, not modal storms.** A failed decode, a lost GPU device, or a failed
   export post a `fig`-tinted banner strip at the top of the relevant panel — factual, one
   sentence, one action: *"Couldn't decode clip 'render_04.mp4' — the file may have moved.
-  Relink…"*. Modals are reserved for questions Kiriko genuinely cannot proceed without
+  Relink…"*. Modals are reserved for questions Luminal genuinely cannot proceed without
   answering. Nothing shakes, flashes, or plays a sound.
 - Progress copy is factual mono: `Exporting — 41% · 02:12 remaining`. Completion is quiet:
   *"Export finished."* with a reveal-in-folder action.
 - **The one rationed running joke** lives in the about box, nowhere else: a single serif line
-  under the version number — *"Named for Edo kiriko: glass, cut precisely."* That is the
+  under the version number — *"Named for Edo luminal: glass, cut precisely."* That is the
   entire joke budget. No pun-laden tooltips, no wacky empty states, no easter eggs in error
   copy.
 - Empty states are soft and factual: *"No compositions yet — import footage or create a comp
@@ -449,12 +449,12 @@ desaturated by the same method as §2 (near-neutral warm-grey papers, strictly n
 `viewer_surround` around `#9c9c9c`–`#b4b4b4` as grading suites prefer for light UIs), the
 light `clay`/`olive`/`kraft`/`fig` values, and re-run of the §9 contrast checks. The editor
 token families (§6) need their own light derivations — muted layer colours darken rather than
-lighten. No widget code changes. Until it ships, Kiriko launches dark and says so plainly in
+lighten. No widget code changes. Until it ships, Luminal launches dark and says so plainly in
 settings: *"Light theme — planned."*
 
 ## 12. New-panel checklist
 
-The Kiriko equivalent of the household §9 checklist. Every new panel or feature MUST satisfy:
+The Luminal equivalent of the household §9 checklist. Every new panel or feature MUST satisfy:
 
 1. All colours from `&Theme`; zero hex literals (CI enforces); any genuinely new semantic gets
    a named token in the theme module first.
@@ -475,13 +475,14 @@ The Kiriko equivalent of the household §9 checklist. Every new panel or feature
 
 ## Brand: the mark and the splash (K-008)
 
-**The mark.** An Edo-kiriko faceted glass form — a point-up hexagon with hairline facet
-spokes and an inner facet ring — with three facets cut in clay that read as a K. The
-namesake made visible: cut glass is cuts, precision, and light. Files:
-`assets/brand/kiriko-mark.svg` (transparent) and `kiriko-icon.svg` (dark rounded tile —
+**The mark.** A faceted glass form inherited from the project's Kiriko era — a point-up
+hexagon with hairline facet spokes and an inner facet ring, three facets cut in clay that
+read as a K. It predates the Luminal name (K-083) and is due for redesign with the retheme;
+the letterform in particular no longer matches. Files:
+`assets/brand/luminal-mark.svg` (transparent) and `luminal-icon.svg` (dark rounded tile —
 the app icon; with the mark's own colours these are the only permitted hex values outside
 the theme module: facet hairlines `#3d4042`, outline `#5c6165`, clay `#e05a72`, mist fill
-`#22262a→#141618`). The wordmark is the word "Kiriko" set in Schibsted Grotesk beside or
+`#22262a→#141618`). The wordmark is the word "Luminal" set in Schibsted Grotesk beside or
 beneath the mark; no custom lettering. The mark MUST also be paintable from theme tokens
 in code (it is pure strokes, no raster assets) so the splash and about box never ship
 image files.
@@ -490,10 +491,10 @@ image files.
 for the brand's artwork is more ambitious, in the owner's words: a **broken-glass look**,
 styled like something out of Persona 5 — hard-edged silhouettes, aggressive shard-shaped
 composition, beautiful graphic stylisation. Direction for the eventual splash art: the
-Kiriko mark or a silhouette figure seen through/composed of fractured glass shards, flat
+Luminal mark or a silhouette figure seen through/composed of fractured glass shards, flat
 high-contrast shapes on the dark ramp with clay as the single cutting colour, mist filling
 the negative space. Persona 5 is the energy reference, not a template to copy — no borrowed
-assets or traced compositions; Kiriko's own geometry (the hexagonal facet grammar above)
+assets or traced compositions; Luminal's own geometry (the hexagonal facet grammar above)
 supplies the shard language. The boot-log splash below ships with the placeholder mark now;
 the art replaces the mark's slot without changing the splash's structure.
 
@@ -528,7 +529,7 @@ shown while the application boots:
 - **Viewer surround options.** Should the neutral-surround slider expose named stops
   (Dark/Mid/Match panel) or a continuous value? Grading convention favours a couple of fixed,
   documented greys.
-- **Layer-type colour user overrides.** AE users expect per-layer label colours. If Kiriko
+- **Layer-type colour user overrides.** AE users expect per-layer label colours. If Luminal
   offers them, the picker SHOULD be a curated muted swatch set derived from §6.1, not a free
   colour wheel — otherwise the Timeline's calm is one preset pack away from destruction.
 - **egui text rendering at 11px.** K-012 flags text polish as a known egui risk; if 11px mono

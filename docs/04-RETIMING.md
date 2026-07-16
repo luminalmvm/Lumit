@@ -1,6 +1,6 @@
 # Retime
 
-**Status: canonical.** This document specifies Retime, Kiriko's single retiming system
+**Status: canonical.** This document specifies Retime, Luminal's single retiming system
 (K-021), end to end: the segment data model and its exact maths, the two graph-editor lenses,
 the beat-sync covenant (K-022), cutting behaviour, overrun, frame interpolation policy, and
 how Retime composes with the rest of the engine. Terminology follows
@@ -15,7 +15,7 @@ in RFC 2119.
 
 ## 1. Purpose and design principles
 
-Retime is the feature Kiriko is built around. The target editor (K-002) spends most of a
+Retime is the feature Luminal is built around. The target editor (K-002) spends most of a
 montage session ramping clips against beats. Every design choice below traces to five
 principles:
 
@@ -564,7 +564,7 @@ vectors computed for frame synthesis SHOULD be reused for flow-based motion blur
 ### 11.5 Audio
 
 v1 Retime is video-only (K-050 scope). Audio layers have no Retime; a retimed clip or layer
-contributes no speed-matched audio, and Kiriko MUST NOT attempt naive resampled audio under
+contributes no speed-matched audio, and Luminal MUST NOT attempt naive resampled audio under
 a ramp. Pitch-preserving audio retime is a Composer-era feature
 ([09-AUDIO.md](09-AUDIO.md)). Montage practice — game audio muted, music driving the edit —
 makes this the right v1 cut.
@@ -663,7 +663,7 @@ boundaries later reproduces these rationals bit-for-bit.
 
 ## 13. Import mappings
 
-### 13.1 After Effects → Kiriko (via the exporter panel, K-060; pipeline in [11-AE-IMPORT.md](11-AE-IMPORT.md))
+### 13.1 After Effects → Luminal (via the exporter panel, K-060; pipeline in [11-AE-IMPORT.md](11-AE-IMPORT.md))
 
 AE's **Time Remap** property (AE's name for the value-graph view of retiming) maps to Retime
 losslessly:
@@ -687,7 +687,7 @@ losslessly:
   inert placeholder (K-060). AE frame blending switches map to the interpolation policy:
   off → Nearest, Frame Mix → Blend, Pixel Motion → Flow.
 
-### 13.2 Vegas → Kiriko (mapping documented now; a Vegas importer is future work)
+### 13.2 Vegas → Luminal (mapping documented now; a Vegas importer is future work)
 
 Vegas expresses retiming as a per-event **velocity envelope** (Vegas's terms) plus two
 constant-factor mechanisms. The mapping, for when an importer exists:
@@ -696,13 +696,13 @@ constant-factor mechanisms. The mapping, for when an importer exists:
   consecutive points (tᵢ, pᵢ), (tᵢ₊₁, pᵢ₊₁) become `Rate { pᵢ/100, pᵢ₊₁/100, ease }`. Fade
   types map by name: Linear→Linear, Fast→Fast, Slow→Slow, Smooth→Smooth, Sharp→Sharp,
   Hold→`Rate { pᵢ/100, pᵢ/100, Linear }`. Vegas's Fast/Slow are logarithmic and its
-  Smooth/Sharp are its own cubics, while Kiriko's ease family is (piecewise-)quadratic: the
+  Smooth/Sharp are its own cubics, while Luminal's ease family is (piecewise-)quadratic: the
   shapes differ slightly mid-segment (endpoint speeds and boundary source positions are
   matched exactly; interior deviation is small and MUST be noted once per import, not per
   segment).
 - Vegas's event playback rate (0.25–4×) and Ctrl-drag stretch multiply into the envelope:
   fold the constant factor into every RateSegment's speeds — exact.
-- Vegas's silent behaviours become visible Kiriko states: media exhaustion (Vegas's "tiny V"
+- Vegas's silent behaviours become visible Luminal states: media exhaustion (Vegas's "tiny V"
   notch, plus its default looping) imports as overrun with hatching and **no looping**;
   reverse-past-start's silent first-frame hold imports as head overrun.
 - Vegas resample modes map to interpolation policy: Disable Resample → Nearest, Smart/Force
