@@ -582,3 +582,19 @@ symbol the UI hoped the fonts carried and didn't (the pop-out `⇱`, the keyfram
 emoji ban — a glyph is from the set or deliberately painter-drawn (track keyframe diamonds),
 never a hoped-for font character. A CI test resolves every mapped name against the embedded
 pack, so a typo'd icon name cannot ship.
+
+**K-086 · DECIDED · Solo panels render bare; the Timeline pops out from its comp strip.**
+From the owner (2026-07-16): the default workspace showed a needless "Timeline" dock tab above
+the Timeline's own comp-tab strip, and the only way to lose it was popping the panel out and
+back. Now a panel that sits alone in its tile renders with **no tab bar at all** — the bare
+look K-074 reserved for the Viewer, extended to every solo pane — and a tab bar appears only
+where panels are stacked into a tab group. This partially supersedes K-074's mechanism note:
+the dock's simplification sets `prune_single_child_tabs = true`, and because that pass runs on
+every draw, a workspace saved under the old rule is tidied the first time it is shown
+(single-child tab wrappers are pruned; layouts keep loading and panes keep their sizes).
+Consequences: a bare pane has no tab to drag, so it is re-arranged by dropping tabbed panels
+onto it (the Viewer's existing behaviour), and it loses the tab's pop-out button. The Timeline
+gets a replacement — right-click an empty spot on its comp-tab strip for **Pop out timeline**
+(the request travels through `AppState::pop_out_timeline`, consumed by the shell after the
+dock draws); other panels pop out via the tab they grow when stacked. The default layout is
+unchanged in substance, minus the two single-child tab wrappers (Scopes, Timeline).

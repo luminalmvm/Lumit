@@ -868,6 +868,11 @@ pub struct AppState {
     /// is always one of these when it is set. Session state, not saved in the
     /// document.
     pub open_comps: Vec<Uuid>,
+    /// Set by the Timeline comp strip's context menu ("Pop out timeline"): a
+    /// solo Timeline has no dock tab to host the pop-out button (K-086), and
+    /// the strip renders deep inside the panel, so the request travels to the
+    /// shell through here. Consumed each frame after the dock draws.
+    pub pop_out_timeline: bool,
 }
 
 impl Default for AppState {
@@ -965,6 +970,7 @@ impl Default for AppState {
             last_autosave: Instant::now(),
             comp_counter: 0,
             open_comps: Vec::new(),
+            pop_out_timeline: false,
             selected_item: None,
             mask_drag: None,
             tool: ToolMode::default(),

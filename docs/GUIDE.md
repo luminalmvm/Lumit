@@ -466,16 +466,21 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   "adjust" node that wraps the composite below — but since the effect suite arrives in a
   later phase, today an adjustment layer simply passes the picture through unchanged. It also
   reuses the solid's glyph for the moment; a distinct icon is a small later touch.
-- **The window layout** (K-074) — the picture (the Viewer) fills the middle with nothing
-  above it: no tab, no strip, just the image. Around it sit the other panels, each with a
-  little title tab you can grab: Project and the effect panels on the left, scopes on the
-  right, the Timeline along the bottom. Drag a panel's tab to move it somewhere else — beside
-  another panel, stacked as tabs, above or below — so you can build the layout that suits you;
-  drag the edge between two panels to resize. Each tabbed panel also has a small pop-out
-  button (⇱) that lifts it out into its own separate window; close that window and the panel
-  drops back where it was. The Viewer is the one panel with no tab, so it always stays put as
-  the bare picture. Under the bonnet this uses a "tiling" layout engine that, unlike the
-  docking library we tried first, is happy to leave the Viewer without a tab bar.
+- **The window layout** (K-074, refined by K-086) — the picture (the Viewer) fills the middle
+  with nothing above it: no tab, no strip, just the image. Around it sit the other panels:
+  Project and the effect panels stacked as tabs on the left, scopes on the right, the
+  Timeline along the bottom. A panel only shows a little title tab when it shares its spot
+  with other panels; a panel sitting alone — the Timeline, scopes — is as bare as the Viewer,
+  so there is no needless "Timeline" label above the timeline any more (K-086). Stack two
+  panels together and the tab bar appears by itself; drag a tab to move a panel somewhere
+  else — beside another panel, stacked as tabs, above or below — and drag the edge between
+  two panels to resize. Tabbed panels keep the small pop-out button that lifts them into
+  their own separate window; the tabless Timeline pops out instead from a right-click on an
+  empty spot of its comp-tab strip (the bar naming the open compositions) — choose "Pop out
+  timeline" — and closing any popped-out window drops the panel back where it was. A
+  workspace saved before this change tidies itself the first time it loads. Under the bonnet
+  this uses a "tiling" layout engine that, unlike the docking library we tried first, is
+  happy to leave any lone pane without a tab bar.
 - The **Project panel** — AE-shaped (K-068): the selected item's details up top, the
   folder tree below, and drag-and-drop everywhere. Drag footage onto the Timeline or
   Viewer to make a layer; with no comp open yet, the composition dialogue appears

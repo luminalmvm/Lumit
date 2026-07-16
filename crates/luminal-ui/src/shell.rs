@@ -11,10 +11,11 @@ use luminal_core::model::ProjectItem;
 use serde::{Deserialize, Serialize};
 
 /// The dockable panels. Names are glossary names (docs/01-GLOSSARY.md §7).
-/// A dockable panel (a pane in the tiling tree). The Viewer is special: it is
-/// the only pane kept out of any tab container, so it shows no tab bar (K-074,
-/// Mack: the viewport must have no top bit); every other panel carries a tab
-/// and can be dragged to re-arrange the workspace.
+/// A dockable panel (a pane in the tiling tree). A panel that sits alone shows
+/// no tab bar at all — the Viewer's bare look (K-074, Mack: the viewport must
+/// have no top bit) extended to every solo pane (K-086). A tab bar appears
+/// only where panels are stacked into a tab group, and those tabs can be
+/// dragged to re-arrange the workspace.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Panel {
     Project,
@@ -39,9 +40,10 @@ impl Panel {
 }
 
 /// The default workspace: a full-width Timeline strip along the bottom, beneath a
-/// band of slim tool columns flanking a tall Viewer. The Viewer is a bare pane (no
-/// tab); Project/effects share a tab group on the left, Scopes on the right, and
-/// the Timeline tabs span the whole width below both — the editing-suite default.
+/// band of slim tool columns flanking a tall Viewer. Only the left column is a
+/// tab group (Project + the effect panels); the Viewer, Scopes and the Timeline
+/// sit alone, and a solo pane renders bare — no tab bar — until other panels are
+/// stacked onto it (K-086). The editing-suite default.
 pub fn default_layout() -> egui_tiles::Tree<Panel> {
     let mut tiles = egui_tiles::Tiles::default();
     let viewer = tiles.insert_pane(Panel::Viewer);
@@ -51,31 +53,46 @@ pub fn default_layout() -> egui_tiles::Tree<Panel> {
     let fxp = tiles.insert_pane(Panel::EffectsAndPresets);
     let left = tiles.insert_tab_tile(vec![project, fx, fxp]);
     let scopes = tiles.insert_pane(Panel::Scopes);
-    let right = tiles.insert_tab_tile(vec![scopes]);
 
     // Upper band: the tool columns either side of the Viewer.
-    let upper = tiles.insert_horizontal_tile(vec![left, viewer, right]);
+    let upper = tiles.insert_horizontal_tile(vec![left, viewer, scopes]);
     if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(lin))) =
         tiles.get_mut(upper)
     {
         lin.shares.set_share(left, 0.22);
         lin.shares.set_share(viewer, 0.58);
-        lin.shares.set_share(right, 0.20);
+        lin.shares.set_share(scopes, 0.20);
     }
 
     // The Timeline is a direct child of the vertical root, so it spans the full
     // window width along the bottom rather than only the Viewer's column.
     let timeline = tiles.insert_pane(Panel::Timeline);
-    let timeline_tabs = tiles.insert_tab_tile(vec![timeline]);
-    let root = tiles.insert_vertical_tile(vec![upper, timeline_tabs]);
+    let root = tiles.insert_vertical_tile(vec![upper, timeline]);
     if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(lin))) =
         tiles.get_mut(root)
     {
         lin.shares.set_share(upper, 0.68);
-        lin.shares.set_share(timeline_tabs, 0.32);
+        lin.shares.set_share(timeline, 0.32);
     }
 
     egui_tiles::Tree::new("luminal-dock", root, tiles)
+}
+
+/// The dock's simplification rules, shared with the layout tests. A pane that
+/// sits alone renders bare — no tab bar, the Viewer's look on every solo panel
+/// (K-086) — because single-child tab groups are pruned; stacking panels into a
+/// tab group brings the bar (and its pop-out button) back for that group. The
+/// pruning runs on every draw, so a workspace saved back when solo panels kept
+/// a tab wrapper is tidied the first time it is shown, keeping its pane sizes.
+fn dock_simplification_options() -> egui_tiles::SimplificationOptions {
+    egui_tiles::SimplificationOptions {
+        prune_empty_tabs: true,
+        prune_empty_containers: true,
+        prune_single_child_tabs: true,
+        prune_single_child_containers: true,
+        all_panes_must_have_tabs: false,
+        join_nested_linear_containers: true,
+    }
 }
 
 /// Render one panel's body. Shared by the docked panes and the pop-out windows
@@ -145,8 +162,10 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
         tabs: &egui_tiles::Tabs,
         _scroll_offset: &mut f32,
     ) {
-        // A pop-out button for the active tab (the Viewer has no tab, so it
-        // never gets one). Detaches the panel into its own window.
+        // A pop-out button for the active tab. Only tab groups have a tab bar
+        // (a solo pane renders bare, K-086), so a lone panel offers this
+        // elsewhere — the Timeline through its comp strip's context menu.
+        // Detaches the panel into its own window.
         if let Some(active) = tabs.active {
             if let Some(egui_tiles::Tile::Pane(panel)) = tiles.get(active) {
                 if ui
@@ -210,16 +229,7 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
     }
 
     fn simplification_options(&self) -> egui_tiles::SimplificationOptions {
-        egui_tiles::SimplificationOptions {
-            prune_empty_tabs: true,
-            prune_empty_containers: true,
-            // Keep single-pane tab groups (Timeline, Scopes) so they retain a
-            // tab; but never force the Viewer into one (all_panes_… = false).
-            prune_single_child_tabs: false,
-            prune_single_child_containers: true,
-            all_panes_must_have_tabs: false,
-            join_nested_linear_containers: true,
-        }
+        dock_simplification_options()
     }
 }
 
@@ -1057,52 +1067,78 @@ fn comp_tab_strip(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
         .fill(theme.surface_1)
         .inner_margin(egui::Margin::symmetric(4, 2))
         .show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for (id, name) in &tabs {
-                    let is_active = active == Some(*id);
-                    let name_btn = ui.add(
-                        egui::Button::new(egui::RichText::new(trim_title(name)).small().color(
-                            if is_active {
-                                theme.text_primary
+            // The strip's background is a click-sensing Ui registered before
+            // the tab buttons, so the buttons keep their own clicks and only
+            // genuinely empty strip space answers to the background — the
+            // Project panel's backdrop layering. Its context menu replaces
+            // the dock tab's pop-out button, gone now that a solo Timeline
+            // renders bare (K-086).
+            let bg = ui.scope_builder(egui::UiBuilder::new().sense(egui::Sense::click()), |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for (id, name) in &tabs {
+                        let is_active = active == Some(*id);
+                        let name_btn = ui.add(
+                            egui::Button::new(egui::RichText::new(trim_title(name)).small().color(
+                                if is_active {
+                                    theme.text_primary
+                                } else {
+                                    theme.text_secondary
+                                },
+                            ))
+                            .fill(if is_active {
+                                theme.surface_3
                             } else {
-                                theme.text_secondary
-                            },
-                        ))
-                        .fill(if is_active {
-                            theme.surface_3
-                        } else {
-                            theme.surface_2
-                        })
-                        .stroke(egui::Stroke::new(
-                            1.0_f32,
-                            if is_active {
-                                theme.accent
-                            } else {
-                                theme.hairline
-                            },
-                        )),
-                    );
-                    // Re-clicking the active tab is a no-op (don't reset its
-                    // playhead); only switching tabs re-activates.
-                    if name_btn.clicked() && !is_active {
-                        activate = Some(*id);
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("×").small().color(theme.text_muted),
+                                theme.surface_2
+                            })
+                            .stroke(egui::Stroke::new(
+                                1.0_f32,
+                                if is_active {
+                                    theme.accent
+                                } else {
+                                    theme.hairline
+                                },
+                            )),
+                        );
+                        // Re-clicking the active tab is a no-op (don't reset its
+                        // playhead); only switching tabs re-activates.
+                        if name_btn.clicked() && !is_active {
+                            activate = Some(*id);
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("×").small().color(theme.text_muted),
+                                )
+                                .frame(false),
                             )
-                            .frame(false),
-                        )
-                        .on_hover_text("Close this comp tab")
-                        .clicked()
-                    {
-                        close = Some(*id);
+                            .on_hover_text("Close this comp tab")
+                            .clicked()
+                        {
+                            close = Some(*id);
+                        }
                     }
-                }
+                });
+                // Claim the empty width right of the tabs, so a
+                // right-click there lands on the strip's background.
+                let claim = egui::Rect::from_min_max(
+                    ui.min_rect().left_top(),
+                    egui::pos2(ui.max_rect().right(), ui.min_rect().bottom()),
+                );
+                ui.expand_to_include_rect(claim);
             });
+            bg.response
         });
+    // Right-clicking an empty spot on the strip (not a tab) offers the
+    // Timeline's pop-out, since a solo Timeline has no dock tab to host the
+    // button (K-086). The strip renders deep inside the panel, so the request
+    // travels to the shell through AppState.
+    strip.inner.context_menu(|ui| {
+        if ui.button("Pop out timeline").clicked() {
+            app.pop_out_timeline = true;
+            ui.close_menu();
+        }
+    });
     // The strip (across the full panel width, so the empty space beside the
     // tabs counts) is a drop target: dropping a comp here opens it as its own
     // tab (separate from the comp already open); dropping anything else files
@@ -8473,9 +8509,10 @@ impl Shell {
         self.recovery_modal(ctx);
         self.comp_dialog_modal(ctx);
 
-        // The tiling dock fills the window: the Viewer is a bare pane with no
-        // tab (K-074), every other panel carries a tab and can be dragged to
-        // re-arrange the workspace.
+        // The tiling dock fills the window: a solo pane renders bare with no
+        // tab bar — the Viewer's look (K-074) on every lone panel (K-086) —
+        // while stacked panels carry tabs and can be dragged to re-arrange
+        // the workspace.
         let Shell {
             dock,
             floating,
@@ -8498,7 +8535,12 @@ impl Shell {
             behavior.pop_out
         };
 
-        // Apply a pop-out request: hide the panel in the dock, float it.
+        // Apply a pop-out request: hide the panel in the dock, float it. A
+        // solo Timeline has no dock tab (K-086), so its request arrives from
+        // the comp strip's context menu through AppState rather than from a
+        // tab's pop-out button.
+        let pop_out = pop_out
+            .or_else(|| std::mem::take(&mut app.pop_out_timeline).then_some(Panel::Timeline));
         if let Some(panel) = pop_out {
             if let Some(tile) = tile_id_of(dock, panel) {
                 dock.tiles.set_visible(tile, false);
@@ -8949,12 +8991,14 @@ mod dock_tests {
         assert!(tree.tiles.is_visible(project));
     }
 
-    // The Timeline starts as a full-width strip along the bottom: its tile is a
-    // direct child of the vertical root (so it is as wide as the window) and the
-    // last child (the bottom band). Guards the default workspace against a
-    // regression back to the Timeline nested inside the Viewer's column.
+    // The Timeline starts as a full-width strip along the bottom: its pane is
+    // a direct child of the vertical root (so it is as wide as the window) and
+    // the last child (the bottom band) — with no tab wrapper around it, since a
+    // solo panel renders bare (K-086). Guards the default workspace against a
+    // regression back to the Timeline nested inside the Viewer's column or
+    // re-wrapped in a needless single-tab group.
     #[test]
-    fn timeline_starts_full_width_along_the_bottom() {
+    fn timeline_starts_full_width_along_the_bottom_as_a_bare_pane() {
         let tree = default_layout();
         let root = tree.root().expect("layout has a root");
         let egui_tiles::Tile::Container(egui_tiles::Container::Linear(lin)) =
@@ -8965,26 +9009,155 @@ mod dock_tests {
         assert_eq!(lin.dir, egui_tiles::LinearDir::Vertical);
 
         let timeline = tile_id_of(&tree, Panel::Timeline).expect("timeline present");
-        let timeline_band = tree
-            .tiles
-            .iter()
-            .find_map(|(id, tile)| match tile {
-                egui_tiles::Tile::Container(c) if c.children().any(|ch| *ch == timeline) => {
-                    Some(*id)
-                }
-                _ => None,
-            })
-            .expect("timeline sits in a container");
-
         assert!(
-            lin.children.contains(&timeline_band),
-            "timeline band should be a direct child of the vertical root (full width)"
+            lin.children.contains(&timeline),
+            "timeline pane should be a direct child of the vertical root (full width, no tab wrapper)"
         );
         assert_eq!(
             lin.children.last(),
-            Some(&timeline_band),
-            "timeline band should be the bottom-most child"
+            Some(&timeline),
+            "timeline pane should be the bottom-most child"
         );
+    }
+
+    /// True when any tab container holds exactly one child — a lone pane that
+    /// would show a needless tab bar (the shape K-086 removes).
+    fn has_solo_tab_group(tree: &egui_tiles::Tree<Panel>) -> bool {
+        tree.tiles.iter().any(|(_, t)| {
+            matches!(t, egui_tiles::Tile::Container(egui_tiles::Container::Tabs(tabs))
+                if tabs.children.len() == 1)
+        })
+    }
+
+    // Solo panels render bare (K-086): the default layout wraps no pane in a
+    // single-child tab group, and the simplification pass the dock runs on
+    // every draw strips such wrappers from a workspace saved before this rule
+    // — a stale persisted layout still loads, just without the lone tabs.
+    // Genuine stacks keep their tab bar.
+    #[test]
+    fn solo_tab_wrappers_are_pruned_and_stacks_keep_their_tabs() {
+        assert!(
+            !has_solo_tab_group(&default_layout()),
+            "default layout should not wrap any lone pane in a tab group"
+        );
+
+        // A stale workspace: the pre-K-086 default, with Scopes and the
+        // Timeline each wrapped in a single-child tab group.
+        let mut tiles = egui_tiles::Tiles::default();
+        let viewer = tiles.insert_pane(Panel::Viewer);
+        let project = tiles.insert_pane(Panel::Project);
+        let fx = tiles.insert_pane(Panel::EffectControls);
+        let fxp = tiles.insert_pane(Panel::EffectsAndPresets);
+        let left = tiles.insert_tab_tile(vec![project, fx, fxp]);
+        let scopes = tiles.insert_pane(Panel::Scopes);
+        let right = tiles.insert_tab_tile(vec![scopes]);
+        let upper = tiles.insert_horizontal_tile(vec![left, viewer, right]);
+        let timeline = tiles.insert_pane(Panel::Timeline);
+        let timeline_tabs = tiles.insert_tab_tile(vec![timeline]);
+        let root = tiles.insert_vertical_tile(vec![upper, timeline_tabs]);
+        let mut stale = egui_tiles::Tree::new("stale-dock", root, tiles);
+
+        stale.simplify(&dock_simplification_options());
+
+        assert!(
+            !has_solo_tab_group(&stale),
+            "the dock's simplify pass should prune single-child tab groups"
+        );
+        // Every panel survives the pruning…
+        for panel in [
+            Panel::Viewer,
+            Panel::Project,
+            Panel::Timeline,
+            Panel::EffectControls,
+            Panel::EffectsAndPresets,
+            Panel::Scopes,
+        ] {
+            assert!(
+                tile_id_of(&stale, panel).is_some(),
+                "{panel:?} should survive simplification"
+            );
+        }
+        // …and the genuine three-panel stack keeps its tab group.
+        let project_tile = tile_id_of(&stale, Panel::Project).unwrap();
+        let in_tabs = stale.tiles.iter().any(|(_, t)| {
+            matches!(t, egui_tiles::Tile::Container(egui_tiles::Container::Tabs(tabs))
+                if tabs.children.contains(&project_tile))
+        });
+        assert!(in_tabs, "a stacked panel keeps its tab bar");
+    }
+
+    // The comp strip's "Pop out timeline" menu hangs off the strip's background
+    // (a click-sensing Ui registered before the tab buttons, expanded to the
+    // panel's right edge). Pins the egui layering it relies on: a right-click
+    // on empty strip space reaches the background; a right-click on a tab
+    // button does not (the button, drawn on top, claims it).
+    #[test]
+    fn strip_background_takes_the_right_click_only_off_the_buttons() {
+        fn scene(pick: impl Fn(egui::Rect, egui::Rect) -> egui::Pos2) -> bool {
+            let ctx = egui::Context::default();
+            let bg_rect = std::cell::Cell::new(egui::Rect::NOTHING);
+            let btn_rect = std::cell::Cell::new(egui::Rect::NOTHING);
+            let bg_secondary = std::cell::Cell::new(false);
+            let run = |events: Vec<egui::Event>| {
+                let ri = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::pos2(0.0, 0.0),
+                        egui::vec2(400.0, 400.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let _ = ctx.run(ri, |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        // comp_tab_strip in miniature: a sensed background Ui,
+                        // a button inside it, the width claimed to the edge.
+                        let bg = ui.scope_builder(
+                            egui::UiBuilder::new().sense(egui::Sense::click()),
+                            |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    btn_rect.set(ui.button("Comp 1").rect);
+                                });
+                                let claim = egui::Rect::from_min_max(
+                                    ui.min_rect().left_top(),
+                                    egui::pos2(ui.max_rect().right(), ui.min_rect().bottom()),
+                                );
+                                ui.expand_to_include_rect(claim);
+                            },
+                        );
+                        bg_rect.set(bg.response.rect);
+                        if bg.response.secondary_clicked() {
+                            bg_secondary.set(true);
+                        }
+                    });
+                });
+            };
+            let m = egui::Modifiers::default();
+            let btn = egui::PointerButton::Secondary;
+            run(vec![]); // lay out twice so the background's rect has settled
+            run(vec![]);
+            let pos = pick(bg_rect.get(), btn_rect.get());
+            run(vec![egui::Event::PointerMoved(pos)]);
+            run(vec![egui::Event::PointerButton {
+                pos,
+                button: btn,
+                pressed: true,
+                modifiers: m,
+            }]);
+            run(vec![egui::Event::PointerButton {
+                pos,
+                button: btn,
+                pressed: false,
+                modifiers: m,
+            }]);
+            bg_secondary.get()
+        }
+        // Empty space right of the tab → the background sees the right-click.
+        assert!(scene(|bg, btn| egui::pos2(
+            (btn.right() + bg.right()) * 0.5,
+            btn.center().y
+        )));
+        // On the tab button → the button wins; the background stays silent.
+        assert!(!scene(|_bg, btn| btn.center()));
     }
 
     // Each keyframe's glyph codes its interpolation (graph-editor ergonomics).
