@@ -344,12 +344,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   straight line through the key, so the motion glides through smoothly. When they are unified,
   moving one handle rotates the other to stay opposite it, but the *other* handle keeps the
   length you last gave it — it only pivots, it never grows or shrinks as you swing the one you
-  are holding. The handle you are dragging simply follows the cursor: no snapping to vertical,
-  no sudden lengthening near the top or bottom. **Alt-drag** a handle
-  to *break* it and shape the two sides independently (a corner). Right-click a broken key and
-  choose **Unify handles** to smooth it back out. The **Linear** button (bottom bar) straightens
+  are holding — and "length" here means what you see: the partner keeps its on-screen pixel
+  length whatever the axes' units or zoom, however steep the drag. The handle you are dragging
+  simply follows the cursor: no snapping to vertical, no sudden lengthening near the top or
+  bottom. While a handle is being dragged the graph's y-axis **holds still** — the view only
+  re-fits once you let go, so the curve isn't sliding under your cursor mid-shape. And however
+  wild the curve gets, it stays inside the graph: it never paints over the ruler, the layer
+  outline, or the bottom bar.
+  **Alt-drag** a handle to *break* it and shape the two sides independently (a corner). The
+  break is decided per drag and it *sticks*: once you've started moving with Alt held you can
+  let go of Alt and the handles stay broken. The same gesture reverses it — **Alt-drag a broken
+  handle** and the pair re-unifies, snapping collinear again. (Right-click → **Unify handles**
+  still works too.) The **Linear** button (bottom bar) straightens
   the selected keys again, and right-clicking a key still offers Easy ease / Linear / Hold /
   Delete. Whatever the handles, the curve always passes exactly through the keys.
+  The **marquee works in both views**: drag a box over the speed view's background and the
+  speed points inside it are selected, just like value keys.
   A **footage layer** also carries a **Retime channel** here, named for the lens you are in
   (K-076): **Time** in the value view, **Velocity** in the speed view. In the **Time** lens it
   is now *exactly* an ordinary property graph (K-078): the curve is the source position (in

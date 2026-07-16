@@ -3694,23 +3694,21 @@ fn side_speed(side: kiriko_core::anim::SideInterp) -> Option<f64> {
     }
 }
 
-/// Write a value-lens tangent-handle drag back onto a keyframe: the dragged side
-/// takes the new `speed`/`influence`; a smooth key (both sides bezier, equal
-/// slope) keeps its handles collinear by mirroring the slope to the other side
-/// (its own reach preserved), unless `alt` breaks it or the key is already
-/// broken. This is the AE handle: unified by default, Alt-drag to move one end.
+/// Write a tangent-handle drag back onto a keyframe: the dragged side takes the
+/// new `speed`/`influence`; when `mirror` is set the other side goes collinear
+/// (same slope, its own reach — `partner_inf` overrides that reach when the
+/// caller has length-preserving maths). Whether to mirror is the caller's call
+/// via [`tangent_mirrors`] — this is the AE handle: unified keys mirror,
+/// Alt-drag breaks one end loose, Alt-drag on a broken key re-unifies it.
 fn apply_tangent(
     k: &mut kiriko_core::anim::Keyframe,
     is_out: bool,
     speed: f64,
     influence: f64,
-    alt: bool,
+    mirror: bool,
     partner_inf: Option<f64>,
 ) {
     use kiriko_core::anim::SideInterp::Bezier;
-    let unified = matches!((side_speed(k.interp_in), side_speed(k.interp_out)),
-        (Some(a), Some(b)) if (a - b).abs() < 1e-6);
-    let mirror = unified && !alt;
     if is_out {
         let in_reach = partner_inf.unwrap_or_else(|| side_influence(k.interp_in));
         k.interp_out = Bezier { speed, influence };
@@ -3730,6 +3728,16 @@ fn apply_tangent(
             };
         }
     }
+}
+
+/// Whether an in-flight tangent drag mirrors across the key. The drag keeps the
+/// unification the key *started* with, and Alt — held at any moment during the
+/// drag — toggles it: break a smooth key, or re-unify a broken one. The toggle
+/// latches, so releasing Alt mid-drag doesn't snap the handles back together
+/// (Mack): once a drag has broken (or re-joined) a key, it stays that way until
+/// the next Alt-drag says otherwise.
+fn tangent_mirrors(unified_at_start: bool, alt_seen: bool) -> bool {
+    unified_at_start != alt_seen
 }
 
 /// A vertical wheel over the value graph, turned into the new y-range (K-079).
@@ -3777,7 +3785,9 @@ fn partner_influence(
     let old_speed = side_speed(partner).unwrap_or(0.0);
     let screen_len = |sp: f64| (sx * sx + sp * sp * sy * sy).sqrt().max(1e-9);
     let target = old_inf * seg * screen_len(old_speed);
-    (target / (seg * screen_len(new_speed))).clamp(1e-3, 1.0)
+    // The floor is tiny so length holds even for a near-vertical drag — a bigger
+    // floor let the partner visibly lengthen as the slope grew (Mack).
+    (target / (seg * screen_len(new_speed))).clamp(1e-4, 1.0)
 }
 
 /// Indices of the plotted keyframe points that fall inside a marquee band.
@@ -3933,22 +3943,12 @@ fn graph_plot(
     // ---- plot geometry: x = layer time over the comp span, y = value ----
     ui.painter().rect_filled(rect, 0.0, theme.surface_0);
     let duration = comp.duration.0.to_f64().max(1e-6);
-
-    // Stable screen scales (px per unit time / value) taken from the *committed*
-    // key range, so the unified partner-handle length maths (below) don't chase
-    // their own tail as the live y-range auto-fits to the dragged curve.
-    let sx_stable = rect.width() as f64 / duration;
-    let sy_stable = {
-        let (lo, hi) = keys.iter().fold((f64::MAX, f64::MIN), |(lo, hi), k| {
-            (lo.min(k.value), hi.max(k.value))
-        });
-        let span = if keys.is_empty() {
-            1.0
-        } else {
-            (hi - lo).abs().max(1.0)
-        };
-        rect.height() as f64 / span
-    };
+    // Everything the graph draws — curve, keys, handles, playhead — stays inside
+    // its rect: a steep bezier must not paint over the ruler, outline or bottom
+    // bar (Mack). The clip also gates hit-tests, so an off-plot key isn't
+    // grabbable. Restored before the commit at the end.
+    let saved_clip = ui.clip_rect();
+    ui.set_clip_rect(saved_clip.intersect(rect));
     // The partner side's segment length in seconds, for keyframe `idx` when its
     // `is_out` side is dragged (partner is the opposite side's neighbouring gap).
     let partner_seg = |idx: usize, is_out: bool| -> f64 {
@@ -3991,15 +3991,8 @@ fn graph_plot(
             k.interp_out = side;
         }
     }
-    if let Some((idx, is_out, sp, inf)) = app.graph_tangent_edit {
-        let alt = ui.input(|i| i.modifiers.alt);
-        let seg_p = partner_seg(idx, is_out);
-        if let Some(k) = shown.get_mut(idx) {
-            let partner = if is_out { k.interp_in } else { k.interp_out };
-            let pinf = partner_influence(partner, seg_p, sp, sx_stable, sy_stable);
-            apply_tangent(k, is_out, sp, inf, alt, Some(pinf));
-        }
-    }
+    // (An in-flight tangent-handle drag is applied to `shown` further down,
+    // *after* the y-range is fixed — the axis must hold still during the drag.)
 
     let (mut vmin, mut vmax) = keys.iter().fold((f64::MAX, f64::MIN), |(lo, hi), k| {
         (lo.min(k.value), hi.max(k.value))
@@ -4044,6 +4037,29 @@ fn graph_plot(
         vmin + ((rect.bottom() - y) / rect.height()).clamp(0.0, 1.0) as f64 * (vmax - vmin)
     };
 
+    // The *live* screen scales — px per second and px per value unit of what is
+    // actually on screen — for the unified partner-handle length maths. Length
+    // must hold in pixels, exactly as drawn (Mack): the old whole-duration /
+    // key-range scales made the partner's length look rotation-dependent. The
+    // y-range above deliberately excluded the in-flight tangent drag, so both
+    // scales are stable for the whole drag.
+    let sx_px = px_per_sec;
+    let sy_px = rect.height() as f64 / (vmax - vmin).max(1e-9);
+    // Apply the in-flight tangent drag to the drawn curve now that the axis is
+    // pinned: the dragged side (and, when mirroring, its partner) re-tangents so
+    // the curve bends live under the cursor.
+    if let Some((idx, is_out, sp, inf)) = app.graph_tangent_edit {
+        let seg_p = partner_seg(idx, is_out);
+        if let Some(k) = shown.get_mut(idx) {
+            let mirror = app
+                .graph_tangent_mode
+                .is_some_and(|(u, a)| tangent_mirrors(u, a));
+            let partner = if is_out { k.interp_in } else { k.interp_out };
+            let pinf = partner_influence(partner, seg_p, sp, sx_px, sy_px);
+            apply_tangent(k, is_out, sp, inf, mirror, Some(pinf));
+        }
+    }
+
     // Vertical scroll / zoom of the value graph (K-079): the outer wheel handler
     // freed `raw_scroll_delta` for us (the outline list scrolls on its own).
     // A plain wheel pans the value range; Ctrl-wheel zooms it around the cursor.
@@ -4078,42 +4094,8 @@ fn graph_plot(
         ui.id().with(("graph-bg", layer_id)),
         egui::Sense::click_and_drag(),
     );
-    if app.graph_speed_view {
-        // No marquee in the speed lens for now: its handles edit tangents,
-        // while the multi-edit acts on values. Dropping an abandoned band
-        // here also keeps `is_interacting` from sticking on a lens switch.
-        app.graph_marquee = None;
-    } else {
-        if bg.drag_started() {
-            if let Some(p) = bg.interact_pointer_pos() {
-                app.graph_marquee = Some((p, p));
-            }
-        } else if bg.dragged() {
-            if let Some(p) = bg.interact_pointer_pos() {
-                if let Some(band) = &mut app.graph_marquee {
-                    band.1 = p;
-                }
-            }
-        }
-        if bg.drag_stopped() {
-            if let Some((a, b)) = app.graph_marquee.take() {
-                let band = egui::Rect::from_two_pos(a, b);
-                let points: Vec<egui::Pos2> = keys
-                    .iter()
-                    .map(|k| egui::pos2(x_of(k.time.to_f64()), y_of(k.value)))
-                    .collect();
-                let hit = keys_in_band(&points, band);
-                app.graph_selection = (!hit.is_empty()).then(|| crate::app_state::GraphSelection {
-                    layer: layer_id,
-                    prop: current,
-                    retime: is_retime,
-                    keys: hit.into_iter().map(|i| (i, keys[i].time)).collect(),
-                });
-            }
-        } else if !bg.dragged() && app.graph_marquee.is_some() {
-            app.graph_marquee = None; // abandoned mid-drag (channel switched)
-        }
-    }
+    // (The marquee runs in both lenses; its handling sits below, after the
+    // speed-lens y-mapping exists, so the band can hit-test speed points too.)
     if bg.clicked() {
         app.graph_selection = None;
     }
@@ -4133,8 +4115,8 @@ fn graph_plot(
     }
 
     // (`shown` — the provisional keys with any in-flight drag applied — and its
-    // multi_delta are computed above, before the y-range, so the range fits the
-    // drawn curve including live bezier overshoots.)
+    // multi_delta are computed above. Key drags fold into the y-range; a tangent
+    // drag deliberately does not, so the axis holds still until release.)
 
     // Curve polyline: value, or its exact derivative in the speed lens (K-080).
     let samples = (rect.width() as usize / 2).max(16);
@@ -4177,6 +4159,53 @@ fn graph_plot(
     let speed_of = move |y: f32| {
         s_lo + ((rect.bottom() - y) / rect.height()).clamp(0.0, 1.0) as f64 * (s_hi - s_lo)
     };
+
+    // Marquee (rubber-band) selection, both lenses (Mack): press-and-drag on
+    // empty plot; on release, select the keys whose plotted point — the value
+    // point here, the speed point in the derivative lens — falls in the band.
+    if bg.drag_started() {
+        if let Some(p) = bg.interact_pointer_pos() {
+            app.graph_marquee = Some((p, p));
+        }
+    } else if bg.dragged() {
+        if let Some(p) = bg.interact_pointer_pos() {
+            if let Some(band) = &mut app.graph_marquee {
+                band.1 = p;
+            }
+        }
+    }
+    if bg.drag_stopped() {
+        if let Some((a, b)) = app.graph_marquee.take() {
+            let band = egui::Rect::from_two_pos(a, b);
+            let points: Vec<egui::Pos2> = keys
+                .iter()
+                .map(|k| {
+                    let x = x_of(k.time.to_f64());
+                    if app.graph_speed_view {
+                        // The speed lens plots each key at its resting speed.
+                        let rest = match (k.interp_out, k.interp_in) {
+                            (SideInterp::Bezier { speed, .. }, _) => speed,
+                            (_, SideInterp::Bezier { speed, .. }) => speed,
+                            _ => sample_at(k.time.to_f64()),
+                        };
+                        egui::pos2(x, speed_y(rest))
+                    } else {
+                        egui::pos2(x, y_of(k.value))
+                    }
+                })
+                .collect();
+            let hit = keys_in_band(&points, band);
+            app.graph_selection = (!hit.is_empty()).then(|| crate::app_state::GraphSelection {
+                layer: layer_id,
+                prop: current,
+                retime: is_retime,
+                keys: hit.into_iter().map(|i| (i, keys[i].time)).collect(),
+            });
+        }
+    } else if !bg.dragged() && app.graph_marquee.is_some() {
+        app.graph_marquee = None; // abandoned mid-drag (channel switched)
+    }
+
     // Y-axis scale: labelled gridlines in the active lens's units — the value
     // itself, or its rate of change per second in the speed lens.
     {
@@ -4302,6 +4331,11 @@ fn graph_plot(
         // same bezier store, so the value and speed lenses stay in lock-step.
         let handle_colour = theme.curve[3];
         let alt_now = ui.input(|i| i.modifiers.alt);
+        // Whether the in-flight drag mirrors, from the latched mode (see
+        // tangent_mirrors); only consulted while a drag is live.
+        let mirror_live = app
+            .graph_tangent_mode
+            .is_some_and(|(u, a)| tangent_mirrors(u, a));
         for &idx in &selection {
             let Some(key) = keys.get(idx) else { continue };
             let kt = key.time.to_f64();
@@ -4332,13 +4366,11 @@ fn graph_plot(
                 if seg <= 1e-6 {
                     continue;
                 }
-                // In-flight drag overrides this side; a unified partner mirrors
+                // In-flight drag overrides this side; a mirroring partner takes
                 // the dragged speed (keeping its own reach).
                 let (sp, influence) = match app.graph_tangent_edit {
                     Some((i, o, s, inf)) if i == idx && o == is_out => (s, inf),
-                    Some((i, _, s, _)) if i == idx && key_unified && !alt_now => {
-                        (s, side_influence(side))
-                    }
+                    Some((i, _, s, _)) if i == idx && mirror_live => (s, side_influence(side)),
                     _ => (side_speed(side).unwrap_or(0.0), side_influence(side)),
                 };
                 let reach = influence * seg;
@@ -4360,7 +4392,15 @@ fn graph_plot(
                         .is_some_and(|(i, o, ..)| i == idx && o == is_out);
                 ui.painter()
                     .circle_filled(hend, if hot { 4.5 } else { 3.0 }, handle_colour);
+                if hresp.drag_started() {
+                    // The drag's mirroring is decided here and only toggled by
+                    // Alt (latched); see tangent_mirrors.
+                    app.graph_tangent_mode = Some((key_unified, alt_now));
+                }
                 if hresp.dragged() {
+                    if let Some(m) = &mut app.graph_tangent_mode {
+                        m.1 |= alt_now; // Alt latches for the rest of the drag
+                    }
                     if let Some(p) = hresp.interact_pointer_pos() {
                         // Horizontal reach → influence; height → this side's
                         // speed. No partner-length trickery here: the speed lens
@@ -4373,10 +4413,11 @@ fn graph_plot(
                 }
                 if hresp.drag_stopped() {
                     if let Some((i, o, sp2, inf)) = app.graph_tangent_edit.take() {
+                        let mode = app.graph_tangent_mode.take();
                         if i == idx {
-                            let alt = ui.input(|inp| inp.modifiers.alt);
+                            let mirror = mode.is_some_and(|(u, a)| tangent_mirrors(u, a));
                             let mut new_keys = keys.clone();
-                            apply_tangent(&mut new_keys[i], o, sp2, inf, alt, None);
+                            apply_tangent(&mut new_keys[i], o, sp2, inf, mirror, None);
                             pending = Some(new_keys);
                         }
                     }
@@ -4456,6 +4497,10 @@ fn graph_plot(
                 (side_speed(key.interp_in), side_speed(key.interp_out)),
                 (Some(a), Some(b)) if (a - b).abs() < 1e-6
             );
+            // Whether the in-flight drag mirrors, from the latched mode.
+            let mirror_live = app
+                .graph_tangent_mode
+                .is_some_and(|(u, a)| tangent_mirrors(u, a));
             for is_out in [true, false] {
                 let side = if is_out {
                     key.interp_out
@@ -4478,12 +4523,13 @@ fn graph_plot(
                 if seg <= 1e-6 {
                     continue;
                 }
-                // The in-flight drag overrides this side's rest tangent; the
-                // unified partner mirrors the dragged slope (its own reach kept).
+                // The in-flight drag overrides this side's rest tangent; a
+                // mirroring partner rotates to the dragged slope with its
+                // on-screen length conserved (the live px scales).
                 let (speed, influence) = match app.graph_tangent_edit {
                     Some((i, o, sp, inf)) if i == idx && o == is_out => (sp, inf),
-                    Some((i, _, sp, _)) if i == idx && key_unified && !alt_now => {
-                        (sp, partner_influence(side, seg, sp, sx_stable, sy_stable))
+                    Some((i, _, sp, _)) if i == idx && mirror_live => {
+                        (sp, partner_influence(side, seg, sp, sx_px, sy_px))
                     }
                     _ => (side_speed(side).unwrap_or(0.0), side_influence(side)),
                 };
@@ -4507,7 +4553,15 @@ fn graph_plot(
                         .is_some_and(|(i, o, ..)| i == idx && o == is_out);
                 ui.painter()
                     .circle_filled(hpos, if hot { 4.5 } else { 3.0 }, handle_colour);
+                if hresp.drag_started() {
+                    // The drag's mirroring is decided here and only toggled by
+                    // Alt (latched); see tangent_mirrors.
+                    app.graph_tangent_mode = Some((key_unified, alt_now));
+                }
                 if hresp.dragged() {
+                    if let Some(m) = &mut app.graph_tangent_mode {
+                        m.1 |= alt_now; // Alt latches for the rest of the drag
+                    }
                     if let Some(p) = hresp.interact_pointer_pos() {
                         let (pt, pv) = (t_of(p.x), v_of(p.y));
                         // Horizontal reach, clamped inside the segment with a
@@ -4526,22 +4580,18 @@ fn graph_plot(
                 }
                 if hresp.drag_stopped() {
                     if let Some((i, o, sp, inf)) = app.graph_tangent_edit.take() {
+                        let mode = app.graph_tangent_mode.take();
                         if i == idx {
-                            let alt = ui.input(|inp| inp.modifiers.alt);
+                            let mirror = mode.is_some_and(|(u, a)| tangent_mirrors(u, a));
                             let mut new_keys = keys.clone();
                             let partner = if o {
                                 new_keys[i].interp_in
                             } else {
                                 new_keys[i].interp_out
                             };
-                            let pinf = partner_influence(
-                                partner,
-                                partner_seg(i, o),
-                                sp,
-                                sx_stable,
-                                sy_stable,
-                            );
-                            apply_tangent(&mut new_keys[i], o, sp, inf, alt, Some(pinf));
+                            let pinf =
+                                partner_influence(partner, partner_seg(i, o), sp, sx_px, sy_px);
+                            apply_tangent(&mut new_keys[i], o, sp, inf, mirror, Some(pinf));
                             pending = Some(new_keys);
                         }
                     }
@@ -4754,6 +4804,10 @@ fn graph_plot(
             }
         }
     }
+
+    // All graph drawing is done; release the clip before the commit below (it
+    // can return early on an unbuildable retime).
+    ui.set_clip_rect(saved_clip);
 
     if let Some(new_keys) = pending {
         let op = if is_retime {
@@ -8546,32 +8600,39 @@ mod dock_tests {
         assert!((side_influence(SideInterp::Hold) - 1.0 / 3.0).abs() < 1e-9);
     }
 
-    // A value-lens tangent drag: a smooth key mirrors the slope across itself
-    // (each side keeps its own reach); Alt-drag, and an already-broken key, move
-    // one end alone.
+    // The tangent drag's mirroring: decided at drag start from the key's
+    // unification, toggled once by Alt (latched — releasing Alt mid-drag never
+    // snaps handles back together), and applied by apply_tangent (Mack).
     #[test]
-    fn tangent_drag_unifies_by_default_and_alt_breaks() {
+    fn tangent_drag_unifies_by_default_and_alt_toggles_latched() {
         use kiriko_core::anim::{Keyframe, SideInterp::Bezier, EASY_EASE};
+        // The mode table: unified stays unified, Alt breaks it — and the break
+        // survives Alt being released (alt_seen latches). A broken key stays
+        // broken on a plain drag; Alt on a broken key re-unifies it.
+        assert!(tangent_mirrors(true, false)); // unified, no Alt → mirror
+        assert!(!tangent_mirrors(true, true)); // unified, Alt seen → broken
+        assert!(!tangent_mirrors(false, false)); // broken, no Alt → stays broken
+        assert!(tangent_mirrors(false, true)); // broken, Alt seen → re-unified
+
         let base = || Keyframe {
             time: rational_at(1.0),
             value: 0.0,
             interp_in: EASY_EASE, // speed 0, influence 1/3
             interp_out: EASY_EASE,
         };
-        // Plain drag of the out handle sets both slopes; reaches are preserved.
+        // Mirroring drag of the out handle sets both slopes; reaches preserved.
         let mut k = base();
-        apply_tangent(&mut k, true, 5.0, 0.5, false, None);
+        apply_tangent(&mut k, true, 5.0, 0.5, tangent_mirrors(true, false), None);
         assert_eq!(side_speed(k.interp_out), Some(5.0));
         assert_eq!(side_speed(k.interp_in), Some(5.0)); // mirrored
         assert!((side_influence(k.interp_out) - 0.5).abs() < 1e-9);
         assert!((side_influence(k.interp_in) - 1.0 / 3.0).abs() < 1e-9); // in reach kept
-                                                                         // Alt-drag breaks: only the dragged side changes.
+                                                                         // Alt seen during the drag breaks: only the dragged side changes.
         let mut k = base();
-        apply_tangent(&mut k, true, 5.0, 0.5, true, None);
+        apply_tangent(&mut k, true, 5.0, 0.5, tangent_mirrors(true, true), None);
         assert_eq!(side_speed(k.interp_out), Some(5.0));
         assert_eq!(side_speed(k.interp_in), Some(0.0)); // untouched
-                                                        // A key already broken (slopes differ) moves one end even on a plain drag.
-        let mut k = Keyframe {
+        let broken = || Keyframe {
             interp_in: Bezier {
                 speed: 2.0,
                 influence: 1.0 / 3.0,
@@ -8582,9 +8643,17 @@ mod dock_tests {
             },
             ..base()
         };
-        apply_tangent(&mut k, false, 9.0, 0.4, false, None);
+        // A broken key stays broken on a plain drag…
+        let mut k = broken();
+        apply_tangent(&mut k, false, 9.0, 0.4, tangent_mirrors(false, false), None);
         assert_eq!(side_speed(k.interp_in), Some(9.0));
         assert_eq!(side_speed(k.interp_out), Some(-3.0)); // stays broken
+                                                          // …and an Alt-drag on it re-unifies: both sides take the dragged slope.
+        let mut k = broken();
+        apply_tangent(&mut k, false, 9.0, 0.4, tangent_mirrors(false, true), None);
+        assert_eq!(side_speed(k.interp_in), Some(9.0));
+        assert_eq!(side_speed(k.interp_out), Some(9.0)); // re-unified
+        assert!((side_influence(k.interp_out) - 1.0 / 3.0).abs() < 1e-9); // own reach kept
     }
 
     // Vertical wheel maths (K-079): a plain wheel pans (span kept, view shifts);

@@ -767,6 +767,11 @@ pub struct AppState {
     /// `out` chooses the forward or backward handle; the curve previews live and
     /// the release writes the bezier side(s) back (unified unless Alt-dragged).
     pub graph_tangent_edit: Option<(usize, bool, f64, f64)>,
+    /// The in-flight tangent drag's mirroring mode: (was the key unified when
+    /// the drag started, has Alt been held at any point since). Mirroring =
+    /// XOR of the two (see `tangent_mirrors`): Alt toggles it once and latches,
+    /// so a break survives releasing Alt, and Alt on a broken key re-unifies.
+    pub graph_tangent_mode: Option<(bool, bool)>,
     /// A pending interpolation change for the graphed transform channel's keys
     /// (selection, or all keys when nothing is selected): set by F9 and the
     /// bottom-bar Linear/Bezier buttons, consumed by `graph_plot`.
@@ -910,6 +915,7 @@ impl Default for AppState {
             graph_selection: None,
             graph_speed_edit: None,
             graph_tangent_edit: None,
+            graph_tangent_mode: None,
             graph_set_interp: None,
             graph_speed_view: false,
             graph_view_y: None,
