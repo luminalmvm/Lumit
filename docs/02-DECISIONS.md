@@ -554,3 +554,19 @@ entries, `docs/research/`) keep the old names verbatim; the hexagon cut-glass ma
 approved placeholder pending a Luminal redesign (noted in 15-DESIGN). The design-language
 overhaul that accompanies the rename (rerun-io-style look, colour scheme kept) is its own
 follow-up decision.
+
+**K-084 · DECIDED · The visual system adopts rerun.io's structure, keeping Luminal's colours.**
+From the owner (2026-07-16), with the K-083 rename. The look moves from the Aizome dark
+adaptation's mid-dark ramp to the structure of rerun.io's viewer (`re_ui`, studied at source):
+a near-black canvas (`surface_0` `#0b0c0e`), panels one small step above it, floating surfaces
+(menus, inputs, tab bars) a clear step up, **borderless widgets** whose idle/hover/pressed
+states are fill steps rather than stroke changes, crisp 1 px hairline separations as the only
+panel elevation, floats on a real soft shadow (offset 0/15, blur 50), 4 px control / 6 px
+float radii, thin solid 6 px scrollbars, 14 px indents and a 16 px interact height. Deliberate
+deviations from rerun: the item-spacing grid stays Luminal-dense (6×4, not 8×8 — the timeline's
+row pitch is part of the app's feel), and every hue is Luminal's own (clay accent, the cool
+grey ramp, the K-004 strictly-neutral Viewer surround, now `#121212`). The accent carries
+selection, punchier than before (50% fill). Embedding Inter (rerun's UI face) is a pending
+follow-up awaiting the owner's decision on shipping the font file. The owner also wants a
+sleeker "liquid glass" alternative theme later; that is not this decision. The hexagon mark
+redesign (noted at K-083) remains open.

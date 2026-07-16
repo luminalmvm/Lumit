@@ -79,21 +79,26 @@ the night print by stripping chroma almost entirely — the indigo survives only
 (chroma so low it reads as neutral at arm's length) — and the immediate Viewer surround drops
 to strictly neutral grey.
 
+As of K-084 the ramp's *structure* follows rerun.io's viewer (`re_ui`): a near-black canvas,
+panels one small step above it, and floating surfaces a clear step above those. The hues stay
+Luminal's own — this section's values are the K-084 system.
+
 ### 2.1 Surface ramp
 
-Five surface levels, named to mirror the household `paper → paper-mid → paper-deep`
-progression (mapping table in §4.2). Values are targets; they MAY be tuned ±3 points of
-lightness during implementation, but the ordering, the near-neutrality, and the strict
-neutrality of `viewer_surround` are binding.
+Five surface levels on the rerun-inspired structure (K-084): the canvas sits near black,
+panels barely above it, and each step up earns real contrast — the deep end of the ramp is
+where the depth lives. Values are targets; they MAY be tuned ±3 points of lightness during
+implementation, but the ordering, the near-neutrality, and the strict neutrality of
+`viewer_surround` are binding.
 
 | Token | Value | Role |
 |---|---|---|
-| `surface_0` | `#141618` | Application background, timeline well, deepest ground |
-| `surface_1` | `#1b1e20` | Panel bodies — the default "card" fill |
-| `surface_2` | `#22262a` | Panel headers, layer rows, tracks, input wells |
-| `surface_3` | `#2b3034` | Hover fills, active rows, raised chips |
-| `surface_4` | `#343a3f` | Pressed states, slider tracks, scrollbar thumbs |
-| `viewer_surround` | `#1e1e1e` | The Viewer's pasteboard — **exactly neutral, R = G = B** |
+| `surface_0` | `#0b0c0e` | The canvas: application background, timeline well, graph paper |
+| `surface_1` | `#131517` | Panel bodies — the default fill, and the active dock tab |
+| `surface_2` | `#1a1d20` | Faint surfaces: tab bars, bottom bars, panel headers, layer rows |
+| `surface_3` | `#212528` | Floating surfaces: menus, popovers, input wells; idle widget fills |
+| `surface_4` | `#2b3034` | Hover fills, raised chips, slider tracks, scrollbar thumbs |
+| `viewer_surround` | `#121212` | The Viewer's pasteboard — **exactly neutral, R = G = B** |
 
 Rules:
 
@@ -108,23 +113,29 @@ Rules:
 
 ### 2.2 Text hierarchy
 
+The darker ramp buys headroom: every tier gains contrast over its predecessor on the old
+ramp while keeping the same roles.
+
 | Token | Value | Role | Contrast on `surface_1` |
 |---|---|---|---|
-| `text_primary` | `#e6e9ea` | Headings, values being edited, primary copy | ≈ 12.9:1 |
-| `text_secondary` | `#b6bcbf` | Panel body copy, property names | ≈ 8.0:1 |
-| `text_muted` | `#838b90` | Kickers, hints, inactive labels, attribution | ≈ 4.6:1 |
-| `text_disabled` | `#667077` | Disabled controls only | exempt (≥3:1 kept anyway) |
+| `text_primary` | `#eef1f2` | Headings, values being edited, primary copy | ≈ 15.5:1 |
+| `text_secondary` | `#c2c8cb` | Panel body copy, property names | ≈ 10.3:1 |
+| `text_muted` | `#8b9296` | Kickers, hints, inactive labels, attribution | ≈ 5.5:1 |
+| `text_disabled` | `#5e666b` | Disabled controls only | exempt (≥3:1 kept anyway) |
 
 ### 2.3 Hairlines
 
 | Token | Value | Role |
 |---|---|---|
-| `hairline` | `text_primary` @ 8% | Default 1px borders between panels, rows, cards |
-| `hairline_strong` | `text_primary` @ 18% | Input borders, dividers that must be found, Null layer outlines |
+| `hairline` | `#26292c` (≈ `text_primary` @ 11%) | Default 1px borders between panels, rows, cards; the dock's 1px tile gaps |
+| `hairline_strong` | `#3c4145` (≈ `text_primary` @ 22%) | Dividers that must be found, Null layer outlines; doubles as the pressed widget fill |
 
-Hairlines are the *only* default elevation. `shadow_float` (black @ 50%, large soft offset,
-matching the household dark shadow) is permitted solely on: modal dialogs, menus/popovers,
-panels while being drag-undocked, and drag ghosts (clips or assets in flight).
+Hairlines are the *only* default elevation between panels. Interactive widgets are
+**borderless** (K-084, the rerun grammar): idle, hovered and pressed are *fill* steps
+(`surface_3` → `surface_4` → `hairline_strong`), never stroke changes. `shadow_float`
+(black @ 50%, offset 0/15, blur 50 — rerun's float shadow) is permitted solely on: modal
+dialogs, menus/popovers, panels while being drag-undocked, and drag ghosts (clips or assets
+in flight).
 
 ## 3. Saturated colour
 

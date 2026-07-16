@@ -571,8 +571,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   depth, AE-style, via a small button at the foot of the Project panel. Full float
   doubles every frame's memory and roughly halves compositing throughput, so 16-float
   stays the default; the heavy maths inside effects can run wider internally either way.
-- `crates/luminal-ui/src/theme.rs` — **the Aizome tokens.** The only file allowed to contain
-  colour values. Change a colour here, it changes everywhere.
+- `crates/luminal-ui/src/theme.rs` — **the design tokens.** The only file allowed to contain
+  colour values. Change a colour here, it changes everywhere. As of K-084 the look follows
+  the *structure* of rerun.io's viewer (a data-tools app whose interface the owner likes):
+  the app's background is nearly black, panels sit just above it, and menus float a clear
+  step higher on a soft shadow; buttons have no borders — you can tell idle from hovered
+  from pressed purely by how light their fill is; scrollbars are thin and solid; panel
+  edges are single crisp 1px lines. The colours themselves (the clay accent, the cool grey
+  family) are still Luminal's own — we borrowed the skeleton, not the skin.
 - `crates/luminal-ui/src/icons.rs` — **the toolbar glyphs, drawn not downloaded.** Little
   pictures like the play triangle or the padlock aren't image files or a special font;
   Luminal *draws* each one from a few lines and curves every frame (design rule §5: flat
