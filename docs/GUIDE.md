@@ -327,11 +327,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the curve you see is always the one you just touched.
   **Panning and zooming the graph (K-079).** The graph now shares the timeline's time axis, so
   **Alt + wheel** zooms and **Shift + wheel** (or a horizontal wheel) scrolls the curve left
-  and right in step with the layer bars. Up and down, the value view **auto-fits** the whole
-  curve by default — a bezier that overshoots its keys still stays fully on screen. A plain
-  wheel over the graph scrolls it vertically and **Ctrl + wheel** zooms the value range toward
-  the cursor; either one takes over from auto-fit, and the **Fit** button in the bottom bar
-  (lit while auto-fit is on) snaps back. Because the graph fills the lane area and the layer
+  and right in step with the layer bars. Up and down, the value view **auto-fits** by default —
+  and the fit covers the whole editable picture: a bezier that overshoots its keys stays fully
+  on screen, and so do the tips of every key's gold tangent handles, so a steep handle never
+  pokes out of view (and because the fit reads every key's handles, not just the selected
+  ones, selecting a key never makes the view jump). The **Fit** button in the bottom bar is a
+  toggle: while it is lit the graph keeps re-fitting as the curve changes; click it while lit
+  to freeze the view exactly where it is. A plain wheel over the graph scrolls it vertically
+  and **Ctrl + wheel** zooms the value range toward the cursor; either one switches the toggle
+  off and takes over, and clicking **Fit** back on drops that manual framing and resumes
+  fitting. While you hold a manual framing, resizing the timeline panel keeps the graph's
+  *scale* rather than its range: making the panel taller reveals **more** of the value range
+  about the same centre instead of stretching the curve (auto-fit simply re-fits to the new
+  height, as you'd expect). Because the graph fills the lane area and the layer
   outline sits to its left, a wheel over the graph moves the *graph* while a wheel over the
   outline still scrolls the *layer list* — the two scroll independently.
   **Shaping a key (bezier handles).** New keys are **linear** — straight lines in, straight

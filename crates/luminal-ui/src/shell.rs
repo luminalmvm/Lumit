@@ -2508,7 +2508,7 @@ fn timeline_bottom_bar(
             .clicked()
         {
             app.graph_speed_view = false;
-            app.graph_view_y = None; // a manual range doesn't carry across lenses
+            app.graph_reset_fit(); // a manual range doesn't carry across lenses
         }
         if zc
             .selectable_label(app.graph_speed_view, speed_label)
@@ -2520,21 +2520,33 @@ fn timeline_bottom_bar(
             .clicked()
         {
             app.graph_speed_view = true;
-            app.graph_view_y = None;
+            app.graph_reset_fit();
         }
 
-        // Fit toggle (K-079): the value graph auto-fits the curve vertically by
-        // default; scrolling or zooming it vertically takes over with a manual
-        // range, and this button snaps back to auto-fit. Lit while auto-fit is
-        // on. Only the value lens has a manual range.
+        // Fit toggle (K-079): the value graph keeps re-fitting the curve (and
+        // its tangent handles) vertically while this is on — lit — and
+        // scrolling or zooming vertically switches it off with a manual range.
+        // Clicking it while lit freezes the view where it is; clicking it back
+        // on drops the manual range and resumes fitting. Only the value lens
+        // has a manual range.
         if !app.graph_speed_view {
             zc.add_space(10.0);
             if zc
-                .selectable_label(app.graph_view_y.is_none(), "Fit")
-                .on_hover_text("Fit the curve to the graph height (auto). Scroll or zoom vertically to override.")
+                .selectable_label(app.graph_auto_fit, "Fit")
+                .on_hover_text("Keep the curve and its handles fitted to the graph height. Click to freeze the view; scroll or zoom vertically to take over.")
                 .clicked()
             {
-                app.graph_view_y = None;
+                if app.graph_auto_fit {
+                    // Freeze: last frame's fit becomes the manual range; the
+                    // plot stamps the height it is framed at next pass.
+                    if let Some(fit) = app.graph_last_fit {
+                        app.graph_auto_fit = false;
+                        app.graph_view_y = Some(fit);
+                        app.graph_view_h = None;
+                    }
+                } else {
+                    app.graph_reset_fit();
+                }
             }
         }
 
@@ -3809,6 +3821,67 @@ fn graph_v_pan_zoom(
     }
 }
 
+/// The value extremes the graph's auto-fit must cover: every keyframe's value
+/// plus, for each bezier side that has a neighbour, that side's tangent-handle
+/// endpoint. A handle of slope `speed` reaching `influence · seg` seconds
+/// towards its neighbour ends at value `v ± speed · reach`, and a steep handle
+/// can poke well past the curve itself — the fit keeps it on screen (Mack).
+/// Reads ALL keys, not just the selection, so selecting a key never jumps the
+/// view. Returns `(f64::MAX, f64::MIN)` for an empty slice, like the plain
+/// min/max fold it extends.
+fn fit_values_with_handles(keys: &[luminal_core::anim::Keyframe]) -> (f64, f64) {
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    for (idx, k) in keys.iter().enumerate() {
+        lo = lo.min(k.value);
+        hi = hi.max(k.value);
+        let kt = k.time.to_f64();
+        for is_out in [false, true] {
+            let side = if is_out { k.interp_out } else { k.interp_in };
+            // Only a bezier side grows a handle, and only towards a neighbour.
+            let Some(speed) = side_speed(side) else {
+                continue;
+            };
+            let seg = if is_out {
+                match keys.get(idx + 1) {
+                    Some(next) => next.time.to_f64() - kt,
+                    None => continue,
+                }
+            } else if idx > 0 {
+                kt - keys[idx - 1].time.to_f64()
+            } else {
+                continue;
+            };
+            if seg <= 1e-9 {
+                continue;
+            }
+            let reach = side_influence(side) * seg;
+            let end = if is_out {
+                k.value + speed * reach
+            } else {
+                k.value - speed * reach
+            };
+            lo = lo.min(end);
+            hi = hi.max(end);
+        }
+    }
+    (lo, hi)
+}
+
+/// Rescale a manual y-range for a new plot height, keeping the centre value
+/// and the value scale (units per pixel): a taller graph reveals *more* range
+/// about the same centre, a shorter one reveals less — the curve never
+/// stretches. Degenerate heights leave the range untouched.
+fn rescale_range_for_height(range: (f64, f64), old_h: f32, new_h: f32) -> (f64, f64) {
+    if old_h <= 0.0 || new_h <= 0.0 {
+        return range;
+    }
+    let (lo, hi) = range;
+    let centre = (lo + hi) * 0.5;
+    let half = (hi - lo) * 0.5 * (new_h as f64 / old_h as f64);
+    (centre - half, centre + half)
+}
+
 /// The influence a unified partner handle needs so its on-screen *length* stays
 /// fixed while the dragged side's slope changes to `new_speed` — only the angle
 /// rotates, the length holds (Mack). `sx`/`sy` are screen px per unit time /
@@ -4037,9 +4110,11 @@ fn graph_plot(
     // (An in-flight tangent-handle drag is applied to `shown` further down,
     // *after* the y-range is fixed — the axis must hold still during the drag.)
 
-    let (mut vmin, mut vmax) = keys.iter().fold((f64::MAX, f64::MIN), |(lo, hi), k| {
-        (lo.min(k.value), hi.max(k.value))
-    });
+    // Key values and every bezier side's tangent-handle endpoint, for ALL keys
+    // (fit_values_with_handles): the fit keeps the whole editable picture on
+    // screen — a steep handle mustn't poke past the plot — and reading every
+    // key, not just the selection, means selecting one never jumps the view.
+    let (mut vmin, mut vmax) = fit_values_with_handles(&shown);
     if keys.is_empty() {
         vmin = static_val;
         vmax = static_val;
@@ -4063,9 +4138,27 @@ fn graph_plot(
     let auto_fit = (vmin - pad, vmax + pad);
     // Remember the auto-fit so a first vertical scroll can seed a manual range
     // from what's on screen; then honour any manual range the user scrolled or
-    // zoomed to (K-079). The Fit button clears `graph_view_y` back to None.
+    // zoomed to (K-079). The Fit toggle clears `graph_view_y` back to None and
+    // resumes continuous fitting.
     if !is_retime || !app.graph_speed_view {
         app.graph_last_fit = Some(auto_fit);
+    }
+    // A manual range answers a panel resize by keeping its value scale (units
+    // per pixel): it grows or shrinks about its centre by the height ratio, so
+    // a taller graph reveals more curve instead of stretching it. Auto-fit
+    // needs none of this — it simply re-fits to whatever height it is given.
+    if !app.graph_speed_view {
+        match (app.graph_view_y, app.graph_view_h) {
+            (Some(range), Some(old_h)) if (old_h - rect.height()).abs() > 0.01 => {
+                app.graph_view_y = Some(rescale_range_for_height(range, old_h, rect.height()));
+                app.graph_view_h = Some(rect.height());
+            }
+            // A freshly frozen range (Fit toggled off) hasn't seen the plot
+            // yet: stamp the height it is being framed at.
+            (Some(_), None) => app.graph_view_h = Some(rect.height()),
+            (None, _) => app.graph_view_h = None,
+            _ => {}
+        }
     }
     let (vmin, vmax) = app.graph_view_y.unwrap_or(auto_fit);
     // x follows the shared timeline axis (K-079): the same pixels-per-second and
@@ -4106,7 +4199,8 @@ fn graph_plot(
     // Vertical scroll / zoom of the value graph (K-079): the outer wheel handler
     // freed `raw_scroll_delta` for us (the outline list scrolls on its own).
     // A plain wheel pans the value range; Ctrl-wheel zooms it around the cursor.
-    // Either takes over from auto-fit — the bottom-bar Fit button restores it.
+    // Either switches auto-fit off and takes over — the bottom-bar Fit toggle
+    // resumes it.
     if !app.graph_speed_view {
         let (dy, ptr, ctrl) = ui.input(|i| {
             (
@@ -4117,6 +4211,7 @@ fn graph_plot(
         });
         if dy.abs() > 0.01 && ptr.is_some_and(|p| rect.contains(p)) {
             let cursor_v = v_of(ptr.map_or(rect.center().y, |p| p.y));
+            app.graph_auto_fit = false;
             app.graph_view_y = Some(graph_v_pan_zoom(
                 (vmin, vmax),
                 dy as f64,
@@ -4124,6 +4219,7 @@ fn graph_plot(
                 cursor_v,
                 rect.height() as f64,
             ));
+            app.graph_view_h = Some(rect.height());
         }
     }
 
@@ -4842,7 +4938,9 @@ fn graph_plot(
                         nlo -= nhi - full_hi;
                         nhi = full_hi;
                     }
+                    app.graph_auto_fit = false;
                     app.graph_view_y = Some((nlo, nhi));
+                    app.graph_view_h = Some(rect.height());
                 }
             }
         }
@@ -5868,7 +5966,7 @@ fn prop_row(
         app.selected_layer = Some(ctx.layer.id);
         app.graph_prop = Some(prop);
         app.graph_retime = false; // switching to a transform property
-        app.graph_view_y = None; // re-fit for the newly graphed channel
+        app.graph_reset_fit(); // a fresh channel starts fitted
     }
     {
         let committed = slot.value_at(ctx.lt);
@@ -6012,7 +6110,7 @@ fn combined_scale_row(
         app.selected_layer = Some(ctx.layer.id);
         app.graph_prop = Some(TransformProp::ScaleX);
         app.graph_retime = false; // switching to a transform property
-        app.graph_view_y = None; // re-fit for the newly graphed channel
+        app.graph_reset_fit(); // a fresh channel starts fitted
     }
     if icon_button(&mut c, ctx.theme, Icon::Link, true)
         .on_hover_text("Unlink scale (edit x and y separately)")
@@ -6374,7 +6472,7 @@ fn speed_property_row(
     {
         app.selected_layer = Some(ctx.layer.id);
         app.graph_retime = true; // graph the Retime channel (K-075)
-        app.graph_view_y = None; // re-fit for the newly graphed channel
+        app.graph_reset_fit(); // a fresh channel starts fitted
         app.graph_speed_view = app.vegas_default_lens; // open to the preferred lens
     }
 
@@ -8759,6 +8857,83 @@ mod dock_tests {
         assert!(zhi - zlo < 10.0); // zoomed in
         let cursor_frac = (5.0 - zlo) / (zhi - zlo);
         assert!((cursor_frac - 0.5).abs() < 1e-9); // cursor value pinned in view
+    }
+
+    // The auto-fit reads tangent-handle endpoints, not just key values: a flat
+    // two-key curve with a steep out-handle must widen the range past the keys,
+    // and an in-handle widens it the other way (endpoint = v ± speed·reach).
+    #[test]
+    fn fit_includes_tangent_handle_endpoints() {
+        use luminal_core::anim::{Keyframe, SideInterp};
+        let key = |t: f64, i: SideInterp, o: SideInterp| Keyframe {
+            time: rational_at(t),
+            value: 10.0,
+            interp_in: i,
+            interp_out: o,
+        };
+        let steep = SideInterp::Bezier {
+            speed: 60.0,
+            influence: 0.5,
+        };
+        // Flat pair of keys at 10, first key's out-handle climbing at 60 u/s
+        // over a reach of 0.5 · 2 s: its endpoint sits at 10 + 60·1 = 70.
+        let keys = vec![
+            key(0.0, SideInterp::Linear, steep),
+            key(2.0, SideInterp::Linear, SideInterp::Linear),
+        ];
+        let (lo, hi) = fit_values_with_handles(&keys);
+        assert!((lo - 10.0).abs() < 1e-9, "flat keys floor the range: {lo}");
+        assert!((hi - 70.0).abs() < 1e-9, "out-handle endpoint missed: {hi}");
+        // The same handle on the second key's *in* side reaches backwards and
+        // downwards: endpoint 10 − 60·1 = −50.
+        let keys = vec![
+            key(0.0, SideInterp::Linear, SideInterp::Linear),
+            key(2.0, steep, SideInterp::Linear),
+        ];
+        let (lo, hi) = fit_values_with_handles(&keys);
+        assert!(
+            (lo - (-50.0)).abs() < 1e-9,
+            "in-handle endpoint missed: {lo}"
+        );
+        assert!((hi - 10.0).abs() < 1e-9);
+        // A bezier side with no neighbour grows no handle: the last key's
+        // out-side (and the first key's in-side) never widen the fit.
+        let keys = vec![
+            key(0.0, steep, SideInterp::Linear),
+            key(2.0, SideInterp::Linear, steep),
+        ];
+        assert_eq!(fit_values_with_handles(&keys), (10.0, 10.0));
+        // Linear keys alone reduce to the plain value min/max.
+        let mut keys = vec![
+            key(0.0, SideInterp::Linear, SideInterp::Linear),
+            key(2.0, SideInterp::Linear, SideInterp::Linear),
+        ];
+        keys[1].value = 25.0;
+        assert_eq!(fit_values_with_handles(&keys), (10.0, 25.0));
+    }
+
+    // A manual y-range answers a panel resize by keeping its value scale:
+    // the range grows or shrinks about its centre by the height ratio, so
+    // units-per-pixel hold and more height shows more curve, not a stretch.
+    #[test]
+    fn manual_range_rescales_with_plot_height() {
+        // Doubling the height doubles the span about the same centre.
+        let (lo, hi) = rescale_range_for_height((0.0, 10.0), 100.0, 200.0);
+        assert!((lo - (-5.0)).abs() < 1e-9 && (hi - 15.0).abs() < 1e-9);
+        assert!(((lo + hi) * 0.5 - 5.0).abs() < 1e-9); // centre preserved
+        assert!(((hi - lo) / 200.0 - 10.0 / 100.0).abs() < 1e-9); // units/px held
+                                                                  // Shrinking the plot narrows the span symmetrically.
+        let (slo, shi) = rescale_range_for_height((0.0, 10.0), 200.0, 100.0);
+        assert!((slo - 2.5).abs() < 1e-9 && (shi - 7.5).abs() < 1e-9);
+        // Degenerate heights leave the range untouched.
+        assert_eq!(
+            rescale_range_for_height((0.0, 10.0), 0.0, 100.0),
+            (0.0, 10.0)
+        );
+        assert_eq!(
+            rescale_range_for_height((0.0, 10.0), 100.0, 0.0),
+            (0.0, 10.0)
+        );
     }
 
     // A unified partner handle rotates but keeps its on-screen length when the
