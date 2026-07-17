@@ -612,6 +612,108 @@ impl Renderer<'_> {
                         },
                     );
                 }
+                lumit_core::fx::Resolved::DirBlur {
+                    length_px,
+                    angle_deg,
+                    edge,
+                    mix,
+                } => {
+                    let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, *angle_deg);
+                    tex = self.fx.dir_blur(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::DirBlurOp {
+                            dx,
+                            dy,
+                            length_px: *length_px,
+                            taps: lumit_core::fx::cpu::dir_blur_taps(*length_px),
+                            edge: *edge,
+                            mix: *mix,
+                        },
+                    );
+                }
+                lumit_core::fx::Resolved::Sharpen {
+                    amount,
+                    radius_px,
+                    threshold,
+                    luma_only,
+                    mix,
+                } => {
+                    tex = self.fx.sharpen(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::SharpenOp {
+                            amount: *amount,
+                            radius_px: *radius_px,
+                            threshold: *threshold,
+                            luma_only: *luma_only,
+                            mix: *mix,
+                        },
+                    );
+                }
+                lumit_core::fx::Resolved::RgbSplit {
+                    amount_px,
+                    angle_deg,
+                    radial,
+                    mix,
+                } => {
+                    let (dx, dy) = lumit_core::fx::rgb_split_offset(*amount_px, *angle_deg);
+                    tex = self.fx.rgb_split(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::RgbSplitOp {
+                            dx,
+                            dy,
+                            amount_px: *amount_px,
+                            radial: *radial,
+                            mix: *mix,
+                        },
+                    );
+                }
+                lumit_core::fx::Resolved::Flash {
+                    strength,
+                    colour,
+                    mix,
+                } => {
+                    tex = self.fx.flash(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::FlashOp {
+                            strength: *strength,
+                            colour: *colour,
+                            mix: *mix,
+                        },
+                    );
+                }
+                lumit_core::fx::Resolved::Grade {
+                    lift,
+                    gamma,
+                    gain,
+                    saturation,
+                    mix,
+                } => {
+                    tex = self.fx.grade(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::GradeOp {
+                            lift: *lift,
+                            gamma: *gamma,
+                            gain: *gain,
+                            saturation: *saturation,
+                            mix: *mix,
+                        },
+                    );
+                }
             }
         }
         tex

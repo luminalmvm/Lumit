@@ -282,6 +282,21 @@ impl EffectInstance {
             _ => None,
         }
     }
+
+    /// A colour parameter's evaluated scene-linear RGBA at layer time `lt`
+    /// (channels animate independently), or None when absent or not a
+    /// Colour.
+    pub fn colour_at(&self, id: &str, lt: f64) -> Option<[f64; 4]> {
+        match self.param(id)? {
+            EffectValue::Colour(ch) => Some([
+                ch[0].value_at(lt),
+                ch[1].value_at(lt),
+                ch[2].value_at(lt),
+                ch[3].value_at(lt),
+            ]),
+            _ => None,
+        }
+    }
 }
 
 fn default_true() -> bool {

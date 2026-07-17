@@ -7407,6 +7407,53 @@ fn effects_rows(ui: &mut egui::Ui, ctx: &RowCtx, pending: &mut Option<lumit_core
                         *pending = Some(commit(effects));
                     }
                 }
+                (EffectValue::Colour(chs), ParamKind::Colour { range, .. }) => {
+                    // Scene-linear RGB drag values plus a live swatch (the
+                    // swatch colour is data, not theme: it is the parameter).
+                    // Channels are animatable in the model; the row edits
+                    // static values for now, like Bool/Choice.
+                    let (_row, mut c) = row_frame(ui, ctx, false);
+                    c.label(
+                        egui::RichText::new(ps.label)
+                            .small()
+                            .color(ctx.theme.text_muted),
+                    );
+                    let preview = egui::Rgba::from_rgb(
+                        chs[0].value_at(ctx.lt).clamp(0.0, 1.0) as f32,
+                        chs[1].value_at(ctx.lt).clamp(0.0, 1.0) as f32,
+                        chs[2].value_at(ctx.lt).clamp(0.0, 1.0) as f32,
+                    );
+                    let (swatch, _) =
+                        c.allocate_exact_size(egui::vec2(14.0, 10.0), egui::Sense::hover());
+                    c.painter()
+                        .rect_filled(swatch, 2.0, egui::Color32::from(preview));
+                    for (ci, chan) in ["R", "G", "B"].iter().enumerate() {
+                        let committed = chs[ci].value_at(ctx.lt);
+                        let id = egui::Id::new(("fxcolour", e.id, pi, ci));
+                        let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+                        let resp = c.add(
+                            egui::DragValue::new(&mut v)
+                                .prefix(format!("{chan} "))
+                                .speed(0.01)
+                                .range(range.0..=range.1)
+                                .max_decimals(3),
+                        );
+                        if resp.dragged() || resp.has_focus() {
+                            c.data_mut(|d| d.insert_temp(id, v));
+                        }
+                        if resp.drag_stopped() || resp.lost_focus() {
+                            if (v - committed).abs() > 1e-9 {
+                                let mut effects = layer.effects.clone();
+                                if let EffectValue::Colour(arr) = &mut effects[idx].params[pi].value
+                                {
+                                    arr[ci] = lumit_core::anim::Property::fixed(v);
+                                }
+                                *pending = Some(commit(effects));
+                            }
+                            c.data_mut(|d| d.remove::<f64>(id));
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -7730,6 +7777,108 @@ impl GpuViewer {
                                 &lumit_gpu::fx::BlurOp {
                                     radius_px: *radius_px,
                                     edge: *edge,
+                                    mix: *mix,
+                                },
+                            );
+                        }
+                        lumit_core::fx::Resolved::DirBlur {
+                            length_px,
+                            angle_deg,
+                            edge,
+                            mix,
+                        } => {
+                            let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, *angle_deg);
+                            tex = self.fx.dir_blur(
+                                &self.ctx,
+                                &tex,
+                                w,
+                                h,
+                                &lumit_gpu::fx::DirBlurOp {
+                                    dx,
+                                    dy,
+                                    length_px: *length_px,
+                                    taps: lumit_core::fx::cpu::dir_blur_taps(*length_px),
+                                    edge: *edge,
+                                    mix: *mix,
+                                },
+                            );
+                        }
+                        lumit_core::fx::Resolved::Sharpen {
+                            amount,
+                            radius_px,
+                            threshold,
+                            luma_only,
+                            mix,
+                        } => {
+                            tex = self.fx.sharpen(
+                                &self.ctx,
+                                &tex,
+                                w,
+                                h,
+                                &lumit_gpu::fx::SharpenOp {
+                                    amount: *amount,
+                                    radius_px: *radius_px,
+                                    threshold: *threshold,
+                                    luma_only: *luma_only,
+                                    mix: *mix,
+                                },
+                            );
+                        }
+                        lumit_core::fx::Resolved::RgbSplit {
+                            amount_px,
+                            angle_deg,
+                            radial,
+                            mix,
+                        } => {
+                            let (dx, dy) = lumit_core::fx::rgb_split_offset(*amount_px, *angle_deg);
+                            tex = self.fx.rgb_split(
+                                &self.ctx,
+                                &tex,
+                                w,
+                                h,
+                                &lumit_gpu::fx::RgbSplitOp {
+                                    dx,
+                                    dy,
+                                    amount_px: *amount_px,
+                                    radial: *radial,
+                                    mix: *mix,
+                                },
+                            );
+                        }
+                        lumit_core::fx::Resolved::Flash {
+                            strength,
+                            colour,
+                            mix,
+                        } => {
+                            tex = self.fx.flash(
+                                &self.ctx,
+                                &tex,
+                                w,
+                                h,
+                                &lumit_gpu::fx::FlashOp {
+                                    strength: *strength,
+                                    colour: *colour,
+                                    mix: *mix,
+                                },
+                            );
+                        }
+                        lumit_core::fx::Resolved::Grade {
+                            lift,
+                            gamma,
+                            gain,
+                            saturation,
+                            mix,
+                        } => {
+                            tex = self.fx.grade(
+                                &self.ctx,
+                                &tex,
+                                w,
+                                h,
+                                &lumit_gpu::fx::GradeOp {
+                                    lift: *lift,
+                                    gamma: *gamma,
+                                    gain: *gain,
+                                    saturation: *saturation,
                                     mix: *mix,
                                 },
                             );

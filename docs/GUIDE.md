@@ -112,8 +112,67 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
   Lumit version adds — so old and new versions can share project files.
+- **Blur grows a Directional mode.** The Blur effect now has a Mode switch: *Gaussian*
+  (the soft circular blur it has always been) or *Directional* — a streak along an
+  angle, the speed-line look. Under the hood directional blur is a *line integral*:
+  for each pixel, the kernel walks a short line through it (Length long, pointing
+  along Angle), samples the image at evenly spaced points on that line, and averages
+  them — as if the image slid past an open shutter in that direction. The two modes
+  are separate GPU programs, so adding Directional changed nothing about Gaussian:
+  the original blur maths, and the test that pins them to the CPU reference, are
+  byte-for-byte what they were. Old projects saved before the switch existed simply
+  read as Gaussian. (The third §3.8 mode, Radial spin/zoom, is still to come.)
+- **Grade (first stage).** The colour-correction engine begins: lift / gamma / gain per
+  channel plus saturation — the trackball grammar every colourist tool shares. *Gain*
+  multiplies (brightens everything proportionally), *lift* adds (raises the blacks —
+  or crushes them, negative values are allowed), *gamma* bends the mid-tones without
+  moving black or white. Each is a colour parameter, so warming the shadows while
+  cooling the highlights is just different numbers per channel. Two rules from the
+  design doc shape the code: it grades *unpremultiplied* colour (same reason as
+  Sharpen — grading premultiplied pixels shifts matte edges), and it never clips
+  highlights — a gain of 2 on an HDR value of 4 gives 8, and whatever glow comes later
+  gets all of it. Saturation pivots around proper Rec. 709 luma, so desaturating gives
+  true greyscale, not the grey-green mush of naive averaging. Neutral settings
+  short-circuit: a Grade at defaults passes pixels through untouched rather than
+  rounding them through power curves. The rest of §3.10 — exposure, white balance,
+  curves, vignette, and the Looks-style preset browser — builds on this stage.
+- **Flash.** The beat-strobe, in its manual form until beat markers exist. Its Trigger
+  parameter reads unusually on purpose: *each keyframe is a hit*. Drop a keyframe with
+  value 1 on a kick drum and the frame flashes to the flash colour, then fades out
+  exponentially over Decay milliseconds — you author one keyframe per beat, not a
+  spike-and-fall pair. (When the audio engine starts producing beat markers, they'll
+  drive the same envelope automatically — that's why the effect declares "marker input:
+  beat" in its traits already.) The flash respects the layer's own transparency: pixels
+  outside the footprint never light up, so flashing a masked layer flashes the masked
+  shape, not the whole rectangle. Flash also introduced the **colour parameter**: an
+  effect can now declare a scene-linear RGBA colour (the Flash tint defaults to white),
+  which the Effects group shows as R/G/B number fields plus a live swatch. Linear values
+  above 1 are legal — a "4.0 white" flash carries real HDR energy into any glow that
+  follows it in the stack.
+- **RGB split.** The impact-frame staple: the red and blue channels slide apart while
+  green stays put, like a lens fringing under stress. Keyframe a spike on Amount at a
+  hit and you have the genre's signature punch. Two modes: *linear* shifts everything
+  one way (set by Angle), *radial* grows the shift from the centre outward, like real
+  lens aberration. Two details matter in the code: alpha stays glued to the green
+  channel (if it moved with red or blue, every matte edge would grow a coloured rim —
+  design rule §3.6), and the sines behind the shift direction are computed once on the
+  CPU and handed to the GPU, because GPU trigonometry is allowed to be slightly
+  imprecise and the CPU-vs-GPU agreement test demands better.
+- **Sharpen.** The second effect in the catalogue, following Blur's four-part template.
+  It's an *unsharp mask* — the counter-intuitive classic: blur a copy of the image,
+  subtract it from the original (what's left is the fine detail), then add that detail
+  back on top, scaled by Amount. Two subtleties earn comments in the code. First, it
+  works on **unpremultiplied** colour (design rule §2.2): footage with transparency
+  stores its colours pre-multiplied by alpha, and sharpening those values directly would
+  draw halos around every matte edge — so the kernel divides alpha out, sharpens, and
+  multiplies it back in. Second, **Threshold** is a *soft* gate: detail weaker than the
+  threshold (compression noise, mostly) is ignored, but rather than a hard on/off — which
+  would leave visible contours where detail crosses the line — the gate shaves the
+  threshold off everything, so the transition is seamless. "Luminance only" (the default)
+  sharpens the brightness signal and leaves colour alone, because sharpening the colour
+  channels of compressed game capture produces rainbow fringes.
 - **Effects are usable end to end.** Twirl a layer open, open its **Effects** group,
-  and "Add effect" lists the catalogue (Blur, for now). Each effect shows a bypass
+  and "Add effect" lists the catalogue. Each effect shows a bypass
   tick, a remove button, and one row per parameter — a Blur radius has a stopwatch
   and lane diamonds exactly like Position does, so effect animation and layer
   animation are one skill. The same stack renders in preview and in export through
