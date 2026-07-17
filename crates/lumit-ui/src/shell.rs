@@ -7355,6 +7355,44 @@ pub struct GpuViewer {
     render_state: egui_wgpu::RenderState,
     /// Keep the display texture alive while egui samples it.
     current: Option<(egui_wgpu::wgpu::Texture, egui::TextureId)>,
+    /// The VRAM tier (docs/06 §5): displayed textures per frame key, LRU by
+    /// position (back = most recent), so a warm scrub re-presents with zero
+    /// upload or colour work. Budgeted by texture bytes.
+    vram: Vec<VramFrame>,
+    vram_bytes: u64,
+}
+
+/// One VRAM-tier entry: the display texture, its egui registration, and size.
+#[cfg(feature = "media")]
+struct VramFrame {
+    key: u128,
+    /// Never read — held so the GPU texture outlives its egui registration.
+    _texture: egui_wgpu::wgpu::Texture,
+    id: egui::TextureId,
+    size: egui::Vec2,
+    bytes: u64,
+}
+
+/// VRAM-tier budget (docs/13-PERFORMANCE-RULES.md: budgets gate merges; the
+/// governor makes this adaptive later). 512 MB of display textures ≈ 60
+/// frames of 4K, several hundred of 1080p.
+#[cfg(feature = "media")]
+const VRAM_TIER_CAP: u64 = 512 * 1024 * 1024;
+
+/// How many oldest entries must go so `total` fits under `cap` after adding
+/// `incoming` bytes. Pure, so the eviction policy is testable off-GPU.
+#[cfg(feature = "media")]
+fn vram_evict_count(entry_bytes: &[u64], total: u64, incoming: u64, cap: u64) -> usize {
+    let mut running = total.saturating_add(incoming);
+    let mut n = 0;
+    for b in entry_bytes {
+        if running <= cap {
+            break;
+        }
+        running = running.saturating_sub(*b);
+        n += 1;
+    }
+    n
 }
 
 #[cfg(feature = "media")]
@@ -7372,6 +7410,8 @@ impl GpuViewer {
             compositor,
             render_state,
             current: None,
+            vram: Vec::new(),
+            vram_bytes: 0,
         }
     }
 
@@ -7529,6 +7569,53 @@ impl GpuViewer {
             self.render_state.renderer.write().free_texture(&old);
         }
         (id, egui::vec2(width as f32, height as f32))
+    }
+
+    /// A warm VRAM hit: re-present a frame whose display texture is still on
+    /// the GPU — no upload, no colour passes (docs/06 §5: VRAM reads first).
+    fn present_vram(&mut self, key: u128) -> Option<(egui::TextureId, egui::Vec2)> {
+        let idx = self.vram.iter().position(|e| e.key == key)?;
+        let entry = self.vram.remove(idx);
+        let out = (entry.id, entry.size);
+        self.vram.push(entry); // back = most recently used
+        Some(out)
+    }
+
+    /// Present a RAM-tier frame and keep its display texture in the VRAM tier
+    /// under `key`, evicting oldest entries past the byte budget.
+    fn present_keyed(
+        &mut self,
+        key: u128,
+        rgba: &[u8],
+        w: u32,
+        h: u32,
+    ) -> (egui::TextureId, egui::Vec2) {
+        let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
+        let linear = self.engine.linearise(&self.ctx, &src);
+        let shown = self.engine.display(&self.ctx, &linear);
+        let view = shown.create_view(&Default::default());
+        let id = self.render_state.renderer.write().register_native_texture(
+            &self.ctx.device,
+            &view,
+            egui_wgpu::wgpu::FilterMode::Linear,
+        );
+        let bytes = u64::from(w) * u64::from(h) * 4;
+        let sizes: Vec<u64> = self.vram.iter().map(|e| e.bytes).collect();
+        let drop_n = vram_evict_count(&sizes, self.vram_bytes, bytes, VRAM_TIER_CAP);
+        for old in self.vram.drain(..drop_n) {
+            self.vram_bytes = self.vram_bytes.saturating_sub(old.bytes);
+            self.render_state.renderer.write().free_texture(&old.id);
+        }
+        let size = egui::vec2(w as f32, h as f32);
+        self.vram.push(VramFrame {
+            key,
+            _texture: shown,
+            id,
+            size,
+            bytes,
+        });
+        self.vram_bytes = self.vram_bytes.saturating_add(bytes);
+        (id, size)
     }
 
     /// Upload a decoded frame through the colour pipeline; returns the egui
@@ -8248,9 +8335,14 @@ impl Shell {
             // Kura warm path: a cached frame presents as a plain upload.
             if let Some(key) = self.app.cached_present.take() {
                 if let Some(gpu) = &mut self.gpu {
-                    if let Some(frame) = self.app.comp_frame_cache.get(&key) {
+                    // VRAM first (docs/06 §5): a still-resident display texture
+                    // re-presents with zero GPU work; a RAM hit re-uploads and
+                    // joins the VRAM tier for next time.
+                    if let Some(hit) = gpu.present_vram(key) {
+                        self.preview_display = Some(hit);
+                    } else if let Some(frame) = self.app.comp_frame_cache.get(&key) {
                         let (w, h, rgba) = (frame.width, frame.height, frame.rgba.clone());
-                        self.preview_display = Some(gpu.present(&rgba, w, h));
+                        self.preview_display = Some(gpu.present_keyed(key, &rgba, w, h));
                     }
                 }
             }
@@ -9074,6 +9166,19 @@ mod geometry_tests {
         let draws = build_comp_draws(&doc, &forced, 0.0, &map, &mut visited);
         assert_eq!(draws.len(), 1);
         assert!(matches!(draws[0].source, DrawSource::Nested { .. }));
+    }
+
+    // The VRAM tier's eviction policy (docs/06 §5): oldest entries drop until
+    // the incoming frame fits the byte budget; an oversize frame clears all.
+    #[test]
+    fn vram_eviction_drops_oldest_until_the_budget_fits() {
+        // 3 entries of 100 bytes under a 350 cap: adding 100 evicts nothing.
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 100, 350), 1);
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 40, 350), 0);
+        // Adding a huge frame drops everything (and still admits it).
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 1000, 350), 3);
+        // Empty tier: nothing to drop whatever the sizes.
+        assert_eq!(vram_evict_count(&[], 0, 500, 350), 0);
     }
 
     // The live value-drag preview renders a comp patched with the provisional
