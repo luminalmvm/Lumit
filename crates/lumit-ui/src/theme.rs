@@ -250,6 +250,29 @@ impl Default for Theme {
     }
 }
 
+impl Theme {
+    /// This theme with a user-picked accent (the customisation seed): the
+    /// accent and its hover take the picked colour; selection, playhead and
+    /// active states follow automatically since they all read `accent`.
+    /// Lives here because only this module constructs colours.
+    pub fn with_accent(mut self, rgb: [u8; 3]) -> Self {
+        self.accent = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        // Hover: the same hue a step brighter (saturating, hue-preserving
+        // enough at these deltas).
+        self.accent_hover = Color32::from_rgb(
+            rgb[0].saturating_add(0x12),
+            rgb[1].saturating_add(0x12),
+            rgb[2].saturating_add(0x12),
+        );
+        self
+    }
+
+    /// The default accent as plain RGB, for seeding the picker.
+    pub const fn default_accent_rgb() -> [u8; 3] {
+        [0xe0, 0x5a, 0x72]
+    }
+}
+
 /// Which background ramp the user has picked (the seed of the full theme
 /// picker to come). `Dark` is the K-084 rerun-structure ramp; `DarkBlue` is
 /// the previous, bluer and slightly lighter ramp, kept as an option by

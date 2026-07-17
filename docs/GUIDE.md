@@ -668,6 +668,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   from pressed purely by how light their fill is; scrollbars are thin and solid; panel
   edges are single crisp 1px lines. The colours themselves (the clay accent, the cool grey
   family) are still Lumit's own — we borrowed the skeleton, not the skin.
+  Two customisation seeds live in the **Window menu** (the full theme picker grows from
+  here): **Background** switches between the near-black ramp and the previous bluer one,
+  and **Accent** lets you pick any colour for the app's single accent — selection, the
+  playhead, active states all follow it, since they are one token. Both persist with your
+  workspace; Reset returns the clay default.
 - `crates/lumit-ui/src/icons.rs` — **the icons: Iconoir, shipped as a font** (K-085).
   Little pictures like the play triangle or the padlock come from Iconoir, a free
   professionally drawn icon family, baked into the program as a small font file — each icon

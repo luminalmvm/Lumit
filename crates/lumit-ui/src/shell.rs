@@ -7653,6 +7653,10 @@ pub struct Shell {
     /// theme picker to come. Persisted with the workspace.
     #[serde(default)]
     theme_variant: crate::theme::ThemeVariant,
+    /// A custom accent colour, when picked (Window menu). None = the clay
+    /// default. Persisted with the workspace.
+    #[serde(default)]
+    accent_override: Option<[u8; 3]>,
     #[serde(skip, default)]
     app: AppState,
     /// Boot splash (K-008); None once the application window has expanded.
@@ -7780,6 +7784,7 @@ impl Default for Shell {
             floating: Vec::new(),
             theme: Theme::dark(),
             theme_variant: crate::theme::ThemeVariant::default(),
+            accent_override: None,
             app: AppState::default(),
             splash: None,
             preview_tex: None,
@@ -7818,6 +7823,9 @@ impl Shell {
         let mut shell = restored.unwrap_or_default();
         Theme::install_fonts(ctx);
         shell.theme = Theme::of(shell.theme_variant); // honour the saved pick
+        if let Some(rgb) = shell.accent_override {
+            shell.theme = shell.theme.with_accent(rgb);
+        }
         shell.theme.apply(ctx);
         ctx.style_mut(|s| s.visuals.panel_fill = shell.theme.surface_0);
 
@@ -9036,11 +9044,42 @@ impl Shell {
                     if pick != self.theme_variant {
                         self.theme_variant = pick;
                         self.theme = Theme::of(pick);
+                        if let Some(rgb) = self.accent_override {
+                            self.theme = self.theme.with_accent(rgb);
+                        }
                         self.theme.apply(ui.ctx());
                         let s0 = self.theme.surface_0;
                         ui.ctx().style_mut(|s| s.visuals.panel_fill = s0);
                         ui.close_menu();
                     }
+                    // Accent pick — the second seed of the theme customiser.
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new("Accent")
+                            .small()
+                            .color(self.theme.text_muted),
+                    );
+                    ui.horizontal(|ui| {
+                        let mut rgb = self
+                            .accent_override
+                            .unwrap_or(crate::theme::Theme::default_accent_rgb());
+                        let changed = ui.color_edit_button_srgb(&mut rgb).changed();
+                        let reset = self.accent_override.is_some()
+                            && ui
+                                .small_button("Reset")
+                                .on_hover_text("Back to the clay default")
+                                .clicked();
+                        if changed || reset {
+                            self.accent_override = if reset { None } else { Some(rgb) };
+                            self.theme = Theme::of(self.theme_variant);
+                            if let Some(rgb) = self.accent_override {
+                                self.theme = self.theme.with_accent(rgb);
+                            }
+                            self.theme.apply(ui.ctx());
+                            let s0 = self.theme.surface_0;
+                            ui.ctx().style_mut(|s| s.visuals.panel_fill = s0);
+                        }
+                    });
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
