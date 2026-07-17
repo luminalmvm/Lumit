@@ -79,6 +79,10 @@ pub struct CompLayerDraw {
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
     /// source. Empty unless the stack is temporal.
     pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
+    /// The layer's dense forward flow field `(u, v, w, h)` for Flow motion
+    /// blur (docs/08 §3.2), carried from its decode job — `w × h` matches the
+    /// decoded source. None unless the stack wants one.
+    pub flow_field: Option<(Vec<f32>, Vec<f32>, u32, u32)>,
 }
 
 /// GPU display path (slice 5 completion): decoded sRGB bytes → linear fp16
@@ -304,7 +308,22 @@ impl GpuViewer {
                         (*offset, self.engine.linearise(&self.ctx, &src))
                     })
                     .collect();
-                crate::fxops::run_ops(&self.fx, &self.ctx, tex, w, h, &l.fx, &neighbours, None)
+                // The dense motion field for Flow motion blur, uploaded as its
+                // own texture (only when it matches the layer's raster).
+                let flow = l.flow_field.as_ref().and_then(|(u, v, fw, fh)| {
+                    (*fw == w && *fh == h)
+                        .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, w, h))
+                });
+                crate::fxops::run_ops(
+                    &self.fx,
+                    &self.ctx,
+                    tex,
+                    w,
+                    h,
+                    &l.fx,
+                    &neighbours,
+                    flow.as_ref(),
+                )
             };
             linear_textures.push(tex);
         }

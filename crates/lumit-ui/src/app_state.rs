@@ -68,6 +68,11 @@ pub mod preview {
         /// offset in the stack's temporal window. Empty for a plain layer, so
         /// a single-frame stack decodes exactly one frame.
         pub temporal: Vec<(i32, usize)>,
+        /// True when the stack has a flow-consuming effect (Flow motion blur,
+        /// docs/08 §3.2): the decode worker measures the dense motion between
+        /// this frame and the +1 neighbour (already fetched via `temporal`)
+        /// and stamps it onto [`CompLayerPixels::flow_field`].
+        pub wants_flow: bool,
     }
 
     pub struct CompLayerPixels {
@@ -81,6 +86,11 @@ pub mod preview {
         /// Decoded neighbour frames for a temporal effect (see
         /// [`CompJob::temporal`]): `(offset, rgba)`, same size as `rgba`.
         pub temporal: Vec<(i32, Vec<u8>)>,
+        /// Dense forward flow (per-pixel `(u, v)` motion in pixels, row-major,
+        /// same `width × height` as `rgba`) between this frame and the next,
+        /// present only when [`CompJob::wants_flow`] and the +1 neighbour
+        /// decoded. Flow motion blur (docs/08 §3.2) smears along it.
+        pub flow_field: Option<(Vec<f32>, Vec<f32>)>,
     }
 
     pub struct CompFrame {
@@ -275,6 +285,46 @@ pub mod preview {
                 target_width: job.target_width,
             };
             let px = decode(decoders, cache, &req)?;
+            // Neighbour frames for a temporal effect (job.temporal is empty
+            // for a plain layer, so this loop does nothing then). A neighbour
+            // that fails to decode is simply dropped — a missing echo tap
+            // degrades the effect, never the frame.
+            let temporal: Vec<(i32, Vec<u8>)> = job
+                .temporal
+                .iter()
+                .filter_map(|&(offset, frame)| {
+                    let nreq = Request {
+                        generation: 0,
+                        item: job.item,
+                        path: job.path.clone(),
+                        frame,
+                        target_width: job.target_width,
+                    };
+                    decode(decoders, cache, &nreq)
+                        .ok()
+                        .map(|p| (offset, p.rgba))
+                })
+                .collect();
+            // Flow motion blur (docs/08 §3.2) needs a dense motion field: the
+            // forward flow from this frame to the next (offset +1, decoded
+            // above). Computed from the raw current frame before it is consumed
+            // into `rgba` below, where both frames live as RGBA — exactly as
+            // the Flow retiming policy computes its flow, on the shared engine
+            // that reuses the GPU when one is present. A dropped +1 neighbour
+            // just leaves it None, and motion blur degrades to a passthrough.
+            let flow_field = if job.wants_flow {
+                temporal.iter().find(|(o, _)| *o == 1).map(|(_, next)| {
+                    let (w, h) = (px.width as usize, px.height as usize);
+                    let ga = lumit_flow::to_gray(&px.rgba, w, h);
+                    let gb = lumit_flow::to_gray(next, w, h);
+                    let (fwd, _bwd) = flow_engine
+                        .get_or_insert_with(lumit_flow::FlowEngine::new_auto)
+                        .flow_pair(&ga, &gb);
+                    (fwd.u, fwd.v)
+                })
+            } else {
+                None
+            };
             // Blend / Flow policy: combine with the next source frame.
             let rgba = if let Some((ceil, w)) = job.blend {
                 let req2 = Request {
@@ -307,26 +357,6 @@ pub mod preview {
             } else {
                 px.rgba
             };
-            // Neighbour frames for a temporal effect (job.temporal is empty
-            // for a plain layer, so this loop does nothing then). A neighbour
-            // that fails to decode is simply dropped — a missing echo tap
-            // degrades the effect, never the frame.
-            let temporal: Vec<(i32, Vec<u8>)> = job
-                .temporal
-                .iter()
-                .filter_map(|&(offset, frame)| {
-                    let nreq = Request {
-                        generation: 0,
-                        item: job.item,
-                        path: job.path.clone(),
-                        frame,
-                        target_width: job.target_width,
-                    };
-                    decode(decoders, cache, &nreq)
-                        .ok()
-                        .map(|p| (offset, p.rgba))
-                })
-                .collect();
             layers.push(CompLayerPixels {
                 layer: job.layer,
                 width: px.width,
@@ -335,6 +365,7 @@ pub mod preview {
                 natural_w: job.natural_w,
                 natural_h: job.natural_h,
                 temporal,
+                flow_field,
             });
         }
         Ok(CompFrame {
@@ -2885,6 +2916,7 @@ impl AppState {
                                     // later refinement (clip-relative neighbour
                                     // resolution); footage layers first.
                                     temporal: Vec::new(),
+                                    wants_flow: false,
                                 });
                             }
                         }
@@ -2977,6 +3009,12 @@ impl AppState {
                         flow,
                         flow_full,
                         temporal,
+                        // Flow motion blur measures motion between this frame
+                        // and the +1 neighbour (already in `temporal`).
+                        wants_flow: lumit_core::fx::stack_wants_flow_field(
+                            &layer.effects,
+                            layer.switches.fx,
+                        ),
                     });
                 }
             }
