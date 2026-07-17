@@ -501,6 +501,33 @@ than a port. `with_accent`'s hover-shift direction now depends on mode: brighten
 amount instead. The §9 contrast floors are re-run against the light ramp, not assumed to carry
 over from the dark one's numbers.
 
+### 11.1 Named colour schemes (K-097)
+
+Beyond Dark, Dark blue and Light, `Theme` carries four ready-made community palettes as
+first-class schemes, each a full token set built the same way as the three above rather than
+a re-tint of them: **Gruvbox dark** and **Gruvbox light** (morhetz's warm, retro
+cream-and-charcoal pair), and **Catppuccin Mocha** and **Catppuccin Latte** (Catppuccin's
+indigo-tinted dark/light pair). Selecting between all seven is `ColorScheme`, which
+supersedes the `ThemeMode` × `ThemeVariant` split as the picker's underlying model while
+`ThemeMode`/`ThemeVariant` stay in place for the settings that still address them directly.
+
+Every scheme maps its own palette onto the *same* roles this document already defines —
+no new tokens, no widget-code changes:
+
+| Role | Gruvbox | Catppuccin |
+|---|---|---|
+| `surface_0..4` | The palette's own background ramp (`bg0..bg4` dark; the light ramp mirrors §11's "elevation is a darker wash" structure) | `crust`/`base`/`surface0..2` dark; `mantle`/`base`/`crust` mirrored the same way light |
+| `text_primary..disabled` | `fg0..fg3` | `text`/`subtext1`/`overlay1`/`overlay0` |
+| `accent` | Orange (`#fe8019` dark, `#af3a03` light) | Mauve (`#cba6f7` Mocha, `#8839ef` Latte) |
+| `viewer_surround` / scopes | Unchanged: strictly neutral and `ScopeColours::STANDARD`, exactly as every other scheme (§2.1, §11) — a named scheme changes chrome, never the grading-neutral surfaces |
+
+The two dark schemes' `error` role takes each palette's calmer red where the palette offers a
+choice (Gruvbox's *neutral* red rather than its "bright" one) — a curation call in the same
+no-punishment-red spirit as §3.1, not a claim that every community palette's boldest red is
+banned outright. `curve[0..3]` and `layer.*` draw four/six further distinct, muted hues from
+each palette rather than reusing `accent`, `success`, `warning` or `error` again, matching how
+§6.1/§6.2 keep those families visually separate from the semantic roles.
+
 ## 12. The Round shape (K-092)
 
 The Figma-UI3-inspired alternative to this document's default Sharp system: panels float as

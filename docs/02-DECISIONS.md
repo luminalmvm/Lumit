@@ -746,6 +746,30 @@ trace whatever the light/dark chrome, the same grading-accuracy reasoning that k
 LRU eviction. The §8 tap-point open question (pre- vs post-display-transform) is untouched —
 v1 has no display transform, so the banked sRGB frame is both.
 
+**K-097 · DECIDED · Four community colour schemes join the theme as named, first-class
+options.** From the owner: alongside Dark, Dark blue and Light, `Theme` gains `gruvbox_dark`,
+`gruvbox_light`, `catppuccin_mocha` and `catppuccin_latte` — full constructors populating
+every token, built the same way as the existing three (`dark()`/`light()`/`dark_blue()`).
+A new `ColorScheme` enum (`Dark`/`DarkBlue`/`Light`/`GruvboxDark`/`GruvboxLight`/
+`CatppuccinMocha`/`CatppuccinLatte`) supersedes the old `ThemeMode` × `ThemeVariant` split as
+the thing a full theme picker selects from, with `ColorScheme::mode()` still reporting the
+light/dark half for callers (e.g. `with_accent`'s hover-shift direction) that only need that.
+`Theme::for_scheme(scheme, shape)` is the shape-inclusive composition entry point, sitting
+alongside the pre-existing `Theme::for_settings(mode, variant, shape)` rather than replacing
+it — both remain callable; wiring the Settings window's Appearance page onto `ColorScheme`
+instead of the old two-axis picker is a follow-up change (K-098's window), not part of this
+entry. Each new scheme maps its source palette onto Lumit's existing roles rather than
+introducing new ones: surfaces follow that palette's own background ramp (monotonic
+light→dark for the dark schemes; mirroring `light()`'s "elevation reads as a darker wash"
+structure, `surface_4` below `surface_0`, for the two light schemes), text takes that
+palette's foreground/muted ramp, `accent` is the scheme's usual signature hue (Gruvbox
+orange, Catppuccin mauve), and `viewer_surround` and `scope` stay exactly as every other
+theme's — strictly neutral and the one fixed `ScopeColours::STANDARD` respectively, never
+palette-tinted, per the grading-accuracy rule in docs/15 §2.1/§11. Gruvbox's error role takes
+the palette's *neutral* red rather than its bolder "bright red", a curation choice keeping it
+a notch short of alarming in the spirit of docs/15 §3.1's no-punishment-red rule while
+remaining an authentic Gruvbox hue. Spec: [15-DESIGN.md](15-DESIGN.md) §2, §11.
+
 **K-098 · DECIDED · A Settings window replaces the Window-menu theme cluster; app-wide
 params migrate onto it.** From the owner (2026-07-18): a proper application-settings surface,
 macOS-System-Settings-shaped — a left sidebar of pages, each page a column of grouped
@@ -759,9 +783,11 @@ keeps only Reset workspace and a Settings… opener. v1 also ships a **Performan
 new `diskio::Cmd::SetCap` the disk worker remembers across project switches) and a **General**
 page (reset workspace, version). Performance settings persist on `Shell` as
 `PerformanceSettings`; defaults reproduce the previous hardcoded budgets (512 MiB RAM, 50 GiB
-disk) exactly, so an existing install is unchanged until a slider moves. The fuller §15
-inventory (VRAM/CUDA, decoder pool, worker cap, cache root/proxy, Preview, Colour, Export,
-Keymap, Autosave, Plugins) fills in on this same surface as those systems gain controls; a
-GPU-acceleration toggle was deliberately deferred rather than shipped half-wired (the flow
-engine lives in the decode worker and needs its own control message). The window is the
-`docs/07 §15` "Interface/Preferences" surface, not a second one.
+disk) exactly, so an existing install is unchanged until a slider moves. The Appearance page's
+Mode-plus-Background pair is the old two-axis picker; folding it into a single K-097
+`ColorScheme` dropdown (so Gruvbox and Catppuccin are selectable) is the immediate follow-up.
+The fuller §15 inventory (VRAM/CUDA, decoder pool, worker cap, cache root/proxy, Preview,
+Colour, Export, Keymap, Autosave, Plugins) fills in on this same surface as those systems gain
+controls; a GPU-acceleration toggle was deliberately deferred rather than shipped half-wired
+(the flow engine lives in the decode worker and needs its own control message). The window is
+the `docs/07 §15` "Interface/Preferences" surface, not a second one.

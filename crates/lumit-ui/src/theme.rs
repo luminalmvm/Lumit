@@ -318,6 +318,214 @@ impl Theme {
         }
     }
 
+    /// Gruvbox dark (K-097) — morhetz's Gruvbox, retro-warm cream-on-charcoal.
+    /// Surfaces are the palette's own five-step `bg0..bg4` ramp (monotonic,
+    /// mirroring how `dark()`'s five surfaces step up in lightness); text
+    /// takes `fg0..fg3`, leaving `fg4` free for `hairline_strong` alongside
+    /// the palette's own `gray` for the plain `hairline`. `accent` is
+    /// Gruvbox's signature orange; `error` takes the *neutral* red rather
+    /// than the bolder "bright red" so it stays a notch short of alarming,
+    /// per this file's no-punishment-red spirit (15-DESIGN §3.1) while
+    /// remaining an authentic Gruvbox hue.
+    pub const fn gruvbox_dark() -> Self {
+        Self {
+            mode: ThemeMode::Dark,
+            shape: ThemeShape::Sharp,
+            tokens: ShapeTokens::SHARP,
+
+            surface_0: Color32::from_rgb(0x28, 0x28, 0x28), // bg0
+            surface_1: Color32::from_rgb(0x3c, 0x38, 0x36), // bg1
+            surface_2: Color32::from_rgb(0x50, 0x49, 0x45), // bg2
+            surface_3: Color32::from_rgb(0x66, 0x5c, 0x54), // bg3
+            surface_4: Color32::from_rgb(0x7c, 0x6f, 0x64), // bg4
+            viewer_surround: Color32::from_rgb(0x1c, 0x1c, 0x1c),
+
+            text_primary: Color32::from_rgb(0xfb, 0xf1, 0xc7), // fg0
+            text_secondary: Color32::from_rgb(0xeb, 0xdb, 0xb2), // fg1
+            text_muted: Color32::from_rgb(0xd5, 0xc4, 0xa1),   // fg2
+            text_disabled: Color32::from_rgb(0xbd, 0xae, 0x93), // fg3
+
+            hairline: Color32::from_rgba_premultiplied(0x92, 0x83, 0x74, 0xff), // gray
+            hairline_strong: Color32::from_rgba_premultiplied(0xa8, 0x99, 0x84, 0xff), // fg4
+
+            accent: Color32::from_rgb(0xfe, 0x80, 0x19), // orange
+            accent_hover: Color32::from_rgb(0xfd, 0x94, 0x38), // brightened
+            success: Color32::from_rgb(0xb8, 0xbb, 0x26), // green
+            warning: Color32::from_rgb(0xfa, 0xbd, 0x2f), // yellow
+            error: Color32::from_rgb(0xcc, 0x24, 0x1d),  // neutral red
+            cache_disk: Color32::from_rgb(0x83, 0xa5, 0x98), // blue
+            curve: [
+                Color32::from_rgb(0x8e, 0xc0, 0x7c), // aqua
+                Color32::from_rgb(0x83, 0xa5, 0x98), // blue
+                Color32::from_rgb(0xd3, 0x86, 0x9b), // purple
+                Color32::from_rgb(0xfa, 0xbd, 0x2f), // yellow
+            ],
+            layer: LayerColours {
+                footage: Color32::from_rgb(0x6a, 0x77, 0x6e), // muted blue
+                sequence: Color32::from_rgb(0x8b, 0x7b, 0x7c), // muted blue/purple
+                precomp: Color32::from_rgb(0x92, 0x68, 0x70), // muted purple
+                solid: Color32::from_rgb(0x87, 0x7a, 0x6c),   // neutral
+                text: Color32::from_rgb(0x94, 0x77, 0x3c),    // muted yellow
+                camera: Color32::from_rgb(0x96, 0x5f, 0x33),  // muted orange
+            },
+            scope: ScopeColours::STANDARD,
+        }
+    }
+
+    /// Gruvbox light (K-097) — the same palette's light ramp, cream panels
+    /// on a slightly deeper cream canvas, following `light()`'s structure:
+    /// `surface_1`/`surface_3` share the ramp's brightest tone (`bg0`),
+    /// `surface_4` (hover) is the *darkest* surface — even below
+    /// `surface_0` — exactly as `light()`'s own hover fill undercuts its
+    /// canvas, since on a light ramp "elevation" reads as a darker wash,
+    /// not a brighter one.
+    pub const fn gruvbox_light() -> Self {
+        Self {
+            mode: ThemeMode::Light,
+            shape: ThemeShape::Sharp,
+            tokens: ShapeTokens::SHARP,
+
+            surface_0: Color32::from_rgb(0xeb, 0xdb, 0xb2), // bg1
+            surface_1: Color32::from_rgb(0xfb, 0xf1, 0xc7), // bg0
+            surface_2: Color32::from_rgb(0xf3, 0xe6, 0xbc), // bg0/bg1 blend
+            surface_3: Color32::from_rgb(0xfb, 0xf1, 0xc7), // bg0
+            surface_4: Color32::from_rgb(0xd5, 0xc4, 0xa1), // bg2
+            viewer_surround: Color32::from_rgb(0xa8, 0xa8, 0xa8),
+
+            text_primary: Color32::from_rgb(0x28, 0x28, 0x28), // fg0
+            text_secondary: Color32::from_rgb(0x3c, 0x38, 0x36), // fg1
+            text_muted: Color32::from_rgb(0x50, 0x49, 0x45),   // fg2
+            text_disabled: Color32::from_rgb(0x66, 0x5c, 0x54), // fg3
+
+            hairline: Color32::from_rgba_premultiplied(0xe0, 0xd0, 0xaa, 0xff),
+            hairline_strong: Color32::from_rgba_premultiplied(0xbd, 0xae, 0x93, 0xff), // bg3
+
+            accent: Color32::from_rgb(0xaf, 0x3a, 0x03), // faded orange
+            accent_hover: Color32::from_rgb(0x86, 0x35, 0x0e), // darkened
+            success: Color32::from_rgb(0x79, 0x74, 0x0e), // faded green
+            warning: Color32::from_rgb(0xb5, 0x76, 0x14), // faded yellow
+            error: Color32::from_rgb(0x9d, 0x00, 0x06),  // faded red
+            cache_disk: Color32::from_rgb(0x07, 0x66, 0x78), // faded blue
+            curve: [
+                Color32::from_rgb(0x42, 0x7b, 0x58), // faded aqua
+                Color32::from_rgb(0x07, 0x66, 0x78), // faded blue
+                Color32::from_rgb(0x8f, 0x3f, 0x71), // faded purple
+                Color32::from_rgb(0xb5, 0x76, 0x14), // faded yellow
+            ],
+            layer: LayerColours {
+                footage: Color32::from_rgb(0x13, 0x50, 0x5c),
+                sequence: Color32::from_rgb(0x42, 0x48, 0x61),
+                precomp: Color32::from_rgb(0x70, 0x38, 0x5b),
+                solid: Color32::from_rgb(0x5b, 0x52, 0x4c),
+                text: Color32::from_rgb(0x8b, 0x5f, 0x1a),
+                camera: Color32::from_rgb(0x91, 0x36, 0x0b),
+            },
+            scope: ScopeColours::STANDARD,
+        }
+    }
+
+    /// Catppuccin Mocha (K-097) — the popular indigo-tinted dark palette.
+    /// Surfaces follow Catppuccin's own naming straight through
+    /// (`crust → base → surface0 → surface1 → surface2`, skipping `mantle`,
+    /// which sits *between* `crust` and `base` and so has no monotonic slot
+    /// left in a five-step ramp); text takes `text/subtext1/overlay1/
+    /// overlay0`. `accent` is mauve, the palette's usual signature choice.
+    pub const fn catppuccin_mocha() -> Self {
+        Self {
+            mode: ThemeMode::Dark,
+            shape: ThemeShape::Sharp,
+            tokens: ShapeTokens::SHARP,
+
+            surface_0: Color32::from_rgb(0x11, 0x11, 0x1b), // crust
+            surface_1: Color32::from_rgb(0x1e, 0x1e, 0x2e), // base
+            surface_2: Color32::from_rgb(0x31, 0x32, 0x44), // surface0
+            surface_3: Color32::from_rgb(0x45, 0x47, 0x5a), // surface1
+            surface_4: Color32::from_rgb(0x58, 0x5b, 0x70), // surface2
+            viewer_surround: Color32::from_rgb(0x1c, 0x1c, 0x1c),
+
+            text_primary: Color32::from_rgb(0xcd, 0xd6, 0xf4), // text
+            text_secondary: Color32::from_rgb(0xba, 0xc2, 0xde), // subtext1
+            text_muted: Color32::from_rgb(0x7f, 0x84, 0x9c),   // overlay1
+            text_disabled: Color32::from_rgb(0x6c, 0x70, 0x86), // overlay0
+
+            hairline: Color32::from_rgba_premultiplied(0x39, 0x3a, 0x4d, 0xff),
+            hairline_strong: Color32::from_rgba_premultiplied(0x4f, 0x52, 0x66, 0xff),
+
+            accent: Color32::from_rgb(0xcb, 0xa6, 0xf7), // mauve
+            accent_hover: Color32::from_rgb(0xcc, 0xb2, 0xf6), // brightened
+            success: Color32::from_rgb(0xa6, 0xe3, 0xa1), // green
+            warning: Color32::from_rgb(0xf9, 0xe2, 0xaf), // yellow
+            error: Color32::from_rgb(0xf3, 0x8b, 0xa8),  // red
+            cache_disk: Color32::from_rgb(0x74, 0xc7, 0xec), // sapphire
+            curve: [
+                Color32::from_rgb(0x94, 0xe2, 0xd5), // teal
+                Color32::from_rgb(0xa6, 0xe3, 0xa1), // green
+                Color32::from_rgb(0xf5, 0xc2, 0xe7), // pink
+                Color32::from_rgb(0xf9, 0xe2, 0xaf), // yellow
+            ],
+            layer: LayerColours {
+                footage: Color32::from_rgb(0x61, 0x7d, 0xaf), // muted blue
+                sequence: Color32::from_rgb(0x7e, 0x80, 0xb9), // muted blue/mauve
+                precomp: Color32::from_rgb(0x8c, 0x74, 0xae), // muted mauve
+                solid: Color32::from_rgb(0x76, 0x7a, 0x91),   // neutral
+                text: Color32::from_rgb(0x94, 0x87, 0x71),    // muted yellow
+                camera: Color32::from_rgb(0xab, 0x7d, 0x65),  // muted peach
+            },
+            scope: ScopeColours::STANDARD,
+        }
+    }
+
+    /// Catppuccin Latte (K-097) — Catppuccin's light sibling. Surfaces
+    /// follow `light()`'s structure exactly (`surface_1`/`surface_3` share
+    /// the ramp's brightest tone `base`, `surface_4` is the darkest of the
+    /// ramp — Catppuccin's `crust`, which is a *deep* shadow tone even here
+    /// on the light side); text takes the same `text/subtext1/overlay1/
+    /// overlay0` family as Mocha, at Latte's own (dark-on-light) hex values.
+    pub const fn catppuccin_latte() -> Self {
+        Self {
+            mode: ThemeMode::Light,
+            shape: ThemeShape::Sharp,
+            tokens: ShapeTokens::SHARP,
+
+            surface_0: Color32::from_rgb(0xe6, 0xe9, 0xef), // mantle
+            surface_1: Color32::from_rgb(0xef, 0xf1, 0xf5), // base
+            surface_2: Color32::from_rgb(0xea, 0xed, 0xf2), // mantle/base blend
+            surface_3: Color32::from_rgb(0xef, 0xf1, 0xf5), // base
+            surface_4: Color32::from_rgb(0xdc, 0xe0, 0xe8), // crust
+            viewer_surround: Color32::from_rgb(0xa8, 0xa8, 0xa8),
+
+            text_primary: Color32::from_rgb(0x4c, 0x4f, 0x69), // text
+            text_secondary: Color32::from_rgb(0x5c, 0x5f, 0x77), // subtext1
+            text_muted: Color32::from_rgb(0x8c, 0x8f, 0xa1),   // overlay1
+            text_disabled: Color32::from_rgb(0x9c, 0xa0, 0xb0), // overlay0
+
+            hairline: Color32::from_rgba_premultiplied(0xcc, 0xd0, 0xda, 0xff), // surface0
+            hairline_strong: Color32::from_rgba_premultiplied(0xbc, 0xc0, 0xcc, 0xff), // surface1
+
+            accent: Color32::from_rgb(0x88, 0x39, 0xef), // mauve
+            accent_hover: Color32::from_rgb(0x6a, 0x2c, 0xba), // darkened
+            success: Color32::from_rgb(0x40, 0xa0, 0x2b), // green
+            warning: Color32::from_rgb(0xdf, 0x8e, 0x1d), // yellow
+            error: Color32::from_rgb(0xd2, 0x0f, 0x39),  // red
+            cache_disk: Color32::from_rgb(0x20, 0x9f, 0xb5), // sapphire
+            curve: [
+                Color32::from_rgb(0x17, 0x92, 0x99), // teal
+                Color32::from_rgb(0x40, 0xa0, 0x2b), // green
+                Color32::from_rgb(0xea, 0x76, 0xcb), // pink
+                Color32::from_rgb(0xdf, 0x8e, 0x1d), // yellow
+            ],
+            layer: LayerColours {
+                footage: Color32::from_rgb(0x2e, 0x5e, 0xc4),
+                sequence: Color32::from_rgb(0x51, 0x50, 0xd0),
+                precomp: Color32::from_rgb(0x76, 0x40, 0xc7),
+                solid: Color32::from_rgb(0x74, 0x77, 0x8c),
+                text: Color32::from_rgb(0xba, 0x7e, 0x30),
+                camera: Color32::from_rgb(0xd2, 0x5f, 0x22),
+            },
+            scope: ScopeColours::STANDARD,
+        }
+    }
+
     /// The full composition (K-092): mode × variant × shape. `variant` only
     /// has meaning under `ThemeMode::Dark` (there is one light ramp; a
     /// Dark/DarkBlue choice made while in Light mode is inert, matching
@@ -329,6 +537,20 @@ impl Theme {
             ThemeMode::Dark => Self::of(variant),
             ThemeMode::Light => Self::light(),
         };
+        t.tokens = match shape {
+            ThemeShape::Sharp => ShapeTokens::SHARP,
+            ThemeShape::Round => ShapeTokens::ROUND,
+        };
+        t.shape = shape;
+        t
+    }
+
+    /// The composition a named [`ColorScheme`] plus [`ThemeShape`] resolves
+    /// to (K-097): the settings-window counterpart to `for_settings` once a
+    /// scheme covers what `mode`+`variant` used to. Builds the scheme, then
+    /// overlays the shape tokens exactly as `for_settings` does.
+    pub const fn for_scheme(scheme: ColorScheme, shape: ThemeShape) -> Self {
+        let mut t = scheme.build();
         t.tokens = match shape {
             ThemeShape::Sharp => ShapeTokens::SHARP,
             ThemeShape::Round => ShapeTokens::ROUND,
@@ -562,6 +784,79 @@ impl Theme {
     }
 }
 
+/// Every named colour scheme Lumit ships (K-097 adds the four community
+/// palettes to the original three). Where `ThemeMode` × `ThemeVariant` used
+/// to be the whole story, `ColorScheme` is the superset a full theme picker
+/// selects from directly — `mode()` still reports which half of that split
+/// a given scheme falls on, since callers (e.g. `with_accent`'s hover-shift
+/// direction) key off light-vs-dark rather than the specific scheme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum ColorScheme {
+    #[default]
+    Dark,
+    DarkBlue,
+    Light,
+    GruvboxDark,
+    GruvboxLight,
+    CatppuccinMocha,
+    CatppuccinLatte,
+}
+
+impl ColorScheme {
+    /// Every scheme, in the order they should list in a picker.
+    pub const ALL: [ColorScheme; 7] = [
+        ColorScheme::Dark,
+        ColorScheme::DarkBlue,
+        ColorScheme::Light,
+        ColorScheme::GruvboxDark,
+        ColorScheme::GruvboxLight,
+        ColorScheme::CatppuccinMocha,
+        ColorScheme::CatppuccinLatte,
+    ];
+
+    /// Sentence-case display name for menus and settings.
+    pub fn label(self) -> &'static str {
+        match self {
+            ColorScheme::Dark => "Dark",
+            ColorScheme::DarkBlue => "Dark blue",
+            ColorScheme::Light => "Light",
+            ColorScheme::GruvboxDark => "Gruvbox dark",
+            ColorScheme::GruvboxLight => "Gruvbox light",
+            ColorScheme::CatppuccinMocha => "Catppuccin Mocha",
+            ColorScheme::CatppuccinLatte => "Catppuccin Latte",
+        }
+    }
+
+    /// Which side of the light/dark split this scheme falls on — drives
+    /// `with_accent`'s hover-shift direction and anything else that only
+    /// needs to know light-vs-dark rather than the specific palette.
+    pub fn mode(self) -> ThemeMode {
+        match self {
+            ColorScheme::Light | ColorScheme::GruvboxLight | ColorScheme::CatppuccinLatte => {
+                ThemeMode::Light
+            }
+            ColorScheme::Dark
+            | ColorScheme::DarkBlue
+            | ColorScheme::GruvboxDark
+            | ColorScheme::CatppuccinMocha => ThemeMode::Dark,
+        }
+    }
+
+    /// The theme this scheme resolves to, shape aside (see
+    /// [`Theme::for_scheme`] for the shape-inclusive composition).
+    pub const fn build(self) -> Theme {
+        match self {
+            ColorScheme::Dark => Theme::dark(),
+            ColorScheme::DarkBlue => Theme::dark_blue(),
+            ColorScheme::Light => Theme::light(),
+            ColorScheme::GruvboxDark => Theme::gruvbox_dark(),
+            ColorScheme::GruvboxLight => Theme::gruvbox_light(),
+            ColorScheme::CatppuccinMocha => Theme::catppuccin_mocha(),
+            ColorScheme::CatppuccinLatte => Theme::catppuccin_latte(),
+        }
+    }
+}
+
 /// A colour that comes from the *document* (a solid's swatch, a comp
 /// background) rather than the design system. Lives here because this module
 /// is the only place allowed to construct egui colours (design lint).
@@ -678,5 +973,101 @@ mod tests {
             t.card_padding,
             t.card_radius
         );
+    }
+
+    /// Every `ColorScheme` builds cleanly under both shapes (K-097) — this
+    /// is mostly a compile-and-run smoke test, since the constructors are
+    /// plain field literals with nothing that can panic, but it pins that
+    /// `for_scheme` stays exhaustive as new schemes are added.
+    #[test]
+    fn every_color_scheme_builds_under_both_shapes() {
+        for scheme in ColorScheme::ALL {
+            let _sharp = Theme::for_scheme(scheme, ThemeShape::Sharp);
+            let _round = Theme::for_scheme(scheme, ThemeShape::Round);
+        }
+    }
+
+    /// `ColorScheme::mode()` must agree with the built theme's own `mode`
+    /// field, and must be `Light` for exactly the three light schemes.
+    #[test]
+    fn color_scheme_mode_matches_built_theme_and_is_light_for_light_schemes_only() {
+        for scheme in ColorScheme::ALL {
+            let built = scheme.build();
+            assert_eq!(
+                built.mode,
+                scheme.mode(),
+                "{scheme:?}'s built theme.mode must match scheme.mode()"
+            );
+        }
+        let light_schemes = [
+            ColorScheme::Light,
+            ColorScheme::GruvboxLight,
+            ColorScheme::CatppuccinLatte,
+        ];
+        for scheme in ColorScheme::ALL {
+            let expected = if light_schemes.contains(&scheme) {
+                ThemeMode::Light
+            } else {
+                ThemeMode::Dark
+            };
+            assert_eq!(scheme.mode(), expected, "wrong mode for {scheme:?}");
+        }
+    }
+
+    /// `ColorScheme::ALL` lists every variant exactly once, and every label
+    /// is non-empty and unique — a duplicate or blank label would be a
+    /// broken picker entry.
+    #[test]
+    fn color_scheme_all_has_seven_unique_nonempty_labels() {
+        assert_eq!(ColorScheme::ALL.len(), 7);
+        let labels: Vec<&str> = ColorScheme::ALL.iter().map(|s| s.label()).collect();
+        for label in &labels {
+            assert!(!label.is_empty());
+        }
+        for i in 0..labels.len() {
+            for j in (i + 1)..labels.len() {
+                assert_ne!(labels[i], labels[j], "duplicate label {}", labels[i]);
+            }
+        }
+    }
+
+    /// `for_scheme` overlays the shape tokens on top of any scheme's own
+    /// colours, exactly as `for_settings` does for mode/variant.
+    #[test]
+    fn for_scheme_overlays_shape_tokens() {
+        for scheme in ColorScheme::ALL {
+            let sharp = Theme::for_scheme(scheme, ThemeShape::Sharp);
+            assert_eq!(sharp.tokens, ShapeTokens::SHARP);
+            assert_eq!(sharp.shape, ThemeShape::Sharp);
+
+            let round = Theme::for_scheme(scheme, ThemeShape::Round);
+            assert_eq!(round.tokens, ShapeTokens::ROUND);
+            assert_eq!(round.shape, ThemeShape::Round);
+
+            // Colours are unaffected by shape.
+            assert_eq!(sharp.surface_1, round.surface_1);
+            assert_eq!(sharp.accent, round.accent);
+        }
+    }
+
+    /// A dark scheme's `viewer_surround` MUST be exactly neutral
+    /// (r == g == b) — the grading-accuracy rule every theme must satisfy
+    /// (15-DESIGN §2.1), re-checked here for the three new dark schemes.
+    #[test]
+    fn dark_scheme_viewer_surround_is_exactly_neutral() {
+        for scheme in [
+            ColorScheme::Dark,
+            ColorScheme::DarkBlue,
+            ColorScheme::GruvboxDark,
+            ColorScheme::CatppuccinMocha,
+        ] {
+            let t = scheme.build();
+            let c = t.viewer_surround;
+            assert_eq!(
+                (c.r(), c.g(), c.b()),
+                (c.r(), c.r(), c.r()),
+                "{scheme:?}'s viewer_surround must be neutral (r == g == b)"
+            );
+        }
     }
 }

@@ -1027,6 +1027,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   The **focused panel** also wears a thin accent edge: whichever panel you last clicked is
   where keyboard shortcuts land, and the edge keeps that visible at a glance (the After
   Effects convention) — it follows the Round shape's card rounding too, when that's picked.
+  Four more complete colour schemes now live in `theme.rs` alongside Dark, Dark blue and
+  Light (K-097): Gruvbox dark, Gruvbox light, Catppuccin Mocha and Catppuccin Latte, each a
+  well-known palette from outside Lumit re-mapped onto its existing surfaces, text, accent and
+  so on, rather than a new set of rules. They're data only for now, not yet reachable from the
+  Settings window — picking between all seven is the next step, folding the Mode and
+  Background rows on the Appearance page into one colour-scheme chooser.
 - `crates/lumit-ui/src/icons.rs` — **the icons: Iconoir, shipped as a font** (K-085).
   Little pictures like the play triangle or the padlock come from Iconoir, a free
   professionally drawn icon family, baked into the program as a small font file — each icon
