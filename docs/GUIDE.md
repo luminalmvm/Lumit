@@ -405,6 +405,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   slow-mo frame is identical in each — the preview-equals-export promise holds for interpolation
   too. The same Frames toggle appears per-clip on Sequence layers (next to Clip speed %), so a
   single slowed clip can flow-interpolate while its neighbours stay crisp.
+  One knob worth knowing about lives in the Flow group: **Input rate**. High-speed footage —
+  say a 600fps phone clip — is a trap for flow, because its frames are so close together in
+  time (under two thousandths of a second apart) that there's essentially no motion between
+  neighbours to interpolate; flow slow-mo of it looks frozen. Input rate fixes that: tell
+  flow to *treat* the clip as, say, 24fps, and it interpolates between frames a real
+  twenty-fourth of a second apart instead — actual motion, actual slow-motion. Native (the
+  default) uses the clip's own rate. It's the same "conform to N fps" idea editors know from
+  interpreting footage in other tools, and because it changes which frames get blended, it's
+  folded into the picture cache's identity so you never see a frame flowed at the wrong rate.
   **This is wired up for
   Footage layers now**: a Speed % box in a footage layer's twirl-down retimes it (50% =
   half speed, and so on), and the same Retime map feeds preview, export, and the cache

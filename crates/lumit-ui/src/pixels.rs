@@ -122,22 +122,38 @@ pub fn frame_pick(
     fps: f64,
     frames: usize,
     blend: bool,
+    sample_fps: Option<f64>,
 ) -> (usize, Option<(usize, f32)>) {
     if frames == 0 {
         return (0, None);
     }
     let last = frames - 1;
-    let pos = (source_time * fps).max(0.0);
     if !blend {
+        // Nearest shows the native frame at the source time — conform is a
+        // blend/flow concept and never applies here.
+        let pos = (source_time * fps).max(0.0);
         return ((pos.round() as usize).min(last), None);
     }
-    let floor = (pos.floor() as usize).min(last);
-    let ceil = (floor + 1).min(last);
-    let w = (pos - pos.floor()) as f32;
-    if ceil == floor || w <= 0.0 {
-        (floor, None)
+    // The sampling rate: a conform rate below the native one (K-095) makes
+    // flow bracket source frames spaced further apart — real motion for
+    // high-fps footage. None, or a rate at/above native, samples adjacent
+    // native frames exactly as before.
+    let r = match sample_fps {
+        Some(r) if r > 0.0 && r < fps => r,
+        _ => fps,
+    };
+    let v = (source_time * r).max(0.0);
+    let floor_v = v.floor();
+    let w = (v - floor_v) as f32;
+    // Map a virtual (conform-rate) frame index back to the nearest native
+    // frame to decode.
+    let to_native = |vi: f64| (((vi / r) * fps).round().max(0.0) as usize).min(last);
+    let a = to_native(floor_v);
+    let b = to_native(floor_v + 1.0);
+    if a == b || w <= 0.0 {
+        (a, None)
     } else {
-        (floor, Some((ceil, w)))
+        (a, Some((b, w)))
     }
 }
 
@@ -156,16 +172,30 @@ mod tests {
         assert_eq!(blend_rgba(&[0; 4], &[80; 4], 0.0), vec![0; 4]); // t=0 → a
         assert_eq!(blend_rgba(&[0; 4], &[80; 4], 1.0), vec![80; 4]); // t=1 → b
                                                                      // Nearest rounds to a single frame.
-        assert_eq!(frame_pick(1.017, 30.0, 100, false), (31, None));
+        assert_eq!(frame_pick(1.017, 30.0, 100, false, None), (31, None));
         // Blend straddles two frames with the fractional weight.
-        let (f, b) = frame_pick(1.017, 30.0, 100, true);
+        let (f, b) = frame_pick(1.017, 30.0, 100, true, None);
         assert_eq!(f, 30);
         let (c, w) = b.unwrap();
         assert_eq!(c, 31);
         assert!((w - 0.51).abs() < 0.01);
         // An exact frame doesn't blend; past the end clamps to the last frame.
-        assert_eq!(frame_pick(1.0, 30.0, 100, true), (30, None));
-        assert_eq!(frame_pick(100.0, 30.0, 100, true), (99, None));
+        assert_eq!(frame_pick(1.0, 30.0, 100, true, None), (30, None));
+        assert_eq!(frame_pick(100.0, 30.0, 100, true, None), (99, None));
+        // Conform (K-095): a 60fps clip conformed to 15fps brackets frames
+        // spaced 4 native frames apart. At source_time 0.05s the 15fps
+        // virtual index is 0.75, so it blends native frames 0 and 4 at 0.75.
+        let (f, b) = frame_pick(0.05, 60.0, 100, true, Some(15.0));
+        assert_eq!(f, 0);
+        let (c, w) = b.unwrap();
+        assert_eq!(c, 4);
+        assert!((w - 0.75).abs() < 0.01);
+        // A conform rate at or above native is a no-op (adjacent frames).
+        let (f, b) = frame_pick(1.017, 30.0, 100, true, Some(60.0));
+        assert_eq!(f, 30);
+        let (c, w) = b.unwrap();
+        assert_eq!(c, 31);
+        assert!((w - 0.51).abs() < 0.01);
     }
 
     #[test]

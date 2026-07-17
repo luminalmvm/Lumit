@@ -363,6 +363,58 @@ pub(crate) fn flow_group_rows(
             }
         }
     });
+
+    // Input rate (K-095): interpret the footage as this fps for flow, so
+    // high-framerate clips (whose adjacent frames barely move) interpolate
+    // across meaningful gaps. Native = the source's own rate.
+    let (_row, mut c) = row_frame(ui, ctx, false);
+    c.label(
+        egui::RichText::new("Input rate")
+            .small()
+            .color(ctx.theme.text_muted),
+    )
+    .on_hover_text(
+        "Treat the footage as this frame rate for flow — lower than the clip's own rate to \
+         flow-interpolate high-speed footage into real slow motion",
+    );
+    let cur = match params.input_fps {
+        None => "Native".to_string(),
+        Some(f) => format!("{} fps", f as i64),
+    };
+    let commit = |ctx: &RowCtx,
+                  rt: &lumit_core::retime::Retime,
+                  params: &lumit_core::retime::FlowParams,
+                  pending: &mut Option<lumit_core::Op>,
+                  input_fps: Option<f64>| {
+        let mut r = rt.clone();
+        let mut p = params.clone();
+        p.input_fps = input_fps;
+        r.interpolation = Interpolation::Flow(p);
+        *pending = Some(lumit_core::Op::SetLayerRetime {
+            comp: ctx.comp_id,
+            layer: ctx.layer.id,
+            retime: Some(r),
+        });
+    };
+    bare_dropdown(&mut c, egui::RichText::new(cur).small(), |ui| {
+        if ui
+            .selectable_label(params.input_fps.is_none(), "Native")
+            .clicked()
+        {
+            commit(ctx, rt, params, pending, None);
+            ui.close_menu();
+        }
+        for fps in [8.0, 12.0, 15.0, 24.0, 25.0, 30.0, 60.0] {
+            let sel = params.input_fps == Some(fps);
+            if ui
+                .selectable_label(sel, format!("{} fps", fps as i64))
+                .clicked()
+            {
+                commit(ctx, rt, params, pending, Some(fps));
+                ui.close_menu();
+            }
+        }
+    });
 }
 
 /// Mute subcolumn (footage layers).

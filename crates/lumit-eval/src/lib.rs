@@ -399,6 +399,14 @@ fn feed_source(
                 if !matches!(r.interpolation, lumit_core::retime::Interpolation::Nearest) {
                     h.update(&[interp_tag(&r.interpolation)]);
                     feed_f64(h, source_time);
+                    // A flow conform rate (K-095) synthesises from different
+                    // source frames at the same source time, so it is content.
+                    if let lumit_core::retime::Interpolation::Flow(p) = &r.interpolation {
+                        if let Some(fps) = p.input_fps {
+                            h.update(b"conform");
+                            feed_f64(h, fps);
+                        }
+                    }
                 }
             }
         }
@@ -464,6 +472,13 @@ fn feed_source(
                             // (see the Footage case above, K-093).
                             h.update(&[interp_tag(&clip.interpolation)]);
                             feed_f64(h, st);
+                            if let lumit_core::retime::Interpolation::Flow(p) = &clip.interpolation
+                            {
+                                if let Some(fps) = p.input_fps {
+                                    h.update(b"conform");
+                                    feed_f64(h, fps);
+                                }
+                            }
                         }
                     }
                 }
@@ -1075,6 +1090,7 @@ mod tests {
         let half = k(&footage(Some(Interpolation::Flow(FlowParams::default()))));
         let full = k(&footage(Some(Interpolation::Flow(FlowParams {
             half_resolution: false,
+            input_fps: None,
             extra: serde_json::Map::new(),
         }))));
         assert_ne!(blend, half);
@@ -1161,6 +1177,40 @@ mod tests {
         assert_ne!(k(&layer(true), 1.0), k(&layer(false), 1.0));
         // The neighbours move with time, so the key evolves.
         assert_ne!(k(&layer(true), 1.0), k(&layer(true), 1.5));
+    }
+
+    /// K-095: a flow conform rate synthesises from different source frames at
+    /// the same time, so changing it (including to/from Native) changes the
+    /// key — the cache can't serve a frame flowed at the wrong rate.
+    #[test]
+    fn flow_conform_rate_keys_distinctly() {
+        use lumit_core::retime::{FlowParams, Interpolation, Retime};
+        use lumit_core::time::Rational;
+        let doc = Document::new();
+        let item = Uuid::now_v7();
+        let footage = |fps: Option<f64>| {
+            let mut l = text_layer("", 0.0, 10.0, 0.0);
+            let mut r = Retime::constant_speed(
+                Rational::new(10, 1).unwrap(),
+                Rational::ZERO,
+                Rational::ONE,
+            );
+            r.interpolation = Interpolation::Flow(FlowParams {
+                half_resolution: true,
+                input_fps: fps,
+                extra: serde_json::Map::new(),
+            });
+            l.kind = LayerKind::Footage {
+                item,
+                retime: Some(r),
+            };
+            comp_with(vec![l])
+        };
+        let k = |c: &Composition| {
+            comp_frame_key(&doc, c, 1.0, Quality::default(), &StubStamper).unwrap()
+        };
+        assert_ne!(k(&footage(None)), k(&footage(Some(24.0))));
+        assert_ne!(k(&footage(Some(24.0))), k(&footage(Some(12.0))));
     }
 
     /// A Sequence layer keys the active clip's source frame; a gap keys

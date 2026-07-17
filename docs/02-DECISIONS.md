@@ -710,3 +710,18 @@ share a held leading frame can differ in their neighbours. Only footage layers w
 temporal stack pay this; every other key is byte-for-byte unchanged, so no `ALGO_VERSION`
 bump. v1 scope limits (echo's fixed 8-frame window and one-frame spacing, source-not-stack
 input, footage-only) are recorded in docs/08 §3.13's status note.
+
+**K-095 · DECIDED · Flow gains an input-rate (conform) override.** From the owner
+(2026-07-19), after the K-093 flow fix: interpolating between adjacent frames of
+high-framerate footage (e.g. 600fps, whose neighbours are ~1.7ms apart) produces almost no
+motion, so flow slow-motion looks frozen. `FlowParams` gains `input_fps: Option<f64>` — the
+rate the clip is *interpreted* at for flow. `None` = the source's native rate (adjacent
+frames, unchanged behaviour). `Some(r)` with `r` below native conforms the clip to `r` fps:
+`frame_pick` brackets the source frames spaced `1/r` apart and blends between *those*, giving
+real motion to interpolate — the standard "interpret footage as N fps" trick. Applied
+identically in preview and export (K-031); the frame-cache key hashes the conform rate
+because the same source time synthesises from different frames under it (no `ALGO_VERSION`
+bump — Native keys are byte-for-byte unchanged, and a conformed key gains a `conform` tag).
+The Flow group's "Input rate" dropdown offers Native and common rates. (Manual on/off already
+exists — the wind toggle forces Flow unconditionally.) Separate near/far-blur-style controls
+belong to the future depth-of-field effects, not here.

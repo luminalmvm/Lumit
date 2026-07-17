@@ -2859,11 +2859,16 @@ impl AppState {
                                     &interp,
                                     Some(Interpolation::Flow(p)) if !p.half_resolution
                                 );
+                                let sample_fps = match &interp {
+                                    Some(Interpolation::Flow(p)) => p.input_fps,
+                                    _ => None,
+                                };
                                 let (source_frame, blend) = crate::pixels::frame_pick(
                                     st,
                                     video.fps(),
                                     *src_frames,
                                     blend_on,
+                                    sample_fps,
                                 );
                                 jobs.push(preview::CompJob {
                                     layer: layer.id,
@@ -2920,8 +2925,17 @@ impl AppState {
                     let flow = matches!(interp, Some(Interpolation::Flow(_)));
                     let flow_full =
                         matches!(interp, Some(Interpolation::Flow(p)) if !p.half_resolution);
-                    let (source_frame, blend) =
-                        crate::pixels::frame_pick(source_time, video.fps(), *src_frames, blend_on);
+                    let sample_fps = match interp {
+                        Some(Interpolation::Flow(p)) => p.input_fps,
+                        _ => None,
+                    };
+                    let (source_frame, blend) = crate::pixels::frame_pick(
+                        source_time,
+                        video.fps(),
+                        *src_frames,
+                        blend_on,
+                        sample_fps,
+                    );
                     // Neighbour source frames for a temporal effect stack
                     // (echo/trails, flow motion blur, datamosh): the layer's
                     // source at each non-zero offset in the stack's window,
@@ -2943,6 +2957,7 @@ impl AppState {
                                         video.fps(),
                                         *src_frames,
                                         false,
+                                        None,
                                     );
                                     (o, nf)
                                 })

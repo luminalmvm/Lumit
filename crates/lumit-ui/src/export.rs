@@ -305,15 +305,17 @@ impl Renderer<'_> {
         source_time: f64,
         pair: bool,
         flow: bool,
+        sample_fps: Option<f64>,
         masks: &[lumit_core::mask::Mask],
     ) -> Result<Option<Prepared>, String> {
         let Some(info) = self.items.get(&item) else {
             return Ok(None);
         };
         // Same frame-pick + interpolation the preview uses, so export matches
-        // (K-031). `pair` = fetch the neighbour; `flow` = flow-synthesise it.
+        // (K-031). `pair` = fetch the neighbour; `flow` = flow-synthesise it;
+        // `sample_fps` = the K-095 conform rate.
         let (source_frame, blend_frame) =
-            crate::pixels::frame_pick(source_time, info.fps, info.frames, pair);
+            crate::pixels::frame_pick(source_time, info.fps, info.frames, pair, sample_fps);
         if !self.decoders.contains_key(&item) {
             let index =
                 lumit_media::index::build_frame_index(&info.path).map_err(|e| e.to_string())?;
@@ -381,7 +383,11 @@ impl Renderer<'_> {
                 let interp = retime.as_ref().map(|r| &r.interpolation);
                 let pair = matches!(interp, Some(Interpolation::Blend | Interpolation::Flow(_)));
                 let flow = matches!(interp, Some(Interpolation::Flow(_)));
-                self.prepare_footage(*item, source_time, pair, flow, &layer.masks)
+                let sample_fps = match interp {
+                    Some(Interpolation::Flow(p)) => p.input_fps,
+                    _ => None,
+                };
+                self.prepare_footage(*item, source_time, pair, flow, sample_fps, &layer.masks)
             }
             LayerKind::Sequence { clips } => {
                 // The clip under the playhead, decoded like footage; a comp
@@ -394,7 +400,11 @@ impl Renderer<'_> {
                         let pair =
                             matches!(interp, Some(Interpolation::Blend | Interpolation::Flow(_)));
                         let flow = matches!(interp, Some(Interpolation::Flow(_)));
-                        self.prepare_footage(item, st, pair, flow, &layer.masks)
+                        let sample_fps = match &interp {
+                            Some(Interpolation::Flow(p)) => p.input_fps,
+                            _ => None,
+                        };
+                        self.prepare_footage(item, st, pair, flow, sample_fps, &layer.masks)
                     }
                     _ => Ok(None),
                 }
@@ -623,7 +633,7 @@ impl Renderer<'_> {
         {
             let nlt = lt + f64::from(o) * comp_dt;
             let nst = retime.as_ref().map(|r| r.evaluate(nlt)).unwrap_or(nlt);
-            let (nf, _) = crate::pixels::frame_pick(nst, fps, frames, false);
+            let (nf, _) = crate::pixels::frame_pick(nst, fps, frames, false, None);
             let dec = self.decoders.get_mut(item).ok_or("decoder missing")?;
             let px = dec.frame_rgba(nf, None).map_err(|e| e.to_string())?;
             let src = self

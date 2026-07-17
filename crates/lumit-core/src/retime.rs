@@ -139,6 +139,15 @@ pub struct FlowParams {
     /// docs/08 §3.1 quality knob); false = full resolution.
     #[serde(default = "default_true")]
     pub half_resolution: bool,
+    /// Override rate the footage is sampled at for flow, in fps (K-095).
+    /// `None` = the source's native rate (interpolate between adjacent
+    /// source frames). `Some(r)` conforms the clip to `r` fps: flow brackets
+    /// the source frames spaced `1/r` apart and interpolates between *those*,
+    /// so high-framerate footage (whose adjacent frames are near-identical)
+    /// gets real slow-motion — the standard "interpret footage as N fps"
+    /// trick. Ignored when it is None or ≥ the native rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_fps: Option<f64>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -148,6 +157,7 @@ impl Default for FlowParams {
     fn default() -> Self {
         Self {
             half_resolution: true,
+            input_fps: None,
             extra: serde_json::Map::new(),
         }
     }
