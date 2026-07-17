@@ -269,6 +269,23 @@ struct Prepared {
     mask: Option<Tex>,
 }
 
+/// One inner layer of a collapsed Precomp, owned so its texture outlives the
+/// borrow-taking CompositeLayer pass (docs/06 §1.4 splice, export side).
+struct CollapsedSpec {
+    p: Prepared,
+    position: (f32, f32),
+    anchor: (f32, f32),
+    scale: (f32, f32),
+    rotation_deg: f32,
+    opacity: f32,
+    z: f32,
+    rotation_x_deg: f32,
+    rotation_y_deg: f32,
+    three_d: bool,
+    blend: lumit_gpu::Blend,
+    pre: [[f32; 4]; 4],
+}
+
 impl Renderer<'_> {
     /// Decode one footage item at `source_time` (seconds), apply the layer's
     /// masks, and upload — shared by Footage layers and Sequence footage clips.
@@ -458,6 +475,102 @@ impl Renderer<'_> {
         }
     }
 
+    /// Gather a collapsed Precomp's inner layers as owned draw specs, the
+    /// parent placement multiplied in front (docs/06 §1.4 — the same splice
+    /// the preview's draw list performs, so export stays pixel-identical).
+    /// Inner mattes cannot occur here: collapse_state forces an intermediate
+    /// for them, so this path never sees one.
+    fn collect_collapsed(
+        &mut self,
+        nested: &Composition,
+        t: f64,
+        visited: &mut Vec<Uuid>,
+        pre: [[f32; 4]; 4],
+        out: &mut Vec<CollapsedSpec>,
+    ) -> Result<(), String> {
+        for l in nested.layers.iter().rev() {
+            if !l.switches.visible {
+                continue;
+            }
+            let lt = t - l.start_offset.0.to_f64();
+            let in_span = t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
+            if !in_span {
+                continue;
+            }
+            if let LayerKind::Precomp { comp: inner_id } = &l.kind {
+                if matches!(
+                    lumit_core::model::collapse_state(self.doc, nested, l, lt),
+                    lumit_core::model::CollapseState::Active
+                ) {
+                    if visited.contains(inner_id) {
+                        continue;
+                    }
+                    let Some(inner) = self.doc.comp(*inner_id) else {
+                        continue;
+                    };
+                    let tr = &l.transform;
+                    let child = lumit_gpu::place_matrix(
+                        (
+                            tr.position_x.value_at(lt) as f32,
+                            tr.position_y.value_at(lt) as f32,
+                        ),
+                        (
+                            tr.anchor_x.value_at(lt) as f32,
+                            tr.anchor_y.value_at(lt) as f32,
+                        ),
+                        (
+                            tr.scale_x.value_at(lt) as f32,
+                            tr.scale_y.value_at(lt) as f32,
+                        ),
+                        tr.rotation.value_at(lt) as f32,
+                        tr.position_z.value_at(lt) as f32,
+                        tr.rotation_x.value_at(lt) as f32,
+                        tr.rotation_y.value_at(lt) as f32,
+                    );
+                    visited.push(*inner_id);
+                    let r = self.collect_collapsed(
+                        inner,
+                        lt,
+                        visited,
+                        lumit_gpu::concat_place(pre, child),
+                        out,
+                    );
+                    visited.pop();
+                    r?;
+                    continue;
+                }
+            }
+            let Some(p) = self.prepare(l, t, visited)? else {
+                continue;
+            };
+            let tr = &l.transform;
+            out.push(CollapsedSpec {
+                p,
+                position: (
+                    tr.position_x.value_at(lt) as f32,
+                    tr.position_y.value_at(lt) as f32,
+                ),
+                anchor: (
+                    tr.anchor_x.value_at(lt) as f32,
+                    tr.anchor_y.value_at(lt) as f32,
+                ),
+                scale: (
+                    tr.scale_x.value_at(lt) as f32,
+                    tr.scale_y.value_at(lt) as f32,
+                ),
+                rotation_deg: tr.rotation.value_at(lt) as f32,
+                opacity: tr.opacity.value_at(lt) as f32,
+                z: tr.position_z.value_at(lt) as f32,
+                rotation_x_deg: tr.rotation_x.value_at(lt) as f32,
+                rotation_y_deg: tr.rotation_y.value_at(lt) as f32,
+                three_d: l.switches.three_d,
+                blend: blend_of(l.blend),
+                pre,
+            });
+        }
+        Ok(())
+    }
+
     /// Render a whole comp at time `t` into a linear fp16 texture (recursive
     /// through Precomp layers).
     fn render_comp_linear(
@@ -470,6 +583,10 @@ impl Renderer<'_> {
             .camera_pose(t)
             .map(|pose| camera_mat(comp.width, comp.height, pose));
         let mut prepared: HashMap<Uuid, Prepared> = HashMap::new();
+        // Collapsed Precomp layers splice their inner draws instead of
+        // rendering an intermediate (docs/06 §1.4) — same rule as preview,
+        // decided by the same collapse_state, so the two stay pixel-identical.
+        let mut spliced: HashMap<Uuid, Vec<CollapsedSpec>> = HashMap::new();
         for l in &comp.layers {
             let needed = l.switches.visible
                 || comp.layers.iter().any(|c| {
@@ -477,6 +594,46 @@ impl Renderer<'_> {
                 });
             if !needed {
                 continue;
+            }
+            let lt = t - l.start_offset.0.to_f64();
+            if let LayerKind::Precomp { comp: nested_id } = &l.kind {
+                if matches!(
+                    lumit_core::model::collapse_state(self.doc, comp, l, lt),
+                    lumit_core::model::CollapseState::Active
+                ) {
+                    if visited.contains(nested_id) {
+                        continue;
+                    }
+                    let Some(nested) = self.doc.comp(*nested_id) else {
+                        continue;
+                    };
+                    let tr = &l.transform;
+                    let pre = lumit_gpu::place_matrix(
+                        (
+                            tr.position_x.value_at(lt) as f32,
+                            tr.position_y.value_at(lt) as f32,
+                        ),
+                        (
+                            tr.anchor_x.value_at(lt) as f32,
+                            tr.anchor_y.value_at(lt) as f32,
+                        ),
+                        (
+                            tr.scale_x.value_at(lt) as f32,
+                            tr.scale_y.value_at(lt) as f32,
+                        ),
+                        tr.rotation.value_at(lt) as f32,
+                        tr.position_z.value_at(lt) as f32,
+                        tr.rotation_x.value_at(lt) as f32,
+                        tr.rotation_y.value_at(lt) as f32,
+                    );
+                    let mut specs = Vec::new();
+                    visited.push(*nested_id);
+                    let r = self.collect_collapsed(nested, lt, visited, pre, &mut specs);
+                    visited.pop();
+                    r?;
+                    spliced.insert(l.id, specs);
+                    continue;
+                }
             }
             if let Some(p) = self.prepare(l, t, visited)? {
                 prepared.insert(l.id, p);
@@ -534,6 +691,28 @@ impl Renderer<'_> {
         let mut draws: Vec<lumit_gpu::CompositeLayer> = Vec::new();
         for l in comp.layers.iter().rev() {
             if !l.switches.visible {
+                continue;
+            }
+            if let Some(specs) = spliced.get(&l.id) {
+                for spec in specs {
+                    draws.push(lumit_gpu::CompositeLayer {
+                        texture: &spec.p.tex,
+                        size: spec.p.natural,
+                        position: spec.position,
+                        anchor: spec.anchor,
+                        scale: spec.scale,
+                        rotation_deg: spec.rotation_deg,
+                        opacity: spec.opacity,
+                        z: spec.z,
+                        rotation_x_deg: spec.rotation_x_deg,
+                        rotation_y_deg: spec.rotation_y_deg,
+                        three_d: spec.three_d,
+                        matte: None,
+                        blend: spec.blend,
+                        layer_mask: spec.p.mask.as_ref(),
+                        pre: Some(spec.pre),
+                    });
+                }
                 continue;
             }
             let Some(p) = prepared.get(&l.id) else {

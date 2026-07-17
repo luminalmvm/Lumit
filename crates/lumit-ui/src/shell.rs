@@ -1712,7 +1712,7 @@ fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
                     let clt = app.preview_frame as f64 / comp.frame_rate.fps().max(1.0)
                         - layer.start_offset.0.to_f64();
                     place(ui, mute_r, &mut |ui| {
-                        collapse_control(ui, theme, comp, comp_id, layer, clt, &mut pending)
+                        collapse_control(ui, theme, &doc, comp, comp_id, layer, clt, &mut pending)
                     });
                 }
                 if select_this {
@@ -5386,7 +5386,7 @@ fn build_comp_draws(
                 // in front — no intermediate raster, no clipping to the nested
                 // bounds, inner blend modes composite against the parent stack.
                 if matches!(
-                    lumit_core::model::collapse_state(comp, layer, lt),
+                    lumit_core::model::collapse_state(doc, comp, layer, lt),
                     lumit_core::model::CollapseState::Active
                 ) {
                     visited.push(*nested_id);
@@ -5747,9 +5747,11 @@ fn three_d_control(
 /// Accent when active; dimmed when the switch is set but a mask, blend,
 /// opacity or matte use forces an intermediate anyway (the spec's required
 /// "dimmed collapse switch" indication).
+#[allow(clippy::too_many_arguments)]
 fn collapse_control(
     ui: &mut egui::Ui,
     theme: &Theme,
+    doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
     comp_id: uuid::Uuid,
     layer: &lumit_core::model::Layer,
@@ -5760,7 +5762,7 @@ fn collapse_control(
     if !matches!(layer.kind, lumit_core::model::LayerKind::Precomp { .. }) {
         return;
     }
-    let state = lumit_core::model::collapse_state(comp, layer, lt);
+    let state = lumit_core::model::collapse_state(doc, comp, layer, lt);
     let col = match state {
         CollapseState::Active => theme.accent,
         CollapseState::Forced => theme.text_disabled,

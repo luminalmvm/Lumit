@@ -246,14 +246,27 @@ pub enum CollapseState {
 }
 
 /// Evaluate the §1.4 collapse rules for `layer` inside `comp` at local time
-/// `lt`. Effects join the force list when the effect stack lands.
-pub fn collapse_state(comp: &Composition, layer: &Layer, lt: f64) -> CollapseState {
-    if !matches!(layer.kind, LayerKind::Precomp { .. }) || !layer.switches.collapse {
+/// `lt`. Effects join the force list when the effect stack lands. An inner
+/// layer using a matte also forces the intermediate for now: a matte renders
+/// "alone into comp space", and splicing that across comps is a later
+/// refinement — forcing keeps preview and export pixel-identical.
+pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64) -> CollapseState {
+    let LayerKind::Precomp { comp: nested_id } = &layer.kind else {
+        return CollapseState::Off;
+    };
+    if !layer.switches.collapse {
         return CollapseState::Off;
     }
+    let inner_matte = doc.comp(*nested_id).is_some_and(|nested| {
+        nested
+            .layers
+            .iter()
+            .any(|l| l.switches.visible && l.matte.is_some())
+    });
     let forced = !layer.masks.is_empty()
         || layer.blend != BlendMode::Normal
         || layer.transform.opacity.value_at(lt) < 99.999
+        || inner_matte
         || comp
             .layers
             .iter()
@@ -592,6 +605,7 @@ mod tests {
     /// blend, sub-100 opacity, or being consumed as a matte.
     #[test]
     fn collapse_state_follows_the_force_rules() {
+        let doc = Document::new();
         let mut comp = comp_with_cameras();
         let nested = Uuid::now_v7();
         let mut pre = comp.layers[0].clone();
@@ -605,13 +619,16 @@ mod tests {
         comp.layers.push(pre.clone());
 
         // Clean collapsed Precomp → Active.
-        assert_eq!(collapse_state(&comp, &pre, 1.0), CollapseState::Active);
+        assert_eq!(
+            collapse_state(&doc, &comp, &pre, 1.0),
+            CollapseState::Active
+        );
         // Switch off → Off; non-Precomp kinds are always Off.
         let mut off = pre.clone();
         off.switches.collapse = false;
-        assert_eq!(collapse_state(&comp, &off, 1.0), CollapseState::Off);
+        assert_eq!(collapse_state(&doc, &comp, &off, 1.0), CollapseState::Off);
         assert_eq!(
-            collapse_state(&comp, &comp.layers[0], 1.0),
+            collapse_state(&doc, &comp, &comp.layers[0], 1.0),
             CollapseState::Off
         );
         // Each §1.4 force: mask, blend, opacity, matte consumption.
@@ -619,13 +636,22 @@ mod tests {
         masked
             .masks
             .push(crate::mask::Mask::rectangle(0.0, 0.0, 1.0, 1.0));
-        assert_eq!(collapse_state(&comp, &masked, 1.0), CollapseState::Forced);
+        assert_eq!(
+            collapse_state(&doc, &comp, &masked, 1.0),
+            CollapseState::Forced
+        );
         let mut blended = pre.clone();
         blended.blend = BlendMode::Add;
-        assert_eq!(collapse_state(&comp, &blended, 1.0), CollapseState::Forced);
+        assert_eq!(
+            collapse_state(&doc, &comp, &blended, 1.0),
+            CollapseState::Forced
+        );
         let mut faded = pre.clone();
         faded.transform.opacity = Property::fixed(50.0);
-        assert_eq!(collapse_state(&comp, &faded, 1.0), CollapseState::Forced);
+        assert_eq!(
+            collapse_state(&doc, &comp, &faded, 1.0),
+            CollapseState::Forced
+        );
         let mut consumer = comp.layers[0].clone();
         consumer.id = Uuid::now_v7();
         consumer.matte = Some(MatteRef {
@@ -635,7 +661,40 @@ mod tests {
         });
         let mut comp2 = comp.clone();
         comp2.layers.push(consumer);
-        assert_eq!(collapse_state(&comp2, &pre, 1.0), CollapseState::Forced);
+        assert_eq!(
+            collapse_state(&doc, &comp2, &pre, 1.0),
+            CollapseState::Forced
+        );
+        // An inner layer consuming a matte forces too (export-parity rule).
+        let mut inner_matted = comp_with_cameras();
+        let mut inner = inner_matted.layers[0].clone();
+        inner.id = Uuid::now_v7();
+        inner.kind = LayerKind::Text {
+            document: TextDocument {
+                text: "m".into(),
+                size: 12.0,
+                fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                extra: serde_json::Map::new(),
+            },
+        };
+        inner.switches.visible = true;
+        inner.matte = Some(MatteRef {
+            layer: inner_matted.layers[0].id,
+            channel: MatteChannel::Alpha,
+            inverted: false,
+        });
+        inner_matted.layers.push(inner);
+        let nested_real_id = inner_matted.id;
+        let mut doc2 = Document::new();
+        doc2.items.push(ProjectItem::Composition(inner_matted));
+        let mut pre2 = pre.clone();
+        pre2.kind = LayerKind::Precomp {
+            comp: nested_real_id,
+        };
+        assert_eq!(
+            collapse_state(&doc2, &comp, &pre2, 1.0),
+            CollapseState::Forced
+        );
     }
 
     /// The topmost visible in-span camera wins; hidden and out-of-span ones
