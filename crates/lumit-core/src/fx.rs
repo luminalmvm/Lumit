@@ -2440,6 +2440,71 @@ pub mod cpu {
         }
     }
 
+    /// The §1.6 oracle for Echo (docs/08 §3.13): the CPU twin of `fx_echo.wgsl`,
+    /// op-for-op. `current` is the leading (this-frame) linear premultiplied
+    /// RGBA; `neighbours` are the layer's decoded source frames keyed by their
+    /// frame offset (all the same length as `current`). `weights[i]` is the
+    /// tap intensity for the echo at offset `-(i+1)`; a zero weight or a
+    /// missing neighbour is skipped. `mode` is 0 = Add, 1 = Behind (the
+    /// accumulator over the echo), 2 = Max. Finally the trail is blended
+    /// toward `current` by `mix`. Working colour is premultiplied, so a tap
+    /// scales all four channels together — the correct premultiplied fade.
+    pub fn echo(
+        current: &[f32],
+        neighbours: &[(i32, &[f32])],
+        weights: [f32; 8],
+        mode: u32,
+        mix: f32,
+    ) -> Vec<f32> {
+        let mut out = current.to_vec();
+        for (px_idx, o) in out.chunks_exact_mut(4).enumerate() {
+            let mut acc = [
+                current[px_idx * 4],
+                current[px_idx * 4 + 1],
+                current[px_idx * 4 + 2],
+                current[px_idx * 4 + 3],
+            ];
+            for (i, &weight) in weights.iter().enumerate() {
+                if weight <= 0.0 {
+                    continue;
+                }
+                let offset = -(i as i32 + 1);
+                let Some((_, buf)) = neighbours.iter().find(|(oo, _)| *oo == offset) else {
+                    continue;
+                };
+                let base = px_idx * 4;
+                let n = [
+                    buf[base] * weight,
+                    buf[base + 1] * weight,
+                    buf[base + 2] * weight,
+                    buf[base + 3] * weight,
+                ];
+                acc = match mode {
+                    0 => [acc[0] + n[0], acc[1] + n[1], acc[2] + n[2], acc[3] + n[3]],
+                    1 => {
+                        let k = 1.0 - acc[3];
+                        [
+                            acc[0] + n[0] * k,
+                            acc[1] + n[1] * k,
+                            acc[2] + n[2] * k,
+                            acc[3] + n[3] * k,
+                        ]
+                    }
+                    _ => [
+                        acc[0].max(n[0]),
+                        acc[1].max(n[1]),
+                        acc[2].max(n[2]),
+                        acc[3].max(n[3]),
+                    ],
+                };
+            }
+            for c in 0..4 {
+                o[c] = current[px_idx * 4 + c] * (1.0 - mix) + acc[c] * mix;
+            }
+        }
+        out
+    }
+
     /// Rec. 709 luma weights, applied in linear light.
     pub const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
 

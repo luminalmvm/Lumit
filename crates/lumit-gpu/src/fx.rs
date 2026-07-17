@@ -351,6 +351,25 @@ struct GlitchParams {
     _pad0: f32,
 }
 
+/// One resolved echo (docs/08 §3.13). The neighbour frames arrive as
+/// textures keyed by offset; `weights[i]` is the tap intensity for the echo
+/// at offset `-(i+1)` (0 = skip). `mode`: 0 = Add, 1 = Behind, 2 = Max.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EchoOp {
+    pub weights: [f32; 8],
+    pub mode: u32,
+    /// 0..1, blended against the leading (current) frame.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct EchoParams {
+    weight: f32,
+    mode: u32,
+    _pad: [f32; 2],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct AdjustParams {
@@ -375,6 +394,8 @@ pub struct FxEngine {
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     glitch: wgpu::ComputePipeline,
+    echo_accumulate: wgpu::ComputePipeline,
+    echo_mix: wgpu::ComputePipeline,
     adjust: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
     /// The adjustment blend's own layout: three sampled inputs (below,
@@ -487,6 +508,7 @@ impl FxEngine {
         let transform_mod = module(include_str!("fx_transform.wgsl"), "fx-transform");
         let glow_mod = module(include_str!("fx_glow.wgsl"), "fx-glow");
         let glitch_mod = module(include_str!("fx_glitch.wgsl"), "fx-glitch");
+        let echo_mod = module(include_str!("fx_echo.wgsl"), "fx-echo");
         let adjust_mod = module(include_str!("fx_adjust.wgsl"), "fx-adjust");
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
@@ -502,6 +524,8 @@ impl FxEngine {
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
         let glitch = pipeline(&glitch_mod, "fx-glitch", "glitch");
+        let echo_accumulate = pipeline(&echo_mod, "fx-echo-accumulate", "echo_accumulate");
+        let echo_mix = pipeline(&echo_mod, "fx-echo-mix", "echo_mix");
         let adjust = ctx
             .device
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -527,10 +551,79 @@ impl FxEngine {
             glow_bright,
             glow_combine,
             glitch,
+            echo_accumulate,
+            echo_mix,
             adjust,
             layout,
             adjust_layout,
         }
+    }
+
+    /// Apply one echo/trails (docs/08 §3.13) to a linear working texture,
+    /// returning a new texture of the same size. Starts the accumulator as
+    /// the current frame (an `echo_accumulate` with weight 0 copies it), folds
+    /// in each live tap's neighbour (looked up by offset `-(i+1)`), then mixes
+    /// the trail back toward the current frame. A missing neighbour or a zero
+    /// weight is skipped, so the pass cost tracks the live tap count.
+    pub fn echo(
+        &self,
+        ctx: &GpuContext,
+        current: &wgpu::Texture,
+        neighbours: &[(i32, &wgpu::Texture)],
+        w: u32,
+        h: u32,
+        op: &EchoOp,
+    ) -> wgpu::Texture {
+        let params = |weight: f32, mode: u32| EchoParams {
+            weight,
+            mode,
+            _pad: [0.0; 2],
+        };
+        // acc := current (weight 0 add = a + n*0 = a).
+        let mut acc = work_texture(ctx, w, h, "fx-echo-acc");
+        self.dispatch(
+            ctx,
+            &self.echo_accumulate,
+            current,
+            current,
+            &acc,
+            w,
+            h,
+            bytemuck::bytes_of(&params(0.0, 0)),
+        );
+        for (i, &weight) in op.weights.iter().enumerate() {
+            if weight <= 0.0 {
+                continue;
+            }
+            let offset = -(i as i32 + 1);
+            let Some((_, tex)) = neighbours.iter().find(|(o, _)| *o == offset) else {
+                continue;
+            };
+            let next = work_texture(ctx, w, h, "fx-echo-acc");
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                &acc,
+                tex,
+                &next,
+                w,
+                h,
+                bytemuck::bytes_of(&params(weight, op.mode)),
+            );
+            acc = next;
+        }
+        let out = work_texture(ctx, w, h, "fx-echo-out");
+        self.dispatch(
+            ctx,
+            &self.echo_mix,
+            &acc,
+            current,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params(op.mix, 0)),
+        );
+        out
     }
 
     /// The adjustment-layer blend (docs/06 §1.5): per-channel lerp between
@@ -2327,6 +2420,84 @@ mod tests {
             readback_linear_f32(&ctx, &out, w, h).unwrap(),
             processed,
             "full coverage at opacity 1 must be the processed image bit-exactly"
+        );
+    }
+
+    /// The §1.6 oracle for Echo (docs/08 §3.13): the GPU chain (an
+    /// `echo_accumulate` per tap plus a final `echo_mix`) matches
+    /// `lumit_core::fx::cpu::echo` across the three combine modes. Each
+    /// accumulate stores an fp16 intermediate where the CPU keeps f32, so a
+    /// two-tap sum can drift a little past the pointwise ≤2 ULP — the bound
+    /// is stated at 4 ULP with that reason (measured well under it). The GPU
+    /// is bit-stable (§2.4); no taps with Mix 1 is a bit-exact passthrough.
+    #[test]
+    fn wgsl_echo_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let current = corpus(w, h);
+        // Two distinct neighbour frames, at offsets -1 and -2.
+        let neigh = |scale: f32| -> Vec<f32> {
+            current
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    if i % 4 == 3 {
+                        *v
+                    } else {
+                        f16_to_f32(f16_bits((v * scale).min(6.0)))
+                    }
+                })
+                .collect()
+        };
+        let n1 = neigh(0.8);
+        let n2 = neigh(0.5);
+        let cur_t = upload_linear_f32(&ctx, &current, w, h);
+        let n1_t = upload_linear_f32(&ctx, &n1, w, h);
+        let n2_t = upload_linear_f32(&ctx, &n2, w, h);
+        let gpu_neighbours: [(i32, &wgpu::Texture); 2] = [(-1, &n1_t), (-2, &n2_t)];
+        let cpu_neighbours: [(i32, &[f32]); 2] = [(-1, &n1), (-2, &n2)];
+
+        for (weights, mode, mix) in [
+            ([0.6f32, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0u32, 1.0f32),
+            ([0.7, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1, 0.8),
+            ([0.9, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2, 1.0),
+        ] {
+            let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, weights, mode, mix);
+            let op = EchoOp { weights, mode, mix };
+            let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("echo mode={mode} mix={mix}: worst {worst} ulp");
+            assert!(worst <= 4, "mode {mode} mix {mix}: worst {worst} fp16 ULP");
+            let out2 = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+            assert_eq!(
+                gpu,
+                readback_linear_f32(&ctx, &out2, w, h).unwrap(),
+                "GPU echo must be bit-stable"
+            );
+        }
+        // No taps, Mix 1: the accumulator is the current frame and the mix is
+        // identity, so the output is the current frame bit-exactly.
+        let out = fx.echo(
+            &ctx,
+            &cur_t,
+            &gpu_neighbours,
+            w,
+            h,
+            &EchoOp {
+                weights: [0.0; 8],
+                mode: 0,
+                mix: 1.0,
+            },
+        );
+        assert_eq!(
+            readback_linear_f32(&ctx, &out, w, h).unwrap(),
+            current,
+            "no taps at Mix 1 must be a bit-exact passthrough"
         );
     }
 }
