@@ -21,6 +21,21 @@ pub struct BlurOp {
     pub mix: f32,
 }
 
+/// One resolved sharpen (docs/08 §3.9), amounts already fractional and the
+/// gaussian radius already in raster pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SharpenOp {
+    /// Fraction of the detail signal added back (0..3 = 0–300%).
+    pub amount: f32,
+    pub radius_px: f32,
+    /// Linear-light soft gate under which detail is left alone.
+    pub threshold: f32,
+    /// True: sharpen the Rec. 709 luma only.
+    pub luma_only: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct BlurParams {
@@ -32,25 +47,30 @@ struct BlurParams {
     _pad: [f32; 2],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SharpenParams {
+    amount: f32,
+    threshold: f32,
+    luma_only: u32,
+    mix_amt: f32,
+}
+
 /// The effect-pass engine: compiled kernels plus their layouts, one per
 /// device (owned alongside the Compositor by whoever renders).
 pub struct FxEngine {
     blur: wgpu::ComputePipeline,
+    sharpen_unpremultiply: wgpu::ComputePipeline,
+    sharpen_combine: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
 }
 
 impl FxEngine {
     pub fn new(ctx: &GpuContext) -> Self {
-        let shader = ctx
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("fx-blur"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("fx_blur.wgsl").into()),
-            });
         let layout = ctx
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("fx-blur-layout"),
+                label: Some("fx-layout"),
                 entries: &[
                     texture_entry(0),
                     texture_entry(1),
@@ -79,21 +99,39 @@ impl FxEngine {
         let pipeline_layout = ctx
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("fx-blur-pl"),
+                label: Some("fx-pl"),
                 bind_group_layouts: &[&layout],
                 push_constant_ranges: &[],
             });
-        let blur = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-blur-pipe"),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("blur_pass"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        Self { blur, layout }
+        let module = |wgsl: &str, name: &str| {
+            ctx.device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some(name),
+                    source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+                })
+        };
+        let pipeline = |shader: &wgpu::ShaderModule, name: &str, entry: &str| {
+            ctx.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(name),
+                    layout: Some(&pipeline_layout),
+                    module: shader,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+        };
+        let blur_mod = module(include_str!("fx_blur.wgsl"), "fx-blur");
+        let sharpen_mod = module(include_str!("fx_sharpen.wgsl"), "fx-sharpen");
+        let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
+        let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
+        let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
+        Self {
+            blur,
+            sharpen_unpremultiply,
+            sharpen_combine,
+            layout,
+        }
     }
 
     /// Apply one gaussian blur to a linear working texture, returning a new
@@ -111,63 +149,135 @@ impl FxEngine {
         let out = work_texture(ctx, w, h, "fx-blur-out");
         let sigma = (op.radius_px * 0.5).max(1e-3);
         // Horizontal into tmp (mix 1: the blend happens once, at the end).
-        self.pass(
+        self.dispatch(
             ctx,
+            &self.blur,
             src,
             src,
             &tmp,
             w,
             h,
-            BlurParams {
+            bytemuck::bytes_of(&BlurParams {
                 dir: [1.0, 0.0],
                 radius: op.radius_px,
                 sigma,
                 edge: op.edge,
                 mix_amt: 1.0,
                 _pad: [0.0; 2],
-            },
+            }),
         );
         // Vertical into out, blending against the original input.
-        self.pass(
+        self.dispatch(
             ctx,
+            &self.blur,
             &tmp,
             src,
             &out,
             w,
             h,
-            BlurParams {
+            bytemuck::bytes_of(&BlurParams {
                 dir: [0.0, 1.0],
                 radius: op.radius_px,
                 sigma,
                 edge: op.edge,
                 mix_amt: op.mix,
                 _pad: [0.0; 2],
-            },
+            }),
         );
         out
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn pass(
+    /// Apply one unsharp mask (docs/08 §3.9) to a linear working texture,
+    /// returning a new texture of the same size. Four passes: unpremultiply
+    /// (§2.2, fused into the kernel chain), a separable gaussian on the
+    /// unpremultiplied colour (reusing the blur kernel, Repeat edges — the
+    /// CPU reference blurs with the same fixed policy), then the combine
+    /// pass that gates, re-premultiplies and applies the host Mix.
+    pub fn sharpen(
         &self,
         ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &SharpenOp,
+    ) -> wgpu::Texture {
+        let un = work_texture(ctx, w, h, "fx-sharpen-un");
+        let tmp = work_texture(ctx, w, h, "fx-sharpen-tmp");
+        let blurred = work_texture(ctx, w, h, "fx-sharpen-blur");
+        let out = work_texture(ctx, w, h, "fx-sharpen-out");
+        let params = SharpenParams {
+            amount: op.amount,
+            threshold: op.threshold,
+            luma_only: u32::from(op.luma_only),
+            mix_amt: op.mix,
+        };
+        self.dispatch(
+            ctx,
+            &self.sharpen_unpremultiply,
+            src,
+            src,
+            &un,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        let sigma = (op.radius_px * 0.5).max(1e-3);
+        for (pass_src, pass_dst, dir) in [(&un, &tmp, [1.0, 0.0]), (&tmp, &blurred, [0.0, 1.0])] {
+            self.dispatch(
+                ctx,
+                &self.blur,
+                pass_src,
+                pass_src,
+                pass_dst,
+                w,
+                h,
+                bytemuck::bytes_of(&BlurParams {
+                    dir,
+                    radius: op.radius_px,
+                    sigma,
+                    edge: 1, // Repeat, always (see the schema comment)
+                    mix_amt: 1.0,
+                    _pad: [0.0; 2],
+                }),
+            );
+        }
+        self.dispatch(
+            ctx,
+            &self.sharpen_combine,
+            &blurred,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        out
+    }
+
+    /// One compute pass: `src` and `orig` sampled, `dst` written, `params`
+    /// as the uniform — the shared plumbing every kernel dispatch uses.
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch(
+        &self,
+        ctx: &GpuContext,
+        pipeline: &wgpu::ComputePipeline,
         src: &wgpu::Texture,
         orig: &wgpu::Texture,
         dst: &wgpu::Texture,
         w: u32,
         h: u32,
-        params: BlurParams,
+        params: &[u8],
     ) {
         use wgpu::util::DeviceExt;
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("fx-blur-params"),
-                contents: bytemuck::bytes_of(&params),
+                label: Some("fx-params"),
+                contents: params,
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("fx-blur-bind"),
+            label: Some("fx-bind"),
             layout: &self.layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -197,14 +307,14 @@ impl FxEngine {
         let mut enc = ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("fx-blur-enc"),
+                label: Some("fx-enc"),
             });
         {
             let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("fx-blur-pass"),
+                label: Some("fx-pass"),
                 timestamp_writes: None,
             });
-            cpass.set_pipeline(&self.blur);
+            cpass.set_pipeline(pipeline);
             cpass.set_bind_group(0, &bind, &[]);
             cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
         }
@@ -359,6 +469,35 @@ mod tests {
         }
     }
 
+    /// The §1.6 oracle corpus: a diagonal gradient, a hard alpha edge down
+    /// the middle, and an HDR spike — already fp16-quantised, so comparisons
+    /// isolate the kernel maths from upload rounding.
+    fn corpus(w: u32, h: u32) -> Vec<f32> {
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let g = (x + y) as f32 / (w + h) as f32;
+                let a = if x < w / 2 { 1.0 } else { 0.0 };
+                img[i] = g * a;
+                img[i + 1] = (1.0 - g) * a;
+                img[i + 2] = 0.25 * a;
+                img[i + 3] = a;
+            }
+        }
+        let spike = ((10 * w + 20) * 4) as usize;
+        img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 1.0]);
+        img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
+    }
+
+    /// Worst absolute difference between two images.
+    fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0f32, f32::max)
+    }
+
     /// The §1.6 oracle: the WGSL blur agrees with the CPU reference on a
     /// corpus of gradient + alpha edge + HDR spike, per edge policy — and is
     /// bit-stable against itself (§2.4 determinism).
@@ -422,6 +561,57 @@ mod tests {
                 let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
                 assert_eq!(gpu, gpu2, "GPU blur must be bit-stable");
             }
+        }
+    }
+
+    /// The §1.6 oracle for sharpen: WGSL agrees with the CPU reference on
+    /// the corpus across parameter sweeps, and is bit-stable (§2.4). The
+    /// internal gaussian's intermediates round through fp16 textures on the
+    /// GPU and stay f32 on the CPU, so the bound is an absolute epsilon:
+    /// 5e-3 ≈ 1–2 fp16 ULP at the corpus's HDR peak of 6.0 (measured worst
+    /// on NVIDIA: 2.9e-3).
+    #[test]
+    fn wgsl_sharpen_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for (amount, radius, threshold, luma_only, mix) in [
+            (0.6f32, 3.0f32, 0.05f32, true, 1.0f32),
+            (1.5, 6.0, 0.0, false, 0.7),
+            (3.0, 2.0, 0.2, true, 1.0),
+            (0.0, 3.0, 0.0, true, 1.0),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::sharpen(&mut cpu, w, h, amount, radius, threshold, luma_only, mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let op = SharpenOp {
+                amount,
+                radius_px: radius,
+                threshold,
+                luma_only,
+                mix,
+            };
+            let out = fx.sharpen(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_diff(&cpu, &gpu);
+            // Logged so real cross-vendor deltas accumulate (docs/08 open
+            // question 5: the class tolerances are placeholders until then).
+            eprintln!("sharpen a={amount} r={radius} t={threshold}: worst {worst:.2e}");
+            assert!(
+                worst < 5e-3,
+                "amount {amount} radius {radius} threshold {threshold} \
+                 luma {luma_only} mix {mix}: worst diff {worst}"
+            );
+
+            let out2 = fx.sharpen(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU sharpen must be bit-stable");
         }
     }
 }

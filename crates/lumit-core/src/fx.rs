@@ -92,52 +92,115 @@ pub struct EffectSchema {
 /// Edge policy shared by the blur family (docs/08 §3.8).
 pub const EDGE_OPTIONS: &[&str] = &["Transparent", "Repeat", "Mirror"];
 
+/// The host-uniform Mix parameter every effect ends with (docs/08 §1.5),
+/// in per cent, blending processed over unprocessed input.
+const MIX_PARAM: ParamSchema = ParamSchema {
+    id: "mix",
+    label: "Mix",
+    kind: ParamKind::Float {
+        default: 100.0,
+        slider: (0.0, 100.0),
+        hard: (0.0, 100.0),
+    },
+};
+
 /// The catalogue. Grows one entry per landed effect; the schema is the single
 /// source of truth the UI menu, instantiation and resolution all read.
-pub const BUILTINS: &[EffectSchema] = &[EffectSchema {
-    match_name: "blur",
-    label: "Blur",
-    version: 1,
-    traits: EffectTraits {
-        cost: CostClass::Moderate,
-        roi: Roi::PaddedPctDiag(25.0),
-        temporal: &[0],
-        premultiplied: true,
-        seeded: false,
-        beat_input: false,
+pub const BUILTINS: &[EffectSchema] = &[
+    EffectSchema {
+        match_name: "blur",
+        label: "Blur",
+        version: 1,
+        traits: EffectTraits {
+            cost: CostClass::Moderate,
+            roi: Roi::PaddedPctDiag(25.0),
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "radius",
+                label: "Radius",
+                // % of the comp diagonal (§2.3), so half-res preview matches.
+                // Default per §1.2's "drop it on and it already looks right".
+                kind: ParamKind::Float {
+                    default: 1.5,
+                    slider: (0.0, 25.0),
+                    hard: (0.0, 100.0),
+                },
+            },
+            ParamSchema {
+                id: "edge",
+                label: "Edges",
+                kind: ParamKind::Choice {
+                    options: EDGE_OPTIONS,
+                    default: 1, // Repeat: full-frame game footage never darkens
+                },
+            },
+            MIX_PARAM,
+        ],
     },
-    params: &[
-        ParamSchema {
-            id: "radius",
-            label: "Radius",
-            // % of the comp diagonal (§2.3), so half-res preview matches.
-            // Default per §1.2's "drop it on and it already looks right".
-            kind: ParamKind::Float {
-                default: 1.5,
-                slider: (0.0, 25.0),
-                hard: (0.0, 100.0),
-            },
+    // Unsharp mask in linear light (docs/08 §3.9), on unpremultiplied colour
+    // (§2.2: sharpening premultiplied values haloes matte edges). The
+    // unpremultiply → sharpen → re-premultiply wrap is fused into the kernel.
+    EffectSchema {
+        match_name: "sharpen",
+        label: "Sharpen",
+        version: 1,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::PaddedPctDiag(4.0),
+            temporal: &[0],
+            premultiplied: false, // §2.2: operates on unpremultiplied colour
+            seeded: false,
+            beat_input: false,
         },
-        ParamSchema {
-            id: "edge",
-            label: "Edges",
-            kind: ParamKind::Choice {
-                options: EDGE_OPTIONS,
-                default: 1, // Repeat: full-frame game footage never darkens
+        params: &[
+            ParamSchema {
+                id: "amount",
+                label: "Amount",
+                // Per cent of the detail signal added back (§3.9: 0–300%).
+                kind: ParamKind::Float {
+                    default: 60.0,
+                    slider: (0.0, 300.0),
+                    hard: (0.0, 300.0),
+                },
             },
-        },
-        ParamSchema {
-            id: "mix",
-            label: "Mix",
-            // The host-uniform Mix (docs/08 §1.5), in per cent.
-            kind: ParamKind::Float {
-                default: 100.0,
-                slider: (0.0, 100.0),
-                hard: (0.0, 100.0),
+            ParamSchema {
+                id: "radius",
+                label: "Radius",
+                // % of the comp diagonal (§2.3) — the width of the detail
+                // the mask lifts; small values crispen, larger add clarity.
+                kind: ParamKind::Float {
+                    default: 0.4,
+                    slider: (0.05, 2.0),
+                    hard: (0.0, 4.0),
+                },
             },
-        },
-    ],
-}];
+            ParamSchema {
+                id: "threshold",
+                label: "Threshold",
+                // Linear-light contrast below which detail is left alone,
+                // so compression noise is not amplified (§3.9).
+                kind: ParamKind::Float {
+                    default: 0.05,
+                    slider: (0.0, 1.0),
+                    hard: (0.0, 1.0),
+                },
+            },
+            ParamSchema {
+                id: "luminance_only",
+                label: "Luminance only",
+                // Sharpen the luma signal only — avoids chroma fringing on
+                // compressed game capture (§3.9).
+                kind: ParamKind::Bool { default: true },
+            },
+            MIX_PARAM,
+        ],
+    },
+];
 
 /// Look a schema up by its match name.
 pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
@@ -188,6 +251,18 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    Sharpen {
+        /// Fraction of the detail signal added back (0..3 = 0–300%).
+        amount: f32,
+        /// The internal gaussian's half-width, in raster pixels.
+        radius_px: f32,
+        /// Linear-light detail magnitude below which nothing is added.
+        threshold: f32,
+        /// True: sharpen the Rec. 709 luma only (no chroma fringing).
+        luma_only: bool,
+        /// 0..1.
+        mix: f32,
+    },
 }
 
 /// Resolve a layer's live stack at layer time `lt` for a raster whose
@@ -211,6 +286,24 @@ pub fn resolve_stack(effects: &[EffectInstance], lt: f64, diag_px: f32) -> Vec<R
                     mix,
                 })
             }
+            "sharpen" => {
+                let amount = (e.float_at("amount", lt)? as f32 / 100.0).clamp(0.0, 3.0);
+                let radius_pct = e.float_at("radius", lt)? as f32;
+                let threshold =
+                    (e.float_at("threshold", lt).unwrap_or(0.05) as f32).clamp(0.0, 1.0);
+                let luma_only = match e.param("luminance_only") {
+                    Some(EffectValue::Bool(b)) => *b,
+                    _ => true,
+                };
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::Sharpen {
+                    amount,
+                    radius_px: (radius_pct / 100.0 * diag_px).max(0.0),
+                    threshold,
+                    luma_only,
+                    mix,
+                })
+            }
             _ => None,
         })
         .collect()
@@ -230,6 +323,95 @@ pub mod cpu {
                 edge,
                 mix,
             } => blur_gaussian(rgba, w, h, *radius_px, *edge, *mix),
+            Resolved::Sharpen {
+                amount,
+                radius_px,
+                threshold,
+                luma_only,
+                mix,
+            } => sharpen(
+                rgba, w, h, *amount, *radius_px, *threshold, *luma_only, *mix,
+            ),
+        }
+    }
+
+    /// Rec. 709 luma weights, applied in linear light.
+    pub const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+    /// The unpremultiplied colour of one premultiplied RGBA pixel. A fully
+    /// transparent pixel's colour is undefined, so it reads as black — the
+    /// WGSL kernels use the identical rule.
+    fn unpremult(px: &[f32]) -> [f32; 3] {
+        if px[3] > 0.0 {
+            [px[0] / px[3], px[1] / px[3], px[2] / px[3]]
+        } else {
+            [0.0; 3]
+        }
+    }
+
+    /// Soft threshold: detail within ±t collapses to zero, detail beyond it
+    /// is shrunk by t — no hard step, so no contouring at the gate (§3.9's
+    /// noise suppression). Written as explicit branches so the WGSL twin
+    /// matches bit-for-bit.
+    fn soft_gate(d: f32, t: f32) -> f32 {
+        if d > t {
+            d - t
+        } else if d < -t {
+            d + t
+        } else {
+            0.0
+        }
+    }
+
+    /// Unsharp mask (docs/08 §3.9) in linear light on unpremultiplied colour
+    /// (§2.2): detail = input − gaussian(input, radius), gated by the soft
+    /// threshold, scaled by amount and added back. The internal gaussian
+    /// always uses Repeat edges (blurring unpremultiplied colour against
+    /// transparent borders would invent dark detail). Undershoot clamps at
+    /// zero — negative light is not a thing — and alpha passes through.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sharpen(
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        amount: f32,
+        radius_px: f32,
+        threshold: f32,
+        luma_only: bool,
+        mix: f32,
+    ) {
+        let original = rgba.to_vec();
+        // Unpremultiplied colour buffer, alpha carried along for the ride.
+        let mut blurred = vec![0.0f32; rgba.len()];
+        for (dst, src) in blurred.chunks_exact_mut(4).zip(original.chunks_exact(4)) {
+            dst[..3].copy_from_slice(&unpremult(src));
+            dst[3] = src[3];
+        }
+        blur_gaussian(&mut blurred, w, h, radius_px, 1, 1.0);
+        for i in (0..rgba.len()).step_by(4) {
+            let o = &original[i..i + 4];
+            let u = unpremult(o);
+            let b = &blurred[i..i + 3];
+            let mut v = [0.0f32; 3];
+            if luma_only {
+                let d = soft_gate(
+                    (u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2])
+                        - (b[0] * LUMA[0] + b[1] * LUMA[1] + b[2] * LUMA[2]),
+                    threshold,
+                );
+                for c in 0..3 {
+                    v[c] = u[c] + amount * d;
+                }
+            } else {
+                for c in 0..3 {
+                    v[c] = u[c] + amount * soft_gate(u[c] - b[c], threshold);
+                }
+            }
+            for c in 0..3 {
+                let s = v[c].max(0.0) * o[3];
+                rgba[i + c] = o[c] * (1.0 - mix) + s * mix;
+            }
+            rgba[i + 3] = o[3];
         }
     }
 
@@ -389,5 +571,118 @@ mod tests {
         let mut rep = corner;
         cpu::blur_gaussian(&mut rep, w, h, 3.0, 1, 1.0);
         assert!(sum(&t) < sum(&rep), "transparent edge sheds energy");
+    }
+
+    #[test]
+    fn sharpen_instantiates_and_resolves() {
+        let e = instantiate("sharpen").unwrap();
+        assert_eq!(e.float_at("amount", 0.0), Some(60.0));
+        assert_eq!(e.float_at("radius", 0.0), Some(0.4));
+        assert_eq!(e.float_at("threshold", 0.0), Some(0.05));
+        assert!(matches!(
+            e.param("luminance_only"),
+            Some(EffectValue::Bool(true))
+        ));
+        // 0.4% of a 1000px diagonal = 4px; amount 60% = 0.6.
+        let r = resolve_stack(&[e], 0.0, 1000.0);
+        assert_eq!(
+            r,
+            vec![Resolved::Sharpen {
+                amount: 0.6,
+                radius_px: 4.0,
+                threshold: 0.05,
+                luma_only: true,
+                mix: 1.0
+            }]
+        );
+    }
+
+    /// A step edge for sharpen tests: left half dark, right half bright,
+    /// fully opaque, with an HDR right side.
+    fn step_image(w: u32, h: u32) -> Vec<f32> {
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let v = if x < w / 2 { 0.2 } else { 2.0 };
+                img[i..i + 4].copy_from_slice(&[v, v * 0.5, v * 0.25, 1.0]);
+            }
+        }
+        img
+    }
+
+    #[test]
+    fn cpu_sharpen_identity_edge_overshoot_and_threshold() {
+        let (w, h) = (16u32, 8u32);
+        let img = step_image(w, h);
+
+        // Mix 0 is the exact identity.
+        let mut m0 = img.clone();
+        cpu::sharpen(&mut m0, w, h, 1.0, 3.0, 0.0, true, 0.0);
+        assert_eq!(m0, img);
+
+        // Amount 0 changes nothing (opaque pixels, so unpremultiply is exact).
+        let mut a0 = img.clone();
+        cpu::sharpen(&mut a0, w, h, 0.0, 3.0, 0.0, true, 1.0);
+        for (a, b) in a0.iter().zip(&img) {
+            assert!((a - b).abs() < 1e-6, "{a} vs {b}");
+        }
+
+        // A flat region is untouched; the step edge overshoots both ways.
+        let mut s = img.clone();
+        cpu::sharpen(&mut s, w, h, 1.0, 2.0, 0.0, true, 1.0);
+        let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+        let far = px(1, 4);
+        assert!((s[far] - img[far]).abs() < 1e-4, "flat area stays put");
+        let dark_side = px(w / 2 - 1, 4);
+        let bright_side = px(w / 2, 4);
+        assert!(s[dark_side] < img[dark_side], "dark side of edge dips");
+        assert!(s[bright_side] > img[bright_side], "bright side lifts");
+
+        // A threshold above the edge contrast suppresses the sharpening.
+        let mut t = img.clone();
+        cpu::sharpen(&mut t, w, h, 1.0, 2.0, 1.0, true, 1.0);
+        for (a, b) in t.iter().zip(&img) {
+            assert!((a - b).abs() < 1e-5, "threshold 1.0 gates the edge detail");
+        }
+
+        // Fully transparent input stays fully transparent (no invented light).
+        let mut clear = vec![0.0f32; (w * h * 4) as usize];
+        cpu::sharpen(&mut clear, w, h, 3.0, 2.0, 0.0, false, 1.0);
+        assert!(clear.iter().all(|v| *v == 0.0));
+
+        // Per-channel mode fringes where luma-only does not: on a pure
+        // chroma edge (constant luma), luma-only is inert.
+        let mut chroma = vec![0.0f32; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                // Two colours with identical Rec. 709 luma.
+                let (r, g, b) = if x < w / 2 {
+                    (0.5, 0.25, 0.0)
+                } else {
+                    let r = 0.1f32;
+                    let b = 0.4f32;
+                    let g = (0.5 * cpu::LUMA[0] + 0.25 * cpu::LUMA[1] - r * cpu::LUMA[0]
+                        + 0.0 * cpu::LUMA[2]
+                        - b * cpu::LUMA[2])
+                        / cpu::LUMA[1];
+                    (r, g, b)
+                };
+                chroma[i..i + 4].copy_from_slice(&[r, g, b, 1.0]);
+            }
+        }
+        let mut luma_pass = chroma.clone();
+        cpu::sharpen(&mut luma_pass, w, h, 2.0, 2.0, 0.0, true, 1.0);
+        let mut chan_pass = chroma.clone();
+        cpu::sharpen(&mut chan_pass, w, h, 2.0, 2.0, 0.0, false, 1.0);
+        let dev = |out: &[f32]| {
+            out.iter()
+                .zip(&chroma)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max)
+        };
+        assert!(dev(&luma_pass) < 1e-4, "luma-only ignores chroma edges");
+        assert!(dev(&chan_pass) > 0.05, "per-channel mode sharpens them");
     }
 }

@@ -612,6 +612,27 @@ impl Renderer<'_> {
                         },
                     );
                 }
+                lumit_core::fx::Resolved::Sharpen {
+                    amount,
+                    radius_px,
+                    threshold,
+                    luma_only,
+                    mix,
+                } => {
+                    tex = self.fx.sharpen(
+                        self.gpu,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::SharpenOp {
+                            amount: *amount,
+                            radius_px: *radius_px,
+                            threshold: *threshold,
+                            luma_only: *luma_only,
+                            mix: *mix,
+                        },
+                    );
+                }
             }
         }
         tex

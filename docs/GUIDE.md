@@ -112,8 +112,21 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
   Lumit version adds — so old and new versions can share project files.
+- **Sharpen.** The second effect in the catalogue, following Blur's four-part template.
+  It's an *unsharp mask* — the counter-intuitive classic: blur a copy of the image,
+  subtract it from the original (what's left is the fine detail), then add that detail
+  back on top, scaled by Amount. Two subtleties earn comments in the code. First, it
+  works on **unpremultiplied** colour (design rule §2.2): footage with transparency
+  stores its colours pre-multiplied by alpha, and sharpening those values directly would
+  draw halos around every matte edge — so the kernel divides alpha out, sharpens, and
+  multiplies it back in. Second, **Threshold** is a *soft* gate: detail weaker than the
+  threshold (compression noise, mostly) is ignored, but rather than a hard on/off — which
+  would leave visible contours where detail crosses the line — the gate shaves the
+  threshold off everything, so the transition is seamless. "Luminance only" (the default)
+  sharpens the brightness signal and leaves colour alone, because sharpening the colour
+  channels of compressed game capture produces rainbow fringes.
 - **Effects are usable end to end.** Twirl a layer open, open its **Effects** group,
-  and "Add effect" lists the catalogue (Blur, for now). Each effect shows a bypass
+  and "Add effect" lists the catalogue. Each effect shows a bypass
   tick, a remove button, and one row per parameter — a Blur radius has a stopwatch
   and lane diamonds exactly like Position does, so effect animation and layer
   animation are one skill. The same stack renders in preview and in export through
