@@ -242,6 +242,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   before rendering: promoting a parked frame beats recomputing it. The timeline's cache bar
   grew a second colour for this: **mint** = in memory, plays right now; **blue** = parked on
   disk, ready to promote.
+  The third tier is **VRAM**: the last few hundred megabytes of frames you actually looked
+  at stay resident on the graphics card, so scrubbing back over them re-shows the exact
+  texture with zero work — no upload, no colour maths. All three tiers answer to the same
+  content fingerprint, so a frame is a frame wherever it lives.
 - `crates/lumit-ui/src/export.rs` — **writing video files.** Every frame of a comp is
   rendered through the *exact same* colour engine and compositor the Viewer uses, then
   compressed to an .mp4. Using one shared path isn't laziness — it's the design's central
