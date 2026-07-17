@@ -257,6 +257,9 @@ struct Renderer<'a> {
     colour: lumit_gpu::ColourEngine,
     compositor: lumit_gpu::Compositor,
     decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
+    /// Flow interpolation backend, sharing the export device; falls back to
+    /// the CPU oracle by itself (export MUST honour the Flow policy, K-019).
+    flow: lumit_flow::FlowEngine,
 }
 
 /// A layer's source, prepared for compositing: a linear texture plus the
@@ -322,7 +325,7 @@ impl Renderer<'_> {
         if let Some((ceil, w)) = blend_frame {
             let px2 = dec.frame_rgba(ceil, None).map_err(|e| e.to_string())?;
             px.rgba = if flow {
-                lumit_flow::interpolate(
+                self.flow.interpolate(
                     &px.rgba,
                     &px2.rgba,
                     px.width as usize,
@@ -822,6 +825,7 @@ fn run(
         colour: lumit_gpu::ColourEngine::new(gpu),
         compositor: lumit_gpu::Compositor::new(gpu),
         decoders: HashMap::new(),
+        flow: lumit_flow::FlowEngine::with_context(gpu),
     };
     // Encoded frame dimensions must be even for 4:2:0 H.264/HEVC.
     let (tw, th) = (spec.target.0 & !1, spec.target.1 & !1);

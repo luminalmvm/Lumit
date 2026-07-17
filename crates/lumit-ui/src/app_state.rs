@@ -113,6 +113,10 @@ pub mod preview {
                 // frames re-display instantly instead of re-decoding.
                 let mut frame_cache: lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame> =
                     lumit_cache::ByteLru::new(512 * 1024 * 1024);
+                // Flow backend, created on the first Flow-policy frame: its
+                // own headless GPU when one exists, the CPU oracle otherwise
+                // (lumit-flow degrades by itself — never a fault).
+                let mut flow_engine: Option<lumit_flow::FlowEngine> = None;
                 loop {
                     // Block for one request, then drain to the newest (latest wins).
                     let mut req = match rx.recv() {
@@ -139,8 +143,15 @@ pub mod preview {
                         }
                         Message::Comp {
                             comp, frame, jobs, ..
-                        } => decode_comp(&mut decoders, &mut frame_cache, comp, frame, &jobs)
-                            .map(PreviewResult::Comp),
+                        } => decode_comp(
+                            &mut decoders,
+                            &mut frame_cache,
+                            &mut flow_engine,
+                            comp,
+                            frame,
+                            &jobs,
+                        )
+                        .map(PreviewResult::Comp),
                     };
                     let _ = result_tx.send(result);
                 }
@@ -239,6 +250,7 @@ pub mod preview {
     fn decode_comp(
         decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
         cache: &mut lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame>,
+        flow_engine: &mut Option<lumit_flow::FlowEngine>,
         comp: Uuid,
         frame: usize,
         jobs: &[CompJob],
@@ -264,13 +276,15 @@ pub mod preview {
                 };
                 let px2 = decode(decoders, cache, &req2)?;
                 if job.flow {
-                    lumit_flow::interpolate(
-                        &px.rgba,
-                        &px2.rgba,
-                        px.width as usize,
-                        px.height as usize,
-                        w,
-                    )
+                    flow_engine
+                        .get_or_insert_with(lumit_flow::FlowEngine::new_auto)
+                        .interpolate(
+                            &px.rgba,
+                            &px2.rgba,
+                            px.width as usize,
+                            px.height as usize,
+                            w,
+                        )
                 } else {
                     crate::pixels::blend_rgba(&px.rgba, &px2.rgba, w)
                 }

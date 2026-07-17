@@ -2582,6 +2582,13 @@ dependencies = [
 [[package]]
 name = "lumit-flow"
 version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "lumit-gpu",
+ "pollster",
+ "thiserror 2.0.18",
+ "wgpu",
+]
 
 [[package]]
 name = "lumit-gpu"
