@@ -100,6 +100,25 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         self.map.contains_key(key)
     }
 
+    /// Change the byte budget, evicting the least-recently-used entries until
+    /// the store fits (Settings → Performance resizes the RAM cache live).
+    pub fn set_budget(&mut self, budget_bytes: usize) {
+        self.budget = budget_bytes;
+        while self.used > self.budget {
+            let Some(oldest) = self
+                .map
+                .iter()
+                .min_by_key(|(_, e)| e.last_used)
+                .map(|(k, _)| k.clone())
+            else {
+                break;
+            };
+            if let Some(evicted) = self.map.remove(&oldest) {
+                self.used -= evicted.bytes;
+            }
+        }
+    }
+
     /// Fetch without touching recency, for read-only per-paint consumers.
     /// The Scopes panel reads the current frame every paint to draw its
     /// waveform/histogram; like `contains_key`, that poll must not bump the
@@ -176,6 +195,21 @@ mod tests {
         assert!(lru.insert(99, v(95)));
         assert!(lru.used_bytes() <= 100);
         assert!(lru.get(&99).is_some());
+    }
+
+    #[test]
+    fn lowering_the_budget_evicts_until_it_fits() {
+        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
+        assert!(lru.insert("a", v(40)));
+        assert!(lru.insert("b", v(40)));
+        lru.get(&"b"); // make "a" the oldest
+        lru.set_budget(50);
+        assert!(lru.used_bytes() <= 50);
+        assert!(lru.contains_key(&"b") && !lru.contains_key(&"a"));
+        // Raising it again keeps what is there and admits more.
+        lru.set_budget(100);
+        assert!(lru.insert("c", v(40)));
+        assert!(lru.contains_key(&"b") && lru.contains_key(&"c"));
     }
 
     #[test]

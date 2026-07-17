@@ -654,10 +654,18 @@ project file, [10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2):
   header text so users understand what the app guarantees.
 - **Export**: default preset, export priority default (background/balanced/fast), encoder
   preference order, filename template.
-- **Keymap**, **Interface** (UI scale, tooltips, reduced motion follows OS or override —
-  Theme Mode, Shape and Animation level live in the Window menu for now, K-092; they migrate
-  into this group once this window ships), **Autosave** (interval, copies kept), **Plugins**
-  (search paths, disabled list, per-plugin overrides).
+- **Keymap**, **Interface** (UI scale, tooltips, reduced motion follows OS or override),
+  **Autosave** (interval, copies kept), **Plugins** (search paths, disabled list,
+  per-plugin overrides).
+
+**Shipped (v1, K-098):** the Settings window exists — a macOS-System-Settings-style surface,
+a sidebar of pages with grouped cards, honouring the Sharp/Round shape. It opens from
+**Window → Settings…** or **Ctrl/Cmd+comma**. Its v1 pages are a subset of the inventory
+above: **Appearance** (Theme Mode, Background ramp, Accent, Shape, Interface motion — all
+migrated here out of the Window menu, K-092), **Performance** (RAM frame-cache budget and
+disk-cache cap, both applied live), and **General** (reset workspace, version). The remaining
+groups (VRAM/CUDA and the other Performance rows, Cache root/proxy, Preview, Colour, Export,
+Keymap, Autosave, Plugins) fill in on this same surface as those systems gain their controls.
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context
 display); the keymap serialises to a shareable file. An "After Effects" alternate preset

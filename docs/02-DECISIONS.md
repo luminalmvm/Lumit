@@ -745,3 +745,23 @@ trace whatever the light/dark chrome, the same grading-accuracy reasoning that k
 (alongside `contains_key`) so a scope reading the current frame every paint does not distort
 LRU eviction. The §8 tap-point open question (pre- vs post-display-transform) is untouched —
 v1 has no display transform, so the banked sRGB frame is both.
+
+**K-098 · DECIDED · A Settings window replaces the Window-menu theme cluster; app-wide
+params migrate onto it.** From the owner (2026-07-18): a proper application-settings surface,
+macOS-System-Settings-shaped — a left sidebar of pages, each page a column of grouped
+"cards" of label-plus-control rows — honouring the Sharp/Round shape like every panel (Round
+gives cards a fill and rounded corners, Sharp a hairline frame). It opens from Window →
+Settings… or Ctrl/Cmd+comma (`settings.rs`). This supersedes the plan note in docs/07 §15
+that the K-092 theme toggles "live in the Window menu for now": Theme Mode, Background ramp,
+Accent, Shape and Interface motion now live on the **Appearance** page, and the Window menu
+keeps only Reset workspace and a Settings… opener. v1 also ships a **Performance** page
+(RAM frame-cache budget and disk-cache cap, both applied live — `ByteLru::set_budget` and a
+new `diskio::Cmd::SetCap` the disk worker remembers across project switches) and a **General**
+page (reset workspace, version). Performance settings persist on `Shell` as
+`PerformanceSettings`; defaults reproduce the previous hardcoded budgets (512 MiB RAM, 50 GiB
+disk) exactly, so an existing install is unchanged until a slider moves. The fuller §15
+inventory (VRAM/CUDA, decoder pool, worker cap, cache root/proxy, Preview, Colour, Export,
+Keymap, Autosave, Plugins) fills in on this same surface as those systems gain controls; a
+GPU-acceleration toggle was deliberately deferred rather than shipped half-wired (the flow
+engine lives in the decode worker and needs its own control message). The window is the
+`docs/07 §15` "Interface/Preferences" surface, not a second one.

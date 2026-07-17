@@ -18,6 +18,7 @@ mod inspector;
 mod overlays;
 mod panels;
 mod scopes;
+mod settings;
 mod timeline;
 mod widgets;
 
@@ -89,10 +90,20 @@ pub struct Shell {
     /// menu, K-092). Persisted with the workspace.
     #[serde(default)]
     theme_shape: crate::theme::ThemeShape,
-    /// How much UI-chrome motion to show (Window menu, K-092). Persisted
-    /// with the workspace.
+    /// How much UI-chrome motion to show (Settings → Appearance, K-092).
+    /// Persisted with the workspace.
     #[serde(default)]
     animation_level: crate::theme::AnimationLevel,
+    /// Application-wide performance settings (Settings → Performance): frame
+    /// cache budgets and GPU acceleration. Persisted with the workspace.
+    #[serde(default)]
+    settings: settings::PerformanceSettings,
+    /// Whether the Settings window is open (runtime only).
+    #[serde(skip, default)]
+    settings_open: bool,
+    /// Which Settings page is showing (runtime only).
+    #[serde(skip, default)]
+    settings_page: settings::SettingsPage,
     /// The panel that last took a click — it wears the accent boundary so the
     /// keyboard's home is always visible (AE's focused-panel edge).
     #[serde(skip, default)]
@@ -228,6 +239,9 @@ impl Default for Shell {
             theme_mode: crate::theme::ThemeMode::default(),
             theme_shape: crate::theme::ThemeShape::default(),
             animation_level: crate::theme::AnimationLevel::default(),
+            settings: settings::PerformanceSettings::default(),
+            settings_open: false,
+            settings_page: settings::SettingsPage::default(),
             active_panel: None,
             app: AppState::default(),
             splash: None,
@@ -274,6 +288,8 @@ impl Shell {
         shell.theme.apply(ctx);
         crate::theme::apply_animation_level(ctx, shell.animation_level);
         ctx.style_mut(|s| s.visuals.panel_fill = shell.theme.surface_0);
+        // Honour saved cache budgets (Settings → Performance).
+        shell.apply_cache_budgets();
 
         // The boot log (K-008): every line reflects real initialisation state.
         let mut lines = vec![
@@ -423,6 +439,8 @@ impl Shell {
         const REDO: KeyboardShortcut =
             KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
         const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+        // The macOS-standard Settings shortcut (Cmd/Ctrl+comma).
+        const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
         // Order matters: consume the more-modified shortcut first.
         if ctx.input_mut(|i| i.consume_shortcut(&REDO)) {
             self.app.redo();
@@ -431,6 +449,9 @@ impl Shell {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SAVE)) {
             self.app.save();
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SETTINGS)) {
+            self.settings_open = true;
         }
     }
 
@@ -1485,108 +1506,11 @@ impl Shell {
                         ui.close_menu();
                     }
                     ui.separator();
-                    // Recompose the full theme (K-092: mode × variant ×
-                    // shape) plus any accent override, then re-apply —
-                    // every radio group below funnels through this.
-                    let recompose = |shell: &mut Self, ctx: &egui::Context| {
-                        shell.theme = Theme::for_settings(
-                            shell.theme_mode,
-                            shell.theme_variant,
-                            shell.theme_shape,
-                        );
-                        if let Some(rgb) = shell.accent_override {
-                            shell.theme = shell.theme.with_accent(rgb);
-                        }
-                        shell.theme.apply(ctx);
-                        let s0 = shell.theme.surface_0;
-                        ctx.style_mut(|s| s.visuals.panel_fill = s0);
-                    };
-                    // Mode: light or dark (K-092).
-                    ui.label(
-                        egui::RichText::new("Mode")
-                            .small()
-                            .color(self.theme.text_muted),
-                    );
-                    let mut mode = self.theme_mode;
-                    ui.radio_value(&mut mode, crate::theme::ThemeMode::Dark, "Dark");
-                    ui.radio_value(&mut mode, crate::theme::ThemeMode::Light, "Light");
-                    if mode != self.theme_mode {
-                        self.theme_mode = mode;
-                        recompose(self, ui.ctx());
-                    }
-                    // Background ramp pick — meaningless under Light (there
-                    // is one light ramp), so hidden rather than shown dead.
-                    if self.theme_mode == crate::theme::ThemeMode::Dark {
-                        ui.separator();
-                        ui.label(
-                            egui::RichText::new("Background")
-                                .small()
-                                .color(self.theme.text_muted),
-                        );
-                        let mut pick = self.theme_variant;
-                        ui.radio_value(&mut pick, crate::theme::ThemeVariant::Dark, "Dark");
-                        ui.radio_value(
-                            &mut pick,
-                            crate::theme::ThemeVariant::DarkBlue,
-                            "Dark blue (previous)",
-                        );
-                        if pick != self.theme_variant {
-                            self.theme_variant = pick;
-                            recompose(self, ui.ctx());
-                            ui.close_menu();
-                        }
-                    }
-                    // Accent pick — the second seed of the theme customiser.
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("Accent")
-                            .small()
-                            .color(self.theme.text_muted),
-                    );
-                    ui.horizontal(|ui| {
-                        let mut rgb = self
-                            .accent_override
-                            .unwrap_or(crate::theme::Theme::default_accent_rgb());
-                        let changed = ui.color_edit_button_srgb(&mut rgb).changed();
-                        let reset = self.accent_override.is_some()
-                            && ui
-                                .small_button("Reset")
-                                .on_hover_text("Back to the clay default")
-                                .clicked();
-                        if changed || reset {
-                            self.accent_override = if reset { None } else { Some(rgb) };
-                            recompose(self, ui.ctx());
-                        }
-                    });
-                    // Shape: sharp (edge-to-edge) or round (floating card),
-                    // K-092 — independent of Mode.
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("Shape")
-                            .small()
-                            .color(self.theme.text_muted),
-                    );
-                    let mut shape = self.theme_shape;
-                    ui.radio_value(&mut shape, crate::theme::ThemeShape::Sharp, "Sharp");
-                    ui.radio_value(&mut shape, crate::theme::ThemeShape::Round, "Round");
-                    if shape != self.theme_shape {
-                        self.theme_shape = shape;
-                        recompose(self, ui.ctx());
-                    }
-                    // Animation: how much UI-chrome motion to show, K-092.
-                    ui.separator();
-                    ui.label(
-                        egui::RichText::new("Animation")
-                            .small()
-                            .color(self.theme.text_muted),
-                    );
-                    let mut anim = self.animation_level;
-                    ui.radio_value(&mut anim, crate::theme::AnimationLevel::All, "All");
-                    ui.radio_value(&mut anim, crate::theme::AnimationLevel::Minimal, "Minimal");
-                    ui.radio_value(&mut anim, crate::theme::AnimationLevel::None, "None");
-                    if anim != self.animation_level {
-                        self.animation_level = anim;
-                        crate::theme::apply_animation_level(ui.ctx(), anim);
+                    // Theme, shape, motion and performance now live in the
+                    // Settings window (Appearance / Performance pages).
+                    if ui.button("Settings…").clicked() {
+                        self.settings_open = true;
+                        ui.close_menu();
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1771,6 +1695,7 @@ impl Shell {
         self.comp_dialog_modal(ctx);
         #[cfg(feature = "media")]
         self.export_dialog_modal(ctx);
+        self.settings_modal(ctx);
 
         // The tiling dock fills the window: a solo pane renders bare with no
         // tab bar — the Viewer's look (K-074) on every lone panel (K-086) —

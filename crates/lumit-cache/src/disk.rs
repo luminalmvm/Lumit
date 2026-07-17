@@ -180,6 +180,13 @@ impl DiskCache {
     }
 
     /// Evict oldest-modified entries until the running total fits the cap
+    /// Change the byte cap, evicting oldest-first until within it (Settings →
+    /// Performance sets the disk budget).
+    pub fn set_cap(&mut self, cap_bytes: u64) {
+        self.cap_bytes = cap_bytes;
+        self.enforce_cap();
+    }
+
     /// (the spec's cost-aware policy refines this once the index exists —
     /// recompute cost isn't tracked without it).
     fn enforce_cap(&mut self) {
@@ -331,6 +338,26 @@ mod tests {
         assert!(c.used_bytes() <= one_size * 2 + one_size / 2);
         assert!(!c.contains(1), "oldest entry evicts first");
         assert!(c.contains(3), "newest entry survives");
+    }
+
+    #[test]
+    fn set_cap_evicts_immediately_when_lowered() {
+        let dir = tempfile::tempdir().unwrap();
+        let one_size = {
+            let mut probe = DiskCache::open(dir.path().join("probe"), u64::MAX);
+            probe.store(1, 16, 16, &frame(16, 16, 3));
+            probe.used_bytes()
+        };
+        let mut c = DiskCache::open(dir.path().join("real"), u64::MAX);
+        c.store(1, 16, 16, &frame(16, 16, 1));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        c.store(2, 16, 16, &frame(16, 16, 2));
+        assert!(c.contains(1) && c.contains(2));
+        // Tightening the cap to hold one frame evicts the oldest at once.
+        c.set_cap(one_size + one_size / 2);
+        assert!(c.used_bytes() <= one_size + one_size / 2);
+        assert!(!c.contains(1), "lowering the cap evicts the oldest");
+        assert!(c.contains(2));
     }
 
     #[test]

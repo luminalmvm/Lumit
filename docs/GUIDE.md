@@ -998,8 +998,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   from pressed purely by how light their fill is; scrollbars are thin and solid; panel
   edges are single crisp 1px lines. The colours themselves (the clay accent, the cool grey
   family) are still Lumit's own — we borrowed the skeleton, not the skin.
-  Five customisation seeds live in the **Window menu** (the full theme picker grows from
-  here, K-092): **Mode** switches the whole app between Dark and a new Light theme — one
+  Five appearance controls live in the **Settings window** (K-098) — open it from
+  **Window → Settings…** or **Ctrl/Cmd+comma**. That window is Lumit's application-settings
+  surface, shaped like macOS's System Settings: a list of pages down the left (General,
+  Appearance, Performance), and on the right the chosen page's settings in grouped cards, a
+  label on the left of each row and its control on the right. It follows the Sharp/Round
+  look like everything else — rounded filled cards under Round, hairline-framed under Sharp.
+  The **Appearance** page carries the theme controls (they used to sit in the Window menu):
+  **Mode** switches the whole app between Dark and a new Light theme — one
   plain white for every panel on a soft neutral canvas, not a tinted panel per section (that
   idea is wanted, but saved for a future setting rather than built now); **Background**
   (only shown under Dark, since there's nothing to pick under Light) switches between the
@@ -1012,6 +1018,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   this reaches things like a collapsing section's arrow or a dialog's fade-in, not (yet) the
   app's own dropdown menus, which don't animate at all today regardless of this setting. All
   five persist with your workspace; Reset returns the clay default for Accent.
+  The **Performance** page of the same window is where you tell Lumit how hard to work your
+  machine: how much memory its frame cache may hold, and how much disk the on-disk cache may
+  use. Both apply the moment you change them — nudge the memory budget down and the cache
+  trims itself to fit at once. The defaults match what Lumit used before the page existed, so
+  nothing changes until you move a slider. (More performance controls — the graphics-card
+  budget, worker counts — arrive on this page as those systems gain their knobs.)
   The **focused panel** also wears a thin accent edge: whichever panel you last clicked is
   where keyboard shortcuts land, and the edge keeps that visible at a glance (the After
   Effects convention) — it follows the Round shape's card rounding too, when that's picked.
