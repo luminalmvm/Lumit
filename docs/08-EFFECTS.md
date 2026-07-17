@@ -55,7 +55,7 @@ Every effect declares, statically:
 | **Temporal window** | Set of source-relative frame offsets required, e.g. `{0}`, `{-1, 0, +1}`, `{-n..0}` for echoes | Cache prefetcher and decode planner (§2.5) |
 | **Alpha mode** | `premultiplied` (default) or `unpremultiplied` (§2.2) | Host unpremultiply/re-premultiply wrapping |
 | **Cancellation points** | `per-pass` and/or `per-tile` | Epoch-based cancellation on scrub (K-017): every pass boundary and tile boundary MUST check the epoch and abandon work |
-| **Randomness** | `none` or `seeded` | Determinism audit (§2.4) |
+| **Randomness** | `none` or `seeded` | Determinism audit (§2.4); frame keys — a seeded effect's pixels are a function of time under constant parameters, so the layer's local time joins its cache key |
 | **Marker input** | `none` or `beat` | Marker-trigger plumbing (§1.4) |
 
 ### 1.4 Marker-trigger parameters
@@ -321,6 +321,17 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 naturally (the S_Shake feature wiggle expressions never had). Edge policy: the resample
 reveals area outside the layer; options Repeat edge / Mirror / Transparent / Auto-scale
 (scales up by max amplitude so no edges ever show — the montage default).
+
+**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, Zoom
+pump, Seed (per-instance default, with reseed) and an Auto-scale Bool (on, the montage
+default: an exact cover scale computed from the declared maxima keeps every corner
+covered; off reveals transparency). The generator is pinned as two octaves of seeded
+value noise (lacunarity 2, gain 0.5, smoothstep-interpolated, one independent channel
+per axis) sampled at local time × frequency — deterministic and hop-free per §2.4.
+Resolved host-side into an affine and dispatched through the §3.5 Transform kernel: no
+kernel of its own, and the zero-wobble state is a bit-exact passthrough (pinned by
+test). Style presets, Triggered mode (§1.4), Motion blur shake and the Repeat/Mirror
+edge options follow; shipped parameters are stable when they do.
 
 ### 3.5 Transform — the transform properties as an effect (K-090)
 

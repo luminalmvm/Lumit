@@ -7631,6 +7631,40 @@ fn effects_rows(ui: &mut egui::Ui, ctx: &RowCtx, pending: &mut Option<lumit_core
                         *pending = Some(commit(effects));
                     }
                 }
+                (EffectValue::Seed(cur), ParamKind::Seed) => {
+                    // An integer drag plus the §2.4 reseed button; the
+                    // chosen value is stored project data, so determinism
+                    // is untouched.
+                    let (_row, mut c) = row_frame(ui, ctx, false);
+                    c.label(
+                        egui::RichText::new(ps.label)
+                            .small()
+                            .color(ctx.theme.text_muted),
+                    );
+                    let id = egui::Id::new(("fxseed", e.id, pi));
+                    let mut v = c.data(|d| d.get_temp::<u32>(id)).unwrap_or(*cur);
+                    let resp = c.add(egui::DragValue::new(&mut v).speed(1));
+                    if resp.dragged() || resp.has_focus() {
+                        c.data_mut(|d| d.insert_temp(id, v));
+                    }
+                    if resp.drag_stopped() || resp.lost_focus() {
+                        if v != *cur {
+                            let mut effects = layer.effects.clone();
+                            effects[idx].params[pi].value = EffectValue::Seed(v);
+                            *pending = Some(commit(effects));
+                        }
+                        c.data_mut(|d| d.remove::<u32>(id));
+                    }
+                    if c.small_button("Reseed")
+                        .on_hover_text("Pick a fresh seed")
+                        .clicked()
+                    {
+                        let mut effects = layer.effects.clone();
+                        effects[idx].params[pi].value =
+                            EffectValue::Seed(lumit_core::fx::fresh_seed());
+                        *pending = Some(commit(effects));
+                    }
+                }
                 (EffectValue::Colour(chs), ParamKind::Colour { range, .. }) => {
                     // Scene-linear RGB drag values plus a live swatch (the
                     // swatch colour is data, not theme: it is the parameter).

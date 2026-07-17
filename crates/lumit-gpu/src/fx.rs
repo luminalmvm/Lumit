@@ -1624,6 +1624,85 @@ mod tests {
         }
     }
 
+    /// The §1.6 oracle for shake (docs/08 §3.4): a transform-domain effect
+    /// with no kernel of its own — the resolved wobble maps through the
+    /// shared `shake_affine` to the Transform kernel, exactly as `run_ops`
+    /// dispatches it, and the CPU reference walks the same affine. One-tap
+    /// resample, so the cheap-class ≤ 2 fp16 ULP bound holds; the GPU is
+    /// bit-stable (§2.4); the neutral wobble (zero amplitude, rotation and
+    /// pump — the effect's §1.2 trigger-adjacent neutral) is the bit-exact
+    /// passthrough even with auto-scale on, because the cover is exactly 1.
+    #[test]
+    fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for (name, offset, rot, zoom, amp, rot_max, zoom_min, auto_scale, mix) in [
+            (
+                "neutral",
+                [0.0f32, 0.0f32],
+                0.0f32,
+                1.0f32,
+                0.0f32,
+                0.0f32,
+                1.0f32,
+                true,
+                1.0f32,
+            ),
+            ("offset", [2.5, -1.5], 0.0, 1.0, 3.0, 0.0, 1.0, false, 1.0),
+            ("twist", [1.0, 0.5], 4.0, 1.0, 1.5, 5.0, 1.0, true, 1.0),
+            ("pumped", [0.0, 2.0], -2.0, 0.95, 2.0, 3.0, 0.9, true, 0.7),
+        ] {
+            let shake = lumit_core::fx::Resolved::Shake {
+                offset_px: offset,
+                rotation_deg: rot,
+                zoom,
+                amp_px: amp,
+                rotation_max_deg: rot_max,
+                zoom_min,
+                auto_scale,
+                mix,
+            };
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
+
+            // The exact run_ops mapping: shared affine → transform op →
+            // the Transform kernel.
+            let (anchor, position, scale, rotation) = lumit_core::fx::shake_affine(
+                w, h, offset, rot, zoom, amp, rot_max, zoom_min, auto_scale,
+            );
+            let (m, off, opacity) =
+                lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let op = TransformOp {
+                m,
+                off,
+                opacity,
+                mix,
+            };
+            let out = fx.transform(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("shake {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+            if name == "neutral" {
+                assert_eq!(
+                    gpu, img,
+                    "a neutral shake must be the bit-exact passthrough"
+                );
+            }
+
+            let out2 = fx.transform(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU shake must be bit-stable");
+        }
+    }
+
     /// The §1.6 oracle for glow: WGSL agrees with the CPU reference on the
     /// corpus across parameter sweeps, is bit-stable (§2.4), and — the
     /// effect's neutral pin — intensity 0 is the bit-exact identity. Like

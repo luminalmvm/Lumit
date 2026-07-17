@@ -221,6 +221,46 @@ pub fn run_ops(fx: &FxEngine, ctx: &GpuContext, tex: Tex, w: u32, h: u32, ops: &
                     },
                 );
             }
+            // Shake dispatches the Transform kernel (docs/08 §3.4: a
+            // transform-domain effect): the shared affine turns the
+            // resolved wobble into the same op the CPU reference builds,
+            // so both paths consume bit-identical numbers.
+            Resolved::Shake {
+                offset_px,
+                rotation_deg,
+                zoom,
+                amp_px,
+                rotation_max_deg,
+                zoom_min,
+                auto_scale,
+                mix,
+            } => {
+                let (anchor, position, scale, rot) = lumit_core::fx::shake_affine(
+                    w,
+                    h,
+                    *offset_px,
+                    *rotation_deg,
+                    *zoom,
+                    *amp_px,
+                    *rotation_max_deg,
+                    *zoom_min,
+                    *auto_scale,
+                );
+                let (m, off, opacity) =
+                    lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                tex = fx.transform(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::TransformOp {
+                        m,
+                        off,
+                        opacity,
+                        mix: *mix,
+                    },
+                );
+            }
         }
     }
     tex

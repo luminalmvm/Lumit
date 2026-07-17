@@ -212,6 +212,22 @@ fn feed_layer(
                     }
                 }
             }
+            // A seeded effect (docs/08 §1.3 Randomness) draws from
+            // hash(seed, time, …) generators (§2.4): its pixels are a
+            // function of the layer's local time even while every
+            // parameter holds constant — a Shake wobbles a static solid
+            // differently every frame. The local time therefore joins the
+            // key for exactly these effects; everything else keeps its
+            // time-free keys (a blurred solid still shares one cached
+            // frame across its whole span).
+            if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
+                if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
+                    if s.traits.seeded {
+                        h.update(b"fx-time");
+                        feed_f64(h, lt);
+                    }
+                }
+            }
         }
     }
 
@@ -721,6 +737,58 @@ mod tests {
         let mut v2 = with_fx.clone();
         v2.layers[0].effects[0].effect.version = 2;
         assert_ne!(fx_key, key(&doc, &v2, 1.0));
+    }
+
+    /// A seeded effect's pixels move with time under constant parameters
+    /// (docs/08 §1.3 Randomness, §2.4), so the layer's local time joins its
+    /// frame key: a shaken static solid keys differently at different
+    /// frames (else every frame would collide on the first render), keys
+    /// identically for the same frame twice, and a non-temporal effect
+    /// (blur) keeps its time-free keys — no cache regression elsewhere.
+    #[test]
+    fn seeded_effects_key_the_local_time() {
+        let mut doc = Document::new();
+        let def_id = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def_id,
+            name: "s".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 64,
+            height: 64,
+            extra: serde_json::Map::new(),
+        }));
+        let with_fx = |name: &str| {
+            let mut l = text_layer("x", 0.0, 10.0, 0.0);
+            l.kind = LayerKind::Solid { def: def_id };
+            l.effects.push(lumit_core::fx::instantiate(name).unwrap());
+            comp_with(vec![l])
+        };
+
+        // Shake (seeded): different frames, different keys; the same frame
+        // twice, the same key.
+        let shaken = with_fx("shake");
+        assert_ne!(key(&doc, &shaken, 1.0), key(&doc, &shaken, 2.0));
+        assert_eq!(key(&doc, &shaken, 1.0), key(&doc, &shaken, 1.0));
+
+        // Blur (not seeded): a static solid keeps one key across frames.
+        let blurred = with_fx("blur");
+        assert_eq!(key(&doc, &blurred, 1.0), key(&doc, &blurred, 2.0));
+
+        // And the seed itself is content: two Shakes differing only by
+        // seed key apart (the params already hash — pinned here so the
+        // Seed value kind never falls out of the loop).
+        let mut reseeded = shaken.clone();
+        for p in &mut reseeded.layers[0].effects[0].params {
+            if p.id == "seed" {
+                use lumit_core::model::EffectValue;
+                let old = match p.value {
+                    EffectValue::Seed(s) => s,
+                    _ => 0,
+                };
+                p.value = EffectValue::Seed(old.wrapping_add(1));
+            }
+        }
+        assert_ne!(key(&doc, &shaken, 1.0), key(&doc, &reseeded, 1.0));
     }
 
     /// Precomps recurse: an edit inside the nested comp changes the parent's

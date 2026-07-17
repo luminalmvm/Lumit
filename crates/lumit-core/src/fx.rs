@@ -86,6 +86,12 @@ pub enum ParamKind {
         /// or dip below 0 (a lift), so each colour declares its own.
         range: (f64, f64),
     },
+    /// An integer seed (docs/08 §1.1's seed type): selects which
+    /// deterministic random-looking sequence a seeded effect follows
+    /// (§2.4). No declared default — the default is per-instance (§3.4),
+    /// drawn from the fresh instance id at instantiation, so two copies of
+    /// a seeded effect never wobble in sync.
+    Seed,
 }
 
 /// The Add-effect menu's grouping (K-090): every schema declares one.
@@ -671,11 +677,101 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Shake (docs/08 §3.4): seeded camera-shake — a transform-domain
+    // wobble (translation, rotation, zoom pump) resampled once through the
+    // Transform kernel, never pixel noise. The v1 continuous form ships
+    // Amplitude/Frequency/Rotation amount/Zoom pump/Auto-scale/Seed; the
+    // Style presets, Triggered mode (§1.4 markers), Motion blur shake and
+    // the Repeat/Mirror edge options follow — these parameters stay stable
+    // when they do. Seeded (§1.3): its pixels are a function of time under
+    // constant parameters, which the frame key reads (lumit-eval).
+    EffectSchema {
+        match_name: "shake",
+        label: "Shake",
+        version: 1,
+        category: FxCategory::Distortion,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::FullFrame,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: true,
+            beat_input: false, // Triggered mode arrives with §1.4 plumbing
+        },
+        params: &[
+            ParamSchema {
+                id: "amplitude",
+                label: "Amplitude",
+                // % of the comp diagonal (§2.3): how far the wobble roams.
+                kind: ParamKind::Float {
+                    default: 1.5,
+                    slider: (0.0, 20.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "frequency",
+                label: "Frequency",
+                // Hz — how fast the wobble wanders; the noise samples at
+                // local time × frequency. Unbounded above (K-090): any
+                // positive rate is meaningful, sampling handles it.
+                kind: ParamKind::Float {
+                    default: 8.0,
+                    slider: (0.1, 30.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "rotation",
+                label: "Rotation amount",
+                // Degrees of twist wobble either way.
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 45.0),
+                    hard: (Some(0.0), Some(360.0)),
+                },
+            },
+            ParamSchema {
+                id: "zoom_pump",
+                label: "Zoom pump",
+                // % of scale wobble about natural size (§3.4).
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 20.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "auto_scale",
+                label: "Auto-scale",
+                // On (the montage default): scale up by the declared maxima
+                // so the wobble never reveals an edge. Off: revealed area
+                // is transparent. The §3.4 Repeat/Mirror options follow.
+                kind: ParamKind::Bool { default: true },
+            },
+            ParamSchema {
+                id: "seed",
+                label: "Seed",
+                kind: ParamKind::Seed,
+            },
+            MIX_PARAM,
+        ],
+    },
 ];
 
 /// Look a schema up by its match name.
 pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
     BUILTINS.iter().find(|s| s.match_name == match_name)
+}
+
+/// A fresh random seed value — the per-instance Seed default (docs/08
+/// §3.4) and the Effect Controls "reseed" button (§2.4) both draw from
+/// here. Taken from a new UUID's random tail, so it needs no extra
+/// dependency; the value becomes stored project data the moment it is
+/// chosen, so evaluation determinism (§2.4) is untouched.
+pub fn fresh_seed() -> u32 {
+    let b = uuid::Uuid::now_v7().into_bytes();
+    u32::from_le_bytes([b[12], b[13], b[14], b[15]])
 }
 
 /// A new instance of a built-in, carrying the declared defaults.
@@ -704,6 +800,7 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
                     ParamKind::Colour { default, .. } => {
                         EffectValue::Colour(default.map(Property::fixed))
                     }
+                    ParamKind::Seed => EffectValue::Seed(fresh_seed()),
                 },
                 extra: serde_json::Map::new(),
             })
@@ -825,6 +922,28 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    /// A shake, already sampled at this frame (the noise runs at resolve
+    /// time, host-side): the current wobble plus the declared maxima the
+    /// Auto-scale cover is computed from. Dispatches through the Transform
+    /// kernel via [`shake_affine`] — no kernel of its own.
+    Shake {
+        /// This frame's wobble offset, raster pixels.
+        offset_px: [f32; 2],
+        /// This frame's rotation wobble, degrees.
+        rotation_deg: f32,
+        /// This frame's zoom factor; 1 = no pump.
+        zoom: f32,
+        /// The amplitude ceiling in raster pixels (Auto-scale input).
+        amp_px: f32,
+        /// The rotation ceiling in degrees (Auto-scale input).
+        rotation_max_deg: f32,
+        /// The zoom floor, 1 − pump (Auto-scale input).
+        zoom_min: f32,
+        /// True: scale up so the wobble never reveals an edge (§3.4).
+        auto_scale: bool,
+        /// 0..1.
+        mix: f32,
+    },
 }
 
 /// The inverse affine of a Transform effect (docs/08 §3.5): the forward map
@@ -926,6 +1045,115 @@ pub fn glow_bright(x: f32, threshold: f32, knee: f32) -> f32 {
         return d * w;
     }
     d
+}
+
+/// The SplitMix64 finaliser — the integer mixer behind the shake noise
+/// lattice. Chosen for its published avalanche quality and its five-line
+/// portability: any future twin (a WGSL noise, an expression binding)
+/// can reproduce it exactly.
+fn splitmix64(mut x: u64) -> u64 {
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    x
+}
+
+/// The lattice value for one noise channel at integer coordinate `i`:
+/// `hash(seed, channel, i)` mapped to [−1, 1] — the §2.4 seeded-stateless
+/// shape, a pure function of its inputs with no history.
+fn noise_lattice(seed: u32, channel: u32, i: i64) -> f64 {
+    let mixed = splitmix64(splitmix64(splitmix64(u64::from(seed)) ^ u64::from(channel)) ^ i as u64);
+    // Top 53 bits → [0, 1) exactly representable in f64, then to [−1, 1].
+    (mixed >> 11) as f64 * (2.0 / 9_007_199_254_740_992.0) - 1.0
+}
+
+/// One octave of seeded 1D value noise: the lattice values at the two
+/// surrounding integers, smoothstep-interpolated. C¹-continuous, so the
+/// wobble it drives is hop-free; deterministic per §2.4 (same inputs, same
+/// output, on every machine and every run).
+pub fn value_noise_1d(seed: u32, channel: u32, x: f64) -> f64 {
+    let x0 = x.floor();
+    let i0 = x0 as i64; // saturating cast: astronomically distant times clamp
+    let f = x - x0;
+    let t = f * f * (3.0 - 2.0 * f);
+    let a = noise_lattice(seed, channel, i0);
+    let b = noise_lattice(seed, channel, i0.wrapping_add(1));
+    a + (b - a) * t
+}
+
+/// The Shake generator (docs/08 §3.4): two octaves of value noise (the
+/// sketch's "Normal" fBm — lacunarity 2, gain 0.5, octaves decorrelated by
+/// channel offset), normalised so the result stays within [−1, 1]. One
+/// independent channel each for x, y, rotation and zoom.
+pub fn shake_noise(seed: u32, channel: u32, x: f64) -> f64 {
+    (value_noise_1d(seed, channel, x) + 0.5 * value_noise_1d(seed, channel + 4, x * 2.0)) / 1.5
+}
+
+/// The §3.4 Auto-scale cover factor: the smallest uniform scale that keeps
+/// the frame fully covered under every wobble the current parameters allow
+/// (offset up to `amp_px` in any direction, rotation up to
+/// `rot_max_deg` either way, zoom down to `zoom_min`), so no edge is ever
+/// revealed — the montage default. Derived from the inverse map: an output
+/// corner displaced by the offset and rotated back must still land inside
+/// the source frame, per axis. Pure host maths in f64, shared by the CPU
+/// reference and the GPU dispatch so both consume the identical scale.
+pub fn shake_cover_scale(w: u32, h: u32, amp_px: f32, rot_max_deg: f32, zoom_min: f32) -> f32 {
+    let hw = f64::from(w) * 0.5;
+    let hh = f64::from(h) * 0.5;
+    if hw <= 0.0 || hh <= 0.0 {
+        return 1.0;
+    }
+    let ex = hw + f64::from(amp_px.max(0.0));
+    let ey = hh + f64::from(amp_px.max(0.0));
+    let rot = f64::from(rot_max_deg.abs()).to_radians();
+    // max over θ ∈ [0, rot] of a·cos θ + b·sin θ: at the interior optimum
+    // atan2(b, a) when rot reaches it, else at rot itself.
+    let reach = |a: f64, b: f64| -> f64 {
+        if rot >= b.atan2(a) {
+            a.hypot(b)
+        } else {
+            a * rot.cos() + b * rot.sin()
+        }
+    };
+    // A full zoom-out pump (zoom_min → 0) cannot be covered by any finite
+    // scale; clamp so the cover stays large but sane rather than infinite.
+    let z = f64::from(zoom_min).max(1e-3);
+    ((reach(ex, ey) / hw).max(reach(ey, ex) / hh) / z).max(1.0) as f32
+}
+
+/// A resolved Shake as the transform-effect ingredients it dispatches as
+/// (docs/08 §3.4: a transform-domain effect — perturb a virtual camera,
+/// resample once): `(anchor, position, scale, rotation)` for
+/// [`transform_op`] / [`cpu::transform`], wobbling about the frame centre.
+/// Both the CPU reference and the GPU path build from this one function,
+/// so every path consumes bit-identical numbers.
+#[allow(clippy::too_many_arguments)]
+pub fn shake_affine(
+    w: u32,
+    h: u32,
+    offset_px: [f32; 2],
+    rotation_deg: f32,
+    zoom: f32,
+    amp_px: f32,
+    rotation_max_deg: f32,
+    zoom_min: f32,
+    auto_scale: bool,
+) -> ([f32; 2], [f32; 2], [f32; 2], f32) {
+    let centre = [w as f32 * 0.5, h as f32 * 0.5];
+    let cover = if auto_scale {
+        shake_cover_scale(w, h, amp_px, rotation_max_deg, zoom_min)
+    } else {
+        1.0
+    };
+    let s = zoom * cover;
+    (
+        centre,
+        [centre[0] + offset_px[0], centre[1] + offset_px[1]],
+        [s, s],
+        rotation_deg,
+    )
 }
 
 /// The linear-mode channel offset vector for an RGB split: `amount_px`
@@ -1117,6 +1345,40 @@ pub fn resolve_stack(
                     mix,
                 })
             }
+            "shake" => {
+                let amp_pct = (e.float_at("amplitude", lt).unwrap_or(1.5) as f32).max(0.0);
+                let freq = e.float_at("frequency", lt).unwrap_or(8.0).max(0.0);
+                let rot_amount = (e.float_at("rotation", lt).unwrap_or(1.0) as f32).max(0.0);
+                let pump =
+                    (e.float_at("zoom_pump", lt).unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
+                let auto_scale = match e.param("auto_scale") {
+                    Some(EffectValue::Bool(b)) => *b,
+                    _ => true,
+                };
+                let seed = match e.param("seed") {
+                    Some(EffectValue::Seed(s)) => *s,
+                    _ => 0,
+                };
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                // The wobble: four independent noise channels sampled at
+                // local time × frequency (§3.4) — deterministic, hop-free,
+                // identical on every machine (§2.4).
+                let x = lt * freq;
+                let amp_px = (amp_pct / 100.0 * diag_px).max(0.0);
+                Some(Resolved::Shake {
+                    offset_px: [
+                        amp_px * shake_noise(seed, 0, x) as f32,
+                        amp_px * shake_noise(seed, 1, x) as f32,
+                    ],
+                    rotation_deg: rot_amount * shake_noise(seed, 2, x) as f32,
+                    zoom: 1.0 + pump * shake_noise(seed, 3, x) as f32,
+                    amp_px,
+                    rotation_max_deg: rot_amount,
+                    zoom_min: 1.0 - pump,
+                    auto_scale,
+                    mix,
+                })
+            }
             "transform" => {
                 // px@comp parameters scale by the preview factor (§2.3) so
                 // Half preview frames exactly like Full, only softer.
@@ -1220,6 +1482,35 @@ pub mod cpu {
             } => glow(
                 rgba, w, h, *radius_px, *threshold, *knee, *intensity, *tint, *mix,
             ),
+            // Shake is a transform-domain effect (docs/08 §3.4): the
+            // resolved wobble maps to the Transform reference through the
+            // same shared affine the GPU dispatch uses, so both paths
+            // consume bit-identical numbers. A neutral shake (zero
+            // amplitude, rotation and pump) maps to the identity affine —
+            // the bit-exact passthrough the Transform reference pins.
+            Resolved::Shake {
+                offset_px,
+                rotation_deg,
+                zoom,
+                amp_px,
+                rotation_max_deg,
+                zoom_min,
+                auto_scale,
+                mix,
+            } => {
+                let (anchor, position, scale, rot) = super::shake_affine(
+                    w,
+                    h,
+                    *offset_px,
+                    *rotation_deg,
+                    *zoom,
+                    *amp_px,
+                    *rotation_max_deg,
+                    *zoom_min,
+                    *auto_scale,
+                );
+                transform(rgba, w, h, anchor, position, scale, rot, 1.0, *mix);
+            }
         }
     }
 
@@ -2542,6 +2833,217 @@ mod tests {
         cpu::glow(&mut t, w, h, 3.0, 0.05, 0.0, 1.0, [1.0, 0.0, 0.0, 1.0], 1.0);
         assert!(t[at(1, 4)] > 0.0, "red halo over the border");
         assert_eq!(t[at(1, 4) + 1], 0.0, "no green in a red-tinted halo");
+    }
+
+    #[test]
+    fn shake_noise_is_deterministic_seeded_and_hop_free() {
+        // Same inputs → same outputs, exactly (§2.4 determinism).
+        for i in 0..50 {
+            let x = i as f64 * 0.173;
+            assert_eq!(shake_noise(7, 0, x), shake_noise(7, 0, x));
+        }
+        // Different seeds → different sequences; different channels too.
+        assert_ne!(shake_noise(1, 0, 0.37), shake_noise(2, 0, 0.37));
+        assert_ne!(shake_noise(1, 0, 0.37), shake_noise(1, 1, 0.37));
+        // Bounded to [−1, 1] and actually moving.
+        let mut spread = (f64::MAX, f64::MIN);
+        for i in 0..500 {
+            let v = shake_noise(11, 2, i as f64 * 0.31);
+            assert!(v.abs() <= 1.0, "bounded at x={i}: {v}");
+            spread = (spread.0.min(v), spread.1.max(v));
+        }
+        assert!(spread.1 - spread.0 > 0.5, "the wobble wanders: {spread:?}");
+        // Hop-free: tiny steps in time give tiny steps in value, across
+        // lattice boundaries included (the smoothstep is C¹ there).
+        for i in 0..400 {
+            let x = i as f64 * 0.01;
+            let dv = (shake_noise(3, 1, x + 1e-4) - shake_noise(3, 1, x)).abs();
+            assert!(dv < 1e-2, "no hop at x={x}: step {dv}");
+        }
+    }
+
+    #[test]
+    fn shake_cover_scale_keeps_every_worst_case_corner_inside() {
+        // For a sweep of parameter sets, the inverse map of every frame
+        // corner under every extreme wobble must stay inside the source
+        // frame when the cover scale is applied.
+        for (w, h, amp, rot, zmin) in [
+            (1920u32, 1080u32, 33.0f32, 1.0f32, 1.0f32),
+            (1920, 1080, 440.0, 45.0, 0.8),
+            (640, 480, 0.0, 0.0, 1.0),
+            (100, 100, 10.0, 30.0, 0.9),
+            (1280, 720, 100.0, 5.0, 1.0),
+        ] {
+            let cover = shake_cover_scale(w, h, amp, rot, zmin);
+            assert!(cover >= 1.0, "cover never shrinks the frame");
+            let (cx, cy) = (f64::from(w) * 0.5, f64::from(h) * 0.5);
+            // The tolerance absorbs the cover's f64 → f32 rounding: a
+            // thousandth of a pixel, far below anything visible.
+            let tol = 1e-3;
+            for (ox, oy) in [(amp, amp), (-amp, amp), (amp, -amp), (-amp, -amp)] {
+                // Sweep the rotation range densely: the worst angle sits
+                // strictly inside (−rot, rot) for wide frames.
+                for k in 0..=8 {
+                    let theta = f64::from(rot) * (f64::from(k) / 4.0 - 1.0);
+                    for zoom in [zmin, 1.0] {
+                        let s = f64::from(cover) * f64::from(zoom);
+                        let rad = theta.to_radians();
+                        for (px, py) in [
+                            (0.0, 0.0),
+                            (f64::from(w), 0.0),
+                            (0.0, f64::from(h)),
+                            (f64::from(w), f64::from(h)),
+                        ] {
+                            // Inverse map: q = centre + R(−θ)·(p − centre − off)/s.
+                            let ux = px - cx - f64::from(ox);
+                            let uy = py - cy - f64::from(oy);
+                            let qx = cx + (rad.cos() * ux + rad.sin() * uy) / s;
+                            let qy = cy + (-rad.sin() * ux + rad.cos() * uy) / s;
+                            assert!(
+                                qx >= -tol
+                                    && qx <= f64::from(w) + tol
+                                    && qy >= -tol
+                                    && qy <= f64::from(h) + tol,
+                                "{w}x{h} amp {amp} rot {rot} zmin {zmin} theta {theta}: \
+                                 corner ({px},{py}) maps outside to ({qx},{qy})"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // Zero maxima: the cover is exactly 1 — auto-scale on a neutral
+        // shake stays the bit-exact identity.
+        assert_eq!(shake_cover_scale(1920, 1080, 0.0, 0.0, 1.0), 1.0);
+    }
+
+    #[test]
+    fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
+        let e = instantiate("shake").unwrap();
+        assert_eq!(e.float_at("amplitude", 0.0), Some(1.5));
+        assert_eq!(e.float_at("frequency", 0.0), Some(8.0));
+        assert_eq!(e.float_at("rotation", 0.0), Some(1.0));
+        assert_eq!(e.float_at("zoom_pump", 0.0), Some(0.0));
+        assert!(matches!(
+            e.param("auto_scale"),
+            Some(EffectValue::Bool(true))
+        ));
+        assert!(matches!(e.param("seed"), Some(EffectValue::Seed(_))));
+
+        // Resolving is deterministic: the same instance at the same time
+        // yields the identical wobble, twice.
+        let a = resolve_stack(std::slice::from_ref(&e), 0.4, 1000.0, 1.0);
+        let b = resolve_stack(std::slice::from_ref(&e), 0.4, 1000.0, 1.0);
+        assert_eq!(a, b);
+        let Resolved::Shake {
+            offset_px,
+            amp_px,
+            zoom,
+            zoom_min,
+            auto_scale,
+            mix,
+            ..
+        } = a[0]
+        else {
+            panic!("expected a Shake");
+        };
+        // 1.5% of a 1000px diagonal = 15px ceiling; the wobble stays
+        // within it, and pump 0 leaves zoom at exactly 1.
+        assert_eq!(amp_px, 15.0);
+        assert!(offset_px[0].abs() <= 15.0 && offset_px[1].abs() <= 15.0);
+        assert_eq!(zoom, 1.0);
+        assert_eq!(zoom_min, 1.0);
+        assert!(auto_scale);
+        assert_eq!(mix, 1.0);
+
+        // Different frames wobble differently; different seeds too.
+        let later = resolve_stack(std::slice::from_ref(&e), 0.9, 1000.0, 1.0);
+        assert_ne!(a, later, "the wobble moves between frames");
+        let mut reseeded = e.clone();
+        for p in &mut reseeded.params {
+            if p.id == "seed" {
+                let old = match p.value {
+                    EffectValue::Seed(s) => s,
+                    _ => 0,
+                };
+                p.value = EffectValue::Seed(old.wrapping_add(1));
+            }
+        }
+        let other = resolve_stack(std::slice::from_ref(&reseeded), 0.4, 1000.0, 1.0);
+        assert_ne!(a, other, "a different seed wobbles differently");
+    }
+
+    #[test]
+    fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
+        let (w, h) = (17u32, 9u32);
+        let img = transform_card(w, h);
+
+        // A neutral shake (zero amplitude, rotation, pump) is the
+        // bit-exact identity even with auto-scale on: the cover is
+        // exactly 1 and the affine is the identity.
+        let neutral = Resolved::Shake {
+            offset_px: [0.0, 0.0],
+            rotation_deg: 0.0,
+            zoom: 1.0,
+            amp_px: 0.0,
+            rotation_max_deg: 0.0,
+            zoom_min: 1.0,
+            auto_scale: true,
+            mix: 1.0,
+        };
+        let mut n = img.clone();
+        cpu::apply(&mut n, w, h, &neutral);
+        assert_eq!(n, img);
+
+        // A pure offset without auto-scale matches the Transform reference
+        // fed the same shared affine — the oracle path is one path.
+        let shaken = Resolved::Shake {
+            offset_px: [2.0, -1.0],
+            rotation_deg: 0.0,
+            zoom: 1.0,
+            amp_px: 2.0,
+            rotation_max_deg: 0.0,
+            zoom_min: 1.0,
+            auto_scale: false,
+            mix: 1.0,
+        };
+        let mut s = img.clone();
+        cpu::apply(&mut s, w, h, &shaken);
+        let (anchor, position, scale, rot) =
+            shake_affine(w, h, [2.0, -1.0], 0.0, 1.0, 2.0, 0.0, 1.0, false);
+        let mut t = img.clone();
+        cpu::transform(&mut t, w, h, anchor, position, scale, rot, 1.0, 1.0);
+        assert_eq!(s, t);
+        assert_ne!(s, img, "the wobble actually moves pixels");
+
+        // Auto-scale zooms in: with a rotation ceiling the cover exceeds 1,
+        // so the revealed corners stay covered (no transparent corners).
+        let covered = Resolved::Shake {
+            offset_px: [1.0, 0.0],
+            rotation_deg: 5.0,
+            zoom: 1.0,
+            amp_px: 1.0,
+            rotation_max_deg: 5.0,
+            zoom_min: 1.0,
+            auto_scale: true,
+            mix: 1.0,
+        };
+        let mut c = img.clone();
+        cpu::apply(&mut c, w, h, &covered);
+        let corner_alpha = |v: &[f32]| {
+            let at = |x: u32, y: u32| ((y * w + x) * 4 + 3) as usize;
+            [
+                v[at(0, 0)],
+                v[at(w - 1, 0)],
+                v[at(0, h - 1)],
+                v[at(w - 1, h - 1)],
+            ]
+        };
+        assert!(
+            corner_alpha(&c).iter().all(|a| *a > 0.0),
+            "auto-scale keeps every corner covered: {:?}",
+            corner_alpha(&c)
+        );
     }
 
     #[test]

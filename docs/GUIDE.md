@@ -112,6 +112,21 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
   Lumit version adds — so old and new versions can share project files.
+- **Shake.** The beatshake workhorse: a virtual camera wobble. The layer is resampled
+  once through the same kernel the Transform effect uses — never pixel noise — so the
+  whole frame sways as one. The wobble comes from *seeded value noise*: a deterministic
+  recipe that turns (seed, time) into a smooth wander between −1 and 1, so the same
+  project shakes identically on every machine and every run — there is no real
+  randomness anywhere, only maths that looks random (the engine's seeded-and-stateless
+  rule). Amplitude sets how far it roams (as % of the comp diagonal), Frequency how
+  fast, Rotation amount how much twist; Auto-scale (on by default) zooms in just enough
+  that the wobble never drags the frame's edge into view. Seed is a new parameter type:
+  an integer picking *which* wander you get — each new instance rolls its own so two
+  shaken layers never move in sync, and the Reseed button rolls a fresh one. Shake also
+  taught the frame cache a lesson: its parameters can sit constant while the picture
+  moves every frame, so for effects that declare seeded randomness the cache key now
+  includes the layer's local time — without that, a shaken solid would replay its first
+  cached frame forever.
 - **Glow.** The montage bloom: anything brighter than Threshold spills light. The
   pipeline is three steps — keep only the light *above* the threshold (with Knee
   easing the cut so it doesn't snap on), blur that leftover wide (Radius, measured
