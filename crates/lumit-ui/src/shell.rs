@@ -7413,15 +7413,25 @@ fn effects_rows(ui: &mut egui::Ui, ctx: &RowCtx, pending: &mut Option<lumit_core
                 .small()
                 .color(ctx.theme.text_secondary),
             |ui| {
-                for schema in fx::BUILTINS {
-                    if ui.button(schema.label).clicked() {
-                        if let Some(inst) = fx::instantiate(schema.match_name) {
-                            let mut effects = layer.effects.clone();
-                            effects.push(inst);
-                            *pending = Some(commit(effects));
-                        }
-                        ui.close_menu();
+                // Grouped by category (K-090); empty categories don't show.
+                for cat in fx::FxCategory::ALL {
+                    let members: Vec<_> =
+                        fx::BUILTINS.iter().filter(|s| s.category == cat).collect();
+                    if members.is_empty() {
+                        continue;
                     }
+                    ui.menu_button(cat.label(), |ui| {
+                        for schema in members {
+                            if ui.button(schema.label).clicked() {
+                                if let Some(inst) = fx::instantiate(schema.match_name) {
+                                    let mut effects = layer.effects.clone();
+                                    effects.push(inst);
+                                    *pending = Some(commit(effects));
+                                }
+                                ui.close_menu();
+                            }
+                        }
+                    });
                 }
             },
         );
@@ -7432,13 +7442,26 @@ fn effects_rows(ui: &mut egui::Ui, ctx: &RowCtx, pending: &mut Option<lumit_core
         // Title row: bypass, name (dimmed when bypassed), remove.
         {
             let (_row, mut c) = row_frame(ui, ctx, false);
-            let mut on = e.enabled;
-            if c.checkbox(&mut on, "")
-                .on_hover_text("Bypass this effect")
-                .changed()
+            // The per-effect visibility toggle (K-090 confirmation of §1.5):
+            // the same eye as layer visibility, dimmed while bypassed.
+            let eye_col = if e.enabled {
+                ctx.theme.text_secondary
+            } else {
+                ctx.theme.text_disabled
+            };
+            let (eye_rect, eye_resp) =
+                c.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+            crate::icons::paint(c.painter(), eye_rect, Icon::Eye, eye_col, 1.4);
+            if eye_resp
+                .on_hover_text(if e.enabled {
+                    "Bypass this effect"
+                } else {
+                    "Enable this effect"
+                })
+                .clicked()
             {
                 let mut effects = layer.effects.clone();
-                effects[idx].enabled = on;
+                effects[idx].enabled = !e.enabled;
                 *pending = Some(commit(effects));
             }
             let name = schema.map_or(e.effect.match_name.as_str(), |s| s.label);
@@ -7484,10 +7507,12 @@ fn effects_rows(ui: &mut egui::Ui, ctx: &RowCtx, pending: &mut Option<lumit_core
                     let committed = prop.value_at(ctx.lt);
                     let id = egui::Id::new(("fxparam", e.id, pi));
                     let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+                    let lo = hard.0.unwrap_or(f64::NEG_INFINITY);
+                    let hi = hard.1.unwrap_or(f64::INFINITY);
                     let resp = c.add(
                         egui::DragValue::new(&mut v)
                             .speed((slider.1 - slider.0).abs().max(1.0) / 200.0)
-                            .range(hard.0..=hard.1)
+                            .range(lo..=hi)
                             .max_decimals(2),
                     );
                     if resp.dragged() || resp.has_focus() {

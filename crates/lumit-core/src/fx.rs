@@ -67,7 +67,9 @@ pub enum ParamKind {
     Float {
         default: f64,
         slider: (f64, f64),
-        hard: (f64, f64),
+        /// Hard bounds; either side may be None (K-090: a threshold clamps
+        /// at zero below and runs unbounded above).
+        hard: (Option<f64>, Option<f64>),
     },
     Choice {
         options: &'static [&'static str],
@@ -86,6 +88,41 @@ pub enum ParamKind {
     },
 }
 
+/// The Add-effect menu's grouping (K-090): every schema declares one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FxCategory {
+    BlurSharpen,
+    Colour,
+    Distortion,
+    Stylise,
+    Temporal,
+    Utility,
+}
+
+impl FxCategory {
+    /// Sentence-case menu label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            FxCategory::BlurSharpen => "Blur & sharpen",
+            FxCategory::Colour => "Colour",
+            FxCategory::Distortion => "Distortion",
+            FxCategory::Stylise => "Stylise",
+            FxCategory::Temporal => "Temporal",
+            FxCategory::Utility => "Utility",
+        }
+    }
+
+    /// Every category, in menu order.
+    pub const ALL: [FxCategory; 6] = [
+        FxCategory::BlurSharpen,
+        FxCategory::Colour,
+        FxCategory::Distortion,
+        FxCategory::Stylise,
+        FxCategory::Temporal,
+        FxCategory::Utility,
+    ];
+}
+
 /// One built-in effect's full declaration.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectSchema {
@@ -93,6 +130,7 @@ pub struct EffectSchema {
     pub match_name: &'static str,
     pub label: &'static str,
     pub version: u32,
+    pub category: FxCategory,
     pub traits: EffectTraits,
     pub params: &'static [ParamSchema],
 }
@@ -108,7 +146,7 @@ const MIX_PARAM: ParamSchema = ParamSchema {
     kind: ParamKind::Float {
         default: 100.0,
         slider: (0.0, 100.0),
-        hard: (0.0, 100.0),
+        hard: (Some(0.0), Some(100.0)),
     },
 };
 
@@ -125,6 +163,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         match_name: "blur",
         label: "Blur",
         version: 1,
+        category: FxCategory::BlurSharpen,
         traits: EffectTraits {
             cost: CostClass::Moderate,
             // The largest slider across modes (Directional length, 50).
@@ -151,7 +190,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 1.5,
                     slider: (0.0, 25.0),
-                    hard: (0.0, 100.0),
+                    hard: (Some(0.0), Some(100.0)),
                 },
             },
             ParamSchema {
@@ -161,7 +200,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 10.0,
                     slider: (0.0, 50.0),
-                    hard: (0.0, 100.0),
+                    hard: (Some(0.0), Some(100.0)),
                 },
             },
             ParamSchema {
@@ -171,7 +210,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.0,
                     slider: (-180.0, 180.0),
-                    hard: (-3600.0, 3600.0),
+                    hard: (Some(-3600.0), Some(3600.0)),
                 },
             },
             ParamSchema {
@@ -192,6 +231,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         match_name: "sharpen",
         label: "Sharpen",
         version: 1,
+        category: FxCategory::BlurSharpen,
         traits: EffectTraits {
             cost: CostClass::Cheap,
             roi: Roi::PaddedPctDiag(4.0),
@@ -208,7 +248,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 60.0,
                     slider: (0.0, 300.0),
-                    hard: (0.0, 300.0),
+                    hard: (Some(0.0), Some(300.0)),
                 },
             },
             ParamSchema {
@@ -219,7 +259,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.4,
                     slider: (0.05, 2.0),
-                    hard: (0.0, 4.0),
+                    hard: (Some(0.0), Some(4.0)),
                 },
             },
             ParamSchema {
@@ -230,7 +270,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.05,
                     slider: (0.0, 1.0),
-                    hard: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
                 },
             },
             ParamSchema {
@@ -251,6 +291,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         match_name: "rgb_split",
         label: "RGB split",
         version: 1,
+        category: FxCategory::Distortion,
         traits: EffectTraits {
             cost: CostClass::Cheap,
             roi: Roi::PaddedPctDiag(25.0),
@@ -268,7 +309,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.4,
                     slider: (0.0, 10.0),
-                    hard: (0.0, 25.0),
+                    hard: (Some(0.0), Some(25.0)),
                 },
             },
             ParamSchema {
@@ -278,7 +319,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.0,
                     slider: (-180.0, 180.0),
-                    hard: (-3600.0, 3600.0),
+                    hard: (Some(-3600.0), Some(3600.0)),
                 },
             },
             ParamSchema {
@@ -302,6 +343,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         match_name: "flash",
         label: "Flash",
         version: 1,
+        category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Trivial,
             roi: Roi::Exact,
@@ -317,7 +359,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 0.0,
                     slider: (0.0, 1.0),
-                    hard: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
                 },
             },
             ParamSchema {
@@ -327,7 +369,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 100.0,
                     slider: (0.0, 100.0),
-                    hard: (0.0, 400.0),
+                    hard: (Some(0.0), Some(400.0)),
                 },
             },
             ParamSchema {
@@ -345,7 +387,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 120.0,
                     slider: (10.0, 1000.0),
-                    hard: (0.0, 10000.0),
+                    hard: (Some(0.0), Some(10000.0)),
                 },
             },
             MIX_PARAM,
@@ -361,6 +403,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         match_name: "grade",
         label: "Grade",
         version: 1,
+        category: FxCategory::Colour,
         traits: EffectTraits {
             cost: CostClass::Cheap,
             roi: Roi::Exact,
@@ -404,7 +447,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Float {
                     default: 100.0,
                     slider: (0.0, 200.0),
-                    hard: (0.0, 200.0),
+                    hard: (Some(0.0), Some(200.0)),
                 },
             },
             MIX_PARAM,
