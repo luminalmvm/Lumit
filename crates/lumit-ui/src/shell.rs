@@ -265,11 +265,39 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
         tile_id: egui_tiles::TileId,
         pane: &mut Panel,
     ) -> egui_tiles::UiResponse {
-        self.panel_rects.push((*pane, ui.max_rect()));
-        if self.bare_tiles.contains(&tile_id) {
-            self.bare_pane_ui(ui, tile_id, pane);
-        } else {
-            render_panel(ui, self.theme, self.app, self.preview_display, *pane);
+        match self.theme.shape {
+            // Byte-identical to the pre-K-092 code: no Frame, no behaviour
+            // change.
+            crate::theme::ThemeShape::Sharp => {
+                self.panel_rects.push((*pane, ui.max_rect()));
+                if self.bare_tiles.contains(&tile_id) {
+                    self.bare_pane_ui(ui, tile_id, pane);
+                } else {
+                    render_panel(ui, self.theme, self.app, self.preview_display, *pane);
+                }
+            }
+            // Every pane — the Viewer included, per the owner's call — floats
+            // as its own rounded, shadowed card. `bare_pane_ui` needs no
+            // changes of its own: it derives the click-sensing scope and the
+            // grip's corner purely from whatever `ui` it's handed, so it
+            // automatically operates on the smaller, padded interior the
+            // Frame gives it.
+            crate::theme::ThemeShape::Round => {
+                let t = self.theme.tokens;
+                let resp = egui::Frame::new()
+                    .fill(self.theme.surface_1)
+                    .corner_radius(t.card_radius)
+                    .shadow(t.card_shadow)
+                    .inner_margin(t.card_padding)
+                    .show(ui, |ui| {
+                        if self.bare_tiles.contains(&tile_id) {
+                            self.bare_pane_ui(ui, tile_id, pane);
+                        } else {
+                            render_panel(ui, self.theme, self.app, self.preview_display, *pane);
+                        }
+                    });
+                self.panel_rects.push((*pane, resp.response.rect));
+            }
         }
         egui_tiles::UiResponse::None
     }
@@ -310,7 +338,39 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
     }
 
     fn gap_width(&self, _style: &egui::Style) -> f32 {
-        1.0
+        self.theme.tokens.tile_gap
+    }
+
+    // The inter-pane divider (K-092): Sharp reproduces egui_tiles' own
+    // default exactly (a `tab_bar_color`-toned line at `gap_width`); Round
+    // paints the idle gap as the canvas colour instead, at the widened
+    // `tile_gap` — since the stroke width equals the gap width, this fills
+    // the whole gap with canvas colour with no extra painting. Deliberately
+    // NOT done by repointing `tab_bar_color` at the canvas colour: that
+    // colour is also the real tab-bar background for stacked groups, and
+    // doing so would paint those wrong.
+    fn resize_stroke(
+        &self,
+        style: &egui::Style,
+        resize_state: egui_tiles::ResizeState,
+    ) -> egui::Stroke {
+        let gap = self.theme.tokens.tile_gap;
+        match self.theme.shape {
+            crate::theme::ThemeShape::Sharp => match resize_state {
+                egui_tiles::ResizeState::Idle => {
+                    egui::Stroke::new(gap, self.tab_bar_color(&style.visuals))
+                }
+                egui_tiles::ResizeState::Hovering => style.visuals.widgets.hovered.fg_stroke,
+                egui_tiles::ResizeState::Dragging => style.visuals.widgets.active.fg_stroke,
+            },
+            crate::theme::ThemeShape::Round => match resize_state {
+                egui_tiles::ResizeState::Idle => egui::Stroke::new(gap, self.theme.surface_0),
+                egui_tiles::ResizeState::Hovering => {
+                    egui::Stroke::new(gap, self.theme.hairline_strong)
+                }
+                egui_tiles::ResizeState::Dragging => egui::Stroke::new(gap, self.theme.accent),
+            },
+        }
     }
 
     // Rerun-style panel chrome (K-084): the tab bar sits one surface step above
@@ -10121,7 +10181,11 @@ impl Shell {
                 bare_tiles,
             };
             egui::CentralPanel::default()
-                .frame(egui::Frame::default().fill(theme.surface_0))
+                .frame(
+                    egui::Frame::default()
+                        .fill(theme.surface_0)
+                        .inner_margin(theme.tokens.window_inset),
+                )
                 .show(ctx, |ui| dock.ui(&mut behavior, ui));
             (behavior.pop_out, behavior.panel_rects)
         };
@@ -10142,7 +10206,7 @@ impl Shell {
                 ))
                 .rect_stroke(
                     rect.shrink(0.5),
-                    0.0,
+                    theme.tokens.card_radius,
                     egui::Stroke::new(1.0_f32, theme.accent.gamma_multiply(0.55)),
                     egui::StrokeKind::Inside,
                 );
@@ -11047,6 +11111,54 @@ mod dock_tests {
             let id = tile_id_of(&tree, panel).unwrap();
             assert!(!bare.contains(&id), "{panel:?} is tab-stacked, not bare");
         }
+    }
+
+    /// `DockBehavior::gap_width`/`resize_stroke` (K-092): Sharp reproduces
+    /// egui_tiles' own idle-state default exactly (a `tab_bar_color`-toned
+    /// line at `gap_width`); Round widens the gap and paints its idle state
+    /// as the canvas colour instead — `tab_bar_color` itself must stay
+    /// untouched by shape (it's also the real tab-bar background for
+    /// stacked groups).
+    #[test]
+    fn dock_behavior_gap_and_resize_stroke_are_shape_aware() {
+        use egui_tiles::Behavior as _;
+        let style = egui::Style::default();
+        let mut app = AppState::default();
+
+        let sharp = Theme::of(crate::theme::ThemeVariant::Dark);
+        let mut behavior = DockBehavior {
+            theme: &sharp,
+            app: &mut app,
+            preview_display: None,
+            pop_out: None,
+            panel_rects: Vec::new(),
+            tree_id: egui::Id::new("test"),
+            bare_tiles: Default::default(),
+        };
+        assert_eq!(behavior.gap_width(&style), 1.0_f32);
+        assert_eq!(
+            behavior.resize_stroke(&style, egui_tiles::ResizeState::Idle),
+            egui::Stroke::new(1.0_f32, behavior.tab_bar_color(&style.visuals))
+        );
+        // tab_bar_color is untouched by shape either way.
+        assert_eq!(behavior.tab_bar_color(&style.visuals), sharp.surface_2);
+
+        let round = crate::theme::Theme::for_settings(
+            crate::theme::ThemeMode::Dark,
+            crate::theme::ThemeVariant::Dark,
+            crate::theme::ThemeShape::Round,
+        );
+        behavior.theme = &round;
+        assert_eq!(behavior.gap_width(&style), round.tokens.tile_gap);
+        assert_eq!(
+            behavior.resize_stroke(&style, egui_tiles::ResizeState::Idle),
+            egui::Stroke::new(round.tokens.tile_gap, round.surface_0)
+        );
+        assert_eq!(
+            behavior.tab_bar_color(&style.visuals),
+            round.surface_2,
+            "tab_bar_color must stay the tab-bar fill, not the canvas, under Round too"
+        );
     }
 
     // The comp strip's "Pop out timeline" menu hangs off the strip's background
