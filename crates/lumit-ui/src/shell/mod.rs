@@ -1815,8 +1815,12 @@ impl Shell {
         }
         if let Some(active) = self.active_panel {
             if let Some((_, rect)) = panel_rects.iter().find(|(p, _)| *p == active) {
+                // `Order::Middle` sits above the panels (which draw in the
+                // background layer) but below menus, popups and tooltips
+                // (foreground and up), so the accent edge no longer paints
+                // over an open menu.
                 ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Foreground,
+                    egui::Order::Middle,
                     egui::Id::new("active-panel-edge"),
                 ))
                 .rect_stroke(

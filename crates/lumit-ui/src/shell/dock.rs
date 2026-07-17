@@ -254,7 +254,13 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
             // Frame gives it.
             crate::theme::ThemeShape::Round => {
                 let t = self.theme.tokens;
-                let resp = egui::Frame::new()
+                // The active-panel highlight traces the TILE rect, never the
+                // Frame's response rect: a Frame sizes to its content, so
+                // below the content's intrinsic minimum (a panel dragged very
+                // small) the response rect stops shrinking and the highlight
+                // would freeze mid-air. The tile rect always tracks the pane.
+                let tile_rect = ui.max_rect();
+                egui::Frame::new()
                     .fill(self.theme.surface_1)
                     .corner_radius(t.card_radius)
                     .shadow(t.card_shadow)
@@ -272,7 +278,7 @@ impl egui_tiles::Behavior<Panel> for DockBehavior<'_> {
                             render_panel(ui, self.theme, self.app, self.preview_display, *pane);
                         }
                     });
-                self.panel_rects.push((*pane, resp.response.rect));
+                self.panel_rects.push((*pane, tile_rect));
             }
         }
         egui_tiles::UiResponse::None

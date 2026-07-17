@@ -438,6 +438,12 @@ impl Theme {
         style.spacing.scroll.bar_inner_margin = 2.0;
         style.spacing.scroll.bar_outer_margin = 2.0;
 
+        // egui turns its own developer overlays on in debug builds — the
+        // orange "unaligned" lines on sub-pixel widget edges are the visible
+        // one. Lumit's debug build is what the owner runs day to day, so the
+        // dev overlay is just noise here; switch it off.
+        style.debug.show_unaligned = false;
+
         ctx.set_style(style);
     }
 }
