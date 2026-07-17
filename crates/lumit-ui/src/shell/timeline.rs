@@ -4,6 +4,20 @@
 
 use super::*;
 
+/// Whether a layer of this kind accepts an effect dragged from the Effects &
+/// Presets browser onto its Timeline row (K-101). Every `Layer` carries an
+/// effect stack regardless of kind (`model::Layer::effects`), but v1 narrows
+/// the drop target to footage and adjustment layers — an effect stack's two
+/// ordinary homes (an adjustment layer exists only to host one). Every other
+/// kind still gains effects the existing way: the "Add effect" row in its
+/// own Effects group, untouched by this change.
+fn accepts_effect_drop(kind: &lumit_core::model::LayerKind) -> bool {
+    matches!(
+        kind,
+        lumit_core::model::LayerKind::Footage { .. } | lumit_core::model::LayerKind::Adjustment
+    )
+}
+
 pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     // Comp tab strip first: it owns a drop zone (drop a comp here to open it as
     // a separate tab). The body below then accepts drops that file into the
@@ -318,6 +332,38 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), row_sense);
                 if row_resp.clicked() {
                     app.selected_layer = Some(layer.id);
+                }
+                // Effects & Presets browser drop target (K-101): footage and
+                // adjustment layers accept an effect dragged from the
+                // browser, appended through the same `SetLayerEffects` op
+                // the "Add effect" row commits, so a drop is one ordinary
+                // undo step. `row_resp` only hit-tests the lane area (see
+                // the `row_sense` comment above — the outline column has its
+                // own, separately-interacted controls), so the hover cue and
+                // the drop both land within that same region; dropping over
+                // the name column does not yet register.
+                if accepts_effect_drop(&layer.kind) {
+                    if let Some(payload) = row_resp.dnd_release_payload::<EffectDragPayload>() {
+                        if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
+                            let mut effects = layer.effects.clone();
+                            effects.push(inst);
+                            app.commit(lumit_core::Op::SetLayerEffects {
+                                comp: comp_id,
+                                layer: layer.id,
+                                effects,
+                            });
+                            app.selected_layer = Some(layer.id);
+                            #[cfg(feature = "media")]
+                            app.refresh_preview();
+                        }
+                    } else if row_resp.dnd_hover_payload::<EffectDragPayload>().is_some() {
+                        ui.painter().rect_stroke(
+                            row_rect,
+                            2.0,
+                            egui::Stroke::new(1.0_f32, theme.accent),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
                 }
                 // Right-click a layer to add things (the house pattern: right-click or
                 // menu, never scattered buttons).
@@ -1699,5 +1745,38 @@ impl LayerMap {
             -dx * self.sin + dy * self.cos,
         );
         (rx / self.sx + self.ax, ry / self.sy + self.ay)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod effect_drop_tests {
+    use super::*;
+    use lumit_core::model::LayerKind;
+
+    // Regression for K-101: the two layer kinds an effect stack is dropped
+    // onto from the Effects & Presets browser must keep accepting the drop.
+    #[test]
+    fn footage_and_adjustment_layers_accept_an_effect_drop() {
+        assert!(accepts_effect_drop(&LayerKind::Footage {
+            item: uuid::Uuid::nil(),
+            retime: None,
+        }));
+        assert!(accepts_effect_drop(&LayerKind::Adjustment));
+    }
+
+    // Other layer kinds still gain effects through the existing "Add effect"
+    // row (untouched by K-101); a drop on their Timeline row is a no-op.
+    #[test]
+    fn other_layer_kinds_do_not_accept_an_effect_drop() {
+        assert!(!accepts_effect_drop(&LayerKind::Solid {
+            def: uuid::Uuid::nil(),
+        }));
+        assert!(!accepts_effect_drop(&LayerKind::Precomp {
+            comp: uuid::Uuid::nil(),
+        }));
+        assert!(!accepts_effect_drop(&LayerKind::Sequence {
+            clips: Vec::new(),
+        }));
     }
 }
