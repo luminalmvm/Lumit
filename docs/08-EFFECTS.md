@@ -409,6 +409,31 @@ One effect, three modes (shared parameters where sensible, per-mode extras):
 All premultiplied (blurring unpremultiplied colour bleeds haloes); all declare `per-tile`
 cancellation. Repeat-edge policy parameter (Transparent / Repeat / Mirror).
 
+**Status (Radial, shipped):** this text names Centre, Amount and Type without giving ranges
+or a parameter shape, unlike Gaussian's and Directional's explicit ones above — pinned here.
+Centre is **Centre X** / **Centre Y**, two Float parameters in % of comp width/height
+(50/50 default): the schema has no Point-shaped `ParamKind` (checked — Transform's own
+Anchor and Position use the identical `anchor_x`/`anchor_y` split for the same reason), so
+this follows that established precedent rather than adding a new kind. **Amount** is % diag
+(default 8, slider 0–25, hard 0–100 per K-090), the same currency as Radius and Length, so
+all three modes read in one unit family; it is the peak per-pixel tap spread, reached at the
+frame's farthest corner from Centre. **Type** is Spin / Zoom, default Spin. Both types reduce
+to one linear scale of the pixel's own (position − centre) vector — Zoom along that vector
+(an exact ray sample), Spin along its perpendicular (the first-order/tangent approximation to
+the true arc about Centre) — so neither needs a division or a runtime trig call: the one scale
+factor (Amount ÷ half the raster diagonal) is a plain host-side division, not a per-pixel or
+per-tap one, and every tap collapses to exactly the pixel itself at Centre with no epsilon
+guard. The tangent approximation is exact for Zoom and close for Spin across the shipped
+Amount range (the worst-case sweep stays well under a radian); the oracle held to the same
+≤ 2 fp16 ULP bound as Gaussian and Directional (measured worst: 1 ULP) rather than needing the
+looser "moderate" allowance, confirming the trig-free design was worth it. The shared Edge
+parameter (Transparent / Repeat / Mirror) applies unchanged — Radial's taps run through the
+same edge-policy bilinear sampler the other two modes already use, so it clamps, mirrors or
+clears at the frame border exactly like them; no radial-specific edge behaviour was needed.
+Instances saved before Radial existed carry none of these parameters and resolve as Gaussian,
+byte-identically (the existing legacy-fallback pattern); Amount 0 is a bit-exact passthrough
+(pinned by test, mirroring Directional's own zero-length case).
+
 ### 3.9 Sharpen
 
 Unsharp mask in linear light on unpremultiplied colour: Amount (0–300%), Radius

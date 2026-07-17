@@ -58,6 +58,28 @@ pub fn run_ops(fx: &FxEngine, ctx: &GpuContext, tex: Tex, w: u32, h: u32, ops: &
                     },
                 );
             }
+            Resolved::RadialBlur {
+                centre_frac,
+                amount_px,
+                spin,
+                edge,
+                mix,
+            } => {
+                tex = fx.radial_blur(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::RadialBlurOp {
+                        centre_frac: *centre_frac,
+                        amount_px: *amount_px,
+                        taps: lumit_core::fx::cpu::radial_blur_taps(*amount_px),
+                        spin: *spin,
+                        edge: *edge,
+                        mix: *mix,
+                    },
+                );
+            }
             Resolved::Sharpen {
                 amount,
                 radius_px,

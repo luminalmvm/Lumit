@@ -52,6 +52,41 @@ struct DirBlurParams {
     _pad: [f32; 2],
 }
 
+/// One resolved radial blur — Blur's Radial mode (docs/08 §3.8, schema
+/// status note). `taps` must equal
+/// `lumit_core::fx::cpu::radial_blur_taps(amount_px)` so the GPU dispatches
+/// the oracle's exact kernel size.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadialBlurOp {
+    /// Centre as a *fraction* of the raster (not raster pixels) — the
+    /// kernel scales it by its own `textureDimensions`, exactly like the
+    /// CPU reference scales it by the `w`/`h` it is handed.
+    pub centre_frac: [f32; 2],
+    /// Peak tap spread in raster pixels, reached at the frame's farthest
+    /// corner from Centre.
+    pub amount_px: f32,
+    /// Evenly spaced taps along the ray (Zoom) or its perpendicular (Spin).
+    pub taps: i32,
+    /// True = Spin (tangent direction), false = Zoom (radial direction).
+    pub spin: bool,
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct RadialBlurParams {
+    centre: [f32; 2],
+    amount: f32,
+    taps: i32,
+    spin: u32,
+    edge: u32,
+    mix_amt: f32,
+    _pad: f32,
+}
+
 /// One resolved sharpen (docs/08 §3.9), amounts already fractional and the
 /// gaussian radius already in raster pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -273,6 +308,7 @@ struct AdjustParams {
 pub struct FxEngine {
     blur: wgpu::ComputePipeline,
     dir_blur: wgpu::ComputePipeline,
+    radial_blur: wgpu::ComputePipeline,
     sharpen_unpremultiply: wgpu::ComputePipeline,
     sharpen_combine: wgpu::ComputePipeline,
     rgb_split: wgpu::ComputePipeline,
@@ -385,6 +421,7 @@ impl FxEngine {
         };
         let blur_mod = module(include_str!("fx_blur.wgsl"), "fx-blur");
         let dir_blur_mod = module(include_str!("fx_dirblur.wgsl"), "fx-dir-blur");
+        let radial_blur_mod = module(include_str!("fx_radialblur.wgsl"), "fx-radial-blur");
         let sharpen_mod = module(include_str!("fx_sharpen.wgsl"), "fx-sharpen");
         let rgb_split_mod = module(include_str!("fx_rgbsplit.wgsl"), "fx-rgb-split");
         let spectral_mod = module(include_str!("fx_spectral.wgsl"), "fx-spectral-split");
@@ -396,6 +433,7 @@ impl FxEngine {
         let adjust_mod = module(include_str!("fx_adjust.wgsl"), "fx-adjust");
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
+        let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
         let rgb_split = pipeline(&rgb_split_mod, "fx-rgb-split", "rgb_split");
@@ -419,6 +457,7 @@ impl FxEngine {
         Self {
             blur,
             dir_blur,
+            radial_blur,
             sharpen_unpremultiply,
             sharpen_combine,
             rgb_split,
@@ -596,6 +635,40 @@ impl FxEngine {
                 edge: op.edge,
                 mix_amt: op.mix,
                 _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+
+    /// Apply one radial blur — Blur's Radial mode (docs/08 §3.8) — to a
+    /// linear working texture, returning a new texture of the same size.
+    /// One pass: box-weighted taps along a ray (Zoom) or its perpendicular
+    /// (Spin), the shared schema-status-note maths.
+    pub fn radial_blur(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &RadialBlurOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-radial-blur-out");
+        self.dispatch(
+            ctx,
+            &self.radial_blur,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&RadialBlurParams {
+                centre: op.centre_frac,
+                amount: op.amount_px,
+                taps: op.taps,
+                spin: u32::from(op.spin),
+                edge: op.edge,
+                mix_amt: op.mix,
+                _pad: 0.0,
             }),
         );
         out
@@ -1821,6 +1894,67 @@ mod tests {
                 let out2 = fx.dir_blur(&ctx, &tex, w, h, &op);
                 let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
                 assert_eq!(gpu, gpu2, "GPU directional blur must be bit-stable");
+            }
+        }
+    }
+
+    /// The §1.6 oracle for Blur's Radial mode (docs/08 §3.8, schema status
+    /// note): WGSL agrees with the CPU reference across Spin and Zoom,
+    /// off-centre Centres, several amounts and edge policies, and is
+    /// bit-stable (§2.4). Neither side runs a per-tap trig call or a
+    /// division (the schema note's whole point), so the bound stays as
+    /// tight as the directional blur's; amount 0 is asserted bit-exact
+    /// against the untouched corpus (mirroring the directional blur's own
+    /// zero-length case) — the gaussian and directional oracles above are
+    /// untouched (separate kernels, separate maths, same version).
+    #[test]
+    fn wgsl_radial_blur_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for edge in [0u32, 1, 2] {
+            for (centre, amount, spin, mix) in [
+                ([0.5f32, 0.5f32], 6.0f32, true, 1.0f32),
+                ([0.5, 0.5], 6.0, false, 1.0),
+                ([0.3, 0.7], 9.5, true, 0.6),
+                ([0.3, 0.7], 9.5, false, 0.6),
+                ([0.5, 0.5], 0.0, true, 1.0),
+            ] {
+                let mut cpu = img.clone();
+                lumit_core::fx::cpu::blur_radial(&mut cpu, w, h, centre, amount, spin, edge, mix);
+
+                let tex = upload_linear_f32(&ctx, &img, w, h);
+                let op = RadialBlurOp {
+                    centre_frac: centre,
+                    amount_px: amount,
+                    taps: lumit_core::fx::cpu::radial_blur_taps(amount),
+                    spin,
+                    edge,
+                    mix,
+                };
+                let out = fx.radial_blur(&ctx, &tex, w, h, &op);
+                let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+                let worst = worst_f16_ulp(&cpu, &gpu);
+                eprintln!(
+                    "radial blur e={edge} c={centre:?} a={amount} spin={spin}: worst {worst} ulp"
+                );
+                assert!(
+                    worst <= 2,
+                    "edge {edge} centre {centre:?} amount {amount} spin {spin} mix {mix}: \
+                     worst {worst} fp16 ULP"
+                );
+                if amount == 0.0 && mix == 1.0 {
+                    assert_eq!(gpu, img, "amount 0 must be the bit-exact passthrough");
+                }
+
+                let out2 = fx.radial_blur(&ctx, &tex, w, h, &op);
+                let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+                assert_eq!(gpu, gpu2, "GPU radial blur must be bit-stable");
             }
         }
     }

@@ -161,12 +161,38 @@ const MIX_PARAM: ParamSchema = ParamSchema {
 /// The catalogue. Grows one entry per landed effect; the schema is the single
 /// source of truth the UI menu, instantiation and resolution all read.
 pub const BUILTINS: &[EffectSchema] = &[
-    // One blur, several modes (docs/08 §3.8): Gaussian (separable two-pass)
-    // and Directional (line-integral streak along an angle); Radial follows.
-    // Mode selects which extra parameters matter — Radius drives Gaussian,
-    // Length/Angle drive Directional. Instances saved before the mode
-    // existed resolve as Gaussian, and the gaussian maths are untouched by
-    // the other modes (same kernel, same version).
+    // One blur, three modes (docs/08 §3.8): Gaussian (separable two-pass),
+    // Directional (line-integral streak along an angle) and Radial (arcs or
+    // rays about a centre). Mode selects which extra parameters matter —
+    // Radius drives Gaussian, Length/Angle drive Directional, Centre/
+    // Amount/Type drive Radial. Instances saved before a mode existed
+    // resolve as Gaussian, and each mode's maths are untouched by the
+    // others (same kernel per mode, same version).
+    //
+    // Status (Radial, shipped): the spec text (§3.8) names Centre, Amount
+    // and Type without giving ranges — pinned here. Centre is Centre X /
+    // Centre Y, two Float params in % of comp width/height (50/50 default):
+    // the schema has no Point-shaped ParamKind (checked — Transform's own
+    // Anchor/Position use the identical anchor_x/anchor_y split, so this
+    // follows established precedent rather than adding a new kind). Amount
+    // is % diag (default 8, slider 0–20, hard 0–100), matching the Radius/
+    // Length unit family so all three modes read in the same currency —
+    // it is the peak per-pixel tap spread, reached at the frame's farthest
+    // corner (half the comp diagonal from Centre). Type is Spin / Zoom.
+    // Both modes reduce to a pure linear scale of the pixel's own
+    // (position − centre) vector — Zoom along that vector (an exact ray
+    // sample), Spin along its perpendicular (the first-order/tangent
+    // approximation to the true arc about Centre) — so neither needs a
+    // division or a runtime trig call: no host trig table was needed
+    // either, since the only scale factor (amount ÷ half diagonal) is a
+    // plain division done once, not per pixel. The approximation is exact
+    // for Zoom and holds closely for Spin across the shipped Amount range
+    // (worst-case sweep well under a radian); it also means every tap
+    // vanishes to zero exactly at Centre with no epsilon guard. The shared
+    // Edge parameter (Transparent/Repeat/Mirror) applies unchanged — taps
+    // run through the same bilinear_edge every mode already uses, so
+    // Radial clamps/mirrors/clears at the frame border exactly like
+    // Gaussian and Directional.
     EffectSchema {
         match_name: "blur",
         label: "Blur",
@@ -186,7 +212,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 id: "mode",
                 label: "Mode",
                 kind: ParamKind::Choice {
-                    options: &["Gaussian", "Directional"],
+                    options: &["Gaussian", "Directional", "Radial"],
                     default: 0,
                 },
             },
@@ -219,6 +245,50 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 0.0,
                     slider: (-180.0, 180.0),
                     hard: (Some(-3600.0), Some(3600.0)),
+                },
+            },
+            ParamSchema {
+                id: "centre_x",
+                label: "Centre X",
+                // Radial mode: % of comp width. resolve_stack only carries
+                // diag_px (no separate width/height), so this resolves to a
+                // *fraction* of the raster and the CPU/GPU function scales
+                // it by its own w — exactly how RGB split's radial mode
+                // already derives the frame centre from w/h it already has.
+                kind: ParamKind::Float {
+                    default: 50.0,
+                    slider: (0.0, 100.0),
+                    hard: (None, None), // off-frame centres are legal
+                },
+            },
+            ParamSchema {
+                id: "centre_y",
+                label: "Centre Y",
+                // Radial mode: % of comp height (see centre_x).
+                kind: ParamKind::Float {
+                    default: 50.0,
+                    slider: (0.0, 100.0),
+                    hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "amount",
+                label: "Amount",
+                // Radial mode: peak tap spread, % diag (§2.3), reached at
+                // the farthest corner from Centre — the same currency as
+                // Radius/Length above.
+                kind: ParamKind::Float {
+                    default: 8.0,
+                    slider: (0.0, 20.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "radial_type",
+                label: "Type",
+                kind: ParamKind::Choice {
+                    options: &["Spin", "Zoom"],
+                    default: 0,
                 },
             },
             ParamSchema {
@@ -892,6 +962,26 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    /// Blur's Radial mode (docs/08 §3.8): rays from, or a tangent to the
+    /// arc about, a centre — see the schema's status note for why both
+    /// reduce to a pure linear scale of (position − centre) with no
+    /// division or runtime trig.
+    RadialBlur {
+        /// Centre as a *fraction* of the raster (not raster pixels):
+        /// resolve_stack carries only diag_px, not separate width/height,
+        /// so the CPU/GPU function scales this by its own w/h — exactly
+        /// how RGB split's radial mode already derives the frame centre.
+        centre_frac: [f32; 2],
+        /// Peak tap spread in raster pixels, reached at the frame's
+        /// farthest corner from Centre (half the raster diagonal away).
+        amount_px: f32,
+        /// True = Spin (tangent direction), false = Zoom (radial direction).
+        spin: bool,
+        /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+        edge: u32,
+        /// 0..1.
+        mix: f32,
+    },
     Sharpen {
         /// Fraction of the detail signal added back (0..3 = 0–300%).
         amount: f32,
@@ -1480,7 +1570,7 @@ pub fn resolve_stack(
                     _ => 1,
                 };
                 let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-                // Instances saved before the mode existed carry no "mode"
+                // Instances saved before a mode existed carry no "mode"
                 // parameter and resolve as Gaussian.
                 let mode = match e.param("mode") {
                     Some(EffectValue::Choice(c)) => *c,
@@ -1492,6 +1582,18 @@ pub fn resolve_stack(
                     Some(Resolved::DirBlur {
                         length_px: (length_pct / 100.0 * diag_px).max(0.0),
                         angle_deg,
+                        edge,
+                        mix,
+                    })
+                } else if mode == 2 {
+                    let cx = (e.float_at("centre_x", lt).unwrap_or(50.0) / 100.0) as f32;
+                    let cy = (e.float_at("centre_y", lt).unwrap_or(50.0) / 100.0) as f32;
+                    let amount_pct = e.float_at("amount", lt).unwrap_or(0.0) as f32;
+                    let spin = !matches!(e.param("radial_type"), Some(EffectValue::Choice(1)));
+                    Some(Resolved::RadialBlur {
+                        centre_frac: [cx, cy],
+                        amount_px: (amount_pct / 100.0 * diag_px).max(0.0),
+                        spin,
                         edge,
                         mix,
                     })
@@ -1701,6 +1803,13 @@ pub mod cpu {
                 edge,
                 mix,
             } => blur_directional(rgba, w, h, *length_px, *angle_deg, *edge, *mix),
+            Resolved::RadialBlur {
+                centre_frac,
+                amount_px,
+                spin,
+                edge,
+                mix,
+            } => blur_radial(rgba, w, h, *centre_frac, *amount_px, *spin, *edge, *mix),
             Resolved::Sharpen {
                 amount,
                 radius_px,
@@ -2185,6 +2294,16 @@ pub mod cpu {
         (length_px.ceil() as i32).clamp(1, 511)
     }
 
+    /// The radial blur's tap count for a peak per-pixel spread in pixels
+    /// (docs/08 §3.8): the same rule as [`dir_blur_taps`], sized from the
+    /// worst case — the spread reached at the frame's farthest corner —
+    /// so CPU and GPU dispatch the same kernel size everywhere in the
+    /// image (nearer Centre simply over-samples a shorter true spread,
+    /// which costs taps but is never wrong).
+    pub fn radial_blur_taps(amount_px: f32) -> i32 {
+        dir_blur_taps(amount_px)
+    }
+
     /// Bilinear sample under a blur edge policy: out-of-frame taps repeat or
     /// mirror per axis, or read as transparent (contributing nothing while
     /// keeping full weight, exactly like the gaussian's normalisation).
@@ -2243,6 +2362,77 @@ pub mod cpu {
                 for k in 0..n {
                     let t = ((k as f32 + 0.5) / nf - 0.5) * length_px;
                     let s = bilinear_edge(&original, w, h, pos.0 + t * dx, pos.1 + t * dy, edge);
+                    for c in 0..4 {
+                        acc[c] += s[c];
+                    }
+                }
+                for c in 0..4 {
+                    let v = acc[c] / nf;
+                    rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
+                }
+            }
+        }
+    }
+
+    /// Radial blur (docs/08 §3.8, schema status note): Spin samples along
+    /// an arc about Centre, Zoom along a ray through it — box-weighted,
+    /// evenly spaced taps across `[-0.5, 0.5]` exactly like
+    /// [`blur_directional`]'s line integral, fixed tap order for
+    /// determinism (§2.4). Both reduce to one linear scale of `d = pos −
+    /// centre`: Zoom's ray is `pos + t·k·d` (an exact sample along the ray,
+    /// since scaling `d` moves along the straight line through Centre and
+    /// `pos`); Spin's arc is `pos + t·k·rot90(d)` (the first-order/tangent
+    /// approximation to true rotation about Centre — accurate for the
+    /// small sweep angles `k` reaches across the shipped Amount range).
+    /// `k = amount_px / (half the raster diagonal)` is the same radial
+    /// scale [`rgb_split`]'s radial mode uses. Neither branch divides by
+    /// `|d|`, so every tap collapses to exactly `pos` at Centre — no
+    /// epsilon guard, no NaN risk. `amount_px == 0.0` gives `k == 0.0`,
+    /// [`radial_blur_taps`] floors at one tap (mirroring
+    /// [`dir_blur_taps`]'s floor), and that single tap sits at exactly
+    /// `pos`: with `mix == 1.0` the result is the bit-exact input (pinned
+    /// by test, matching the directional blur's own zero-length case).
+    #[allow(clippy::too_many_arguments)]
+    pub fn blur_radial(
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        centre_frac: [f32; 2],
+        amount_px: f32,
+        spin: bool,
+        edge: u32,
+        mix: f32,
+    ) {
+        let original = rgba.to_vec();
+        let (fw, fh) = (w as f32, h as f32);
+        let centre = (centre_frac[0] * fw, centre_frac[1] * fh);
+        let diag = (fw * fw + fh * fh).sqrt();
+        let k = if diag > 0.0 {
+            amount_px / (0.5 * diag)
+        } else {
+            0.0
+        };
+        let n = radial_blur_taps(amount_px);
+        let nf = n as f32;
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let pos = (x as f32 + 0.5, y as f32 + 0.5);
+                let d = (pos.0 - centre.0, pos.1 - centre.1);
+                // Zoom steps along d itself (a ray through Centre); Spin
+                // steps along its perpendicular (the tangent to the arc).
+                let step = if spin { (-d.1, d.0) } else { d };
+                let mut acc = [0.0f32; 4];
+                for t in 0..n {
+                    let tt = (t as f32 + 0.5) / nf - 0.5;
+                    let s = bilinear_edge(
+                        &original,
+                        w,
+                        h,
+                        pos.0 + tt * k * step.0,
+                        pos.1 + tt * k * step.1,
+                        edge,
+                    );
                     for c in 0..4 {
                         acc[c] += s[c];
                     }
@@ -2948,6 +3138,52 @@ mod tests {
             }]
         );
 
+        // Radial mode reads Centre/Amount/Type instead: Centre resolves to
+        // a *fraction* (30/70%, unconverted — resolve_stack has no width/
+        // height to scale it by), Amount 8% of 1000 = 80px, Type defaults
+        // to Spin.
+        for p in &mut e.params {
+            match p.id.as_str() {
+                "mode" => p.value = EffectValue::Choice(2),
+                "centre_x" => p.value = EffectValue::Float(Property::fixed(30.0)),
+                "centre_y" => p.value = EffectValue::Float(Property::fixed(70.0)),
+                "amount" => p.value = EffectValue::Float(Property::fixed(8.0)),
+                _ => {}
+            }
+        }
+        let r = resolve_stack(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        assert_eq!(
+            r,
+            vec![Resolved::RadialBlur {
+                centre_frac: [0.3, 0.7],
+                amount_px: 80.0,
+                spin: true,
+                edge: 1,
+                mix: 1.0
+            }]
+        );
+
+        // The Type choice flips Spin/Zoom.
+        for p in &mut e.params {
+            if p.id == "radial_type" {
+                p.value = EffectValue::Choice(1);
+            }
+        }
+        let r = resolve_stack(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        assert!(matches!(r[..], [Resolved::RadialBlur { spin: false, .. }]));
+
         // A legacy instance (saved before the mode existed) has no mode
         // parameter and still resolves as Gaussian.
         e.params
@@ -3002,6 +3238,74 @@ mod tests {
             "streak spreads in y"
         );
         assert!(v[at(7, 4)] < 1e-6, "x row stays clean");
+    }
+
+    #[test]
+    fn cpu_radial_blur_spins_and_zooms_from_centre() {
+        // A white impulse 4px right of centre in a transparent square frame
+        // (odd dimensions: pixel 8's centre is the exact frame centre, as
+        // the RGB split radial test already relies on).
+        let (w, h) = (17u32, 17u32);
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+        let imp = at(12, 8);
+        img[imp..imp + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+        let centre = [0.5f32, 0.5f32];
+
+        // Amount 0 and mix 0 are both the exact identity, either type (the
+        // same zero-tap-offset reasoning as blur_directional's length 0).
+        let mut a0 = img.clone();
+        cpu::blur_radial(&mut a0, w, h, centre, 0.0, true, 1, 1.0);
+        assert_eq!(a0, img);
+        let mut a0z = img.clone();
+        cpu::blur_radial(&mut a0z, w, h, centre, 0.0, false, 1, 1.0);
+        assert_eq!(a0z, img);
+        let mut m0 = img.clone();
+        cpu::blur_radial(&mut m0, w, h, centre, 30.0, true, 1, 0.0);
+        assert_eq!(m0, img);
+
+        // The exact centre pixel is unmoved even at a huge amount, either
+        // type — d = 0 there, so every tap collapses to that pixel itself.
+        let mut cs = img.clone();
+        cpu::blur_radial(&mut cs, w, h, centre, 60.0, true, 1, 1.0);
+        assert_eq!(cs[at(8, 8)], 0.0, "centre picks up no energy (spin)");
+        let mut cz = img.clone();
+        cpu::blur_radial(&mut cz, w, h, centre, 60.0, false, 1, 1.0);
+        assert_eq!(cz[at(8, 8)], 0.0, "centre picks up no energy (zoom)");
+
+        // Zoom steps along the ray through the impulse — here, exactly the
+        // row — so energy spreads left/right of it on that same row. Row 8
+        // is where the exact proof lives: any output pixel there has a
+        // purely horizontal d (centre is also on row 8), so its zoom taps
+        // never leave the row. Off-row neighbours (12,7)/(12,9) are not
+        // proved zero — bilinear's one-pixel blend radius legitimately
+        // bleeds a little across a row boundary near the impulse — so the
+        // contrast is asserted as "far less", not "none".
+        let mut z = img.clone();
+        cpu::blur_radial(&mut z, w, h, centre, 20.0, false, 1, 1.0);
+        assert!(z[imp] < 1.0, "peak flattens");
+        assert!(
+            z[at(11, 8)] > 0.0 && z[at(13, 8)] > 0.0,
+            "zoom streak spreads along the ray"
+        );
+        assert!(
+            z[at(12, 7)] < z[at(11, 8)] && z[at(12, 9)] < z[at(11, 8)],
+            "zoom bleeds far less off the ray than along it"
+        );
+
+        // Spin steps along the perpendicular instead — energy spreads
+        // above/below the impulse. The exact proof mirrors the zoom one:
+        // row 8's own points have a purely *vertical* spin step there, so
+        // they never reach column 12 — no bleed along the ray at all.
+        let mut s = img.clone();
+        cpu::blur_radial(&mut s, w, h, centre, 20.0, true, 1, 1.0);
+        assert!(s[imp] < 1.0, "peak flattens");
+        assert!(
+            s[at(12, 7)] > 0.0 && s[at(12, 9)] > 0.0,
+            "spin streak spreads tangentially"
+        );
+        assert_eq!(s[at(11, 8)], 0.0, "spin: no bleed along the ray");
+        assert_eq!(s[at(13, 8)], 0.0, "spin: no bleed along the ray");
     }
 
     #[test]

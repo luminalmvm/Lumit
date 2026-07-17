@@ -112,6 +112,27 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
   Lumit version adds — so old and new versions can share project files.
+- **Blur gains a Radial mode** — the third and final mode of the §3.8 trio, alongside
+  Gaussian and Directional. Drop a Centre point anywhere on the frame (as two percentages,
+  Centre X and Centre Y, of the frame's width and height) and pick a Type: **Spin** streaks
+  every pixel along the arc it would trace if the frame span rotating about that point;
+  **Zoom** streaks it along the straight line from the centre through it instead, like a
+  camera punching in. Either way the streak grows the farther a pixel sits from Centre —
+  right at Centre nothing moves at all, and the effect gets stronger toward the edges,
+  reaching its full length (set by Amount, in the same "% of frame diagonal" units Radius
+  and Length already use) at the frame's farthest corner. The clever bit is *how* those two
+  streak directions get computed: rather than actually rotating anything (which needs
+  trigonometry, and GPU trigonometry is allowed to be slightly imprecise — the same reason
+  Transform's matrix arrives pre-computed from the CPU), both Spin and Zoom turn out to be
+  nothing more than stretching the vector from Centre to the pixel by a plain number — along
+  that vector for Zoom, sideways from it for Spin. No division, no sine or cosine anywhere,
+  and — as a free bonus — every stretch is exactly zero at Centre itself, so there is no
+  special case to write for "what happens exactly at the middle". Sideways-instead-of-rotated
+  is a deliberate simplification (a straight sideways nudge closely matches a true curved arc
+  for the modest sweep this effect targets) and is written down as a pinned choice in docs/08
+  §3.8, alongside the other numbers the spec didn't pin down itself (the exact ranges and
+  defaults for Centre and Amount). Old projects saved before Radial existed still read as
+  Gaussian, byte for byte, and Amount 0 is an exact passthrough — both pinned by tests.
 - **Flash fires on the beat.** The Flash effect's Mode switch now has three positions.
   *Manual* is exactly the old behaviour — keyframed hits with an exponential fade — and
   stays the default, so nothing saved earlier changes by a single byte. *Trigger* lights
