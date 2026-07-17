@@ -67,33 +67,51 @@ impl Default for PerformanceSettings {
     }
 }
 
+/// The dialog's fixed content width — the same on every page, so switching
+/// pages never resizes it.
+const SETTINGS_WIDTH: f32 = 680.0;
+/// The dialog's fixed body height (below the title bar), so a short page and
+/// a long one make the same-sized dialog; long pages scroll inside it.
+const SETTINGS_BODY_HEIGHT: f32 = 420.0;
+/// The sidebar column width.
+const SETTINGS_SIDEBAR_WIDTH: f32 = 150.0;
+
 impl Shell {
-    /// Draw the Settings window when it is open. Mirrors the other modals
-    /// (`export_dialog_modal`), invoked once per frame from `update`.
+    /// Draw the Settings dialog when it is open. A true modal (`egui::Modal`):
+    /// a dimmed backdrop eats clicks to the app behind it, and it draws in the
+    /// foreground layer — above the panel-focus edge, which sits at
+    /// `Order::Middle`. Fixed size so every page makes the same dialog.
     pub(crate) fn settings_modal(&mut self, ctx: &egui::Context) {
         if !self.settings_open {
             return;
         }
-        // Theme is `Copy`, so a snapshot lets the window body read colours
-        // while it mutates `self` (theme picks) with no borrow clash.
+        // Theme is `Copy`, so a snapshot lets the body read colours while it
+        // mutates `self` (theme picks) with no borrow clash.
         let theme = self.theme;
-        let mut open = self.settings_open;
-        egui::Window::new("Settings")
-            .collapsible(false)
-            .resizable(true)
-            .default_size([720.0, 520.0])
-            .min_width(560.0)
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.horizontal_top(|ui| {
-                    self.settings_sidebar(ui, &theme);
-                    ui.separator();
+        let modal = egui::Modal::new(egui::Id::new("lumit-settings")).show(ctx, |ui| {
+            ui.set_width(SETTINGS_WIDTH);
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new("Settings")
+                        .heading()
+                        .color(theme.text_primary),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Done").clicked() {
+                        self.settings_open = false;
+                    }
+                });
+            });
+            ui.separator();
+            ui.horizontal_top(|ui| {
+                self.settings_sidebar(ui, &theme);
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.set_min_height(SETTINGS_BODY_HEIGHT);
                     egui::ScrollArea::vertical()
                         .auto_shrink([false, false])
+                        .max_height(SETTINGS_BODY_HEIGHT)
                         .show(ui, |ui| {
-                            ui.set_min_width(360.0);
-                            ui.add_space(2.0);
                             match self.settings_page {
                                 SettingsPage::General => self.settings_general(ui, &theme),
                                 SettingsPage::Appearance => {
@@ -105,12 +123,16 @@ impl Shell {
                         });
                 });
             });
-        self.settings_open = open;
+        });
+        // Clicking the dimmed backdrop or pressing Escape closes it.
+        if modal.should_close() {
+            self.settings_open = false;
+        }
     }
 
     fn settings_sidebar(&mut self, ui: &mut egui::Ui, theme: &Theme) {
         ui.vertical(|ui| {
-            ui.set_width(160.0);
+            ui.set_width(SETTINGS_SIDEBAR_WIDTH);
             ui.add_space(4.0);
             for page in SettingsPage::ALL {
                 let selected = self.settings_page == page;

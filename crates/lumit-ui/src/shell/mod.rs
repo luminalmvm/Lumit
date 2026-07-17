@@ -930,6 +930,24 @@ impl Shell {
         }
     }
 
+    /// True while any modal dialog is up (Settings, the composition or export
+    /// dialogs, or the recovery prompt). Callers that read the raw pointer —
+    /// the active-panel focus edge — skip themselves so a click meant for the
+    /// dialog never reaches a panel behind it.
+    fn any_modal_open(&self) -> bool {
+        if self.settings_open
+            || self.app.comp_dialog.is_some()
+            || self.app.pending_recovery.is_some()
+        {
+            return true;
+        }
+        #[cfg(feature = "media")]
+        if self.export_dialog.is_some() {
+            return true;
+        }
+        false
+    }
+
     fn recovery_modal(&mut self, ctx: &egui::Context) {
         let Some(pending) = &self.app.pending_recovery else {
             return;
@@ -1726,6 +1744,9 @@ impl Shell {
         #[cfg(feature = "media")]
         self.export_dialog_modal(ctx);
         self.settings_modal(ctx);
+        // Read before the borrow below splits `self` apart (used by the
+        // active-panel focus edge further down).
+        let modal_open = self.any_modal_open();
 
         // The tiling dock fills the window: a solo pane renders bare with no
         // tab bar — the Viewer's look (K-074) on every lone panel (K-086) —
@@ -1764,10 +1785,14 @@ impl Shell {
 
         // Active-panel boundary (owner request): a press inside a pane makes
         // it the focused one, and it wears a 1px accent edge so the eye always
-        // knows where shortcuts land.
-        if let Some(pos) = ctx.input(|i| i.pointer.press_origin()) {
-            if let Some((panel, _)) = panel_rects.iter().find(|(_, r)| r.contains(pos)) {
-                self.active_panel = Some(*panel);
+        // knows where shortcuts land. Skipped while a modal is open — its
+        // backdrop owns the click, so a press over the dialog must not reach
+        // through and re-focus a panel behind it.
+        if !modal_open {
+            if let Some(pos) = ctx.input(|i| i.pointer.press_origin()) {
+                if let Some((panel, _)) = panel_rects.iter().find(|(_, r)| r.contains(pos)) {
+                    self.active_panel = Some(*panel);
+                }
             }
         }
         if let Some(active) = self.active_panel {
@@ -2616,6 +2641,19 @@ mod dock_tests {
             ),
             ColorScheme::GruvboxDark
         );
+    }
+
+    #[test]
+    fn an_open_settings_dialog_counts_as_a_modal() {
+        // Gates the active-panel focus edge: while the dialog is up its
+        // backdrop owns clicks, so a press must not re-focus a panel behind
+        // it (the reported click-through bug).
+        assert!(!Shell::default().any_modal_open());
+        let shell = Shell {
+            settings_open: true,
+            ..Shell::default()
+        };
+        assert!(shell.any_modal_open());
     }
 
     #[test]
