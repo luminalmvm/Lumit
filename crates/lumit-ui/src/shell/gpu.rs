@@ -102,6 +102,9 @@ pub struct GpuViewer {
     /// upload or colour work. Budgeted by texture bytes.
     vram: Vec<VramFrame>,
     vram_bytes: u64,
+    /// The live VRAM-tier budget (Settings → Performance, K-100). Starts at
+    /// [`VRAM_TIER_CAP`] and moves when the owner drags the slider.
+    vram_cap: u64,
 }
 
 /// One VRAM-tier entry: the display texture, its egui registration, and size.
@@ -156,6 +159,7 @@ impl GpuViewer {
             current: None,
             vram: Vec::new(),
             vram_bytes: 0,
+            vram_cap: VRAM_TIER_CAP,
         }
     }
 
@@ -482,7 +486,7 @@ impl GpuViewer {
         );
         let bytes = u64::from(w) * u64::from(h) * 4;
         let sizes: Vec<u64> = self.vram.iter().map(|e| e.bytes).collect();
-        let drop_n = vram_evict_count(&sizes, self.vram_bytes, bytes, VRAM_TIER_CAP);
+        let drop_n = vram_evict_count(&sizes, self.vram_bytes, bytes, self.vram_cap);
         for old in self.vram.drain(..drop_n) {
             self.vram_bytes = self.vram_bytes.saturating_sub(old.bytes);
             self.render_state.renderer.write().free_texture(&old.id);
@@ -497,6 +501,29 @@ impl GpuViewer {
         });
         self.vram_bytes = self.vram_bytes.saturating_add(bytes);
         (id, size)
+    }
+
+    /// Move the VRAM-tier budget (Settings → Performance, K-100), evicting
+    /// oldest entries immediately if the new cap is below what is currently
+    /// held — the same oldest-first policy `present_keyed` uses on insert,
+    /// just with nothing incoming.
+    pub(crate) fn set_vram_cap(&mut self, bytes: u64) {
+        self.vram_cap = bytes;
+        let sizes: Vec<u64> = self.vram.iter().map(|e| e.bytes).collect();
+        let drop_n = vram_evict_count(&sizes, self.vram_bytes, 0, self.vram_cap);
+        for old in self.vram.drain(..drop_n) {
+            self.vram_bytes = self.vram_bytes.saturating_sub(old.bytes);
+            self.render_state.renderer.write().free_texture(&old.id);
+        }
+    }
+
+    /// Drop every VRAM-tier entry (Settings → Performance "Clear cache",
+    /// K-100), releasing each texture's egui registration so nothing leaks.
+    pub(crate) fn clear_vram(&mut self) {
+        for old in self.vram.drain(..) {
+            self.render_state.renderer.write().free_texture(&old.id);
+        }
+        self.vram_bytes = 0;
     }
 
     /// Upload a decoded frame through the colour pipeline; returns the egui

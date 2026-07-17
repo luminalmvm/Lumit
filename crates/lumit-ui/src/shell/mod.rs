@@ -2057,6 +2057,19 @@ mod geometry_tests {
         assert_eq!(vram_evict_count(&[], 0, 500, 350), 0);
     }
 
+    // `GpuViewer::set_vram_cap` (Settings → Performance, K-100) reuses this
+    // same helper with nothing incoming (`incoming = 0`) to evict down to a
+    // freshly lowered budget.
+    #[test]
+    fn vram_evict_count_drops_to_fit_a_lowered_cap_with_nothing_incoming() {
+        // 3 entries of 100 bytes, cap dropped to 150: two must go.
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 0, 150), 2);
+        // Cap dropped below a single entry's size: everything goes.
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 0, 50), 3);
+        // Cap raised (or unchanged): nothing is evicted.
+        assert_eq!(vram_evict_count(&[100, 100, 100], 300, 0, 1024), 0);
+    }
+
     // The live value-drag preview renders a comp patched with the provisional
     // value. Patching a layer's Position X to 500 must show through as the
     // draw's position, without touching the committed document.
