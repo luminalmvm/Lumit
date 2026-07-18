@@ -1767,6 +1767,77 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Invert (docs/08 §3.23, K-126): a simple colour inverse — out.rgb = 1 − in.rgb
+    // per channel, alpha kept. Because 1 − c is affine (not a pure scale) it does
+    // NOT commute with premultiplied alpha, so premultiplied: false: the host wraps
+    // unpremultiply → invert → re-premultiply (fused into the kernel and the CPU
+    // reference), exactly like Contrast and Gamma, so matte edges do not fringe.
+    // The inverse is taken in the compositor's scene-linear fp16 working space (the
+    // owner's "simple inverse"), so HDR values above 1 invert to honest negatives,
+    // never clipped (§2.1). Continuous everywhere, so the §1.6 oracle holds. There
+    // is no neutral no-op default — invert always inverts (§1.2) — so only Mix 0 is
+    // the identity. Category Colour, beside its grade siblings.
+    EffectSchema {
+        match_name: "invert",
+        label: "Invert",
+        version: 1,
+        category: FxCategory::Colour,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::Exact,
+            temporal: &[0],
+            premultiplied: false, // §2.2: 1 − c is affine, so it shifts matte edges
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[MIX_PARAM],
+    },
+    // Tint (docs/08 §3.24, K-127): a luminance duotone / gradient map. Two colour
+    // params — "Map black to" (default black) and "Map white to" (default white) —
+    // and out.rgb = black.rgb + (white.rgb − black.rgb) · luma(in.rgb) with Rec.709
+    // luma on the unpremultiplied linear colour, alpha kept. A luma-driven colour
+    // remap does not commute with premultiplied alpha, so premultiplied: false: the
+    // host wraps unpremultiply → map → re-premultiply (fused into the kernel and the
+    // CPU reference), exactly like Contrast and Gamma, so matte edges do not fringe.
+    // The default black→black / white→white maps every pixel to its own luma — a
+    // greyscale, a visible tasteful default (§1.2), not a no-op — so only Mix 0 is
+    // the identity. Continuous everywhere, so the §1.6 oracle holds. Category Colour,
+    // beside its grade siblings.
+    EffectSchema {
+        match_name: "tint",
+        label: "Tint",
+        version: 1,
+        category: FxCategory::Colour,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::Exact,
+            temporal: &[0],
+            premultiplied: false, // §2.2: a colour remap shifts matte edges
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "black",
+                label: "Map black to",
+                // Scene-linear RGBA (alpha ignored): the colour dark input maps to.
+                kind: ParamKind::Colour {
+                    default: [0.0, 0.0, 0.0, 1.0],
+                    range: (0.0, 4.0),
+                },
+            },
+            ParamSchema {
+                id: "white",
+                label: "Map white to",
+                // Scene-linear RGBA (alpha ignored): the colour bright input maps to.
+                kind: ParamKind::Colour {
+                    default: [1.0, 1.0, 1.0, 1.0],
+                    range: (0.0, 4.0),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
 ];
 
 /// Look a schema up by its match name.
@@ -2118,6 +2189,25 @@ pub enum Resolved {
         gain_r: f32,
         /// Scene-linear blue gain, `1 − 0.5·(temperature/100)`.
         gain_b: f32,
+        /// 0..1.
+        mix: f32,
+    },
+    /// Invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − in.rgb` per RGB
+    /// channel on unpremultiplied colour, alpha untouched. No neutral value —
+    /// invert always inverts — so only Mix 0 is the identity.
+    Invert {
+        /// 0..1.
+        mix: f32,
+    },
+    /// Tint (docs/08 §3.24): a luminance duotone. `out.rgb = black + (white −
+    /// black)·luma(in)` with Rec.709 luma on the unpremultiplied colour, alpha
+    /// untouched. The two mapped colours resolve to scene-linear RGB at frame
+    /// time; Mix 0 is the identity.
+    Tint {
+        /// Scene-linear RGB the darkest input maps to.
+        black: [f32; 3],
+        /// Scene-linear RGB the brightest input maps to.
+        white: [f32; 3],
         /// 0..1.
         mix: f32,
     },
@@ -3034,6 +3124,25 @@ pub fn resolve_stack(
                     mix,
                 })
             }
+            "invert" => {
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::Invert { mix })
+            }
+            "tint" => {
+                // The two mapped colours resolve to scene-linear RGB at frame
+                // time (alpha ignored); the CPU reference and the WGSL kernel
+                // read the identical numbers.
+                let rgb = |id: &str, default: [f64; 4]| -> [f32; 3] {
+                    let c = e.colour_at(id, lt).unwrap_or(default);
+                    [c[0] as f32, c[1] as f32, c[2] as f32]
+                };
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::Tint {
+                    black: rgb("black", [0.0, 0.0, 0.0, 1.0]),
+                    white: rgb("white", [1.0, 1.0, 1.0, 1.0]),
+                    mix,
+                })
+            }
             "lut" => {
                 // Only Mix is Copy-carried; the `.cube` file's parsed cube is a
                 // 3D texture threaded beside the resolved op (the caller's LUT
@@ -3322,6 +3431,8 @@ pub mod cpu {
                 gain_b,
                 mix,
             } => temperature(rgba, *gain_r, *gain_b, *mix),
+            Resolved::Invert { mix } => invert(rgba, *mix),
+            Resolved::Tint { black, white, mix } => tint(rgba, *black, *white, *mix),
             Resolved::Transform {
                 anchor,
                 position,
@@ -3758,6 +3869,55 @@ pub mod cpu {
             let sb = px[2] * gain_b;
             px[0] = px[0] * (1.0 - mix) + sr * mix;
             px[2] = px[2] * (1.0 - mix) + sb * mix;
+        }
+    }
+
+    /// Invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − u` per RGB
+    /// channel in the compositor's scene-linear working space, on
+    /// unpremultiplied colour (§2.2), re-premultiplied on the way out — exactly
+    /// Contrast's and Gamma's premultiply handling. `1 − c` is affine, so it does
+    /// not commute with premultiplied alpha: the pixel is unpremultiplied,
+    /// inverted, then re-premultiplied, so matte edges do not fringe. The inverse
+    /// is a plain `1 − c` in scene-linear light — the owner's "simple inverse" —
+    /// so HDR values above 1 invert to honest negatives, never clipped (§2.1).
+    /// There is no neutral value (invert always inverts); Mix 0 is the bit-exact
+    /// identity (the `× (1 − mix) + · × mix` blend collapses to the input), and
+    /// the WGSL twin matches. Purely continuous, so it is safe under the §1.6
+    /// fp16 ULP oracle. Alpha is untouched.
+    pub fn invert(rgba: &mut [f32], mix: f32) {
+        for px in rgba.chunks_exact_mut(4) {
+            let a = px[3];
+            let u = unpremult(px);
+            for c in 0..3 {
+                let inverted = (1.0 - u[c]) * a;
+                px[c] = px[c] * (1.0 - mix) + inverted * mix;
+            }
+        }
+    }
+
+    /// Tint (docs/08 §3.24): a luminance duotone / gradient map
+    /// `out.rgb = black + (white − black)·luma(u)` per RGB channel, with Rec.709
+    /// `luma` on the unpremultiplied colour `u` (§2.2), re-premultiplied on the
+    /// way out — exactly Contrast's and Gamma's premultiply handling. A
+    /// luma-driven colour remap does not commute with premultiplied alpha, so the
+    /// pixel is unpremultiplied, mapped, then re-premultiplied, and matte edges do
+    /// not fringe. The lerp is written `black + (white − black)·luma` (not the
+    /// `black·(1 − luma) + white·luma` form) so the CPU reference and the WGSL
+    /// kernel reduce in the same order and the §1.6 oracle holds. The default
+    /// black→black / white→white maps every pixel to its own luma (a greyscale) —
+    /// a visible tasteful default, not a no-op; Mix 0 is the bit-exact identity
+    /// (the WGSL twin matches). Purely continuous, so it is safe under the §1.6
+    /// fp16 ULP oracle. Alpha is untouched.
+    pub fn tint(rgba: &mut [f32], black: [f32; 3], white: [f32; 3], mix: f32) {
+        for px in rgba.chunks_exact_mut(4) {
+            let a = px[3];
+            let u = unpremult(px);
+            let luma = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
+            for c in 0..3 {
+                let mapped = black[c] + (white[c] - black[c]) * luma;
+                let graded = mapped * a;
+                px[c] = px[c] * (1.0 - mix) + graded * mix;
+            }
         }
     }
 
@@ -5635,6 +5795,101 @@ mod tests {
         let mut mixed = vec![0.4_f32, 0.5, 0.6, 1.0];
         cpu::temperature(&mut mixed, 1.5, 0.5, 0.0);
         assert_eq!(mixed, vec![0.4, 0.5, 0.6, 1.0]);
+    }
+
+    #[test]
+    fn invert_instantiates_resolves_and_inverts() {
+        let e = instantiate("invert").unwrap();
+        // The only parameter is Mix, defaulting to 100 %.
+        assert_eq!(e.float_at("mix", 0.0), Some(100.0));
+        let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+        assert_eq!(r, vec![Resolved::Invert { mix: 1.0 }]);
+
+        // The CPU reference: an opaque pixel inverts as 1 − c, alpha untouched.
+        let mut opaque = vec![0.2_f32, 0.5, 0.9, 1.0];
+        cpu::invert(&mut opaque, 1.0);
+        for (v, want) in opaque.iter().zip([0.8_f32, 0.5, 0.1, 1.0]) {
+            assert!((v - want).abs() < 1e-6, "opaque invert: {v} vs {want}");
+        }
+        // Mix 0 is the identity at any input.
+        let mut m0 = vec![0.2_f32, 0.5, 0.9, 1.0];
+        cpu::invert(&mut m0, 0.0);
+        assert_eq!(m0, vec![0.2, 0.5, 0.9, 1.0]);
+
+        // Half-alpha pixel: invert runs on the unpremultiplied colour and is
+        // re-premultiplied — the round trip a naive invert of premultiplied
+        // colour gets wrong. Straight (0.4,0.6,0.8) at alpha 0.5 is stored
+        // premultiplied as (0.2,0.3,0.4); inverting the straight colour gives
+        // (0.6,0.4,0.2), re-premultiplied to (0.3,0.2,0.1); alpha untouched.
+        let mut half = vec![0.2_f32, 0.3, 0.4, 0.5];
+        cpu::invert(&mut half, 1.0);
+        for (v, want) in half.iter().zip([0.3_f32, 0.2, 0.1, 0.5]) {
+            assert!((v - want).abs() < 1e-6, "half-alpha invert: {v} vs {want}");
+        }
+
+        // Scene-linear HDR values above 1 invert to honest negatives (§2.1).
+        let mut hdr = vec![2.0_f32, 3.0, 0.5, 1.0];
+        cpu::invert(&mut hdr, 1.0);
+        for (v, want) in hdr.iter().zip([-1.0_f32, -2.0, 0.5, 1.0]) {
+            assert!((v - want).abs() < 1e-6, "hdr invert: {v} vs {want}");
+        }
+    }
+
+    #[test]
+    fn tint_instantiates_resolves_and_maps_luma() {
+        let e = instantiate("tint").unwrap();
+        assert_eq!(e.colour_at("black", 0.0), Some([0.0, 0.0, 0.0, 1.0]));
+        assert_eq!(e.colour_at("white", 0.0), Some([1.0, 1.0, 1.0, 1.0]));
+        // Defaults resolve to black→black, white→white (a greyscale mapping).
+        let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+        assert_eq!(
+            r,
+            vec![Resolved::Tint {
+                black: [0.0, 0.0, 0.0],
+                white: [1.0, 1.0, 1.0],
+                mix: 1.0
+            }]
+        );
+
+        // The CPU reference: default black→black / white→white maps every pixel
+        // to its own Rec.709 luma in all three channels (a greyscale).
+        let rgb = [0.8_f32, 0.2, 0.5];
+        let luma = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+        let mut grey = vec![rgb[0], rgb[1], rgb[2], 1.0];
+        cpu::tint(&mut grey, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1.0);
+        for v in grey.iter().take(3) {
+            assert!((v - luma).abs() < 1e-6, "greyscale luma: {v} vs {luma}");
+        }
+        assert_eq!(grey[3], 1.0, "alpha untouched");
+
+        // A duotone: black→(0.1,0,0.2), white→(0.9,0.8,1.0). Each channel lerps
+        // by the pixel's luma. Mix 0 is the identity at any colours.
+        let black = [0.1_f32, 0.0, 0.2];
+        let white = [0.9_f32, 0.8, 1.0];
+        let mut duo = vec![rgb[0], rgb[1], rgb[2], 1.0];
+        cpu::tint(&mut duo, black, white, 1.0);
+        for c in 0..3 {
+            let want = black[c] + (white[c] - black[c]) * luma;
+            assert!(
+                (duo[c] - want).abs() < 1e-6,
+                "duotone ch{c}: {} vs {want}",
+                duo[c]
+            );
+        }
+        let mut m0 = vec![rgb[0], rgb[1], rgb[2], 1.0];
+        cpu::tint(&mut m0, black, white, 0.0);
+        assert_eq!(m0, vec![rgb[0], rgb[1], rgb[2], 1.0]);
+
+        // Half-alpha pixel: the map runs on the unpremultiplied colour and is
+        // re-premultiplied. Straight (0.8,0.2,0.5) at alpha 0.5 is stored
+        // premultiplied as (0.4,0.1,0.25); with defaults it maps to the straight
+        // luma in each channel, re-premultiplied to luma·0.5; alpha untouched.
+        let mut half = vec![0.4_f32, 0.1, 0.25, 0.5];
+        cpu::tint(&mut half, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1.0);
+        for v in half.iter().take(3) {
+            assert!((v - luma * 0.5).abs() < 1e-6, "half-alpha map: {v}");
+        }
+        assert_eq!(half[3], 0.5, "alpha untouched");
     }
 
     #[test]

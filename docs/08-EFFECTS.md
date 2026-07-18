@@ -211,6 +211,8 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.20 | Temperature | stock CC pack white-balance | cheap | `{0}` |
 | 3.21 | Matte key | Keylight (basic) / stock chroma keyer | cheap | `{0}` |
 | 3.22 | Depth of field | Frischluft / Camera Lens Blur | moderate | `{0}` |
+| 3.23 | Invert | stock CC pack invert | cheap | `{0}` |
+| 3.24 | Tint | AE Tint / duotone | cheap | `{0}` |
 
 ### 3.1 Flow engine — optical-flow retime interpolation (Twixtor-class)
 
@@ -935,6 +937,54 @@ preview decode planner and export decode a hidden layer-input reference exactly 
 matte source. The bokeh is a plain flat disc; shaped, bright-rimmed highlights are the
 planned "DOF PRO" second effect. The depth layer is chosen with the inspector's Layer picker
 (a dropdown of the comp's other layers); an unset or dangling reference is a no-op.
+
+### 3.23 Invert
+
+**Parameters:** Mix.
+
+**Algorithm sketch.** A simple colour inverse: `out.rgb = 1 − in.rgb` per channel, alpha
+untouched. Because `1 − c` is affine (a `1 −` offset, not a pure scale) it does **not**
+commute with premultiplied alpha, so — like Contrast and Gamma (§2.2) — it declares `alpha
+mode: unpremultiplied` and the host wraps it unpremultiply → invert → re-premultiply, so
+matte edges do not fringe. The inverse is taken in the compositor's **scene-linear working
+space** as-is (the deliberately simple choice, K-126): scene-linear values above 1.0 invert
+to honest negatives, never clipped (§2.1), and there is no display-referred round trip. There
+is no neutral no-op default — invert always inverts, so the "no no-op default" rule (§1.2) is
+satisfied trivially — and **Mix 0 is the bit-exact identity**. `cheap` cost, `Exact` ROI,
+`{0}` temporal. Category **Colour**, beside its grade siblings.
+
+**Status (v1, shipped, K-126):** the one-parameter inverse above. Continuous everywhere (a
+plain `1 − c`, no round/clamp/quantize), so the §1.6 oracle holds to ≤ 2 fp16 ULP, exercised
+on a corpus that includes partial-alpha pixels since the premultiply round trip is
+load-bearing here. The scene-linear space choice is the owner's "simple inverse"; a
+display-referred (perceptual) inversion is a possible later variant, not v1.
+
+### 3.24 Tint
+
+**Parameters:** Map black to (colour, default black `[0, 0, 0]`), Map white to (colour,
+default white `[1, 1, 1]`), Mix.
+
+**Algorithm sketch.** A luminance duotone / gradient map: `out.rgb = black + (white − black)
+· luma(in.rgb)` per channel, with `luma` the Rec. 709 weighting (0.2126·R + 0.7152·G +
+0.0722·B) on the **unpremultiplied** linear colour, alpha untouched. Every pixel's brightness
+picks a colour on the black-to-white gradient, so the image is recoloured while its luminosity
+structure is kept — the "select two colours, map everything between them" look. A luma-driven
+colour remap does not commute with premultiplied alpha, so — like Contrast and Gamma (§2.2) —
+it declares `alpha mode: unpremultiplied` and the host wraps it unpremultiply → map →
+re-premultiply, so matte edges do not fringe. The lerp is written `black + (white − black)
+· luma` (rather than `black·(1 − luma) + white·luma`) so the CPU reference and the WGSL kernel
+reduce in the same order and the §1.6 oracle holds. The **default black→black / white→white
+maps every pixel to its own luma — a greyscale**, a visible tasteful result (§1.2), not a
+no-op; **Mix 0 is the bit-exact identity**. `cheap` cost, `Exact` ROI, `{0}` temporal.
+Category **Colour**, beside its grade siblings.
+
+**Status (v1, shipped, K-127):** the two-colour luma map above. Continuous everywhere (a
+linear lerp of a luma), so the §1.6 oracle holds to ≤ 2 fp16 ULP, exercised on a corpus that
+includes partial-alpha pixels since the premultiply round trip is load-bearing here. The two
+colours render through the inspector's existing `ParamKind::Colour` arm — no inspector change
+was needed. Distinct from Colour balance's three-channel trackballs: a two-colour duotone that
+remaps by luma rather than grading in place. The fuller shadows/mids/highlights **Tritone**
+(three colour stops) is tracked as a Tier 2 follow-up (§4).
 
 ---
 

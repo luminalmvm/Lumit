@@ -369,6 +369,51 @@ struct TemperatureParams {
     _pad0: f32,
 }
 
+/// One resolved invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − u`
+/// per RGB channel, on unpremultiplied colour (`1 − c` is affine, so it does
+/// not commute with premultiplied alpha), alpha untouched. There is no neutral
+/// value — invert always inverts — so only Mix 0 is the identity.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InvertOp {
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct InvertParams {
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+/// One resolved tint (docs/08 §3.24): a luminance duotone
+/// `out.rgb = black + (white − black)·luma(u)` with Rec.709 luma on
+/// unpremultiplied colour (a colour remap does not commute with premultiplied
+/// alpha), alpha untouched. `black`/`white` are the scene-linear RGB the darkest
+/// and brightest input map to; Mix 0 is the identity.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TintOp {
+    /// Scene-linear RGB the darkest input maps to.
+    pub black: [f32; 3],
+    /// Scene-linear RGB the brightest input maps to.
+    pub white: [f32; 3],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct TintParams {
+    black: [f32; 4],
+    white: [f32; 4],
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
 /// One resolved contrast (docs/08 §3.18): the affine grade
 /// `(u − 0.5) × k + 0.5` per RGB channel about a fixed mid-grey pivot, on
 /// unpremultiplied colour (an affine grade does not commute with premultiplied
@@ -681,6 +726,8 @@ pub struct FxEngine {
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
+    invert: wgpu::ComputePipeline,
+    tint: wgpu::ComputePipeline,
     hue_shift: wgpu::ComputePipeline,
     contrast: wgpu::ComputePipeline,
     gamma: wgpu::ComputePipeline,
@@ -919,6 +966,8 @@ impl FxEngine {
         let vignette_mod = module(include_str!("fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("fx_exposure.wgsl"), "fx-exposure");
         let temperature_mod = module(include_str!("fx_temperature.wgsl"), "fx-temperature");
+        let invert_mod = module(include_str!("fx_invert.wgsl"), "fx-invert");
+        let tint_mod = module(include_str!("fx_tint.wgsl"), "fx-tint");
         let hue_mod = module(include_str!("fx_hue.wgsl"), "fx-hue");
         let contrast_mod = module(include_str!("fx_contrast.wgsl"), "fx-contrast");
         let gamma_mod = module(include_str!("fx_gamma.wgsl"), "fx-gamma");
@@ -951,6 +1000,8 @@ impl FxEngine {
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
         let temperature = pipeline(&temperature_mod, "fx-temperature", "temperature");
+        let invert = pipeline(&invert_mod, "fx-invert", "invert");
+        let tint = pipeline(&tint_mod, "fx-tint", "tint");
         let hue_shift = pipeline(&hue_mod, "fx-hue", "hue_shift");
         let contrast = pipeline(&contrast_mod, "fx-contrast", "contrast");
         let gamma = pipeline(&gamma_mod, "fx-gamma", "gamma");
@@ -1027,6 +1078,8 @@ impl FxEngine {
             vignette,
             exposure,
             temperature,
+            invert,
+            tint,
             hue_shift,
             contrast,
             gamma,
@@ -2035,6 +2088,71 @@ impl FxEngine {
                 gain_b: op.gain_b,
                 mix_amt: op.mix,
                 _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one invert (docs/08 §3.23) to a linear working texture, returning a
+    /// new texture of the same size. One pointwise pass: `1 − u` per channel, the
+    /// §2.2 unpremultiply wrap fused into the kernel. There is no neutral
+    /// short-circuit (invert always inverts); Mix 0 is the identity.
+    pub fn invert(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &InvertOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-invert-out");
+        self.dispatch(
+            ctx,
+            &self.invert,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&InvertParams {
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one tint (docs/08 §3.24) to a linear working texture, returning a
+    /// new texture of the same size. One pointwise pass: the luma-driven lerp
+    /// between the two mapped colours, the §2.2 unpremultiply wrap fused into the
+    /// kernel; Mix 0 is the identity.
+    pub fn tint(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &TintOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-tint-out");
+        let v4 = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
+        self.dispatch(
+            ctx,
+            &self.tint,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&TintParams {
+                black: v4(op.black),
+                white: v4(op.white),
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out
@@ -3489,6 +3607,141 @@ mod tests {
             let out2 = fx.temperature(&ctx, &tex, w, h, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU temperature must be bit-stable");
+        }
+    }
+
+    /// A corpus (§1.6) that seeds the shared gradient + alpha edge + HDR spike
+    /// with partial-alpha pixels: straight colour stored premultiplied, quantised
+    /// to f16 so both paths begin identical. The unpremultiply round trip is
+    /// load-bearing for the affine colour effects (Invert, Tint), so a naive pass
+    /// on premultiplied colour would diverge exactly on these pixels.
+    fn corpus_with_partials(w: u32, h: u32) -> Vec<f32> {
+        let mut img = corpus(w, h);
+        let q = |v: f32| f16_to_f32(f16_bits(v));
+        let partials = [
+            // (straight rgb, alpha)
+            ([0.7_f32, 0.3, 0.5], 0.5_f32),
+            ([0.2, 0.8, 0.6], 0.25),
+            ([0.9, 0.1, 0.4], 0.75),
+            ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ];
+        for (n, (rgb, a)) in partials.iter().enumerate() {
+            let i = n * 4; // the first four pixels of row 0
+            img[i] = q(rgb[0] * a);
+            img[i + 1] = q(rgb[1] * a);
+            img[i + 2] = q(rgb[2] * a);
+            img[i + 3] = q(*a);
+        }
+        img
+    }
+
+    /// The §1.6 oracle for invert: a cheap pointwise colour inverse, so CPU and
+    /// GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and Mix 0 is the
+    /// bit-exact identity on both paths. The corpus carries partial-alpha pixels
+    /// (invert runs on unpremultiplied colour, so the premultiply round trip is
+    /// load-bearing) and the HDR spike (which inverts to honest negatives, never
+    /// clipped). There is no neutral value, so the only identity case is Mix 0.
+    #[test]
+    fn wgsl_invert_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus_with_partials(w, h);
+        for (name, op) in [
+            ("full", InvertOp { mix: 1.0 }),
+            ("mixed", InvertOp { mix: 0.5 }),
+            ("mix-zero", InvertOp { mix: 0.0 }),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::invert(&mut cpu, op.mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let out = fx.invert(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("invert {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+            if name == "mix-zero" {
+                assert_eq!(gpu, img, "Mix 0 must be the bit-exact identity");
+            }
+
+            let out2 = fx.invert(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU invert must be bit-stable");
+        }
+    }
+
+    /// The §1.6 oracle for tint: a cheap pointwise luminance duotone, so CPU and
+    /// GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and Mix 0 is the
+    /// bit-exact identity on both paths. The corpus carries partial-alpha pixels
+    /// (the luma-driven remap runs on unpremultiplied colour, so the premultiply
+    /// round trip is load-bearing). Settings sweep the default greyscale
+    /// (black→black, white→white) and a coloured duotone; the lerp is the
+    /// `black + (white − black)·luma` form on both paths so they reduce alike.
+    #[test]
+    fn wgsl_tint_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus_with_partials(w, h);
+        for (name, op) in [
+            (
+                "greyscale",
+                TintOp {
+                    black: [0.0, 0.0, 0.0],
+                    white: [1.0, 1.0, 1.0],
+                    mix: 1.0,
+                },
+            ),
+            (
+                "duotone",
+                TintOp {
+                    black: [0.1, 0.05, 0.3],
+                    white: [1.0, 0.9, 0.6],
+                    mix: 1.0,
+                },
+            ),
+            (
+                "mixed",
+                TintOp {
+                    black: [0.2, 0.0, 0.4],
+                    white: [0.8, 1.0, 0.5],
+                    mix: 0.5,
+                },
+            ),
+            (
+                "mix-zero",
+                TintOp {
+                    black: [0.1, 0.05, 0.3],
+                    white: [1.0, 0.9, 0.6],
+                    mix: 0.0,
+                },
+            ),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::tint(&mut cpu, op.black, op.white, op.mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let out = fx.tint(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("tint {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+            if name == "mix-zero" {
+                assert_eq!(gpu, img, "Mix 0 must be the bit-exact identity");
+            }
+
+            let out2 = fx.tint(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU tint must be bit-stable");
         }
     }
 

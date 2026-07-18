@@ -522,6 +522,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   edge pixels by their true colour and doesn't leave a fringe. Setting the Key colour is now a
   point-and-click job: use the **eyedropper** beside its swatch to sample the screen straight
   from the Viewer (see the colour picker and eyedropper note below).
+- **Invert (K-126).** The classic negative: every colour flips to its opposite — black becomes
+  white, blue becomes orange, and so on (each channel is replaced by "one minus itself"). There
+  are no dials except the shared **Mix**, so it always inverts; turn Mix down to blend the
+  negative part-way back toward the original. Like Contrast and Gamma it works on the picture's
+  *straight* colours (Lumit divides the alpha out, inverts, folds it back in) so soft edges don't
+  fringe. It flips in the compositor's own light space, which keeps it simple and truthful — very
+  bright (above-white) values honestly flip to negatives rather than being clipped, exactly as the
+  owner asked for a "simple inverse".
+- **Tint (K-127).** A two-colour recolour that keeps the *brightness* of the picture but swaps
+  its *palette*. You pick two colours — **Map black to** and **Map white to** — and Lumit reads
+  each pixel's brightness and places it on the gradient between those two: the darkest parts take
+  the first colour, the brightest take the second, everything in between blends across. Left at its
+  defaults (black→black, white→white) it turns the image black-and-white; set the two colours to,
+  say, deep teal and warm cream and you get a duotone poster look while the shading of the original
+  is preserved. Like the other colour tools it works on the straight colour under the alpha so
+  edges stay clean, and **Mix** dials the whole effect in or out.
 - **Matte: source or after-effects (K-125).** A track matte lets one layer borrow another's
   shape — its brightness or its transparency decides where the layer below shows through. Normally
   the matte reads the other layer's **raw picture**, ignoring any effects on it. But sometimes the

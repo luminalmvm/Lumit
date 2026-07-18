@@ -407,6 +407,22 @@ pub fn run_ops(
                     },
                 );
             }
+            Resolved::Invert { mix } => {
+                tex = fx.invert(ctx, &tex, w, h, &lumit_gpu::fx::InvertOp { mix: *mix });
+            }
+            Resolved::Tint { black, white, mix } => {
+                tex = fx.tint(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::TintOp {
+                        black: *black,
+                        white: *white,
+                        mix: *mix,
+                    },
+                );
+            }
             Resolved::Transform {
                 anchor,
                 position,
