@@ -1756,8 +1756,13 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             egui::Stroke::new(1.5_f32, theme.accent),
         );
     }
-    // Live preview while an effect value is dragged (cleared when not).
-    app.fx_edit = fx_edit;
+    // Live preview while an effect value is dragged. Only WRITE when this panel
+    // has an active drag — the Effect Controls panel draws the same effect rows
+    // in the same frame, and an unconditional `= None` here would clobber its
+    // drag (or vice versa). The shell clears fx_edit once at the top of the frame.
+    if fx_edit.is_some() {
+        app.fx_edit = fx_edit;
+    }
     if let Some(op) = pending {
         follow_edit(app, &op); // the graph follows the key you just touched
         app.commit(op);

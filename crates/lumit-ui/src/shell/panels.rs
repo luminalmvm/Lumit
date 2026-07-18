@@ -1096,8 +1096,13 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         .show(ui, |ui| {
             effects_rows(ui, &ctx, &mut pending, &mut fx_edit);
         });
-    // Live preview while an effect value is dragged (cleared when not).
-    app.fx_edit = fx_edit;
+    // Live preview while an effect value is dragged. Only WRITE when this panel
+    // has an active drag — the Timeline draws the same effect rows in the same
+    // frame, and an unconditional `= None` here would clobber its drag (or vice
+    // versa). The shell clears fx_edit once at the top of the frame.
+    if fx_edit.is_some() {
+        app.fx_edit = fx_edit;
+    }
     if let Some(op) = pending {
         app.commit(op);
         #[cfg(feature = "media")]

@@ -2002,6 +2002,13 @@ impl Shell {
             ..
         } = self;
         let preview_display = *preview_display;
+        // Clear the effect-value live-preview slot once per frame before the
+        // panels draw; whichever panel (Timeline or Effect Controls) has an
+        // active drag re-sets it. Both draw the same effect rows in one frame,
+        // so an unconditional write from either used to clobber the other's
+        // drag — the fix that makes "live preview while dragging" actually work
+        // when both panels are docked.
+        app.fx_edit = None;
         let tree_id = dock.id();
         let bare_tiles = bare_tile_ids(dock);
         let (pop_out, panel_rects) = {
