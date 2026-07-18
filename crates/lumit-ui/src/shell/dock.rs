@@ -93,6 +93,29 @@ pub(crate) fn tile_id_of(
     })
 }
 
+/// Bring `panel`'s tab to the front of whichever tab group holds it. Each tab
+/// group's active tab is part of the dock tree, and the tree is persisted with
+/// the workspace — so whichever tab was last in front (often Effect controls,
+/// after an editing session) came back on the next launch. `Shell::new` calls
+/// this once at startup so the left group always opens on Project; it never
+/// runs again, so tab clicks behave exactly as before for the rest of the
+/// session. A solo pane (no Tabs parent) is untouched.
+pub(crate) fn activate_panel_tab(tree: &mut egui_tiles::Tree<Panel>, panel: Panel) {
+    let Some(target) = tile_id_of(tree, panel) else {
+        return;
+    };
+    let ids: Vec<egui_tiles::TileId> = tree.tiles.iter().map(|(id, _)| *id).collect();
+    for id in ids {
+        if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Tabs(tabs))) =
+            tree.tiles.get_mut(id)
+        {
+            if tabs.children.contains(&target) {
+                tabs.set_active(target);
+            }
+        }
+    }
+}
+
 /// Every pane rendering bare this frame (K-086): a pane is bare unless its
 /// parent tile is a Tabs container — single-child Tabs get pruned by
 /// [`dock_simplification_options`], so this is exactly the condition

@@ -455,6 +455,12 @@ impl Shell {
     ) -> Self {
         let workspace_restored = restored.is_some();
         let mut shell = restored.unwrap_or_default();
+        // Startup default: the left tab group opens on Project. The dock tree —
+        // including each tab group's *active* tab — is persisted with the
+        // workspace, so without this the tab last in front (often Effect
+        // controls) greeted every launch. Startup only; tab clicks are
+        // untouched for the rest of the session.
+        activate_panel_tab(&mut shell.dock, Panel::Project);
         Theme::install_fonts(ctx);
         // Migrate a pre-K-097 save (see `migrated_scheme`).
         shell.color_scheme =
@@ -2896,6 +2902,129 @@ mod dock_tests {
         )));
         // On the row → the row consumes it; the backdrop stays silent.
         assert!(!scene(|_bg, row| row.center()));
+    }
+
+    /// Regression for the effect drop that never landed: egui keeps ONE drag
+    /// payload for the whole app and `dnd_release_payload` takes it out of
+    /// the context *before* checking its type — so the Timeline's panel-wide
+    /// `uuid::Uuid` item zone (registered before the layer rows, containing
+    /// every release over the body) swallowed each `EffectDragPayload` drop
+    /// whole, and the row's own reader found nothing. The scene mirrors the
+    /// real structure: a browser row drags the effect, a body-wide item zone
+    /// reads first, the layer row reads second. Unguarded, the drop dies in
+    /// the item zone; through [`dnd_release_of`], it reaches the row.
+    fn effect_drop_scene(guarded: bool) -> bool {
+        let ctx = egui::Context::default();
+        let src_rect = std::cell::Cell::new(egui::Rect::NOTHING);
+        let row_rect = std::cell::Cell::new(egui::Rect::NOTHING);
+        let applied = std::cell::Cell::new(false);
+        let run = |events: Vec<egui::Event>| {
+            let ri = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(400.0, 400.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(ri, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    // The Effects & Presets browser row (the drag source).
+                    let src = draggable_row(
+                        ui,
+                        egui::Id::new("fx-src"),
+                        EffectDragPayload("lumit.blur"),
+                        false,
+                        "Blur",
+                    );
+                    src_rect.set(src.rect);
+                    ui.add_space(40.0);
+                    // The Timeline body: its item zone spans everything below,
+                    // registered before the rows exactly as `timeline_panel`
+                    // registers `accept_item_drop` before its ScrollArea.
+                    let body = ui.available_rect_before_wrap();
+                    let zone = ui.interact(body, egui::Id::new("item-zone"), egui::Sense::hover());
+                    if guarded {
+                        if let Some(p) = dnd_release_of::<uuid::Uuid>(&zone) {
+                            let _ = *p; // a real drop would file the item
+                        }
+                    } else if let Some(p) = zone.dnd_release_payload::<uuid::Uuid>() {
+                        let _ = *p;
+                    }
+                    // A layer row inside the body, reading the effect release.
+                    let (rr, rresp) =
+                        ui.allocate_exact_size(egui::vec2(160.0, 20.0), egui::Sense::hover());
+                    row_rect.set(rr);
+                    if dnd_release_of::<EffectDragPayload>(&rresp).is_some() {
+                        applied.set(true);
+                    }
+                });
+            });
+        };
+        let m = egui::Modifiers::default();
+        let btn = egui::PointerButton::Primary;
+        run(vec![]); // lay out
+        let from = src_rect.get().center();
+        let to = row_rect.get().center();
+        run(vec![egui::Event::PointerMoved(from)]); // hover the browser row
+        run(vec![egui::Event::PointerButton {
+            pos: from,
+            button: btn,
+            pressed: true,
+            modifiers: m,
+        }]);
+        run(vec![egui::Event::PointerMoved(to)]); // drag onto the layer row
+        run(vec![egui::Event::PointerButton {
+            pos: to,
+            button: btn,
+            pressed: false,
+            modifiers: m,
+        }]);
+        applied.get()
+    }
+
+    #[test]
+    fn an_effect_drop_survives_the_item_zone_beneath_the_rows() {
+        // The bug: an unguarded uuid zone under the rows eats the effect drop.
+        assert!(!effect_drop_scene(false));
+        // The fix: type-gated reads let the drop through to the layer row.
+        assert!(effect_drop_scene(true));
+    }
+
+    /// Startup shows the Project tab (owner report): the dock tree persists
+    /// each tab group's active tab with the workspace, so whichever tab was
+    /// last in front — often Effect controls — greeted the next launch.
+    /// `Shell::new` now normalises the left group to Project once at startup.
+    #[test]
+    fn startup_brings_the_project_tab_to_the_front() {
+        let mut tree = default_layout();
+        let project = tile_id_of(&tree, Panel::Project).unwrap();
+        let fx = tile_id_of(&tree, Panel::EffectControls).unwrap();
+        // Simulate the restored workspace: Effect controls was left in front.
+        let group = tree
+            .tiles
+            .iter()
+            .find_map(|(id, tile)| match tile {
+                egui_tiles::Tile::Container(egui_tiles::Container::Tabs(t))
+                    if t.children.contains(&project) =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .expect("Project sits in a tab group in the default layout");
+        if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Tabs(t))) =
+            tree.tiles.get_mut(group)
+        {
+            t.set_active(fx);
+        }
+        activate_panel_tab(&mut tree, Panel::Project);
+        match tree.tiles.get(group) {
+            Some(egui_tiles::Tile::Container(egui_tiles::Container::Tabs(t))) => {
+                assert_eq!(t.active, Some(project), "Project fronts the group");
+            }
+            _ => panic!("tab group vanished"),
+        }
     }
 
     // The default workspace contains every panel, and the pop-out mechanism

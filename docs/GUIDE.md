@@ -419,6 +419,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   it on a footage or adjustment layer's row in the Timeline — the row outlines while
   you hover, and letting go appends the effect exactly as if you'd picked it from
   that layer's own menu, one undo step either way.
+- **Why that drop once died silently (the one-slot drag rule).** egui carries exactly
+  one "thing being dragged" for the whole app, like a single hand that can hold one
+  object. The catch: when any drop zone asks "was that released on me?", egui hands
+  the object over *before* checking whether it is the kind that zone wanted — and if
+  it is the wrong kind, the object is simply gone. The Timeline's whole-body zone
+  (the one that accepts footage dropped from the Project panel) sits underneath every
+  layer row, so it asked first, was handed the dragged *effect*, shrugged, and
+  discarded it — the row you actually dropped on found the hand empty. The fix is a
+  small shared reader (`dnd_release_of` in `panels.rs`) that peeks at the kind first
+  and only takes a drop that matches; every drop zone in the app now reads through
+  it, so a footage drag and an effect drag can never eat each other again.
 - **Effects, the pixel side.** The first real effect exists end to end: **Blur**
   (gaussian). Its life is the template every effect will follow (design rule §1.1's four
   parts): a catalogue entry in `lumit-core/src/fx.rs` declaring parameters and behaviour

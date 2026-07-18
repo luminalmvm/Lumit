@@ -568,7 +568,11 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 // ignores occlusion, so the layer bar or a switch under the cursor
                 // never blocks the drop, and the zone exists only mid-drag, so it
                 // steals no ordinary input. Non-effect-stack layer kinds still gain
-                // effects through their own row's "Add effect" menu.
+                // effects through their own row's "Add effect" menu. The release is
+                // read through `dnd_release_of`, and so is every other zone's — the
+                // panel-wide item zone above this ScrollArea used to take-and-discard
+                // the effect payload on the release frame before any row could read
+                // it, which is why dropping on a row silently did nothing.
                 if fx_drag && accepts_effect_drop(&layer.kind) {
                     let full = egui::Rect::from_min_max(
                         row_rect.left_top(),
@@ -585,7 +589,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                         ui.set_clip_rect(saved);
                         r
                     };
-                    if let Some(payload) = drop.dnd_release_payload::<EffectDragPayload>() {
+                    if let Some(payload) = dnd_release_of::<EffectDragPayload>(&drop) {
                         if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
                             let mut effects = layer.effects.clone();
                             effects.push(inst);
@@ -599,8 +603,12 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             app.refresh_preview();
                         }
                     } else if drop.dnd_hover_payload::<EffectDragPayload>().is_some() {
+                        // Hover highlight while the drag is over this row: a faint
+                        // accent wash under an accent outline, across outline and
+                        // lane alike, so the landing row is unmistakable.
                         let mut hp = ui.painter().clone();
                         hp.set_clip_rect(viewport);
+                        hp.rect_filled(full, 2.0, theme.accent.gamma_multiply(0.08));
                         hp.rect_stroke(
                             full,
                             2.0,
@@ -1685,32 +1693,52 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         }
     }
     let sep_x = track_left - 4.0;
-    let handle = egui::Rect::from_min_max(
-        egui::pos2(sep_x - 3.0, rows_top),
-        egui::pos2(sep_x + 3.0, sep_bottom.max(rows_top + 1.0)),
-    );
-    let hresp = ui.interact(
-        handle,
-        ui.id().with("name-col-resize"),
-        egui::Sense::click_and_drag(),
-    );
-    if hresp.hovered() || hresp.dragged() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+    {
+        // The separator lives LEFT of the lane area, but the clip in force here
+        // was narrowed to the lanes (x ≥ track_left) for the grid overlays — under
+        // it the hairline painted into the clipped-away margin (invisible) and the
+        // grab zone hit-tested against an empty rect ∩ clip (undraggable): egui
+        // hit-tests a widget against its rect intersected with the ui clip. Widen
+        // back to the whole panel for the handle, then restore the lane clip for
+        // the playhead below.
+        ui.set_clip_rect(saved_clip);
+        let handle = egui::Rect::from_min_max(
+            egui::pos2(sep_x - 4.0, ruler_rect.top()),
+            egui::pos2(sep_x + 4.0, sep_bottom.max(ruler_rect.top() + 1.0)),
+        );
+        let hresp = ui.interact(
+            handle,
+            ui.id().with("name-col-resize"),
+            egui::Sense::click_and_drag(),
+        );
+        if hresp.hovered() || hresp.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        if hresp.dragged() {
+            // Clamp to the same bounds the layout applies, so the divider never
+            // drags past where the outline can actually go.
+            let max_w = (panel_right - panel_left - 120.0).clamp(96.0, 900.0);
+            app.timeline_name_w = (app.timeline_name_w + hresp.drag_delta().x).clamp(96.0, max_w);
+        }
+        // Full-height division between the outline and the lanes: a strong
+        // hairline from the ruler down to the bottom of the rows, accent while
+        // hovered or dragged so the handle reads as interactive.
+        ui.painter().line_segment(
+            [
+                egui::pos2(sep_x, ruler_rect.top()),
+                egui::pos2(sep_x, sep_bottom),
+            ],
+            egui::Stroke::new(
+                1.0_f32,
+                if hresp.hovered() || hresp.dragged() {
+                    theme.accent
+                } else {
+                    theme.hairline_strong
+                },
+            ),
+        );
+        ui.set_clip_rect(saved_clip.intersect(lane_area));
     }
-    if hresp.dragged() {
-        app.timeline_name_w = (app.timeline_name_w + hresp.drag_delta().x).clamp(96.0, 900.0);
-    }
-    ui.painter().line_segment(
-        [egui::pos2(sep_x, rows_top), egui::pos2(sep_x, sep_bottom)],
-        egui::Stroke::new(
-            1.0_f32,
-            if hresp.hovered() || hresp.dragged() {
-                theme.accent
-            } else {
-                theme.hairline
-            },
-        ),
-    );
     // Playhead over ruler and rows (clay, the one accent). In graph mode it
     // stops at the ruler: the curve draws its own playhead on its own axis.
     if app.preview_comp == Some(comp_id) {
@@ -2127,5 +2155,85 @@ mod effect_drop_tests {
         assert!(!accepts_effect_drop(&LayerKind::Sequence {
             clips: Vec::new(),
         }));
+    }
+
+    /// Regression for the invisible, undraggable outline/lane divider: egui
+    /// hit-tests a widget against its rect ∩ the ui clip, and the timeline
+    /// narrows its clip to the lane area (x ≥ track_left) for the
+    /// time-positioned overlays — the divider handle sits just LEFT of that,
+    /// so under the lane clip its rect ∩ clip was empty and it neither drew
+    /// nor dragged. The scene reproduces the geometry in miniature: a handle
+    /// left of a lane clip is dead until the clip is widened around it, which
+    /// is exactly what `timeline_panel` now does.
+    fn divider_drag_delta(widen_clip: bool) -> f32 {
+        let ctx = egui::Context::default();
+        let moved = std::cell::Cell::new(0.0_f32);
+        let run = |events: Vec<egui::Event>| {
+            let ri = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(400.0, 400.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(ri, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let full = ui.max_rect();
+                    let track_left = 200.0;
+                    let lane =
+                        egui::Rect::from_min_max(egui::pos2(track_left, full.top()), full.max);
+                    let saved = ui.clip_rect();
+                    ui.set_clip_rect(saved.intersect(lane));
+                    if widen_clip {
+                        ui.set_clip_rect(saved); // the fix
+                    }
+                    // The handle straddles sep_x = track_left - 4, entirely
+                    // left of the lane clip — the original geometry, whose
+                    // rect ∩ clip came out empty.
+                    let handle = egui::Rect::from_min_max(
+                        egui::pos2(track_left - 7.0, full.top()),
+                        egui::pos2(track_left - 1.0, full.bottom()),
+                    );
+                    let r = ui.interact(
+                        handle,
+                        egui::Id::new("name-col-resize"),
+                        egui::Sense::click_and_drag(),
+                    );
+                    if r.dragged() {
+                        moved.set(moved.get() + r.drag_delta().x);
+                    }
+                });
+            });
+        };
+        let m = egui::Modifiers::default();
+        let btn = egui::PointerButton::Primary;
+        run(vec![]); // lay out
+        let from = egui::pos2(196.0, 200.0);
+        let to = egui::pos2(236.0, 200.0);
+        run(vec![egui::Event::PointerMoved(from)]);
+        run(vec![egui::Event::PointerButton {
+            pos: from,
+            button: btn,
+            pressed: true,
+            modifiers: m,
+        }]);
+        run(vec![egui::Event::PointerMoved(to)]); // drag right, past threshold
+        run(vec![egui::Event::PointerButton {
+            pos: to,
+            button: btn,
+            pressed: false,
+            modifiers: m,
+        }]);
+        moved.get()
+    }
+
+    #[test]
+    fn the_divider_drags_only_once_the_lane_clip_is_widened_around_it() {
+        // The bug: under the lane clip the handle's rect ∩ clip is empty.
+        assert_eq!(divider_drag_delta(false), 0.0);
+        // The fix: with the clip widened, the drag registers and reports
+        // the pointer's travel.
+        assert!(divider_drag_delta(true) > 0.0);
     }
 }

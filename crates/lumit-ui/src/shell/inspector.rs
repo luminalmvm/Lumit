@@ -513,19 +513,38 @@ pub(crate) fn linked_scale(old_x: f64, old_y: f64, new_x: f64) -> (f64, f64) {
     }
 }
 
-/// Paint a subtle full-width themed strip behind a section title (Mack): the
-/// bar that makes it obvious where one effect (or the Transform group) ends and
-/// the next begins. Drawn under the row's widgets, clipped to the outline via
-/// the scroll viewport like every other left-column paint. `surface_1` is a
-/// quiet step above the panel — never the selection colour.
+/// The fill an effect-title bar paints. `surface_2` deliberately, not
+/// `surface_1`: the Effect Controls panel's card is filled with `surface_1`
+/// under the Round shape and the Sharp background (`surface_0`) sits within a
+/// few RGB steps of it — a `surface_1` bar was therefore invisible in the one
+/// place it mattered most, which is exactly the defect the owner reported.
+/// `surface_2` is the same visible step the ruler and the selection highlight
+/// use, so the bar reads on every scheme and both shapes.
+pub(crate) fn section_bar_fill(theme: &Theme) -> egui::Color32 {
+    theme.surface_2
+}
+
+/// Paint a full-width themed bar behind an effect's title row — the one shared
+/// helper for both of its homes (Mack): the Effect Controls panel and the
+/// layer area's Effects group both draw their title rows through
+/// `effects_rows`, so this bar is what makes each effect's start obvious in
+/// both. Drawn under the row's widgets, clipped via the scroll viewport like
+/// every other left-column paint. In the Timeline the bar spans the outline
+/// column (up to the lane divider); in the panel (no lane, `track_w == 0`)
+/// it spans the whole panel width.
 pub(crate) fn section_bar(ui: &egui::Ui, ctx: &RowCtx, row_rect: egui::Rect) {
     let mut p = ui.painter().clone();
     p.set_clip_rect(ctx.viewport);
-    let right = (ctx.track_left - 6.0).max(row_rect.left() + 1.0);
+    let edge = if ctx.track_w > 0.0 {
+        ctx.track_left - 6.0
+    } else {
+        ctx.track_left
+    };
+    let right = edge.max(row_rect.left() + 1.0);
     p.rect_filled(
         egui::Rect::from_min_max(row_rect.min, egui::pos2(right, row_rect.bottom())),
         2.0,
-        ctx.theme.surface_1,
+        section_bar_fill(ctx.theme),
     );
 }
 
@@ -2487,4 +2506,33 @@ pub(crate) fn upsert_key(
         keys.sort_by_key(|k| k.time);
     }
     keys
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod section_bar_tests {
+    use super::*;
+
+    /// Regression for the invisible effect-title bars: the bar was painted in
+    /// `surface_1`, which is the very colour the Round shape fills each pane
+    /// card with and sits within a few RGB steps of the Sharp background
+    /// (`surface_0`) — so in the Effect Controls panel the bar could not be
+    /// seen at all. The fill must stand apart from BOTH pane backgrounds in
+    /// every colour scheme, or effect boundaries vanish again.
+    #[test]
+    fn the_effect_title_bar_stands_apart_from_both_pane_backgrounds() {
+        use crate::theme::{ColorScheme, ThemeShape};
+        for scheme in ColorScheme::ALL {
+            let theme = Theme::for_scheme(scheme, ThemeShape::Sharp);
+            let fill = section_bar_fill(&theme);
+            assert_ne!(
+                fill, theme.surface_0,
+                "{scheme:?}: the bar must not match the Sharp panel background"
+            );
+            assert_ne!(
+                fill, theme.surface_1,
+                "{scheme:?}: the bar must not match the Round pane card fill"
+            );
+        }
+    }
 }

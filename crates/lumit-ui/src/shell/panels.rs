@@ -156,7 +156,7 @@ pub(crate) fn project_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState
                 egui::StrokeKind::Outside,
             );
         }
-        if let Some(payload) = new_comp.dnd_release_payload::<uuid::Uuid>() {
+        if let Some(payload) = dnd_release_of::<uuid::Uuid>(&new_comp) {
             app.open_new_comp_dialog(Some(*payload));
         }
     });
@@ -204,7 +204,7 @@ pub(crate) fn project_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState
     if bg.double_clicked() {
         app.import_footage_dialog();
     }
-    if let Some(payload) = bg.dnd_release_payload::<uuid::Uuid>() {
+    if let Some(payload) = dnd_release_of::<uuid::Uuid>(&bg) {
         // Row/folder drops claim the pointer first; reaching here means the
         // drop landed on empty panel space.
         actions.push(PanelAction::MoveTo {
@@ -423,6 +423,27 @@ pub(crate) fn draggable_row<P: std::any::Any + Send + Sync>(
     resp
 }
 
+/// Read a drop release of type `P` without being able to destroy another
+/// type's drag. egui keeps ONE drag payload for the whole app, and
+/// `Response::dnd_release_payload` *takes* that payload out of the context
+/// before it checks the type — so a `uuid::Uuid` zone that merely contains
+/// the release point swallows an `EffectDragPayload` drag whole, and every
+/// zone reading after it sees nothing. That is exactly how the Timeline's
+/// full-body item zone (registered before the layer rows) ate each effect
+/// drop: the effect landed on a row, the item zone took-and-discarded it
+/// first, and the row's own reader found the slot empty. Gating on the
+/// payload's type first means only a matching drop is ever taken; a
+/// mismatched drag sails past untouched to whichever zone it belongs to.
+pub(crate) fn dnd_release_of<P: std::any::Any + Send + Sync>(
+    resp: &egui::Response,
+) -> Option<std::sync::Arc<P>> {
+    if egui::DragAndDrop::has_payload_of_type::<P>(&resp.ctx) {
+        resp.dnd_release_payload::<P>()
+    } else {
+        None
+    }
+}
+
 /// A compact icon button in the house toolbar style (docs/15-DESIGN.md §5): a
 /// stroke glyph in `text_secondary`, brightening to `text_primary` on hover and
 /// `accent` when `active`, over a faint surface chip. Returns the response so
@@ -581,7 +602,7 @@ pub(crate) fn item_rows(
 
     if is_folder {
         // Folder rows accept drops (file the dragged item here).
-        if let Some(payload) = row.dnd_release_payload::<uuid::Uuid>() {
+        if let Some(payload) = dnd_release_of::<uuid::Uuid>(&row) {
             if *payload != id {
                 actions.push(PanelAction::MoveTo {
                     item: *payload,
@@ -621,7 +642,10 @@ pub(crate) fn accept_item_drop(ui: &egui::Ui, theme: &Theme, app: &mut AppState,
             egui::StrokeKind::Inside,
         );
     }
-    let Some(payload) = zone.dnd_release_payload::<uuid::Uuid>() else {
+    // Guarded read: this zone spans a whole panel body, so an unguarded
+    // `dnd_release_payload::<uuid::Uuid>` here would take-and-discard an
+    // effect drag released over it (the slot is shared; see `dnd_release_of`).
+    let Some(payload) = dnd_release_of::<uuid::Uuid>(&zone) else {
         return;
     };
     let item = *payload;
@@ -786,7 +810,7 @@ pub(crate) fn comp_tab_strip(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     if let Some(id) = close {
         app.close_comp_tab(id);
     }
-    if let Some(payload) = strip_drop.dnd_release_payload::<uuid::Uuid>() {
+    if let Some(payload) = dnd_release_of::<uuid::Uuid>(&strip_drop) {
         let dropped = *payload;
         if app.store.snapshot().comp(dropped).is_some() {
             app.open_comp(dropped); // open beside the tabs as a separate tab
@@ -940,7 +964,7 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
             ui.id().with(("fx-controls-drop", layer_id)),
             egui::Sense::hover(),
         );
-        if let Some(payload) = drop.dnd_release_payload::<EffectDragPayload>() {
+        if let Some(payload) = dnd_release_of::<EffectDragPayload>(&drop) {
             if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
                 let mut effects = layer.effects.clone();
                 effects.push(inst);
