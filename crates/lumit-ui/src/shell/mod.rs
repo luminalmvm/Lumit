@@ -118,6 +118,13 @@ pub struct Shell {
     /// tooltips show. Persisted with the workspace.
     #[serde(default)]
     interface: settings::InterfaceSettings,
+    /// Export settings (Settings → Export, K-119): the default preset a
+    /// generic "Export…" action stamps, and an optional filename template.
+    /// Persisted with the workspace. Gated on the `media` feature like every
+    /// other export concept.
+    #[cfg(feature = "media")]
+    #[serde(default)]
+    settings_export: settings::ExportSettings,
     /// Whether the Settings window is open (runtime only).
     #[serde(skip, default)]
     settings_open: bool,
@@ -196,6 +203,13 @@ pub struct Shell {
 struct ExportDialogState {
     comp_id: uuid::Uuid,
     comp_size: (u32, u32),
+    /// The comp's own name, for the `{comp}` filename-template token
+    /// (K-119). Snapshotted once at open time, like `comp_size`.
+    comp_name: String,
+    /// Settings → Export's filename template, snapshotted once at open time
+    /// (K-119). `None`/blank = today's behaviour: each preset's own default
+    /// file name, untouched.
+    filename_template: Option<String>,
     /// The last preset applied (display only; the fields below are truth).
     preset: crate::export::ExportPreset,
     /// What that preset stamped, kept to preserve its VBR peak while the
@@ -216,7 +230,8 @@ impl ExportDialogState {
     fn apply(&mut self, preset: crate::export::ExportPreset) {
         self.preset = preset;
         self.stamped = preset.params();
-        self.default_name = preset.default_file_name().to_string();
+        self.default_name =
+            export_default_file_name(preset, &self.comp_name, self.filename_template.as_deref());
         match self.stamped {
             Some(p) => {
                 self.codec = p.codec;
@@ -258,6 +273,106 @@ impl ExportDialogState {
     }
 }
 
+/// The export dialogue's suggested file name for `preset` (K-119, Settings →
+/// Export → Filename template). `template` is `self.settings_export
+/// .filename_template`, snapshotted onto the dialogue at open time. `None`,
+/// or a template that's blank once trimmed, must reproduce
+/// `preset.default_file_name()` byte-for-byte — this is load-bearing: an
+/// existing install's suggested names must not shift under it just because
+/// the setting now exists.
+#[cfg(feature = "media")]
+fn export_default_file_name(
+    preset: crate::export::ExportPreset,
+    comp_name: &str,
+    template: Option<&str>,
+) -> String {
+    match template.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(t) => {
+            let stem = preset.default_file_name().trim_end_matches(".mp4");
+            render_filename_template(t, comp_name, stem)
+        }
+        None => preset.default_file_name().to_string(),
+    }
+}
+
+/// Substitute `{comp}`, `{preset}`, and `{date}` in a filename template
+/// (K-119), sanitise the result against characters Windows forbids in file
+/// names, and guarantee it ends in `.mp4`. `comp_name` is free text (a
+/// composition name), so it — not just the template — can carry an illegal
+/// character; both go through the same sanitising pass.
+#[cfg(feature = "media")]
+fn render_filename_template(template: &str, comp_name: &str, preset_stem: &str) -> String {
+    let date = today_utc_date();
+    let substituted = template
+        .replace("{comp}", comp_name)
+        .replace("{preset}", preset_stem)
+        .replace("{date}", &date);
+    let mut name = sanitise_windows_filename(&substituted);
+    if !name.to_ascii_lowercase().ends_with(".mp4") {
+        name.push_str(".mp4");
+    }
+    name
+}
+
+/// Replace characters illegal in a Windows file name (`< > : " / \ | ? *`,
+/// and control characters) with `_`, and fall back to `export` if nothing
+/// but such characters (or leading/trailing whitespace) is left.
+#[cfg(feature = "media")]
+fn sanitise_windows_filename(raw: &str) -> String {
+    const ILLEGAL: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+    let cleaned: String = raw
+        .chars()
+        .map(|c| {
+            if ILLEGAL.contains(&c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        "export".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Today's UTC date as `YYYY-MM-DD` (K-119's `{date}` filename-template
+/// token). Hand-rolled rather than a new dependency: `SystemTime` for the
+/// clock, then Howard Hinnant's `civil_from_days` to turn a day count since
+/// the Unix epoch into a calendar date — the standard, widely-used
+/// constant-time algorithm for this conversion (no leap-year branching to
+/// get wrong). A clock before 1970 (never in practice) degrades to the
+/// epoch date rather than panicking.
+#[cfg(feature = "media")]
+fn today_utc_date() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = (secs / 86_400) as i64;
+    let (y, m, d) = civil_from_days(days);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Days since the Unix epoch → (year, month, day), proleptic Gregorian.
+/// Howard Hinnant's `civil_from_days`: <https://howardhinnant.github.io/date_algorithms.html>.
+#[cfg(feature = "media")]
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 /// Reconcile the persisted colour scheme with a pre-K-097 save's legacy
 /// mode × variant pair. A newer save carries `color_scheme` directly (the
 /// legacy fields are no longer written, so they deserialize to their
@@ -295,6 +410,8 @@ impl Default for Shell {
             settings: settings::PerformanceSettings::default(),
             autosave: settings::AutosaveSettings::default(),
             interface: settings::InterfaceSettings::default(),
+            #[cfg(feature = "media")]
+            settings_export: settings::ExportSettings::default(),
             settings_open: false,
             settings_page: settings::SettingsPage::default(),
             palette_open: false,
@@ -440,8 +557,11 @@ impl Shell {
                 MenuAction::ImportFootage => self.app.import_footage_dialog(),
                 MenuAction::Save => self.app.save(),
                 MenuAction::ExportComp => {
+                    // A generic "Export…" action stamps the Settings →
+                    // Export default preset (K-119); an explicit preset
+                    // pick below always keeps its own preset regardless.
                     #[cfg(feature = "media")]
-                    self.open_export_dialog(crate::export::ExportPreset::Custom);
+                    self.open_export_dialog(self.settings_export.default_preset);
                 }
                 MenuAction::ExportYouTube1080 => {
                     #[cfg(feature = "media")]
@@ -576,6 +696,8 @@ impl Shell {
         let mut dialog = ExportDialogState {
             comp_id,
             comp_size: (comp.width, comp.height),
+            comp_name: comp.name.clone(),
+            filename_template: self.settings_export.filename_template.clone(),
             preset,
             stamped: None,
             codec: lumit_media::encode::VideoCodec::H264,
@@ -1485,7 +1607,10 @@ impl Shell {
                     }
                     #[cfg(feature = "media")]
                     if ui.button("Export comp…").clicked() {
-                        self.open_export_dialog(crate::export::ExportPreset::Custom);
+                        // Settings → Export default preset (K-119); the
+                        // "Export preset" submenu below always keeps its
+                        // own explicit pick regardless of this default.
+                        self.open_export_dialog(self.settings_export.default_preset);
                         ui.close_menu();
                     }
                     #[cfg(feature = "media")]
@@ -2293,6 +2418,70 @@ mod geometry_tests {
             assert_eq!(draws.len(), 1, "a dead adjustment stack must not stage");
             assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
         }
+    }
+
+    // --- K-119: Settings → Export filename template ------------------------
+
+    // The byte-identical-default-behaviour regression test: no template (or
+    // a blank one) must reproduce `preset.default_file_name()` exactly, for
+    // more than one preset, so an existing install's suggested export name
+    // never shifts just because the setting now exists.
+    #[test]
+    fn no_template_reproduces_the_presets_own_default_file_name() {
+        use crate::export::ExportPreset;
+        for preset in [ExportPreset::Custom, ExportPreset::Youtube4k60] {
+            assert_eq!(
+                export_default_file_name(preset, "My Comp", None),
+                preset.default_file_name()
+            );
+            // A template that's blank once trimmed is the same as None.
+            assert_eq!(
+                export_default_file_name(preset, "My Comp", Some("   ")),
+                preset.default_file_name()
+            );
+        }
+    }
+
+    #[test]
+    fn template_substitutes_comp_and_preset_tokens_and_ends_in_mp4() {
+        use crate::export::ExportPreset;
+        let name = export_default_file_name(
+            ExportPreset::Youtube1080p60,
+            "My Comp",
+            Some("{comp}-{preset}"),
+        );
+        assert_eq!(name, "My Comp-youtube-1080p60.mp4");
+    }
+
+    #[test]
+    fn template_expands_the_date_token_to_todays_utc_date() {
+        let name = render_filename_template("{date}", "comp", "stem");
+        assert_eq!(name, format!("{}.mp4", today_utc_date()));
+    }
+
+    // A comp name is free text: the user can put a `:` or `/` in it, and the
+    // result must be sanitised, not passed through raw into a path.
+    #[test]
+    fn illegal_windows_filename_characters_are_sanitised_not_passed_through() {
+        let name = render_filename_template("{comp}", "My:Comp/Name?", "stem");
+        for illegal in ['<', '>', ':', '"', '/', '\\', '|', '?', '*'] {
+            assert!(
+                !name.contains(illegal),
+                "{name:?} still contains illegal character {illegal:?}"
+            );
+        }
+        assert!(name.ends_with(".mp4"));
+    }
+
+    #[test]
+    fn civil_from_days_matches_known_calendar_dates() {
+        // The Unix epoch itself — proves the +719468 day-count offset lines
+        // up, the most bug-prone constant in Hinnant's algorithm.
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        // January has 31 days: day index 31 (0-based) is the first of Feb.
+        assert_eq!(civil_from_days(31), (1970, 2, 1));
+        // 1970 is not a leap year (365 days): day 365 rolls into 1971.
+        assert_eq!(civil_from_days(365), (1971, 1, 1));
     }
 }
 

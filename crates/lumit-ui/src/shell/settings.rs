@@ -26,9 +26,24 @@ pub(crate) enum SettingsPage {
     Appearance,
     Interface,
     Performance,
+    /// Export defaults (K-119). Gated on the `media` feature like every
+    /// other export concept (`crate::export` compiles to nothing without
+    /// it), so this variant — and the page itself — simply doesn't exist on
+    /// a `--no-default-features` build.
+    #[cfg(feature = "media")]
+    Export,
 }
 
 impl SettingsPage {
+    #[cfg(feature = "media")]
+    const ALL: [SettingsPage; 5] = [
+        SettingsPage::General,
+        SettingsPage::Appearance,
+        SettingsPage::Interface,
+        SettingsPage::Performance,
+        SettingsPage::Export,
+    ];
+    #[cfg(not(feature = "media"))]
     const ALL: [SettingsPage; 4] = [
         SettingsPage::General,
         SettingsPage::Appearance,
@@ -42,6 +57,8 @@ impl SettingsPage {
             SettingsPage::Appearance => "Appearance",
             SettingsPage::Interface => "Interface",
             SettingsPage::Performance => "Performance",
+            #[cfg(feature = "media")]
+            SettingsPage::Export => "Export",
         }
     }
 }
@@ -155,6 +172,31 @@ impl Default for PerformanceSettings {
     }
 }
 
+/// Application-wide export settings (Settings → Export, docs/07-UI-SPEC §15,
+/// K-119): the preset a plain "Export…" action stamps, and an optional
+/// filename template for the export dialogue's suggested name. Persisted
+/// with the workspace. Defaults reproduce today's implicit behaviour exactly
+/// — Custom (the comp's own size) and no template (each preset's own file
+/// name) — so an existing install is unchanged until the user visits the
+/// page. Gated on the `media` feature: `ExportPreset` lives in
+/// `crate::export`, which compiles to nothing without it.
+#[cfg(feature = "media")]
+#[derive(Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct ExportSettings {
+    /// Preset a generic "Export…" action stamps: the File-menu "Export
+    /// comp…" entry and its native-menu twin. Picking a specific preset from
+    /// the "Export preset" submenu always uses that preset, regardless of
+    /// this default.
+    pub default_preset: crate::export::ExportPreset,
+    /// Filename template for the export dialogue's suggested name. `{comp}`,
+    /// `{preset}`, and `{date}` substitute the composition name, the
+    /// preset's file stem, and today's date (YYYY-MM-DD). `None` (the
+    /// default) keeps today's behaviour: each preset's own default file
+    /// name, untouched.
+    pub filename_template: Option<String>,
+}
+
 /// The dialog's fixed content width — the same on every page, so switching
 /// pages never resizes it.
 const SETTINGS_WIDTH: f32 = 680.0;
@@ -207,6 +249,8 @@ impl Shell {
                                 }
                                 SettingsPage::Interface => self.settings_interface(ui, &theme, ctx),
                                 SettingsPage::Performance => self.settings_performance(ui, &theme),
+                                #[cfg(feature = "media")]
+                                SettingsPage::Export => self.settings_export(ui, &theme),
                             }
                             ui.add_space(8.0);
                         });
@@ -564,6 +608,63 @@ impl Shell {
         });
     }
 
+    // --- Export --------------------------------------------------------------
+
+    #[cfg(feature = "media")]
+    fn settings_export(&mut self, ui: &mut egui::Ui, theme: &Theme) {
+        page_heading(ui, theme, "Export");
+
+        settings_group(ui, theme, "Defaults", |ui| {
+            let mut preset = self.settings_export.default_preset;
+            settings_row(
+                ui,
+                theme,
+                "Default preset",
+                Some(
+                    "The preset a plain \"Export…\" action stamps. Picking a specific \
+                     preset from the Export preset menu always uses that preset instead.",
+                ),
+                |ui| {
+                    bare_dropdown(ui, preset.label(), |ui| {
+                        for p in crate::export::ExportPreset::ALL {
+                            if ui.selectable_label(preset == p, p.label()).clicked() {
+                                preset = p;
+                                ui.close_menu();
+                            }
+                        }
+                    });
+                },
+            );
+            if preset != self.settings_export.default_preset {
+                self.settings_export.default_preset = preset;
+            }
+
+            settings_divider(ui, theme);
+            let mut template = self
+                .settings_export
+                .filename_template
+                .clone()
+                .unwrap_or_default();
+            settings_row(
+                ui,
+                theme,
+                "Filename template",
+                Some(
+                    "{comp}, {preset}, and {date} stand for the composition name, the \
+                     preset's file name, and today's date (YYYY-MM-DD). Leave blank to \
+                     use each preset's own default file name.",
+                ),
+                |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut template).desired_width(180.0));
+                },
+            );
+            let normalised = (!template.trim().is_empty()).then_some(template);
+            if normalised != self.settings_export.filename_template {
+                self.settings_export.filename_template = normalised;
+            }
+        });
+    }
+
     /// Push the current cache budgets to their stores: the RAM
     /// `comp_frame_cache` directly, the disk cache through its worker (which
     /// remembers the cap across project switches). Called at start-up and
@@ -718,6 +819,14 @@ mod tests {
         let i = InterfaceSettings::default();
         assert_eq!(i.ui_scale, 1.0);
         assert!(i.show_tooltips);
+    }
+
+    #[cfg(feature = "media")]
+    #[test]
+    fn export_defaults_are_a_no_op_for_existing_installs() {
+        let e = ExportSettings::default();
+        assert_eq!(e.default_preset, crate::export::ExportPreset::Custom);
+        assert_eq!(e.filename_template, None);
     }
 
     #[test]

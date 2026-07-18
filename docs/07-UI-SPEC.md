@@ -679,23 +679,29 @@ project file, [10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2):
   per-plugin overrides).
 
 **Shipped (v1, K-098; VRAM budget and Clear cache added K-100; Background fill added K-115;
-Cache root folder added K-117; Interface page added K-118):** the Settings window exists — a
-macOS-System-Settings-style surface, a sidebar of pages with grouped cards, honouring the
-Sharp/Round shape. It opens from **Window → Settings…** or **Ctrl/Cmd+comma**. Its v1 pages are
-a subset of the inventory above: **Appearance** (Theme Mode, Background ramp, Accent, Shape,
-Interface motion — all migrated here out of the Window menu, K-092), **Interface** (UI scale,
-75–200%, applied live via egui's own zoom mechanism; a Show tooltips switch that suppresses
-hover tooltips app-wide when off, K-118), **Performance** (RAM frame-cache budget, disk-cache
-cap and VRAM frame-cache budget, all applied live, a Clear cache action that empties the RAM and
-VRAM tiers at once, a Background fill toggle gating the idle-fill loop, and a Cache root folder
-picker that redirects new project on-disk caches to a chosen folder instead of always sitting
-beside the project file, K-117), and **General** (reset workspace, an **Autosave** group —
-interval in minutes and copies kept, defaulting to the previous 5 min / 5 copies — and version).
-Reduced motion stays on the Appearance page as Interface motion (K-092), not this Interface
-page — the inventory line above groups it with Interface conceptually, but it shipped earlier
-under Appearance and stays there. The remaining groups (CUDA, decoder pool size, worker thread
-cap, proxy generation policy, Preview, Colour, Export, Keymap, Plugins) fill in on this same
-surface as those systems gain their controls.
+Cache root folder added K-117; Interface page added K-118; Export page added K-119):** the
+Settings window exists — a macOS-System-Settings-style surface, a sidebar of pages with grouped
+cards, honouring the Sharp/Round shape. It opens from **Window → Settings…** or
+**Ctrl/Cmd+comma**. Its v1 pages are a subset of the inventory above: **Appearance** (Theme Mode,
+Background ramp, Accent, Shape, Interface motion — all migrated here out of the Window menu,
+K-092), **Interface** (UI scale, 75–200%, applied live via egui's own zoom mechanism; a Show
+tooltips switch that suppresses hover tooltips app-wide when off, K-118), **Performance** (RAM
+frame-cache budget, disk-cache cap and VRAM frame-cache budget, all applied live, a Clear cache
+action that empties the RAM and VRAM tiers at once, a Background fill toggle gating the idle-fill
+loop, and a Cache root folder picker that redirects new project on-disk caches to a chosen folder
+instead of always sitting beside the project file, K-117), **Export** (a default-preset dropdown
+that a generic "Export…" action stamps — an explicit pick from the Export preset submenu always
+overrides it — and a filename template with `{comp}`/`{preset}`/`{date}` tokens for the export
+dialogue's suggested name, sanitised against illegal Windows filename characters, K-119; export
+priority and encoder preference order are not built — no priority or encoder-order concept exists
+in the export pipeline yet, so those two inventory rows would be dead controls), and **General**
+(reset workspace, an **Autosave** group — interval in minutes and copies kept, defaulting to the
+previous 5 min / 5 copies — and version). Reduced motion stays on the Appearance page as Interface
+motion (K-092), not this Interface page — the inventory line above groups it with Interface
+conceptually, but it shipped earlier under Appearance and stays there. The remaining groups (CUDA,
+decoder pool size, worker thread cap, proxy generation policy, Preview, Colour, export priority,
+encoder preference order, Keymap, Plugins) fill in on this same surface as those systems gain
+their controls.
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context
 display); the keymap serialises to a shareable file. An "After Effects" alternate preset

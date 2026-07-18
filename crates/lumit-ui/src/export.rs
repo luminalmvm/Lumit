@@ -65,9 +65,12 @@ pub struct AudioJob {
 
 /// Delivery presets (docs/06-RENDER-PIPELINE.md §7.5): frame, codec, and
 /// bitrates as data, not code. Custom keeps the comp's own size and the
-/// dialogue's choices.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// dialogue's choices; it is also the default (Settings → Export, K-119),
+/// matching the implicit behaviour every "Export…" action had before that
+/// setting existed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum ExportPreset {
+    #[default]
     Custom,
     Youtube1080p60,
     Youtube4k60,
@@ -1388,6 +1391,21 @@ mod tests {
         for preset in ExportPreset::ALL {
             assert!(!preset.label().is_empty());
             assert!(preset.default_file_name().ends_with(".mp4"));
+        }
+    }
+
+    /// K-119: `ExportPreset::default()` must be Custom, so a fresh Settings →
+    /// Export default-preset field reproduces today's implicit behaviour
+    /// (every generic "Export…" action stamping Custom) until the user
+    /// changes it. Also proves the type round-trips through JSON, which
+    /// `ExportSettings` (settings.rs) relies on to persist the pick.
+    #[test]
+    fn export_preset_defaults_to_custom_and_round_trips_through_json() {
+        assert_eq!(ExportPreset::default(), ExportPreset::Custom);
+        for preset in ExportPreset::ALL {
+            let json = serde_json::to_string(&preset).unwrap();
+            let back: ExportPreset = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, preset);
         }
     }
 

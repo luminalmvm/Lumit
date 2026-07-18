@@ -1154,7 +1154,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   Five appearance controls live in the **Settings window** (K-098) — open it from
   **Window → Settings…** or **Ctrl/Cmd+comma**. That window is Lumit's application-settings
   surface, shaped like macOS's System Settings: a list of pages down the left (General,
-  Appearance, Interface, Performance), and on the right the chosen page's settings in grouped
+  Appearance, Interface, Performance, Export), and on the right the chosen page's settings in grouped
   cards, a label on the left of each row and its control on the right. It follows the
   Sharp/Round look like everything else — rounded filled cards under Round, hairline-framed
   under Sharp.
@@ -1208,6 +1208,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   names and shortcuts that pop up when you rest the pointer on a button. Both default to
   today's behaviour (native scale, tooltips on), so nothing changes for anyone until they visit
   this page.
+  The **Export** page (K-119) holds two defaults for the export dialogue. **Default preset**
+  is the preset that a plain "Export comp…" action starts from — pick a specific preset from
+  the File menu's "Export preset" submenu instead and that always wins, regardless of what's
+  set here. **Filename template** lets you write the suggested file name yourself instead of
+  taking whatever the preset would otherwise call it, using three tokens: `{comp}` for the
+  composition's own name, `{preset}` for the preset's usual file name, and `{date}` for
+  today's date. Leave it blank (the default) and nothing changes — you get exactly the file
+  name each preset always suggested. Whatever comes out is checked for characters Windows
+  won't allow in a file name (like `:` or `/`, which a composition name could easily contain)
+  and those get swapped out automatically, and the name always ends in `.mp4` even if you
+  forgot to type it. Two rows from the fuller Export plan aren't here yet — export priority
+  and which encoder to prefer — because nothing in Lumit today has a concept of either one to
+  control; they'll appear once that machinery exists.
   The **General** page holds an **Autosave** group: how often Lumit quietly saves a spare copy
   of a saved project (in minutes) and how many timestamped copies it keeps, so a crash or a
   mistake never costs more than the interval. The defaults are the same 5 minutes / 5 copies
