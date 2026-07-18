@@ -920,3 +920,17 @@ the top of the Effect Controls panel, beside the Parent picker; a Timeline solo 
 later refinement. Known v1 edge: a non-soloed layer used as a *matte* source for a soloed
 layer is hidden like any other non-soloed layer (solo takes precedence over the matte-source
 exemption) — acceptable until the Timeline surface makes solo state obvious per row.
+
+**K-106 · DECIDED · Exposure ships as a new single-frame grade effect (docs/08 §3.16).**
+A single scene-linear gain on RGB, `factor = 2^Stops`, computed host-side so the CPU
+reference and the WGSL kernel multiply by the identical number (no per-pixel `exp2`, no path
+divergence). Params Stops (default 0, slider −5..+5, unbounded) plus the host Mix; Category
+**Colour**, alongside Colour balance and Saturation. Premultiplied — a scalar scales
+premultiplied colour consistently, so no unpremultiply round trip and alpha is untouched.
+Continuous (unlike a posterise/quantise, which would blow the ULP oracle at every
+quantisation edge), so the §1.6 oracle holds to ≤ 2 fp16 ULP (measured 0–1 on the dev RTX).
+`factor` 1.0 (0 stops) short-circuits to the input on both paths — the bit-exact neutral
+point, pinned by test — and Mix 0 is likewise the identity. Distinct from Colour balance's
+three-channel Gain: the single, animatable, photographic-stops brightness lever the montage
+grade reaches for first. Wired at the usual four sites (schema in `lumit-core`, WGSL +
+`FxEngine::exposure` in `lumit-gpu`, `run_ops` arm in `lumit-ui`).

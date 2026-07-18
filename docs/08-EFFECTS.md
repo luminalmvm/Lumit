@@ -180,6 +180,7 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.13 | Echo | stock Echo / speed-lines packs | moderate | `{-n..0}` |
 | 3.14 | Vignette | stock CC pack vignette | cheap | `{0}` |
 | 3.15 | Chromatic aberration | stock CC pack fillers | cheap | `{0}` |
+| 3.16 | Exposure | stock CC pack exposure/levels | cheap | `{0}` |
 
 ### 3.1 Flow engine — optical-flow retime interpolation (Twixtor-class)
 
@@ -657,6 +658,23 @@ resolution ahead of time. Category is **Distortion**, matching RGB split. No exp
 short circuit is needed in either the CPU reference or the WGSL kernel: the radial offset's
 scale factor is an exact `0.0` at Amount 0, so every tap already collapses onto its own pixel
 — the same un-guarded style RGB split's own kernel uses (asserted bit-exact by test).
+
+### 3.16 Exposure
+
+**Parameters:** Stops (photographic stops, default 0, slider −5..+5, unbounded), Mix.
+
+**Algorithm sketch.** A single scene-linear gain on RGB: `factor = 2^Stops` is computed
+host-side (in the resolve step) so the CPU reference and the WGSL kernel multiply by the
+identical number — no `exp2` runs per pixel or per path. Premultiplied throughout: a scalar
+scales premultiplied colour consistently (straight × factor, then × the unchanged alpha), so
+there is no unpremultiply round trip and alpha is untouched. `cheap` cost, `Exact` ROI.
+
+**Status (v1, shipped, K-106):** the montage grade's brightness lever, beside Colour balance
+and Saturation in the **Colour** category. Continuous (unlike a quantiser), so the §1.6 oracle
+holds to ≤ 2 fp16 ULP. 0 stops (`factor` 1.0) short-circuits to the input on both paths (the
+bit-exact neutral point, pinned by test); Mix 0 is likewise the identity. Distinct from Colour
+balance's three-channel Gain: a single, animatable, photographic-stops control — the common
+one-knob exposure move.
 
 ---
 

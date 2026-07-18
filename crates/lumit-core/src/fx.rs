@@ -733,6 +733,38 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Exposure (docs/08 §3.16): a single scene-linear gain on RGB (2^stops) —
+    // the montage grade's brightness lever. Premultiplied: a scalar scales
+    // premultiplied colour consistently, so no unpremultiply round trip and
+    // alpha is untouched. 0 stops is the neutral point (bit-exact passthrough,
+    // pinned by test). Category Colour, beside its grade siblings.
+    EffectSchema {
+        match_name: "exposure",
+        label: "Exposure",
+        version: 1,
+        category: FxCategory::Colour,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::Exact,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "stops",
+                label: "Stops",
+                // Photographic stops; each +1 doubles the light. 0 is neutral.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (-5.0, 5.0),
+                    hard: (None, None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
     // Transform (docs/08 §3.5, K-090): the layer transform group as a stack
     // entry — same parameter names, units and animatability. Its point is
     // adjustment layers: applied there, it transforms the composite of
@@ -1576,6 +1608,14 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    /// Exposure (docs/08 §3.16): RGB × `factor` (= 2^stops), alpha untouched.
+    /// `factor` 1.0 is the neutral point.
+    Exposure {
+        /// Linear gain, 2^stops.
+        factor: f32,
+        /// 0..1.
+        mix: f32,
+    },
     Transform {
         /// Anchor point, raster pixels (converted from px@comp, §2.3).
         anchor: [f32; 2],
@@ -2381,6 +2421,12 @@ pub fn resolve_stack(
                     mix,
                 })
             }
+            "exposure" => {
+                let stops = e.float_at("stops", lt).unwrap_or(0.0);
+                let factor = 2f64.powf(stops) as f32;
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::Exposure { factor, mix })
+            }
             "glow" => {
                 let radius_pct = e.float_at("radius", lt).unwrap_or(8.0) as f32;
                 let threshold = (e.float_at("threshold", lt).unwrap_or(1.0) as f32).max(0.0);
@@ -2624,6 +2670,7 @@ pub mod cpu {
                 roundness,
                 mix,
             } => vignette(rgba, w, h, *amount, *radius, *softness, *roundness, *mix),
+            Resolved::Exposure { factor, mix } => exposure(rgba, *factor, *mix),
             Resolved::Transform {
                 anchor,
                 position,
@@ -2871,6 +2918,23 @@ pub mod cpu {
                 let v = (luma + (u[c] - luma) * saturation).max(0.0);
                 let s = v * a;
                 px[c] = px[c] * (1.0 - mix) + s * mix;
+            }
+        }
+    }
+
+    /// Exposure (docs/08 §3.16): a scene-linear gain on RGB. Premultiplied
+    /// colour scales consistently under a scalar, so there is no unpremultiply
+    /// round trip and alpha is untouched. `factor` (= 2^stops) 1.0 is the
+    /// bit-exact neutral point (the WGSL twin matches its early return); Mix 0
+    /// is likewise the identity.
+    pub fn exposure(rgba: &mut [f32], factor: f32, mix: f32) {
+        if factor == 1.0 {
+            return;
+        }
+        for px in rgba.chunks_exact_mut(4) {
+            for ch in &mut px[..3] {
+                let scaled = *ch * factor;
+                *ch = *ch * (1.0 - mix) + scaled * mix;
             }
         }
     }
@@ -4496,6 +4560,32 @@ mod tests {
                 mix: 1.0
             }]
         );
+    }
+
+    #[test]
+    fn exposure_instantiates_resolves_and_gains_light() {
+        let e = instantiate("exposure").unwrap();
+        assert_eq!(e.float_at("stops", 0.0), Some(0.0));
+        // 0 stops resolves to a neutral factor of 1.0.
+        let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+        assert_eq!(
+            r,
+            vec![Resolved::Exposure {
+                factor: 1.0,
+                mix: 1.0
+            }]
+        );
+        // The CPU reference: 0 stops is identity; +1 stop (factor 2) doubles
+        // RGB and leaves alpha alone; Mix 0 is the identity at any factor.
+        let mut neutral = vec![0.4_f32, 0.5, 0.6, 1.0];
+        cpu::exposure(&mut neutral, 1.0, 1.0);
+        assert_eq!(neutral, vec![0.4, 0.5, 0.6, 1.0]);
+        let mut bright = vec![0.2_f32, 0.3, 0.1, 0.8];
+        cpu::exposure(&mut bright, 2.0, 1.0);
+        assert_eq!(bright, vec![0.4, 0.6, 0.2, 0.8]);
+        let mut mixed = vec![0.2_f32, 0.3, 0.1, 1.0];
+        cpu::exposure(&mut mixed, 3.0, 0.0);
+        assert_eq!(mixed, vec![0.2, 0.3, 0.1, 1.0]);
     }
 
     #[test]

@@ -292,6 +292,27 @@ struct VignetteParams {
     _pad2: f32,
 }
 
+/// One resolved exposure (docs/08 §3.16): a single scene-linear gain on the
+/// RGB channels. `factor` is `2^stops`, computed host-side so the CPU
+/// reference and the kernel multiply by the identical number; alpha is
+/// untouched. `factor == 1.0` (0 stops) is the bit-exact neutral point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ExposureOp {
+    /// The linear gain, `2^stops`. 1.0 is the neutral point.
+    pub factor: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ExposureParams {
+    factor: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
 /// One resolved transform (docs/08 §3.5, K-090): the inverse affine arrives
 /// host-computed (`lumit_core::fx::transform_op`) so the kernel never runs
 /// its own trigonometry and the CPU reference consumes bit-identical
@@ -487,6 +508,7 @@ pub struct FxEngine {
     colour_balance: wgpu::ComputePipeline,
     saturation: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
+    exposure: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
@@ -655,6 +677,7 @@ impl FxEngine {
         let balance_mod = module(include_str!("fx_colourbalance.wgsl"), "fx-colour-balance");
         let saturation_mod = module(include_str!("fx_saturation.wgsl"), "fx-saturation");
         let vignette_mod = module(include_str!("fx_vignette.wgsl"), "fx-vignette");
+        let exposure_mod = module(include_str!("fx_exposure.wgsl"), "fx-exposure");
         let transform_mod = module(include_str!("fx_transform.wgsl"), "fx-transform");
         let glow_mod = module(include_str!("fx_glow.wgsl"), "fx-glow");
         let glitch_mod = module(include_str!("fx_glitch.wgsl"), "fx-glitch");
@@ -678,6 +701,7 @@ impl FxEngine {
         let colour_balance = pipeline(&balance_mod, "fx-colour-balance", "colour_balance");
         let saturation = pipeline(&saturation_mod, "fx-saturation", "saturate_fx");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
+        let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
@@ -727,6 +751,7 @@ impl FxEngine {
             colour_balance,
             saturation,
             vignette,
+            exposure,
             transform,
             glow_bright,
             glow_combine,
@@ -1451,6 +1476,37 @@ impl FxEngine {
                 _pad0: 0.0,
                 _pad1: 0.0,
                 _pad2: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one exposure (docs/08 §3.16) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass: RGB × the
+    /// host-computed `factor`, alpha untouched; `factor == 1.0` short-circuits
+    /// to the input inside the kernel.
+    pub fn exposure(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ExposureOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-exposure-out");
+        self.dispatch(
+            ctx,
+            &self.exposure,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ExposureParams {
+                factor: op.factor,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
             }),
         );
         out
@@ -2434,6 +2490,75 @@ mod tests {
             let out2 = fx.vignette(&ctx, &tex, w, h, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU vignette must be bit-stable");
+        }
+    }
+
+    /// The §1.6 oracle for exposure: a cheap pointwise gain, so CPU and GPU
+    /// must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and 0 stops
+    /// (`factor` 1.0) or Mix 0 is the bit-exact identity on both paths.
+    #[test]
+    fn wgsl_exposure_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for (name, op) in [
+            (
+                "neutral",
+                ExposureOp {
+                    factor: 1.0,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "brighten",
+                ExposureOp {
+                    factor: 2.0,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "darken",
+                ExposureOp {
+                    factor: 0.5,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "mixed",
+                ExposureOp {
+                    factor: 1.7,
+                    mix: 0.5,
+                },
+            ),
+            (
+                "mix-zero",
+                ExposureOp {
+                    factor: 3.0,
+                    mix: 0.0,
+                },
+            ),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::exposure(&mut cpu, op.factor, op.mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let out = fx.exposure(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("exposure {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+            if name == "neutral" || name == "mix-zero" {
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            }
+
+            let out2 = fx.exposure(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU exposure must be bit-stable");
         }
     }
 

@@ -403,6 +403,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   away from the centre (Amount/Radius/Softness/Roundness); **Chromatic aberration** fringes
   red and blue outward/inward from the centre by a set number of pixels — a simpler,
   always-on-the-corner sibling of RGB split's own Radial mode, for the common one-click case.
+- **Exposure (K-106).** The one-knob brightness lever, measured in photographic *stops* —
+  each +1 doubles the light, −1 halves it. It is a straight multiply on the colour (done in
+  the scene-linear light the compositor works in, so it behaves like a real camera exposure,
+  not a washed-out lift), with 0 stops leaving the picture exactly untouched. Distinct from
+  Colour balance's three-channel gain: a single animatable control for the whole image.
 - `crates/lumit-core/src/ops.rs` — **Every possible edit, as data.** An edit is an `Op`
   (AddLayer, SetLayerSpan…). Applying an op returns its exact inverse — that pair is what
   makes undo *provably* correct instead of hopefully correct.

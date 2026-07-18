@@ -242,6 +242,18 @@ pub fn run_ops(
                     },
                 );
             }
+            Resolved::Exposure { factor, mix } => {
+                tex = fx.exposure(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::ExposureOp {
+                        factor: *factor,
+                        mix: *mix,
+                    },
+                );
+            }
             Resolved::Transform {
                 anchor,
                 position,
