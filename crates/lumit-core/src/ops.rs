@@ -50,6 +50,15 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
     },
+    /// Move a layer to a new stack index (0 = top), keeping the layer itself.
+    /// One undoable step; the inverse moves it back to its old index. The
+    /// index is the target position in the list once the layer is lifted out
+    /// (ordinary `Vec::insert` semantics), clamped into range.
+    ReorderLayer {
+        comp: Uuid,
+        layer: Uuid,
+        new_index: usize,
+    },
     /// Set a layer's span on the comp timeline.
     SetLayerSpan {
         comp: Uuid,
@@ -292,6 +301,26 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 index,
                 layer: Box::new(removed),
+            })
+        }
+        Op::ReorderLayer {
+            comp,
+            layer,
+            new_index,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let old = c
+                .layers
+                .iter()
+                .position(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let lifted = c.layers.remove(old);
+            let idx = (*new_index).min(c.layers.len());
+            c.layers.insert(idx, lifted);
+            Ok(Op::ReorderLayer {
+                comp: *comp,
+                layer: *layer,
+                new_index: old,
             })
         }
         Op::SetLayerSpan {

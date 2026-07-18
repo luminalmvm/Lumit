@@ -928,6 +928,40 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
     };
     let (fps, layer) = layer;
 
+    // Effect drop (K-101): dropping an effect dragged from the Effects & Presets
+    // browser anywhere in this panel appends it to the shown layer — the same
+    // SetLayerEffects the Timeline row drop commits. The zone exists only while a
+    // drag is live, so it steals no ordinary input; `contains_pointer` ignores
+    // the widgets drawn over it.
+    if egui::DragAndDrop::has_payload_of_type::<EffectDragPayload>(ui.ctx()) {
+        let rect = ui.max_rect();
+        let drop = ui.interact(
+            rect,
+            ui.id().with(("fx-controls-drop", layer_id)),
+            egui::Sense::hover(),
+        );
+        if let Some(payload) = drop.dnd_release_payload::<EffectDragPayload>() {
+            if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
+                let mut effects = layer.effects.clone();
+                effects.push(inst);
+                app.commit(lumit_core::Op::SetLayerEffects {
+                    comp: comp_id,
+                    layer: layer_id,
+                    effects,
+                });
+                #[cfg(feature = "media")]
+                app.refresh_preview();
+            }
+        } else if drop.dnd_hover_payload::<EffectDragPayload>().is_some() {
+            ui.painter().rect_stroke(
+                rect,
+                4.0,
+                egui::Stroke::new(1.0_f32, theme.accent),
+                egui::StrokeKind::Inside,
+            );
+        }
+    }
+
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.add_space(6.0);

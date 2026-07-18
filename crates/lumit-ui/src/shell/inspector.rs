@@ -510,9 +510,27 @@ pub(crate) fn linked_scale(old_x: f64, old_y: f64, new_x: f64) -> (f64, f64) {
     }
 }
 
+/// Paint a subtle full-width themed strip behind a section title (Mack): the
+/// bar that makes it obvious where one effect (or the Transform group) ends and
+/// the next begins. Drawn under the row's widgets, clipped to the outline via
+/// the scroll viewport like every other left-column paint. `surface_1` is a
+/// quiet step above the panel — never the selection colour.
+pub(crate) fn section_bar(ui: &egui::Ui, ctx: &RowCtx, row_rect: egui::Rect) {
+    let mut p = ui.painter().clone();
+    p.set_clip_rect(ctx.viewport);
+    let right = (ctx.track_left - 6.0).max(row_rect.left() + 1.0);
+    p.rect_filled(
+        egui::Rect::from_min_max(row_rect.min, egui::pos2(right, row_rect.bottom())),
+        2.0,
+        ctx.theme.surface_1,
+    );
+}
+
 /// A collapsible sub-group header inside a layer's twirl-down ("Transform",
 /// "Effects", …): a disclosure triangle and label, indented under the layer and
-/// full width so it reads as a band. Persists and returns its open state.
+/// full width so it reads as a band. Persists and returns its open state. The
+/// band is always drawn (a subtle themed strip, brighter on hover) so the
+/// section title reads as its own bar.
 pub(crate) fn group_header_row(
     ui: &mut egui::Ui,
     theme: &Theme,
@@ -536,9 +554,15 @@ pub(crate) fn group_header_row(
     // replaces the lane clip; with_clip_rect would intersect it and hide the row.
     let mut p = ui.painter().clone();
     p.set_clip_rect(viewport);
-    if resp.hovered() {
-        p.rect_filled(rect, 0.0, theme.surface_1);
-    }
+    p.rect_filled(
+        rect,
+        0.0,
+        if resp.hovered() {
+            theme.surface_2
+        } else {
+            theme.surface_1
+        },
+    );
     if resp.clicked() {
         open = !open;
         ui.data_mut(|d| d.insert_temp(id, open));
@@ -1983,11 +2007,23 @@ pub(crate) fn effects_rows(
         );
     }
 
+    // Reorder-by-drag bookkeeping (docs/07 §6): each effect's title-row rect, so a
+    // drop can be resolved against every effect after the loop. `fx_drag_id` holds
+    // the live drag (source index + pointer y) in ui temp so it survives frames.
+    let fx_drag_id = ui.id().with(("fx-reorder", layer.id));
+    let fx_dragging: Option<(usize, f32)> = ui.data(|d| d.get_temp(fx_drag_id));
+    let mut fx_title_rows: Vec<egui::Rect> = Vec::new();
+    let mut fx_reorder_release: Option<(usize, f32)> = None;
     for (idx, e) in layer.effects.iter().enumerate() {
         let schema = fx::schema(&e.effect.match_name);
-        // Title row: bypass, name (dimmed when bypassed), remove.
+        // Title row: bypass, name (dimmed when bypassed), remove — sitting in a
+        // subtle full-width bar so each effect's start is obvious (Mack). The name
+        // is a drag handle: dragging it up or down reorders the stack (one
+        // SetLayerEffects, so one undo step).
         {
-            let (_row, mut c) = row_frame(ui, ctx, false);
+            let (row_rect, mut c) = row_frame(ui, ctx, false);
+            section_bar(ui, ctx, row_rect);
+            fx_title_rows.push(row_rect);
             // The per-effect visibility toggle (K-090 confirmation of §1.5):
             // the same eye as layer visibility, dimmed while bypassed.
             let eye_col = if e.enabled {
@@ -2016,7 +2052,32 @@ pub(crate) fn effects_rows(
             } else {
                 ctx.theme.text_disabled
             };
-            c.label(egui::RichText::new(name).small().color(colour));
+            // The name doubles as the reorder handle: a frameless click-and-drag
+            // button (not a Label, so dragging never highlights its characters).
+            let name_resp = c
+                .add(
+                    egui::Button::new(egui::RichText::new(name).small().color(colour))
+                        .frame(false)
+                        .truncate()
+                        .sense(egui::Sense::click_and_drag()),
+                )
+                .on_hover_text("Drag to reorder");
+            if name_resp.dragged() {
+                if let Some(p) = name_resp.interact_pointer_pos() {
+                    c.data_mut(|d| d.insert_temp(fx_drag_id, (idx, p.y)));
+                }
+                c.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            }
+            if name_resp.drag_stopped() {
+                let y = fx_dragging
+                    .filter(|(i, _)| *i == idx)
+                    .map(|(_, y)| y)
+                    .or_else(|| name_resp.interact_pointer_pos().map(|p| p.y));
+                if let Some(y) = y {
+                    fx_reorder_release = Some((idx, y));
+                }
+                c.data_mut(|d| d.remove::<(usize, f32)>(fx_drag_id));
+            }
             if c.small_button("\u{00d7}")
                 .on_hover_text("Remove this effect")
                 .clicked()
@@ -2245,6 +2306,53 @@ pub(crate) fn effects_rows(
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    // Resolve an effect reorder drag: the target slot is where the dropped
+    // effect's centre lands among the other title rows (top = 0). A landing that
+    // changes nothing commits nothing. One SetLayerEffects = one undo step.
+    if let Some((from, y)) = fx_reorder_release {
+        let target = fx_title_rows
+            .iter()
+            .enumerate()
+            .filter(|(i, r)| *i != from && r.center().y < y)
+            .count();
+        if target != from && from < layer.effects.len() {
+            let mut effects = layer.effects.clone();
+            let moved = effects.remove(from);
+            effects.insert(target.min(effects.len()), moved);
+            *pending = Some(commit(effects));
+        }
+    }
+    // While an effect name is being dragged, draw an accent insertion line at the
+    // gap it would drop into, across the control column.
+    if let Some((from, y)) = fx_dragging {
+        if from < fx_title_rows.len() {
+            let others: Vec<f32> = fx_title_rows
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != from)
+                .map(|(_, r)| r.center().y)
+                .collect();
+            if !others.is_empty() {
+                let target = others.iter().filter(|cy| **cy < y).count();
+                let gap_y = if target == 0 {
+                    others[0] - 9.0
+                } else if target >= others.len() {
+                    others[others.len() - 1] + 9.0
+                } else {
+                    (others[target - 1] + others[target]) * 0.5
+                };
+                let left = fx_title_rows[0].left();
+                let right = (ctx.track_left - 6.0).max(left + 1.0);
+                let mut p = ui.painter().clone();
+                p.set_clip_rect(ctx.viewport);
+                p.line_segment(
+                    [egui::pos2(left, gap_y), egui::pos2(right, gap_y)],
+                    egui::Stroke::new(2.0_f32, ctx.theme.accent),
+                );
             }
         }
     }

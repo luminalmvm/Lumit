@@ -342,6 +342,58 @@ mod tests {
         assert_eq!(layer.transform.opacity.value_at(1.0), 100.0);
     }
 
+    #[test]
+    fn reorder_layer_moves_and_undoes_exactly() {
+        let store = DocumentStore::new(Document::new());
+        let comp = test_comp();
+        let comp_id = comp.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        // Stack top-to-bottom: A (index 0), B, C.
+        let mut ids = Vec::new();
+        for _ in 0..3 {
+            let layer = test_layer(Uuid::now_v7());
+            ids.push(layer.id);
+            store
+                .commit(Op::AddLayer {
+                    comp: comp_id,
+                    index: 0,
+                    layer: Box::new(layer),
+                })
+                .unwrap();
+        }
+        // Added top-first, so the final order is the reverse of insertion.
+        let order = |s: &DocumentStore| -> Vec<Uuid> {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .map(|l| l.id)
+                .collect()
+        };
+        let before = order(&store);
+        // Move the bottom layer to the top.
+        let bottom = *before.last().unwrap();
+        store
+            .commit(Op::ReorderLayer {
+                comp: comp_id,
+                layer: bottom,
+                new_index: 0,
+            })
+            .unwrap();
+        let after = order(&store);
+        assert_eq!(after.first(), Some(&bottom), "moved layer is now on top");
+        assert_eq!(after.len(), 3);
+        // Undo restores the exact original order.
+        store.undo().unwrap();
+        assert_eq!(order(&store), before, "reorder undo == original order");
+    }
+
     /// A camera layer's zoom and a layer's 3D switch both round-trip through
     /// undo — the two ops the 2.5D camera work added.
     /// Retime on a Footage layer round-trips through undo; the op refuses a

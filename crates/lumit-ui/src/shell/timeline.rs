@@ -18,6 +18,203 @@ fn accepts_effect_drop(kind: &lumit_core::model::LayerKind) -> bool {
     )
 }
 
+/// The right-click menu for a layer (opened from its name in the outline): the
+/// things you can do to a layer, in one place (the house pattern — right-click
+/// or menu, never scattered buttons). Ops it can build are returned through
+/// `ctx_op`; app-level actions (rename, duplicate, delete, convert, trim) are
+/// flagged for the caller to run once the outline has drawn. `mask` is the
+/// layer's natural pixel size, for the "Add mask" default geometry.
+#[allow(clippy::too_many_arguments)]
+fn layer_context_menu(
+    ui: &mut egui::Ui,
+    layer: &lumit_core::model::Layer,
+    comp_id: uuid::Uuid,
+    mask: (f64, f64),
+    ctx_op: &mut Option<lumit_core::Op>,
+    start_rename: &mut bool,
+    duplicate_this: &mut bool,
+    delete_this: &mut bool,
+    convert_layer: &mut bool,
+    trim_to_source: &mut bool,
+) {
+    use lumit_core::fx;
+    ui.set_min_width(170.0);
+    if ui.button("Rename").clicked() {
+        *start_rename = true;
+        ui.close_menu();
+    }
+    ui.menu_button("Add effect", |ui| {
+        // Grouped by category (K-090), mirroring the "Add effect" row; empty
+        // categories don't show.
+        for cat in fx::FxCategory::ALL {
+            let members: Vec<_> = fx::BUILTINS.iter().filter(|s| s.category == cat).collect();
+            if members.is_empty() {
+                continue;
+            }
+            ui.menu_button(cat.label(), |ui| {
+                for schema in members {
+                    if ui.button(schema.label).clicked() {
+                        if let Some(inst) = fx::instantiate(schema.match_name) {
+                            let mut effects = layer.effects.clone();
+                            effects.push(inst);
+                            *ctx_op = Some(lumit_core::Op::SetLayerEffects {
+                                comp: comp_id,
+                                layer: layer.id,
+                                effects,
+                            });
+                        }
+                        ui.close_menu();
+                    }
+                }
+            });
+        }
+    });
+    let (w, h) = mask;
+    ui.menu_button("Add mask", |ui| {
+        let mut new_mask = None;
+        if ui.button("Rectangle").clicked() {
+            new_mask = Some(lumit_core::mask::Mask::rectangle(
+                w * 0.25,
+                h * 0.25,
+                w * 0.5,
+                h * 0.5,
+            ));
+            ui.close_menu();
+        }
+        if ui.button("Ellipse").clicked() {
+            new_mask = Some(lumit_core::mask::Mask::ellipse(
+                w * 0.5,
+                h * 0.5,
+                w * 0.3,
+                h * 0.3,
+            ));
+            ui.close_menu();
+        }
+        if ui.button("Star").clicked() {
+            new_mask = Some(lumit_core::mask::Mask::star(
+                w * 0.5,
+                h * 0.5,
+                w * 0.32,
+                w * 0.14,
+                5,
+            ));
+            ui.close_menu();
+        }
+        if let Some(m) = new_mask {
+            let mut masks = layer.masks.clone();
+            masks.push(m);
+            *ctx_op = Some(lumit_core::Op::SetLayerMasks {
+                comp: comp_id,
+                layer: layer.id,
+                masks,
+            });
+        }
+    });
+    ui.separator();
+    if ui.button("Duplicate").clicked() {
+        *duplicate_this = true;
+        ui.close_menu();
+    }
+    if ui.button("Delete").clicked() {
+        *delete_this = true;
+        ui.close_menu();
+    }
+    ui.separator();
+    // Solo and enable (visibility) toggles: the switches you reach for most,
+    // ticked to show their current state.
+    if ui
+        .selectable_label(layer.switches.solo, "Solo")
+        .on_hover_text("Isolate: while any layer is soloed, only soloed layers render")
+        .clicked()
+    {
+        *ctx_op = Some(lumit_core::Op::SetLayerSolo {
+            comp: comp_id,
+            layer: layer.id,
+            solo: !layer.switches.solo,
+        });
+        ui.close_menu();
+    }
+    if ui
+        .selectable_label(layer.switches.visible, "Enabled")
+        .on_hover_text("Show or hide this layer")
+        .clicked()
+    {
+        *ctx_op = Some(lumit_core::Op::SetLayerVisible {
+            comp: comp_id,
+            layer: layer.id,
+            visible: !layer.switches.visible,
+        });
+        ui.close_menu();
+    }
+    // Footage → sequenced layer (K-071).
+    if matches!(layer.kind, lumit_core::model::LayerKind::Footage { .. })
+        && ui.button("Convert to sequenced layer").clicked()
+    {
+        *convert_layer = true;
+        ui.close_menu();
+    }
+    // Trim to source end (K-022) — only offered for a retimed clip.
+    if matches!(
+        layer.kind,
+        lumit_core::model::LayerKind::Footage {
+            retime: Some(_),
+            ..
+        }
+    ) && ui.button("Trim to source end").clicked()
+    {
+        *trim_to_source = true;
+        ui.close_menu();
+    }
+}
+
+/// Header icons over the Timeline outline's switch columns, aligned to the same
+/// x-slots the per-layer rows use (see the `slot`/`edge` geometry below): an eye
+/// over visibility, "Layer" over the names, the flow glyph over the flow toggle,
+/// "3D" over the 3D switch, and a speaker over the audio/mute column. Purely
+/// decorative — themed, muted, and clipped to the outline so they never touch
+/// the lane ruler.
+fn column_header_icons(
+    ui: &egui::Ui,
+    theme: &Theme,
+    panel_left: f32,
+    track_left: f32,
+    ruler: egui::Rect,
+) {
+    let mut p = ui.painter().clone();
+    let outline = egui::Rect::from_min_max(
+        egui::pos2(panel_left, ruler.top()),
+        egui::pos2((track_left - 6.0).max(panel_left + 1.0), ruler.bottom()),
+    );
+    p.set_clip_rect(outline);
+    let edge = track_left - 6.0;
+    let cy = ruler.center().y;
+    let icon = |cx: f32, ic: Icon| {
+        crate::icons::paint(
+            &p,
+            egui::Rect::from_center_size(egui::pos2(cx, cy), egui::vec2(13.0, 13.0)),
+            ic,
+            theme.text_muted,
+            1.2,
+        );
+    };
+    let label = |cx: f32, s: &str, align: egui::Align2| {
+        p.text(
+            egui::pos2(cx, cy),
+            align,
+            s,
+            egui::FontId::proportional(9.0),
+            theme.text_muted,
+        );
+    };
+    // Slots mirror the row loop: eye at left+27, names from left+58, then the
+    // right-anchored switch cluster measured back from `edge`.
+    icon(panel_left + 27.0, Icon::Eye);
+    label(panel_left + 58.0, "Layer", egui::Align2::LEFT_CENTER);
+    icon(edge - 75.0, Icon::Flow);
+    label(edge - 49.0, "3D", egui::Align2::CENTER_CENTER);
+    icon(edge - 17.0, Icon::Audio);
+}
+
 pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     // Comp tab strip first: it owns a drop zone (drop a comp here to open it as
     // a separate tab). The body below then accepts drops that file into the
@@ -144,6 +341,11 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         egui::Sense::click_and_drag(),
     );
     ui.painter().rect_filled(ruler_rect, 0.0, theme.surface_2);
+    // Column headers (Mack): small icons over the outline switch columns, on the
+    // ruler's own level, so each column reads at a glance. Painted before the
+    // lane clip narrows below, and clipped to the outline so they never bleed
+    // over the ruler ticks.
+    column_header_icons(ui, theme, panel_left, track_left, ruler_rect);
     // Clip everything time-positioned (ruler ticks, bars, keyframes, markers,
     // playhead) to the lane area so a zoomed/scrolled view never bleeds left over
     // the layer outline. The outline columns replace this clip with their own
@@ -322,6 +524,16 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             // above the ruler when a row is half-scrolled).
             let viewport = ui.clip_rect();
             ui.set_clip_rect(viewport.intersect(lane_area));
+            // Is an effect being dragged out of the Effects & Presets browser this
+            // frame. Only then does each row raise a drop zone (see below), so the
+            // zone never steals ordinary hover/clicks.
+            let fx_drag =
+                egui::DragAndDrop::has_payload_of_type::<EffectDragPayload>(ui.ctx());
+            // Reorder-by-drag bookkeeping (Mack): each top-level row records its
+            // centre y, so a drop can be resolved against every row after the loop;
+            // `commit_reorder` carries the dragged layer and release y.
+            let mut layer_row_centers: Vec<(uuid::Uuid, f32)> = Vec::new();
+            let mut commit_reorder: Option<(uuid::Uuid, f32)> = None;
             for layer in &comp.layers {
                 // The row response only hit-tests over the lane area (the clip
                 // above), so in graph mode it goes inert — clicks there belong
@@ -333,20 +545,35 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 };
                 let (row_rect, row_resp) =
                     ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), row_sense);
+                layer_row_centers.push((layer.id, row_rect.center().y));
                 if row_resp.clicked() {
                     app.selected_layer = Some(layer.id);
                 }
-                // Effects & Presets browser drop target (K-101): footage and
-                // adjustment layers accept an effect dragged from the
-                // browser, appended through the same `SetLayerEffects` op
-                // the "Add effect" row commits, so a drop is one ordinary
-                // undo step. `row_resp` only hit-tests the lane area (see
-                // the `row_sense` comment above — the outline column has its
-                // own, separately-interacted controls), so the hover cue and
-                // the drop both land within that same region; dropping over
-                // the name column does not yet register.
-                if accepts_effect_drop(&layer.kind) {
-                    if let Some(payload) = row_resp.dnd_release_payload::<EffectDragPayload>() {
+                // Effect drop target (K-101, extended): while an effect is dragged
+                // out of the Effects & Presets browser, the whole row — outline and
+                // lane alike — accepts it, appended through the same SetLayerEffects
+                // the "Add effect" menu commits (one undo step). `contains_pointer`
+                // ignores occlusion, so the layer bar or a switch under the cursor
+                // never blocks the drop, and the zone exists only mid-drag, so it
+                // steals no ordinary input. Non-effect-stack layer kinds still gain
+                // effects through their own row's "Add effect" menu.
+                if fx_drag && accepts_effect_drop(&layer.kind) {
+                    let full = egui::Rect::from_min_max(
+                        row_rect.left_top(),
+                        egui::pos2(panel_right, row_rect.bottom()),
+                    );
+                    let drop = {
+                        let saved = ui.clip_rect();
+                        ui.set_clip_rect(viewport);
+                        let r = ui.interact(
+                            full,
+                            ui.id().with(("fx-drop", layer.id)),
+                            egui::Sense::hover(),
+                        );
+                        ui.set_clip_rect(saved);
+                        r
+                    };
+                    if let Some(payload) = drop.dnd_release_payload::<EffectDragPayload>() {
                         if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
                             let mut effects = layer.effects.clone();
                             effects.push(inst);
@@ -359,95 +586,28 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             #[cfg(feature = "media")]
                             app.refresh_preview();
                         }
-                    } else if row_resp.dnd_hover_payload::<EffectDragPayload>().is_some() {
-                        ui.painter().rect_stroke(
-                            row_rect,
+                    } else if drop.dnd_hover_payload::<EffectDragPayload>().is_some() {
+                        let mut hp = ui.painter().clone();
+                        hp.set_clip_rect(viewport);
+                        hp.rect_stroke(
+                            full,
                             2.0,
                             egui::Stroke::new(1.0_f32, theme.accent),
                             egui::StrokeKind::Inside,
                         );
                     }
                 }
-                // Right-click a layer to add things (the house pattern: right-click or
-                // menu, never scattered buttons).
+                // Deferred layer actions, set by the name's context menu / rename
+                // (drawn with the outline below) and applied once it has drawn.
                 let mut ctx_op: Option<lumit_core::Op> = None;
                 let mut convert_layer = false;
                 let mut trim_to_source = false;
-                row_resp.context_menu(|ui| {
-                    ui.menu_button("Add mask", |ui| {
-                        let (w, h) = mask_space(layer, app, comp);
-                        let mut new_mask = None;
-                        if ui.button("Rectangle").clicked() {
-                            new_mask = Some(lumit_core::mask::Mask::rectangle(
-                                w * 0.25,
-                                h * 0.25,
-                                w * 0.5,
-                                h * 0.5,
-                            ));
-                            ui.close_menu();
-                        }
-                        if ui.button("Ellipse").clicked() {
-                            new_mask = Some(lumit_core::mask::Mask::ellipse(
-                                w * 0.5,
-                                h * 0.5,
-                                w * 0.3,
-                                h * 0.3,
-                            ));
-                            ui.close_menu();
-                        }
-                        if ui.button("Star").clicked() {
-                            new_mask = Some(lumit_core::mask::Mask::star(
-                                w * 0.5,
-                                h * 0.5,
-                                w * 0.32,
-                                w * 0.14,
-                                5,
-                            ));
-                            ui.close_menu();
-                        }
-                        if let Some(m) = new_mask {
-                            let mut masks = layer.masks.clone();
-                            masks.push(m);
-                            ctx_op = Some(lumit_core::Op::SetLayerMasks {
-                                comp: comp_id,
-                                layer: layer.id,
-                                masks,
-                            });
-                        }
-                    });
-                    // Footage → sequenced layer (K-071).
-                    if matches!(layer.kind, lumit_core::model::LayerKind::Footage { .. })
-                        && ui.button("Convert to sequenced layer").clicked()
-                    {
-                        convert_layer = true;
-                        ui.close_menu();
-                    }
-                    // Trim to source end (K-022) — only offered for a retimed clip.
-                    if matches!(
-                        layer.kind,
-                        lumit_core::model::LayerKind::Footage {
-                            retime: Some(_),
-                            ..
-                        }
-                    ) && ui.button("Trim to source end").clicked()
-                    {
-                        trim_to_source = true;
-                        ui.close_menu();
-                    }
-                });
-                if ctx_op.is_some() {
-                    pending = ctx_op;
-                    app.selected_layer = Some(layer.id);
-                }
-                if trim_to_source {
-                    app.selected_layer = Some(layer.id);
-                    #[cfg(feature = "media")]
-                    app.trim_selected_to_source_end();
-                }
-                if convert_layer {
-                    app.selected_layer = Some(layer.id);
-                    app.convert_to_sequenced_layer();
-                }
+                let mut start_rename = false;
+                let mut duplicate_this = false;
+                let mut delete_this = false;
+                // Layer's natural pixel space, for the "Add mask" sizes (computed
+                // outside the menu closure so it needn't borrow `app`).
+                let (mask_w, mask_h) = mask_space(layer, app, comp);
                 // Outline glyphs draw left of the lanes, so they paint through a
                 // viewport-clipped painter, not the lane clip (which would hide
                 // them). Child-UI columns (place/row_frame) already clip this way.
@@ -538,22 +698,105 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 place(ui, eye_r, &mut |ui| {
                     visible_control(ui, theme, comp_id, layer, &mut pending)
                 });
-                place(ui, title_r, &mut |ui| {
-                    if ui
-                        .add(
-                            egui::Label::new(
+                // Layer name (Mack): a non-selectable, click-and-drag button — a
+                // click selects, a double-click renames inline, a drag reorders the
+                // stack, a right-click opens the layer menu. While renaming, the
+                // button is swapped for a single-line editor: Enter or focus-loss
+                // commits a RenameLayer, Escape cancels. A Button (not a Label) is
+                // used so dragging over the name never highlights its characters.
+                let renaming = app
+                    .renaming_layer
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == layer.id);
+                {
+                    let mut child = ui.new_child(
+                        egui::UiBuilder::new()
+                            .id_salt(("layer-title", layer.id))
+                            .max_rect(title_r)
+                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                    );
+                    child.set_clip_rect(title_r.intersect(viewport));
+                    if renaming {
+                        let focus_id = ui.id().with(("rename-focus", layer.id));
+                        let mut buf = app
+                            .renaming_layer
+                            .as_ref()
+                            .map(|(_, s)| s.clone())
+                            .unwrap_or_default();
+                        let resp = child.add(
+                            egui::TextEdit::singleline(&mut buf)
+                                .desired_width(title_r.width())
+                                .font(egui::TextStyle::Small),
+                        );
+                        if ui.data(|d| d.get_temp::<bool>(focus_id).unwrap_or(false)) {
+                            resp.request_focus();
+                            ui.data_mut(|d| d.remove::<bool>(focus_id));
+                        }
+                        if resp.lost_focus() {
+                            let escape = child.input(|i| i.key_pressed(egui::Key::Escape));
+                            if !escape {
+                                let name = buf.trim();
+                                if !name.is_empty() && name != layer.name {
+                                    pending = Some(lumit_core::Op::RenameLayer {
+                                        comp: comp_id,
+                                        layer: layer.id,
+                                        name: name.to_owned(),
+                                    });
+                                }
+                            }
+                            app.renaming_layer = None;
+                        } else {
+                            app.renaming_layer = Some((layer.id, buf));
+                        }
+                    } else {
+                        let title_resp = child.add(
+                            egui::Button::new(
                                 egui::RichText::new(trim_title(&layer.name))
                                     .small()
                                     .color(theme.text_secondary),
                             )
+                            .frame(false)
                             .truncate()
-                            .sense(egui::Sense::click()),
-                        )
-                        .clicked()
-                    {
-                        select_this = true;
+                            .sense(egui::Sense::click_and_drag()),
+                        );
+                        if title_resp.double_clicked() {
+                            start_rename = true;
+                        } else if title_resp.clicked() {
+                            select_this = true;
+                        }
+                        if title_resp.dragged() {
+                            if let Some(p) = title_resp.interact_pointer_pos() {
+                                app.layer_reorder = Some((layer.id, p.y));
+                            }
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                        }
+                        if title_resp.drag_stopped() {
+                            let y = app
+                                .layer_reorder
+                                .filter(|(id, _)| *id == layer.id)
+                                .map(|(_, y)| y)
+                                .or_else(|| title_resp.interact_pointer_pos().map(|p| p.y));
+                            if let Some(y) = y {
+                                commit_reorder = Some((layer.id, y));
+                            }
+                            app.layer_reorder = None;
+                        }
+                        title_resp.context_menu(|ui| {
+                            layer_context_menu(
+                                ui,
+                                layer,
+                                comp_id,
+                                (mask_w, mask_h),
+                                &mut ctx_op,
+                                &mut start_rename,
+                                &mut duplicate_this,
+                                &mut delete_this,
+                                &mut convert_layer,
+                                &mut trim_to_source,
+                            );
+                        });
                     }
-                });
+                }
                 place(ui, matte_r, &mut |ui| {
                     matte_control(ui, theme, comp, comp_id, layer, &mut pending)
                 });
@@ -581,6 +824,34 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 }
                 if select_this {
                     app.selected_layer = Some(layer.id);
+                }
+                if start_rename {
+                    app.selected_layer = Some(layer.id);
+                    app.renaming_layer = Some((layer.id, layer.name.clone()));
+                    ui.data_mut(|d| {
+                        d.insert_temp(ui.id().with(("rename-focus", layer.id)), true)
+                    });
+                }
+                if let Some(op) = ctx_op {
+                    app.selected_layer = Some(layer.id);
+                    pending = Some(op);
+                }
+                if duplicate_this {
+                    app.selected_layer = Some(layer.id);
+                    app.duplicate_layer();
+                }
+                if delete_this {
+                    app.selected_layer = Some(layer.id);
+                    app.delete_selected_layer();
+                }
+                if trim_to_source {
+                    app.selected_layer = Some(layer.id);
+                    #[cfg(feature = "media")]
+                    app.trim_selected_to_source_end();
+                }
+                if convert_layer {
+                    app.selected_layer = Some(layer.id);
+                    app.convert_to_sequenced_layer();
                 }
                 // Lane content — the bar, its labels and its drag handles — only
                 // draws in the layers view; in graph mode the lane area belongs
@@ -1219,12 +1490,14 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
 
                     // (Frame-interpolation choice — Nearest / Blend / Flow — is not
                     // surfaced here for now; it will return in a dedicated place.)
-                    // Transform group: its own twirl (open by default) revealing each
-                    // animatable property as a timeline row — stopwatch/name/value in
-                    // the left column, that property's keyframes on the track to the
-                    // right; click a row to graph it (K-072).
+                    // Transform group: its own twirl, starting collapsed (Mack) so
+                    // opening a layer's twirl doesn't also unfurl every transform
+                    // property. Revealing it lists each animatable property as a
+                    // timeline row — stopwatch/name/value in the left column, that
+                    // property's keyframes on the track to the right; click a row to
+                    // graph it (K-072).
                     let tf_id = ui.id().with(("transform-group", layer.id));
-                    if group_header_row(ui, theme, "Transform", tf_id, true, viewport) {
+                    if group_header_row(ui, theme, "Transform", tf_id, false, viewport) {
                         transform_property_rows(
                             ui,
                             theme,
@@ -1289,6 +1562,56 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             };
                             flow_group_rows(ui, &flow_ctx, &mut pending);
                         }
+                    }
+                }
+            }
+            // Resolve a name-drag reorder (Mack). The target slot is where the
+            // dropped layer's centre lands among the *other* rows (top = 0), which
+            // is exactly the ReorderLayer index (the position after the layer is
+            // lifted out). A landing that changes nothing commits nothing.
+            if let Some((lid, y)) = commit_reorder {
+                let others: Vec<f32> = layer_row_centers
+                    .iter()
+                    .filter(|(id, _)| *id != lid)
+                    .map(|(_, cy)| *cy)
+                    .collect();
+                let target = others.iter().filter(|cy| **cy < y).count();
+                let old = layer_row_centers.iter().position(|(id, _)| *id == lid);
+                if old != Some(target) && pending.is_none() {
+                    pending = Some(lumit_core::Op::ReorderLayer {
+                        comp: comp_id,
+                        layer: lid,
+                        new_index: target,
+                    });
+                }
+            }
+            // While a name drag is live, draw an accent insertion line at the gap
+            // the layer would drop into, across the outline column.
+            if !app.timeline_graph_mode {
+                if let Some((lid, y)) = app.layer_reorder {
+                    let others: Vec<f32> = layer_row_centers
+                        .iter()
+                        .filter(|(id, _)| *id != lid)
+                        .map(|(_, cy)| *cy)
+                        .collect();
+                    if !others.is_empty() {
+                        let target = others.iter().filter(|cy| **cy < y).count();
+                        let gap_y = if target == 0 {
+                            others[0] - 10.0
+                        } else if target >= others.len() {
+                            others[others.len() - 1] + 10.0
+                        } else {
+                            (others[target - 1] + others[target]) * 0.5
+                        };
+                        let mut p = ui.painter().clone();
+                        p.set_clip_rect(viewport);
+                        p.line_segment(
+                            [
+                                egui::pos2(panel_left + 4.0, gap_y),
+                                egui::pos2(track_left - 6.0, gap_y),
+                            ],
+                            egui::Stroke::new(2.0_f32, theme.accent),
+                        );
                     }
                 }
             }

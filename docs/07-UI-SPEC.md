@@ -286,11 +286,22 @@ Default column order, all reorderable and hideable per workspace:
 6. **Parent** dropdown + pick-whip.
 7. Optional columns: in, out, duration, stretch.
 
+A row of small icons sits over the outline, level with the time ruler, labelling the switch
+columns (eye over visibility, "Layer" over the names, the flow glyph, "3D", and a speaker
+over mute). Right-clicking a layer's name opens the **layer menu** — rename, add an effect
+(by category) or a mask, duplicate, delete, and the solo/enable toggles — so the things you
+do to a layer live in one place rather than scattered buttons. The thin divider between the
+outline and the lanes is a drag handle that sets the outline width.
+
 ### 4.3 Layer lanes and property twirl-down
 
 - Each layer row twirls open (`click` the caret, or property-reveal shortcuts, §15) into
   **property lanes**: Transform group, Masks, Effects (one group per effect), Audio, and
-  Retime when enabled. Property groups nest with indentation.
+  Retime when enabled. Property groups nest with indentation. Opening a layer's twirl does
+  not auto-open its Transform sub-group — it starts collapsed, so the twirl first shows a
+  tidy list of section headings, each in its own subtle full-width bar, and you open only the
+  group you want. In Effect Controls (and the Effects group here) an effect's name is a drag
+  handle for reordering the stack.
 - Each animatable property lane shows: stopwatch (keyframing on/off), value with
   **scrub-drag** and click-to-type numeric entry, expression toggle, and its keyframes as
   diamonds on the lane. Keyframe icons reflect interpolation (hold/linear/bezier), matching
@@ -444,8 +455,11 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   - **v1 (K-101)**: the drag-onto-Timeline-row path ships first, scoped to footage and
     adjustment layers (the effect stack's two ordinary homes) — dragging an entry there shows
     an accent hover outline over the row and appends the effect on release, one ordinary undo
-    step. Double-click apply, drag onto the Viewer, and every other layer kind (which still
-    gains effects through its own row's "Add effect" menu) remain later steps.
+    step. The drop target is the **whole row** (the layer outline as readily as the lane, since
+    the browser's hit-test ignores whatever bar or switch sits under the cursor) and the
+    **Effect Controls panel** (dropping anywhere in it appends to the shown layer). Double-click
+    apply, drag onto the Viewer, and every other layer kind (which still gains effects through
+    its own row's "Add effect" menu) remain later steps.
 - **Favourites**: star any effect or preset; a Favourites group pins to the top of the tree.
 - Hovering an entry SHOULD show a one-line description; presets show a thumbnail where the
   preset carries one.

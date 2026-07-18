@@ -969,6 +969,25 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   horizontal scrollbar just above it (the vertical scrollbar stops above the bar so the two
   never fight). Layers/Graph is only a change of what the lanes *draw* — the outline stays
   identical between the two, so twirling a layer open shows the same rows either way.
+- **Working the layer outline** — a few habits from other editors now work the way you
+  would expect. A row of tiny icons sits over the outline columns, level with the time
+  ruler, naming each one at a glance: an eye over visibility, "Layer" over the names, the
+  flow glyph, a "3D" tag and a speaker over their switches. The thin line between the
+  outline and the lanes is a handle — drag it to widen or narrow the outline. **Double-click
+  a layer's name** to rename it in place (Enter or clicking away keeps the change, Escape
+  throws it away); **drag a name up or down** to reorder the stack (top = renders last, one
+  undo per move, with an accent line showing where it will land); and **right-click a name**
+  for the layer menu — rename, add an effect (by category) or a mask, duplicate, delete, and
+  the solo and enable toggles, all in one place. Names are plain labels now, so dragging over
+  one never smears a text selection across it. Opening a layer's twirl no longer also unfurls
+  its Transform group — Transform starts closed, so you see a tidy list of section headings
+  (Transform, Effects…) each sitting in its own faint bar, and open only the one you want.
+- **Reordering effects** — in the Effect Controls panel (or a layer's Effects group in the
+  Timeline) each effect's name is a drag handle: drag it up or down to restack the effects,
+  one undo step. Each effect's title sits in its own subtle bar so it is obvious where one
+  ends and the next begins. Dragging an effect out of the **Effects & Presets** browser now
+  drops onto the *whole* layer row — the name side as readily as the lane — and onto the
+  Effect Controls panel too, not just the sliver of lane past the bar.
 - The **2.5D camera** — the parallax tool. Every layer has a z position and x/y
   rotations alongside the flat transform; they sleep until you switch the layer to 3D
   (the "3D" toggle in its twirl-down) *and* the comp has a Camera layer
