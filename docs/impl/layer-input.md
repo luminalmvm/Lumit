@@ -158,3 +158,30 @@ unpicked Layer renders as nothing for now); the preview decode planner gate
 above; a placement/effects-aware depth; and the fuller "DOF PRO" second effect
 with shaped bokeh highlights and the deferred bright-rim "Highlight bloom" param.
 Logged as K-123 (Layer-input parameter kind) and K-124 (DoF effect).
+
+## DoF lens controls — landed (K-128)
+
+Three additions to the DoF effect that read the same threaded depth pass, none
+touching the layer-input plumbing above (they are plain scalar params on the
+effect instance, carried in `Resolved::Dof`, which stays `Copy`):
+
+- **Depth invert** (`depth_invert` bool). Applied to the depth *after* it is
+  read (`d' = 1 - d`) and *before* the circle-of-confusion, the near/far select
+  and the Depth-map view — so it swaps near and far consistently everywhere. It
+  acts on the resampled depth the kernel reads, so it is orthogonal to
+  `depth_after_effects` (which changes *what* the depth pass is): a graded depth
+  can still be inverted. Continuous, so the §1.6 ULP oracle holds.
+- **Near/Far blur** (`near_aperture`/`far_aperture`, px@comp). Per-side maximum
+  CoC; the pre-existing `aperture` becomes a master scaling both about its
+  default 8. Absent on pre-feature projects, so the resolve arm falls them back
+  to `aperture` (`float_at(..).unwrap_or(8)` under the master, which reproduces
+  the old single-aperture radius). The near/far select flips only where the
+  smoothstep `s` is zero (`d = focus`), so the radius stays continuous.
+- **Display** (`display` choice: Rendered / Depth map / Focus map). Diagnostic
+  views computed from the same depth read: Depth map writes the post-invert `d`
+  as greyscale, Focus map writes `1 - s`; both short-circuit before the disc
+  gather and ignore Mix. All shipped modes are continuous, so the oracle covers
+  them with no exclusion.
+
+No cache-key change: the new Bool/Float/Choice params hash automatically through
+`feed_effect_stack`'s per-param arms (they sit on the effect instance).

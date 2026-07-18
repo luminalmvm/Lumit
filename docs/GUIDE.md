@@ -212,6 +212,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   kernel below, unchanged and still proven against its plain-Rust twin. One more piece the
   owner will add: the little dropdown in the effect controls that actually *picks* the depth
   layer — until that lands the effect is wired and correct but has no layer to point at yet.
+- **Depth of field grows three lens controls.** Three tick-and-slide additions, all borrowed
+  from the reference plugins. **Depth invert** is a tickbox that flips the depth map's reading
+  (`near` becomes `far` and back), so if your depth pass is the wrong way round you fix it with
+  one click instead of re-rendering it. **Near blur** and **Far blur** let you set *how much*
+  blur the close side and the far side get *separately* — a shallow foreground and a soft
+  distance, or the reverse — where before both sides shared one Aperture. Aperture now acts as a
+  **master**: it scales both sides together (its normal value, 8, means "leave Near and Far as
+  they are"), and turning it up or down blurs the whole picture more or less without touching the
+  balance between the two. Old projects saved before this — which only had the one Aperture —
+  open and look exactly the same, because Near and Far quietly start out matching it. **Display**
+  is a small dropdown of *what you're looking at*: normally **Rendered** (the finished blur), but
+  switch to **Depth map** to see the depth pass itself as a greyscale picture (handy for checking
+  it is the right way round), or **Focus map** to see a white-where-sharp mask that shows exactly
+  which parts of the frame are in focus. The two diagnostic views ignore the blur so you get a
+  clean look. As always, the graphics-card program and its plain-Rust twin were checked to agree
+  to the last bit across every one of these — invert on and off, lopsided near/far, and each
+  display mode.
 - **Depth-of-field, the foundation** — the first piece of a "lens blur" that keeps one
   distance sharp and softens everything nearer and farther, the way a real camera lens does.
   A photographic lens can only focus at one distance at a time; things off that plane spread

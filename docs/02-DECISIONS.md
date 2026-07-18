@@ -1287,3 +1287,21 @@ ULP (measured worst 1); Mix 0 is the bit-exact identity, pinned by test. The two
 through the inspector's existing `ParamKind::Colour` arm — no inspector change needed. The fuller
 shadows/mids/highlights Tritone is a Tier 2 follow-up (§4). Built in an isolated worktree; not
 pushed.
+**K-128 · DECIDED · Depth of field gains depth invert, separate near/far blur, and Display views
+(docs/08 §3.22).** Three owner-requested additions modelled on Frischluft / DOF PRO. (1) **Depth
+invert** (bool, default off): inverts the depth (`d' = 1 − d`) before the circle-of-confusion,
+swapping near and far. (2) **Near/Far blur** (px@comp, default 8, slider 0–40): per-side maximum
+circle-of-confusion — depths in front of focus (`d < focus`) use Near, the far side Far. The
+existing **Aperture** is retained as a **master** that scales both about its default 8 (unity:
+`radius · Aperture / 8`), so the near/far select flips only where the smoothstep `s` is zero (at
+`d = focus`) and the radius stays continuous. (3) **Display** (choice, default Rendered):
+diagnostic views — Rendered (the blur), Depth map (post-invert greyscale), Focus map (the smooth
+`1 − s` in-focus mask); Depth/Focus map short-circuit before the gather and ignore Mix. All three
+are threaded through `Resolved::Dof` (still `Copy`), the resolve arm, the CPU oracle, `DofParams`,
+`FxEngine::dof` and `fx_dof.wgsl`; the UI renders the new Bool/Float/Choice params automatically
+and the frame key hashes them via the effect-stack feed with no change. **Back-compat:** old
+`dof` instances lack the new params, so Depth invert reads off, Display reads Rendered, and
+Near/Far fall back to Aperture (both sides `8 · Aperture/8 = Aperture`), rendering identically.
+Every shipped mode is continuous, so the §1.6 ULP oracle covers invert on/off, asymmetric near/far,
+and each Display mode with no exclusion (worst 1 fp16 ULP on the RTX). Built in an isolated
+worktree.
