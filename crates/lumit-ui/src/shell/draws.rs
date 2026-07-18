@@ -153,9 +153,12 @@ pub(crate) fn build_comp_draws(
         })
     };
 
+    // Solo / isolate (K-105): while any layer is soloed, only soloed layers
+    // render — computed once for the whole comp.
+    let any_solo = lumit_core::model::any_solo(comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for layer in comp.layers.iter().rev() {
-        if !layer.switches.visible || !in_span(layer) {
+        if !layer.switches.visible || !in_span(layer) || (any_solo && !layer.switches.solo) {
             continue;
         }
         let lt = t_comp - layer.start_offset.0.to_f64();

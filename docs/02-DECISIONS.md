@@ -908,3 +908,15 @@ it is footage-only and adds a flow computation the moment it is live — existin
 instances render byte-identically until an editor opts in. Operates on the layer's *source*
 frames, the same v1 simplification Echo and Motion blur already made. Oracle: GPU matches
 `lumit_core::fx::cpu::datamosh` at ≤ 2 fp16 ULP (measured 0–1).
+
+**K-105 · DECIDED · Solo / isolate switch on layers.** `Switches` gains `solo: bool` (serde
+default false, so every existing project is byte-identical). While *any* layer in a
+composition is soloed, only soloed layers render — the standard After Effects isolate. The
+gate is one shared helper, `model::any_solo(comp)`, applied identically in the preview
+(`build_comp_draws`) and export (`render_comp_linear`) visibility checks so the two agree
+(K-031): a layer renders iff `visible && in_span && (!any_solo || solo)`. `Op::SetLayerSolo`
+toggles it as one undo step (mirroring `SetLayerVisible`). The control is a Solo checkbox at
+the top of the Effect Controls panel, beside the Parent picker; a Timeline solo column is a
+later refinement. Known v1 edge: a non-soloed layer used as a *matte* source for a soloed
+layer is hidden like any other non-soloed layer (solo takes precedence over the matte-source
+exemption) — acceptable until the Timeline surface makes solo state obvious per row.

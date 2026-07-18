@@ -989,6 +989,25 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         ui.add_space(2.0);
     }
 
+    // Solo / isolate (K-105): while on, only soloed layers render.
+    let mut solo = layer.switches.solo;
+    ui.horizontal(|ui| {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("Solo").small().color(theme.text_muted));
+        if ui
+            .checkbox(&mut solo, "")
+            .on_hover_text("Isolate: while any layer is soloed, only soloed layers render")
+            .changed()
+        {
+            pending = Some(lumit_core::Op::SetLayerSolo {
+                comp: comp_id,
+                layer: layer_id,
+                solo,
+            });
+        }
+    });
+    ui.add_space(2.0);
+
     let panel = ui.max_rect();
     let ctx = RowCtx {
         theme,

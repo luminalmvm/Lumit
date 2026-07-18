@@ -815,11 +815,15 @@ impl Renderer<'_> {
         // rendering an intermediate (docs/06 §1.4) — same rule as preview,
         // decided by the same collapse_state, so the two stay pixel-identical.
         let mut spliced: HashMap<Uuid, Vec<CollapsedSpec>> = HashMap::new();
+        // Solo / isolate (K-105): while any layer is soloed, only soloed layers
+        // render — the same rule the preview applies, so the two stay identical.
+        let any_solo = lumit_core::model::any_solo(comp);
         for l in &comp.layers {
-            let needed = l.switches.visible
-                || comp.layers.iter().any(|c| {
-                    c.switches.visible && c.matte.as_ref().is_some_and(|m| m.layer == l.id)
-                });
+            let needed = (!any_solo || l.switches.solo)
+                && (l.switches.visible
+                    || comp.layers.iter().any(|c| {
+                        c.switches.visible && c.matte.as_ref().is_some_and(|m| m.layer == l.id)
+                    }));
             if !needed {
                 continue;
             }

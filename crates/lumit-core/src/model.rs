@@ -321,6 +321,18 @@ pub struct Switches {
     /// stack. Defaults on, so old projects load with effects live.
     #[serde(default = "default_true")]
     pub fx: bool,
+    /// Solo / isolate (K-105): while any layer in the composition is soloed,
+    /// only soloed layers render — a quick way to view one layer (or a few)
+    /// against nothing. Off by default, so nothing changes until it is set.
+    #[serde(default)]
+    pub solo: bool,
+}
+
+/// Whether any layer in `comp` is soloed (K-105). When true, the compositor
+/// renders only the soloed layers. Shared by the preview and export paths so
+/// they agree on what is visible.
+pub fn any_solo(comp: &Composition) -> bool {
+    comp.layers.iter().any(|l| l.switches.solo)
 }
 
 impl Default for Switches {
@@ -332,6 +344,7 @@ impl Default for Switches {
             three_d: false,
             collapse: false,
             fx: true,
+            solo: false,
         }
     }
 }
@@ -1036,5 +1049,41 @@ mod tests {
             parent: Some(Uuid::now_v7()),
         };
         assert_eq!(apply(&mut doc, &unknown), Err(OpError::InvalidParent));
+    }
+
+    #[test]
+    fn solo_op_round_trips_and_any_solo_reports() {
+        use crate::ops::{apply, Op};
+        let mut comp = comp_with_cameras();
+        let a = comp.layers[0].id;
+        assert!(!any_solo(&comp), "nothing soloed to start");
+        comp.layers[0].switches.solo = true;
+        assert!(any_solo(&comp));
+        comp.layers[0].switches.solo = false;
+
+        let comp_id = comp.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(comp));
+        let inv = apply(
+            &mut doc,
+            &Op::SetLayerSolo {
+                comp: comp_id,
+                layer: a,
+                solo: true,
+            },
+        )
+        .unwrap();
+        assert!(doc.comp(comp_id).unwrap().layers[0].switches.solo);
+        assert!(any_solo(doc.comp(comp_id).unwrap()));
+        assert_eq!(
+            inv,
+            Op::SetLayerSolo {
+                comp: comp_id,
+                layer: a,
+                solo: false
+            }
+        );
+        apply(&mut doc, &inv).unwrap();
+        assert!(!doc.comp(comp_id).unwrap().layers[0].switches.solo);
     }
 }

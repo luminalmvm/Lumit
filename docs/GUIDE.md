@@ -415,6 +415,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   already uses — computed identically for the preview and the export so they always match.
   A layer with no parent (every layer, until you set one) renders exactly as before. For now
   it inherits the flat 2D move/rotate/scale; inheriting the 2.5D depth/tilt is a later touch.
+- **Solo (isolate)** (K-105) — tick **Solo** on a layer (top of the Effect Controls panel,
+  next to Parent) and the composition shows only that layer; solo a few and it shows just
+  those, hiding everything else, so you can look at one thing without deleting or hiding the
+  rest. It is a view aid, not a permanent change — untick to bring everything back. The rule
+  ("if anything is soloed, only soloed layers draw") is applied the same way in the preview
+  and the export, so what you isolate is what you'd get. Nothing is soloed by default, so
+  existing projects look identical.
 - `crates/lumit-core/src/anim.rs` — **the keyframe engine.** Between two keyframes the
   value follows a bezier curve shaped by AE-style *speed* (units per second) and
   *influence* (how far each handle reaches). The subtle part: the curve is parametric, so

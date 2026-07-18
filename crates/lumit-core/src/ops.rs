@@ -108,6 +108,12 @@ pub enum Op {
         layer: Uuid,
         visible: bool,
     },
+    /// Toggle a layer's solo / isolate switch (K-105).
+    SetLayerSolo {
+        comp: Uuid,
+        layer: Uuid,
+        solo: bool,
+    },
     /// Toggle a Precomp layer's collapse-transformations switch (docs/06 §1.4).
     SetLayerCollapse {
         comp: Uuid,
@@ -437,6 +443,20 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 visible: previous,
+            })
+        }
+        Op::SetLayerSolo { comp, layer, solo } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.solo, *solo);
+            Ok(Op::SetLayerSolo {
+                comp: *comp,
+                layer: *layer,
+                solo: previous,
             })
         }
         Op::SetTextDocument {
