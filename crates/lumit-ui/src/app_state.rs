@@ -1759,6 +1759,34 @@ impl AppState {
         self.refresh_preview();
     }
 
+    /// Delete the selected layer from its composition (one undoable step).
+    /// Deliberately reachable only from the menu and the command palette, not
+    /// a bare Delete key, so it can never fire while a value field has focus.
+    pub fn delete_selected_layer(&mut self) {
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            return;
+        };
+        let Some(layer_id) = self.selected_layer else {
+            self.error = Some("select a layer to delete".into());
+            return;
+        };
+        let present = self
+            .store
+            .snapshot()
+            .comp(comp_id)
+            .is_some_and(|c| c.layers.iter().any(|l| l.id == layer_id));
+        if !present {
+            return;
+        }
+        self.commit(Op::RemoveLayer {
+            comp: comp_id,
+            layer: layer_id,
+        });
+        self.selected_layer = None;
+        #[cfg(feature = "media")]
+        self.refresh_preview();
+    }
+
     /// Add a Sequence layer (Vegas-style clip row). If a footage item is
     /// selected in the Project panel it becomes the first clip spanning the
     /// footage; otherwise the layer starts empty. This is a first, simple
@@ -3814,6 +3842,31 @@ mod tests {
         // One undo removes the duplicate.
         app.undo();
         assert_eq!(app.store.snapshot().comp(comp_id).unwrap().layers.len(), 1);
+    }
+
+    #[test]
+    fn delete_selected_layer_removes_it_and_undoes() {
+        let mut app = AppState::default();
+        app.new_composition();
+        app.confirm_comp_dialog();
+        app.add_solid_layer();
+        let comp_id = app.selected_comp.unwrap();
+        let layer = app.store.snapshot().comp(comp_id).unwrap().layers[0].id;
+        app.selected_layer = Some(layer);
+
+        app.delete_selected_layer();
+        assert_eq!(
+            app.store.snapshot().comp(comp_id).unwrap().layers.len(),
+            0,
+            "the layer is gone"
+        );
+        assert_eq!(app.selected_layer, None);
+        app.undo();
+        assert_eq!(
+            app.store.snapshot().comp(comp_id).unwrap().layers.len(),
+            1,
+            "undo brings it back"
+        );
     }
 
     /// K-068: the dialogue edits an existing comp's settings invertibly.
