@@ -379,6 +379,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   still edit the stack inline on the layer's own row in the Timeline; the panel is the same
   editor given more room. Saving a stack as a **preset** and loading one back (a small
   `.lumfx` JSON file, K-065) lives on that same add-effect row.
+- **Two more single-frame effects (K-099).** **Vignette** darkens the frame toward black
+  away from the centre (Amount/Radius/Softness/Roundness); **Chromatic aberration** fringes
+  red and blue outward/inward from the centre by a set number of pixels — a simpler,
+  always-on-the-corner sibling of RGB split's own Radial mode, for the common one-click case.
 - `crates/lumit-core/src/ops.rs` — **Every possible edit, as data.** An edit is an `Op`
   (AddLayer, SetLayerSpan…). Applying an op returns its exact inverse — that pair is what
   makes undo *provably* correct instead of hopefully correct.

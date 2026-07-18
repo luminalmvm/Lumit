@@ -179,6 +179,26 @@ struct SpectralSplitParams {
     _pad: [f32; 3],
 }
 
+/// One resolved chromatic aberration (docs/08 §3.15): a dedicated,
+/// always-radial sibling of [`RgbSplitOp`]'s own radial mode — no linear
+/// offset or wavelength dispersion of its own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChromaticAberrationOp {
+    /// Peak channel offset, raster pixels (reached at the corner distance).
+    pub amount_px: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ChromaticAberrationParams {
+    amount: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
 /// One resolved flash (docs/08 §3.7, manual form): the trigger envelope is
 /// already evaluated host-side into a plain strength.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -238,6 +258,38 @@ struct SaturationParams {
     saturation: f32,
     mix_amt: f32,
     _pad: [f32; 2],
+}
+
+/// One resolved vignette (docs/08 §3.14): darkens toward black away from
+/// the frame centre. Radius/Softness/Roundness are already-clamped
+/// fractions; the kernel derives the distance metric from its own
+/// `textureDimensions`, exactly like the CPU reference derives it from
+/// `w`/`h` — no raster conversion happens host-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VignetteOp {
+    /// 0..1: darkening strength; 0 is the neutral point.
+    pub amount: f32,
+    /// 0..1: the clear centre's reach.
+    pub radius: f32,
+    /// 0..1: feather width beyond radius.
+    pub softness: f32,
+    /// 0..1: 1 = circular, 0 = follows the frame's aspect.
+    pub roundness: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct VignetteParams {
+    amount: f32,
+    radius: f32,
+    softness: f32,
+    roundness: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// One resolved transform (docs/08 §3.5, K-090): the inverse affine arrives
@@ -412,9 +464,11 @@ pub struct FxEngine {
     sharpen_combine: wgpu::ComputePipeline,
     rgb_split: wgpu::ComputePipeline,
     spectral_split: wgpu::ComputePipeline,
+    chromatic_aberration: wgpu::ComputePipeline,
     flash: wgpu::ComputePipeline,
     colour_balance: wgpu::ComputePipeline,
     saturation: wgpu::ComputePipeline,
+    vignette: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
@@ -571,9 +625,11 @@ impl FxEngine {
         let sharpen_mod = module(include_str!("fx_sharpen.wgsl"), "fx-sharpen");
         let rgb_split_mod = module(include_str!("fx_rgbsplit.wgsl"), "fx-rgb-split");
         let spectral_mod = module(include_str!("fx_spectral.wgsl"), "fx-spectral-split");
+        let chromatic_mod = module(include_str!("fx_chromatic.wgsl"), "fx-chromatic-aberration");
         let flash_mod = module(include_str!("fx_flash.wgsl"), "fx-flash");
         let balance_mod = module(include_str!("fx_colourbalance.wgsl"), "fx-colour-balance");
         let saturation_mod = module(include_str!("fx_saturation.wgsl"), "fx-saturation");
+        let vignette_mod = module(include_str!("fx_vignette.wgsl"), "fx-vignette");
         let transform_mod = module(include_str!("fx_transform.wgsl"), "fx-transform");
         let glow_mod = module(include_str!("fx_glow.wgsl"), "fx-glow");
         let glitch_mod = module(include_str!("fx_glitch.wgsl"), "fx-glitch");
@@ -587,9 +643,15 @@ impl FxEngine {
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
         let rgb_split = pipeline(&rgb_split_mod, "fx-rgb-split", "rgb_split");
         let spectral_split = pipeline(&spectral_mod, "fx-spectral-split", "spectral_split");
+        let chromatic_aberration = pipeline(
+            &chromatic_mod,
+            "fx-chromatic-aberration",
+            "chromatic_aberration",
+        );
         let flash = pipeline(&flash_mod, "fx-flash", "flash");
         let colour_balance = pipeline(&balance_mod, "fx-colour-balance", "colour_balance");
         let saturation = pipeline(&saturation_mod, "fx-saturation", "saturate_fx");
+        let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
@@ -624,9 +686,11 @@ impl FxEngine {
             sharpen_combine,
             rgb_split,
             spectral_split,
+            chromatic_aberration,
             flash,
             colour_balance,
             saturation,
+            vignette,
             transform,
             glow_bright,
             glow_combine,
@@ -1120,6 +1184,37 @@ impl FxEngine {
         out
     }
 
+    /// Apply one chromatic aberration (docs/08 §3.15) to a linear working
+    /// texture, returning a new texture of the same size. Single pointwise
+    /// pass with offset bilinear taps — a dedicated, always-radial sibling
+    /// of [`FxEngine::rgb_split`]'s own radial mode.
+    pub fn chromatic_aberration(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ChromaticAberrationOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-chromatic-aberration-out");
+        self.dispatch(
+            ctx,
+            &self.chromatic_aberration,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ChromaticAberrationParams {
+                amount: op.amount_px,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+            }),
+        );
+        out
+    }
+
     /// Apply one flash (docs/08 §3.7, manual form) to a linear working
     /// texture, returning a new texture of the same size. One pointwise
     /// pass; the trigger envelope arrives pre-evaluated in the op.
@@ -1208,6 +1303,41 @@ impl FxEngine {
                 saturation: op.saturation,
                 mix_amt: op.mix,
                 _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+
+    /// Apply one vignette (docs/08 §3.14) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass; the
+    /// kernel derives the distance metric from its own texture size, and
+    /// Amount 0 short-circuits inside it.
+    pub fn vignette(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &VignetteOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-vignette-out");
+        self.dispatch(
+            ctx,
+            &self.vignette,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&VignetteParams {
+                amount: op.amount,
+                radius: op.radius,
+                softness: op.softness,
+                roundness: op.roundness,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out
@@ -1886,6 +2016,58 @@ mod tests {
         }
     }
 
+    /// The §1.6 oracle for chromatic aberration: a cheap pointwise effect
+    /// (a dedicated, always-radial sibling of RGB split's own radial mode),
+    /// so the CPU and GPU must agree to ≤ 2 fp16 ULP, and the GPU is
+    /// bit-stable (§2.4). Amount 0 is a bit-exact passthrough through the
+    /// general formula — no explicit short-circuit, mirroring RGB split's
+    /// own un-guarded style (asserted here as it is for RGB split above).
+    #[test]
+    fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for (amount, mix) in [
+            (3.0f32, 1.0f32),
+            (8.0, 0.6),
+            (12.5, 1.0),
+            (0.0, 1.0),
+            (6.0, 0.0),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::chromatic_aberration(&mut cpu, w, h, amount, mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let op = ChromaticAberrationOp {
+                amount_px: amount,
+                mix,
+            };
+            let out = fx.chromatic_aberration(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("chromatic aberration a={amount} mix={mix}: worst {worst} ulp");
+            assert!(
+                worst <= 2,
+                "amount {amount} mix {mix}: worst {worst} fp16 ULP"
+            );
+            if amount == 0.0 || mix == 0.0 {
+                assert_eq!(
+                    gpu, img,
+                    "amount 0 or mix 0 must be the bit-exact passthrough"
+                );
+            }
+
+            let out2 = fx.chromatic_aberration(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU chromatic aberration must be bit-stable");
+        }
+    }
+
     /// The §1.6 oracle for flash: a trivial pointwise effect, so the CPU
     /// and GPU must agree to ≤ 2 fp16 ULP, and the GPU is bit-stable (§2.4).
     #[test]
@@ -2046,6 +2228,99 @@ mod tests {
             let out2 = fx.saturation(&ctx, &tex, w, h, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU saturation must be bit-stable");
+        }
+    }
+
+    /// The §1.6 oracle for vignette: a cheap pointwise effect, so the CPU
+    /// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
+    /// Amount 0 (or Mix 0) is the bit-exact identity on both paths.
+    #[test]
+    fn wgsl_vignette_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+        for (name, op) in [
+            (
+                "neutral",
+                VignetteOp {
+                    amount: 0.0,
+                    radius: 0.75,
+                    softness: 0.5,
+                    roundness: 1.0,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "tight-circular",
+                VignetteOp {
+                    amount: 1.0,
+                    radius: 0.3,
+                    softness: 0.1,
+                    roundness: 1.0,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "soft-elliptical",
+                VignetteOp {
+                    amount: 0.6,
+                    radius: 0.5,
+                    softness: 0.4,
+                    roundness: 0.0,
+                    mix: 1.0,
+                },
+            ),
+            (
+                "mixed",
+                VignetteOp {
+                    amount: 0.8,
+                    radius: 0.6,
+                    softness: 0.3,
+                    roundness: 0.5,
+                    mix: 0.5,
+                },
+            ),
+            (
+                "mix-zero",
+                VignetteOp {
+                    amount: 0.9,
+                    radius: 0.2,
+                    softness: 0.05,
+                    roundness: 1.0,
+                    mix: 0.0,
+                },
+            ),
+        ] {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::vignette(
+                &mut cpu,
+                w,
+                h,
+                op.amount,
+                op.radius,
+                op.softness,
+                op.roundness,
+                op.mix,
+            );
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let out = fx.vignette(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("vignette {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+            if name == "neutral" || name == "mix-zero" {
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            }
+
+            let out2 = fx.vignette(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU vignette must be bit-stable");
         }
     }
 

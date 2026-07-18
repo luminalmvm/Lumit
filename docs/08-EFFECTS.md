@@ -178,6 +178,8 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.11 | LUT | stock + Looks | trivial | `{0}` |
 | 3.12 | Glitch | Universe / glitch packs | cheap | `{0}` (datamosh: `{-1, 0}`) |
 | 3.13 | Echo | stock Echo / speed-lines packs | moderate | `{-n..0}` |
+| 3.14 | Vignette | stock CC pack vignette | cheap | `{0}` |
+| 3.15 | Chromatic aberration | stock CC pack fillers | cheap | `{0}` |
 
 ### 3.1 Flow engine — optical-flow retime interpolation (Twixtor-class)
 
@@ -399,6 +401,11 @@ offsets along the angle; radial mode offsets along the vector from centre, scale
 distance^falloff. Operates premultiplied; alpha follows the green channel to avoid fringed
 mattes. Trivially animatable Amount is the scene's impact-frame staple.
 
+**§3.15 Chromatic aberration** is a separate, single-purpose sibling shipped alongside this
+effect: same R-outward/B-inward radial shape as this effect's own Radial mode, but with
+nothing else to configure — Amount and Mix only, no Angle/Mode/Wavelength — for the common
+case of a one-click corner fringe rather than a tuned dispersion look.
+
 ### 3.7 Flash — beat-aware strobe
 
 **Parameters:** Mode (Trigger / Strobe), Trigger source (marker-trigger), Duration
@@ -485,11 +492,11 @@ grade's tasteful default is a preset choice — see the browser below):
   precisely in the implementation notes.
 - **Saturation** (0–200%) — colourfulness about Rec. 709 luma in linear light.
 
-The remaining "CC" stages arrive as further single-purpose colour effects: **exposure /
-white balance** (stops; Temperature via Bradford-adapted CCT shift; Tint), **vibrance**
-(protects skin/already-saturated values), **curves** (master + R/G/B bezier, evaluated as
-1D LUTs baked per frame when animated), and **vignette** (Amount, Size, Softness,
-Roundness) — because every CC pack has one.
+**Vignette** (§3.14, shipped) is one of these single-purpose colour effects, because every CC
+pack has one. The remaining "CC" stages arrive the same way: **exposure / white balance**
+(stops; Temperature via Bradford-adapted CCT shift; Tint), **vibrance** (protects
+skin/already-saturated values), and **curves** (master + R/G/B bezier, evaluated as 1D LUTs
+baked per frame when animated).
 
 **Preset browser.** Colour presets get a dedicated browser (per
 [07-UI-SPEC.md](07-UI-SPEC.md)): a panel of live thumbnails, each preset applied to the
@@ -583,6 +590,59 @@ the layer's **source** frames, not the upstream stack's output at those times (f
 stacking is later), and echoes footage layers only — Sequence-clip and adjustment-layer
 temporal effects are deferred. Marker-triggerable intensity spikes come with the §1.4 wiring
 already in place.
+
+### 3.14 Vignette
+
+**Parameters:** Amount (0–1, default 0.5), Radius (0–1, default 0.75), Softness (0–1,
+default 0.5), Roundness (0–1, default 1.0), Mix.
+
+**Algorithm sketch.** Darkens toward black away from the frame centre: a normalised distance
+metric (blended by Roundness between a true circle and an ellipse matching the frame's
+aspect) feeds a smoothstep between Radius and Radius + Softness, scaled by Amount and
+multiplied into the premultiplied colour; alpha is untouched. `cheap` cost, `exact` ROI — a
+pointwise per-pixel darken, no neighbour sampling despite the spatial falloff.
+
+**Status (v1, shipped):** §3.10's one-line mention names Amount, Size, Softness, Roundness
+without ranges or a parameter shape — pinned here as Amount / Radius / Softness / Roundness,
+each a plain 0–1 fraction rather than the %-diag or percentage figures most of the catalogue
+uses: the schema's Radius plays the role §3.10's text calls Size, renamed for clarity against
+Blur's and Glow's own Radius, which shares their unit family instead. Category is **Colour**,
+alongside Colour balance and Saturation — matching where §3.10's text already lists it, not
+Stylise, despite the spatial falloff. Roundness blends the distance metric between a circle
+(1: both axes normalised by the frame's shorter side, so equal pixel distances read as equal)
+and an ellipse that exactly reaches every edge of the frame (0: each axis normalised by its
+own half-extent); Radius and Softness are read against that same normalised metric, so — despite
+governing a spatial falloff — neither needs a %-diag conversion the way Blur's Radius does: the
+metric is already resolution-relative by construction, derived from the raster's own width and
+height at kernel time. Amount 0 is the neutral point (bit-exact passthrough, pinned by test,
+mirroring Glow's own Intensity-0 short-circuit). A Colour param tinting the vignette away from
+black is deferred — v1 always darkens toward black, the near-universal case; array literals for
+such a default remain data, not the banned hex-literal shape (docs/15 §4's no-hex-outside-theme
+rule only reaches `Color32`/hex-literal colours in widget code).
+
+### 3.15 Chromatic aberration
+
+**Parameters:** Amount (px@comp, default 4), Mix.
+
+**Algorithm sketch.** R samples pulled toward the frame centre and B pulled away (so R reads
+outward and B inward in the rendered image), growing linearly with each pixel's own distance
+from centre and reaching Amount at the corner; G and alpha stay put. Premultiplied throughout,
+edges clamp. `cheap` cost, `full-frame` ROI.
+
+**Status (v1, shipped):** a dedicated, always-radial sibling of §3.6 RGB split's own Radial
+mode, not a replacement for it — RGB split's Radial mode already covers this exact shape as
+one of its three modes (alongside Linear and the Wavelength quality tier), sharing its Amount
+currency (% diag) with Linear mode's Angle-driven offset. This effect exists as a
+single-purpose, one-click version with nothing else to configure: drop it on and it already
+looks right (§1.2), the same shape rule that split the old Grade into Colour balance and
+Saturation (K-090). Because it has no Angle to share a currency with, Amount is authored in
+raw px@comp (§2.3) instead of % diag — scaled by the preview factor exactly like Glitch's
+Block size — and its ROI is declared `full-frame` rather than a tight %-diag padding, since a
+fixed pixel offset cannot be bounded as a percentage of the diagonal across every comp
+resolution ahead of time. Category is **Distortion**, matching RGB split. No explicit Amount-0
+short circuit is needed in either the CPU reference or the WGSL kernel: the radial offset's
+scale factor is an exact `0.0` at Amount 0, so every tap already collapses onto its own pixel
+— the same un-guarded style RGB split's own kernel uses (asserted bit-exact by test).
 
 ---
 

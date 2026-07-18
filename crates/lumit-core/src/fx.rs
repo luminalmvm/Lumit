@@ -424,6 +424,48 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Chromatic aberration (docs/08 §3.15): a dedicated, always-radial
+    // sibling of RGB split's own Radial mode (§3.6) — R pulled outward, B
+    // pulled inward, G and alpha unshifted, growing from the frame centre.
+    // Where RGB split's Amount is % diag (so linear and radial modes share
+    // one currency across both angle-driven and centre-driven offsets),
+    // this effect has only the radial shape and one purpose, so Amount is
+    // authored in raw px@comp (§2.3) instead — scaled by the preview factor
+    // exactly like Glitch's Block size — because "how many pixels of
+    // fringe" is the honest unit for a single-purpose corner effect with no
+    // angle to share a currency with.
+    EffectSchema {
+        match_name: "chromatic_aberration",
+        label: "Chromatic aberration",
+        version: 1,
+        category: FxCategory::Distortion,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            // Amount is raw px@comp, not % diag, so a tight %-diag padding
+            // cannot be declared statically across every comp resolution;
+            // full-frame is the safe static bound (mirroring Glitch's own
+            // px@comp parameters, which take the same route).
+            roi: Roi::FullFrame,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "amount",
+                label: "Amount",
+                // px@comp (§2.3): peak channel offset, reached at the
+                // corner distance from the frame centre.
+                kind: ParamKind::Float {
+                    default: 4.0,
+                    slider: (0.0, 20.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
     // Beat-aware strobe (docs/08 §3.7). Manual mode is the original manual
     // form: each keyframe on Trigger is a hit (its value = how hard, 0..1)
     // that decays exponentially over Decay; a static Trigger holds a
@@ -618,6 +660,74 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 100.0,
                     slider: (0.0, 200.0),
                     hard: (Some(0.0), Some(200.0)),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
+    // Vignette (docs/08 §3.14, listed as a planned colour effect in §3.10):
+    // darkens toward black away from the frame centre, in premultiplied
+    // colour (a coverage-like darken, not a lift/gamma/gain grade, so no
+    // unpremultiply round trip). Category Colour, alongside Colour balance
+    // and Saturation — its closest siblings and where §3.10's own text
+    // already lists it.
+    EffectSchema {
+        match_name: "vignette",
+        label: "Vignette",
+        version: 1,
+        category: FxCategory::Colour,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::Exact,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "amount",
+                label: "Amount",
+                // 0..1: the darkening strength; 0 is the neutral point
+                // (bit-exact passthrough, pinned by test).
+                kind: ParamKind::Float {
+                    default: 0.5,
+                    slider: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
+                },
+            },
+            ParamSchema {
+                id: "radius",
+                label: "Radius",
+                // 0..1: how far from centre the clear area reaches, in the
+                // Roundness-blended distance metric below (1.0 = that
+                // metric's own reference edge).
+                kind: ParamKind::Float {
+                    default: 0.75,
+                    slider: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
+                },
+            },
+            ParamSchema {
+                id: "softness",
+                label: "Softness",
+                // 0..1: feather width beyond Radius, in the same metric.
+                kind: ParamKind::Float {
+                    default: 0.5,
+                    slider: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
+                },
+            },
+            ParamSchema {
+                id: "roundness",
+                label: "Roundness",
+                // 1 = circular (both axes read equal pixel distances as
+                // equal); 0 = follows the frame's own aspect ratio (an
+                // ellipse exactly reaching every edge at Radius 1).
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
                 },
             },
             MIX_PARAM,
@@ -1370,6 +1480,16 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    /// Chromatic aberration (docs/08 §3.15): a dedicated, always-radial
+    /// sibling of RGB split's own Radial mode — always centred on the
+    /// frame, no angle or linear mode of its own.
+    ChromaticAberration {
+        /// Peak channel offset in raster pixels, reached at the corner
+        /// distance from the frame centre.
+        amount_px: f32,
+        /// 0..1.
+        mix: f32,
+    },
     Flash {
         /// The evaluated envelope × intensity, 0..1 (0 = no flash).
         strength: f32,
@@ -1392,6 +1512,23 @@ pub enum Resolved {
     Saturation {
         /// Factor about Rec. 709 luma: 0 = greyscale, 1 = neutral, 2 = max.
         saturation: f32,
+        /// 0..1.
+        mix: f32,
+    },
+    /// Vignette (docs/08 §3.14): darkens toward black away from the frame
+    /// centre. `radius`/`softness` are read against the Roundness-blended
+    /// distance metric [`cpu::vignette`] computes from `w`/`h` — no raster
+    /// conversion happens here, unlike the %-diag family, because the
+    /// metric is already resolution-relative by construction.
+    Vignette {
+        /// 0..1: darkening strength; 0 is the neutral point.
+        amount: f32,
+        /// 0..1: the clear centre's reach.
+        radius: f32,
+        /// 0..1: feather width beyond radius.
+        softness: f32,
+        /// 0..1: 1 = circular, 0 = follows the frame's aspect.
+        roundness: f32,
         /// 0..1.
         mix: f32,
     },
@@ -2116,6 +2253,12 @@ pub fn resolve_stack(
                     }
                 })
             }
+            "chromatic_aberration" => {
+                let amount_px =
+                    (e.float_at("amount", lt).unwrap_or(4.0) as f32 * px_scale).max(0.0);
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::ChromaticAberration { amount_px, mix })
+            }
             "flash" => {
                 // Instances saved before the marker modes existed carry no
                 // "mode" parameter and resolve as Manual — byte-identically.
@@ -2171,6 +2314,20 @@ pub fn resolve_stack(
                     (e.float_at("saturation", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 2.0);
                 let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
                 Some(Resolved::Saturation { saturation, mix })
+            }
+            "vignette" => {
+                let amount = (e.float_at("amount", lt).unwrap_or(0.5) as f32).clamp(0.0, 1.0);
+                let radius = (e.float_at("radius", lt).unwrap_or(0.75) as f32).clamp(0.0, 1.0);
+                let softness = (e.float_at("softness", lt).unwrap_or(0.5) as f32).clamp(0.0, 1.0);
+                let roundness = (e.float_at("roundness", lt).unwrap_or(1.0) as f32).clamp(0.0, 1.0);
+                let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+                Some(Resolved::Vignette {
+                    amount,
+                    radius,
+                    softness,
+                    roundness,
+                    mix,
+                })
             }
             "glow" => {
                 let radius_pct = e.float_at("radius", lt).unwrap_or(8.0) as f32;
@@ -2388,6 +2545,9 @@ pub mod cpu {
                 radial,
                 mix,
             } => spectral_split(rgba, w, h, *amount_px, *angle_deg, *radial, *mix),
+            Resolved::ChromaticAberration { amount_px, mix } => {
+                chromatic_aberration(rgba, w, h, *amount_px, *mix)
+            }
             Resolved::Flash {
                 strength,
                 colour,
@@ -2400,6 +2560,13 @@ pub mod cpu {
                 mix,
             } => colour_balance(rgba, *lift, *gamma, *gain, *mix),
             Resolved::Saturation { saturation, mix } => saturate(rgba, *saturation, *mix),
+            Resolved::Vignette {
+                amount,
+                radius,
+                softness,
+                roundness,
+                mix,
+            } => vignette(rgba, w, h, *amount, *radius, *softness, *roundness, *mix),
             Resolved::Transform {
                 anchor,
                 position,
@@ -2641,6 +2808,61 @@ pub mod cpu {
                 let v = (luma + (u[c] - luma) * saturation).max(0.0);
                 let s = v * a;
                 px[c] = px[c] * (1.0 - mix) + s * mix;
+            }
+        }
+    }
+
+    /// Vignette (docs/08 §3.14): darkens toward black away from the frame
+    /// centre, on premultiplied colour — a coverage-like darkening, not a
+    /// colour grade, so no unpremultiply round trip (alpha is untouched).
+    /// Roundness blends the distance metric between a true circle (1: both
+    /// axes normalised by the shorter side, so equal pixel distances read
+    /// as equal) and an ellipse that exactly reaches the frame's own edges
+    /// (0: each axis normalised by its own half-extent) — the schema's own
+    /// description of the knob. Radius is the clear centre's reach in that
+    /// normalised metric (1.0 = the metric's own reference edge) and
+    /// Softness the feather beyond it; the feather width floors at a small
+    /// epsilon so Softness 0 reads as a hard edge rather than a division by
+    /// zero. Amount 0 is the neutral point (bit-exact passthrough, pinned
+    /// by test — the WGSL twin matches).
+    #[allow(clippy::too_many_arguments)]
+    pub fn vignette(
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        amount: f32,
+        radius: f32,
+        softness: f32,
+        roundness: f32,
+        mix: f32,
+    ) {
+        if amount == 0.0 {
+            return;
+        }
+        let (fw, fh) = (w as f32, h as f32);
+        if fw <= 0.0 || fh <= 0.0 {
+            return;
+        }
+        let half = fw.min(fh) * 0.5;
+        let rx = (fw * 0.5) * (1.0 - roundness) + half * roundness;
+        let ry = (fh * 0.5) * (1.0 - roundness) + half * roundness;
+        let (cx, cy) = (fw * 0.5, fh * 0.5);
+        let edge0 = radius;
+        let edge1 = radius + softness.max(1e-6);
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let nx = (x as f32 + 0.5 - cx) / rx;
+                let ny = (y as f32 + 0.5 - cy) / ry;
+                let dist = (nx * nx + ny * ny).sqrt();
+                let t = ((dist - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+                let s = t * t * (3.0 - 2.0 * t);
+                let vig = (s * amount).clamp(0.0, 1.0);
+                let keep = 1.0 - vig;
+                for c in 0..3 {
+                    let darkened = rgba[i + c] * keep;
+                    rgba[i + c] = rgba[i + c] * (1.0 - mix) + darkened * mix;
+                }
             }
         }
     }
@@ -2913,6 +3135,37 @@ pub mod cpu {
                     }
                 }
                 let split = [acc[0], acc[1], acc[2], original[i + 3]];
+                for c in 0..4 {
+                    rgba[i + c] = original[i + c] * (1.0 - mix) + split[c] * mix;
+                }
+            }
+        }
+    }
+
+    /// Chromatic aberration (docs/08 §3.15): a dedicated, always-radial
+    /// sibling of [`rgb_split`]'s own Radial mode — same R-behind/B-ahead
+    /// shape, always centred on the frame, no angle or linear mode of its
+    /// own. R samples pulled toward centre, B pulled away, so R reads
+    /// outward and B inward in the rendered image; G and alpha stay put.
+    /// Premultiplied throughout; samples outside the frame clamp to the
+    /// edge. Amount 0 is already the bit-exact passthrough through the
+    /// general formula (`k` is an exact `0.0`, so every tap lands on its
+    /// own pixel) — no separate short-circuit is needed, mirroring
+    /// `rgb_split`'s own un-guarded style.
+    pub fn chromatic_aberration(rgba: &mut [f32], w: u32, h: u32, amount_px: f32, mix: f32) {
+        let original = rgba.to_vec();
+        let (fw, fh) = (w as f32, h as f32);
+        let diag = (fw * fw + fh * fh).sqrt();
+        let k = amount_px / (0.5 * diag);
+        let (cx, cy) = (fw * 0.5, fh * 0.5);
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let pos = (x as f32 + 0.5, y as f32 + 0.5);
+                let (ox, oy) = ((pos.0 - cx) * k, (pos.1 - cy) * k);
+                let r = bilinear(&original, w, h, pos.0 - ox, pos.1 - oy)[0];
+                let b = bilinear(&original, w, h, pos.0 + ox, pos.1 + oy)[2];
+                let split = [r, original[i + 1], b, original[i + 3]];
                 for c in 0..4 {
                     rgba[i + c] = original[i + c] * (1.0 - mix) + split[c] * mix;
                 }
@@ -3788,6 +4041,87 @@ mod tests {
     }
 
     #[test]
+    fn chromatic_aberration_instantiates_and_resolves() {
+        let e = instantiate("chromatic_aberration").unwrap();
+        assert_eq!(e.float_at("amount", 0.0), Some(4.0));
+        // px@comp, not % diag: diag_px does not enter the conversion, unlike
+        // rgb_split's own Amount — only the preview-resolution px_scale does.
+        let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+        assert_eq!(
+            r,
+            vec![Resolved::ChromaticAberration {
+                amount_px: 4.0,
+                mix: 1.0
+            }]
+        );
+    }
+
+    #[test]
+    fn chromatic_aberration_amount_scales_with_the_preview_factor() {
+        let e = instantiate("chromatic_aberration").unwrap();
+        // Half preview (px_scale 0.5): px@comp parameters scale down with
+        // it, exactly like Glitch's Block size (§2.3).
+        let r = resolve_stack(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
+        assert_eq!(
+            r,
+            vec![Resolved::ChromaticAberration {
+                amount_px: 2.0,
+                mix: 1.0
+            }]
+        );
+    }
+
+    #[test]
+    fn cpu_chromatic_aberration_shifts_channels_radially_and_keeps_alpha() {
+        // A white impulse in the middle of a black opaque frame — the same
+        // corpus rgb_split's own radial-mode test uses.
+        let (w, h) = (17u32, 9u32);
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for px in img.chunks_exact_mut(4) {
+            px[3] = 1.0;
+        }
+        let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+        let mid = at(8, 4);
+        img[mid..mid + 3].copy_from_slice(&[1.0, 1.0, 1.0]);
+
+        // Amount 0 and mix 0 are both the exact identity (the general
+        // formula's own passthrough, mirroring rgb_split's un-guarded style).
+        let mut a0 = img.clone();
+        cpu::chromatic_aberration(&mut a0, w, h, 0.0, 1.0);
+        assert_eq!(a0, img);
+        let mut m0 = img.clone();
+        cpu::chromatic_aberration(&mut m0, w, h, 5.0, 0.0);
+        assert_eq!(m0, img);
+
+        // The exact centre pixel is unmoved even at a huge amount: its own
+        // (position − centre) vector is zero, so every tap collapses onto it.
+        let mut c = img.clone();
+        cpu::chromatic_aberration(&mut c, w, h, 20.0, 1.0);
+        assert_eq!(c[mid], 1.0, "frame-centre red is unmoved");
+        assert_eq!(c[mid + 2], 1.0, "frame-centre blue is unmoved");
+        assert_eq!(c[mid + 1], 1.0, "green untouched everywhere");
+
+        // At Amount = half the frame diagonal, k is exactly 1: every
+        // pixel's R sample point algebraically collapses onto the frame
+        // centre (`pos − (pos − centre)·1 = centre`) — and because every
+        // coordinate here is an integer or half-integer well inside f32's
+        // exact range, that cancellation is bit-exact, not approximate. So
+        // red reads the centre's own red value (the impulse, 1.0)
+        // everywhere: a clean, exact witness that the offset visibly moves
+        // colour off-centre, which a single arbitrary amount cannot give
+        // (a lone one-texel impulse can fall clean outside a shifted tap's
+        // bilinear footprint, missing it entirely).
+        let (fw, fh) = (w as f32, h as f32);
+        let diag = (fw * fw + fh * fh).sqrt();
+        let mut half_diag = img.clone();
+        cpu::chromatic_aberration(&mut half_diag, w, h, 0.5 * diag, 1.0);
+        assert!(
+            half_diag.iter().step_by(4).all(|&r| r == 1.0),
+            "every pixel's red reads the centre's red at Amount = half diagonal"
+        );
+    }
+
+    #[test]
     fn spectral_basis_columns_sum_to_one() {
         // The normalisation that makes a uniform image pass through
         // unchanged: each channel's nine weights sum to 1 (within f32
@@ -3978,6 +4312,94 @@ mod tests {
                 saturation: 1.0,
                 mix: 1.0
             }]
+        );
+    }
+
+    #[test]
+    fn vignette_instantiates_and_resolves() {
+        let e = instantiate("vignette").unwrap();
+        assert_eq!(e.float_at("amount", 0.0), Some(0.5));
+        assert_eq!(e.float_at("radius", 0.0), Some(0.75));
+        assert_eq!(e.float_at("softness", 0.0), Some(0.5));
+        assert_eq!(e.float_at("roundness", 0.0), Some(1.0));
+        let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+        assert_eq!(
+            r,
+            vec![Resolved::Vignette {
+                amount: 0.5,
+                radius: 0.75,
+                softness: 0.5,
+                roundness: 1.0,
+                mix: 1.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
+        let (w, h) = (20u32, 20u32);
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for px in img.chunks_exact_mut(4) {
+            px.copy_from_slice(&[1.0, 1.0, 1.0, 1.0]); // opaque white
+        }
+        let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+
+        // Amount 0 and mix 0 are both the exact identity (the early return
+        // and the general blend formula's own 1·x + 0·y identity).
+        let mut a0 = img.clone();
+        cpu::vignette(&mut a0, w, h, 0.0, 0.75, 0.5, 1.0, 1.0);
+        assert_eq!(a0, img);
+        let mut m0 = img.clone();
+        cpu::vignette(&mut m0, w, h, 0.8, 0.2, 0.1, 1.0, 0.0);
+        assert_eq!(m0, img);
+
+        // A tight, hard-edged, fully-strength vignette: the centre stays
+        // lit, the corner goes dark, alpha is never touched.
+        let mut v = img.clone();
+        cpu::vignette(&mut v, w, h, 1.0, 0.2, 0.05, 1.0, 1.0);
+        let centre = at(10, 10);
+        let corner = at(0, 0);
+        assert!(v[centre] > 0.95, "centre stays lit: {}", v[centre]);
+        assert!(v[corner] < 0.05, "corner goes dark: {}", v[corner]);
+        assert_eq!(v[corner + 3], 1.0, "alpha is never touched");
+    }
+
+    #[test]
+    fn cpu_vignette_roundness_changes_the_shape_on_a_non_square_frame() {
+        let (w, h) = (40u32, 20u32);
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for px in img.chunks_exact_mut(4) {
+            px.copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+        }
+        let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+        // The long edge's midpoint: circular roundness (normalised by the
+        // short side, h here) reads its x distance as almost twice as far
+        // as elliptical roundness (normalised by w itself) does, so a
+        // Radius/Softness pair that fully darkens only one metric's reach
+        // tells the two apart.
+        let edge_right_mid = at(w - 1, h / 2);
+
+        let mut circular = img.clone();
+        cpu::vignette(&mut circular, w, h, 1.0, 0.9, 0.2, 1.0, 1.0);
+        let mut elliptical = img.clone();
+        cpu::vignette(&mut elliptical, w, h, 1.0, 0.9, 0.2, 0.0, 1.0);
+
+        assert!(
+            circular[edge_right_mid] < 1e-5,
+            "circular is fully dark this far out: {}",
+            circular[edge_right_mid]
+        );
+        assert!(
+            elliptical[edge_right_mid] > 0.0,
+            "elliptical has not fully darkened here: {}",
+            elliptical[edge_right_mid]
+        );
+        assert!(
+            circular[edge_right_mid] < elliptical[edge_right_mid],
+            "circular darkens the long edge harder than elliptical: \
+             circular {} elliptical {}",
+            circular[edge_right_mid],
+            elliptical[edge_right_mid]
         );
     }
 

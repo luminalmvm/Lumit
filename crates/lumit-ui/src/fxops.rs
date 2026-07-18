@@ -160,6 +160,18 @@ pub fn run_ops(
                     },
                 );
             }
+            Resolved::ChromaticAberration { amount_px, mix } => {
+                tex = fx.chromatic_aberration(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::ChromaticAberrationOp {
+                        amount_px: *amount_px,
+                        mix: *mix,
+                    },
+                );
+            }
             Resolved::Flash {
                 strength,
                 colour,
@@ -204,6 +216,27 @@ pub fn run_ops(
                     h,
                     &lumit_gpu::fx::SaturationOp {
                         saturation: *saturation,
+                        mix: *mix,
+                    },
+                );
+            }
+            Resolved::Vignette {
+                amount,
+                radius,
+                softness,
+                roundness,
+                mix,
+            } => {
+                tex = fx.vignette(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::VignetteOp {
+                        amount: *amount,
+                        radius: *radius,
+                        softness: *softness,
+                        roundness: *roundness,
                         mix: *mix,
                     },
                 );
