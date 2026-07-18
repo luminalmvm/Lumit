@@ -858,21 +858,39 @@ impl Renderer<'_> {
                 && e.effect.namespace == EffectNamespace::Builtin
                 && e.effect.match_name == "dof"
         }) {
+            let after_effects = e.bool_of("depth_after_effects").unwrap_or(false);
             let slot = match e.layer_ref("depth") {
                 Some(id) => match comp.layers.iter().find(|l| l.id == id) {
                     Some(src) if t >= src.in_point.0.to_f64() && t < src.out_point.0.to_f64() => {
-                        // Render source-only (the pre-fx `prepare` result), so
-                        // the depth matches the preview and cannot recurse.
+                        // Source-only by default (the pre-fx `prepare` result),
+                        // so the depth matches the preview and cannot recurse.
+                        // After-effects depth (K-125) runs the depth layer's own
+                        // stack on it first, exactly as the preview does — empty
+                        // temporal inputs in v1 (same boundary as the matte).
                         match self.prepare(src, t, visited)? {
-                            Some(p) => Some(crate::fxops::render_layer_input(
-                                &self.compositor,
-                                self.gpu,
-                                w,
-                                h,
-                                &p.tex,
-                                p.tex.width() as f32,
-                                p.tex.height() as f32,
-                            )),
+                            Some(p) => {
+                                let (dw, dh) = (p.tex.width(), p.tex.height());
+                                let tex = if after_effects {
+                                    let slt = t - src.start_offset.0.to_f64();
+                                    let diag = ((comp.width as f32).powi(2)
+                                        + (comp.height as f32).powi(2))
+                                    .sqrt();
+                                    let markers =
+                                        lumit_core::fx::MarkerContext::for_layer(comp, src);
+                                    self.apply_fx(p.tex, src, slt, diag, &markers, &[], None, &[])
+                                } else {
+                                    p.tex
+                                };
+                                Some(crate::fxops::render_layer_input(
+                                    &self.compositor,
+                                    self.gpu,
+                                    w,
+                                    h,
+                                    &tex,
+                                    dw as f32,
+                                    dh as f32,
+                                ))
+                            }
                             None => None,
                         }
                     }

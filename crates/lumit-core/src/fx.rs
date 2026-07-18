@@ -1011,6 +1011,18 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Layer {},
             },
             ParamSchema {
+                // The "after effects" companion for the depth Layer input
+                // (K-125): off (default) reads the depth layer's source pixels,
+                // on runs the depth layer's own effect stack into the depth pass
+                // first (a graded or blurred depth map). Named `<layer>_after_
+                // effects` by convention so the host can find the flag for any
+                // layer-input parameter. Off keeps the historical source-only
+                // behaviour, so old projects are unchanged.
+                id: "depth_after_effects",
+                label: "Depth after effects",
+                kind: ParamKind::Bool { default: false },
+            },
+            ParamSchema {
                 id: "focus",
                 label: "Focus distance",
                 // The in-focus depth, 0..1. Mid-depth by default so a typical

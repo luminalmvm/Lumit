@@ -899,9 +899,11 @@ file. The GPU kernel and its §1.6 CPU oracle predate the wiring (`lumit_gpu::fx
 `fx_dof.wgsl`); this is the effect that feeds them a real depth.
 
 **Parameters:** Depth layer (a layer reference; unset until picked — a labelled no-op),
-Focus distance (0–1, default 0.5, the in-focus depth), Focus range (0–1, default 0.1, the
-half-width of the sharp band around focus), Aperture (px@comp, default 8, slider 0–40, the
-maximum circle-of-confusion radius), Mix.
+Depth after effects (bool, default off — off reads the depth layer's source pixels, on runs the
+depth layer's own effect stack into the depth pass first, a graded/blurred depth map; K-125,
+same v1 temporal boundary as the after-effects matte), Focus distance (0–1, default 0.5, the
+in-focus depth), Focus range (0–1, default 0.1, the half-width of the sharp band around focus),
+Aperture (px@comp, default 8, slider 0–40, the maximum circle-of-confusion radius), Mix.
 
 **Algorithm sketch.** Per output pixel, read the depth from the referenced layer's **red
 channel** (0..1; by convention 0 = near, 1 = far, though the effect is symmetric about

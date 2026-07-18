@@ -446,6 +446,17 @@ impl EffectInstance {
         }
     }
 
+    /// A bool parameter's value, or None when the parameter is absent or not a
+    /// Bool. Bools are static in v1 (they do not keyframe), so there is no time
+    /// argument — an absent flag (an older project saved before the parameter
+    /// existed) reads as None, which callers treat as the default (false).
+    pub fn bool_of(&self, id: &str) -> Option<bool> {
+        match self.param(id)? {
+            EffectValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
     /// A file parameter's live path at layer time `lt` (the hold-keyframed
     /// index selects it), or None when the parameter is absent, not a File, or
     /// unset.

@@ -1253,5 +1253,9 @@ colour moves. **v1 boundary:** temporal inputs (echo neighbours, flow motion-blu
 depth reference) are **not** fed through an after-effects matte — the source's spatial and colour
 stack applies, but an echo/flow effect on the matte source degrades to a still; the common cases
 (colour key, blur, levels) are exact. The same toggle for a Layer-reference depth input (K-123)
-rides as a `depth_after_effects` schema bool on each consuming effect (a follow-up), not a model
-field. Built on the main branch alongside the effects sprint.
+rides as a `depth_after_effects` schema bool on each consuming effect, not a model field. Built on
+the main branch alongside the effects sprint. *Follow-up landed same sprint:* the DoF depth input
+gained `depth_after_effects` (default false); `render_dof_inputs`/`build_dof_inputs` run the depth
+layer's stack before resampling, and the key folds it via `feed_effect_stack`'s Layer arm guarded
+by a one-level `allow_after_effects_refs` (a referenced layer's own layer-inputs stay source-only,
+matching the render where they render as passthrough).

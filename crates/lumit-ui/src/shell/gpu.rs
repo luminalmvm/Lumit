@@ -48,6 +48,15 @@ pub struct DofInputDraw {
     pub rgba: Vec<u8>,
     pub tex_w: u32,
     pub tex_h: u32,
+    /// The depth layer's own effect stack, resolved at its layer time — run on
+    /// the depth texture before it is resampled, when the consuming effect's
+    /// `depth_after_effects` flag is set (K-125, mirroring the after-effects
+    /// matte). Empty is the source-only default. Temporal inputs are not fed
+    /// through an after-effects depth input in v1 (same boundary as the matte).
+    pub fx: Vec<lumit_core::fx::Resolved>,
+    /// The depth layer's `lut` file paths, 1:1 with the `Resolved::Lut` ops in
+    /// `fx`. Empty unless `depth_after_effects` and the depth layer has a LUT.
+    pub lut_files: Vec<Option<String>>,
 }
 
 /// Where a draw's pixels come from: decoded/synthesised bytes, or a nested
@@ -290,6 +299,28 @@ impl GpuViewer {
                     .engine
                     .upload_srgb8(&self.ctx, &d.rgba, d.tex_w, d.tex_h);
                 let linear = self.engine.linearise(&self.ctx, &src);
+                // After-effects depth (K-125): run the depth layer's own stack
+                // on its texture before it is resampled, when the consumer set
+                // depth_after_effects. Temporal inputs stay empty in v1 (same
+                // boundary as the after-effects matte). Export does the same, so
+                // the two depth passes match (K-031).
+                let linear = if d.fx.is_empty() {
+                    linear
+                } else {
+                    let luts = self.load_luts(&d.lut_files);
+                    crate::fxops::run_ops(
+                        &self.fx,
+                        &self.ctx,
+                        linear,
+                        d.tex_w,
+                        d.tex_h,
+                        &d.fx,
+                        &[],
+                        None,
+                        &luts,
+                        &[],
+                    )
+                };
                 Some(crate::fxops::render_layer_input(
                     &self.compositor,
                     &self.ctx,

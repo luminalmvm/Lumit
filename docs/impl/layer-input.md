@@ -109,10 +109,21 @@ source's stack (shared `feed_effect_stack`) only when the toggle is on.
   source to flow through the full per-layer draw path (its own decode job for
   neighbours/flow, its own depth inputs) rather than a one-shot `run_ops`.
 
-**Depth layer-input — deferred.** Rides as a companion `depth_after_effects`
-`Bool` schema param on each consuming effect (DoF), not an `EffectValue::Layer`
-model change — cheaper, no serialisation churn, and per-input nameable. Same
-`run_ops`-before-consume shape as the matte, same v1 temporal boundary.
+**Depth layer-input — landed (K-125).** Rides as a companion
+`depth_after_effects` `Bool` schema param on the DoF effect (default false), not
+an `EffectValue::Layer` model change — cheaper, no serialisation churn, and
+per-input nameable by the `<layer-param-id>_after_effects` convention. When set,
+`render_dof_inputs` (preview) / `build_dof_inputs` (export) run the depth
+layer's own stack on its texture before `render_layer_input` resamples it —
+same `run_ops`-before-consume shape as the matte, same v1 temporal boundary
+(empty neighbours/flow/nested-depth). The frame key folds the depth layer's
+stack through `feed_effect_stack`'s Layer arm when the sibling flag is set,
+guarded by `allow_after_effects_refs` so the fold is one level deep (a depth
+layer's *own* layer-inputs render as passthrough in v1, so they are not folded
+after-effects — matching the render and bounding key recursion). New DoF
+instances show the "Depth after effects" checkbox automatically; existing saved
+instances gain it on re-add (the instance-driven param list, as for any new
+effect param).
 
 ## Status / follow-ups (landed, K-123/K-124)
 

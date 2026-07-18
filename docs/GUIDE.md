@@ -532,7 +532,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   nothing you already made changes. One limitation worth knowing: in this first version the
   after-effects matte applies the layer's *look* effects (keys, blurs, colour) but not its
   *time-based* ones — an Echo or motion-blur-from-movement on a matte layer is treated as a still
-  frame; the everyday cases are exact. (The same switch is coming to depth layers.)
+  frame; the everyday cases are exact. **Depth of field** has the same switch as a **Depth after
+  effects** checkbox beside its Depth layer picker: off reads the depth layer's raw picture, on
+  runs the depth layer's own effects first — so you can blur or grade a depth pass before the lens
+  blur reads it. Same look-effects-only limit applies.
 - **Colour picker and eyedropper.** Every effect **Colour** parameter — a Flash tint, a Colour
   balance wheel, the Matte key's Key colour, and so on — now shows a **clickable swatch**. Click
   it and Lumit's colour wheel and sliders open, so you can pick a colour by eye instead of typing

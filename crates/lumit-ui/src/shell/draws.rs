@@ -267,8 +267,40 @@ pub(crate) fn build_comp_draws(
                     if !in_span(src) {
                         return None;
                     }
-                    let (rgba, tex_w, tex_h, _natural) = pixels_for(src)?;
-                    Some(DofInputDraw { rgba, tex_w, tex_h })
+                    let (rgba, tex_w, tex_h, natural) = pixels_for(src)?;
+                    // After-effects depth (K-125): when the dof effect sets
+                    // depth_after_effects, resolve the depth layer's own stack at
+                    // its layer time so render_dof_inputs runs it on the depth
+                    // texture before resampling. Uses the depth layer's decode
+                    // scale (its px@comp radii stay honest), the same resolve
+                    // export uses (K-031). Empty when off or its fx switch is off.
+                    let (fx, lut_files) =
+                        if e.bool_of("depth_after_effects").unwrap_or(false) && src.switches.fx {
+                            let slt = t_comp - src.start_offset.0.to_f64();
+                            let comp_diag =
+                                ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                            let scale = tex_w as f32 / natural.0.max(1.0);
+                            let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                            (
+                                lumit_core::fx::resolve_stack(
+                                    &src.effects,
+                                    slt,
+                                    comp_diag * scale,
+                                    scale,
+                                    &markers,
+                                ),
+                                lut_files(&src.effects, slt),
+                            )
+                        } else {
+                            (Vec::new(), Vec::new())
+                        };
+                    Some(DofInputDraw {
+                        rgba,
+                        tex_w,
+                        tex_h,
+                        fx,
+                        lut_files,
+                    })
                 })
                 .collect()
         };

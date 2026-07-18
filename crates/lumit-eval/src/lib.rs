@@ -147,14 +147,19 @@ fn feed_comp(
 /// Fold an effect stack into the frame key (docs/08): each live effect's
 /// identity, version and evaluated parameters, plus the local time for seeded
 /// and marker-driven effects (their pixels depend on time even when parameters
-/// hold). Shared by a layer's own stack and — for an after-effects matte
-/// (K-decision) — the matte source's stack, so editing the source's effects
-/// invalidates the consumer's cached frames. `lt` is the local time the effects
-/// evaluate at (the matte source's own local time when hashing a matte source);
-/// `t` is comp time, threaded through only for nested layer-reference sources.
-/// `marker_layer` supplies the §1.4 marker context (the matte source, when that
-/// is what is being hashed). Emits nothing when the fx switch is off or no
-/// effect is enabled, so every pre-effects key stays valid.
+/// hold). Shared by a layer's own stack and — for an after-effects matte or
+/// depth input (K-125) — a referenced layer's stack, so editing that layer's
+/// effects invalidates the consumer's cached frames. `lt` is the local time the
+/// effects evaluate at (the referenced layer's own local time when hashing a
+/// referenced layer); `t` is comp time, threaded through only for nested
+/// layer-reference sources. `marker_layer` supplies the §1.4 marker context.
+/// When `allow_after_effects_refs` is true, a Layer parameter whose sibling
+/// `<id>_after_effects` bool is set also folds the referenced layer's own stack
+/// (the after-effects depth input, K-125); the nested fold passes false, so a
+/// referenced layer's own layer-refs stay source-only — bounding recursion to
+/// one level and matching the v1 render, where a referenced layer's own
+/// layer-inputs render as passthrough. Emits nothing when the fx switch is off
+/// or no effect is enabled, so every pre-effects key stays valid.
 #[allow(clippy::too_many_arguments)]
 fn feed_effect_stack(
     h: &mut blake3::Hasher,
@@ -168,6 +173,7 @@ fn feed_effect_stack(
     quality: Quality,
     stamper: &dyn SourceStamper,
     visited: &mut Vec<Uuid>,
+    allow_after_effects_refs: bool,
 ) -> Option<()> {
     if !(fx_on && effects.iter().any(|e| e.enabled)) {
         return Some(());
@@ -265,6 +271,34 @@ fn feed_effect_stack(
                                 feed_f64(h, v);
                             }
                             h.update(&[u8::from(src.switches.three_d)]);
+                            // After-effects layer input (K-125): when this Layer
+                            // param's sibling `<id>_after_effects` bool is set,
+                            // the referenced layer is consumed *after* its own
+                            // stack, so that stack is content. Fold it once — the
+                            // nested call disables further after-effects refs, so
+                            // the source's own layer-inputs stay source-only,
+                            // matching the render (they resolve to passthrough)
+                            // and bounding recursion.
+                            if allow_after_effects_refs
+                                && e.bool_of(&format!("{}_after_effects", p.id))
+                                    .unwrap_or(false)
+                            {
+                                h.update(b"ref-fx/");
+                                feed_effect_stack(
+                                    h,
+                                    src.switches.fx,
+                                    &src.effects,
+                                    src,
+                                    comp,
+                                    doc,
+                                    t,
+                                    slt,
+                                    quality,
+                                    stamper,
+                                    visited,
+                                    false,
+                                )?;
+                            }
                         }
                         None => {
                             h.update(&[0]);
@@ -418,6 +452,7 @@ fn feed_layer(
         quality,
         stamper,
         visited,
+        true,
     )?;
 
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
@@ -498,6 +533,9 @@ fn feed_layer(
                 // the same way the source's own draw would. Off leaves the
                 // source-only key untouched (a bypassed source stack too).
                 if mr.after_effects {
+                    // false: the matte render runs the source's stack with no
+                    // layer-inputs (v1), so the source's own after-effects refs
+                    // are passthrough — don't fold them, matching the render.
                     feed_effect_stack(
                         h,
                         src.switches.fx,
@@ -510,6 +548,7 @@ fn feed_layer(
                         quality,
                         stamper,
                         visited,
+                        false,
                     )?;
                 }
             }
@@ -1114,6 +1153,60 @@ mod tests {
             key(&doc, &bypassed, 1.0),
             "a bypassed source stack contributes nothing, like the flag alone"
         );
+    }
+
+    /// An after-effects DoF depth input (K-125) folds the depth layer's own
+    /// stack into the consumer's key, so grading the depth pass invalidates its
+    /// cached frames; the source-only default ignores it. The depth layer is
+    /// hidden, so its stack reaches the key only through the depth reference.
+    #[test]
+    fn after_effects_depth_input_keys_on_the_source_stack() {
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let mut depth = text_layer("d", 0.0, 10.0, 0.0);
+        depth.switches.visible = false; // depth pass: referenced, not rendered as a layer
+        let depth_id = depth.id;
+        let mut consumer = text_layer("c", 0.0, 10.0, 0.0);
+        let mut dof = lumit_core::fx::instantiate("dof").unwrap();
+        for p in &mut dof.params {
+            if p.id == "depth" {
+                p.value = EffectValue::Layer(Some(depth_id));
+            }
+        }
+        consumer.effects.push(dof);
+        let comp = comp_with(vec![consumer, depth]);
+        let base = key(&doc, &comp, 1.0);
+
+        // A blur on the hidden depth layer, with depth_after_effects off: the
+        // depth is read source-only, so the consumer's key is untouched.
+        let mut src_fx = comp.clone();
+        src_fx.layers[1]
+            .effects
+            .push(lumit_core::fx::instantiate("blur").unwrap());
+        assert_eq!(
+            base,
+            key(&doc, &src_fx, 1.0),
+            "a source-only depth input ignores the depth layer's stack"
+        );
+
+        // Flip depth_after_effects on: the depth layer's stack is now content.
+        let mut after = src_fx.clone();
+        for p in &mut after.layers[0].effects[0].params {
+            if p.id == "depth_after_effects" {
+                p.value = EffectValue::Bool(true);
+            }
+        }
+        assert_ne!(base, key(&doc, &after, 1.0));
+
+        // The flag itself is content even with no depth stack (a mode bit).
+        let mut flag_only = comp.clone();
+        for p in &mut flag_only.layers[0].effects[0].params {
+            if p.id == "depth_after_effects" {
+                p.value = EffectValue::Bool(true);
+            }
+        }
+        assert_ne!(base, key(&doc, &flag_only, 1.0));
+        assert_ne!(key(&doc, &flag_only, 1.0), key(&doc, &after, 1.0));
     }
 
     /// A seeded effect's pixels move with time under constant parameters
