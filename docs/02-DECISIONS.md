@@ -1127,3 +1127,19 @@ guess. Both default to today's implicit behaviour (native scale, tooltips on), s
 install changes until the user visits the page. Trade-off, flagged for follow-up: tooltip
 suppression rides on `tooltip_delay`'s current meaning in egui's style struct, which is worth
 re-checking on any future egui upgrade. Built in an isolated worktree and merged.
+
+**K-119 · DECIDED · The Settings window gains an Export page: a default preset and a filename
+template (docs/07-UI-SPEC.md §15).** Closes two of the four named rows in the Export group;
+export priority and encoder preference order stay unbuilt — no priority or encoder-order
+concept exists anywhere in the export pipeline yet, so a control for either would be dead.
+`ExportSettings::default_preset` (default `Custom`, matching `ExportPreset`'s own new `Default`)
+is stamped by every generic "Export…" action — the File-menu entry and its native-menu twin —
+while an explicit pick from the "Export preset" submenu always keeps its own preset regardless.
+`ExportSettings::filename_template: Option<String>` (default `None`) substitutes `{comp}`,
+`{preset}`, and `{date}` into the export dialogue's suggested name when set, sanitised against
+characters Windows forbids in file names (a composition name is free text and can carry one)
+and guaranteed to end in `.mp4`; `None`, or a template blank once trimmed, reproduces
+`preset.default_file_name()` byte-for-byte, so no existing install's suggested name shifts until
+the user visits the page. Today's date comes from a small hand-rolled UTC civil-date conversion
+(Howard Hinnant's `civil_from_days` over `SystemTime`) rather than a new `chrono`/`time`
+dependency. Built in an isolated worktree and merged.
