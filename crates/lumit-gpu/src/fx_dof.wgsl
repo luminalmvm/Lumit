@@ -21,10 +21,14 @@
 // not a sampler).
 
 struct Params {
-    focus: f32,     // in-focus depth in [0,1]
-    range: f32,     // half-width of the sharp band, [0,1]
-    aperture: f32,  // max circle-of-confusion radius, raster px
-    mix_amt: f32,   // 0..1, blended against the unprocessed input
+    focus: f32,          // in-focus depth in [0,1]
+    range: f32,          // half-width of the sharp band, [0,1]
+    aperture: f32,       // max circle-of-confusion radius, raster px
+    mix_amt: f32,        // 0..1, blended against the unprocessed input
+    depth_invert: u32,   // 1 = invert the depth (d' = 1 - d) before the CoC
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -53,7 +57,9 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (xy.x >= size.x || xy.y >= size.y) {
         return;
     }
-    let d = textureLoad(depth, xy, 0).x;
+    let raw = textureLoad(depth, xy, 0).x;
+    // Depth invert (swap near and far): d' = 1 - d, applied before the CoC.
+    let d = select(raw, 1.0 - raw, p.depth_invert != 0u);
     let coc = coc_radius(d);
     let coc2 = coc * coc;
     // Integer disc radius: every tap whose squared pixel distance is within

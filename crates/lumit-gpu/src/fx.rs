@@ -631,7 +631,9 @@ struct DatamoshParams {
 /// [`upload_depth_map`] and [`FxEngine::dof`]); this uniform carries only the
 /// scalars the kernel turns a depth into a circle-of-confusion radius with,
 /// plus the host Mix. `aperture == 0` (or every pixel inside the sharp band)
-/// is a bit-exact passthrough. A neat 16 bytes — no padding.
+/// is a bit-exact passthrough. `depth_invert` is a 0/1 flag (u32 to match the
+/// WGSL uniform's scalar packing). 32 bytes: six scalars plus two words of
+/// tail padding to the 16-byte uniform stride.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct DofParams {
@@ -639,6 +641,9 @@ struct DofParams {
     range: f32,
     aperture: f32,
     mix_amt: f32,
+    /// 0 = read the depth as-is, 1 = invert it (`d' = 1 - d`) before the CoC.
+    depth_invert: u32,
+    _pad: [f32; 3],
 }
 
 #[repr(C)]
@@ -1275,8 +1280,9 @@ impl FxEngine {
     /// returning a new texture of the same size. Backs the `dof` effect
     /// (docs/08 §3.22, docs/impl/layer-input.md): one pass where each output
     /// pixel reads its depth from the **red channel** of `depth` (values in
-    /// `[0, 1]` by convention; the shader reads `.x`), turns it into a circle-
-    /// of-confusion radius — zero inside `range` of `focus`, ramping smoothstep
+    /// `[0, 1]` by convention; the shader reads `.x`), optionally inverts it
+    /// (`depth_invert`: `d' = 1 - d`, swapping near and far), turns it into a
+    /// circle-of-confusion radius — zero inside `range` of `focus`, ramping smoothstep
     /// to `aperture` raster pixels at the far depth extreme — and averages a
     /// box-weighted integer disc of that radius from `src`, edges clamped,
     /// then blends against the input by the host Mix. `depth` must be the same
@@ -1300,6 +1306,7 @@ impl FxEngine {
         focus: f32,
         range: f32,
         aperture: f32,
+        depth_invert: bool,
         mix: f32,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -1313,6 +1320,8 @@ impl FxEngine {
                     range,
                     aperture,
                     mix_amt: mix,
+                    depth_invert: u32::from(depth_invert),
+                    _pad: [0.0; 3],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
@@ -4740,6 +4749,7 @@ mod tests {
         focus: f32,
         range: f32,
         aperture: f32,
+        depth_invert: bool,
         mix: f32,
     ) -> Vec<f32> {
         let wi = w as i32;
@@ -4748,7 +4758,10 @@ mod tests {
         for y in 0..hi {
             for x in 0..wi {
                 let pi = (y * wi + x) as usize;
-                let d = depth[pi];
+                let raw = depth[pi];
+                // Depth invert (swap near and far): the shader's
+                // `select(raw, 1 - raw, invert)`, bit-identical here.
+                let d = if depth_invert { 1.0 - raw } else { raw };
                 let dist = (d - focus).abs();
                 let denom = (1.0f32 - range).max(1e-4);
                 // clamp(0,1) is bit-identical to the shader's min(max(·,0),1)
@@ -4818,22 +4831,29 @@ mod tests {
         }
         let depth_t = upload_depth_map(&ctx, &ramp, w, h);
 
-        // (focus, range, aperture, mix, name)
+        // (focus, range, aperture, invert, mix, name). Invert on and off both
+        // stay continuous, so the cheap-class ≤ 2 fp16 ULP bound holds.
         let cases = [
-            (0.5f32, 0.1f32, 6.0f32, 1.0f32, "centre-focus"),
-            (0.0, 0.05, 8.0, 1.0, "near-focus"),
-            (0.5, 0.1, 6.0, 0.5, "partial mix"),
-            (0.5, 0.2, 10.0, 1.0, "wide aperture"),
+            (0.5f32, 0.1f32, 6.0f32, false, 1.0f32, "centre-focus"),
+            (0.0, 0.05, 8.0, false, 1.0, "near-focus"),
+            (0.5, 0.1, 6.0, false, 0.5, "partial mix"),
+            (0.5, 0.2, 10.0, false, 1.0, "wide aperture"),
+            (0.2, 0.1, 8.0, true, 1.0, "inverted near-focus"),
+            (0.5, 0.1, 6.0, true, 1.0, "inverted centre-focus"),
         ];
-        for (focus, range, aperture, mix, name) in cases {
-            let cpu = dof_reference(&img, &ramp, w, h, focus, range, aperture, mix);
-            let out = fx.dof(&ctx, &src, w, h, &depth_t, focus, range, aperture, mix);
+        for (focus, range, aperture, invert, mix, name) in cases {
+            let cpu = dof_reference(&img, &ramp, w, h, focus, range, aperture, invert, mix);
+            let out = fx.dof(
+                &ctx, &src, w, h, &depth_t, focus, range, aperture, invert, mix,
+            );
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
             let worst = worst_f16_ulp(&cpu, &gpu);
             eprintln!("dof {name}: worst {worst} ulp");
             assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
             // Determinism (§2.4): a second run is bit-identical to the first.
-            let out2 = fx.dof(&ctx, &src, w, h, &depth_t, focus, range, aperture, mix);
+            let out2 = fx.dof(
+                &ctx, &src, w, h, &depth_t, focus, range, aperture, invert, mix,
+            );
             assert_eq!(
                 gpu,
                 readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -4842,7 +4862,7 @@ mod tests {
         }
 
         // Mix 0 is the bit-exact input regardless of depth or aperture.
-        let out = fx.dof(&ctx, &src, w, h, &depth_t, 0.5, 0.1, 10.0, 0.0);
+        let out = fx.dof(&ctx, &src, w, h, &depth_t, 0.5, 0.1, 10.0, false, 0.0);
         assert_eq!(
             readback_linear_f32(&ctx, &out, w, h).unwrap(),
             img,
@@ -4850,8 +4870,9 @@ mod tests {
         );
 
         // A zero aperture collapses every disc to the centre tap — a bit-exact
-        // passthrough at full Mix, whatever the depth.
-        let out = fx.dof(&ctx, &src, w, h, &depth_t, 0.5, 0.1, 0.0, 1.0);
+        // passthrough at full Mix, whatever the depth (invert cannot change a
+        // zero radius).
+        let out = fx.dof(&ctx, &src, w, h, &depth_t, 0.5, 0.1, 0.0, true, 1.0);
         assert_eq!(
             readback_linear_f32(&ctx, &out, w, h).unwrap(),
             img,
@@ -4860,9 +4881,9 @@ mod tests {
 
         // A depth that sits everywhere inside the sharp band leaves the CoC at
         // zero for every pixel — also a bit-exact passthrough at full Mix,
-        // even with a large aperture.
+        // even with a large aperture. Inverting a flat 0.5 leaves it in-band.
         let flat = upload_depth_map(&ctx, &vec![0.5f32; n], w, h);
-        let out = fx.dof(&ctx, &src, w, h, &flat, 0.5, 0.1, 10.0, 1.0);
+        let out = fx.dof(&ctx, &src, w, h, &flat, 0.5, 0.1, 10.0, false, 1.0);
         assert_eq!(
             readback_linear_f32(&ctx, &out, w, h).unwrap(),
             img,

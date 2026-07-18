@@ -632,6 +632,7 @@ pub fn run_ops(
                 focus,
                 range,
                 aperture,
+                depth_invert,
                 mix,
             } => {
                 // The k-th Dof op binds the k-th `layer_inputs` slot (docs/08
@@ -644,7 +645,18 @@ pub fn run_ops(
                 let depth = layer_inputs.get(dof_i).and_then(|o| o.as_ref());
                 dof_i += 1;
                 if let Some(depth) = depth {
-                    tex = fx.dof(ctx, &tex, w, h, depth, *focus, *range, *aperture, *mix);
+                    tex = fx.dof(
+                        ctx,
+                        &tex,
+                        w,
+                        h,
+                        depth,
+                        *focus,
+                        *range,
+                        *aperture,
+                        *depth_invert,
+                        *mix,
+                    );
                 }
             }
         }

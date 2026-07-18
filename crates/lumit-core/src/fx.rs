@@ -1023,6 +1023,16 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                // Invert the depth pass (d' = 1 - d) before the circle-of-
+                // confusion, swapping near and far — the owner's "tick to
+                // invert the depth" box (Frischluft / DOF PRO both offer it).
+                // Off (default) keeps the historical reading, so old projects
+                // are unchanged. Continuous, so the §1.6 ULP oracle still holds.
+                id: "depth_invert",
+                label: "Depth invert",
+                kind: ParamKind::Bool { default: false },
+            },
+            ParamSchema {
                 id: "focus",
                 label: "Focus distance",
                 // The in-focus depth, 0..1. Mid-depth by default so a typical
@@ -2287,6 +2297,10 @@ pub enum Resolved {
         /// Maximum circle-of-confusion radius in raster pixels (converted from
         /// px@comp by the §2.3 preview factor).
         aperture: f32,
+        /// When set, the per-pixel depth is inverted (`d' = 1 - d`) before the
+        /// circle-of-confusion, swapping near and far. A `Copy` scalar, so the
+        /// enum stays `Copy` and threads beside the depth texture unchanged.
+        depth_invert: bool,
         /// 0..1.
         mix: f32,
     },
@@ -3056,11 +3070,15 @@ pub fn resolve_stack(
                 // Half preview blurs the same disc as Full, only softer.
                 let aperture =
                     (e.float_at("aperture", lt).unwrap_or(8.0) as f32 * px_scale).max(0.0);
+                // Depth invert (a plain Bool; absent on pre-feature projects,
+                // where it reads false — the historical, unchanged behaviour).
+                let depth_invert = matches!(e.param("depth_invert"), Some(EffectValue::Bool(true)));
                 let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
                 Some(Resolved::Dof {
                     focus,
                     range,
                     aperture,
+                    depth_invert,
                     mix,
                 })
             }
@@ -4648,6 +4666,11 @@ mod tests {
         assert_eq!(e.float_at("range", 0.0), Some(0.1));
         assert_eq!(e.float_at("aperture", 0.0), Some(8.0));
         assert_eq!(e.float_at("mix", 0.0), Some(100.0));
+        // Depth invert is off by default (the historical reading).
+        assert!(matches!(
+            e.param("depth_invert"),
+            Some(EffectValue::Bool(false))
+        ));
 
         // resolve_stack carries only the scalars; the depth is threaded beside
         // the op. Aperture is px@comp scaled by the §2.3 preview factor (here
@@ -4661,6 +4684,7 @@ mod tests {
                 focus: 0.5,
                 range: 0.1,
                 aperture: 4.0,
+                depth_invert: false,
                 mix: 1.0,
             }]
         );
