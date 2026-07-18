@@ -685,8 +685,9 @@ are a subset of the inventory above: **Appearance** (Theme Mode, Background ramp
 Shape, Interface motion — all migrated here out of the Window menu, K-092), **Performance**
 (RAM frame-cache budget, disk-cache cap and VRAM frame-cache budget, all applied live, plus a
 Clear cache action that empties the RAM and VRAM tiers at once), and **General** (reset
-workspace, version). The remaining groups (CUDA and the other Performance rows, Cache
-root/proxy, Preview, Colour, Export, Keymap, Autosave, Plugins) fill in on this same surface
+workspace, an **Autosave** group — interval in minutes and copies kept, defaulting to the
+previous 5 min / 5 copies — and version). The remaining groups (CUDA and the other Performance
+rows, Cache root/proxy, Preview, Colour, Export, Keymap, Plugins) fill in on this same surface
 as those systems gain their controls.
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context

@@ -1364,15 +1364,18 @@ impl AppState {
         }
     }
 
-    pub fn autosave_tick(&mut self) {
+    /// Autosave if due. `interval_secs` and `keep` come from Settings →
+    /// General (defaulting to [`AUTOSAVE_INTERVAL_SECS`]/[`AUTOSAVE_KEEP`]);
+    /// `interval_secs` is floored at 1 so a zero can never busy-save.
+    pub fn autosave_tick(&mut self, interval_secs: u64, keep: usize) {
         if self.dirty
             && self.path.is_some()
-            && self.last_autosave.elapsed().as_secs() >= AUTOSAVE_INTERVAL_SECS
+            && self.last_autosave.elapsed().as_secs() >= interval_secs.max(1)
         {
             self.last_autosave = Instant::now();
             if let Some(path) = self.path.clone() {
                 let doc = self.store.snapshot();
-                let _ = self.report(lumit_project::autosave(&doc, &path, AUTOSAVE_KEEP));
+                let _ = self.report(lumit_project::autosave(&doc, &path, keep.max(1)));
             }
         }
     }

@@ -1095,6 +1095,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   alone since clearing it would mean re-decoding footage from scratch. (More performance
   controls — CUDA acceleration, worker counts — arrive on this page as those systems gain
   their knobs.)
+  The **General** page holds an **Autosave** group: how often Lumit quietly saves a spare copy
+  of a saved project (in minutes) and how many timestamped copies it keeps, so a crash or a
+  mistake never costs more than the interval. The defaults are the same 5 minutes / 5 copies
+  Lumit always used; they are just adjustable now.
   The **focused panel** also wears a thin accent edge: whichever panel you last clicked is
   where keyboard shortcuts land, and the edge keeps that visible at a glance (the After
   Effects convention) — it follows the Round shape's card rounding too, when that's picked.

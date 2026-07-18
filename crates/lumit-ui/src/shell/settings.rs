@@ -59,6 +59,26 @@ pub(crate) struct PerformanceSettings {
     pub vram_cache_mb: u32,
 }
 
+/// Autosave settings (Settings → General; docs/07-UI-SPEC §15). Persisted
+/// with the workspace; defaults reproduce the previous hardcoded behaviour.
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct AutosaveSettings {
+    /// Minutes between autosaves (floored at 1 when applied).
+    pub interval_mins: u32,
+    /// Backup copies kept.
+    pub keep: u32,
+}
+
+impl Default for AutosaveSettings {
+    fn default() -> Self {
+        Self {
+            // Matches `AUTOSAVE_INTERVAL_SECS` (300 s) and `AUTOSAVE_KEEP`.
+            interval_mins: (crate::app_state::AUTOSAVE_INTERVAL_SECS / 60) as u32,
+            keep: crate::app_state::AUTOSAVE_KEEP as u32,
+        }
+    }
+}
+
 impl Default for PerformanceSettings {
     fn default() -> Self {
         Self {
@@ -174,6 +194,29 @@ impl Shell {
                     if ui.button("Reset workspace").clicked() {
                         self.dock = default_layout();
                     }
+                },
+            );
+        });
+
+        settings_group(ui, theme, "Autosave", |ui| {
+            settings_row(
+                ui,
+                theme,
+                "Every",
+                Some("Minutes between automatic saves of a saved project."),
+                |ui| {
+                    ui.label(egui::RichText::new("min").color(theme.text_muted));
+                    ui.add(egui::DragValue::new(&mut self.autosave.interval_mins).range(1..=60));
+                },
+            );
+            settings_divider(ui, theme);
+            settings_row(
+                ui,
+                theme,
+                "Copies kept",
+                Some("How many timestamped backups to keep."),
+                |ui| {
+                    ui.add(egui::DragValue::new(&mut self.autosave.keep).range(1..=50));
                 },
             );
         });

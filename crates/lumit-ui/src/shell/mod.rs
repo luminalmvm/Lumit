@@ -111,6 +111,9 @@ pub struct Shell {
     /// cache budgets and GPU acceleration. Persisted with the workspace.
     #[serde(default)]
     settings: settings::PerformanceSettings,
+    /// Autosave settings (Settings → General). Persisted with the workspace.
+    #[serde(default)]
+    autosave: settings::AutosaveSettings,
     /// Whether the Settings window is open (runtime only).
     #[serde(skip, default)]
     settings_open: bool,
@@ -286,6 +289,7 @@ impl Default for Shell {
             theme_shape: crate::theme::ThemeShape::default(),
             animation_level: crate::theme::AnimationLevel::default(),
             settings: settings::PerformanceSettings::default(),
+            autosave: settings::AutosaveSettings::default(),
             settings_open: false,
             settings_page: settings::SettingsPage::default(),
             palette_open: false,
@@ -1022,7 +1026,10 @@ impl Shell {
             }
             return;
         }
-        self.app.autosave_tick();
+        self.app.autosave_tick(
+            self.autosave.interval_mins as u64 * 60,
+            self.autosave.keep as usize,
+        );
         let dropped: Vec<std::path::PathBuf> = ctx.input(|i| {
             i.raw
                 .dropped_files
