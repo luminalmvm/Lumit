@@ -934,3 +934,36 @@ point, pinned by test — and Mix 0 is likewise the identity. Distinct from Colo
 three-channel Gain: the single, animatable, photographic-stops brightness lever the montage
 grade reaches for first. Wired at the usual four sites (schema in `lumit-core`, WGSL +
 `FxEngine::exposure` in `lumit-gpu`, `run_ops` arm in `lumit-ui`).
+
+**K-107 · DECIDED · Glitch splits into Block glitch, Scanlines and Datamosh; the combined
+effect is removed (docs/08 §3.12).** Per the one-effect-one-job rule (K-090 — the same rule
+that split the v1 Grade into Colour balance and Saturation, and split Chromatic aberration
+off RGB split's own Radial mode): the old `glitch` effect did three things behind enableable
+section toggles (Block displacement, Scanlines, Datamosh — the last added by K-104), so it
+splits into three standalone schemas — `block_glitch`, `scanlines`, `datamosh` — and `glitch`
+is deleted outright. Pre-v1, single user, no saved-project migration: existing `glitch`
+instances simply stop resolving; no alias or upgrade path is built. `block_glitch` and
+`scanlines` carry over their section's parameters unchanged (ids, labels, ranges, defaults),
+minus the now-redundant `block_enabled`/`scanline_enabled` toggles — each is always on in its
+own effect now. Stacking Block glitch → Scanlines, each at Mix 100%, reproduces the old
+combined Glitch's look bit-for-bit, since the two sections never interacted beyond sharing one
+kernel pass. `block_glitch` keeps `seeded: true` and `full-frame` ROI (the block hash can
+displace a read from anywhere in the grid); `scanlines` drops Seed entirely and declares
+`seeded: false` and `exact` ROI — it reads the input pixel directly, no hash, no neighbour tap.
+Datamosh keeps its existing GPU pass and CPU oracle (`FxEngine::datamosh`, `cpu::datamosh`,
+`fx_datamosh.wgsl`) byte-for-byte unchanged; only its schema, `Resolved` variant and stack
+wiring are new. Its temporal reach is now **static** — schema `temporal: {0, -1}`, the same
+shape Motion blur's own `{0, +1}` already has — which retires the one dynamic special case
+`stack_temporal_window`/`stack_flow_neighbour` carried since K-104 (a live `glitch` instance's
+`datamosh_enabled` param toggling whether the stack's temporal window and flow-field gate
+reached back to -1); `stack_flow_neighbour` now recognises a live `datamosh` instance the same
+static way it recognises `motion_blur`. Datamosh's Mix folds into its existing single-blend-
+fraction `intensity` argument by multiplication at the call site (`run_ops`) rather than adding
+a second uniform to the unchanged kernel — mixing the same two inputs (current frame, warped
+neighbour) twice collapses algebraically to one mix by the product, so Intensity-0 and Mix-0
+are both the identical bit-exact passthrough. All three new schemas declare Category
+**Distortion**, matching Shake and RGB split (their closest siblings: a seeded positional
+wobble; a channel split), not the additive-light Stylise pair (Glow, Flash) — unchanged from
+the old combined Glitch. Landed as three green commits: Datamosh split out first (retiring the
+dynamic special case on its own), then Block glitch/Scanlines split out and `glitch` deleted,
+then docs.

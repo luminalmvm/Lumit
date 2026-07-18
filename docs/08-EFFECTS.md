@@ -119,8 +119,8 @@ Colour-manipulation effects operate on unpremultiplied colour, because grading
 premultiplied values shifts matte edges. Effects declaring `alpha mode: unpremultiplied`
 are wrapped by the host: unpremultiply → effect → re-premultiply, fused into the effect's
 first/last passes where possible. The Tier 1 effects requiring this: **the colour effects
-(Colour balance, Saturation), LUT, Sharpen** (edge haloes otherwise), and the hue/colour
-operations of **Glitch**. All others consume premultiplied input directly.
+(Colour balance, Saturation), LUT, Sharpen** (edge haloes otherwise). All others consume
+premultiplied input directly (Block glitch, Scanlines and Datamosh among them — §3.12).
 
 ### 2.3 Resolution-independent units
 
@@ -176,7 +176,9 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.9 | Sharpen | stock | cheap | `{0}` |
 | 3.10 | Colour balance, Saturation + preset browser | Magic Bullet Looks | cheap | `{0}` |
 | 3.11 | LUT | stock + Looks | trivial | `{0}` |
-| 3.12 | Glitch | Universe / glitch packs | cheap | `{0}` (datamosh: `{-1, 0}`) |
+| 3.12 | Block glitch | Universe / glitch packs | cheap | `{0}` |
+| 3.12 | Scanlines | Universe / glitch packs | cheap | `{0}` |
+| 3.12 | Datamosh | Universe / glitch packs | cheap | `{-1, 0}` |
 | 3.13 | Echo | stock Echo / speed-lines packs | moderate | `{-n..0}` |
 | 3.14 | Vignette | stock CC pack vignette | cheap | `{0}` |
 | 3.15 | Chromatic aberration | stock CC pack fillers | cheap | `{0}` |
@@ -519,69 +521,97 @@ render failure ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) never-crash r
 file's content hash joins the cache key; project save embeds small LUTs (K-040) so shared
 projects survive relinking.
 
-### 3.12 Glitch — block displacement, scanlines, datamosh look
+### 3.12 Glitch family — block glitch, scanlines, datamosh
 
-Three sub-effects shipped as one "Glitch" effect with enableable sections, all seeded:
+Three separate effects, formerly shipped as one "Glitch" effect with enableable sections
+(K-104). **Status (K-107):** split into one-thing effects per the §1's one-effect-one-job
+rule (K-090 — the same rule that split the v1 Grade into Colour balance and Saturation, and
+split Chromatic aberration off RGB split's own Radial mode). Stacking **Block glitch** →
+**Scanlines**, each at Mix 100%, reproduces the old combined Glitch's look bit-for-bit — the
+two sections never interacted beyond running in the same pass. Existing saved `glitch`
+instances do not migrate (pre-v1, single user, no alias); each of the three below is added
+to a layer independently going forward. Category **Distortion** for all three, matching
+Shake and RGB split — their closest siblings (a seeded positional wobble; a channel split)
+— not the additive-light Stylise pair (Glow, Flash).
 
-- **Block displacement:** the image is partitioned into a seeded grid (Block size,
-  px@comp; Rows/columns jitter); per block, a hash decides displacement (Amount, % diag),
-  channel offset, and slice repetition. Intensity is the master animatable — spike it on
-  beats via keyframes or trigger mode (§1.4).
-- **Scanlines:** line period (px@comp), darkness, roll speed (lines/s, deterministic from
-  time), interlace-offset option.
-- **Datamosh look:** simulates I-frame removal by re-warping the previous source frame
-  with the flow field measured from the current frame to it instead of showing the current
-  frame, blended by Intensity; temporal window `{-1, 0}` when its own toggle is on. It is a
-  *look*, not real bitstream corruption — deterministic and safe.
+#### Block glitch
 
-**Status (all three sections shipped, K-104):** Datamosh reuses the §3.2 flow machinery
-Motion blur introduced (`flow_pair` on the shared `FlowEngine`) rather than needing new
-plumbing: a `Datamosh look` toggle (`datamosh_enabled`, off by default — see below), and
-`stack_temporal_window`/`stack_flow_neighbour` (docs/impl territory) read that toggle
-per-instance to decide whether the layer's decode reaches back to -1 and computes a flow
-field at all, unlike every other trait here which is fixed per schema. A single bilinear
-tap per pixel reads the -1 neighbour at the position its own flow vector displaces to — a
-motion-compensated prediction, not Motion blur's multi-tap streak integral — then blends
-against the already block/scanline'd frame by Intensity (Intensity 0 is the same bit-exact
-passthrough the rest of the effect pins). Off by default: unlike Block displacement and
-Scanlines (on since Glitch first shipped), this section is footage-only and adds a flow
-computation, so it opts in rather than silently changing every existing Glitch instance's
-output the moment it lands. It operates on the layer's *source* frames, not the upstream
-stack's output at -1 — the same v1 simplification Echo and Motion blur already made ("full
-temporal stacking is later"). A layer can carry only one flow field per frame in v1; if a
-stack somehow has both a live Motion blur and a Datamosh-on Glitch, whichever comes first
-in stack order wins the single slot and the other's flow-dependent behaviour degrades to
-its own missing-field passthrough — never a fault, pinned by test. Category is
-**Distortion**, matching Shake and RGB split — its
-closest siblings (a seeded positional wobble; a channel split) — not the additive-light
-Stylise pair (Glow, Flash). Intensity (0–1, the master dial per §1.2) scales *every* hashed
-quantity across both sections — grid jitter, displacement, channel offset, slice-repeat odds
-and scanline darkness alike — so 0 is a genuine, single-knob bit-exact passthrough regardless
-of which sections are enabled or what Mix reads, pinned by an explicit early return (the same
-shape as Glow's neutral short-circuit, not the box-blur family's tap-sum coincidence). "Rows/
-columns jitter" ships as one Block jitter % (of Block size), applied as a hashed offset to
-*which nominal block* a pixel's content is read from — a cheap stand-in for moving grid lines
-themselves, which would need a boundary search a single pointwise pass cannot do; pinned as a
-deliberate simplification. "Channel-offset toggle or amount" ships as a continuous Channel
-offset (% diag) Float, following RGB split's R/B-offset-from-G shape but with a per-block
-hashed offset instead of one global vector — alpha follows green here too, for the same
-matte-fringing reason. Slice repetition ships as a Float 0–100%: the odds (scaled by
-Intensity) that a block folds its own content to repeat a short hashed strip instead of a
-plain positional read. The per-block hash runs inside the GPU kernel itself, not as a
+**Parameters:** Intensity (0–1, default 0.35, the master dial), Seed, Block size (px@comp,
+default 24), Rows/columns jitter (% of Block size, default 25), Displacement (% diag,
+default 3), Channel offset (% diag, default 1), Slice repeat (%, default 20), Mix.
+
+**Algorithm sketch.** The image is partitioned into a seeded grid (Block size, px@comp);
+per *nominal* block, a hash decides a jitter offset (Rows/columns jitter, scaled by
+Intensity) that picks *which* block's content a pixel actually reads from — a cheap
+stand-in for moving grid lines themselves, which would need a boundary search a single
+pointwise pass cannot do. That block then hashes its own displacement (Displacement, %
+diag), R/B channel split (Channel offset, % diag, alpha follows green exactly like RGB
+split, for the same matte-fringing reason), and slice-repeat odds (Slice repeat, scaled by
+Intensity: folds the block's own local Y to a short hashed repeat height instead of a plain
+read). Every hashed quantity is scaled by Intensity, so Intensity 0 is a genuine,
+single-knob bit-exact passthrough, pinned by an explicit early return (the same shape as
+Glow's neutral short-circuit, not the box-blur family's tap-sum coincidence) — holding
+regardless of Mix. The per-block hash runs inside the GPU kernel itself, not as a
 host-precomputed table (the block index is a per-pixel quantity — there are too many blocks
-at a small Block size to fit a table into the shared uniform binding), which is the case this
-section's `{0}` window text anticipates: WGSL has no 64-bit integer type, so it cannot host
-Shake's actual splitmix64 lattice; `splitmix32`, a matching-spirit 32-bit sibling, was added
-alongside it in `lumit-core` for exactly this, and both the CPU reference and the WGSL kernel
-run it, so the integer hash agrees bit-for-bit (measured oracle worst: 1 fp16 ULP, same as
-the other hash/tap-based kernels — no looser bound was needed despite Glitch's `cheap` cost
-class default suggesting one might be). "Time-derived tick" (per-frame block variation) steps
-at a fixed, unexposed 8 Hz, chosen so blocks visibly pop rather than blur into continuous
-noise; the spec text lists no rate parameter, so this is pinned as an internal constant, not
-a control. Interlace alternates which half of each scanline period darkens on odd periods —
-the classic interlaced-field look. Frame keys: Glitch declares `seeded: true` exactly like
-Shake, so the existing §2.4 mechanism already carries the layer's local time into its cache
-key with no Glitch-specific plumbing — pinned by a regression test alongside Shake's own.
+at a small Block size to fit a table into the shared uniform binding): WGSL has no 64-bit
+integer type, so it cannot host Shake's actual splitmix64 lattice; `splitmix32`, a
+matching-spirit 32-bit sibling, was added alongside it in `lumit-core` for exactly this, and
+both the CPU reference and the WGSL kernel run it, so the integer hash agrees bit-for-bit
+(measured oracle worst: 1 fp16 ULP, same as the other hash/tap-based kernels — no looser
+bound was needed despite the `cheap` cost class default suggesting one might be).
+"Time-derived tick" (per-frame block variation) steps at a fixed, unexposed 8 Hz, chosen so
+blocks visibly pop rather than blur into continuous noise; the spec text lists no rate
+parameter, so this is pinned as an internal constant, not a control. `cheap` cost,
+`full-frame` ROI (a hashed displacement can read from anywhere in the block grid). Frame
+keys: declares `seeded: true` exactly like Shake, so the existing §2.4 mechanism already
+carries the layer's local time into its cache key with no effect-specific plumbing.
+
+#### Scanlines
+
+**Parameters:** Intensity (0–1, default 0.35, the master dial), Line period (px@comp,
+default 3), Darkness (%, default 40), Roll speed (lines/s, default 0, either direction),
+Interlace offset (Bool, default off), Mix.
+
+**Algorithm sketch.** A pointwise periodic darken in raster Y (plus the roll offset — roll
+speed × time × period, host-computed so the kernel never sees raw time), alternating which
+half of each period darkens on odd periods when Interlace offset is on — the classic
+interlaced-field look. No hash, no neighbour read: reads the input pixel directly, so ROI is
+`exact` (tighter than Block glitch's `full-frame`) and there is no Seed parameter. Intensity
+0 is the bit-exact passthrough, pinned by the same early-return shape as Block glitch's.
+`cheap` cost. Not seeded (`seeded: false`) — its pixels are a pure function of the frame's
+own position and the host-computed roll offset, not a random-looking hash, so it needs no
+extra cache-key plumbing beyond the ordinary parameter-animation case.
+
+#### Datamosh
+
+**Parameters:** Intensity (0–1, default 0.5), Mix.
+
+**Algorithm sketch.** Simulates I-frame removal by re-warping the previous source frame
+with the flow field measured from the current frame to it, instead of showing the current
+frame — blended by Intensity × Mix. It is a *look*, not real bitstream corruption —
+deterministic and safe. Reuses the §3.2 flow machinery Motion blur introduced (`flow_pair`
+on the shared `FlowEngine`) rather than needing new plumbing. A single bilinear tap per
+pixel reads the -1 neighbour at the position its own flow vector displaces to — a
+motion-compensated prediction, not Motion blur's multi-tap streak integral. Footage-only:
+with no -1 neighbour or flow field (a non-footage layer, or a dropped decode) it degrades to
+a no-op, never a fault. Temporal window `{-1, 0}` — statically, unlike its K-104-era shape as
+a toggle inside the combined Glitch effect (see Status below). A layer can carry only one
+flow field per frame in v1; if a stack somehow has both a live Motion blur and a live
+Datamosh, whichever comes first in stack order wins the single slot and the other's
+flow-dependent behaviour degrades to its own missing-field passthrough — never a fault,
+pinned by test. `cheap` cost (one bilinear tap), `full-frame` ROI (the flow can point
+anywhere in the frame, the same unbounded-read reasoning Motion blur's own ROI carries).
+Not seeded (`seeded: false`) — no hash or random-looking sequence, just flow-directed
+sampling.
+
+**Status (K-104, its own effect since K-107):** originally shipped as a toggle
+(`datamosh_enabled`, off by default) inside the combined Glitch effect — the one place
+`stack_temporal_window`/`stack_flow_neighbour` read a param value instead of a schema's
+static `temporal` trait, because the section was footage-only and opted in rather than
+silently changing every existing Glitch instance's output the moment it landed. As its own
+effect that per-instance toggle is gone: `temporal: {-1, 0}` is simply the schema's own
+static declaration, exactly the shape Motion blur's own `{0, +1}` already has, and
+`stack_flow_neighbour` reads the match name the same static way it reads Motion blur's.
 
 ### 3.13 Echo — frame echo and trails (speed lines)
 
@@ -651,8 +681,9 @@ currency (% diag) with Linear mode's Angle-driven offset. This effect exists as 
 single-purpose, one-click version with nothing else to configure: drop it on and it already
 looks right (§1.2), the same shape rule that split the old Grade into Colour balance and
 Saturation (K-090). Because it has no Angle to share a currency with, Amount is authored in
-raw px@comp (§2.3) instead of % diag — scaled by the preview factor exactly like Glitch's
-Block size — and its ROI is declared `full-frame` rather than a tight %-diag padding, since a
+raw px@comp (§2.3) instead of % diag — scaled by the preview factor exactly like Block
+glitch's Block size (§3.12) — and its ROI is declared `full-frame` rather than a tight
+%-diag padding, since a
 fixed pixel offset cannot be bounded as a percentage of the diagonal across every comp
 resolution ahead of time. Category is **Distortion**, matching RGB split. No explicit Amount-0
 short circuit is needed in either the CPU reference or the WGSL kernel: the radial offset's

@@ -369,18 +369,16 @@ struct GlowParams {
     mix_amt: f32,
 }
 
-/// One resolved Glitch (docs/08 §3.12, schema status note): Block
-/// displacement and Scanlines, one kernel pass — Datamosh is deferred.
-/// `tick` and `roll_px` arrive already computed from local time
-/// (`lumit_core::fx::GLITCH_TICK_HZ` and roll speed × time × period), so
-/// the kernel never sees raw time or does its own time maths.
+/// One resolved Block glitch (docs/08 §3.12, split out of the old combined
+/// Glitch effect by K-107). `tick` arrives already computed from local time
+/// (`lumit_core::fx::GLITCH_TICK_HZ`), so the kernel never sees raw time or
+/// does its own time maths.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GlitchOp {
-    /// The master 0..1 dial; scales every section's strength.
+pub struct BlockGlitchOp {
+    /// The master 0..1 dial; scales every hashed quantity.
     pub intensity: f32,
     pub seed: u32,
     pub tick: i32,
-    pub block_enabled: bool,
     /// Raster pixels (px@comp × the §2.3 preview factor).
     pub block_size_px: f32,
     /// 0..1, fraction of block_size_px.
@@ -391,7 +389,34 @@ pub struct GlitchOp {
     pub chan_px: f32,
     /// 0..1: odds (before the Intensity scale) a block slice-repeats.
     pub slice_frac: f32,
-    pub scanline_enabled: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct BlockGlitchParams {
+    intensity: f32,
+    seed: u32,
+    tick: i32,
+    block_size: f32,
+    jitter_frac: f32,
+    amount: f32,
+    chan: f32,
+    slice_frac: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
+}
+
+/// One resolved Scanlines (docs/08 §3.12, split out of the old combined
+/// Glitch effect by K-107). `roll_px` arrives already computed from local
+/// time (roll speed × time × period), so the kernel never sees raw time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScanlinesOp {
+    /// The master 0..1 dial; scales the darken strength.
+    pub intensity: f32,
     /// Raster pixels (px@comp × the §2.3 preview factor).
     pub period_px: f32,
     /// 0..1.
@@ -405,23 +430,15 @@ pub struct GlitchOp {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct GlitchParams {
+struct ScanlinesParams {
     intensity: f32,
-    seed: u32,
-    tick: i32,
-    block_enabled: u32,
-    block_size: f32,
-    jitter_frac: f32,
-    amount: f32,
-    chan: f32,
-    slice_frac: f32,
-    scanline_enabled: u32,
     period: f32,
     darkness: f32,
     roll_px: f32,
     interlace: u32,
     mix_amt: f32,
     _pad0: f32,
+    _pad1: f32,
 }
 
 /// One resolved echo (docs/08 §3.13). The neighbour frames arrive as
@@ -468,14 +485,16 @@ struct MotionBlurParams {
     _pad0: f32,
 }
 
-/// One resolved Datamosh pass (docs/08 §3.12, the Glitch effect's third
-/// section, K-104). The raw -1 source neighbour and the dense current→
-/// previous flow field arrive as their own textures (see
-/// [`FxEngine::datamosh`]); this op carries only the scalar the kernel
-/// blends by.
+/// One resolved Datamosh pass (docs/08 §3.12, K-104; its own effect since
+/// K-107). The raw -1 source neighbour and the dense current→previous flow
+/// field arrive as their own textures (see [`FxEngine::datamosh`]); this op
+/// carries only the scalar the kernel blends by. Callers fold the schema's
+/// Intensity and host Mix into this one field before calling (mixing the
+/// same two inputs twice collapses to one mix by the product), so this
+/// kernel and its CPU oracle need no second blend knob.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DatamoshOp {
-    /// 0..1, blended against the current (already block/scanline'd) frame.
+    /// 0..1, blended against the current frame.
     pub intensity: f32,
 }
 
@@ -512,7 +531,8 @@ pub struct FxEngine {
     transform: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
-    glitch: wgpu::ComputePipeline,
+    block_glitch: wgpu::ComputePipeline,
+    scanlines: wgpu::ComputePipeline,
     echo_accumulate: wgpu::ComputePipeline,
     echo_mix: wgpu::ComputePipeline,
     motion_blur: wgpu::ComputePipeline,
@@ -680,7 +700,8 @@ impl FxEngine {
         let exposure_mod = module(include_str!("fx_exposure.wgsl"), "fx-exposure");
         let transform_mod = module(include_str!("fx_transform.wgsl"), "fx-transform");
         let glow_mod = module(include_str!("fx_glow.wgsl"), "fx-glow");
-        let glitch_mod = module(include_str!("fx_glitch.wgsl"), "fx-glitch");
+        let block_glitch_mod = module(include_str!("fx_block_glitch.wgsl"), "fx-block-glitch");
+        let scanlines_mod = module(include_str!("fx_scanlines.wgsl"), "fx-scanlines");
         let echo_mod = module(include_str!("fx_echo.wgsl"), "fx-echo");
         let motion_blur_mod = module(include_str!("fx_motionblur.wgsl"), "fx-motion-blur");
         let datamosh_mod = module(include_str!("fx_datamosh.wgsl"), "fx-datamosh");
@@ -705,7 +726,8 @@ impl FxEngine {
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
-        let glitch = pipeline(&glitch_mod, "fx-glitch", "glitch");
+        let block_glitch = pipeline(&block_glitch_mod, "fx-block-glitch", "block_glitch");
+        let scanlines = pipeline(&scanlines_mod, "fx-scanlines", "scanlines");
         let echo_accumulate = pipeline(&echo_mod, "fx-echo-accumulate", "echo_accumulate");
         let echo_mix = pipeline(&echo_mod, "fx-echo-mix", "echo_mix");
         let motion_blur = ctx
@@ -755,7 +777,8 @@ impl FxEngine {
             transform,
             glow_bright,
             glow_combine,
-            glitch,
+            block_glitch,
+            scanlines,
             echo_accumulate,
             echo_mix,
             motion_blur,
@@ -913,8 +936,8 @@ impl FxEngine {
         out
     }
 
-    /// Apply Datamosh (docs/08 §3.12, the Glitch effect's third section,
-    /// K-104) to a linear working texture, returning a new texture of the
+    /// Apply Datamosh (docs/08 §3.12, K-104; its own effect since K-107)
+    /// to a linear working texture, returning a new texture of the
     /// same size. One pass: per output pixel, read its current→previous
     /// motion vector from `flow` and take a single bilinear tap of `prev`
     /// at the displaced position — a motion-compensated prediction, not a
@@ -1616,44 +1639,74 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Glitch (docs/08 §3.12) to a linear working texture,
-    /// returning a new texture of the same size. One pointwise-with-taps
-    /// pass: block UV displacement, channel offset and scanline darkening
-    /// together — Datamosh is deferred (schema status note).
-    pub fn glitch(
+    /// Apply one Block glitch (docs/08 §3.12, split out by K-107) to a
+    /// linear working texture, returning a new texture of the same size.
+    /// One pointwise-with-taps pass: block UV displacement and channel
+    /// offset.
+    pub fn block_glitch(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
         w: u32,
         h: u32,
-        op: &GlitchOp,
+        op: &BlockGlitchOp,
     ) -> wgpu::Texture {
-        let out = work_texture(ctx, w, h, "fx-glitch-out");
+        let out = work_texture(ctx, w, h, "fx-block-glitch-out");
         self.dispatch(
             ctx,
-            &self.glitch,
+            &self.block_glitch,
             src,
             src,
             &out,
             w,
             h,
-            bytemuck::bytes_of(&GlitchParams {
+            bytemuck::bytes_of(&BlockGlitchParams {
                 intensity: op.intensity,
                 seed: op.seed,
                 tick: op.tick,
-                block_enabled: u32::from(op.block_enabled),
                 block_size: op.block_size_px,
                 jitter_frac: op.jitter_frac,
                 amount: op.amount_px,
                 chan: op.chan_px,
                 slice_frac: op.slice_frac,
-                scanline_enabled: u32::from(op.scanline_enabled),
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Scanlines (docs/08 §3.12, split out by K-107) to a linear
+    /// working texture, returning a new texture of the same size. One
+    /// pointwise pass: periodic darkening in raster Y, no neighbour taps.
+    pub fn scanlines(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ScanlinesOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-scanlines-out");
+        self.dispatch(
+            ctx,
+            &self.scanlines,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ScanlinesParams {
+                intensity: op.intensity,
                 period: op.period_px,
                 darkness: op.darkness,
                 roll_px: op.roll_px,
                 interlace: u32::from(op.interlace),
                 mix_amt: op.mix,
                 _pad0: 0.0,
+                _pad1: 0.0,
             }),
         );
         out
@@ -2767,16 +2820,17 @@ mod tests {
         }
     }
 
-    /// The §1.6 oracle for Glitch (docs/08 §3.12, schema status note):
-    /// WGSL agrees with the CPU reference across intensity, seed, tick,
-    /// section toggles and the full parameter set, and is bit-stable
-    /// (§2.4). The per-block hash is exact integer maths on both sides
-    /// (`splitmix32`), so the bound stays as tight as the other hash/
-    /// tap-based kernels; intensity 0 and "both sections off" are asserted
-    /// bit-exact against the untouched corpus (either alone is enough to
-    /// short-circuit, matching the CPU reference's early return).
+    /// The §1.6 oracle for Block glitch (docs/08 §3.12, split out by K-107):
+    /// WGSL agrees with the CPU reference across intensity, seed, tick and
+    /// the full parameter set, and is bit-stable (§2.4). Mirrors the old
+    /// combined Glitch oracle's structure — same maths, just without the
+    /// scanline section and its toggle. The per-block hash is exact integer
+    /// maths on both sides (`splitmix32`), so the bound stays as tight as
+    /// the other hash/tap-based kernels; intensity 0 is asserted bit-exact
+    /// against the untouched corpus regardless of Mix, matching the CPU
+    /// reference's early return.
     #[test]
-    fn wgsl_glitch_matches_the_cpu_oracle() {
+    fn wgsl_block_glitch_matches_the_cpu_oracle() {
         let Ok(ctx) = GpuContext::headless() else {
             eprintln!("no GPU adapter; skipping WGSL parity test");
             return;
@@ -2785,19 +2839,122 @@ mod tests {
         let (w, h) = (32u32, 24u32);
         let img = corpus(w, h);
 
-        #[allow(clippy::struct_excessive_bools)]
         struct Case {
             name: &'static str,
             intensity: f32,
             seed: u32,
             tick: i32,
-            block_enabled: bool,
             block_size_px: f32,
             jitter_frac: f32,
             amount_px: f32,
             chan_px: f32,
             slice_frac: f32,
-            scanline_enabled: bool,
+            mix: f32,
+        }
+        let cases = [
+            Case {
+                name: "neutral-intensity0",
+                intensity: 0.0,
+                seed: 7,
+                tick: 3,
+                block_size_px: 6.0,
+                jitter_frac: 0.5,
+                amount_px: 5.0,
+                chan_px: 2.0,
+                slice_frac: 0.5,
+                mix: 0.4,
+            },
+            Case {
+                name: "moderate",
+                intensity: 0.7,
+                seed: 11,
+                tick: 4,
+                block_size_px: 6.0,
+                jitter_frac: 0.3,
+                amount_px: 4.0,
+                chan_px: 1.5,
+                slice_frac: 0.4,
+                mix: 1.0,
+            },
+            Case {
+                name: "full-partial-mix",
+                intensity: 1.0,
+                seed: 99,
+                tick: 12,
+                block_size_px: 5.0,
+                jitter_frac: 1.0,
+                amount_px: 8.0,
+                chan_px: 3.0,
+                slice_frac: 1.0,
+                mix: 0.6,
+            },
+        ];
+
+        for case in cases {
+            let mut cpu = img.clone();
+            lumit_core::fx::cpu::block_glitch(
+                &mut cpu,
+                w,
+                h,
+                case.intensity,
+                case.seed,
+                case.tick,
+                case.block_size_px,
+                case.jitter_frac,
+                case.amount_px,
+                case.chan_px,
+                case.slice_frac,
+                case.mix,
+            );
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let op = BlockGlitchOp {
+                intensity: case.intensity,
+                seed: case.seed,
+                tick: case.tick,
+                block_size_px: case.block_size_px,
+                jitter_frac: case.jitter_frac,
+                amount_px: case.amount_px,
+                chan_px: case.chan_px,
+                slice_frac: case.slice_frac,
+                mix: case.mix,
+            };
+            let out = fx.block_glitch(&ctx, &tex, w, h, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("block_glitch {}: worst {worst} ulp", case.name);
+            assert!(worst <= 2, "{}: worst {worst} fp16 ULP", case.name);
+            if case.name == "neutral-intensity0" {
+                assert_eq!(gpu, img, "{}: must be the bit-exact passthrough", case.name);
+            }
+
+            let out2 = fx.block_glitch(&ctx, &tex, w, h, &op);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "GPU block_glitch must be bit-stable");
+        }
+    }
+
+    /// The §1.6 oracle for Scanlines (docs/08 §3.12, split out by K-107):
+    /// WGSL agrees with the CPU reference across intensity, period,
+    /// darkness, roll and interlace, and is bit-stable (§2.4). Mirrors the
+    /// old combined Glitch oracle's scanline cases — same maths, now a
+    /// standalone pointwise pass with no block resample. Intensity 0 is
+    /// asserted bit-exact against the untouched corpus regardless of Mix,
+    /// matching the CPU reference's early return.
+    #[test]
+    fn wgsl_scanlines_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+        let img = corpus(w, h);
+
+        struct Case {
+            name: &'static str,
+            intensity: f32,
             period_px: f32,
             darkness: f32,
             roll_px: f32,
@@ -2808,15 +2965,6 @@ mod tests {
             Case {
                 name: "neutral-intensity0",
                 intensity: 0.0,
-                seed: 7,
-                tick: 3,
-                block_enabled: true,
-                block_size_px: 6.0,
-                jitter_frac: 0.5,
-                amount_px: 5.0,
-                chan_px: 2.0,
-                slice_frac: 0.5,
-                scanline_enabled: true,
                 period_px: 3.0,
                 darkness: 0.6,
                 roll_px: 1.0,
@@ -2824,53 +2972,8 @@ mod tests {
                 mix: 0.4,
             },
             Case {
-                name: "both-sections-off",
-                intensity: 1.0,
-                seed: 7,
-                tick: 3,
-                block_enabled: false,
-                block_size_px: 6.0,
-                jitter_frac: 0.5,
-                amount_px: 5.0,
-                chan_px: 2.0,
-                slice_frac: 0.5,
-                scanline_enabled: false,
-                period_px: 3.0,
-                darkness: 0.6,
-                roll_px: 1.0,
-                interlace: true,
-                mix: 0.4,
-            },
-            Case {
-                name: "block-only",
-                intensity: 0.7,
-                seed: 11,
-                tick: 4,
-                block_enabled: true,
-                block_size_px: 6.0,
-                jitter_frac: 0.3,
-                amount_px: 4.0,
-                chan_px: 1.5,
-                slice_frac: 0.4,
-                scanline_enabled: false,
-                period_px: 3.0,
-                darkness: 0.6,
-                roll_px: 0.0,
-                interlace: false,
-                mix: 1.0,
-            },
-            Case {
-                name: "scanline-only",
+                name: "moderate",
                 intensity: 0.8,
-                seed: 3,
-                tick: 1,
-                block_enabled: false,
-                block_size_px: 6.0,
-                jitter_frac: 0.0,
-                amount_px: 0.0,
-                chan_px: 0.0,
-                slice_frac: 0.0,
-                scanline_enabled: true,
                 period_px: 4.0,
                 darkness: 0.5,
                 roll_px: 2.5,
@@ -2878,41 +2981,23 @@ mod tests {
                 mix: 1.0,
             },
             Case {
-                name: "both-sections-full",
+                name: "full-partial-mix-no-interlace",
                 intensity: 1.0,
-                seed: 99,
-                tick: 12,
-                block_enabled: true,
-                block_size_px: 5.0,
-                jitter_frac: 1.0,
-                amount_px: 8.0,
-                chan_px: 3.0,
-                slice_frac: 1.0,
-                scanline_enabled: true,
                 period_px: 2.5,
                 darkness: 0.8,
                 roll_px: -1.5,
-                interlace: true,
+                interlace: false,
                 mix: 0.6,
             },
         ];
 
         for case in cases {
             let mut cpu = img.clone();
-            lumit_core::fx::cpu::glitch(
+            lumit_core::fx::cpu::scanlines(
                 &mut cpu,
                 w,
                 h,
                 case.intensity,
-                case.seed,
-                case.tick,
-                case.block_enabled,
-                case.block_size_px,
-                case.jitter_frac,
-                case.amount_px,
-                case.chan_px,
-                case.slice_frac,
-                case.scanline_enabled,
                 case.period_px,
                 case.darkness,
                 case.roll_px,
@@ -2921,36 +3006,27 @@ mod tests {
             );
 
             let tex = upload_linear_f32(&ctx, &img, w, h);
-            let op = GlitchOp {
+            let op = ScanlinesOp {
                 intensity: case.intensity,
-                seed: case.seed,
-                tick: case.tick,
-                block_enabled: case.block_enabled,
-                block_size_px: case.block_size_px,
-                jitter_frac: case.jitter_frac,
-                amount_px: case.amount_px,
-                chan_px: case.chan_px,
-                slice_frac: case.slice_frac,
-                scanline_enabled: case.scanline_enabled,
                 period_px: case.period_px,
                 darkness: case.darkness,
                 roll_px: case.roll_px,
                 interlace: case.interlace,
                 mix: case.mix,
             };
-            let out = fx.glitch(&ctx, &tex, w, h, &op);
+            let out = fx.scanlines(&ctx, &tex, w, h, &op);
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
             let worst = worst_f16_ulp(&cpu, &gpu);
-            eprintln!("glitch {}: worst {worst} ulp", case.name);
+            eprintln!("scanlines {}: worst {worst} ulp", case.name);
             assert!(worst <= 2, "{}: worst {worst} fp16 ULP", case.name);
-            if case.name == "neutral-intensity0" || case.name == "both-sections-off" {
+            if case.name == "neutral-intensity0" {
                 assert_eq!(gpu, img, "{}: must be the bit-exact passthrough", case.name);
             }
 
-            let out2 = fx.glitch(&ctx, &tex, w, h, &op);
+            let out2 = fx.scanlines(&ctx, &tex, w, h, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
-            assert_eq!(gpu, gpu2, "GPU glitch must be bit-stable");
+            assert_eq!(gpu, gpu2, "GPU scanlines must be bit-stable");
         }
     }
 
@@ -3328,8 +3404,8 @@ mod tests {
         );
     }
 
-    /// The §1.6 oracle for Datamosh (docs/08 §3.12, the Glitch effect's
-    /// third section, K-104): the GPU single-tap warp matches
+    /// The §1.6 oracle for Datamosh (docs/08 §3.12, K-104; its own effect
+    /// since K-107): the GPU single-tap warp matches
     /// `lumit_core::fx::cpu::datamosh` given the same -1 neighbour and flow
     /// field, on a constant field and a varying one — the same two shapes
     /// [`wgsl_motion_blur_matches_the_cpu_oracle`] exercises, since both

@@ -20,8 +20,8 @@ type Tex = egui_wgpu::wgpu::Texture;
 /// reads them, single-frame ops ignore them. `flow_field` is the layer's
 /// dense motion field (per-pixel `(u, v)` at this raster size), present only
 /// when the stack has a flow-consuming effect (Flow motion blur, or Datamosh
-/// within Glitch — §3.12, K-104); a missing field makes that effect a
-/// passthrough (degrade, never fault).
+/// — §3.12, K-107); a missing field makes that effect a passthrough
+/// (degrade, never fault).
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -345,40 +345,50 @@ pub fn run_ops(
                     },
                 );
             }
-            Resolved::Glitch {
+            Resolved::BlockGlitch {
                 intensity,
                 seed,
                 tick,
-                block_enabled,
                 block_size_px,
                 jitter_frac,
                 amount_px,
                 chan_px,
                 slice_frac,
-                scanline_enabled,
-                period_px,
-                darkness,
-                roll_px,
-                interlace,
                 mix,
-                datamosh_enabled,
             } => {
-                tex = fx.glitch(
+                tex = fx.block_glitch(
                     ctx,
                     &tex,
                     w,
                     h,
-                    &lumit_gpu::fx::GlitchOp {
+                    &lumit_gpu::fx::BlockGlitchOp {
                         intensity: *intensity,
                         seed: *seed,
                         tick: *tick,
-                        block_enabled: *block_enabled,
                         block_size_px: *block_size_px,
                         jitter_frac: *jitter_frac,
                         amount_px: *amount_px,
                         chan_px: *chan_px,
                         slice_frac: *slice_frac,
-                        scanline_enabled: *scanline_enabled,
+                        mix: *mix,
+                    },
+                );
+            }
+            Resolved::Scanlines {
+                intensity,
+                period_px,
+                darkness,
+                roll_px,
+                interlace,
+                mix,
+            } => {
+                tex = fx.scanlines(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::ScanlinesOp {
+                        intensity: *intensity,
                         period_px: *period_px,
                         darkness: *darkness,
                         roll_px: *roll_px,
@@ -386,27 +396,30 @@ pub fn run_ops(
                         mix: *mix,
                     },
                 );
-                // Datamosh (§3.12, K-104) reads the layer's -1 neighbour and
+            }
+            Resolved::Datamosh { intensity, mix } => {
+                // Datamosh (§3.12, K-107) reads the layer's -1 neighbour and
                 // its current→previous flow field, exactly as Motion blur
                 // reads its own +1-neighbour flow field. Either missing (a
-                // non-footage layer, or a dropped decode) skips the section
-                // — a passthrough, never a fault.
-                if *datamosh_enabled {
-                    if let (Some(flow), Some((_, prev))) =
-                        (flow_field, neighbours.iter().find(|(o, _)| *o == -1))
-                    {
-                        tex = fx.datamosh(
-                            ctx,
-                            &tex,
-                            prev,
-                            flow,
-                            w,
-                            h,
-                            &lumit_gpu::fx::DatamoshOp {
-                                intensity: *intensity,
-                            },
-                        );
-                    }
+                // non-footage layer, or a dropped decode) is a passthrough,
+                // never a fault. The existing GPU/CPU maths take a single
+                // blend fraction; Mix folds into Intensity here rather than
+                // adding a second uniform, since mixing the same two inputs
+                // twice collapses to one mix by the product.
+                if let (Some(flow), Some((_, prev))) =
+                    (flow_field, neighbours.iter().find(|(o, _)| *o == -1))
+                {
+                    tex = fx.datamosh(
+                        ctx,
+                        &tex,
+                        prev,
+                        flow,
+                        w,
+                        h,
+                        &lumit_gpu::fx::DatamoshOp {
+                            intensity: *intensity * *mix,
+                        },
+                    );
                 }
             }
             Resolved::Echo { weights, mode, mix } => {

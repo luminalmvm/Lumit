@@ -112,31 +112,35 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-core/src/model.rs` — **What a project is.** Structs for the document,
   comps, layers, footage items. Each has an `extra` field that preserves anything a future
   Lumit version adds — so old and new versions can share project files.
-- **Glitch** — the corrupted-video look, as three sub-effects sharing one Intensity dial (the
-  third, Datamosh, is explained further down, once the flow-field machinery it needs has been
-  introduced). **Block displacement**
+- **Block glitch and Scanlines, the corrupted-video look, as two separate effects** (a third,
+  Datamosh, is explained further down, once the flow-field machinery it needs has been
+  introduced — the three used to be one "Glitch" effect with on/off sections, but each does
+  one thing so each is now its own effect you drop on separately; stack Block glitch then
+  Scanlines to get the old combined look back). **Block glitch**
   carves the frame into a grid (Block size) and, per block, reads its picture from a
   slightly different spot — a random-looking but fully repeatable jump, plus an optional
   colour-channel split and a "slice repeat" look where a thin strip of the block tiles
   instead of showing a plain shifted read. **Scanlines** darkens alternating bands of rows
   (Line period, Darkness), optionally rolling them over time and alternating which half of
-  each band darkens every other cycle for an interlaced-video feel. One dial, Intensity,
-  turns *all* of that up or down together, and at 0 the effect is a guaranteed no-op — checked
-  by a test — no matter which sections are switched on or what Mix is set to. The interesting
-  engineering wrinkle: which block "moves" and by how much has to be decided freshly for
-  every pixel, on the GPU, from nothing but (seed, that block's row/column, a coarse
-  time-step) — there's no way to precompute a lookup table for it up front, because a busy
-  frame can have thousands of blocks. That means the effect needs its own hash function
-  running *inside* the graphics-card program, not just on the CPU side like Shake's wobble
-  does. Shake's existing hash is built on 64-bit numbers, which graphics-card programs
-  (written in a language called WGSL) cannot represent — so Glitch gets a sibling hash built
-  entirely from 32-bit numbers instead, same design, both the CPU and the GPU version running
-  the identical recipe so they always agree. Every "which block, how much, which look" answer
-  comes from that one shared hash fed different small numbers, which is also why the same
-  project glitches exactly the same way on every machine, every time. It reuses the same
-  frame-cache lesson Shake taught the codebase: because Glitch is seeded, the cache
-  automatically knows a frozen frame still needs the *current* moment's local time to look
-  right, with no Glitch-specific code needed for that part at all.
+  each band darkens every other cycle for an interlaced-video feel — it has no hash and no
+  Seed of its own, since it just reads straight down from each row rather than jumping
+  around like Block glitch does. Each effect has its own Intensity dial that turns its own
+  look up or down, and at 0 each is a guaranteed no-op — checked by a test — whatever Mix is
+  set to. The interesting engineering wrinkle, in Block glitch: which block "moves" and by
+  how much has to be decided freshly for every pixel, on the GPU, from nothing but (seed,
+  that block's row/column, a coarse time-step) — there's no way to precompute a lookup table
+  for it up front, because a busy frame can have thousands of blocks. That means the effect
+  needs its own hash function running *inside* the graphics-card program, not just on the CPU
+  side like Shake's wobble does. Shake's existing hash is built on 64-bit numbers, which
+  graphics-card programs (written in a language called WGSL) cannot represent — so Block
+  glitch gets a sibling hash built entirely from 32-bit numbers instead, same design, both
+  the CPU and the GPU version running the identical recipe so they always agree. Every
+  "which block, how much, which look" answer comes from that one shared hash fed different
+  small numbers, which is also why the same project glitches exactly the same way on every
+  machine, every time. It reuses the same frame-cache lesson Shake taught the codebase:
+  because Block glitch is seeded, the cache automatically knows a frozen frame still needs
+  the *current* moment's local time to look right, with no Block-glitch-specific code needed
+  for that part at all.
 - **Echo / trails, and "temporal effects"** — the montage speed-line staple, and the first
   effect that needs *more than the current frame*. Until now every effect looked only at the
   single frame it was drawn on. Echo lays several earlier frames of the layer behind (or over)
@@ -169,25 +173,25 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each streak — more is smoother but slower). A still frame, or a shutter of zero, leaves the
   picture untouched. For now it follows the footage's own motion only (not, yet, motion you
   add with keyframes) and works on footage layers, the same starting scope Echo has.
-- **Datamosh, Glitch's third section** — the corrupted-video "reused an old frame's motion"
-  look, and the third effect to use the flow-field machinery Motion blur introduced. Real
-  video codecs sometimes drop a frame's actual picture data and just reuse the previous
-  frame's content nudged by that frame's motion vectors — which looks like melting, trailing
-  smears where things moved. This section fakes that on purpose: it works out how far every
-  pixel moved between the frame *before* this one and this one (the same kind of arrow-map
-  Motion blur reads, just measured one frame earlier), then paints each pixel of *this* frame
-  by looking up where that arrow says its content used to be, back in the previous frame — a
-  single lookup per pixel, not Motion blur's multi-step smear along the arrow. Intensity (the
-  same master dial the other two sections share) fades between the ordinary frame and the
-  moshed one. It has its own on/off switch, off by default, because — unlike Block
-  displacement and Scanlines, which have always been part of Glitch — turning it on means
-  fetching an extra frame and running the motion-arrow calculation, so existing projects with
-  Glitch already applied do not suddenly start moshing the moment this ships. One wrinkle
-  worth knowing: the app can only carry one motion-arrow map per layer per frame right now, so
-  if a layer somehow had both Motion blur and a moshing Glitch turned on together, only
-  whichever one is listed first in the effect stack gets its arrows this frame — the other
-  quietly sits out, the same "missing data, do nothing" safety rule every temporal effect
-  already follows.
+- **Datamosh** — the corrupted-video "reused an old frame's motion" look, and the third
+  effect to use the flow-field machinery Motion blur introduced. Real video codecs sometimes
+  drop a frame's actual picture data and just reuse the previous frame's content nudged by
+  that frame's motion vectors — which looks like melting, trailing smears where things
+  moved. This effect fakes that on purpose: it works out how far every pixel moved between
+  the frame *before* this one and this one (the same kind of arrow-map Motion blur reads,
+  just measured one frame earlier), then paints each pixel of *this* frame by looking up
+  where that arrow says its content used to be, back in the previous frame — a single lookup
+  per pixel, not Motion blur's multi-step smear along the arrow. Intensity fades between the
+  ordinary frame and the moshed one. It started life as a toggle inside Glitch, off by
+  default, because turning it on meant fetching an extra frame and running the motion-arrow
+  calculation, unlike Glitch's other two sections which were always on; when Glitch split
+  into three separate effects, Datamosh kept that same shape as its own effect — you simply
+  do not add it to a layer unless you want the look, rather than flicking a switch inside a
+  bigger effect. One wrinkle worth knowing: the app can only carry one motion-arrow map per
+  layer per frame right now, so if a layer somehow had both Motion blur and Datamosh turned
+  on together, only whichever one is listed first in the effect stack gets its arrows this
+  frame — the other quietly sits out, the same "missing data, do nothing" safety rule every
+  temporal effect already follows.
 - **Blur gains a Radial mode** — the third and final mode of the §3.8 trio, alongside
   Gaussian and Directional. Drop a Centre point anywhere on the frame (as two percentages,
   Centre X and Centre Y, of the frame's width and height) and pick a Type: **Spin** streaks
