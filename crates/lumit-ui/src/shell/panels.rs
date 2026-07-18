@@ -835,8 +835,7 @@ pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme) {
                 let members: Vec<_> = fx::BUILTINS
                     .iter()
                     .filter(|s| {
-                        s.category == cat
-                            && (needle.is_empty() || s.label.to_lowercase().contains(&needle))
+                        s.category == cat && fuzzy_score(&needle, s.label, s.match_name).is_some()
                     })
                     .collect();
                 if members.is_empty() {

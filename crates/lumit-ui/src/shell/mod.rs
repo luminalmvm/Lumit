@@ -24,6 +24,7 @@ mod settings;
 mod timeline;
 mod widgets;
 
+pub(crate) use command_palette::*;
 pub(crate) use dock::*;
 pub(crate) use draws::*;
 pub(crate) use gpu::*;
