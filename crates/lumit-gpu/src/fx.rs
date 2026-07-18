@@ -604,6 +604,21 @@ struct AdjustParams {
     _pad: [f32; 3],
 }
 
+/// One resolved 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). The cube
+/// itself arrives as its own 3D texture (see [`upload_lut_3d`] and
+/// [`FxEngine::lut`]); this uniform carries only the edge length the shader
+/// needs to turn a colour into grid coordinates and the host Mix. Domain is
+/// assumed 0..1 (a domain remap is a documented follow-up, docs/impl/lut.md).
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LutParams {
+    /// LUT edge length N (the cube holds `N³` samples).
+    size: u32,
+    /// 0..1, blended against the unprocessed input.
+    mix: f32,
+    _pad: [f32; 2],
+}
+
 /// The effect-pass engine: compiled kernels plus their layouts, one per
 /// device (owned alongside the Compositor by whoever renders).
 pub struct FxEngine {
@@ -638,6 +653,11 @@ pub struct FxEngine {
     /// field) plus a storage output and a uniform.
     datamosh: wgpu::ComputePipeline,
     adjust: wgpu::ComputePipeline,
+    /// 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). Its own pipeline and
+    /// [`Self::lut_layout`]: the shared two sampled inputs (src, orig) plus
+    /// the cube as a fifth binding — a 3D texture, the first effect to need
+    /// one.
+    lut: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
     /// The adjustment blend's own layout: three sampled inputs (below,
     /// processed, coverage) where every effect kernel takes two.
@@ -647,6 +667,9 @@ pub struct FxEngine {
     /// needs. Also Datamosh's layout (see [`Self::datamosh`]): its three
     /// sampled inputs (current, previous, flow) fit the same shape.
     mb_layout: wgpu::BindGroupLayout,
+    /// The LUT lookup's own layout (see [`Self::lut`]): src (0), orig (1),
+    /// the storage output (2), the uniform (3) and the 3D cube texture (4).
+    lut_layout: wgpu::BindGroupLayout,
 }
 
 impl FxEngine {
@@ -764,6 +787,56 @@ impl FxEngine {
                 bind_group_layouts: &[&mb_layout],
                 push_constant_ranges: &[],
             });
+        // The LUT lookup's layout: src (0), orig-for-mix (1), the storage
+        // output (2), the uniform (3) and — the one thing no other kernel has —
+        // the cube as a 3D texture at binding 4 (filterable:false; the shader
+        // does its own trilinear via textureLoad, docs/impl/lut.md §3).
+        let lut_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("fx-lut-layout"),
+                entries: &[
+                    texture_entry(0),
+                    texture_entry(1),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: WORKING_FORMAT,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let lut_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-lut-pl"),
+                bind_group_layouts: &[&lut_layout],
+                push_constant_ranges: &[],
+            });
         let module = |wgsl: &str, name: &str| {
             ctx.device
                 .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -806,6 +879,7 @@ impl FxEngine {
         let motion_blur_mod = module(include_str!("fx_motionblur.wgsl"), "fx-motion-blur");
         let datamosh_mod = module(include_str!("fx_datamosh.wgsl"), "fx-datamosh");
         let adjust_mod = module(include_str!("fx_adjust.wgsl"), "fx-adjust");
+        let lut_mod = module(include_str!("fx_lut.wgsl"), "fx-lut");
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
         let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");
@@ -864,6 +938,16 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
+        let lut = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-lut"),
+                layout: Some(&lut_pl),
+                module: &lut_mod,
+                entry_point: Some("lut_apply"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
         Self {
             blur,
             dir_blur,
@@ -892,9 +976,11 @@ impl FxEngine {
             motion_blur,
             datamosh,
             adjust,
+            lut,
             layout,
             adjust_layout,
             mb_layout,
+            lut_layout,
         }
     }
 
@@ -1113,6 +1199,95 @@ impl FxEngine {
                 timestamp_writes: None,
             });
             cpass.set_pipeline(&self.datamosh);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
+        ctx.queue.submit([enc.finish()]);
+        out
+    }
+
+    /// Apply one 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md) to a linear
+    /// working texture, returning a new texture of the same size. One pass on
+    /// **unpremultiplied** colour (§2.2 — a LUT is an arbitrary colour map):
+    /// per output pixel, unpremultiply, map each channel to a grid coordinate
+    /// in `[0, size-1]` (domain assumed 0..1, clamped), `textureLoad` the eight
+    /// integer corners of `lut_tex` and trilinearly interpolate in f32 — **not**
+    /// the hardware sampler, whose precision is not guaranteed bit-for-bit
+    /// across GPUs (docs/impl/lut.md §3) — re-premultiply, then blend against
+    /// the input by the host Mix. The cube is consumed exactly as
+    /// `lumit_core::lut::Lut3d::sample` reads its red-fastest data, so the two
+    /// agree (§1.6). Its own bind group (the cube is a 3D texture, the one
+    /// binding no other kernel has). `mix == 0` is the bit-exact input.
+    #[allow(clippy::too_many_arguments)]
+    pub fn lut(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        lut_tex: &wgpu::Texture,
+        size: u32,
+        mix: f32,
+    ) -> wgpu::Texture {
+        use wgpu::util::DeviceExt;
+        let out = work_texture(ctx, w, h, "fx-lut-out");
+        let ubuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-lut-params"),
+                contents: bytemuck::bytes_of(&LutParams {
+                    size,
+                    mix,
+                    _pad: [0.0; 2],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        // The cube is a 3D texture; name its view dimension explicitly so the
+        // binding matches the layout's `D3` regardless of the default.
+        let lut_view = lut_tex.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D3),
+            ..Default::default()
+        });
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-lut-bind"),
+            layout: &self.lut_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view(src)),
+                },
+                // orig-for-mix: a single pass, so the unprocessed original is
+                // the source itself.
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view(src)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&view(&out)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: ubuf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&lut_view),
+                },
+            ],
+        });
+        let mut enc = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("fx-lut-enc"),
+            });
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-lut-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.lut);
             cpass.set_bind_group(0, &bind, &[]);
             cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
         }
@@ -2068,6 +2243,63 @@ pub fn upload_linear_f32(ctx: &GpuContext, rgba: &[f32], w: u32, h: u32) -> wgpu
             width: w,
             height: h,
             depth_or_array_layers: 1,
+        },
+    );
+    tex
+}
+
+/// Upload a 3D colour LUT cube as an `rgba32float` 3D texture for
+/// [`FxEngine::lut`]. `data` is `size³` RGB triplets, **red-fastest** (flat
+/// index `r + g*size + b*size*size`, the layout `lumit_core::lut::Lut3d`
+/// stores). Each triplet is padded to RGBA (alpha 1.0, unused) and written at
+/// full f32 precision, so the shader's manual trilinear lookup reads the exact
+/// samples the CPU oracle interpolates — the only fp16 rounding is then the
+/// colour output at the working texture, matching the other tap-based kernels.
+/// The `textureLoad` axis order `(x=r, y=g, z=b)` mirrors the red-fastest flat
+/// index, so no transpose. `bytes_per_row = size*16` (four f32 channels),
+/// `rows_per_image = size`, depth = size.
+pub fn upload_lut_3d(ctx: &GpuContext, size: u32, data: &[[f32; 3]]) -> wgpu::Texture {
+    let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("fx-lut-3d"),
+        size: wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: size,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D3,
+        format: wgpu::TextureFormat::Rgba32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let count = (size as usize)
+        .saturating_mul(size as usize)
+        .saturating_mul(size as usize);
+    let mut rgba = vec![0f32; count * 4];
+    for (i, c) in data.iter().take(count).enumerate() {
+        rgba[i * 4] = c[0];
+        rgba[i * 4 + 1] = c[1];
+        rgba[i * 4 + 2] = c[2];
+        rgba[i * 4 + 3] = 1.0;
+    }
+    ctx.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        bytemuck::cast_slice(&rgba),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(size * 16),
+            rows_per_image: Some(size),
+        },
+        wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: size,
         },
     );
     tex
@@ -3989,5 +4221,169 @@ mod tests {
             current,
             "intensity 0 must be a bit-exact passthrough"
         );
+    }
+
+    /// Build a `Lut3d` (domain 0..1) by mapping each grid point through `f`,
+    /// pushed **red-fastest** (index `r + g*size + b*size*size`) — the layout
+    /// `upload_lut_3d` and the shader assume.
+    fn build_lut(size: usize, f: impl Fn([f32; 3]) -> [f32; 3]) -> lumit_core::lut::Lut3d {
+        let maxf = (size - 1) as f32;
+        let mut data = Vec::with_capacity(size * size * size);
+        for b in 0..size {
+            for g in 0..size {
+                for r in 0..size {
+                    data.push(f([r as f32 / maxf, g as f32 / maxf, b as f32 / maxf]));
+                }
+            }
+        }
+        lumit_core::lut::Lut3d {
+            size,
+            domain_min: [0.0; 3],
+            domain_max: [1.0; 3],
+            data,
+        }
+    }
+
+    /// The §1.6 oracle for the 3D LUT (docs/08 §3.11; docs/impl/lut.md): the
+    /// WGSL manual-trilinear lookup matches `lumit_core::lut::Lut3d::sample`
+    /// wrapped as unpremultiply -> sample -> re-premultiply -> Mix, on a spread
+    /// of RGBA pixels **including partial-alpha and out-of-domain HDR ones** and
+    /// several cubes (identity, a per-channel gamma, an R/B swap). A cheap
+    /// pointwise effect, so CPU and GPU agree to ≤ 2 fp16 ULP; the GPU is
+    /// bit-stable (§2.4); Mix 0 is the bit-exact input; and the identity cube
+    /// round-trips every in-domain pixel to itself (a strong end-to-end check
+    /// that the red-fastest indexing, the domain scale and the premult handling
+    /// are all right — if it did not, one of those three is wrong).
+    #[test]
+    fn wgsl_lut_matches_the_cpu_oracle() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("no GPU adapter; skipping WGSL parity test");
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+
+        // A premultiplied corpus built from a known *straight* colour and an
+        // alpha that cycles through 0, partial and 1, so unpremultiply -> look
+        // up -> re-premultiply is exercised at every alpha. A couple of pixels
+        // carry straight colour > 1.0 to hit the out-of-domain edge clamp.
+        let mut img = vec![0.0f32; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let s = [
+                    x as f32 / (w - 1) as f32,
+                    y as f32 / (h - 1) as f32,
+                    (x + y) as f32 / (w + h) as f32,
+                ];
+                let a = match (x + y) % 4 {
+                    0 => 0.0,
+                    1 => 0.25,
+                    2 => 0.5,
+                    _ => 1.0,
+                };
+                img[i] = s[0] * a;
+                img[i + 1] = s[1] * a;
+                img[i + 2] = s[2] * a;
+                img[i + 3] = a;
+            }
+        }
+        // Out-of-domain straight colours (alpha 1): must clamp on both paths.
+        img[((5 * w + 7) * 4) as usize..((5 * w + 7) * 4 + 4) as usize]
+            .copy_from_slice(&[1.5, 0.2, 2.0, 1.0]);
+        img[((9 * w + 3) * 4) as usize..((9 * w + 3) * 4 + 4) as usize]
+            .copy_from_slice(&[3.0, 4.0, 0.1, 1.0]);
+        // fp16-quantise exactly as the GPU sees it, so the comparison isolates
+        // the LUT maths from upload rounding.
+        let img: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+
+        let unpremult = |c: [f32; 4]| -> [f32; 3] {
+            if c[3] > 0.0 {
+                [c[0] / c[3], c[1] / c[3], c[2] / c[3]]
+            } else {
+                [0.0; 3]
+            }
+        };
+
+        let identity = build_lut(3, |c| c);
+        // A per-channel gamma (a real, non-linear "film" curve); trilinear is
+        // approximate for it, but both paths use the *same* cube, so they still
+        // agree — the point is the interpolation maths, not the cube's fidelity.
+        let gamma = build_lut(5, |c| [c[0].powf(2.0), c[1].powf(0.5), c[2].powf(1.5)]);
+        // A non-separable swap of red and blue: out = [b, g, r].
+        let swap = build_lut(2, |c| [c[2], c[1], c[0]]);
+
+        let cases: [(&str, &lumit_core::lut::Lut3d, f32); 5] = [
+            ("identity-full", &identity, 1.0),
+            ("identity-mix0", &identity, 0.0),
+            ("gamma-full", &gamma, 1.0),
+            ("gamma-mixed", &gamma, 0.5),
+            ("swap-rb", &swap, 1.0),
+        ];
+
+        for (name, lut, mix) in cases {
+            // CPU expected: unpremultiply -> Lut3d::sample -> re-premultiply ->
+            // Mix, using the same lerp form the shader uses for the final blend.
+            let mut cpu = vec![0.0f32; img.len()];
+            for px in 0..(w * h) as usize {
+                let i = px * 4;
+                let o = [img[i], img[i + 1], img[i + 2], img[i + 3]];
+                let graded = lut.sample(unpremult(o));
+                let pm = [graded[0] * o[3], graded[1] * o[3], graded[2] * o[3]];
+                cpu[i] = o[0] + (pm[0] - o[0]) * mix;
+                cpu[i + 1] = o[1] + (pm[1] - o[1]) * mix;
+                cpu[i + 2] = o[2] + (pm[2] - o[2]) * mix;
+                cpu[i + 3] = o[3];
+            }
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let lut_tex = upload_lut_3d(&ctx, lut.size as u32, &lut.data);
+            let out = fx.lut(&ctx, &tex, w, h, &lut_tex, lut.size as u32, mix);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            eprintln!("lut {name}: worst {worst} ulp");
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+
+            if name == "identity-mix0" {
+                // Mix 0 is the bit-exact input on the GPU path.
+                assert_eq!(gpu, img, "{name}: Mix 0 must be the bit-exact input");
+            }
+
+            // Determinism: a second run is bit-identical to the first (§2.4).
+            let out2 = fx.lut(&ctx, &tex, w, h, &lut_tex, lut.size as u32, mix);
+            let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+            assert_eq!(gpu, gpu2, "{name}: GPU LUT must be bit-stable");
+        }
+
+        // End-to-end: the identity cube at Mix 1.0 returns every *in-domain*
+        // pixel to itself (out-of-domain HDR pixels legitimately clamp, so they
+        // are excluded). A transposed cube or a broken premult round-trip would
+        // fail this loudly.
+        let lut_tex = upload_lut_3d(&ctx, identity.size as u32, &identity.data);
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let gpu = readback_linear_f32(
+            &ctx,
+            &fx.lut(&ctx, &tex, w, h, &lut_tex, identity.size as u32, 1.0),
+            w,
+            h,
+        )
+        .unwrap();
+        for px in 0..(w * h) as usize {
+            let i = px * 4;
+            let o = [img[i], img[i + 1], img[i + 2], img[i + 3]];
+            let s = unpremult(o);
+            if s.iter().all(|v| (0.0..=1.0).contains(v)) {
+                for c in 0..4 {
+                    assert!(
+                        (gpu[i + c] - img[i + c]).abs() < 5e-3,
+                        "identity must round-trip in-domain pixel {px} chan {c}: \
+                         {} vs {}",
+                        gpu[i + c],
+                        img[i + c]
+                    );
+                }
+            }
+        }
     }
 }
