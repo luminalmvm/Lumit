@@ -264,7 +264,10 @@ fn feed_layer(
                         // selects it); an unset param feeds a distinct 0 marker.
                         // The path string is hashed (length-prefixed), not the
                         // file's bytes — the same policy a footage source path
-                        // follows; the LUT loader re-reads by path + mtime.
+                        // follows. Refreshing a file edited on disk is the LUT
+                        // loader's job (specified as path + mtime caching,
+                        // docs/impl/lut.md §4; the shipped caches key by path
+                        // only, so an on-disk edit shows after a restart).
                         match f.path_at(lt) {
                             Some(p) => {
                                 h.update(&[1]);

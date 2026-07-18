@@ -313,6 +313,17 @@ Modes not listed (Dissolve, Linear/Vivid/Pin light, Hard mix, Divide, Subtract, 
   proportion to speed; fractional sample times use the clip's frame-interpolation policy.
   Overrun regions hold the boundary frame for all samples.
 
+Status (shipped v1, K-120): the transform-multi-sampling core is live in the shape above with
+these v1 trims, each a recorded follow-up rather than a reversal. N is a **fixed comp setting**
+(`samples`, default 16, control range 2–64, hard cap 256 — the same maximum the adaptive rule
+above will respect), not yet the adaptive displacement-derived count; the frame-time source is
+rendered once and only the transform re-evaluated per sample (the source-static case above —
+sub-frame *source* re-render, and therefore the Retime interaction bullet, awaits the
+accumulation path); the accumulator is the working-format average (`motion_blur_average`'s
+additive-on-both-channels mean) rather than a dedicated fp32 target; parent motion within the
+shutter and blur on a collapsed Precomp's inner layers are deferred (K-120). Preview and export
+share one sample-time derivation and one averaging helper, so K-031 holds.
+
 ## 5. Caching (K-016)
 
 ### 5.1 Three tiers

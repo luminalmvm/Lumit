@@ -128,6 +128,15 @@ impl Default for MotionBlur {
 }
 
 impl MotionBlur {
+    /// The docs/06 §4 hard ceiling on shutter samples (256). The UI clamps its
+    /// own control to 2–64, but `samples` is plain saved data: a hand-edited or
+    /// damaged project could carry any u32, and every offset returned here
+    /// becomes a full draw of the layer per frame — so the budget is enforced
+    /// where the offsets are made, not just at the control (docs/14 §5,
+    /// budgeted work). Applied inside [`sample_offsets`], the one source both
+    /// the render and the frame key read, so the two stay consistent.
+    pub const MAX_SAMPLES: u32 = 256;
+
     /// The sub-frame sample offsets, in *frames*, across the open shutter
     /// (docs/06 §4, K-120). For `samples` = N the k-th midpoint offset is
     /// `phase_frac + (k + 0.5)/N · open_frac`, where `open_frac =
@@ -139,13 +148,16 @@ impl MotionBlur {
     ///
     /// Empty unless the comp master is on and `samples` ≥ 2 (a single sample
     /// is no blur), so a caller can treat a non-empty result as "this comp
-    /// blurs" without re-checking. Deterministic and side-effect free, so
-    /// preview and export derive identical sample times from it (K-031).
+    /// blurs" without re-checking. `samples` is capped at [`Self::MAX_SAMPLES`]
+    /// (the docs/06 §4 maximum), so a damaged file can never demand an
+    /// unbounded number of sub-frame draws. Deterministic and side-effect
+    /// free, so preview and export derive identical sample times from it
+    /// (K-031).
     pub fn sample_offsets(&self) -> Vec<f64> {
         if !self.enabled || self.samples < 2 {
             return Vec::new();
         }
-        let n = self.samples;
+        let n = self.samples.min(Self::MAX_SAMPLES);
         let open_frac = self.shutter_angle / 360.0;
         let phase_frac = self.shutter_phase / 360.0;
         (0..n)
@@ -978,6 +990,33 @@ mod tests {
         let span = offs.last().unwrap() - offs.first().unwrap();
         let slice = 0.5 / 4.0; // one sample sits half a slice in from each edge
         assert!((span - (0.5 - slice)).abs() < 1e-12, "span {span}");
+    }
+
+    #[test]
+    fn motion_blur_sample_count_is_capped_at_the_docs_maximum() {
+        // `samples` is plain saved data (the UI clamps its own control, a
+        // hand-edited file need not), and each offset becomes a full draw of
+        // the layer per frame — so the docs/06 §4 maximum (256) is enforced in
+        // sample_offsets itself, the one source both the render and the frame
+        // key read. A damaged file asking for millions of samples gets the
+        // capped, still-centred window instead of an unbounded draw list.
+        let mb = MotionBlur {
+            enabled: true,
+            samples: 1_000_000,
+            ..MotionBlur::default()
+        };
+        let offs = mb.sample_offsets();
+        assert_eq!(offs.len(), MotionBlur::MAX_SAMPLES as usize);
+        // Still the centred AE-default window: mean at the frame time.
+        let mean: f64 = offs.iter().sum::<f64>() / offs.len() as f64;
+        assert!(mean.abs() < 1e-12, "mean {mean}");
+        // At or below the cap nothing changes.
+        let at_cap = MotionBlur {
+            enabled: true,
+            samples: MotionBlur::MAX_SAMPLES,
+            ..MotionBlur::default()
+        };
+        assert_eq!(at_cap.sample_offsets().len(), 256);
     }
 
     #[test]

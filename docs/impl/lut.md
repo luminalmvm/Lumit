@@ -88,6 +88,17 @@ in the working space as-is (no implicit input transfer), documented in §3.11; a
 colour-managed "LUT input space" control is a recorded follow-up. Flag this when
 the effect lands so it can be logged as a K-decision.
 
+Status (shipped, K-114) — **domain gap**: the shipped shader (`fx_lut.wgsl`)
+assumes the default `0..1` domain and skips the `(c - lo) / (hi - lo)` remap
+above; the CPU reference (`Lut3d::sample`) applies it in full. Almost every
+creative `.cube` uses the default domain, where the two are identical — but a
+cube with a non-default `DOMAIN_MIN`/`DOMAIN_MAX` currently renders with the
+domain **ignored** on the GPU (wrong colours, silently) while the CPU oracle
+remaps correctly. Closing this — either passing the six domain floats through
+`LutParams` into the shader per §2, or refusing non-default-domain cubes at
+load as a labelled no-op — is an open follow-up; until then the oracle test
+only exercises default-domain cubes.
+
 ## 4. Caching by path (never re-parse per frame)
 
 Parsing and uploading on every frame would be absurd. Cache on the path plus its
@@ -96,6 +107,12 @@ parallel `-> GpuLut` for the uploaded texture. Look the resolved path up each
 frame; parse+upload only on a miss (path changed, or the file was edited on
 disk). Bound the cache (a handful of entries — a comp rarely references many
 LUTs at once) and evict LRU. The parse cost is then paid once per distinct file.
+
+Status (shipped, K-114): the shipped caches (`GpuViewer::load_luts`,
+`Renderer::layer_luts`) key by **path only** — no mtime, no LRU bound — so a
+`.cube` edited on disk keeps showing its old grade until the app restarts, and
+distinct paths accumulate uploads for the session. Upgrading both to the
+`(path, mtime)` key with an LRU bound as specified here is an open follow-up.
 
 ## 5. Animating which file is live (the File parameter)
 
