@@ -53,13 +53,12 @@ is a dense professional tool rather than a web app.
   first-polished theme, because a neutral dark surround preserves colour judgement against the
   Viewer — the industry-standard reasoning behind every grading suite. Light mode is a
   documented later option (§11), not a launch requirement.
-- **KD-2 · Hit-target compensation (PROPOSED; promote to the decision log per §Open
-  questions).** The household accessibility gate demands ≥44px touch targets. In a timeline
-  where twenty layers must be visible at once, 44px rows are impossible. Lumit's recorded
-  compensation: dense-surface controls (timeline rows, keyframes, property lanes, graph editor
-  handles) MUST be ≥24px in visual extent on their smaller axis **and** MUST carry ≥32px of
-  interactive hit-slop; toolbar, transport, and dialog controls keep the full household ≥44px.
-  See §7.2.
+- **KD-2 · Hit-target compensation (= decision K-116, DECIDED).** The household accessibility
+  gate demands ≥44px touch targets. In a timeline where twenty layers must be visible at once,
+  44px rows are impossible. Lumit's recorded compensation: dense-surface controls (timeline
+  rows, keyframes, property lanes, graph editor handles) MUST be ≥24px in visual extent on their
+  smaller axis **and** MUST carry ≥32px of interactive hit-slop; toolbar, transport, and dialog
+  controls keep the full household ≥44px. See §7.2.
 
 ### 1.3 What does not apply
 
@@ -395,7 +394,7 @@ parameter values, durations, and counts are ALWAYS JetBrains Mono with tabular f
 (`tnum`), so scrubbing a value never causes horizontal jitter. Editable numeric fields keep
 mono while focused.
 
-### 7.2 Hit targets (recorded deviation KD-2)
+### 7.2 Hit targets (recorded deviation KD-2, = K-116)
 
 - Toolbar, transport, dialog, and Viewer-toolbar controls: ≥44px hit extent (household gate).
 - Dense-surface controls (Timeline rows, clips, keyframes, curve handles, property lanes,
@@ -614,9 +613,6 @@ shown while the application boots:
 
 ## Open questions
 
-- **Promote KD-2 to the decision log?** The hit-target compensation deserves a numbered entry
-  in [02-DECISIONS.md](02-DECISIONS.md) (proposed as K-006) so it carries the same weight as
-  K-004 rather than living only here.
 - **Exact ramp values under real hardware.** §2.1 targets were chosen on paper; they MUST be
   validated on a consumer gaming monitor (the audience's hardware — often wide-gamut,
   aggressively vivid presets) before being frozen. Does `surface_0` at `#141618` hold up on an

@@ -1079,3 +1079,18 @@ playhead" block) is gated on the new flag alongside its existing playing/interac
 checks; off means zero background decode/render work while idle, trading a colder cache for a
 quieter machine. K-114 is reserved for the in-flight LUT effect and intentionally skipped here to
 keep the log ascending without colliding with that session's work.
+
+**K-116 · DECIDED · Hit-target compensation promoted from KD-2 (docs/15-DESIGN.md §1.2/§7.2).**
+The household accessibility gate demands ≥44px touch targets everywhere; a Timeline showing
+twenty layers at once cannot meet that on every row, so Lumit records a deliberate, scoped
+exception rather than silently missing the gate. Toolbar, transport, dialog, and Viewer-toolbar
+controls keep the full household ≥44px hit extent. Dense-surface controls — Timeline rows,
+clips, keyframes, curve handles, property lanes, the cache bar — drop to ≥24px **visual** extent
+on their smaller axis, but MUST still carry ≥32px of **interactive** hit-slop (e.g. a keyframe
+renders at 9px but hit-tests at 32px, nearest-wins, with adjacent slop regions split at their
+midpoint). Timeline rows default to 28px, 24px minimum at the densest zoom; nothing interactive
+ever hit-tests below 32px in either axis. This was recorded as PROPOSED deviation KD-2 pending
+promotion to the decision log (docs/15-DESIGN.md §Open questions); that question is now
+resolved — KD-2 is promoted here as DECIDED, and docs/15-DESIGN.md is updated in the same commit
+to point at K-116 instead of the stale "promote as K-006" note (K-006 was independently taken by
+Migration-aware first run before this promotion happened).
