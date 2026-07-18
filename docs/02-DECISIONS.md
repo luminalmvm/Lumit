@@ -791,3 +791,31 @@ Colour, Export, Keymap, Autosave, Plugins) fills in on this same surface as thos
 controls; a GPU-acceleration toggle was deliberately deferred rather than shipped half-wired
 (the flow engine lives in the decode worker and needs its own control message). The window is
 the `docs/07 §15` "Interface/Preferences" surface, not a second one.
+
+**K-099 · DECIDED · Vignette and Chromatic aberration ship as two new single-frame effects
+(docs/08 §3.14, §3.15).** Both are cheap, pointwise, `{0}` temporal, wired at the usual four
+sites (schema in `lumit-core`, WGSL kernel + `FxEngine` method in `lumit-gpu`, `run_ops` arm
+in `lumit-ui`). **Vignette** — Amount/Radius/Softness/Roundness (each a plain 0–1 fraction)
+plus the host Mix — darkens toward black away from the frame centre; Category **Colour**,
+matching where docs/08 §3.10's text already listed it as planned scope, not Stylise. Its
+distance metric blends between a circle and a frame-aspect ellipse by Roundness, computed from
+the raster's own width/height at kernel time, so Radius/Softness need no %-diag conversion
+despite governing a spatial falloff — the metric is already resolution-relative by
+construction. Amount 0 is the neutral point (bit-exact passthrough, pinned by test, mirroring
+Glow's own Intensity-0 short-circuit); a Colour param to tint the vignette away from black was
+scoped but deferred, v1 always darkening toward black. **Chromatic aberration** — Amount
+(px@comp) plus Mix — is a dedicated, always-radial, single-purpose sibling of RGB split's own
+Radial mode (docs/08 §3.6): same R-outward/B-inward shape, but with nothing else to configure,
+the same one-thing shape rule that split the old Grade into Colour balance/Saturation (K-090).
+Deliberate overlap, not a functional gap: RGB split's Radial mode already covers this exact
+maths as one of its three modes, sharing an Amount currency (% diag) with Linear mode's
+Angle-driven offset; this effect exists purely for the common one-click case. Because it has no
+Angle to share a currency with, its Amount is authored in raw px@comp instead — scaled by the
+preview factor like Glitch's Block size — and its ROI trait is `full-frame` rather than a
+%-diag padding, since a fixed pixel offset cannot be statically bounded as a percentage of the
+diagonal across every comp resolution; Category is **Distortion**, matching RGB split. Neither
+the CPU reference nor the WGSL kernel needs an explicit Amount-0 short circuit — the radial
+scale factor is an exact `0.0` at Amount 0, so every tap already collapses onto its own pixel,
+the same un-guarded style RGB split's own kernel uses — asserted bit-exact by test rather than
+built as a branch. Both oracles measured worst 1 fp16 ULP on the dev RTX (0 ULP at their
+passthrough cases), within the cheap-class ≤ 2 ULP bound (§1.6).
