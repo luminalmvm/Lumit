@@ -1165,3 +1165,22 @@ which Tolerance widens for). A viewer eyedropper to pick the key off the image, 
 matte-choker / luma-key companion, are noted follow-ups. Built in an isolated worktree and
 merged. (Numbered after K-120 per-layer motion blur, which lands from a parallel worktree; the
 two are independent, so the log briefly carries K-121 before K-120.)
+
+**K-120 · DECIDED · Per-layer motion blur is transform-sampled multi-draw (docs/06 §4).**
+With a composition's motion-blur master on (`Composition.motion_blur.enabled`), a layer whose
+own `Switches.motion_blur` is set is drawn at N sub-frame placements across the open shutter —
+offsets `phase/360 + (k + 0.5)/N · angle/360` frames, centred by the −90°/180° AE defaults
+(`MotionBlur::sample_offsets`) — and averaged into one comp-space smear; the layer's blend,
+opacity, matte and mask apply once to that average, not per sub-copy. The average is a **true
+premultiplied mean** via a dedicated additive-on-both-channels accumulation pipeline (not
+`Blend::Add`, whose `alpha: over` would leave a static opaque layer at ~63 % alpha), so a still
+layer is unchanged and a moving one thins along its path. Preview (`realise_segment`) and export
+(`render_comp_linear`) derive the sample times through one shared `motion_blur_samples` and
+build the average through one shared `Compositor::motion_blur_average`, so a blurred preview
+equals a blurred export (K-031, reviewed by hand — both call the one helper). Comp motion-blur
+settings and the per-layer switch join the frame cache key. Only the layer's own transform is
+sampled; **parent-motion blur** (a still layer under a moving parent) and per-layer blur on the
+inner layers of a **collapsed Precomp** are deferred follow-ups. Numbered K-120 though it lands
+just after K-121 (matte key), the two being independent parallel-worktree work. Distinct from
+the flow `motion_blur` effect (footage-internal motion) and the coming accumulation MB (full
+sub-frame re-render).
