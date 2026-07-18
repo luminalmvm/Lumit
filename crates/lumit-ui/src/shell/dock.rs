@@ -76,7 +76,7 @@ pub(crate) fn render_panel(
         Panel::Project => project_panel(ui, theme, app),
         Panel::Timeline => timeline_panel(ui, theme, app),
         Panel::EffectControls => effect_controls_panel(ui, theme, app),
-        Panel::EffectsAndPresets => effects_panel(ui, theme),
+        Panel::EffectsAndPresets => effects_panel(ui, theme, app),
         Panel::Scopes(kind) => scopes_panel(ui, theme, app, kind),
         Panel::Hierarchy => hierarchy_panel(ui, theme, app),
     }

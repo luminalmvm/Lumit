@@ -1305,3 +1305,19 @@ Near/Far fall back to Aperture (both sides `8 · Aperture/8 = Aperture`), render
 Every shipped mode is continuous, so the §1.6 ULP oracle covers invert on/off, asymmetric near/far,
 and each Display mode with no exclusion (worst 1 fp16 ULP on the RTX). Built in an isolated
 worktree.
+**K-129 · DECIDED · User-preset library and browser (docs/07 §7).** Effect presets (K-065)
+gain a browsable home: a **Presets** group at the top of the Effects & Presets panel lists the
+`.lumfx` files in a single preset library — `directories::ProjectDirs::from("dev","Lumit","Lumit")
+.data_dir().join("presets")`, i.e. the platform roaming app-data folder, shared across projects
+(alongside the existing `media_index_dir`/`journal_path` helpers in `lumit-project`). The folder is
+created lazily and scanned live each paint (cheap for a small library), so a just-saved preset
+appears at once; a missing or unreadable folder yields a hint, never a panic. Each entry's label is
+the preset's own `name`, falling back to the file stem when the file can't be parsed, and the list
+sorts case-insensitively by that label for stability between paints. A **click** applies the
+preset, appending its saved stack with fresh instance ids to the selected layer as one undoable
+`SetLayerEffects` — the same append the inspector's "Load preset…" already commits (K-065); with no
+layer selected the click surfaces a status hint. "Save stack as preset…" defaults its rfd dialogue
+to this folder so saving and browsing share one home, while still allowing the user to navigate
+elsewhere. The scan/label/sort and load-with-fresh-ids logic are pure helpers (`preset::list_presets`,
+`preset::load_instantiated`) with unit tests. Drag-a-preset-onto-a-layer, favourites, and preset
+thumbnails (§7) remain later steps. Built in an isolated worktree; not pushed.

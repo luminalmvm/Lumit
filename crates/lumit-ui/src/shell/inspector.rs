@@ -2631,11 +2631,18 @@ pub(crate) fn effects_rows(
             |ui| {
                 ui.add_enabled_ui(!layer.effects.is_empty(), |ui| {
                     if ui.button("Save stack as preset…").clicked() {
-                        if let Some(path) = rfd::FileDialog::new()
+                        // Default the dialogue to the preset library (K-129),
+                        // created lazily, so a saved preset appears in the
+                        // Effects & Presets browser straight away; the user can
+                        // still navigate elsewhere.
+                        let mut dialog = rfd::FileDialog::new()
                             .set_file_name(format!("effects.{}", crate::preset::PRESET_EXTENSION))
-                            .add_filter("Lumit effect preset", &[crate::preset::PRESET_EXTENSION])
-                            .save_file()
-                        {
+                            .add_filter("Lumit effect preset", &[crate::preset::PRESET_EXTENSION]);
+                        if let Some(dir) = lumit_project::presets_dir() {
+                            let _ = std::fs::create_dir_all(&dir);
+                            dialog = dialog.set_directory(&dir);
+                        }
+                        if let Some(path) = dialog.save_file() {
                             let name = path
                                 .file_stem()
                                 .and_then(|s| s.to_str())

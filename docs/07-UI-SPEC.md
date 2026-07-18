@@ -460,6 +460,16 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
     **Effect Controls panel** (dropping anywhere in it appends to the shown layer). Double-click
     apply, drag onto the Viewer, and every other layer kind (which still gains effects through
     its own row's "Add effect" menu) remain later steps.
+- **User presets (K-129)**: a **Presets** group at the top of the tree lists the `.lumfx`
+  presets in the preset library — the roaming app-data folder `…/Lumit/data/presets`,
+  scanned live so a just-saved preset appears at once. Each entry shows the preset's own
+  name (or the file stem when the file can't be read), filters under the same search field,
+  and **applies on a click**, appending its whole saved stack (fresh instance ids) to the
+  selected layer as one undoable `SetLayerEffects` — the same append the Effect Controls
+  → Presets "Load preset…" commits. "Save stack as preset…" defaults its file dialogue to
+  this folder (created lazily), so saving and browsing share one home. A missing or empty
+  folder shows a hint, never a failure. Drag-a-preset-onto-a-layer and preset thumbnails are
+  later steps.
 - **Favourites**: star any effect or preset; a Favourites group pins to the top of the tree.
 - Hovering an entry SHOULD show a one-line description; presets show a thumbnail where the
   preset carries one.

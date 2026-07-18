@@ -828,13 +828,13 @@ pub(crate) fn comp_tab_strip(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct EffectDragPayload(pub &'static str);
 
-/// The effects browser (docs/07-UI-SPEC §7): the built-in catalogue
-/// (docs/08-EFFECTS.md), grouped by category and filtered by the search
-/// field, mirroring the Add-effect menu's grouping (`effects_rows`).
-/// Each entry is a drag source (K-101): drag it onto a footage or
-/// adjustment layer row in the Timeline to apply it there. Double-click
-/// apply, presets and favourites are later steps of the same spec section.
-pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme) {
+/// The effects browser (docs/07-UI-SPEC §7): a user-preset library (K-129) over
+/// the built-in catalogue (docs/08-EFFECTS.md), both grouped and filtered by the
+/// search field. Effect entries mirror the Add-effect menu's grouping
+/// (`effects_rows`) and are drag sources (K-101): drag one onto a footage or
+/// adjustment layer row in the Timeline to apply it. Preset entries apply on a
+/// click, appending their whole saved stack to the selected layer.
+pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     use lumit_core::fx;
     ui.add_space(6.0);
     let search_id = ui.id().with("effects-panel-search");
@@ -851,10 +851,67 @@ pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme) {
     }
     ui.add_space(8.0);
     let needle = search.trim().to_lowercase();
-    let mut any_shown = false;
+
+    // The preset library, scanned fresh each paint so a just-saved preset shows
+    // straight away. A missing directory or read error yields an empty list —
+    // the section then shows a hint, never a failure.
+    let presets: Vec<crate::preset::PresetEntry> = lumit_project::presets_dir()
+        .as_deref()
+        .map(crate::preset::list_presets)
+        .unwrap_or_default();
+    let shown_presets: Vec<&crate::preset::PresetEntry> = presets
+        .iter()
+        .filter(|p| needle.is_empty() || p.name.to_lowercase().contains(&needle))
+        .collect();
+    // Applying needs a selected layer; read it now so the scroll closure never
+    // borrows `app`, and the chosen preset is applied after drawing.
+    let has_layer = app.selected_comp.is_some() && app.selected_layer.is_some();
+    let mut apply: Option<std::path::PathBuf> = None;
+
+    let mut any_effect = false;
     egui::ScrollArea::vertical()
         .id_salt("effects-panel-scroll")
         .show(ui, |ui| {
+            // Presets first — the user's own looks sit above the built-ins.
+            egui::CollapsingHeader::new(
+                egui::RichText::new("Presets")
+                    .small()
+                    .color(theme.text_secondary),
+            )
+            .default_open(true)
+            .show(ui, |ui| {
+                if shown_presets.is_empty() {
+                    let hint = if presets.is_empty() {
+                        "No presets yet. Save a layer's effect stack as a preset \
+                         (Effect Controls → Presets) to build your library."
+                    } else {
+                        "No presets match your search."
+                    };
+                    ui.label(egui::RichText::new(hint).small().color(theme.text_muted));
+                } else {
+                    for entry in &shown_presets {
+                        // A plain click applies the preset to the selected layer.
+                        // Frameless so it reads like the effect rows beside it.
+                        let row = ui.add(
+                            egui::Button::new(
+                                egui::RichText::new(&entry.name)
+                                    .small()
+                                    .color(theme.text_primary),
+                            )
+                            .frame(false),
+                        );
+                        let row = if has_layer {
+                            row.on_hover_text("Apply this preset to the selected layer")
+                        } else {
+                            row.on_hover_text("Select a layer, then click to apply this preset")
+                        };
+                        if row.clicked() {
+                            apply = Some(entry.path.clone());
+                        }
+                    }
+                }
+            });
+
             for cat in fx::FxCategory::ALL {
                 let members: Vec<_> = fx::BUILTINS
                     .iter()
@@ -865,7 +922,7 @@ pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme) {
                 if members.is_empty() {
                     continue;
                 }
-                any_shown = true;
+                any_effect = true;
                 egui::CollapsingHeader::new(
                     egui::RichText::new(cat.label())
                         .small()
@@ -892,22 +949,60 @@ pub(crate) fn effects_panel(ui: &mut egui::Ui, theme: &Theme) {
                     }
                 });
             }
+            if !any_effect && !needle.is_empty() {
+                ui.label(
+                    egui::RichText::new("No effects match.")
+                        .small()
+                        .color(theme.text_muted),
+                );
+            }
         });
-    if !any_shown {
-        ui.label(
-            egui::RichText::new("No effects match.")
-                .small()
-                .color(theme.text_muted),
-        );
+
+    if let Some(path) = apply {
+        apply_preset_to_selected_layer(app, &path);
     }
+
     ui.add_space(6.0);
     ui.label(
         egui::RichText::new(
-            "Drag an effect onto a layer in the Timeline, or add one from a layer's own Effects group there.",
+            "Drag an effect onto a layer in the Timeline, or click a preset to append its stack.",
         )
         .small()
         .color(theme.text_muted),
     );
+}
+
+/// Append a preset's saved stack (fresh ids) to the selected layer — one
+/// undoable `SetLayerEffects`, the same append the Effect Controls "Load
+/// preset…" commits. A read error or no selected layer surfaces as a status
+/// hint and leaves the document untouched (applying a preset is never a
+/// half-done edit).
+fn apply_preset_to_selected_layer(app: &mut AppState, path: &std::path::Path) {
+    let Some(added) = crate::preset::load_instantiated(path) else {
+        app.error = Some("that preset could not be read".into());
+        return;
+    };
+    let (Some(comp_id), Some(layer_id)) = (app.selected_comp, app.selected_layer) else {
+        app.error = Some("select a layer to apply a preset".into());
+        return;
+    };
+    let doc = app.store.snapshot();
+    let Some(layer) = doc
+        .comp(comp_id)
+        .and_then(|c| c.layers.iter().find(|l| l.id == layer_id))
+    else {
+        app.error = Some("select a layer to apply a preset".into());
+        return;
+    };
+    let mut effects = layer.effects.clone();
+    effects.extend(added);
+    app.commit(lumit_core::Op::SetLayerEffects {
+        comp: comp_id,
+        layer: layer_id,
+        effects,
+    });
+    #[cfg(feature = "media")]
+    app.refresh_preview();
 }
 
 pub(crate) fn empty_hint(ui: &mut egui::Ui, theme: &Theme, title: &str, hint: &str) {

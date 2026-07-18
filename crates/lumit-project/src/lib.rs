@@ -175,6 +175,16 @@ pub fn media_index_dir() -> Option<PathBuf> {
     Some(dirs.cache_dir().join("media-index"))
 }
 
+/// The user's effect-preset library directory (docs/07-UI-SPEC.md §7) — where
+/// `.lumfx` presets saved from a layer's effect stack live, so the Effects &
+/// Presets browser can list and apply them. Global (shared across projects),
+/// in the platform's roaming app-data area beside the config. `None` only when
+/// the platform has no home directory; callers create it lazily.
+pub fn presets_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.data_dir().join("presets"))
+}
+
 /// Append-only op log between saves; truncated on successful save.
 pub struct JournalFile {
     path: PathBuf,

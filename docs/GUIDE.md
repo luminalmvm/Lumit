@@ -471,7 +471,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   reusing the Timeline's stack editor rather than being a second, divergent one. You can
   still edit the stack inline on the layer's own row in the Timeline; the panel is the same
   editor given more room. Saving a stack as a **preset** and loading one back (a small
-  `.lumfx` JSON file, K-065) lives on that same add-effect row. **Dragging an effect's value
+  `.lumfx` JSON file, K-065) lives on that same add-effect row. **A preset library (K-129)**
+  gives those saved looks a browsable home: the **Effects & Presets** panel now opens with a
+  **Presets** group listing every `.lumfx` file in one shared folder (tucked away in Windows'
+  roaming app-data area, next to Lumit's other saved data). Click a preset and its whole
+  saved stack is added to the layer you have selected — one undo step, exactly as loading a
+  preset by hand does. "Save stack as preset…" now points its save box at that same folder to
+  begin with, so anything you save shows up in the list straight away; you can still save it
+  elsewhere if you want. An empty folder just shows a gentle hint rather than an error.
+  **Dragging an effect's value
   updates the Viewer live** — as you drag a Glow radius or a Blur amount, the picture re-runs
   the effect with the value under your cursor every frame, committing once when you let go (so
   a whole drag is one undo step). It reuses the same trick a transform-value drag already uses:
