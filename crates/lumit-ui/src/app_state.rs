@@ -1121,6 +1121,9 @@ pub struct AppState {
     /// Whether the live lane marquee adds to the existing selection (Shift held
     /// when the drag began) rather than replacing it (note 2.6c).
     pub lane_marquee_add: bool,
+    /// A released lane marquee band waiting to be hit-tested: set when the drag
+    /// ends, resolved after the row loop has refilled `lane_glyphs`. Transient.
+    pub lane_marquee_commit: Option<(egui::Pos2, egui::Pos2)>,
     /// Every keyframe glyph drawn on the lanes this frame, gathered for the
     /// marquee's cross-row hit-test (see [`LaneGlyph`]). Cleared and refilled
     /// each timeline frame.
@@ -1348,6 +1351,7 @@ impl Default for AppState {
             lane_key_drag: None,
             lane_marquee: None,
             lane_marquee_add: false,
+            lane_marquee_commit: None,
             lane_glyphs: Vec::new(),
             keyframe_clipboard: Vec::new(),
             lane_drag_commit: None,

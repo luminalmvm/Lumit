@@ -976,6 +976,207 @@ pub(crate) fn draw_key_diamonds(
     }
 }
 
+/// Draw one lane keyframe glyph: the interpolation-coded shape (note 2.3), an
+/// accent ring around it when it is in the lane selection, and a brighter fill
+/// when it is hot (hovered or being dragged). Shares the shapes with
+/// `draw_key_diamonds`.
+fn draw_lane_glyph(
+    ui: &egui::Ui,
+    ctx: &RowCtx,
+    pos: egui::Pos2,
+    k: &lumit_core::anim::Keyframe,
+    selected: bool,
+    hot: bool,
+) {
+    if selected {
+        ui.painter()
+            .circle_stroke(pos, 6.0, egui::Stroke::new(1.5_f32, ctx.theme.accent));
+    }
+    let fill = if hot {
+        ctx.theme.text_primary
+    } else {
+        ctx.theme.accent
+    };
+    let outline = egui::Stroke::new(1.0_f32, ctx.theme.surface_0);
+    let (x, cy) = (pos.x, pos.y);
+    match key_shape(k) {
+        KeyShape::Square => {
+            ui.painter().rect(
+                egui::Rect::from_center_size(pos, egui::vec2(6.5, 6.5)),
+                1.0,
+                fill,
+                outline,
+                egui::StrokeKind::Inside,
+            );
+        }
+        KeyShape::Circle => {
+            ui.painter().circle(pos, 3.6, fill, outline);
+        }
+        KeyShape::Diamond => {
+            let d = 4.0;
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(x, cy - d),
+                    egui::pos2(x + d, cy),
+                    egui::pos2(x, cy + d),
+                    egui::pos2(x - d, cy),
+                ],
+                fill,
+                outline,
+            ));
+        }
+    }
+}
+
+/// Apply a modifier-aware click to the lane keyframe selection (note 2.6): a
+/// plain click replaces it with just this key, Ctrl/Cmd-click toggles this
+/// key's membership, and Shift-click adds it — the usual list-select gestures.
+pub(crate) fn lane_select_click(
+    selection: &mut Vec<crate::app_state::LaneKeySel>,
+    sel: crate::app_state::LaneKeySel,
+    mods: egui::Modifiers,
+) {
+    if mods.command || mods.ctrl {
+        if let Some(i) = selection.iter().position(|s| *s == sel) {
+            selection.remove(i);
+        } else {
+            selection.push(sel);
+        }
+    } else if mods.shift {
+        if !selection.contains(&sel) {
+            selection.push(sel);
+        }
+    } else {
+        selection.clear();
+        selection.push(sel);
+    }
+}
+
+/// Return `keys` with every keyframe whose time matches one of `move_times`
+/// (within half a frame at `fps`) shifted by `delta` seconds — clamped to ≥ 0,
+/// re-sorted, and de-duplicated by time (a key slid onto another's time keeps
+/// the earlier one). The lane keyframe drag commit leans on this, once per
+/// affected property, so a group of keys slides rigidly in one undo step.
+pub(crate) fn shift_keys_time(
+    keys: &[lumit_core::anim::Keyframe],
+    move_times: &[lumit_core::Rational],
+    delta: f64,
+    fps: f64,
+) -> Vec<lumit_core::anim::Keyframe> {
+    let tol = 0.5 / fps.max(1.0);
+    let mut out: Vec<lumit_core::anim::Keyframe> = keys
+        .iter()
+        .map(|k| {
+            let moved = move_times
+                .iter()
+                .any(|t| (t.to_f64() - k.time.to_f64()).abs() < tol);
+            if moved {
+                lumit_core::anim::Keyframe {
+                    time: rational_at((k.time.to_f64() + delta).max(0.0)),
+                    ..*k
+                }
+            } else {
+                *k
+            }
+        })
+        .collect();
+    out.sort_by_key(|k| k.time);
+    out.dedup_by(|a, b| a.time == b.time);
+    out
+}
+
+/// Interactive keyframe glyphs on a property row's lane (notes 2.1/2.6). Each
+/// key becomes a small draggable target: a plain click selects just it,
+/// Shift-click adds it and Ctrl-click toggles it in the lane selection, and
+/// dragging a key slides every selected key in *time* (frame-snapped when the
+/// magnet is on) — the lane has no value axis, so only time moves; a key's value
+/// and tangents are shaped in the graph editor. The grabbed key's delta rides in
+/// `app.lane_key_drag` for the live preview and lands in `app.lane_drag_commit`
+/// on release, which `timeline_panel` turns into one Batch (a single undo step)
+/// after the row loop. Every drawn glyph's screen position is recorded in
+/// `app.lane_glyphs` so the timeline's cross-row marquee can hit it. `row` names
+/// the property this lane belongs to; a linked Anchor/Position/Scale pair passes
+/// its x channel and shows the union of both axes' keys. In graph mode the lane
+/// belongs to the curve, so this no-ops (like `draw_key_diamonds`).
+pub(crate) fn lane_keys(
+    ui: &egui::Ui,
+    app: &mut AppState,
+    ctx: &RowCtx,
+    row_rect: egui::Rect,
+    row: crate::app_state::PropRow,
+    keys: &[lumit_core::anim::Keyframe],
+) {
+    if ctx.graph_mode {
+        return;
+    }
+    let layer = ctx.layer.id;
+    let cy = row_rect.center().y;
+    let x_of = |s: f64| ctx.track_left + ((s - ctx.view_start) * ctx.px_per_sec) as f32;
+    let drag_delta = app.lane_key_drag.map(|d| d.delta()).unwrap_or(0.0);
+    for (idx, k) in keys.iter().enumerate() {
+        let sel = crate::app_state::LaneKeySel {
+            layer,
+            row,
+            time: k.time,
+        };
+        let selected = app.lane_selection.contains(&sel);
+        // A selected key rides the live drag delta; unselected keys stay put.
+        let shown_t = k.time.to_f64() + if selected { drag_delta } else { 0.0 };
+        let x = x_of(ctx.off + shown_t);
+        // Off-screen keys can't be grabbed or marquee'd — skip like the drawer.
+        if x < ctx.track_left - 1.0 || x > ctx.track_left + ctx.track_w + 1.0 {
+            continue;
+        }
+        let pos = egui::pos2(x, cy);
+        app.lane_glyphs
+            .push(crate::app_state::LaneGlyph { sel, pos });
+        let resp = ui.interact(
+            egui::Rect::from_center_size(pos, egui::vec2(12.0, 14.0)),
+            ui.id().with(("lanekey", layer, row, idx)),
+            egui::Sense::click_and_drag(),
+        );
+        let hot = resp.hovered() || app.lane_key_drag.is_some_and(|d| d.grabbed == sel);
+        draw_lane_glyph(ui, ctx, pos, k, selected, hot);
+        if resp.clicked() {
+            let mods = ui.input(|i| i.modifiers);
+            lane_select_click(&mut app.lane_selection, sel, mods);
+        }
+        if resp.drag_started() {
+            // Grabbing an unselected key collapses the selection to just it
+            // (today's single-key drag, plus select) — the graph editor's rule.
+            if !selected {
+                app.lane_selection = vec![sel];
+            }
+            app.lane_key_drag = Some(crate::app_state::LaneKeyDrag {
+                grabbed: sel,
+                to: k.time.to_f64(),
+            });
+        }
+        if resp.dragged() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                let mut nt = ctx.view_start
+                    + (p.x - ctx.track_left) as f64 / ctx.px_per_sec.max(1e-6)
+                    - ctx.off;
+                // The magnet (note 2.7) snaps the grabbed key to the nearest
+                // whole frame — the same maths the graph editor uses.
+                if app.magnet_snap {
+                    let fps = ctx.fps.max(1.0);
+                    nt = (nt * fps).round() / fps;
+                }
+                nt = nt.max(0.0);
+                if let Some(d) = &mut app.lane_key_drag {
+                    d.to = nt;
+                }
+            }
+        }
+        if resp.drag_stopped() {
+            if let Some(d) = app.lane_key_drag.take() {
+                app.lane_drag_commit = Some(d.delta());
+            }
+        }
+    }
+}
+
 /// The stopwatch toggle. Returns the new Animation if clicked (animate at the
 /// playhead / freeze to the current value), else None.
 /// A drawn, clickable stopwatch — a filled dot when animated, a ring when not.
@@ -1269,7 +1470,14 @@ pub(crate) fn prop_row(
     }
     axis_drag_value(&mut c, app, ctx, prop, speed, pending);
     if let Animation::Keyframed(keys) = &slot.animation {
-        draw_key_diamonds(ui, ctx, row_rect, keys);
+        lane_keys(
+            ui,
+            app,
+            ctx,
+            row_rect,
+            crate::app_state::PropRow::Transform(prop),
+            keys,
+        );
     }
 }
 
@@ -1560,14 +1768,26 @@ pub(crate) fn combined_scale_row(
             app.scale_preview = None;
         }
     }
-    // Track: the union of both axes' keys.
+    // Lane: the union of both axes' keys, one glyph per time (a linked pair
+    // keys both axes together). This is a linked row, so record it — a lane drag
+    // on it moves both axes' keys sharing a time (notes 2.1/2.6).
     let mut keys: Vec<lumit_core::anim::Keyframe> = Vec::new();
     for slot in [sx, sy] {
         if let Animation::Keyframed(k) = &slot.animation {
             keys.extend(k.iter().cloned());
         }
     }
-    draw_key_diamonds(ui, ctx, row_rect, &keys);
+    keys.sort_by_key(|k| k.time);
+    keys.dedup_by(|a, b| a.time == b.time);
+    app.lane_linked.push((ctx.layer.id, TransformProp::ScaleX));
+    lane_keys(
+        ui,
+        app,
+        ctx,
+        row_rect,
+        crate::app_state::PropRow::Transform(TransformProp::ScaleX),
+        &keys,
+    );
 }
 
 /// A thin row holding a relink button ("Link scale", "Link position", …);
@@ -1722,14 +1942,25 @@ pub(crate) fn linked_pair_row(
     axis_drag_value(&mut c, app, ctx, px, 1.0, pending);
     axis_drag_value(&mut c, app, ctx, py, 1.0, pending);
 
-    // Lane: the union of both axes' keys.
+    // Lane: the union of both axes' keys, one glyph per time. A linked row —
+    // record it so a lane drag moves both axes' keys sharing a time (2.1/2.6).
     let mut keys: Vec<lumit_core::anim::Keyframe> = Vec::new();
     for slot in [sx, sy] {
         if let Animation::Keyframed(k) = &slot.animation {
             keys.extend(k.iter().cloned());
         }
     }
-    draw_key_diamonds(ui, ctx, row_rect, &keys);
+    keys.sort_by_key(|k| k.time);
+    keys.dedup_by(|a, b| a.time == b.time);
+    app.lane_linked.push((ctx.layer.id, px));
+    lane_keys(
+        ui,
+        app,
+        ctx,
+        row_rect,
+        crate::app_state::PropRow::Transform(px),
+        &keys,
+    );
 }
 
 /// Insert or replace a speed keyframe at local time `lt` (seconds) with `speed`
@@ -2257,6 +2488,7 @@ pub(crate) fn effect_param_nav(
 /// commits one whole-stack SetLayerEffects, so each edit is one undo step.
 pub(crate) fn effects_rows(
     ui: &mut egui::Ui,
+    app: &mut AppState,
     ctx: &RowCtx,
     pending: &mut Option<lumit_core::Op>,
     // Set to (layer, effect index, param index, provisional value) while a
@@ -2558,9 +2790,20 @@ pub(crate) fn effects_rows(
                             );
                         }
                     }
-                    // Keys on the lane, like any property row.
+                    // Selectable, draggable keys on the lane, like any property
+                    // row (notes 2.1/2.6). The row is this effect's parameter.
                     if let lumit_core::anim::Animation::Keyframed(keys) = &prop.animation {
-                        draw_key_diamonds(ui, ctx, row_rect, keys);
+                        lane_keys(
+                            ui,
+                            app,
+                            ctx,
+                            row_rect,
+                            crate::app_state::PropRow::Effect {
+                                effect: idx,
+                                param: pi,
+                            },
+                            keys,
+                        );
                     }
                 }
                 (EffectValue::Choice(cur), ParamKind::Choice { options, .. }) => {
@@ -2966,5 +3209,108 @@ mod section_bar_tests {
                 "{scheme:?}: the bar must not match the Round pane card fill"
             );
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod lane_key_tests {
+    use super::*;
+    use crate::app_state::{LaneKeySel, PropRow};
+    use lumit_core::anim::{Keyframe, SideInterp};
+    use lumit_core::model::TransformProp;
+
+    fn key(t: f64, interp: SideInterp) -> Keyframe {
+        Keyframe {
+            time: rational_at(t),
+            value: 0.0,
+            interp_in: interp,
+            interp_out: interp,
+        }
+    }
+
+    // A lane drag shifts only the keys at the named times, and by the whole
+    // delta — the group slides rigidly (note 2.1).
+    #[test]
+    fn shift_moves_only_the_named_times() {
+        let keys = [
+            key(0.0, SideInterp::Linear),
+            key(1.0, SideInterp::Linear),
+            key(2.0, SideInterp::Linear),
+        ];
+        let out = shift_keys_time(&keys, &[rational_at(1.0)], 0.5, 30.0);
+        let times: Vec<f64> = out.iter().map(|k| k.time.to_f64()).collect();
+        assert_eq!(times, vec![0.0, 1.5, 2.0]);
+    }
+
+    // A key dragged onto another key's time collapses to one (the collision rule
+    // the graph editor uses), never a duplicate-time pair.
+    #[test]
+    fn shift_dedups_on_collision() {
+        let keys = [
+            key(0.0, SideInterp::Linear),
+            key(1.0, SideInterp::Linear),
+            key(2.0, SideInterp::Linear),
+        ];
+        let out = shift_keys_time(&keys, &[rational_at(1.0)], 1.0, 30.0);
+        assert_eq!(out.len(), 2);
+        assert!(out
+            .iter()
+            .all(|k| k.time.to_f64() == 0.0 || k.time.to_f64() == 2.0));
+    }
+
+    // Time never goes negative, and bezier handles ride along with the key.
+    #[test]
+    fn shift_clamps_and_keeps_handles() {
+        let bez = SideInterp::Bezier {
+            speed: 3.5,
+            influence: 0.4,
+        };
+        let keys = [key(0.5, bez)];
+        let out = shift_keys_time(&keys, &[rational_at(0.5)], -2.0, 30.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].time.to_f64(), 0.0);
+        assert_eq!(out[0].interp_in, bez);
+        assert_eq!(out[0].interp_out, bez);
+    }
+
+    fn sel(t: f64) -> LaneKeySel {
+        LaneKeySel {
+            layer: uuid::Uuid::nil(),
+            row: PropRow::Transform(TransformProp::Rotation),
+            time: rational_at(t),
+        }
+    }
+
+    #[test]
+    fn plain_click_replaces_the_selection() {
+        let mut s = vec![sel(1.0), sel(2.0)];
+        lane_select_click(&mut s, sel(3.0), egui::Modifiers::default());
+        assert_eq!(s, vec![sel(3.0)]);
+    }
+
+    #[test]
+    fn ctrl_click_toggles_membership() {
+        let mut s = vec![sel(1.0)];
+        let ctrl = egui::Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
+        lane_select_click(&mut s, sel(2.0), ctrl); // add
+        assert_eq!(s, vec![sel(1.0), sel(2.0)]);
+        lane_select_click(&mut s, sel(1.0), ctrl); // remove
+        assert_eq!(s, vec![sel(2.0)]);
+    }
+
+    #[test]
+    fn shift_click_extends_without_removing() {
+        let mut s = vec![sel(1.0)];
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        lane_select_click(&mut s, sel(2.0), shift);
+        lane_select_click(&mut s, sel(2.0), shift); // already in — no duplicate
+        assert_eq!(s, vec![sel(1.0), sel(2.0)]);
     }
 }

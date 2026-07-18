@@ -231,6 +231,143 @@ fn column_header_icons(
     icon(edge - 49.0, Icon::Cube3d);
 }
 
+/// One transform channel's bucket of local key times to shift (lane drag).
+type TfShift = (
+    (uuid::Uuid, lumit_core::model::TransformProp),
+    Vec<lumit_core::Rational>,
+);
+/// One layer's bucket of (effect index, param index, local time) shifts.
+type FxShift = (uuid::Uuid, Vec<(usize, usize, lumit_core::Rational)>);
+
+/// The Y partner of a linked pair's X channel (Anchor/Position/Scale), or None.
+/// A linked lane row keys both axes together, so a drag on it moves both.
+fn linked_partner(p: lumit_core::model::TransformProp) -> Option<lumit_core::model::TransformProp> {
+    use lumit_core::model::TransformProp::{
+        AnchorX, AnchorY, PositionX, PositionY, ScaleX, ScaleY,
+    };
+    match p {
+        AnchorX => Some(AnchorY),
+        PositionX => Some(PositionY),
+        ScaleX => Some(ScaleY),
+        _ => None,
+    }
+}
+
+/// Build the one op that slides every selected lane keyframe by `delta` seconds
+/// (note 2.1). Transform-channel selections become one `SetTransformProperty`
+/// per channel — a linked Anchor/Position/Scale row (listed in `linked`) also
+/// moves its partner axis's key at the same time; effect-parameter selections
+/// fold into one `SetLayerEffects` per layer. Several ops wrap in a Batch so the
+/// whole slide is a single undo step. Returns None when nothing moves.
+fn build_lane_drag_op(
+    comp: &lumit_core::model::Composition,
+    selection: &[crate::app_state::LaneKeySel],
+    linked: &[(uuid::Uuid, lumit_core::model::TransformProp)],
+    delta: f64,
+    fps: f64,
+) -> Option<lumit_core::Op> {
+    use crate::app_state::PropRow;
+    use lumit_core::anim::Animation;
+    use lumit_core::model::TransformProp;
+
+    // (layer, transform channel) -> the local times to shift on it.
+    let mut tf: Vec<TfShift> = Vec::new();
+    // layer -> (effect index, param index, local time) shifts.
+    let mut fx: Vec<FxShift> = Vec::new();
+    {
+        let mut add_tf = |layer: uuid::Uuid, prop: TransformProp, t: lumit_core::Rational| match tf
+            .iter_mut()
+            .find(|((l, p), _)| *l == layer && *p == prop)
+        {
+            Some((_, ts)) => ts.push(t),
+            None => tf.push(((layer, prop), vec![t])),
+        };
+        let mut add_fx =
+            |layer: uuid::Uuid, effect: usize, param: usize, t: lumit_core::Rational| match fx
+                .iter_mut()
+                .find(|(l, _)| *l == layer)
+            {
+                Some((_, v)) => v.push((effect, param, t)),
+                None => fx.push((layer, vec![(effect, param, t)])),
+            };
+        for s in selection {
+            match s.row {
+                PropRow::Transform(prop) => {
+                    add_tf(s.layer, prop, s.time);
+                    if linked.iter().any(|(l, p)| *l == s.layer && *p == prop) {
+                        if let Some(partner) = linked_partner(prop) {
+                            add_tf(s.layer, partner, s.time);
+                        }
+                    }
+                }
+                PropRow::Effect { effect, param } => add_fx(s.layer, effect, param, s.time),
+            }
+        }
+    }
+
+    let mut ops: Vec<lumit_core::Op> = Vec::new();
+
+    for ((layer_id, prop), times) in &tf {
+        let Some(layer) = comp.layers.iter().find(|l| l.id == *layer_id) else {
+            continue;
+        };
+        let Animation::Keyframed(keys) = &layer.transform.get(*prop).animation else {
+            continue;
+        };
+        let new_keys = shift_keys_time(keys, times, delta, fps);
+        ops.push(lumit_core::Op::SetTransformProperty {
+            comp: comp.id,
+            layer: *layer_id,
+            prop: *prop,
+            animation: Animation::Keyframed(new_keys),
+        });
+    }
+
+    for (layer_id, shifts) in &fx {
+        let Some(layer) = comp.layers.iter().find(|l| l.id == *layer_id) else {
+            continue;
+        };
+        let mut effects = layer.effects.clone();
+        let mut touched = false;
+        // Distinct (effect, param) pairs, each shifted once with all its times.
+        let mut seen: Vec<(usize, usize)> = Vec::new();
+        for (e, p, _) in shifts {
+            if !seen.contains(&(*e, *p)) {
+                seen.push((*e, *p));
+            }
+        }
+        for (e, p) in seen {
+            let times: Vec<lumit_core::Rational> = shifts
+                .iter()
+                .filter(|(ee, pp, _)| *ee == e && *pp == p)
+                .map(|(_, _, t)| *t)
+                .collect();
+            if let Some(param) = effects.get_mut(e).and_then(|inst| inst.params.get_mut(p)) {
+                if let lumit_core::model::EffectValue::Float(prop) = &mut param.value {
+                    if let Animation::Keyframed(keys) = &prop.animation {
+                        prop.animation =
+                            Animation::Keyframed(shift_keys_time(keys, &times, delta, fps));
+                        touched = true;
+                    }
+                }
+            }
+        }
+        if touched {
+            ops.push(lumit_core::Op::SetLayerEffects {
+                comp: comp.id,
+                layer: *layer_id,
+                effects,
+            });
+        }
+    }
+
+    match ops.len() {
+        0 => None,
+        1 => ops.pop(),
+        _ => Some(lumit_core::Op::Batch { ops }),
+    }
+}
+
 pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState) {
     // Comp tab strip first: it owns a drop zone (drop a comp here to open it as
     // a separate tab). The body below then accepts drops that file into the
@@ -542,6 +679,41 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             // above the ruler when a row is half-scrolled).
             let viewport = ui.clip_rect();
             ui.set_clip_rect(viewport.intersect(lane_area));
+            // Lane keyframe glyphs and the linked-pair register are rebuilt every
+            // frame: clear them before the rows repopulate them (notes 2.1/2.6).
+            app.lane_glyphs.clear();
+            app.lane_linked.clear();
+            // Lane keyframe marquee (notes 2.1/2.6c): a press-drag on empty
+            // timeline space rubber-bands a selection box. Added BEFORE the rows
+            // so the layer bars and keyframe glyphs (drawn after, topmost) win
+            // the hit-test — a drag that begins on a bar or a key never opens the
+            // marquee. Layers view only; the graph editor owns the lane otherwise.
+            if !app.timeline_graph_mode {
+                let bg = ui.interact(
+                    ui.clip_rect(),
+                    ui.id().with(("lane-marquee-bg", comp_id)),
+                    egui::Sense::click_and_drag(),
+                );
+                if bg.clicked() {
+                    app.lane_selection.clear();
+                }
+                if bg.drag_started() {
+                    if let Some(p) = bg.interact_pointer_pos() {
+                        app.lane_marquee = Some((p, p));
+                        app.lane_marquee_add = ui.input(|i| i.modifiers.shift);
+                    }
+                } else if bg.dragged() {
+                    if let Some(p) = bg.interact_pointer_pos() {
+                        if let Some(m) = &mut app.lane_marquee {
+                            m.1 = p;
+                        }
+                    }
+                }
+                if bg.drag_stopped() {
+                    // Defer the hit-test until the rows below refill lane_glyphs.
+                    app.lane_marquee_commit = app.lane_marquee.take();
+                }
+            }
             // Is an effect being dragged out of the Effects & Presets browser this
             // frame. Only then does each row raise a drop zone (see below), so the
             // zone never steals ordinary hover/clicks.
@@ -1568,6 +1740,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                         let mut fx_nav_jump = None;
                         effects_rows(
                             ui,
+                            app,
                             &fx_ctx,
                             &mut pending,
                             &mut fx_edit,
@@ -1794,6 +1967,59 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             egui::Stroke::new(1.5_f32, theme.accent),
         );
     }
+    // Lane keyframe drag release (note 2.1): slide every selected key by the
+    // grabbed key's delta, as one Batch (a single undo step). Re-pin the
+    // selection to the moved times so it stays selected where it landed.
+    if let Some(delta) = app.lane_drag_commit.take() {
+        let fps = comp.frame_rate.fps().max(1.0);
+        if delta.abs() > 1e-9 && !app.lane_selection.is_empty() {
+            if let Some(op) =
+                build_lane_drag_op(comp, &app.lane_selection, &app.lane_linked, delta, fps)
+            {
+                for s in app.lane_selection.iter_mut() {
+                    s.time = rational_at((s.time.to_f64() + delta).max(0.0));
+                }
+                follow_edit(app, &op);
+                app.commit(op);
+                #[cfg(feature = "media")]
+                app.refresh_preview();
+            }
+        }
+    }
+    // Lane marquee release (notes 2.1/2.6): hit-test the box against the glyphs
+    // the rows just drew, across every property row. Shift-drag adds to the
+    // selection; a plain drag replaces it.
+    if let Some((a, b)) = app.lane_marquee_commit.take() {
+        let band = egui::Rect::from_two_pos(a, b);
+        let mut hits: Vec<crate::app_state::LaneKeySel> = Vec::new();
+        for g in &app.lane_glyphs {
+            if band.contains(g.pos) && !hits.contains(&g.sel) {
+                hits.push(g.sel);
+            }
+        }
+        if app.lane_marquee_add {
+            for h in hits {
+                if !app.lane_selection.contains(&h) {
+                    app.lane_selection.push(h);
+                }
+            }
+        } else {
+            app.lane_selection = hits;
+        }
+    }
+    // The in-flight marquee band: translucent accent fill, hairline outline —
+    // the graph editor's look, on the lanes.
+    if let Some((a, b)) = app.lane_marquee {
+        let band = egui::Rect::from_two_pos(a, b).intersect(lane_area);
+        ui.painter()
+            .rect_filled(band, 0.0, theme.accent.gamma_multiply(0.12));
+        ui.painter().rect_stroke(
+            band,
+            0.0,
+            egui::Stroke::new(1.0_f32, theme.accent),
+            egui::StrokeKind::Inside,
+        );
+    }
     // Live preview while an effect value is dragged. Only WRITE when this panel
     // has an active drag — the Effect Controls panel draws the same effect rows
     // in the same frame, and an unconditional `= None` here would clobber its
@@ -1820,6 +2046,10 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     if app.timeline_graph_mode {
         let plot_rect = graph_lane_rect(track_left, track_w, rows_top, ui.max_rect().bottom());
         graph_lane_plot(ui, theme, app, comp, px_per_sec, view_start, plot_rect);
+        // A curve owns the lane in graph mode: no lane marquee/drag there.
+        app.lane_marquee = None;
+        app.lane_marquee_commit = None;
+        app.lane_key_drag = None;
     } else {
         // No plot on screen: drop any in-flight band and keyframe selection
         // (a selection must never outlive the curve it was made on).
@@ -2293,5 +2523,229 @@ mod effect_drop_tests {
         // The fix: with the clip widened, the drag registers and reports
         // the pointer's travel.
         assert!(divider_drag_delta(true) > 0.0);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod lane_drag_tests {
+    use super::*;
+    use crate::app_state::{LaneKeySel, PropRow};
+    use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+    use lumit_core::model::{
+        BlendMode, Composition, Layer, LayerKind, LinearColour, Switches, TransformGroup,
+        TransformProp,
+    };
+    use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+    use uuid::Uuid;
+
+    fn kf_prop(times: &[f64]) -> Property {
+        let keys = times
+            .iter()
+            .map(|&t| Keyframe {
+                time: rational_at(t),
+                value: 0.0,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            })
+            .collect();
+        Property {
+            animation: Animation::Keyframed(keys),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    fn comp_one_layer(tf: TransformGroup) -> (Composition, Uuid) {
+        let lid = Uuid::now_v7();
+        let layer = Layer {
+            id: lid,
+            name: "L".into(),
+            kind: LayerKind::Solid { def: Uuid::nil() },
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: tf,
+            matte: None,
+            parent: None,
+            blend: BlendMode::Normal,
+            masks: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp = Composition {
+            id: Uuid::now_v7(),
+            name: "C".into(),
+            width: 100,
+            height: 100,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour([0.0; 4]),
+            work_area: None,
+            layers: vec![layer],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        (comp, lid)
+    }
+
+    fn tsel(layer: Uuid, prop: TransformProp, t: f64) -> LaneKeySel {
+        LaneKeySel {
+            layer,
+            row: PropRow::Transform(prop),
+            time: rational_at(t),
+        }
+    }
+
+    // A single transform-channel selection slides just that channel's keys.
+    #[test]
+    fn transform_selection_shifts_that_channel() {
+        let tf = TransformGroup {
+            rotation: kf_prop(&[1.0, 2.0]),
+            ..Default::default()
+        };
+        let (comp, lid) = comp_one_layer(tf);
+        let sel = [tsel(lid, TransformProp::Rotation, 1.0)];
+        let op = build_lane_drag_op(&comp, &sel, &[], 0.5, 30.0).unwrap();
+        match op {
+            lumit_core::Op::SetTransformProperty {
+                prop, animation, ..
+            } => {
+                assert_eq!(prop, TransformProp::Rotation);
+                let Animation::Keyframed(k) = animation else {
+                    panic!("expected keyframed");
+                };
+                let ts: Vec<f64> = k.iter().map(|x| x.time.to_f64()).collect();
+                assert_eq!(ts, vec![1.5, 2.0]);
+            }
+            other => panic!("expected SetTransformProperty, got {other:?}"),
+        }
+    }
+
+    // A linked pair listed in the register moves both axes' keys in one Batch.
+    #[test]
+    fn linked_pair_moves_both_axes() {
+        let tf = TransformGroup {
+            position_x: kf_prop(&[1.0]),
+            position_y: kf_prop(&[1.0]),
+            ..Default::default()
+        };
+        let (comp, lid) = comp_one_layer(tf);
+        let sel = [tsel(lid, TransformProp::PositionX, 1.0)];
+        let linked = [(lid, TransformProp::PositionX)];
+        let op = build_lane_drag_op(&comp, &sel, &linked, 1.0, 30.0).unwrap();
+        let lumit_core::Op::Batch { ops } = op else {
+            panic!("expected a Batch across both axes");
+        };
+        let props: Vec<TransformProp> = ops
+            .iter()
+            .filter_map(|o| match o {
+                lumit_core::Op::SetTransformProperty { prop, .. } => Some(*prop),
+                _ => None,
+            })
+            .collect();
+        assert!(props.contains(&TransformProp::PositionX));
+        assert!(props.contains(&TransformProp::PositionY));
+    }
+
+    // The same channel, NOT in the register (unlinked), moves only itself.
+    #[test]
+    fn unlinked_axis_moves_only_itself() {
+        let tf = TransformGroup {
+            position_x: kf_prop(&[1.0]),
+            position_y: kf_prop(&[1.0]),
+            ..Default::default()
+        };
+        let (comp, lid) = comp_one_layer(tf);
+        let sel = [tsel(lid, TransformProp::PositionX, 1.0)];
+        let op = build_lane_drag_op(&comp, &sel, &[], 1.0, 30.0).unwrap();
+        match op {
+            lumit_core::Op::SetTransformProperty { prop, .. } => {
+                assert_eq!(prop, TransformProp::PositionX);
+            }
+            other => panic!("expected a single SetTransformProperty, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn partner_maps_x_to_y_only() {
+        assert_eq!(
+            linked_partner(TransformProp::ScaleX),
+            Some(TransformProp::ScaleY)
+        );
+        assert_eq!(
+            linked_partner(TransformProp::AnchorX),
+            Some(TransformProp::AnchorY)
+        );
+        assert_eq!(linked_partner(TransformProp::Rotation), None);
+        assert_eq!(linked_partner(TransformProp::ScaleY), None);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod lane_marquee_interaction_tests {
+    // The lane marquee relies on egui's hit-test order: the full-lane background
+    // (click+drag) is registered BEFORE the layer rows (click only), so a press
+    // on empty lane space that then moves opens the marquee instead of reading as
+    // a click on the row underneath. If egui ever changed that fall-through, the
+    // marquee would silently stop working — this pins the behaviour.
+    fn drive() -> (bool, bool) {
+        let ctx = egui::Context::default();
+        let bg_drag = std::cell::Cell::new(false);
+        let row_click = std::cell::Cell::new(false);
+        let run = |events: Vec<egui::Event>| {
+            let ri = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(400.0, 400.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(ri, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let full = ui.max_rect();
+                    // Marquee background: added first, senses click and drag.
+                    let bg = ui.interact(full, egui::Id::new("bg"), egui::Sense::click_and_drag());
+                    if bg.dragged() {
+                        bg_drag.set(true);
+                    }
+                    // A layer row on top: added after, senses click only.
+                    let row = ui.interact(full, egui::Id::new("row"), egui::Sense::click());
+                    if row.clicked() {
+                        row_click.set(true);
+                    }
+                });
+            });
+        };
+        let m = egui::Modifiers::default();
+        let btn = egui::PointerButton::Primary;
+        run(vec![]);
+        let from = egui::pos2(100.0, 100.0);
+        let to = egui::pos2(170.0, 150.0);
+        run(vec![egui::Event::PointerMoved(from)]);
+        run(vec![egui::Event::PointerButton {
+            pos: from,
+            button: btn,
+            pressed: true,
+            modifiers: m,
+        }]);
+        run(vec![egui::Event::PointerMoved(to)]);
+        run(vec![egui::Event::PointerButton {
+            pos: to,
+            button: btn,
+            pressed: false,
+            modifiers: m,
+        }]);
+        (bg_drag.get(), row_click.get())
+    }
+
+    #[test]
+    fn a_drag_on_empty_lane_opens_the_marquee_not_a_row_click() {
+        let (bg_dragged, row_clicked) = drive();
+        assert!(bg_dragged, "the drag must reach the marquee background");
+        assert!(!row_clicked, "a drag must not read as a click on the row");
     }
 }

@@ -1099,6 +1099,7 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         .show(ui, |ui| {
             effects_rows(
                 ui,
+                app,
                 &ctx,
                 &mut pending,
                 &mut fx_edit,
