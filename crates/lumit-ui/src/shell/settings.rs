@@ -24,13 +24,15 @@ pub(crate) enum SettingsPage {
     General,
     #[default]
     Appearance,
+    Interface,
     Performance,
 }
 
 impl SettingsPage {
-    const ALL: [SettingsPage; 3] = [
+    const ALL: [SettingsPage; 4] = [
         SettingsPage::General,
         SettingsPage::Appearance,
+        SettingsPage::Interface,
         SettingsPage::Performance,
     ];
 
@@ -38,6 +40,7 @@ impl SettingsPage {
         match self {
             SettingsPage::General => "General",
             SettingsPage::Appearance => "Appearance",
+            SettingsPage::Interface => "Interface",
             SettingsPage::Performance => "Performance",
         }
     }
@@ -62,6 +65,51 @@ pub(crate) struct PerformanceSettings {
     /// (docs/06 §5.4). On by default; off trades a colder cache for zero
     /// background decode/render work when the machine is busy elsewhere.
     pub background_fill: bool,
+}
+
+/// Application-wide interface settings (Settings → Interface, docs/07-UI-SPEC
+/// §15): how large the chrome draws, and whether hover tooltips show at all.
+/// Persisted with the workspace. Defaults reproduce today's implicit
+/// behaviour exactly — native scale, tooltips on — so an existing install is
+/// unchanged until the user touches a control.
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct InterfaceSettings {
+    /// Zoom factor applied on top of the display's native scale, via egui's
+    /// own `Context::set_pixels_per_point` (K-117). 1.0 = native.
+    pub ui_scale: f32,
+    /// Whether hover tooltips show anywhere in the app (docs/07-UI-SPEC §13.2
+    /// "a single setting disables all tooltips"). On by default.
+    pub show_tooltips: bool,
+}
+
+impl Default for InterfaceSettings {
+    fn default() -> Self {
+        Self {
+            ui_scale: 1.0,
+            show_tooltips: true,
+        }
+    }
+}
+
+/// Apply the "show tooltips" setting to the live interaction style (K-117):
+/// off pushes `tooltip_delay` to infinity, which the hover logic in
+/// `egui::Response::should_show_hover_ui` reads as "the wait is never over" —
+/// every code path that would show a tooltip instead requests a repaint after
+/// `tooltip_delay - elapsed` seconds and returns `false`, and that repaint
+/// request itself uses a fallible `Duration` conversion that silently no-ops
+/// on an infinite input, so this never panics. On restores egui's own default
+/// (0.5 s, `egui::Style::default().interaction.tooltip_delay`) rather than a
+/// hardcoded guess, so a future egui upgrade that changes the default keeps
+/// working. Called once at start-up (so a saved preference takes effect
+/// before the first frame) and again whenever the checkbox changes.
+pub(crate) fn apply_tooltips_enabled(ctx: &egui::Context, enabled: bool) {
+    let delay = if enabled {
+        egui::Style::default().interaction.tooltip_delay
+    } else {
+        f32::INFINITY
+    };
+    ctx.style_mut(|s| s.interaction.tooltip_delay = delay);
 }
 
 /// Autosave settings (Settings → General; docs/07-UI-SPEC §15). Persisted
@@ -149,6 +197,7 @@ impl Shell {
                                 SettingsPage::Appearance => {
                                     self.settings_appearance(ui, &theme, ctx)
                                 }
+                                SettingsPage::Interface => self.settings_interface(ui, &theme, ctx),
                                 SettingsPage::Performance => self.settings_performance(ui, &theme),
                             }
                             ui.add_space(8.0);
@@ -341,6 +390,50 @@ impl Shell {
             if anim != self.animation_level {
                 self.animation_level = anim;
                 crate::theme::apply_animation_level(ctx, anim);
+            }
+        });
+    }
+
+    // --- Interface -----------------------------------------------------------
+
+    fn settings_interface(&mut self, ui: &mut egui::Ui, theme: &Theme, ctx: &egui::Context) {
+        page_heading(ui, theme, "Interface");
+
+        settings_group(ui, theme, "Display", |ui| {
+            let mut scale = self.interface.ui_scale;
+            settings_row(
+                ui,
+                theme,
+                "UI scale",
+                Some("How large Lumit's interface draws relative to your display's native scale."),
+                |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut scale, 0.75..=2.0)
+                            .step_by(0.05)
+                            .fixed_decimals(2)
+                            .suffix("×"),
+                    );
+                },
+            );
+            if scale != self.interface.ui_scale {
+                self.interface.ui_scale = scale;
+                ctx.set_pixels_per_point(scale);
+            }
+
+            settings_divider(ui, theme);
+            let mut show_tooltips = self.interface.show_tooltips;
+            settings_row(
+                ui,
+                theme,
+                "Show tooltips",
+                Some("Show hover tooltips throughout the app."),
+                |ui| {
+                    ui.checkbox(&mut show_tooltips, "");
+                },
+            );
+            if show_tooltips != self.interface.show_tooltips {
+                self.interface.show_tooltips = show_tooltips;
+                apply_tooltips_enabled(ctx, show_tooltips);
             }
         });
     }
@@ -580,5 +673,22 @@ mod tests {
         for page in SettingsPage::ALL {
             assert!(!page.title().is_empty());
         }
+    }
+
+    #[test]
+    fn interface_defaults_are_a_no_op_for_existing_installs() {
+        let i = InterfaceSettings::default();
+        assert_eq!(i.ui_scale, 1.0);
+        assert!(i.show_tooltips);
+    }
+
+    #[test]
+    fn tooltips_off_pushes_the_delay_to_infinity_and_on_restores_the_egui_default() {
+        let ctx = egui::Context::default();
+        apply_tooltips_enabled(&ctx, false);
+        ctx.style_mut(|s| assert_eq!(s.interaction.tooltip_delay, f32::INFINITY));
+        apply_tooltips_enabled(&ctx, true);
+        let egui_default = egui::Style::default().interaction.tooltip_delay;
+        ctx.style_mut(|s| assert_eq!(s.interaction.tooltip_delay, egui_default));
     }
 }

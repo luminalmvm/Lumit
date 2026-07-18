@@ -114,6 +114,10 @@ pub struct Shell {
     /// Autosave settings (Settings → General). Persisted with the workspace.
     #[serde(default)]
     autosave: settings::AutosaveSettings,
+    /// Interface settings (Settings → Interface): UI scale and whether hover
+    /// tooltips show. Persisted with the workspace.
+    #[serde(default)]
+    interface: settings::InterfaceSettings,
     /// Whether the Settings window is open (runtime only).
     #[serde(skip, default)]
     settings_open: bool,
@@ -290,6 +294,7 @@ impl Default for Shell {
             animation_level: crate::theme::AnimationLevel::default(),
             settings: settings::PerformanceSettings::default(),
             autosave: settings::AutosaveSettings::default(),
+            interface: settings::InterfaceSettings::default(),
             settings_open: false,
             settings_page: settings::SettingsPage::default(),
             palette_open: false,
@@ -347,6 +352,11 @@ impl Shell {
         ctx.style_mut(|s| s.visuals.panel_fill = shell.theme.surface_0);
         // Honour saved cache budgets (Settings → Performance).
         shell.apply_cache_budgets();
+        // Honour saved interface settings (Settings → Interface, K-117): a
+        // saved non-default UI scale or a tooltips-off pick takes effect
+        // before the first frame, not just after the next control touch.
+        ctx.set_pixels_per_point(shell.interface.ui_scale);
+        settings::apply_tooltips_enabled(ctx, shell.interface.show_tooltips);
 
         // The boot log (K-008): every line reflects real initialisation state.
         let mut lines = vec![

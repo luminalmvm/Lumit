@@ -1154,9 +1154,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   Five appearance controls live in the **Settings window** (K-098) — open it from
   **Window → Settings…** or **Ctrl/Cmd+comma**. That window is Lumit's application-settings
   surface, shaped like macOS's System Settings: a list of pages down the left (General,
-  Appearance, Performance), and on the right the chosen page's settings in grouped cards, a
-  label on the left of each row and its control on the right. It follows the Sharp/Round
-  look like everything else — rounded filled cards under Round, hairline-framed under Sharp.
+  Appearance, Interface, Performance), and on the right the chosen page's settings in grouped
+  cards, a label on the left of each row and its control on the right. It follows the
+  Sharp/Round look like everything else — rounded filled cards under Round, hairline-framed
+  under Sharp.
   The **Appearance** page carries the theme controls (they used to sit in the Window menu):
   **Mode** switches the whole app between Dark and a new Light theme — one
   plain white for every panel on a soft neutral canvas, not a tinted panel per section (that
@@ -1186,6 +1187,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   quieter machine when you're doing something else at the same time. On by default, matching
   what Lumit always did. (More performance controls — CUDA acceleration, worker counts —
   arrive on this page as those systems gain their knobs.)
+  The **Interface** page (K-117) holds two controls that don't belong to a theme. **UI scale**
+  is a slider from 75% to 200% that makes the whole app — panels, text, icons, everything —
+  draw larger or smaller than your display's native scale, for a hi-DPI screen that reads too
+  small or a projector that needs everything bigger; it applies the moment you move it, using
+  egui's own zoom mechanism (the same one behind its built-in Ctrl+= / Ctrl+- zoom shortcut,
+  here exposed as a persistent, saved preference instead of a one-off per-session nudge).
+  **Show tooltips** is a single switch for every hover tooltip in the app at once — the icon
+  names and shortcuts that pop up when you rest the pointer on a button — matching the "single
+  setting disables all tooltips" promise in the UI spec's onboarding rules. Both default to
+  today's behaviour (native scale, tooltips on), so nothing changes for anyone until they visit
+  this page.
   The **General** page holds an **Autosave** group: how often Lumit quietly saves a spare copy
   of a saved project (in minutes) and how many timestamped copies it keeps, so a crash or a
   mistake never costs more than the interval. The defaults are the same 5 minutes / 5 copies
