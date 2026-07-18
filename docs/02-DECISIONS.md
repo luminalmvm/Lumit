@@ -1094,3 +1094,36 @@ promotion to the decision log (docs/15-DESIGN.md §Open questions); that questio
 resolved — KD-2 is promoted here as DECIDED, and docs/15-DESIGN.md is updated in the same commit
 to point at K-116 instead of the stale "promote as K-006" note (K-006 was independently taken by
 Migration-aware first run before this promotion happened).
+
+**K-117 · DECIDED · Settings → Performance → Cache gains a cache root folder override
+(docs/07-UI-SPEC.md §15).** Closes the last named row of the Cache group.
+`PerformanceSettings::cache_root: Option<PathBuf>` (default `None`) keeps today's
+`<project>-cache` sidecar-beside-the-project-file behaviour byte-for-byte, so existing projects
+and saved workspaces are unaffected until the user picks a folder. When set, each project's disk
+cache moves under the chosen root as `<stem>-<hash8hex>-cache`, the hash taken from the
+canonicalized project path so same-named projects in different folders never collide while the
+stem keeps folders eyeball-recognisable. `lumit_cache::disk::cache_root_for` carries the
+override-aware lookup; the existing `sidecar_root` is untouched and still backs the `None` case.
+The picker uses `rfd::FileDialog::pick_folder`, matching every other file/folder chooser in the
+app. Applied live: `AppState::disk_sync_root` already polls once per frame and diffs the
+computed root against the one in use, so a Settings change repoints the disk-cache worker on the
+next frame with no restart. Trade-off, flagged for follow-up: old cache folders at a previous
+root are not migrated or deleted when the root changes — orphaned, not corrupting, consistent
+with the cache's "always safe to delete, never authoritative" design; worth a cleanup pass if
+orphaned caches become a nuisance. Built in an isolated worktree and merged.
+
+**K-118 · DECIDED · The Settings window gains an Interface page: UI scale and a tooltips
+on/off switch (docs/07-UI-SPEC.md §15).** Closes two of the three named controls in the
+Interface group; reduced motion already shipped separately as Interface motion on the
+Appearance page (K-092) and is untouched here. UI scale is a 75–200% slider applied live
+through egui's own `Context::set_pixels_per_point` — the same zoom primitive behind egui's
+built-in Ctrl+=/Ctrl+- shortcut, here surfaced as a persisted preference applied at start-up as
+well as on change, rather than a per-session nudge. Tooltips are suppressed globally by pushing
+`egui::Style::interaction.tooltip_delay` to infinity rather than gating each `.on_hover_text()`
+call site individually — confirmed against `Response::should_show_hover_ui` that this genuinely
+prevents a tooltip ever showing, and confirmed the resulting infinite duration cannot panic the
+repaint-scheduling path. "On" restores egui's own stock default delay rather than a hardcoded
+guess. Both default to today's implicit behaviour (native scale, tooltips on), so no existing
+install changes until the user visits the page. Trade-off, flagged for follow-up: tooltip
+suppression rides on `tooltip_delay`'s current meaning in egui's style struct, which is worth
+re-checking on any future egui upgrade. Built in an isolated worktree and merged.
