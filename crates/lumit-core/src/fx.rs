@@ -1057,10 +1057,40 @@ pub const BUILTINS: &[EffectSchema] = &[
             ParamSchema {
                 id: "aperture",
                 label: "Aperture",
-                // The maximum circle-of-confusion radius in px@comp (§2.3),
-                // reached at the farthest-from-focus depth. Clamped at zero
-                // below (a zero aperture is a passthrough), unbounded typing
-                // above the 40 px slider.
+                // The master maximum circle-of-confusion radius in px@comp
+                // (§2.3), reached at the farthest-from-focus depth. Scales both
+                // per-side radii about its default 8 (unity: `aperture / 8`), so
+                // a project saved before Near/Far existed — which has only this
+                // param — renders identically (Near/Far fall back to 8, and
+                // 8·aperture/8 = aperture on both sides). Clamped at zero below
+                // (a zero master is a passthrough), unbounded typing above the
+                // 40 px slider.
+                kind: ParamKind::Float {
+                    default: 8.0,
+                    slider: (0.0, 40.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                // Per-side circle-of-confusion for the near side — depths in
+                // front of focus (`d < focus`). px@comp, scaled by the Aperture
+                // master. Owner's "adjust close/far blur separately". Absent on
+                // pre-feature projects, where it falls back to Aperture.
+                id: "near_aperture",
+                label: "Near blur",
+                kind: ParamKind::Float {
+                    default: 8.0,
+                    slider: (0.0, 40.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                // Per-side circle-of-confusion for the far side — depths behind
+                // focus (`d >= focus`). px@comp, scaled by the Aperture master.
+                // Absent on pre-feature projects, where it falls back to
+                // Aperture, keeping the old symmetric behaviour.
+                id: "far_aperture",
+                label: "Far blur",
                 kind: ParamKind::Float {
                     default: 8.0,
                     slider: (0.0, 40.0),
@@ -2294,9 +2324,14 @@ pub enum Resolved {
         focus: f32,
         /// Half-width of the sharp band around `focus`, 0..1.
         range: f32,
-        /// Maximum circle-of-confusion radius in raster pixels (converted from
-        /// px@comp by the §2.3 preview factor).
-        aperture: f32,
+        /// Maximum circle-of-confusion radius for the **near** side (depths in
+        /// front of focus, `d < focus`), raster pixels — the per-side Near blur
+        /// already scaled by the Aperture master and the §2.3 preview factor.
+        near_aperture: f32,
+        /// Maximum circle-of-confusion radius for the **far** side (depths
+        /// behind focus, `d >= focus`), raster pixels — the Far blur already
+        /// scaled by the master and the preview factor.
+        far_aperture: f32,
         /// When set, the per-pixel depth is inverted (`d' = 1 - d`) before the
         /// circle-of-confusion, swapping near and far. A `Copy` scalar, so the
         /// enum stays `Copy` and threads beside the depth texture unchanged.
@@ -3066,10 +3101,18 @@ pub fn resolve_stack(
                 // 1:1 and in order with the Dof ops — the threading contract.
                 let focus = (e.float_at("focus", lt).unwrap_or(0.5) as f32).clamp(0.0, 1.0);
                 let range = (e.float_at("range", lt).unwrap_or(0.1) as f32).clamp(0.0, 1.0);
-                // Aperture is px@comp (§2.3): scale by the preview factor so a
-                // Half preview blurs the same disc as Full, only softer.
-                let aperture =
-                    (e.float_at("aperture", lt).unwrap_or(8.0) as f32 * px_scale).max(0.0);
+                // Aperture is the px@comp master; Near/Far are the per-side
+                // radii it scales about its default 8 (unity). A pre-feature
+                // project has only `aperture` and lacks Near/Far, which then
+                // read their default 8, so each side resolves to
+                // 8·(aperture/8)·px_scale = aperture·px_scale — identical to the
+                // old single-aperture behaviour. px@comp is scaled by the §2.3
+                // preview factor so a Half preview blurs the same disc as Full.
+                let master = e.float_at("aperture", lt).unwrap_or(8.0) as f32 / 8.0;
+                let near = e.float_at("near_aperture", lt).unwrap_or(8.0) as f32;
+                let far = e.float_at("far_aperture", lt).unwrap_or(8.0) as f32;
+                let near_aperture = (near * master * px_scale).max(0.0);
+                let far_aperture = (far * master * px_scale).max(0.0);
                 // Depth invert (a plain Bool; absent on pre-feature projects,
                 // where it reads false — the historical, unchanged behaviour).
                 let depth_invert = matches!(e.param("depth_invert"), Some(EffectValue::Bool(true)));
@@ -3077,7 +3120,8 @@ pub fn resolve_stack(
                 Some(Resolved::Dof {
                     focus,
                     range,
-                    aperture,
+                    near_aperture,
+                    far_aperture,
                     depth_invert,
                     mix,
                 })
@@ -4665,6 +4709,8 @@ mod tests {
         assert_eq!(e.float_at("focus", 0.0), Some(0.5));
         assert_eq!(e.float_at("range", 0.0), Some(0.1));
         assert_eq!(e.float_at("aperture", 0.0), Some(8.0));
+        assert_eq!(e.float_at("near_aperture", 0.0), Some(8.0));
+        assert_eq!(e.float_at("far_aperture", 0.0), Some(8.0));
         assert_eq!(e.float_at("mix", 0.0), Some(100.0));
         // Depth invert is off by default (the historical reading).
         assert!(matches!(
@@ -4673,8 +4719,9 @@ mod tests {
         ));
 
         // resolve_stack carries only the scalars; the depth is threaded beside
-        // the op. Aperture is px@comp scaled by the §2.3 preview factor (here
-        // 0.5 → 4 raster px). A `dof` always resolves to exactly one
+        // the op. The default Aperture master (8) is unity, so each side
+        // resolves to its Near/Far radius (8) scaled by the §2.3 preview factor
+        // (here 0.5 → 4 raster px). A `dof` always resolves to exactly one
         // Resolved::Dof, so it stays 1:1 and in order with the depth-input list
         // even when the depth reference is unset.
         let r = resolve_stack(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
@@ -4683,7 +4730,72 @@ mod tests {
             vec![Resolved::Dof {
                 focus: 0.5,
                 range: 0.1,
-                aperture: 4.0,
+                near_aperture: 4.0,
+                far_aperture: 4.0,
+                depth_invert: false,
+                mix: 1.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn dof_near_far_override_and_fall_back_to_the_aperture_master() {
+        // Near/Far override the per-side radii; the Aperture master scales both
+        // about its default 8. Set Aperture 16 (master 2×), Near 10, Far 4.
+        let mut e = instantiate("dof").unwrap();
+        for p in e.params.iter_mut() {
+            match p.id.as_str() {
+                "aperture" => p.value = EffectValue::Float(Property::fixed(16.0)),
+                "near_aperture" => p.value = EffectValue::Float(Property::fixed(10.0)),
+                "far_aperture" => p.value = EffectValue::Float(Property::fixed(4.0)),
+                _ => {}
+            }
+        }
+        let r = resolve_stack(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        assert_eq!(
+            r,
+            vec![Resolved::Dof {
+                focus: 0.5,
+                range: 0.1,
+                near_aperture: 20.0, // 10 · (16/8)
+                far_aperture: 8.0,   // 4 · (16/8)
+                depth_invert: false,
+                mix: 1.0,
+            }]
+        );
+
+        // A legacy instance saved before the Near/Far pair existed has only
+        // `aperture`; both sides then fall back to it, reproducing the old
+        // symmetric single-aperture behaviour exactly.
+        let mut legacy = instantiate("dof").unwrap();
+        for p in legacy.params.iter_mut() {
+            if p.id == "aperture" {
+                p.value = EffectValue::Float(Property::fixed(12.0));
+            }
+        }
+        legacy
+            .params
+            .retain(|p| p.id != "near_aperture" && p.id != "far_aperture");
+        let r = resolve_stack(
+            std::slice::from_ref(&legacy),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        assert_eq!(
+            r,
+            vec![Resolved::Dof {
+                focus: 0.5,
+                range: 0.1,
+                near_aperture: 12.0, // 8 (default) · (12/8)
+                far_aperture: 12.0,
                 depth_invert: false,
                 mix: 1.0,
             }]

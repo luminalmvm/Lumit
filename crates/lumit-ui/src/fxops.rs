@@ -631,7 +631,8 @@ pub fn run_ops(
             Resolved::Dof {
                 focus,
                 range,
-                aperture,
+                near_aperture,
+                far_aperture,
                 depth_invert,
                 mix,
             } => {
@@ -653,7 +654,8 @@ pub fn run_ops(
                         depth,
                         *focus,
                         *range,
-                        *aperture,
+                        *near_aperture,
+                        *far_aperture,
                         *depth_invert,
                         *mix,
                     );

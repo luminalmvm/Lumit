@@ -23,12 +23,12 @@
 struct Params {
     focus: f32,          // in-focus depth in [0,1]
     range: f32,          // half-width of the sharp band, [0,1]
-    aperture: f32,       // max circle-of-confusion radius, raster px
+    near_aperture: f32,  // near-side (d < focus) max CoC radius, raster px
+    far_aperture: f32,   // far-side (d >= focus) max CoC radius, raster px
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     depth_invert: u32,   // 1 = invert the depth (d' = 1 - d) before the CoC
     _pad0: f32,
     _pad1: f32,
-    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -38,16 +38,20 @@ struct Params {
 @group(0) @binding(4) var<uniform> p: Params;
 
 // Circle-of-confusion radius (raster px) for a depth sample. Zero inside the
-// sharp band |depth-focus| <= range, then ramps smoothstep to `aperture` as
-// the depth distance reaches the far extreme (1.0). Written with explicit
-// min/max/mul/sub — NOT the built-in smoothstep, whose exact form is not
-// guaranteed to match the CPU — so the oracle reproduces it bit-for-bit.
+// sharp band |depth-focus| <= range, then ramps smoothstep toward the per-side
+// aperture as the depth distance reaches the far extreme (1.0). The near side
+// (d < focus) uses `near_aperture`, the far side `far_aperture`; at d == focus
+// the ramp `s` is 0, so the aperture select never introduces a discontinuity
+// and the §1.6 oracle holds. Written with explicit min/max/mul/sub — NOT the
+// built-in smoothstep, whose exact form is not guaranteed to match the CPU — so
+// the oracle reproduces it bit-for-bit.
 fn coc_radius(d: f32) -> f32 {
     let dist = abs(d - p.focus);
     let denom = max(1.0 - p.range, 1e-4);
     let e = min(max((dist - p.range) / denom, 0.0), 1.0);
     let s = e * e * (3.0 - 2.0 * e); // smoothstep ramp
-    return p.aperture * s;
+    let ap = select(p.far_aperture, p.near_aperture, d < p.focus);
+    return ap * s;
 }
 
 @compute @workgroup_size(8, 8)

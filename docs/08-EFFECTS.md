@@ -905,16 +905,23 @@ same v1 temporal boundary as the after-effects matte), Depth invert (bool, defau
 the depth is inverted, `d' = 1 − d`, before the circle-of-confusion, swapping near and far),
 Focus distance (0–1, default 0.5, the in-focus depth), Focus range (0–1, default 0.1, the
 half-width of the sharp band around focus), Aperture (px@comp, default 8, slider 0–40, the
-maximum circle-of-confusion radius), Mix.
+**master** maximum circle-of-confusion radius, scaling both per-side radii about its default 8),
+Near blur (px@comp, default 8, slider 0–40, the max circle-of-confusion on the **near** side,
+`d < focus`) and Far blur (px@comp, default 8, slider 0–40, the **far** side, `d ≥ focus`) — the
+owner's "adjust close/far blur separately", Mix.
 
 **Algorithm sketch.** Per output pixel, read the depth from the referenced layer's **red
 channel** (0..1; by convention 0 = near, 1 = far, though the effect is symmetric about
-Focus). Its distance from Focus, beyond the sharp band `range`, ramps by a smoothstep to a
-circle-of-confusion radius up to `Aperture` at the far extreme; a box-weighted integer disc
-of that radius is averaged from the source (edges clamped), then blended by Mix. Operates on
-**premultiplied** colour (the disc gathers the working premultiplied image, so coverage and
-colour blur together). `moderate` cost, ROI a padded gather (the static declaration covers
-the 40 px aperture at ≥ 1080p), `{0}` temporal. Category **Blur & sharpen**. `Aperture 0`, a
+Focus), and — when **Depth invert** is on — replace it with `1 − d` (swapping near and far).
+Its distance from Focus, beyond the sharp band `range`, ramps by a smoothstep `s` to a
+circle-of-confusion radius: `s ·` (**Near blur** where `d < focus`, else **Far blur**), each
+per-side radius already scaled by the **Aperture** master (`radius · Aperture / 8`). Because the
+near/far select flips only at `d = focus`, where `s = 0`, the radius is continuous, so the
+§1.6 ULP oracle still holds. A box-weighted integer disc of that radius is averaged from the
+source (edges clamped), then blended by Mix. Operates on **premultiplied** colour (the disc
+gathers the working premultiplied image, so coverage and colour blur together). `moderate`
+cost, ROI a padded gather (the static declaration covers the 40 px aperture at ≥ 1080p), `{0}`
+temporal. Category **Blur & sharpen**. A zero effective aperture (master or both sides at 0), a
 depth everywhere inside the sharp band, or `Mix 0` are all bit-exact passthroughs, pinned by
 the kernel oracle.
 
