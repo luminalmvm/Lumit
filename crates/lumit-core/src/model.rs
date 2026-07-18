@@ -270,6 +270,16 @@ pub struct MatteRef {
     pub layer: Uuid,
     pub channel: MatteChannel,
     pub inverted: bool,
+    /// Whether the matte samples the source layer *after* its own effect stack
+    /// (a keyed greenscreen, a blurred edge) rather than its raw source pixels.
+    /// Default false — a matte reads source pixels only, matching the historical
+    /// behaviour and letting the source's effects be irrelevant to the matte.
+    /// When true the source's effects run into the matte texture before it gates
+    /// the consumer (docs/impl/layer-input.md; K-decision). Temporal effects on
+    /// the source (echo, flow motion blur) are not sub-sampled through a matte in
+    /// v1 — a matte after-effects applies the source's spatial and colour stack.
+    #[serde(default)]
+    pub after_effects: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -909,6 +919,22 @@ mod tests {
     }
 
     #[test]
+    fn matte_ref_after_effects_defaults_false() {
+        // A matte saved before the after-effects toggle existed loads source-only
+        // (the historical behaviour), so old projects render unchanged.
+        let m = MatteRef {
+            layer: Uuid::now_v7(),
+            channel: MatteChannel::Alpha,
+            inverted: false,
+            after_effects: false,
+        };
+        let mut v = serde_json::to_value(m).unwrap();
+        v.as_object_mut().unwrap().remove("after_effects");
+        let back: MatteRef = serde_json::from_value(v).unwrap();
+        assert!(!back.after_effects);
+    }
+
+    #[test]
     fn file_param_steps_by_its_hold_keyed_index() {
         use crate::anim::{Animation, Keyframe, SideInterp};
 
@@ -1175,6 +1201,7 @@ mod tests {
             layer: pre.id,
             channel: MatteChannel::Alpha,
             inverted: false,
+            after_effects: false,
         });
         let mut comp2 = comp.clone();
         comp2.layers.push(consumer);
@@ -1199,6 +1226,7 @@ mod tests {
             layer: inner_matted.layers[0].id,
             channel: MatteChannel::Alpha,
             inverted: false,
+            after_effects: false,
         });
         inner_matted.layers.push(inner);
         let nested_real_id = inner_matted.id;

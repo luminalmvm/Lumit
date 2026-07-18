@@ -522,6 +522,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   edge pixels by their true colour and doesn't leave a fringe. Setting the Key colour is now a
   point-and-click job: use the **eyedropper** beside its swatch to sample the screen straight
   from the Viewer (see the colour picker and eyedropper note below).
+- **Matte: source or after-effects (K-125).** A track matte lets one layer borrow another's
+  shape — its brightness or its transparency decides where the layer below shows through. Normally
+  the matte reads the other layer's **raw picture**, ignoring any effects on it. But sometimes the
+  *whole point* is the effect: you want the matte to be a **keyed** greenscreen, or an edge you
+  **softened** with a blur, or a shape you **graded**. The matte pop-up now has an **After effects**
+  switch for exactly that — flick it on and the matte layer's own effect stack runs first, so the
+  matte is its finished picture, not its raw one. Off (the default) is the old behaviour, so
+  nothing you already made changes. One limitation worth knowing: in this first version the
+  after-effects matte applies the layer's *look* effects (keys, blurs, colour) but not its
+  *time-based* ones — an Echo or motion-blur-from-movement on a matte layer is treated as a still
+  frame; the everyday cases are exact. (The same switch is coming to depth layers.)
 - **Colour picker and eyedropper.** Every effect **Colour** parameter — a Flash tint, a Colour
   balance wheel, the Matte key's Key colour, and so on — now shows a **clickable swatch**. Click
   it and Lumit's colour wheel and sliders open, so you can pick a colour by eye instead of typing

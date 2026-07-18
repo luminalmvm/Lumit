@@ -144,6 +144,186 @@ fn feed_comp(
     Some(())
 }
 
+/// Fold an effect stack into the frame key (docs/08): each live effect's
+/// identity, version and evaluated parameters, plus the local time for seeded
+/// and marker-driven effects (their pixels depend on time even when parameters
+/// hold). Shared by a layer's own stack and — for an after-effects matte
+/// (K-decision) — the matte source's stack, so editing the source's effects
+/// invalidates the consumer's cached frames. `lt` is the local time the effects
+/// evaluate at (the matte source's own local time when hashing a matte source);
+/// `t` is comp time, threaded through only for nested layer-reference sources.
+/// `marker_layer` supplies the §1.4 marker context (the matte source, when that
+/// is what is being hashed). Emits nothing when the fx switch is off or no
+/// effect is enabled, so every pre-effects key stays valid.
+#[allow(clippy::too_many_arguments)]
+fn feed_effect_stack(
+    h: &mut blake3::Hasher,
+    fx_on: bool,
+    effects: &[lumit_core::model::EffectInstance],
+    marker_layer: &lumit_core::model::Layer,
+    comp: &Composition,
+    doc: &Document,
+    t: f64,
+    lt: f64,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<()> {
+    if !(fx_on && effects.iter().any(|e| e.enabled)) {
+        return Some(());
+    }
+    h.update(b"effects/");
+    // The §1.4 marker context, built lazily (only marker-driven effects read
+    // it) by the same shared constructor resolution uses (K-031), so the key
+    // hashes exactly the beat times resolution sees.
+    let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
+    for e in effects.iter().filter(|e| e.enabled) {
+        h.update(&[match e.effect.namespace {
+            lumit_core::model::EffectNamespace::Builtin => 0,
+            lumit_core::model::EffectNamespace::Ofx => 1,
+            lumit_core::model::EffectNamespace::Lfx => 2,
+            lumit_core::model::EffectNamespace::Placeholder => 3,
+        }]);
+        h.update(e.effect.match_name.as_bytes());
+        h.update(&e.effect.version.to_le_bytes());
+        for p in &e.params {
+            h.update(p.id.as_bytes());
+            use lumit_core::model::EffectValue;
+            match &p.value {
+                EffectValue::Float(v) => feed_f64(h, v.value_at(lt)),
+                EffectValue::Point(x, y) => {
+                    feed_f64(h, x.value_at(lt));
+                    feed_f64(h, y.value_at(lt));
+                }
+                EffectValue::Colour(c) => {
+                    for ch in c {
+                        feed_f64(h, ch.value_at(lt));
+                    }
+                }
+                EffectValue::Bool(b) => {
+                    h.update(&[u8::from(*b)]);
+                }
+                EffectValue::Choice(v) | EffectValue::Seed(v) => {
+                    h.update(&v.to_le_bytes());
+                }
+                EffectValue::File(f) => {
+                    // Which file is live at this time (the hold-keyed index
+                    // selects it); an unset param feeds a distinct 0 marker.
+                    // The path string is hashed (length-prefixed), not the
+                    // file's bytes — the same policy a footage source path
+                    // follows. Refreshing a file edited on disk is the LUT
+                    // loader's job (specified as path + mtime caching,
+                    // docs/impl/lut.md §4; the shipped caches key by path
+                    // only, so an on-disk edit shows after a restart).
+                    match f.path_at(lt) {
+                        Some(p) => {
+                            h.update(&[1]);
+                            h.update(&(p.len() as u64).to_le_bytes());
+                            h.update(p.as_bytes());
+                        }
+                        None => {
+                            h.update(&[0]);
+                        }
+                    }
+                }
+                EffectValue::Layer(lref) => {
+                    // The referenced layer is rendered alone at comp size as
+                    // this effect's auxiliary input (a depth pass for depth
+                    // of field, docs/impl/layer-input.md §4): its content is
+                    // content the parameter hash cannot otherwise see, so it
+                    // joins the key. It is rendered SOURCE-ONLY (its own
+                    // effect stack is not applied), so — exactly like a matte
+                    // source — the key is the referenced layer's source plus
+                    // its evaluated transform. A source-only render never
+                    // re-enters an effect stack, so a layer reference cannot
+                    // recurse; `visited` still guards any precomp cycle
+                    // inside that source. An unset or dangling reference
+                    // feeds a distinct 0 marker (the effect is a no-op).
+                    match lref
+                        .as_ref()
+                        .and_then(|id| comp.layers.iter().find(|l| l.id == *id))
+                    {
+                        Some(src) => {
+                            h.update(&[1]);
+                            h.update(src.id.as_bytes());
+                            let slt = t - src.start_offset.0.to_f64();
+                            feed_source(h, doc, &src.kind, slt, quality, stamper, visited)?;
+                            let dtr = &src.transform;
+                            for v in [
+                                dtr.position_x.value_at(slt),
+                                dtr.position_y.value_at(slt),
+                                dtr.position_z.value_at(slt),
+                                dtr.anchor_x.value_at(slt),
+                                dtr.anchor_y.value_at(slt),
+                                dtr.scale_x.value_at(slt),
+                                dtr.scale_y.value_at(slt),
+                                dtr.rotation.value_at(slt),
+                                dtr.rotation_x.value_at(slt),
+                                dtr.rotation_y.value_at(slt),
+                                dtr.opacity.value_at(slt),
+                            ] {
+                                feed_f64(h, v);
+                            }
+                            h.update(&[u8::from(src.switches.three_d)]);
+                        }
+                        None => {
+                            h.update(&[0]);
+                        }
+                    }
+                }
+            }
+        }
+        // A seeded effect (docs/08 §1.3 Randomness) draws from
+        // hash(seed, time, …) generators (§2.4): its pixels are a
+        // function of the layer's local time even while every
+        // parameter holds constant — a Shake wobbles a static solid
+        // differently every frame. The local time therefore joins the
+        // key for exactly these effects; everything else keeps its
+        // time-free keys (a blurred solid still shares one cached
+        // frame across its whole span).
+        if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
+            if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
+                if s.traits.seeded {
+                    h.update(b"fx-time");
+                    feed_f64(h, lt);
+                }
+                // A marker-driven effect (docs/08 §1.3 Marker input,
+                // §1.4) reads beat markers the parameter hash cannot
+                // see, so its key gains the layer's local time plus
+                // the §1.4 window it consumes — the same trigger
+                // times, through the same shared context constructor,
+                // that resolution reads (K-031). The window, not the
+                // whole marker list: a marker edit that cannot change
+                // this frame's envelope leaves its key alone. A
+                // Manual-mode Flash reports no window at all and keeps
+                // its time-free keys — no over-invalidation.
+                if s.traits.beat_input {
+                    let ctx = mctx.get_or_insert_with(|| {
+                        lumit_core::fx::MarkerContext::for_layer(comp, marker_layer)
+                    });
+                    if let Some(w) = lumit_core::fx::marker_window(e, lt, ctx) {
+                        h.update(b"fx-markers");
+                        feed_f64(h, lt);
+                        feed_f64(h, w.fps);
+                        for side in [w.before, w.after] {
+                            match side {
+                                Some(t) => {
+                                    h.update(&[1]);
+                                    feed_f64(h, t);
+                                }
+                                None => {
+                                    h.update(&[0]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Some(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn feed_layer(
     h: &mut blake3::Hasher,
@@ -226,157 +406,19 @@ fn feed_layer(
     // a live stack exists, so every pre-effects key stays valid. A bypassed
     // effect (or an fx-switched-off layer) contributes nothing, exactly as
     // it renders nothing.
-    if layer.switches.fx && layer.effects.iter().any(|e| e.enabled) {
-        h.update(b"effects/");
-        // The layer's §1.4 marker context, built lazily (only marker-driven
-        // effects read it) by the same shared constructor resolution uses
-        // (K-031), so the key hashes exactly the beat times resolution sees.
-        let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
-        for e in layer.effects.iter().filter(|e| e.enabled) {
-            h.update(&[match e.effect.namespace {
-                lumit_core::model::EffectNamespace::Builtin => 0,
-                lumit_core::model::EffectNamespace::Ofx => 1,
-                lumit_core::model::EffectNamespace::Lfx => 2,
-                lumit_core::model::EffectNamespace::Placeholder => 3,
-            }]);
-            h.update(e.effect.match_name.as_bytes());
-            h.update(&e.effect.version.to_le_bytes());
-            for p in &e.params {
-                h.update(p.id.as_bytes());
-                use lumit_core::model::EffectValue;
-                match &p.value {
-                    EffectValue::Float(v) => feed_f64(h, v.value_at(lt)),
-                    EffectValue::Point(x, y) => {
-                        feed_f64(h, x.value_at(lt));
-                        feed_f64(h, y.value_at(lt));
-                    }
-                    EffectValue::Colour(c) => {
-                        for ch in c {
-                            feed_f64(h, ch.value_at(lt));
-                        }
-                    }
-                    EffectValue::Bool(b) => {
-                        h.update(&[u8::from(*b)]);
-                    }
-                    EffectValue::Choice(v) | EffectValue::Seed(v) => {
-                        h.update(&v.to_le_bytes());
-                    }
-                    EffectValue::File(f) => {
-                        // Which file is live at this time (the hold-keyed index
-                        // selects it); an unset param feeds a distinct 0 marker.
-                        // The path string is hashed (length-prefixed), not the
-                        // file's bytes — the same policy a footage source path
-                        // follows. Refreshing a file edited on disk is the LUT
-                        // loader's job (specified as path + mtime caching,
-                        // docs/impl/lut.md §4; the shipped caches key by path
-                        // only, so an on-disk edit shows after a restart).
-                        match f.path_at(lt) {
-                            Some(p) => {
-                                h.update(&[1]);
-                                h.update(&(p.len() as u64).to_le_bytes());
-                                h.update(p.as_bytes());
-                            }
-                            None => {
-                                h.update(&[0]);
-                            }
-                        }
-                    }
-                    EffectValue::Layer(lref) => {
-                        // The referenced layer is rendered alone at comp size as
-                        // this effect's auxiliary input (a depth pass for depth
-                        // of field, docs/impl/layer-input.md §4): its content is
-                        // content the parameter hash cannot otherwise see, so it
-                        // joins the key. It is rendered SOURCE-ONLY (its own
-                        // effect stack is not applied), so — exactly like a matte
-                        // source — the key is the referenced layer's source plus
-                        // its evaluated transform. A source-only render never
-                        // re-enters an effect stack, so a layer reference cannot
-                        // recurse; `visited` still guards any precomp cycle
-                        // inside that source. An unset or dangling reference
-                        // feeds a distinct 0 marker (the effect is a no-op).
-                        match lref
-                            .as_ref()
-                            .and_then(|id| comp.layers.iter().find(|l| l.id == *id))
-                        {
-                            Some(src) => {
-                                h.update(&[1]);
-                                h.update(src.id.as_bytes());
-                                let slt = t - src.start_offset.0.to_f64();
-                                feed_source(h, doc, &src.kind, slt, quality, stamper, visited)?;
-                                let dtr = &src.transform;
-                                for v in [
-                                    dtr.position_x.value_at(slt),
-                                    dtr.position_y.value_at(slt),
-                                    dtr.position_z.value_at(slt),
-                                    dtr.anchor_x.value_at(slt),
-                                    dtr.anchor_y.value_at(slt),
-                                    dtr.scale_x.value_at(slt),
-                                    dtr.scale_y.value_at(slt),
-                                    dtr.rotation.value_at(slt),
-                                    dtr.rotation_x.value_at(slt),
-                                    dtr.rotation_y.value_at(slt),
-                                    dtr.opacity.value_at(slt),
-                                ] {
-                                    feed_f64(h, v);
-                                }
-                                h.update(&[u8::from(src.switches.three_d)]);
-                            }
-                            None => {
-                                h.update(&[0]);
-                            }
-                        }
-                    }
-                }
-            }
-            // A seeded effect (docs/08 §1.3 Randomness) draws from
-            // hash(seed, time, …) generators (§2.4): its pixels are a
-            // function of the layer's local time even while every
-            // parameter holds constant — a Shake wobbles a static solid
-            // differently every frame. The local time therefore joins the
-            // key for exactly these effects; everything else keeps its
-            // time-free keys (a blurred solid still shares one cached
-            // frame across its whole span).
-            if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
-                if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
-                    if s.traits.seeded {
-                        h.update(b"fx-time");
-                        feed_f64(h, lt);
-                    }
-                    // A marker-driven effect (docs/08 §1.3 Marker input,
-                    // §1.4) reads beat markers the parameter hash cannot
-                    // see, so its key gains the layer's local time plus
-                    // the §1.4 window it consumes — the same trigger
-                    // times, through the same shared context constructor,
-                    // that resolution reads (K-031). The window, not the
-                    // whole marker list: a marker edit that cannot change
-                    // this frame's envelope leaves its key alone. A
-                    // Manual-mode Flash reports no window at all and keeps
-                    // its time-free keys — no over-invalidation.
-                    if s.traits.beat_input {
-                        let ctx = mctx.get_or_insert_with(|| {
-                            lumit_core::fx::MarkerContext::for_layer(comp, layer)
-                        });
-                        if let Some(w) = lumit_core::fx::marker_window(e, lt, ctx) {
-                            h.update(b"fx-markers");
-                            feed_f64(h, lt);
-                            feed_f64(h, w.fps);
-                            for side in [w.before, w.after] {
-                                match side {
-                                    Some(t) => {
-                                        h.update(&[1]);
-                                        feed_f64(h, t);
-                                    }
-                                    None => {
-                                        h.update(&[0]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    feed_effect_stack(
+        h,
+        layer.switches.fx,
+        &layer.effects,
+        layer,
+        comp,
+        doc,
+        t,
+        lt,
+        quality,
+        stamper,
+        visited,
+    )?;
 
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
     // source frames, which are content the parameter hash cannot see (K-094):
@@ -429,6 +471,7 @@ fn feed_layer(
                 h.update(&[
                     u8::from(matches!(mr.channel, MatteChannel::Luma)),
                     u8::from(mr.inverted),
+                    u8::from(mr.after_effects),
                 ]);
                 let mlt = t - src.start_offset.0.to_f64();
                 feed_source(h, doc, &src.kind, mlt, quality, stamper, visited)?;
@@ -449,6 +492,26 @@ fn feed_layer(
                     feed_f64(h, v);
                 }
                 h.update(&[u8::from(src.switches.three_d)]);
+                // After-effects matte (K-decision): the matte gates by the
+                // source's *processed* pixels, so the source's own effect stack
+                // is content — fold it into the key at the source's local time,
+                // the same way the source's own draw would. Off leaves the
+                // source-only key untouched (a bypassed source stack too).
+                if mr.after_effects {
+                    feed_effect_stack(
+                        h,
+                        src.switches.fx,
+                        &src.effects,
+                        src,
+                        comp,
+                        doc,
+                        t,
+                        mlt,
+                        quality,
+                        stamper,
+                        visited,
+                    )?;
+                }
             }
         },
     }
@@ -941,6 +1004,116 @@ mod tests {
         let mut v2 = with_fx.clone();
         v2.layers[0].effects[0].effect.version = 2;
         assert_ne!(fx_key, key(&doc, &v2, 1.0));
+    }
+
+    /// An after-effects matte (K-decision) gates by the source's *processed*
+    /// pixels, so the source's effect stack becomes content for the consumer's
+    /// key; a source-only matte (the default) ignores it entirely. The source
+    /// is hidden here, so its stack can only reach the key through the matte —
+    /// isolating the matte path from the source's own layer contribution.
+    #[test]
+    fn after_effects_matte_keys_on_the_source_stack() {
+        use lumit_core::anim::{Animation, Keyframe, SideInterp};
+        use lumit_core::model::{
+            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, MatteChannel,
+            MatteRef,
+        };
+        use lumit_core::time::Rational;
+        let doc = Document::new();
+        let mut source = text_layer("m", 0.0, 10.0, 0.0);
+        source.switches.visible = false; // matte-only: renders alone, not as a layer
+        let source_id = source.id;
+        let mut consumer = text_layer("c", 0.0, 10.0, 0.0);
+        consumer.matte = Some(MatteRef {
+            layer: source_id,
+            channel: MatteChannel::Alpha,
+            inverted: false,
+            after_effects: false,
+        });
+        let comp = comp_with(vec![consumer, source]);
+        let base = key(&doc, &comp, 1.0);
+
+        let glow = |radius: lumit_core::anim::Property| EffectInstance {
+            id: Uuid::now_v7(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Builtin,
+                match_name: "glow".into(),
+                version: 1,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![EffectParam {
+                id: "radius".into(),
+                value: EffectValue::Float(radius),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
+            extra: serde_json::Map::new(),
+        };
+
+        // Source-only matte (the default): the source's stack is not content —
+        // adding an effect to the hidden source leaves the consumer's key alone.
+        let mut src_fx = comp.clone();
+        src_fx.layers[1]
+            .effects
+            .push(glow(lumit_core::anim::Property::fixed(24.0)));
+        assert_eq!(
+            base,
+            key(&doc, &src_fx, 1.0),
+            "a source-only matte ignores the source's effect stack"
+        );
+
+        // The flag itself is content: flipping after_effects on (even with no
+        // source stack) keys apart — a mode bit that changes the pixels.
+        let mut flag_only = comp.clone();
+        flag_only.layers[0].matte.as_mut().unwrap().after_effects = true;
+        assert_ne!(
+            base,
+            key(&doc, &flag_only, 1.0),
+            "the after_effects flag is itself content"
+        );
+
+        // After-effects matte with a stack: the source's effects fold into the
+        // key, so it differs from both the source-only and the flag-only keys.
+        let mut after = src_fx.clone();
+        after.layers[0].matte.as_mut().unwrap().after_effects = true;
+        let after_key = key(&doc, &after, 1.0);
+        assert_ne!(base, after_key);
+        assert_ne!(key(&doc, &flag_only, 1.0), after_key);
+
+        // Evaluated params, not keyframe data: an animated source radius moves
+        // the after-effects key across frames.
+        let mut animated = comp.clone();
+        animated.layers[0].matte.as_mut().unwrap().after_effects = true;
+        animated.layers[1]
+            .effects
+            .push(glow(lumit_core::anim::Property {
+                animation: Animation::Keyframed(vec![
+                    Keyframe {
+                        time: Rational::new(0, 1).unwrap(),
+                        value: 24.0,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    },
+                    Keyframe {
+                        time: Rational::new(4, 1).unwrap(),
+                        value: 80.0,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    },
+                ]),
+                extra: serde_json::Map::new(),
+            }));
+        assert_ne!(key(&doc, &animated, 1.0), key(&doc, &animated, 3.0));
+
+        // Bypassing the source stack (or its fx switch) returns to source-only.
+        let mut bypassed = after.clone();
+        bypassed.layers[1].effects[0].enabled = false;
+        assert_eq!(
+            key(&doc, &flag_only, 1.0),
+            key(&doc, &bypassed, 1.0),
+            "a bypassed source stack contributes nothing, like the flag alone"
+        );
     }
 
     /// A seeded effect's pixels move with time under constant parameters

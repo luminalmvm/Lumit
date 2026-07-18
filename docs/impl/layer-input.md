@@ -80,23 +80,39 @@ correct form — do it if the visited-set makes it clean.
 - Preview==export: the referenced-layer render + threading go through one shared
   helper (asserted by construction / reviewed by hand, as for the LUT).
 
-## Follow-up: reference the layer BEFORE or AFTER its own effects (owner request)
-Both a **track matte** and a **layer-input** (depth) should offer a boolean —
-take the referenced layer's pixels **before** its own effect stack runs, or
-**after** (the fully processed layer). A depth pass you graded, or a matte you
-did not want blurred, is the motivating case.
-- Model: add `pre_effects: bool` to `MatteRef`, and to the layer-input value
-  (either `EffectValue::Layer` becomes `{ id: Option<Uuid>, pre_effects: bool }`,
-  or the effect carries a companion `Bool` param, e.g. DoF's "Depth before
-  effects"). `#[serde(default)]` so existing projects load with `false`
-  (after-effects, today's behaviour).
-- Render: the ONE shared "render layer X alone at comp size" helper (§2) takes
-  the flag and, when `pre_effects`, renders **source → masks → transform** but
-  **skips the effect stack** — the pipeline already has the stack as a discrete
-  step, so this is one branch. Preview and export pass the same flag (K-031).
-- Do this as a small increment AFTER the layer-input + matte referencing lands,
-  so it touches a settled helper. Applies uniformly to mattes and every
-  layer-input effect.
+## Reference the layer BEFORE or AFTER its own effects (K-125, matte landed)
+Both a **track matte** and a **layer-input** (depth) offer a boolean — take the
+referenced layer's pixels **as source** (before its own effect stack, the
+default and historical behaviour) or **after** the fully processed layer. A
+keyed greenscreen matte, or a matte whose edge you softened with a blur, is the
+motivating case; a graded depth pass is the layer-input case.
+
+**Matte — landed (K-125).** `MatteRef` gains `after_effects: bool`,
+`#[serde(default)]` false (source-only, unchanged for old projects). When set,
+the matte source's stack runs on its texture before it gates the consumer:
+`shell::gpu` uploads the source pixels, linearises, and — when the carried
+`MatteDraw::fx` is non-empty — calls the same `fxops::run_ops` a layer's own
+draw uses, *then* composites the matte alone. Export does the identical thing
+via `apply_fx` on the freshly `prepare`d source. Preview and export both resolve
+the source's stack the same way, so they match (K-031). The frame key folds the
+source's stack (shared `feed_effect_stack`) only when the toggle is on.
+
+- This also **corrected a latent K-031 bug**: export was reading the matte
+  source's *post-fx* `prepared` texture while preview read source-only, so a
+  matte source that happened to have effects diverged. Both are now source-only
+  by default; post-fx only when `after_effects` is set.
+- **v1 boundary:** temporal inputs — echo neighbours, the flow motion-blur
+  field, a nested depth reference — are **not** fed through an after-effects
+  matte (empty `neighbours`/`flow`/`layer_inputs` to `run_ops`). An echo or flow
+  effect on the matte source therefore degrades to a still. The common cases
+  (colour key, blur, levels, curves) are exact. Lifting this needs the matte
+  source to flow through the full per-layer draw path (its own decode job for
+  neighbours/flow, its own depth inputs) rather than a one-shot `run_ops`.
+
+**Depth layer-input — deferred.** Rides as a companion `depth_after_effects`
+`Bool` schema param on each consuming effect (DoF), not an `EffectValue::Layer`
+model change — cheaper, no serialisation churn, and per-input nameable. Same
+`run_ops`-before-consume shape as the matte, same v1 temporal boundary.
 
 ## Status / follow-ups (landed, K-123/K-124)
 

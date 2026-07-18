@@ -460,6 +460,29 @@ pub(crate) fn build_comp_draws(
             let (m_rgba, m_w, m_h, m_nat) = pixels_for(src)?;
             let mlt = t_comp - src.start_offset.0.to_f64();
             let mtr = &src.transform;
+            // After-effects matte (K-decision): resolve the matte source's own
+            // stack at its layer time so gpu.rs runs it on the matte texture
+            // before the matte gates the consumer. Uses the source's decode scale
+            // (its px@comp radii stay honest under reduced-res preview), the same
+            // §1.4 markers and the same resolve export uses (K-031). Empty when
+            // the toggle is off or the source's fx switch is off — source-only.
+            let (fx, lut_files) = if mr.after_effects && src.switches.fx {
+                let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                let scale = m_w as f32 / m_nat.0.max(1.0);
+                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                (
+                    lumit_core::fx::resolve_stack(
+                        &src.effects,
+                        mlt,
+                        comp_diag * scale,
+                        scale,
+                        &markers,
+                    ),
+                    lut_files(&src.effects, mlt),
+                )
+            } else {
+                (Vec::new(), Vec::new())
+            };
             Some(MatteDraw {
                 rgba: m_rgba,
                 tex_w: m_w,
@@ -485,6 +508,8 @@ pub(crate) fn build_comp_draws(
                 three_d: src.switches.three_d,
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
+                fx,
+                lut_files,
             })
         });
 

@@ -21,6 +21,19 @@ pub struct MatteDraw {
     pub three_d: bool,
     pub luma: bool,
     pub inverted: bool,
+    /// The matte source's own effect stack, resolved at the matte's layer time
+    /// (docs/impl/layer-input.md; K-decision). Non-empty only when the consumer's
+    /// `MatteRef::after_effects` is set — the effects then run on the matte
+    /// texture (upload → linearise → `run_ops`) before it is composited alone, so
+    /// a keyed or blurred matte gates by its processed pixels. Empty is the
+    /// source-only default. Temporal inputs (neighbours/flow/depth) are not fed
+    /// through an after-effects matte in v1, so an echo or flow effect on the
+    /// matte source degrades to a still (documented boundary).
+    pub fx: Vec<lumit_core::fx::Resolved>,
+    /// The matte source's `lut` file paths, 1:1 and in order with the `Resolved::
+    /// Lut` ops in `fx` (as for a layer's own `lut_files`). Empty unless
+    /// `after_effects` and the matte source has a LUT.
+    pub lut_files: Vec<Option<String>>,
 }
 
 /// A depth-of-field depth input packaged for the preview (docs/impl/
@@ -509,6 +522,28 @@ impl GpuViewer {
                         .engine
                         .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
                     let linear = self.engine.linearise(&self.ctx, &src);
+                    // After-effects matte (K-decision): run the matte source's own
+                    // stack on its texture before it gates the consumer, so a keyed
+                    // or blurred matte works. Temporal inputs stay empty in v1 — the
+                    // matte source's echo/flow degrades to a still (documented). The
+                    // same run export performs, so the two agree (K-031).
+                    let linear = if m.fx.is_empty() {
+                        linear
+                    } else {
+                        let luts = self.load_luts(&m.lut_files);
+                        crate::fxops::run_ops(
+                            &self.fx,
+                            &self.ctx,
+                            linear,
+                            m.tex_w,
+                            m.tex_h,
+                            &m.fx,
+                            &[],
+                            None,
+                            &luts,
+                            &[],
+                        )
+                    };
                     self.compositor.composite_with_camera(
                         &self.ctx,
                         width,

@@ -1092,52 +1092,73 @@ impl Renderer<'_> {
             mb_avg.insert(l.id, avg);
         }
 
-        // Matte textures: the matte layer rendered alone into comp space.
+        // Matte textures: the matte layer rendered alone into comp space, one per
+        // consumer. The source is rendered SOURCE-ONLY (its own effects are not
+        // applied) unless the consumer's `MatteRef::after_effects` is set, in
+        // which case the source's stack runs on it first (a keyed or blurred
+        // matte; K-decision). Both modes go through the same `prepare` the depth
+        // inputs use and the same `apply_fx` the layer's own draw uses, so the
+        // export matches the preview (K-031). Temporal inputs are not fed through
+        // an after-effects matte in v1 (empty neighbours/flow/depth — a
+        // documented boundary). Collected first because `prepare` needs `&mut
+        // self` while the layer list is borrowed from `comp`.
         let mut matte_tex: HashMap<Uuid, Tex> = HashMap::new();
-        for l in comp.layers.iter().filter(|l| l.switches.visible) {
-            if let Some(mr) = &l.matte {
-                if let (Some(src_layer), Some(mp)) = (
-                    comp.layers.iter().find(|x| x.id == mr.layer),
-                    prepared.get(&mr.layer),
-                ) {
-                    let mlt = t - src_layer.start_offset.0.to_f64();
-                    let mtr = &src_layer.transform;
-                    let rendered = self.compositor.composite_with_camera(
-                        self.gpu,
-                        comp.width,
-                        comp.height,
-                        [0.0, 0.0, 0.0, 0.0],
-                        &[lumit_gpu::CompositeLayer {
-                            texture: &mp.tex,
-                            size: mp.natural,
-                            position: (
-                                mtr.position_x.value_at(mlt) as f32,
-                                mtr.position_y.value_at(mlt) as f32,
-                            ),
-                            anchor: (
-                                mtr.anchor_x.value_at(mlt) as f32,
-                                mtr.anchor_y.value_at(mlt) as f32,
-                            ),
-                            scale: (
-                                mtr.scale_x.value_at(mlt) as f32,
-                                mtr.scale_y.value_at(mlt) as f32,
-                            ),
-                            rotation_deg: mtr.rotation.value_at(mlt) as f32,
-                            opacity: mtr.opacity.value_at(mlt) as f32,
-                            matte: None,
-                            blend: lumit_gpu::Blend::Normal,
-                            z: mtr.position_z.value_at(mlt) as f32,
-                            rotation_x_deg: mtr.rotation_x.value_at(mlt) as f32,
-                            rotation_y_deg: mtr.rotation_y.value_at(mlt) as f32,
-                            three_d: src_layer.switches.three_d,
-                            layer_mask: mp.mask.as_ref(),
-                            pre: None,
-                        }],
-                        camera,
-                    );
-                    matte_tex.insert(l.id, rendered);
-                }
-            }
+        let matte_specs: Vec<(Uuid, lumit_core::model::MatteRef)> = comp
+            .layers
+            .iter()
+            .filter(|l| l.switches.visible)
+            .filter_map(|l| l.matte.map(|mr| (l.id, mr)))
+            .collect();
+        for (consumer_id, mr) in matte_specs {
+            let Some(src_layer) = comp.layers.iter().find(|x| x.id == mr.layer) else {
+                continue;
+            };
+            let Some(p) = self.prepare(src_layer, t, visited)? else {
+                continue;
+            };
+            let mlt = t - src_layer.start_offset.0.to_f64();
+            let src_tex = if mr.after_effects {
+                let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src_layer);
+                self.apply_fx(p.tex, src_layer, mlt, diag, &markers, &[], None, &[])
+            } else {
+                p.tex
+            };
+            let mtr = &src_layer.transform;
+            let rendered = self.compositor.composite_with_camera(
+                self.gpu,
+                comp.width,
+                comp.height,
+                [0.0, 0.0, 0.0, 0.0],
+                &[lumit_gpu::CompositeLayer {
+                    texture: &src_tex,
+                    size: p.natural,
+                    position: (
+                        mtr.position_x.value_at(mlt) as f32,
+                        mtr.position_y.value_at(mlt) as f32,
+                    ),
+                    anchor: (
+                        mtr.anchor_x.value_at(mlt) as f32,
+                        mtr.anchor_y.value_at(mlt) as f32,
+                    ),
+                    scale: (
+                        mtr.scale_x.value_at(mlt) as f32,
+                        mtr.scale_y.value_at(mlt) as f32,
+                    ),
+                    rotation_deg: mtr.rotation.value_at(mlt) as f32,
+                    opacity: mtr.opacity.value_at(mlt) as f32,
+                    matte: None,
+                    blend: lumit_gpu::Blend::Normal,
+                    z: mtr.position_z.value_at(mlt) as f32,
+                    rotation_x_deg: mtr.rotation_x.value_at(mlt) as f32,
+                    rotation_y_deg: mtr.rotation_y.value_at(mlt) as f32,
+                    three_d: src_layer.switches.three_d,
+                    layer_mask: p.mask.as_ref(),
+                    pre: None,
+                }],
+                camera,
+            );
+            matte_tex.insert(consumer_id, rendered);
         }
 
         let bg = comp.background.0;

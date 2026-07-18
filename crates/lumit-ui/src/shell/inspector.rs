@@ -106,6 +106,7 @@ pub(crate) fn matte_control(
                             .map(|m| m.channel)
                             .unwrap_or(MatteChannel::Alpha),
                         inverted: layer.matte.is_some_and(|m| m.inverted),
+                        after_effects: layer.matte.is_some_and(|m| m.after_effects),
                     }));
                 }
             }
@@ -122,6 +123,17 @@ pub(crate) fn matte_control(
                 }
                 if ui.selectable_label(m.inverted, "Inverted").clicked() {
                     m.inverted = !m.inverted;
+                    set = Some(Some(m));
+                }
+                if ui
+                    .selectable_label(m.after_effects, "After effects")
+                    .on_hover_text(
+                        "Gate with the matte layer's pixels after its own effects \
+                         (a keyed or blurred matte), not its raw source",
+                    )
+                    .clicked()
+                {
+                    m.after_effects = !m.after_effects;
                     set = Some(Some(m));
                 }
             }

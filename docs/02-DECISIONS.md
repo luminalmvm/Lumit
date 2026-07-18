@@ -1236,3 +1236,22 @@ reduced-resolution preview; a framing-matched depth pass is expected, and the de
 visible + in-span in preview (the decode-planner gate, a recorded follow-up to lift). Placement/
 effects-aware depth and the shaped-bokeh "DOF PRO" second effect are post-v1. Preview == export
 via the one shared render helper. Built in an isolated worktree and merged.
+
+**K-125 · DECIDED · Matte "after effects" toggle (docs/03 §6 matte, docs/impl/layer-input.md).**
+A matte reads the source layer's **source pixels** by default (its own effect stack irrelevant),
+but a new `MatteRef::after_effects` bool (serde-default false, so old projects are unchanged) has
+the source's **own effect stack run into the matte texture** before it gates the consumer — a
+keyed greenscreen, a blurred or levels-adjusted edge. The matte source is uploaded, linearised,
+`run_ops` applies its resolved stack, then it composites alone exactly as a source-only matte
+does; preview (`shell::gpu`) and export both do this from the same resolve + `run_ops`, so they
+match (K-031). This also **fixed a latent K-031 bug**: export had been feeding the matte source's
+*post-fx* `prepared` texture while preview fed source-only, so a matte source with effects
+diverged between the two; both are now source-only by default and post-fx only when the toggle is
+set. The frame key folds the source's stack (via the shared `feed_effect_stack`) only when the
+toggle is on, so a source-only matte keeps its keys and a keyed matte invalidates when its key
+colour moves. **v1 boundary:** temporal inputs (echo neighbours, flow motion-blur field, a nested
+depth reference) are **not** fed through an after-effects matte — the source's spatial and colour
+stack applies, but an echo/flow effect on the matte source degrades to a still; the common cases
+(colour key, blur, levels) are exact. The same toggle for a Layer-reference depth input (K-123)
+rides as a `depth_after_effects` schema bool on each consuming effect (a follow-up), not a model
+field. Built on the main branch alongside the effects sprint.

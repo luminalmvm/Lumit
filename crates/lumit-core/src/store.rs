@@ -899,6 +899,7 @@ mod tests {
             layer: matte_id,
             channel: MatteChannel::Luma,
             inverted: true,
+            after_effects: false,
         };
         store
             .commit(Op::SetLayerMatte {
