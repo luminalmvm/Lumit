@@ -4,6 +4,7 @@
 
 pub mod anim;
 pub mod fx;
+pub mod lut;
 pub mod markers;
 pub mod mask;
 pub mod model;

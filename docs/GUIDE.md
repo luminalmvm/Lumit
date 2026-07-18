@@ -422,6 +422,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   0° leaves the picture exactly as it was. Under the hood it is a small fixed colour-mixing
   matrix worked out once for the angle, so the preview and the export apply the identical
   numbers.
+- `crates/lumit-core/src/lut.rs` — **reading a colour LUT (`.cube` file).** A LUT
+  (look-up table) is a colour recipe a colourist bakes elsewhere: feed it a red/green/blue
+  and it hands back a graded red/green/blue. The common `.cube` text format stores that as a
+  cube of sample points — a 3D LUT is a grid (say 33×33×33) of "this colour in, that colour
+  out", a 1D LUT is three separate curves, one per channel. This file reads such a file into
+  memory and answers the one question the coming LUT effect (docs/08 §3.11) will ask millions
+  of times a frame — "what does this LUT turn *this* pixel into?" — by **trilinear
+  interpolation**: it finds the eight grid points around the input colour and blends them by
+  how close the input sits to each, so colours between the baked samples come out smooth
+  rather than blocky (a 1D LUT just blends along each channel's own curve). That blending is
+  deliberately the simplest continuous maths there is, because the identical recipe has to run
+  again on the graphics card later and the two must agree to the last decimal — the
+  CPU-reference-as-oracle rule (docs/08 §1.6). The reader is strict about broken files (a
+  missing or repeated size, the wrong number of rows, non-numbers, a size of 0 or 1) and
+  returns a plain typed error rather than ever crashing, and it refuses an absurd cube (over
+  256 points per axis) instead of trying to allocate gigabytes for it. Nothing is wired to an
+  effect yet — this is just the load-and-sample building block.
 - `crates/lumit-core/src/ops.rs` — **Every possible edit, as data.** An edit is an `Op`
   (AddLayer, SetLayerSpan…). Applying an op returns its exact inverse — that pair is what
   makes undo *provably* correct instead of hopefully correct.
