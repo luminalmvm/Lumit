@@ -91,6 +91,69 @@ pub enum ParamKind {
     Layer {},
 }
 
+/// How a transform- or displacement-domain effect treats the border pixels
+/// its warp reveals (P3, K-145): the one reusable Edges control, shared by
+/// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
+/// wire form the resolved ops and every WGSL kernel read — 0 Transparent,
+/// 1 Repeat, 2 Mirror — so the enum only names those numbers, it never
+/// changes them. Any effect whose resample can pull in area outside the
+/// frame reuses this rather than re-deciding what an edge means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgesMode {
+    /// Revealed area is transparent (contributes nothing, full weight kept).
+    Transparent,
+    /// The border pixel is held outward (clamp-to-edge).
+    Repeat,
+    /// The image reflects at the border, without repeating the edge sample.
+    Mirror,
+}
+
+impl EdgesMode {
+    /// The Choice option labels, in code order (index 0/1/2). A schema's Edges
+    /// parameter declares `options: EdgesMode::OPTIONS` (aliased as the shared
+    /// [`EDGE_OPTIONS`](crate::fx::EDGE_OPTIONS) const the blur family already
+    /// uses).
+    pub const OPTIONS: &'static [&'static str] = &["Transparent", "Repeat", "Mirror"];
+
+    /// The wire code the resolved ops and the WGSL kernels read.
+    pub const fn code(self) -> u32 {
+        match self {
+            EdgesMode::Transparent => 0,
+            EdgesMode::Repeat => 1,
+            EdgesMode::Mirror => 2,
+        }
+    }
+
+    /// The mode for a stored Choice index, or `None` for an unknown code (a
+    /// caller supplies its own default). 0 Transparent, 1 Repeat, 2 Mirror.
+    pub const fn from_code(code: u32) -> Option<Self> {
+        match code {
+            0 => Some(EdgesMode::Transparent),
+            1 => Some(EdgesMode::Repeat),
+            2 => Some(EdgesMode::Mirror),
+            _ => None,
+        }
+    }
+}
+
+/// A collapsible group of parameters inside one effect's parameter list
+/// (P4, K-145): the disclosure "twirl" the Effect Controls draws so an effect
+/// can tuck advanced controls behind a header (Shake's per-axis wobble). The
+/// group is driven entirely from schema metadata, so any effect adopts it by
+/// declaring one in its [`EffectSchema::groups`]; the UI renders the named
+/// params under `label` and hides them when the twirl is closed. The member
+/// ids must be a contiguous run in the schema's `params` (they render in
+/// place, where the group's first member sits).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ParamGroup {
+    /// Sentence-case disclosure header.
+    pub label: &'static str,
+    /// The member parameter ids, naming params in the same schema.
+    pub params: &'static [&'static str],
+    /// Whether the twirl starts closed (the advanced-by-default case).
+    pub collapsed: bool,
+}
+
 /// The Add-effect menu's grouping (K-090): every schema declares one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxCategory {
@@ -136,4 +199,8 @@ pub struct EffectSchema {
     pub category: FxCategory,
     pub traits: EffectTraits,
     pub params: &'static [ParamSchema],
+    /// Collapsible parameter groups (P4, K-145): each names a contiguous run
+    /// of `params` the Effect Controls tucks behind a twirl. Empty for the
+    /// effects that declare none.
+    pub groups: &'static [ParamGroup],
 }

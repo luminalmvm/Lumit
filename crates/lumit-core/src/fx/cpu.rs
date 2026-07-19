@@ -99,6 +99,9 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
             *position,
             *scale,
             *rotation_deg,
+            // The Transform effect has no Edges control: transparent border,
+            // its long-standing behaviour.
+            0,
             *opacity,
             *mix,
         ),
@@ -115,31 +118,19 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // Shake is a transform-domain effect (docs/08 §3.4): the
         // resolved wobble maps to the Transform reference through the
         // same shared affine the GPU dispatch uses, so both paths
-        // consume bit-identical numbers. A neutral shake (zero
-        // amplitude, rotation and pump) maps to the identity affine —
-        // the bit-exact passthrough the Transform reference pins.
+        // consume bit-identical numbers. A neutral shake (zero wobble)
+        // maps to the identity affine — the bit-exact passthrough the
+        // Transform reference pins. `edge` is Shake's own Edges control.
         Resolved::Shake {
             offset_px,
             rotation_deg,
             zoom,
-            amp_px,
-            rotation_max_deg,
-            zoom_min,
-            auto_scale,
+            edge,
             mix,
         } => {
-            let (anchor, position, scale, rot) = super::shake_affine(
-                w,
-                h,
-                *offset_px,
-                *rotation_deg,
-                *zoom,
-                *amp_px,
-                *rotation_max_deg,
-                *zoom_min,
-                *auto_scale,
-            );
-            transform(rgba, w, h, anchor, position, scale, rot, 1.0, *mix);
+            let (anchor, position, scale, rot) =
+                super::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
+            transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
         }
         Resolved::BlockGlitch {
             intensity,
@@ -251,8 +242,11 @@ pub fn glow(
 
 /// Transform (docs/08 §3.5, K-090): resample the input through the
 /// inverse of `position + R·S·(p − anchor)` — one bilinear tap per
-/// output pixel, transparent outside the frame, premultiplied
-/// throughout, with opacity multiplied into all four channels.
+/// output pixel, the revealed border handled by `edge` (0 Transparent,
+/// 1 Repeat, 2 Mirror — the same shared policy the blur family uses,
+/// [`EdgesMode`](super::EdgesMode)), premultiplied throughout, with
+/// opacity multiplied into all four channels. The Transform effect passes
+/// `edge = 0`; Shake threads its own Edges control (FX-11/K-146).
 /// Identity parameters reproduce the input bit-exactly: the inverse
 /// affine is exactly `q = p`, a bilinear tap at a pixel centre is
 /// exactly that pixel, and opacity/mix 1 multiply by exact 1.0 — the
@@ -267,6 +261,7 @@ pub fn transform(
     position: [f32; 2],
     scale: [f32; 2],
     rotation_deg: f32,
+    edge: u32,
     opacity: f32,
     mix: f32,
 ) {
@@ -281,7 +276,10 @@ pub fn transform(
             let py = y as f32 + 0.5;
             let qx = m[0] * px + m[1] * py + o[0];
             let qy = m[2] * px + m[3] * py + o[1];
-            let s = bilinear_edge(&original, w, h, qx, qy, 0);
+            // `edge` picks how the revealed border is sampled (0 Transparent,
+            // 1 Repeat, 2 Mirror): the Transform effect passes 0 (its
+            // long-standing behaviour); Shake passes its Edges control.
+            let s = bilinear_edge(&original, w, h, qx, qy, edge);
             for c in 0..4 {
                 let v = s[c] * opacity;
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;

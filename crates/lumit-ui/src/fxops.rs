@@ -460,6 +460,9 @@ pub fn run_ops(
                         off,
                         opacity,
                         mix: *mix,
+                        // The Transform effect has no Edges control: a
+                        // transparent border, its long-standing behaviour.
+                        edge: 0,
                     },
                 );
             }
@@ -494,23 +497,11 @@ pub fn run_ops(
                 offset_px,
                 rotation_deg,
                 zoom,
-                amp_px,
-                rotation_max_deg,
-                zoom_min,
-                auto_scale,
+                edge,
                 mix,
             } => {
-                let (anchor, position, scale, rot) = lumit_core::fx::shake_affine(
-                    w,
-                    h,
-                    *offset_px,
-                    *rotation_deg,
-                    *zoom,
-                    *amp_px,
-                    *rotation_max_deg,
-                    *zoom_min,
-                    *auto_scale,
-                );
+                let (anchor, position, scale, rot) =
+                    lumit_core::fx::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
                 let (m, off, opacity) =
                     lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
                 tex = fx.transform(
@@ -523,6 +514,8 @@ pub fn run_ops(
                         off,
                         opacity,
                         mix: *mix,
+                        // Shake's own Edges control governs the revealed border.
+                        edge: *edge,
                     },
                 );
             }

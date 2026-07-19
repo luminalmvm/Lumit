@@ -215,67 +215,26 @@ pub fn block_hash01(seed: u32, channel: u32, bx: i32, by: i32, tick: i32) -> f32
 /// visible instead of blurring into continuous noise.
 pub const GLITCH_TICK_HZ: f64 = 8.0;
 
-/// The §3.4 Auto-scale cover factor: the smallest uniform scale that keeps
-/// the frame fully covered under every wobble the current parameters allow
-/// (offset up to `amp_px` in any direction, rotation up to
-/// `rot_max_deg` either way, zoom down to `zoom_min`), so no edge is ever
-/// revealed — the montage default. Derived from the inverse map: an output
-/// corner displaced by the offset and rotated back must still land inside
-/// the source frame, per axis. Pure host maths in f64, shared by the CPU
-/// reference and the GPU dispatch so both consume the identical scale.
-pub fn shake_cover_scale(w: u32, h: u32, amp_px: f32, rot_max_deg: f32, zoom_min: f32) -> f32 {
-    let hw = f64::from(w) * 0.5;
-    let hh = f64::from(h) * 0.5;
-    if hw <= 0.0 || hh <= 0.0 {
-        return 1.0;
-    }
-    let ex = hw + f64::from(amp_px.max(0.0));
-    let ey = hh + f64::from(amp_px.max(0.0));
-    let rot = f64::from(rot_max_deg.abs()).to_radians();
-    // max over θ ∈ [0, rot] of a·cos θ + b·sin θ: at the interior optimum
-    // atan2(b, a) when rot reaches it, else at rot itself.
-    let reach = |a: f64, b: f64| -> f64 {
-        if rot >= b.atan2(a) {
-            a.hypot(b)
-        } else {
-            a * rot.cos() + b * rot.sin()
-        }
-    };
-    // A full zoom-out pump (zoom_min → 0) cannot be covered by any finite
-    // scale; clamp so the cover stays large but sane rather than infinite.
-    let z = f64::from(zoom_min).max(1e-3);
-    ((reach(ex, ey) / hw).max(reach(ey, ex) / hh) / z).max(1.0) as f32
-}
-
 /// A resolved Shake as the transform-effect ingredients it dispatches as
 /// (docs/08 §3.4: a transform-domain effect — perturb a virtual camera,
 /// resample once): `(anchor, position, scale, rotation)` for
 /// [`transform_op`] / [`cpu::transform`], wobbling about the frame centre.
 /// Both the CPU reference and the GPU path build from this one function,
-/// so every path consumes bit-identical numbers.
-#[allow(clippy::too_many_arguments)]
+/// so every path consumes bit-identical numbers. The revealed border is the
+/// caller's Edges policy (P3, K-145), applied by the resample itself — there
+/// is no cover-scale any more (FX-11/K-146 dropped Auto-scale).
 pub fn shake_affine(
     w: u32,
     h: u32,
     offset_px: [f32; 2],
     rotation_deg: f32,
     zoom: f32,
-    amp_px: f32,
-    rotation_max_deg: f32,
-    zoom_min: f32,
-    auto_scale: bool,
 ) -> ([f32; 2], [f32; 2], [f32; 2], f32) {
     let centre = [w as f32 * 0.5, h as f32 * 0.5];
-    let cover = if auto_scale {
-        shake_cover_scale(w, h, amp_px, rotation_max_deg, zoom_min)
-    } else {
-        1.0
-    };
-    let s = zoom * cover;
     (
         centre,
         [centre[0] + offset_px[0], centre[1] + offset_px[1]],
-        [s, s],
+        [zoom, zoom],
         rotation_deg,
     )
 }

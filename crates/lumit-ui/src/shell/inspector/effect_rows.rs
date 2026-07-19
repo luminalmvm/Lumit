@@ -308,10 +308,30 @@ pub(crate) fn effects_rows(
         }
         // One row per parameter, driven by the schema.
         let Some(schema) = schema else { continue };
+        // Collapsible parameter groups (P4, K-145): a group's params render
+        // under a disclosure twirl and hide when it is closed. Members are a
+        // contiguous run in the schema, so tracking the current group as the
+        // loop walks the params is enough — the header draws when we step into
+        // a group, and its open state gates the members until we step out.
+        let mut current_group: Option<&'static str> = None;
+        let mut group_open = true;
         for (pi, param) in e.params.iter().enumerate() {
             let Some(ps) = schema.params.iter().find(|p| p.id == param.id) else {
                 continue;
             };
+            let group = schema.groups.iter().find(|g| g.params.contains(&ps.id));
+            if group.map(|g| g.label) != current_group {
+                current_group = group.map(|g| g.label);
+                if let Some(g) = group {
+                    let gid = egui::Id::new(("fxgroup", e.id, g.label));
+                    group_open =
+                        group_header_row(ui, ctx.theme, g.label, gid, !g.collapsed, ctx.viewport);
+                }
+            }
+            // Inside a closed group: the member row is hidden.
+            if group.is_some() && !group_open {
+                continue;
+            }
             // Row selection (note 2.8.1): this param's row identity, whether it
             // is the highlighted one, and — set below on a click anywhere in the
             // row — the selection to hand back to the caller.

@@ -378,8 +378,8 @@ later; every shipped parameter is stable when they do.
 ### 3.4 Shake — parameterised camera shake (S_Shake-class)
 
 Seeded-noise transform wobble, the beatshake workhorse. Implemented as a transform-domain
-effect: it perturbs a virtual camera (translation, rotation, optional zoom pump) and
-resamples the layer once — not a pixel-noise effect.
+effect: it perturbs a virtual camera (translation, rotation, and a per-axis x/y/z wobble
+where z is a depth/scale shake) and resamples the layer once — not a pixel-noise effect.
 
 **Algorithm sketch.** Three independent 1D fractal noise generators (fBm over seeded value
 noise, 2–4 octaves) drive x, y (as % diag) and rotation (degrees), sampled at
@@ -396,28 +396,40 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Amplitude | 0–20 % diag | 1.5 % diag |
 | Frequency | 0.1–30 Hz | 8 Hz |
 | Rotation amount | 0–45° | 1° |
-| Zoom pump | 0–20% | 0 |
+| *Per-axis wobble* (twirl) | | |
+| — X amount / X frequency | ×0–2 / ×0–4 | ×1 / ×1 |
+| — Y amount / Y frequency | ×0–2 / ×0–4 | ×1 / ×1 |
+| — Z amount / Z frequency | 0–20% / ×0–4 | 0 / ×1 |
+| Edges | Transparent / Repeat / Mirror | Repeat |
 | Mode | Continuous / Triggered | Continuous |
 | Trigger source | marker-trigger | comp beat markers |
 | Decay | 0.05–2 s | 0.35 s |
 | Motion blur shake | boolean | on |
 | Seed | seed | per-instance |
 
-"Motion blur shake" samples the wobble at shutter sub-times so fast shakes streak
-naturally (the S_Shake feature wiggle expressions never had). Edge policy: the resample
-reveals area outside the layer; options Repeat edge / Mirror / Transparent / Auto-scale
-(scales up by max amplitude so no edges ever show — the montage default).
+The master Amplitude and Frequency drive the overall translational sway; the **Per-axis
+wobble** twirl (K-146) biases each axis and adds depth. X and Y amount/frequency are
+dimensionless multipliers on the master values (×1 reproduces the plain uniform shake); Z
+is the depth/scale shake — Z amount is a scale-pump per cent (the old Zoom pump, same
+range), Z frequency a rate multiplier. **Edges** (K-145, the reusable control) governs the
+border the resample reveals: Transparent leaves it clear, Repeat holds the edge pixel,
+Mirror reflects. "Motion blur shake" samples the wobble at shutter sub-times so fast shakes
+streak naturally (the S_Shake feature wiggle expressions never had).
 
-**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, Zoom
-pump, Seed (per-instance default, with reseed) and an Auto-scale Bool (on, the montage
-default: an exact cover scale computed from the declared maxima keeps every corner
-covered; off reveals transparency). The generator is pinned as two octaves of seeded
-value noise (lacunarity 2, gain 0.5, smoothstep-interpolated, one independent channel
-per axis) sampled at local time × frequency — deterministic and hop-free per §2.4.
-Resolved host-side into an affine and dispatched through the §3.5 Transform kernel: no
-kernel of its own, and the zero-wobble state is a bit-exact passthrough (pinned by
-test). Style presets, Triggered mode (§1.4), Motion blur shake and the Repeat/Mirror
-edge options follow; shipped parameters are stable when they do.
+**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, the
+Per-axis wobble twirl (X/Y/Z amount and frequency), an Edges control (Transparent / Repeat
+/ Mirror, default Repeat) and Seed (per-instance default, with reseed). The generator is
+pinned as two octaves of seeded value noise (lacunarity 2, gain 0.5, smoothstep-
+interpolated, one independent channel per axis) sampled at local time × frequency —
+deterministic and hop-free per §2.4. Resolved host-side into an affine and dispatched
+through the §3.5 Transform kernel (which now carries the Edges policy): no kernel of its
+own, and the zero-wobble state is a bit-exact passthrough (pinned by test). **Migration
+(FX-11/K-146):** this reshape replaced the old Zoom pump and Auto-scale bool — a project
+saved before it maps its Zoom pump to the Z amount, and its Auto-scale to the Edges control
+(on → Repeat, which hides the border as the cover scale once did; off → Transparent). The
+Auto-scale cover (which zoomed in to keep every corner covered) is gone; the Edges control
+handles the revealed border instead. Style presets, Triggered mode (§1.4) and Motion blur
+shake follow; shipped parameters are stable when they do.
 
 ### 3.5 Transform — the transform properties as an effect (K-090)
 

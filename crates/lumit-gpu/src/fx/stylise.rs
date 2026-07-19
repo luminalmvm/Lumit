@@ -81,6 +81,9 @@ pub struct TransformOp {
     pub opacity: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The revealed border's edge policy (P3, K-145): 0 Transparent, 1 Repeat,
+    /// 2 Mirror. The Transform effect passes 0; Shake threads its Edges control.
+    pub edge: u32,
 }
 
 #[repr(C)]
@@ -90,6 +93,10 @@ struct TransformParams {
     off: [f32; 2],
     opacity: f32,
     mix_amt: f32,
+    edge: u32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
@@ -260,6 +267,10 @@ impl FxEngine {
                 off: op.off,
                 opacity: op.opacity,
                 mix_amt: op.mix,
+                edge: op.edge,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out

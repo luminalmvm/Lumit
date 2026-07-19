@@ -263,24 +263,20 @@ pub enum Resolved {
         mix: f32,
     },
     /// A shake, already sampled at this frame (the noise runs at resolve
-    /// time, host-side): the current wobble plus the declared maxima the
-    /// Auto-scale cover is computed from. Dispatches through the Transform
-    /// kernel via [`shake_affine`] — no kernel of its own.
+    /// time, host-side): the current wobble, dispatched through the Transform
+    /// kernel via [`shake_affine`] — no kernel of its own. `edge` (P3, K-145)
+    /// governs the border the resample reveals; there is no Auto-scale cover
+    /// any more (FX-11/K-146 replaced it with this Edges control).
     Shake {
         /// This frame's wobble offset, raster pixels.
         offset_px: [f32; 2],
         /// This frame's rotation wobble, degrees.
         rotation_deg: f32,
-        /// This frame's zoom factor; 1 = no pump.
+        /// This frame's zoom factor; 1 = no depth (z) shake.
         zoom: f32,
-        /// The amplitude ceiling in raster pixels (Auto-scale input).
-        amp_px: f32,
-        /// The rotation ceiling in degrees (Auto-scale input).
-        rotation_max_deg: f32,
-        /// The zoom floor, 1 − pump (Auto-scale input).
-        zoom_min: f32,
-        /// True: scale up so the wobble never reveals an edge (§3.4).
-        auto_scale: bool,
+        /// Edge policy for the revealed border: 0 Transparent, 1 Repeat,
+        /// 2 Mirror ([`EdgesMode`]).
+        edge: u32,
         /// 0..1.
         mix: f32,
     },
@@ -516,16 +512,20 @@ fn resolve_one(
             let cy = (e.float_at("centre_y", lt).unwrap_or(50.0) / 100.0) as f32;
             let amount_pct = e.float_at("amount", lt).unwrap_or(0.0) as f32;
             let spin = !matches!(e.param("radial_type"), Some(EffectValue::Choice(1)));
+            // The reusable Edges control (P3, K-145): the stored Choice maps
+            // through EdgesMode (clamped to the known set, default Repeat).
             let edge = match e.param("edge") {
-                Some(EffectValue::Choice(c)) => (*c).min(2),
-                _ => 1,
+                Some(EffectValue::Choice(c)) => {
+                    EdgesMode::from_code((*c).min(2)).unwrap_or(EdgesMode::Repeat)
+                }
+                _ => EdgesMode::Repeat,
             };
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
             Some(Resolved::RadialBlur {
                 centre_frac: [cx, cy],
                 amount_px: (amount_pct / 100.0 * diag_px).max(0.0),
                 spin,
-                edge,
+                edge: edge.code(),
                 mix,
             })
         }
@@ -836,32 +836,52 @@ fn resolve_one(
             let amp_pct = (e.float_at("amplitude", lt).unwrap_or(1.5) as f32).max(0.0);
             let freq = e.float_at("frequency", lt).unwrap_or(8.0).max(0.0);
             let rot_amount = (e.float_at("rotation", lt).unwrap_or(1.0) as f32).max(0.0);
-            let pump = (e.float_at("zoom_pump", lt).unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let auto_scale = match e.param("auto_scale") {
-                Some(EffectValue::Bool(b)) => *b,
-                _ => true,
+            // Per-axis wobble (twirl group, K-146): amount multipliers scale
+            // the master Amplitude, frequency multipliers the master rate.
+            // Defaults of 1 reproduce the old uniform x/y shake exactly.
+            let x_amp = (e.float_at("x_amp", lt).unwrap_or(1.0) as f32).max(0.0);
+            let y_amp = (e.float_at("y_amp", lt).unwrap_or(1.0) as f32).max(0.0);
+            let x_freq = e.float_at("x_freq", lt).unwrap_or(1.0).max(0.0);
+            let y_freq = e.float_at("y_freq", lt).unwrap_or(1.0).max(0.0);
+            let z_freq = e.float_at("z_freq", lt).unwrap_or(1.0).max(0.0);
+            // z (depth/scale) amount: the new id, else the old `zoom_pump`
+            // (migration — a project saved before FX-11 keeps its pump), a
+            // scale-pump per cent either way.
+            let z_pct = e
+                .float_at("z_amp", lt)
+                .or_else(|| e.float_at("zoom_pump", lt))
+                .unwrap_or(0.0) as f32;
+            let z_amp = (z_pct / 100.0).clamp(0.0, 1.0);
+            // Edges (P3, K-145): the new `edge` Choice, else migrate the old
+            // Auto-scale bool (on → Repeat hides the border as the cover once
+            // did; off → Transparent), else the schema default Repeat.
+            let edge = match e.param("edge") {
+                Some(EffectValue::Choice(c)) => {
+                    EdgesMode::from_code((*c).min(2)).unwrap_or(EdgesMode::Repeat)
+                }
+                _ => match e.param("auto_scale") {
+                    Some(EffectValue::Bool(false)) => EdgesMode::Transparent,
+                    _ => EdgesMode::Repeat,
+                },
             };
             let seed = match e.param("seed") {
                 Some(EffectValue::Seed(s)) => *s,
                 _ => 0,
             };
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // The wobble: four independent noise channels sampled at
-            // local time × frequency (§3.4) — deterministic, hop-free,
-            // identical on every machine (§2.4).
-            let x = lt * freq;
+            // The wobble: independent noise channels sampled at local time ×
+            // frequency (per axis, §3.4) — deterministic, hop-free, identical
+            // on every machine (§2.4).
+            let base = lt * freq;
             let amp_px = (amp_pct / 100.0 * diag_px).max(0.0);
             Some(Resolved::Shake {
                 offset_px: [
-                    amp_px * shake_noise(seed, 0, x) as f32,
-                    amp_px * shake_noise(seed, 1, x) as f32,
+                    amp_px * x_amp * shake_noise(seed, 0, base * x_freq) as f32,
+                    amp_px * y_amp * shake_noise(seed, 1, base * y_freq) as f32,
                 ],
-                rotation_deg: rot_amount * shake_noise(seed, 2, x) as f32,
-                zoom: 1.0 + pump * shake_noise(seed, 3, x) as f32,
-                amp_px,
-                rotation_max_deg: rot_amount,
-                zoom_min: 1.0 - pump,
-                auto_scale,
+                rotation_deg: rot_amount * shake_noise(seed, 2, base) as f32,
+                zoom: 1.0 + z_amp * shake_noise(seed, 3, base * z_freq) as f32,
+                edge: edge.code(),
                 mix,
             })
         }

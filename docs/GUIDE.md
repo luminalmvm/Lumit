@@ -384,14 +384,38 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   project shakes identically on every machine and every run — there is no real
   randomness anywhere, only maths that looks random (the engine's seeded-and-stateless
   rule). Amplitude sets how far it roams (as % of the comp diagonal), Frequency how
-  fast, Rotation amount how much twist; Auto-scale (on by default) zooms in just enough
-  that the wobble never drags the frame's edge into view. Seed is a new parameter type:
-  an integer picking *which* wander you get — each new instance rolls its own so two
-  shaken layers never move in sync, and the Reseed button rolls a fresh one. Shake also
-  taught the frame cache a lesson: its parameters can sit constant while the picture
-  moves every frame, so for effects that declare seeded randomness the cache key now
-  includes the layer's local time — without that, a shaken solid would replay its first
-  cached frame forever.
+  fast, Rotation amount how much twist. A **Per-axis wobble** twirl (a collapsible
+  sub-section, see below) tucks the finer controls away: X and Y amount/frequency let you
+  bias each axis (they multiply the master values, so leaving them at 1 gives the plain
+  even shake), and Z is a depth shake — the frame pumps a little bigger and smaller, the
+  old "zoom pump" renamed. When the wobble drags the frame's edge into view, the **Edges**
+  control decides what shows there: Transparent (a clear border), Repeat (the edge pixel
+  held outward) or Mirror (the picture reflected) — the same three choices the blur effects
+  offer (see "Edges control" below). This replaced an older Auto-scale toggle that quietly
+  zoomed in to hide the border; a project saved before the change carries its old zoom-pump
+  and auto-scale settings across automatically (auto-scale on becomes Repeat, off becomes
+  Transparent). Seed is a new parameter type: an integer picking *which* wander you get —
+  each new instance rolls its own so two shaken layers never move in sync, and the Reseed
+  button rolls a fresh one. Shake also taught the frame cache a lesson: its parameters can
+  sit constant while the picture moves every frame, so for effects that declare seeded
+  randomness the cache key now includes the layer's local time — without that, a shaken
+  solid would replay its first cached frame forever.
+- **Edges control (a shared effect building block).** Several effects move pixels around —
+  a blur that smears sideways, a shake that slides the whole frame — and wherever the
+  picture shifts, it can pull in area from *outside* the layer that has no pixels of its
+  own. The Edges control names what to put there, with three settings shared by every
+  effect that needs them: **Transparent** (leave it clear), **Repeat** (stretch the very
+  edge pixel outward, so full-screen footage never grows a dark border) and **Mirror**
+  (reflect the picture back on itself). It is one small reusable piece rather than each
+  effect inventing its own, so it behaves identically everywhere it appears (in code it is
+  a shared `EdgesMode` with three fixed options).
+- **Collapsible "twirl" sub-sections in effect controls.** An effect's parameter list can
+  hide its advanced controls behind a disclosure triangle — a little header you click to
+  fold a group open or shut, exactly like twirling a layer open in the timeline. Shake's
+  "Per-axis wobble" is the first: the everyday knobs (Amplitude, Frequency, Rotation) stay
+  in plain view, and the per-axis fine-tuning tucks away until you want it. Any effect can
+  ask for one just by declaring the group in its parameter schema — it is a reusable piece
+  of the effect-controls panel, not something written afresh each time.
 - **Glow.** The montage bloom: anything brighter than Threshold spills light. The
   pipeline is three steps — keep only the light *above* the threshold (with Knee
   easing the cut so it doesn't snap on), blur that leftover wide (Radius, measured

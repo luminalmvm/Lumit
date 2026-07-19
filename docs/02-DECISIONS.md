@@ -1522,3 +1522,48 @@ idle comps are untouched. A full per-audio-block re-mix from cached decoded sour
 apply with zero re-decode latency) is the natural next step but was deferred as a larger
 refactor of the single-baked-buffer engine. Built in an isolated worktree; not pushed —
 another agent may also claim K-141, renumber on merge if so.
+
+**K-145 · DECIDED · Two reusable effect-UI primitives: a shared Edges mode enum (P3) and
+schema-driven collapsible parameter groups (P4).** Factored out so effects stop re-deciding
+two recurring shapes:
+- **`EdgesMode { Transparent, Repeat, Mirror }`** (`lumit-core::fx`) names the one edge
+  policy a transform- or displacement-domain effect applies to the border its warp reveals.
+  The blur family and Shake already spoke it as loose 0/1/2 `u32` codes plus an
+  `EDGE_OPTIONS` string slice; the enum makes that vocabulary a type — `code()` /
+  `from_code()` are the only bridge to the wire form the resolved ops and WGSL kernels read
+  (the numbers are unchanged, so nothing re-serialises), and `EDGE_OPTIONS` is now
+  `EdgesMode::OPTIONS`. Radial blur's resolve flows through it unchanged; new effects reuse
+  it rather than inventing an edge meaning. The Transform *effect* itself stays
+  transparent-only (it passes code 0), but its shared kernel — CPU `cpu::transform` and
+  `fx_transform.wgsl` — gained an `edge` parameter so Shake can dispatch through it with any
+  policy; `edge = 0` is bit-identical to the old transparent-only kernel (pinned by the
+  transform oracle, which now sweeps all three modes).
+- **`ParamGroup`** (a `label` + a contiguous run of member param ids + a `collapsed`
+  default) is declared on `EffectSchema::groups`, and the Effect Controls panel renders each
+  group under a disclosure "twirl" (reusing `group_header_row`, the same header a layer's
+  Transform/Effects sections use), hiding its members when closed. Driven entirely from
+  schema metadata, so any effect adopts a twirl by declaring a group — no per-effect UI
+  code. Every existing schema declares `groups: &[]`. Spec: [08-EFFECTS.md](08-EFFECTS.md)
+  §3.4/§3.8. Built in an isolated worktree; not pushed — another agent may also claim K-145,
+  renumber on merge if so.
+
+**K-146 · DECIDED · Shake reshaped: a per-axis wobble twirl, and Edges replaces Auto-scale
+(FX-11).** The Shake effect (§3.4) keeps its master Amplitude / Frequency / Rotation amount
+and gains a **Per-axis wobble** twirl (the K-145 P4 group) holding per-axis **x / y / z**
+amount and frequency: x and y amount/frequency are dimensionless multipliers on the master
+values (default ×1 reproduces the old uniform x/y shake bit-for-bit), and **z** is the
+depth/scale shake — z amount is a scale-pump per cent that **replaces the old "Zoom pump"**
+(same range and meaning), z frequency a rate multiplier. The **Auto-scale** bool is
+**removed** and replaced by an **Edges** control (the K-145 P3 enum, default Repeat): the
+resample's revealed border is now handled by the edge policy rather than by an automatic
+cover-scale that zoomed in to hide it. Shake stays seeded and deterministic (§1.3/§2.4): the
+generator (two octaves of value noise per axis) and the host-side affine → Transform-kernel
+dispatch are unchanged, so with default per-axis values the resolved wobble is identical to
+before; only the border treatment and the new z/frequency biasing differ. **Migration:** a
+project saved before FX-11 has its `zoom_pump` read as the z amount and its `auto_scale`
+read as the Edges control (on → Repeat, off → Transparent) via resolve-time fallbacks, so
+saved shakes keep their pump and never sprout a transparent border unexpectedly; the
+Auto-scale cover behaviour itself is gone (an intentional change — the wobble no longer
+zooms to hide edges). CPU/GPU parity and the §1.6 oracle hold across all three edge modes.
+Spec: [08-EFFECTS.md](08-EFFECTS.md) §3.4. Built in an isolated worktree; not pushed —
+another agent may also claim K-146, renumber on merge if so.

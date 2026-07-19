@@ -4,8 +4,19 @@ use crate::model::{
     EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, FileParam,
 };
 
-/// Edge policy shared by the blur family (docs/08 §3.8).
-pub const EDGE_OPTIONS: &[&str] = &["Transparent", "Repeat", "Mirror"];
+/// Edge-policy option labels shared by the blur family (docs/08 §3.8) and
+/// Shake (§3.4). Backed by the reusable [`EdgesMode`] enum (P3, K-145), so the
+/// labels and the 0/1/2 codes stay in one place.
+pub const EDGE_OPTIONS: &[&str] = EdgesMode::OPTIONS;
+
+/// Shake's per-axis wobble (FX-11, K-146), tucked behind a twirl (P4): the
+/// master Amplitude/Frequency drive x and y together, and this group biases
+/// each axis, adding the z (depth/scale) shake that replaces the old Zoom pump.
+const SHAKE_GROUPS: &[ParamGroup] = &[ParamGroup {
+    label: "Per-axis wobble",
+    params: &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"],
+    collapsed: true,
+}];
 
 /// The host-uniform Mix parameter every effect ends with (docs/08 §1.5),
 /// in per cent, blending processed over unprocessed input.
@@ -39,6 +50,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // Directional resolve at the old default, Repeat (full-frame game
     // footage never darkens along the border), so their look is unchanged.
     EffectSchema {
+        groups: &[],
         match_name: "blur",
         label: "Gaussian blur",
         version: 1,
@@ -76,6 +88,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // Repeat-edged (see the family note above). ROI is full-frame: an
     // unbounded Length cannot be padded statically.
     EffectSchema {
+        groups: &[],
         match_name: "directional_blur",
         label: "Directional blur",
         version: 1,
@@ -129,6 +142,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // (Transparent/Repeat/Mirror); its taps run through the same
     // bilinear_edge sampler the others use.
     EffectSchema {
+        groups: &[],
         match_name: "radial_blur",
         label: "Radial blur",
         version: 1,
@@ -201,6 +215,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // Labelled "Unsharp mask" since K-138 split the plain 3×3 Sharpen out
     // below; the match_name stays "sharpen" so saved projects are unchanged.
     EffectSchema {
+        groups: &[],
         match_name: "sharpen",
         label: "Unsharp mask",
         version: 1,
@@ -266,6 +281,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // reach — the honest "just sharpen it" control next to the Unsharp mask's
     // radius/threshold/luma knobs.
     EffectSchema {
+        groups: &[],
         match_name: "sharpen_simple",
         label: "Sharpen",
         version: 1,
@@ -304,6 +320,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // extras land later; radial mode grows the offset from the frame
     // centre.
     EffectSchema {
+        groups: &[],
         match_name: "rgb_split",
         label: "RGB split",
         version: 1,
@@ -370,6 +387,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // fringe" is the honest unit for a single-purpose corner effect with no
     // angle to share a currency with.
     EffectSchema {
+        groups: &[],
         match_name: "chromatic_aberration",
         label: "Chromatic aberration",
         version: 1,
@@ -410,6 +428,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // resolve as Manual, byte-identically. Default is a no-op by design:
     // §1.2 exempts inherently trigger-driven effects.
     EffectSchema {
+        groups: &[],
         match_name: "flash",
         label: "Flash",
         version: 1,
@@ -526,6 +545,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // a grade's "tasteful default" is a preset choice, which is what the
     // §3.10 preset browser is for.
     EffectSchema {
+        groups: &[],
         match_name: "colour_balance",
         label: "Colour balance",
         version: 1,
@@ -574,6 +594,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // colour (§2.2). Neutral default: like the balance above, its tasteful
     // setting is a preset choice.
     EffectSchema {
+        groups: &[],
         match_name: "saturation",
         label: "Saturation",
         version: 1,
@@ -611,6 +632,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // and Saturation — its closest siblings and where §3.10's own text
     // already lists it.
     EffectSchema {
+        groups: &[],
         match_name: "vignette",
         label: "Vignette",
         version: 1,
@@ -682,6 +704,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // alpha is untouched. 0 stops is the neutral point (bit-exact passthrough,
     // pinned by test). Category Colour, beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "exposure",
         label: "Exposure",
         version: 1,
@@ -720,6 +743,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // 0° is the bit-exact neutral point in both modes. Category Colour,
     // beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "hue_shift",
         label: "Hue shift",
         version: 1,
@@ -765,6 +789,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // round/clamp/quantize), so the §1.6 oracle holds. Category Colour, beside
     // its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "contrast",
         label: "Contrast",
         version: 1,
@@ -804,6 +829,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // everywhere for input ≥ 0, so the §1.6 oracle holds. Category Colour,
     // beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "gamma",
         label: "Gamma",
         version: 1,
@@ -847,6 +873,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // factors. Temperature 0 is the neutral point (gains 1.0, bit-exact
     // passthrough, pinned by test). Category Colour, beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "temperature",
         label: "Temperature",
         version: 1,
@@ -890,6 +917,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // missing, 1D or unreadable file is a labelled no-op, never a fault (§3.11
     // never-crash rule). Moderate cost (a per-pixel 3D lookup), Exact ROI.
     EffectSchema {
+        groups: &[],
         match_name: "lut",
         label: "LUT",
         version: 1,
@@ -932,6 +960,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // gather: the static declaration covers the Aperture slider's 40 px@comp
     // maximum across typical rasters (docs/08 §2.3 % diag ≈ 40 px at ≥ 1080p).
     EffectSchema {
+        groups: &[],
         match_name: "dof",
         label: "Depth of field",
         version: 1,
@@ -1067,6 +1096,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // touching per-layer transforms. Identity parameters pass the input
     // through bit-exactly (pinned by test). The §3.5 Skew pair is post-v1.
     EffectSchema {
+        groups: &[],
         match_name: "transform",
         label: "Transform",
         version: 1,
@@ -1174,6 +1204,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // four premultiplied channels alike, so the halo carries alpha and glow
     // spreads over transparency like light.
     EffectSchema {
+        groups: &[],
         match_name: "glow",
         label: "Glow",
         version: 1,
@@ -1256,15 +1287,18 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
-    // Shake (docs/08 §3.4): seeded camera-shake — a transform-domain
-    // wobble (translation, rotation, zoom pump) resampled once through the
-    // Transform kernel, never pixel noise. The v1 continuous form ships
-    // Amplitude/Frequency/Rotation amount/Zoom pump/Auto-scale/Seed; the
-    // Style presets, Triggered mode (§1.4 markers), Motion blur shake and
-    // the Repeat/Mirror edge options follow — these parameters stay stable
-    // when they do. Seeded (§1.3): its pixels are a function of time under
-    // constant parameters, which the frame key reads (lumit-eval).
+    // Shake (docs/08 §3.4, FX-11/K-146): seeded camera-shake — a
+    // transform-domain wobble resampled once through the Transform kernel,
+    // never pixel noise. The master Amplitude/Frequency/Rotation drive the
+    // overall translational sway; a "Per-axis wobble" twirl (P4) biases each
+    // of x, y and z (z is the depth/scale shake that replaced the old Zoom
+    // pump), and an Edges control (P3) governs the border the wobble reveals
+    // (it replaced the old Auto-scale bool). Style presets, Triggered mode
+    // (§1.4 markers) and Motion blur shake follow — these parameters stay
+    // stable when they do. Seeded (§1.3): its pixels are a function of time
+    // under constant parameters, which the frame key reads (lumit-eval).
     EffectSchema {
+        groups: SHAKE_GROUPS,
         match_name: "shake",
         label: "Shake",
         version: 1,
@@ -1310,10 +1344,54 @@ pub const BUILTINS: &[EffectSchema] = &[
                     hard: (Some(0.0), Some(360.0)),
                 },
             },
+            // The "Per-axis wobble" twirl (SHAKE_GROUPS): x/y amount and
+            // frequency are dimensionless multipliers on the master Amplitude
+            // and Frequency (default 1 reproduces the old uniform x/y shake);
+            // z is the depth/scale shake — z amount is a scale-pump per cent
+            // (the old Zoom pump, same range) and z frequency a rate multiplier.
             ParamSchema {
-                id: "zoom_pump",
-                label: "Zoom pump",
-                // % of scale wobble about natural size (§3.4).
+                id: "x_amp",
+                label: "X amount",
+                // × the master Amplitude (0 stills this axis).
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "x_freq",
+                label: "X frequency",
+                // × the master Frequency.
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "y_amp",
+                label: "Y amount",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "y_freq",
+                label: "Y frequency",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "z_amp",
+                label: "Z amount",
+                // Depth/scale shake, % of scale wobble about natural size —
+                // the old Zoom pump's range and meaning (§3.4).
                 kind: ParamKind::Float {
                     default: 0.0,
                     slider: (0.0, 20.0),
@@ -1321,12 +1399,24 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                id: "auto_scale",
-                label: "Auto-scale",
-                // On (the montage default): scale up by the declared maxima
-                // so the wobble never reveals an edge. Off: revealed area
-                // is transparent. The §3.4 Repeat/Mirror options follow.
-                kind: ParamKind::Bool { default: true },
+                id: "z_freq",
+                label: "Z frequency",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "edge",
+                label: "Edges",
+                // How the resample treats the border the wobble reveals (P3,
+                // K-145). Default Repeat: full-frame game footage never
+                // darkens along the edge, matching the blur family's choice.
+                kind: ParamKind::Choice {
+                    options: EDGE_OPTIONS,
+                    default: 1,
+                },
             },
             ParamSchema {
                 id: "seed",
@@ -1375,6 +1465,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // continuous noise; no rate parameter is listed in the spec text, so
     // this is pinned as an internal constant.
     EffectSchema {
+        groups: &[],
         match_name: "block_glitch",
         label: "Block glitch",
         version: 1,
@@ -1469,6 +1560,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // direction); Interlace alternates which half of each scanline period
     // darkens on odd periods, the classic interlaced-field look.
     EffectSchema {
+        groups: &[],
         match_name: "scanlines",
         label: "Scanlines",
         version: 1,
@@ -1548,6 +1640,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // wobble, a channel split) — but Datamosh itself reads no hash or seed,
     // so `seeded: false`, unlike them.
     EffectSchema {
+        groups: &[],
         match_name: "datamosh",
         label: "Datamosh",
         version: 1,
@@ -1592,6 +1685,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // stacking is later) — so it echoes the footage, placed by the layer's
     // own transform like any effect output.
     EffectSchema {
+        groups: &[],
         match_name: "echo",
         label: "Echo",
         version: 1,
@@ -1648,6 +1742,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // across many frames). Scope chooses adjustment behaviour (Everything below,
     // the owner's global pass) or a per-layer time hold (This layer's effects).
     EffectSchema {
+        groups: &[],
         match_name: "posterize_time",
         label: "Posterize time",
         version: 1,
@@ -1721,6 +1816,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // result against the frame-time composite. Boundaries as Posterize (K-125):
     // temporal effects inside the sampled below-stack hold to stills.
     EffectSchema {
+        groups: &[],
         match_name: "accumulation_mb",
         label: "Accumulation motion blur",
         version: 1,
@@ -1804,6 +1900,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // darkens the border. Cost heavy, full-frame ROI; footage layers only,
     // exactly like Echo (adjustment-layer temporal effects follow).
     EffectSchema {
+        groups: &[],
         match_name: "motion_blur",
         label: "Motion blur",
         version: 1,
@@ -1864,6 +1961,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // no neutral no-op default (Mix 0 is the identity). A viewer eyedropper to
     // pick the key colour off the image is a nice follow-up, out of scope here.
     EffectSchema {
+        groups: &[],
         match_name: "matte_key",
         label: "Matte key",
         version: 1,
@@ -1935,6 +2033,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // is no neutral no-op default — invert always inverts (§1.2) — so only Mix 0 is
     // the identity. Category Colour, beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "invert",
         label: "Invert",
         version: 1,
@@ -1961,6 +2060,7 @@ pub const BUILTINS: &[EffectSchema] = &[
     // the identity. Continuous everywhere, so the §1.6 oracle holds. Category Colour,
     // beside its grade siblings.
     EffectSchema {
+        groups: &[],
         match_name: "tint",
         label: "Tint",
         version: 1,

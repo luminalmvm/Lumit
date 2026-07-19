@@ -2563,72 +2563,30 @@ fn shake_noise_is_deterministic_seeded_and_hop_free() {
 }
 
 #[test]
-fn shake_cover_scale_keeps_every_worst_case_corner_inside() {
-    // For a sweep of parameter sets, the inverse map of every frame
-    // corner under every extreme wobble must stay inside the source
-    // frame when the cover scale is applied.
-    for (w, h, amp, rot, zmin) in [
-        (1920u32, 1080u32, 33.0f32, 1.0f32, 1.0f32),
-        (1920, 1080, 440.0, 45.0, 0.8),
-        (640, 480, 0.0, 0.0, 1.0),
-        (100, 100, 10.0, 30.0, 0.9),
-        (1280, 720, 100.0, 5.0, 1.0),
-    ] {
-        let cover = shake_cover_scale(w, h, amp, rot, zmin);
-        assert!(cover >= 1.0, "cover never shrinks the frame");
-        let (cx, cy) = (f64::from(w) * 0.5, f64::from(h) * 0.5);
-        // The tolerance absorbs the cover's f64 → f32 rounding: a
-        // thousandth of a pixel, far below anything visible.
-        let tol = 1e-3;
-        for (ox, oy) in [(amp, amp), (-amp, amp), (amp, -amp), (-amp, -amp)] {
-            // Sweep the rotation range densely: the worst angle sits
-            // strictly inside (−rot, rot) for wide frames.
-            for k in 0..=8 {
-                let theta = f64::from(rot) * (f64::from(k) / 4.0 - 1.0);
-                for zoom in [zmin, 1.0] {
-                    let s = f64::from(cover) * f64::from(zoom);
-                    let rad = theta.to_radians();
-                    for (px, py) in [
-                        (0.0, 0.0),
-                        (f64::from(w), 0.0),
-                        (0.0, f64::from(h)),
-                        (f64::from(w), f64::from(h)),
-                    ] {
-                        // Inverse map: q = centre + R(−θ)·(p − centre − off)/s.
-                        let ux = px - cx - f64::from(ox);
-                        let uy = py - cy - f64::from(oy);
-                        let qx = cx + (rad.cos() * ux + rad.sin() * uy) / s;
-                        let qy = cy + (-rad.sin() * ux + rad.cos() * uy) / s;
-                        assert!(
-                            qx >= -tol
-                                && qx <= f64::from(w) + tol
-                                && qy >= -tol
-                                && qy <= f64::from(h) + tol,
-                            "{w}x{h} amp {amp} rot {rot} zmin {zmin} theta {theta}: \
-                                 corner ({px},{py}) maps outside to ({qx},{qy})"
-                        );
-                    }
-                }
-            }
-        }
-    }
-    // Zero maxima: the cover is exactly 1 — auto-scale on a neutral
-    // shake stays the bit-exact identity.
-    assert_eq!(shake_cover_scale(1920, 1080, 0.0, 0.0, 1.0), 1.0);
-}
-
-#[test]
 fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     let e = instantiate("shake").unwrap();
     assert_eq!(e.float_at("amplitude", 0.0), Some(1.5));
     assert_eq!(e.float_at("frequency", 0.0), Some(8.0));
     assert_eq!(e.float_at("rotation", 0.0), Some(1.0));
-    assert_eq!(e.float_at("zoom_pump", 0.0), Some(0.0));
-    assert!(matches!(
-        e.param("auto_scale"),
-        Some(EffectValue::Bool(true))
-    ));
+    // The per-axis twirl group's defaults (multipliers of 1, z pump 0) and
+    // the Edges control (default Repeat = code 1) replace the old Zoom
+    // pump / Auto-scale pair.
+    assert_eq!(e.float_at("x_amp", 0.0), Some(1.0));
+    assert_eq!(e.float_at("y_freq", 0.0), Some(1.0));
+    assert_eq!(e.float_at("z_amp", 0.0), Some(0.0));
+    assert!(matches!(e.param("edge"), Some(EffectValue::Choice(1))));
+    assert!(e.param("zoom_pump").is_none());
+    assert!(e.param("auto_scale").is_none());
     assert!(matches!(e.param("seed"), Some(EffectValue::Seed(_))));
+    // The schema declares the twirl group over exactly the per-axis params.
+    let schema = schema("shake").unwrap();
+    assert_eq!(schema.groups.len(), 1);
+    assert_eq!(schema.groups[0].label, "Per-axis wobble");
+    assert!(schema.groups[0].collapsed);
+    assert_eq!(
+        schema.groups[0].params,
+        &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"]
+    );
 
     // Resolving is deterministic: the same instance at the same time
     // yields the identical wobble, twice.
@@ -2649,10 +2607,8 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     assert_eq!(a, b);
     let Resolved::Shake {
         offset_px,
-        amp_px,
         zoom,
-        zoom_min,
-        auto_scale,
+        edge,
         mix,
         ..
     } = a[0]
@@ -2660,12 +2616,11 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
         panic!("expected a Shake");
     };
     // 1.5% of a 1000px diagonal = 15px ceiling; the wobble stays
-    // within it, and pump 0 leaves zoom at exactly 1.
-    assert_eq!(amp_px, 15.0);
+    // within it, z amount 0 leaves zoom at exactly 1, and the default
+    // Edges control is Repeat (code 1).
     assert!(offset_px[0].abs() <= 15.0 && offset_px[1].abs() <= 15.0);
     assert_eq!(zoom, 1.0);
-    assert_eq!(zoom_min, 1.0);
-    assert!(auto_scale);
+    assert_eq!(edge, 1);
     assert_eq!(mix, 1.0);
 
     // Different frames wobble differently; different seeds too.
@@ -2702,58 +2657,39 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     let (w, h) = (17u32, 9u32);
     let img = transform_card(w, h);
 
-    // A neutral shake (zero amplitude, rotation, pump) is the
-    // bit-exact identity even with auto-scale on: the cover is
-    // exactly 1 and the affine is the identity.
+    // A neutral shake (zero wobble) is the bit-exact identity: the affine
+    // is the identity, whatever the Edges control.
     let neutral = Resolved::Shake {
         offset_px: [0.0, 0.0],
         rotation_deg: 0.0,
         zoom: 1.0,
-        amp_px: 0.0,
-        rotation_max_deg: 0.0,
-        zoom_min: 1.0,
-        auto_scale: true,
+        edge: 1,
         mix: 1.0,
     };
     let mut n = img.clone();
     cpu::apply(&mut n, w, h, &neutral);
     assert_eq!(n, img);
 
-    // A pure offset without auto-scale matches the Transform reference
-    // fed the same shared affine — the oracle path is one path.
+    // A pure offset matches the Transform reference fed the same shared
+    // affine and the same edge policy — the oracle path is one path.
     let shaken = Resolved::Shake {
         offset_px: [2.0, -1.0],
         rotation_deg: 0.0,
         zoom: 1.0,
-        amp_px: 2.0,
-        rotation_max_deg: 0.0,
-        zoom_min: 1.0,
-        auto_scale: false,
+        edge: 0,
         mix: 1.0,
     };
     let mut s = img.clone();
     cpu::apply(&mut s, w, h, &shaken);
-    let (anchor, position, scale, rot) =
-        shake_affine(w, h, [2.0, -1.0], 0.0, 1.0, 2.0, 0.0, 1.0, false);
+    let (anchor, position, scale, rot) = shake_affine(w, h, [2.0, -1.0], 0.0, 1.0);
     let mut t = img.clone();
-    cpu::transform(&mut t, w, h, anchor, position, scale, rot, 1.0, 1.0);
+    cpu::transform(&mut t, w, h, anchor, position, scale, rot, 0, 1.0, 1.0);
     assert_eq!(s, t);
     assert_ne!(s, img, "the wobble actually moves pixels");
 
-    // Auto-scale zooms in: with a rotation ceiling the cover exceeds 1,
-    // so the revealed corners stay covered (no transparent corners).
-    let covered = Resolved::Shake {
-        offset_px: [1.0, 0.0],
-        rotation_deg: 5.0,
-        zoom: 1.0,
-        amp_px: 1.0,
-        rotation_max_deg: 5.0,
-        zoom_min: 1.0,
-        auto_scale: true,
-        mix: 1.0,
-    };
-    let mut c = img.clone();
-    cpu::apply(&mut c, w, h, &covered);
+    // The Edges control governs the revealed border (P3, K-145). A big
+    // offset drags an edge into view: Transparent leaves a fully clear
+    // corner; Repeat and Mirror hold coverage there instead.
     let corner_alpha = |v: &[f32]| {
         let at = |x: u32, y: u32| ((y * w + x) * 4 + 3) as usize;
         [
@@ -2763,11 +2699,111 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
             v[at(w - 1, h - 1)],
         ]
     };
+    let shake_with = |edge: u32| {
+        let mut c = img.clone();
+        cpu::apply(
+            &mut c,
+            w,
+            h,
+            &Resolved::Shake {
+                offset_px: [6.0, 3.0],
+                rotation_deg: 0.0,
+                zoom: 1.0,
+                edge,
+                mix: 1.0,
+            },
+        );
+        c
+    };
+    let transparent = shake_with(0);
     assert!(
-        corner_alpha(&c).iter().all(|a| *a > 0.0),
-        "auto-scale keeps every corner covered: {:?}",
-        corner_alpha(&c)
+        corner_alpha(&transparent).contains(&0.0),
+        "Transparent reveals a clear corner: {:?}",
+        corner_alpha(&transparent)
     );
+    for edge in [1u32, 2] {
+        let held = shake_with(edge);
+        assert!(
+            corner_alpha(&held).iter().all(|a| *a > 0.0),
+            "edge {edge} holds coverage at every corner: {:?}",
+            corner_alpha(&held)
+        );
+    }
+}
+
+#[test]
+fn edges_mode_codes_round_trip() {
+    // The enum only names the wire codes the resolved ops and WGSL read.
+    for (mode, code) in [
+        (EdgesMode::Transparent, 0u32),
+        (EdgesMode::Repeat, 1),
+        (EdgesMode::Mirror, 2),
+    ] {
+        assert_eq!(mode.code(), code);
+        assert_eq!(EdgesMode::from_code(code), Some(mode));
+    }
+    assert_eq!(EdgesMode::from_code(3), None);
+    assert_eq!(EdgesMode::OPTIONS, &["Transparent", "Repeat", "Mirror"]);
+    // The shared blur-family const is the enum's option list.
+    assert_eq!(EDGE_OPTIONS, EdgesMode::OPTIONS);
+}
+
+#[test]
+fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
+    // A project saved before FX-11 carries `zoom_pump` and `auto_scale`
+    // instead of `z_amp` and `edge`. Resolve reads the old ids as
+    // fallbacks so the look migrates sensibly (K-146).
+    let mut old = instantiate("shake").unwrap();
+    // Rebuild the pre-FX-11 param set by id.
+    old.params.retain(|p| {
+        matches!(
+            p.id.as_str(),
+            "amplitude" | "frequency" | "rotation" | "seed" | "mix"
+        )
+    });
+    old.params.push(crate::model::EffectParam {
+        id: "zoom_pump".into(),
+        value: EffectValue::Float(crate::anim::Property::fixed(10.0)),
+        extra: Default::default(),
+    });
+    old.params.push(crate::model::EffectParam {
+        id: "auto_scale".into(),
+        value: EffectValue::Bool(false),
+        extra: Default::default(),
+    });
+
+    let resolved = resolve_stack(
+        std::slice::from_ref(&old),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake { zoom, edge, .. } = resolved[0] else {
+        panic!("expected a Shake");
+    };
+    // The old 10% Zoom pump becomes the z (depth) shake, so zoom moves off
+    // 1; Auto-scale off migrates to the Transparent edge (code 0).
+    assert_ne!(zoom, 1.0, "the old Zoom pump migrated to the z shake");
+    assert_eq!(edge, 0, "Auto-scale off migrated to Transparent");
+
+    // Auto-scale on (the old default) migrates to Repeat (code 1).
+    for p in &mut old.params {
+        if p.id == "auto_scale" {
+            p.value = EffectValue::Bool(true);
+        }
+    }
+    let on = resolve_stack(
+        std::slice::from_ref(&old),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake { edge, .. } = on[0] else {
+        panic!("expected a Shake");
+    };
+    assert_eq!(edge, 1, "Auto-scale on migrated to Repeat");
 }
 
 #[test]
@@ -2805,7 +2841,9 @@ fn cpu_transform_identity_is_bit_exact() {
     let img = transform_card(w, h);
     // Identity parameters: the docs/08 §3.5 bit-exact passthrough pin.
     let mut id = img.clone();
-    cpu::transform(&mut id, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0);
+    cpu::transform(
+        &mut id, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 0, 1.0, 1.0,
+    );
     assert_eq!(id, img);
     // Mix 0 is the exact identity whatever the parameters.
     let mut m0 = img.clone();
@@ -2817,6 +2855,7 @@ fn cpu_transform_identity_is_bit_exact() {
         [9.0, 1.0],
         [2.0, 0.5],
         33.0,
+        0,
         0.4,
         0.0,
     );
@@ -2835,7 +2874,18 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     // Position +2 in x (anchor 0): the impulse lands two pixels right,
     // exactly (integer offsets keep bilinear taps on pixel centres).
     let mut t = img.clone();
-    cpu::transform(&mut t, w, h, [0.0; 2], [2.0, 0.0], [1.0; 2], 0.0, 1.0, 1.0);
+    cpu::transform(
+        &mut t,
+        w,
+        h,
+        [0.0; 2],
+        [2.0, 0.0],
+        [1.0; 2],
+        0.0,
+        0,
+        1.0,
+        1.0,
+    );
     assert_eq!(t[at(10, 4)], 1.0, "impulse moved +2x");
     assert_eq!(t[mid], 0.0, "and left its old home");
 
@@ -2853,19 +2903,19 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     let mut r = img.clone();
     img[at(10, 4)..at(10, 4) + 4].copy_from_slice(&[0.0, 1.0, 0.0, 1.0]);
     r.copy_from_slice(&img);
-    cpu::transform(&mut r, w, h, centre, centre, [1.0; 2], 90.0, 1.0, 1.0);
+    cpu::transform(&mut r, w, h, centre, centre, [1.0; 2], 90.0, 0, 1.0, 1.0);
     assert_eq!(r[mid], 1.0, "the centre pixel stays put");
     assert!(r[at(8, 6) + 1] > 0.999, "+2x lands at +2y");
 
     // Scale 0 is degenerate: the image collapses to nothing and renders
     // fully transparent — never a division fault (docs/14).
     let mut z = img.clone();
-    cpu::transform(&mut z, w, h, centre, centre, [0.0, 0.0], 0.0, 1.0, 1.0);
+    cpu::transform(&mut z, w, h, centre, centre, [0.0, 0.0], 0.0, 0, 1.0, 1.0);
     assert!(z.iter().all(|v| *v == 0.0), "zero scale collapses to clear");
 
     // Opacity halves all four channels (premultiplied).
     let mut o = img.clone();
-    cpu::transform(&mut o, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 0.5, 1.0);
+    cpu::transform(&mut o, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 0, 0.5, 1.0);
     for c in 0..4 {
         assert_eq!(o[mid + c], 0.5, "channel {c} at half");
     }

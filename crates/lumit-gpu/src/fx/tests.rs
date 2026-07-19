@@ -1244,16 +1244,32 @@ fn wgsl_transform_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let centre = [w as f32 * 0.5, h as f32 * 0.5];
-    for (name, anchor, position, scale, rotation, opacity, mix) in [
-        ("identity", [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0),
-        ("shift", [0.0; 2], [2.5, -1.5], [1.0; 2], 0.0, 1.0, 1.0),
-        ("punch-in", centre, centre, [1.4, 1.4], 12.0, 1.0, 1.0),
-        ("flip-fade", centre, centre, [-1.0, 1.0], 0.0, 0.5, 0.8),
-        ("collapsed", centre, centre, [0.0, 1.0], 0.0, 1.0, 0.6),
+    // The last column is the Edges policy (P3, K-145): the Transform effect
+    // itself always passes 0, but Shake dispatches this same kernel with 1
+    // (Repeat) and 2 (Mirror), so the oracle exercises all three here.
+    for (name, anchor, position, scale, rotation, opacity, mix, edge) in [
+        (
+            "identity", [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0, 0u32,
+        ),
+        ("shift", [0.0; 2], [2.5, -1.5], [1.0; 2], 0.0, 1.0, 1.0, 0),
+        ("punch-in", centre, centre, [1.4, 1.4], 12.0, 1.0, 1.0, 0),
+        ("flip-fade", centre, centre, [-1.0, 1.0], 0.0, 0.5, 0.8, 0),
+        ("collapsed", centre, centre, [0.0, 1.0], 0.0, 1.0, 0.6, 0),
+        (
+            "shift-repeat",
+            [0.0; 2],
+            [5.0, -4.0],
+            [1.0; 2],
+            0.0,
+            1.0,
+            1.0,
+            1,
+        ),
+        ("spin-mirror", centre, centre, [1.0; 2], 8.0, 1.0, 1.0, 2),
     ] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::transform(
-            &mut cpu, w, h, anchor, position, scale, rotation, opacity, mix,
+            &mut cpu, w, h, anchor, position, scale, rotation, edge, opacity, mix,
         );
 
         let (m, off, opacity) =
@@ -1264,6 +1280,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             off,
             opacity,
             mix,
+            edge,
         };
         let out = fx.transform(&ctx, &tex, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -1289,9 +1306,10 @@ fn wgsl_transform_matches_the_cpu_oracle() {
 /// shared `shake_affine` to the Transform kernel, exactly as `run_ops`
 /// dispatches it, and the CPU reference walks the same affine. One-tap
 /// resample, so the cheap-class ≤ 2 fp16 ULP bound holds; the GPU is
-/// bit-stable (§2.4); the neutral wobble (zero amplitude, rotation and
-/// pump — the effect's §1.2 trigger-adjacent neutral) is the bit-exact
-/// passthrough even with auto-scale on, because the cover is exactly 1.
+/// bit-stable (§2.4); the neutral wobble (zero offset, rotation and z
+/// shake) is the bit-exact passthrough. The Edges control (P3, K-145) is
+/// swept across Transparent / Repeat / Mirror so the kernel's border
+/// handling is covered on both paths.
 #[test]
 fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
     let Ok(ctx) = GpuContext::headless() else {
@@ -1301,40 +1319,26 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
     let fx = FxEngine::new(&ctx);
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    for (name, offset, rot, zoom, amp, rot_max, zoom_min, auto_scale, mix) in [
-        (
-            "neutral",
-            [0.0f32, 0.0f32],
-            0.0f32,
-            1.0f32,
-            0.0f32,
-            0.0f32,
-            1.0f32,
-            true,
-            1.0f32,
-        ),
-        ("offset", [2.5, -1.5], 0.0, 1.0, 3.0, 0.0, 1.0, false, 1.0),
-        ("twist", [1.0, 0.5], 4.0, 1.0, 1.5, 5.0, 1.0, true, 1.0),
-        ("pumped", [0.0, 2.0], -2.0, 0.95, 2.0, 3.0, 0.9, true, 0.7),
+    for (name, offset, rot, zoom, edge, mix) in [
+        ("neutral", [0.0f32, 0.0f32], 0.0f32, 1.0f32, 1u32, 1.0f32),
+        ("offset", [2.5, -1.5], 0.0, 1.0, 0, 1.0),
+        ("twist-repeat", [1.0, 0.5], 4.0, 1.0, 1, 1.0),
+        ("pumped-mirror", [0.0, 2.0], -2.0, 0.95, 2, 0.7),
     ] {
         let shake = lumit_core::fx::Resolved::Shake {
             offset_px: offset,
             rotation_deg: rot,
             zoom,
-            amp_px: amp,
-            rotation_max_deg: rot_max,
-            zoom_min,
-            auto_scale,
+            edge,
             mix,
         };
         let mut cpu = img.clone();
         lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
 
         // The exact run_ops mapping: shared affine → transform op →
-        // the Transform kernel.
-        let (anchor, position, scale, rotation) = lumit_core::fx::shake_affine(
-            w, h, offset, rot, zoom, amp, rot_max, zoom_min, auto_scale,
-        );
+        // the Transform kernel, carrying the Edges policy.
+        let (anchor, position, scale, rotation) =
+            lumit_core::fx::shake_affine(w, h, offset, rot, zoom);
         let (m, off, opacity) =
             lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
         let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -1343,6 +1347,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
             off,
             opacity,
             mix,
+            edge,
         };
         let out = fx.transform(&ctx, &tex, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
