@@ -4,26 +4,33 @@
 use super::*;
 
 /// The layer-view / graph-view switch (K-070), drawn right-anchored in `rect`.
-pub(crate) fn graph_toggle(ui: &mut egui::Ui, theme: &Theme, app: &mut AppState, rect: egui::Rect) {
+pub(crate) fn graph_toggle(
+    ui: &mut egui::Ui,
+    _theme: &Theme,
+    app: &mut AppState,
+    rect: egui::Rect,
+) {
     let mut child = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(rect)
             .layout(egui::Layout::right_to_left(egui::Align::Center)),
     );
     child.set_clip_rect(rect);
-    // Pack the two 28 px chips flush (each already carries its own glyph padding,
-    // and the fills shrink 1 px, so they read as a segmented pair): the toggle
-    // then fits its rect exactly instead of spilling one item-gap to the left,
-    // which is what let the left control cluster's clip be pulled in (UI-14).
-    child.spacing_mut().item_spacing.x = 0.0;
+    // Render the two views as selectable text glyphs — the same look as the
+    // magnet, which sits perfectly — and inset a few px from the panel's right
+    // edge so the rightmost glyph isn't shaved by the clip (T10; the framed
+    // icon-button chips sat 1-2 px into it).
+    child.add_space(3.0);
     let graph = app.timeline_graph_mode;
-    if icon_button(&mut child, theme, Icon::GraphCurve, graph)
+    if child
+        .selectable_label(graph, crate::icons::text(Icon::GraphCurve, 13.0))
         .on_hover_text("Graph editor")
         .clicked()
     {
         app.timeline_graph_mode = true;
     }
-    if icon_button(&mut child, theme, Icon::TimelineBars, !graph)
+    if child
+        .selectable_label(!graph, crate::icons::text(Icon::TimelineBars, 13.0))
         .on_hover_text("Layers")
         .clicked()
     {

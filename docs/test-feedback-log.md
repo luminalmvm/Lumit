@@ -174,7 +174,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [x] T7 Shift-range now stops at section boundaries: a cross-effect (or cross-kind) shift-click just picks the target; within one effect it ranges.
 - [x] T8 Flow input rate now shows a concrete fps (defaults to the comp/layer frame rate), no "Native" word; typing 0 still conforms to native.
 - [x] T9 Per-layer MB looked dead because the comp MB MASTER was buried in comp settings. Added a master "MB" toggle to the timeline bottom bar; with it on, MB-switched layers blur along their transform. (T22: the comp master is the composition-level MB the owner asked for.)
-- [ ] T10 Bottom-bar graph icons still ~1-2px clipped; match the magnet icon's placement.
+- [x] T10 Graph-view toggle now uses the magnet's selectable-glyph look with a 3px right inset, so it isn't clipped. (Eyeball.)
 - [ ] T11 Viewfinder still spills over the inner border; round-mode bottom bar not rounded.
 - [ ] T12 Posterize time still does nothing at any frame rate.
 - [ ] T13 Radial blur Type combobox: moving down to pick opens the Edges menu below instead (menu overlap/UI bug).
