@@ -1,41 +1,110 @@
-//! The Timeline's bottom bar: the magnet and grid-mode controls, and the
-//! graph-view toggle.
+//! The Timeline's top row (TL4: current time, layer search, view + MB-master
+//! toggles) and its bottom bar (zoom, the magnet and grid-mode controls, the
+//! graph lens toggle).
 
 use super::*;
 
-/// The layer-view / graph-view switch (K-070), drawn right-anchored in `rect`.
-pub(crate) fn graph_toggle(
+/// The timeline's top row (TL4): the current time/frame on the left, a
+/// layer-search box in the middle, and the graph-view toggle + the composition
+/// motion-blur master on the right (both moved up from the bottom bar, T22).
+/// Drawn above the ruler, making the time bar taller. Edits `app` in place.
+pub(crate) fn timeline_top_row(
     ui: &mut egui::Ui,
-    _theme: &Theme,
+    theme: &Theme,
     app: &mut AppState,
-    rect: egui::Rect,
+    comp_id: uuid::Uuid,
+    fps: f64,
+    frame: usize,
 ) {
-    let mut child = ui.new_child(
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, theme.surface_1);
+    ui.painter().line_segment(
+        [
+            egui::pos2(rect.left(), rect.bottom()),
+            egui::pos2(rect.right(), rect.bottom()),
+        ],
+        egui::Stroke::new(1.0_f32, theme.hairline),
+    );
+
+    // Current time / frame, top-left (m:ss:ff plus the raw frame number).
+    let f = fps.max(1.0).round() as usize;
+    let (mm, ss, ff) = (frame / (f * 60), (frame / f) % 60, frame % f);
+    ui.painter().text(
+        rect.left_center() + egui::vec2(8.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        format!("{mm}:{ss:02}:{ff:02}   f{frame}"),
+        egui::FontId::proportional(12.0),
+        theme.text_secondary,
+    );
+
+    // Right cluster: MB master then the view toggle (right-to-left, so the view
+    // glyphs sit at the far right).
+    let right = egui::Rect::from_min_max(
+        egui::pos2(rect.right() - 118.0, rect.top()),
+        egui::pos2(rect.right() - 4.0, rect.bottom()),
+    );
+    let mut rc = ui.new_child(
         egui::UiBuilder::new()
-            .max_rect(rect)
+            .max_rect(right)
             .layout(egui::Layout::right_to_left(egui::Align::Center)),
     );
-    child.set_clip_rect(rect);
-    // Render the two views as selectable text glyphs — the same look as the
-    // magnet, which sits perfectly — and inset a few px from the panel's right
-    // edge so the rightmost glyph isn't shaved by the clip (T10; the framed
-    // icon-button chips sat 1-2 px into it).
-    child.add_space(3.0);
+    rc.set_clip_rect(right);
     let graph = app.timeline_graph_mode;
-    if child
+    if rc
         .selectable_label(graph, crate::icons::text(Icon::GraphCurve, 13.0))
         .on_hover_text("Graph editor")
         .clicked()
     {
         app.timeline_graph_mode = true;
     }
-    if child
+    if rc
         .selectable_label(!graph, crate::icons::text(Icon::TimelineBars, 13.0))
         .on_hover_text("Layers")
         .clicked()
     {
         app.timeline_graph_mode = false;
     }
+    // Composition motion-blur master (T9/T22): the comp-wide enable the per-layer
+    // MB switches need. With it on, every layer whose own MB switch is set blurs.
+    let mut mb = app
+        .store
+        .snapshot()
+        .comp(comp_id)
+        .map(|c| c.motion_blur)
+        .unwrap_or_default();
+    rc.add_space(6.0);
+    if rc
+        .selectable_label(mb.enabled, egui::RichText::new("MB").small())
+        .on_hover_text(
+            "Composition motion blur (master): layers with their own motion-blur switch on then blur",
+        )
+        .clicked()
+    {
+        mb.enabled = !mb.enabled;
+        app.commit(lumit_core::Op::SetCompMotionBlur {
+            comp: comp_id,
+            motion_blur: mb,
+        });
+    }
+
+    // Layer-search box, middle.
+    let sw = 170.0;
+    let search = egui::Rect::from_min_max(
+        egui::pos2(rect.center().x - sw * 0.5, rect.top() + 2.0),
+        egui::pos2(rect.center().x + sw * 0.5, rect.bottom() - 2.0),
+    );
+    let mut sc = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(search)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    sc.set_clip_rect(search);
+    sc.add(
+        egui::TextEdit::singleline(&mut app.timeline_layer_search)
+            .hint_text("Search layers")
+            .desired_width(sw),
+    );
 }
 
 /// The lane-view bottom bar spanning the lanes area: zoom controls (`− + Fit` +
@@ -180,32 +249,8 @@ pub(crate) fn timeline_bottom_bar(
         app.magnet_snap = !app.magnet_snap;
     }
 
-    // Composition motion-blur master (T9): the comp-wide enable that the
-    // per-layer motion-blur switches need — previously reachable only in Comp
-    // settings, so a per-layer switch looked dead. Surfaced here as a master
-    // toggle (AE's timeline motion-blur button); with it on, every layer whose
-    // own MB switch is set blurs along its motion.
-    if let Some(comp_id) = app.preview_comp {
-        let mut mb = app
-            .store
-            .snapshot()
-            .comp(comp_id)
-            .map(|c| c.motion_blur)
-            .unwrap_or_default();
-        if zc
-            .selectable_label(mb.enabled, egui::RichText::new("MB").small())
-            .on_hover_text(
-                "Composition motion blur (master): layers with their own motion-blur switch on then blur",
-            )
-            .clicked()
-        {
-            mb.enabled = !mb.enabled;
-            app.commit(lumit_core::Op::SetCompMotionBlur {
-                comp: comp_id,
-                motion_blur: mb,
-            });
-        }
-    }
+    // (The composition motion-blur master and the view toggle moved up to the
+    // timeline's top row — TL4/T22.)
 
     // The value/speed lens toggle (graph mode only): one lens shared by every
     // curve, so it lives here rather than in each plot's header. Its own group,
@@ -320,10 +365,5 @@ pub(crate) fn timeline_bottom_bar(
         }
     }
 
-    // View toggle, bottom-right of the lanes.
-    let gr = egui::Rect::from_min_max(
-        egui::pos2(panel_right - 60.0, bar_top),
-        egui::pos2(panel_right - 4.0, panel.bottom()),
-    );
-    graph_toggle(ui, theme, app, gr);
+    // (The view toggle moved up to the timeline's top row — TL4.)
 }

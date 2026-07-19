@@ -630,6 +630,10 @@ pub struct AppState {
     /// right-clicking the strip hides it; it defaults on. A view preference, not
     /// project data.
     pub show_audio_bar: bool,
+    /// The timeline's layer-search filter (TL4): layers whose name doesn't
+    /// contain this (case-insensitive) are hidden from the outline. Empty shows
+    /// all. A view preference.
+    pub timeline_layer_search: String,
     /// In-flight property drag (layer, property, provisional value): commits
     /// once on release so a drag is ONE undo step, not hundreds.
     pub prop_edit: Option<(Uuid, lumit_core::model::TransformProp, f64)>,
@@ -1032,6 +1036,7 @@ impl Default for AppState {
             selected_item: None,
             selected_items: Vec::new(),
             show_audio_bar: true,
+            timeline_layer_search: String::new(),
             mask_drag: None,
             tool: ToolMode::default(),
             eyedropper: None,

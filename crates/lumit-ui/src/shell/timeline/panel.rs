@@ -119,6 +119,18 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         TimelineWheel::Graph | TimelineWheel::Scroll => {}
     }
 
+    // The taller time bar's top row (TL4): current time/frame, a layer-search
+    // box, and the view + motion-blur-master toggles (moved up from the bottom
+    // bar, T22). Drawn above the ruler so the whole time bar reads taller.
+    timeline_top_row(
+        ui,
+        theme,
+        app,
+        comp_id,
+        comp.frame_rate.fps(),
+        app.preview_frame,
+    );
+
     let (ruler_rect, ruler_resp) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), 20.0),
         egui::Sense::click_and_drag(),
@@ -436,7 +448,15 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             // `commit_reorder` carries the dragged layer and release y.
             let mut layer_row_centers: Vec<(uuid::Uuid, f32)> = Vec::new();
             let mut commit_reorder: Option<(uuid::Uuid, f32)> = None;
+            // Layer-search filter (TL4): a non-empty query hides non-matching
+            // layers from the outline (view-only; the render is unaffected).
+            let layer_search = app.timeline_layer_search.trim().to_lowercase();
             for layer in &comp.layers {
+                if !layer_search.is_empty()
+                    && !layer.name.to_lowercase().contains(&layer_search)
+                {
+                    continue;
+                }
                 // The row response only hit-tests over the lane area (the clip
                 // above), so in graph mode it goes inert — clicks there belong
                 // to the curve, and the outline keeps its own controls.
