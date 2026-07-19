@@ -372,3 +372,87 @@ mod span_move_tests {
         assert!((out_p.0.to_f64() - 13.0).abs() < 1e-9);
     }
 }
+
+// UI-8: the wheel routes differently per timeline mode. In the layers view the
+// outline and lanes share one scroll (a plain wheel anywhere over the lanes
+// falls through to it); in the graph view the curve and the layer list are
+// decoupled — a plain wheel over the curve pans it and never scrolls the list.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod wheel_route_tests {
+    use super::*;
+
+    fn plain() -> egui::Modifiers {
+        egui::Modifiers::default()
+    }
+
+    #[test]
+    fn lane_view_plain_wheel_over_the_lane_feeds_the_shared_scroll() {
+        // Layers view: a plain vertical wheel over the lane area is left to the
+        // one shared ScrollArea, so the outline and the lanes move together.
+        let r = timeline_wheel_route(false, true, plain(), false, true);
+        assert_eq!(r, TimelineWheel::Scroll);
+    }
+
+    #[test]
+    fn graph_view_plain_wheel_over_the_curve_goes_to_the_graph_not_the_list() {
+        // Graph view: the same wheel belongs to the curve — the layer list is
+        // untouched (its own scroll area stops at the outline's right edge).
+        let r = timeline_wheel_route(true, true, plain(), false, true);
+        assert_eq!(r, TimelineWheel::Graph);
+    }
+
+    #[test]
+    fn a_wheel_over_the_outline_column_always_feeds_a_scroll_area() {
+        // Over the outline (not the lane) the routing is the same in both modes:
+        // a ScrollArea owns it (shared in lane view, outline-only in graph view).
+        for graph in [false, true] {
+            let r = timeline_wheel_route(graph, false, plain(), false, true);
+            assert_eq!(r, TimelineWheel::Scroll, "graph_mode = {graph}");
+        }
+    }
+
+    #[test]
+    fn alt_wheel_over_the_lane_zooms_time_in_either_mode() {
+        let alt = egui::Modifiers {
+            alt: true,
+            ..Default::default()
+        };
+        for graph in [false, true] {
+            let r = timeline_wheel_route(graph, true, alt, false, true);
+            assert_eq!(r, TimelineWheel::ZoomTime, "graph_mode = {graph}");
+        }
+    }
+
+    #[test]
+    fn shift_or_horizontal_wheel_over_the_lane_pans_time() {
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        // Shift + vertical wheel pans time (over the lane, either mode).
+        assert_eq!(
+            timeline_wheel_route(true, true, shift, false, true),
+            TimelineWheel::PanTime
+        );
+        // A horizontal wheel pans time without any modifier.
+        assert_eq!(
+            timeline_wheel_route(false, true, plain(), true, false),
+            TimelineWheel::PanTime
+        );
+    }
+
+    #[test]
+    fn time_pan_and_zoom_never_fire_over_the_outline_column() {
+        // Alt/Shift only zoom or pan the time axis over the lane — over the
+        // outline the wheel always scrolls the list, whatever the modifiers.
+        let alt = egui::Modifiers {
+            alt: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            timeline_wheel_route(true, false, alt, false, true),
+            TimelineWheel::Scroll
+        );
+    }
+}

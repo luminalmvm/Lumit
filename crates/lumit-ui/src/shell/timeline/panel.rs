@@ -70,23 +70,35 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     let seconds_of = |x: f32| view_start + (x - track_left) as f64 / px_per_sec.max(1e-6);
 
     // AE wheel shortcuts over the lane area: Alt = zoom (around the cursor),
-    // Shift = scroll through time. Plain wheel falls through to the vertical
-    // ScrollArea. Alt/Shift consume the scroll so it does not also scroll lanes.
+    // Shift/horizontal = scroll through time. In the layers view a plain wheel
+    // falls through to the one shared vertical ScrollArea (outline + lanes move
+    // together); in the graph view the outline scrolls on its own (its scroll
+    // area stops at the outline's right edge — see the ScrollArea below) and a
+    // plain wheel over the curve pans it, not the layer list (UI-8, K-079).
     let lane_area = egui::Rect::from_min_max(
         egui::pos2(track_left, ui.max_rect().top()),
         egui::pos2(panel_right, ui.max_rect().bottom()),
     );
     let (scroll, mods, hover) =
         ui.input(|i| (i.raw_scroll_delta, i.modifiers, i.pointer.hover_pos()));
-    if hover.is_some_and(|p| lane_area.contains(p)) {
-        let cursor_x = hover.map(|p| p.x).unwrap_or(track_left);
-        let consume = |ui: &mut egui::Ui| {
-            ui.input_mut(|i| {
-                i.raw_scroll_delta = egui::Vec2::ZERO;
-                i.smooth_scroll_delta = egui::Vec2::ZERO;
-            });
-        };
-        if mods.alt && scroll.y.abs() > 0.01 {
+    let over_lane = hover.is_some_and(|p| lane_area.contains(p));
+    let horizontal = scroll.x.abs() > 0.01;
+    let vertical = scroll.y.abs() > 0.01;
+    let cursor_x = hover.map(|p| p.x).unwrap_or(track_left);
+    let consume = |ui: &mut egui::Ui| {
+        ui.input_mut(|i| {
+            i.raw_scroll_delta = egui::Vec2::ZERO;
+            i.smooth_scroll_delta = egui::Vec2::ZERO;
+        });
+    };
+    match timeline_wheel_route(
+        app.timeline_graph_mode,
+        over_lane,
+        mods,
+        horizontal,
+        vertical,
+    ) {
+        TimelineWheel::ZoomTime => {
             // Alt-wheel: zoom the time axis around the cursor.
             let cursor_t = view_start + (cursor_x - track_left) as f64 / px_per_sec.max(1e-6);
             let factor = (scroll.y as f64 * 0.004).exp();
@@ -94,36 +106,19 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             let (new_ppx, _) = lane_view(track_w, duration, app.timeline_zoom, view_start);
             app.timeline_view_start = cursor_t - (cursor_x - track_left) as f64 / new_ppx.max(1e-6);
             consume(ui);
-        } else if app.timeline_graph_mode
-            && !app.graph_speed_view
-            && !mods.shift
-            && scroll.y.abs() > 0.01
-            && scroll.x.abs() <= 0.01
-        {
-            // Graph mode, value lens: the plain (or Ctrl-) wheel scrolls/zooms
-            // the *curve* vertically, not the layer list (K-079). The outline's
-            // ScrollArea reads `smooth_scroll_delta`, so zeroing only that frees
-            // the wheel for graph_plot (which reads `raw_scroll_delta`) — the
-            // graph and the layer list therefore scroll independently. A wheel
-            // over the outline column (left of the lane area) isn't in
-            // `lane_area`, so it still scrolls the list as before.
-            ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
-        } else {
-            // Horizontal scroll: a horizontal wheel (Shift-wheel arrives as
-            // scroll.x on most platforms) or Shift + a vertical wheel. Plain
-            // vertical wheel falls through to the ScrollArea.
-            let h = if scroll.x.abs() > 0.01 {
-                scroll.x
-            } else if mods.shift {
-                scroll.y
-            } else {
-                0.0
-            };
-            if h.abs() > 0.01 {
-                app.timeline_view_start = view_start - h as f64 / px_per_sec.max(1e-6);
-                consume(ui);
-            }
         }
+        TimelineWheel::PanTime => {
+            // A horizontal wheel (Shift-wheel arrives as scroll.x on most
+            // platforms) or Shift + a vertical wheel scrolls through time.
+            let h = if horizontal { scroll.x } else { scroll.y };
+            app.timeline_view_start = view_start - h as f64 / px_per_sec.max(1e-6);
+            consume(ui);
+        }
+        // Graph: the curve reads `raw_scroll_delta` itself and its outline-only
+        // scroll area never sees this wheel. Scroll: left to a ScrollArea (the
+        // shared outline+lane scroll in the layers view, or the outline's own
+        // scroll over the outline column). Either way, nothing to consume here.
+        TimelineWheel::Graph | TimelineWheel::Scroll => {}
     }
 
     let (ruler_rect, ruler_resp) = ui.allocate_exact_size(
@@ -301,17 +296,33 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     // right of `track_left` is suppressed, and the curve fills that area
     // after the ScrollArea.
 
-    // Lanes scroll vertically when there are more layers than fit. Full-width clip
-    // inside so `place` (which re-clips each outline column) sees the viewport.
+    // Lanes scroll vertically when there are more layers than fit. In the layers
+    // view the scroll area spans the whole panel, so one wheel moves the outline
+    // and the lanes together (synced) and its scrollbar sits at the far right. In
+    // the graph view the curve owns the lane area and pans on its own wheel, so
+    // the width caps at the outline column (`max_width(name_w)`): the scrollbar
+    // then lands at the outline's right edge, and — since a scroll area only
+    // reacts to the wheel over its own rect — a wheel over the curve never
+    // scrolls the layer list (UI-8). The list still scrolls on its own bar or a
+    // wheel over the outline column. `INFINITY` is the builder's own default (no
+    // cap), so the layers view spans the whole panel exactly as before.
     ui.set_clip_rect(saved_clip);
+    let lane_max_w = if app.timeline_graph_mode {
+        name_w
+    } else {
+        f32::INFINITY
+    };
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .max_height((ui.available_height() - 38.0).max(48.0)) // leave the bottom bar + hscrollbar
+        .max_width(lane_max_w)
         .id_salt(("timeline-lanes", comp_id))
         .show(ui, |ui| {
-            // The scroll viewport (full width). Lane content clips to lane_area ∩ it;
-            // outline columns clip to their own x but this viewport's y (never bleeding
-            // above the ruler when a row is half-scrolled).
+            // The scroll viewport: the whole panel in the layers view, the outline
+            // column alone in the graph view (the capped width above). Lane content
+            // clips to lane_area ∩ it (empty in the graph view, where the lane side
+            // is suppressed); outline columns clip to their own x but this
+            // viewport's y, so a half-scrolled row never bleeds above the ruler.
             let viewport = ui.clip_rect();
             ui.set_clip_rect(viewport.intersect(lane_area));
             // Lane keyframe glyphs, the linked-pair register and the property-row
@@ -1552,7 +1563,6 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             crate::app_state::TimelineGrid::Off => {}
         }
     }
-    let sep_x = track_left - 4.0;
     {
         // The separator lives LEFT of the lane area, but the clip in force here
         // was narrowed to the lanes (x ≥ track_left) for the grid overlays — under
@@ -1562,40 +1572,56 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         // back to the whole panel for the handle, then restore the lane clip for
         // the playhead below.
         ui.set_clip_rect(saved_clip);
-        let handle = egui::Rect::from_min_max(
-            egui::pos2(sep_x - 4.0, ruler_rect.top()),
-            egui::pos2(sep_x + 4.0, sep_bottom.max(ruler_rect.top() + 1.0)),
-        );
-        let hresp = ui.interact(
-            handle,
-            ui.id().with("name-col-resize"),
-            egui::Sense::click_and_drag(),
-        );
-        if hresp.hovered() || hresp.dragged() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-        }
-        if hresp.drag_started() {
-            app.timeline_divider_raw = Some(app.timeline_name_w);
-        }
-        if hresp.dragged() {
-            // Clamp to the same bounds the layout applies, so the divider never
-            // drags past where the outline can actually go. Overshoot tracking
-            // (drag-catch-up note 1): accumulate the *raw* pointer travel and
-            // clamp only the shown width, so once the drag is pinned at a limit
-            // the divider doesn't start moving back until the cursor returns to
-            // the divider's actual position — not the instant the mouse reverses.
-            let max_w = (panel_right - panel_left - 120.0).clamp(96.0, 900.0);
-            let raw =
-                app.timeline_divider_raw.unwrap_or(app.timeline_name_w) + hresp.drag_delta().x;
-            app.timeline_divider_raw = Some(raw);
-            app.timeline_name_w = raw.clamp(96.0, max_w);
-        }
-        if hresp.drag_stopped() {
-            app.timeline_divider_raw = None;
+        // The divider doubles as the column-resize grip — but only in the layers
+        // view (UI-8). In the graph view the outline's own scrollbar sits in this
+        // same right-edge strip, and egui would hand an overlapping drag to this
+        // grip (the last-added widget), leaving the scrollbar thumb unusable. So
+        // the grip is a layers-view control (the column width it sets is kept in
+        // the graph view), and the graph view draws a plain division at
+        // `track_left`, clear of the scrollbar gutter to its left.
+        let (sep_x, active) = if app.timeline_graph_mode {
+            (track_left, false)
+        } else {
+            (track_left - 4.0, true)
+        };
+        let mut hot = false;
+        if active {
+            let handle = egui::Rect::from_min_max(
+                egui::pos2(sep_x - 4.0, ruler_rect.top()),
+                egui::pos2(sep_x + 4.0, sep_bottom.max(ruler_rect.top() + 1.0)),
+            );
+            let hresp = ui.interact(
+                handle,
+                ui.id().with("name-col-resize"),
+                egui::Sense::click_and_drag(),
+            );
+            hot = hresp.hovered() || hresp.dragged();
+            if hot {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            }
+            if hresp.drag_started() {
+                app.timeline_divider_raw = Some(app.timeline_name_w);
+            }
+            if hresp.dragged() {
+                // Clamp to the same bounds the layout applies, so the divider never
+                // drags past where the outline can actually go. Overshoot tracking
+                // (drag-catch-up note 1): accumulate the *raw* pointer travel and
+                // clamp only the shown width, so once the drag is pinned at a limit
+                // the divider doesn't start moving back until the cursor returns to
+                // the divider's actual position — not the instant the mouse reverses.
+                let max_w = (panel_right - panel_left - 120.0).clamp(96.0, 900.0);
+                let raw =
+                    app.timeline_divider_raw.unwrap_or(app.timeline_name_w) + hresp.drag_delta().x;
+                app.timeline_divider_raw = Some(raw);
+                app.timeline_name_w = raw.clamp(96.0, max_w);
+            }
+            if hresp.drag_stopped() {
+                app.timeline_divider_raw = None;
+            }
         }
         // Full-height division between the outline and the lanes: a strong
         // hairline from the ruler down to the bottom of the rows, accent while
-        // hovered or dragged so the handle reads as interactive.
+        // hovered or dragged so the handle reads as interactive (layers view).
         ui.painter().line_segment(
             [
                 egui::pos2(sep_x, ruler_rect.top()),
@@ -1603,7 +1629,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             ],
             egui::Stroke::new(
                 1.0_f32,
-                if hresp.hovered() || hresp.dragged() {
+                if hot {
                     theme.accent
                 } else {
                     theme.hairline_strong

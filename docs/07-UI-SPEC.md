@@ -365,6 +365,11 @@ The graph editor is a mode of the Timeline's lane area (toggle button in the Tim
 header, `Shift+F3`): the lanes are replaced by curves for the selected properties. The
 outline stays; each property gains an *include in graph* toggle.
 
+In graph mode the outline scrolls **independently** of the curve (UI-8): it keeps its own
+vertical scrollbar at the outline's right edge, and a wheel over the curve pans or zooms the
+curve (K-079) without ever scrolling the layer list. The ordinary layers view keeps the single
+shared scroll of §4.6, where the outline and lanes move together.
+
 ### 5.1 Views
 
 - **Value graph**: value against time, editable bezier tangents per keyframe side, following

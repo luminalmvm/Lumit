@@ -160,6 +160,61 @@ pub(crate) fn drag_secs(dx_px: f64, px_per_sec: f64) -> f64 {
     dx_px / px_per_sec.max(1e-6)
 }
 
+/// Where a timeline mouse wheel goes (UI-8; 07-UI-SPEC §4). The lane (layers)
+/// view scrolls the outline and the lanes together on one shared scroll; the
+/// graph view keeps them apart — the curve pans vertically on its own wheel
+/// while the outline keeps its own scrollbar at the outline's right edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TimelineWheel {
+    /// Alt-wheel over the lane: zoom the time axis about the cursor.
+    ZoomTime,
+    /// Horizontal wheel, or Shift + a vertical wheel, over the lane: pan time.
+    PanTime,
+    /// Graph view, a plain vertical wheel over the curve: the curve reads the
+    /// wheel itself and pans/zooms its value axis. The outline list is left
+    /// alone — its own (outline-only) scroll never sees this wheel.
+    Graph,
+    /// Leave the wheel to a `ScrollArea`: the shared outline+lane scroll in lane
+    /// view, or — whenever the pointer sits over the outline column — the
+    /// outline's own scroll in either view. The outer handler does nothing.
+    Scroll,
+}
+
+/// Route a timeline mouse wheel per mode and pointer zone (UI-8). `over_lane` is
+/// whether the pointer sits over the lane/graph area (right of the outline
+/// column); `horizontal`/`vertical` flag a non-trivial wheel on each axis. Pure,
+/// so the routing is unit-testable without egui. The decoupling in graph view is
+/// completed by the layout: the outline's scroll area stops at the outline's
+/// right edge, so a plain wheel over the curve never reaches the outline list.
+pub(crate) fn timeline_wheel_route(
+    graph_mode: bool,
+    over_lane: bool,
+    mods: egui::Modifiers,
+    horizontal: bool,
+    vertical: bool,
+) -> TimelineWheel {
+    // Over the outline column (or off the lane entirely), a scroll area owns the
+    // wheel: the shared scroll in lane view, the outline-only scroll in graph
+    // view. Nothing for the outer handler to do.
+    if !over_lane {
+        return TimelineWheel::Scroll;
+    }
+    // Alt zooms the time axis about the cursor; it wins over vertical routing.
+    if mods.alt && vertical {
+        return TimelineWheel::ZoomTime;
+    }
+    // A horizontal wheel, or Shift + a vertical wheel, pans through time.
+    if horizontal || (mods.shift && vertical) {
+        return TimelineWheel::PanTime;
+    }
+    // A plain vertical wheel: the curve in graph view (its own scroll area does
+    // not reach here), the shared scroll in lane view.
+    if graph_mode && vertical {
+        return TimelineWheel::Graph;
+    }
+    TimelineWheel::Scroll
+}
+
 /// Parse a flexible duration: `SS(.sss)`, `MM:SS`, `HH:MM:SS`, or
 /// `HH:MM:SS:mmm`. None on anything unparseable.
 pub(crate) fn parse_duration(text: &str) -> Option<f64> {

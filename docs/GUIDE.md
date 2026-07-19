@@ -1187,8 +1187,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   *scale* rather than its range: making the panel taller reveals **more** of the value range
   about the same centre instead of stretching the curve (auto-fit simply re-fits to the new
   height, as you'd expect). Because the graph fills the lane area and the layer
-  outline sits to its left, a wheel over the graph moves the *graph* while a wheel over the
-  outline still scrolls the *layer list* — the two scroll independently.
+  outline sits to its left, the two scroll **completely apart** in graph mode (UI-8): the layer
+  list gets its own vertical scrollbar tucked against the **right edge of the outline**, a wheel
+  over the graph pans the *curve* only, and a wheel over the outline (or a drag of that
+  scrollbar) moves the *layer list* only — neither ever nudges the other. This is the one place
+  they differ from the ordinary lane view, where the outline and the lanes ride a **single**
+  shared scroll so a row's controls and its bar always move together.
   **Shaping a key (bezier handles).** New keys are **linear** — straight lines in, straight
   lines out. Select a key (click it, or marquee several) and press **F9**, or the **Bezier**
   button in the bottom bar, to *easy-ease* it — After Effects' smooth default. A bezier key
