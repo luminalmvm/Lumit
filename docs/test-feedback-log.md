@@ -14,12 +14,12 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 - [ ] **P2 — Channel-colour picker.** A reusable three-colour selector (default red /
   green / blue, per Screenshot_135) used by RGB split and chromatic aberration, designed
   to be reused by more effects. (from FX-10, FX-9)
-- [ ] **P3 — Edges mode enum.** Transparent / Repeat / Mirror, reusable wherever edges
+- [x] **P3 — Edges mode enum.** (done, K-145) Transparent / Repeat / Mirror, reusable wherever edges
   can become visible (radial blur already has it; shake, etc.). (from FX-11)
-- [ ] **P4 — Collapsible "twirl" sub-section.** A disclosure group inside an effect's
+- [x] **P4 — Collapsible "twirl" sub-section.** (done, K-145) A disclosure group inside an effect's
   params to hide controls the user does not always need. First user: shake's z / extra
   axes. Reusable across effects. (from FX-11)
-- [ ] **P5 — Value-range policy (K-decision).** Unless a property name contains `%` or a
+- [x] **P5 — Value-range policy (K-decision).** (done, K-135) Unless a property name contains `%` or a
   0–1 ratio is genuinely the natural unit (e.g. vignette roundness), prefer pixel / real
   units with `0..inf` (or wider signed) ranges rather than 0–1. Audit existing effects and
   widen where it helps. (from FX-6)
@@ -85,9 +85,9 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
   samples, with an extra property so the user controls sample count.
 - [ ] **FX-10** Chromatic aberration: add RGB-split's wavelength, and a way to pick the
   three colours (default r/g/b, per Screenshot_135 / s_distortchroma). Reuse **P2**.
-- [ ] **FX-11** Shake: keep Amp/Freq/Rotation; add a **twirl** sub-section (**P4**) holding
-  x/y/z shake amp+freq (z replaces zoom). Remove auto-scale; replace with edges
-  Transparent/Repeat/Mirror (**P3**).
+- [x] **FX-11** Shake reworked (K-146): per-axis x/y/z amp+freq in a twirl sub-section (z
+  replaces zoom pump); auto-scale removed, replaced with Edges (Transparent/Repeat/Mirror).
+  Built the reusable **P3** `EdgesMode` enum + **P4** twirl `ParamGroup` (K-145) for other effects.
 - [x] **FX-12** Block glitch: Seed should always be the second-last property, before Mix.
   — done: Seed moved to second-last in the schema (read by id, so resolve/GPU unaffected).
 - [ ] **FX-13** Scanlines: collapse to a single Intensity/Darkness property (the two
