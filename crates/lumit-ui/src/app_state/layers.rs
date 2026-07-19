@@ -71,8 +71,11 @@ impl AppState {
             return;
         };
 
-        // Span: media duration when known (frame-exact via the comp grid),
-        // else the full comp.
+        // Span: the media's FULL duration when known (frame-exact via the comp
+        // grid), positioned from the comp start; else the full comp. A clip
+        // longer than the comp keeps its whole length (K-153) — it is not
+        // trimmed to fit, only clipped by the comp window [0, comp_end) at
+        // render time, so its tail is recoverable by sliding the layer.
         let comp_dur = comp.duration.0;
         #[cfg(feature = "media")]
         let out = match self.media.map.get(&item_id) {
@@ -80,7 +83,7 @@ impl AppState {
                 let frames = (probe.duration_seconds * comp.frame_rate.fps()).round() as i64;
                 comp.frame_rate
                     .time_of_frame(frames.max(1))
-                    .map(|t| if t.0 < comp_dur { t.0 } else { comp_dur })
+                    .map(|t| t.0)
                     .unwrap_or(comp_dur)
             }
             _ => comp_dur,
@@ -148,11 +151,10 @@ impl AppState {
         let (Some(target), Some(nested)) = (doc.comp(target_id), doc.comp(nested_id)) else {
             return;
         };
-        let out = if nested.duration.0 < target.duration.0 {
-            nested.duration.0
-        } else {
-            target.duration.0
-        };
+        // Keep the nested comp's full duration, positioned from the target's
+        // start (K-153); a precomp longer than its parent is not trimmed to fit,
+        // only clipped by the target window at render time.
+        let out = nested.duration.0;
         let transform = centred_transform(
             f64::from(nested.width),
             f64::from(nested.height),

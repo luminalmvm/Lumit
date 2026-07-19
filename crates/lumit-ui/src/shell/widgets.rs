@@ -122,6 +122,8 @@ pub(crate) fn parse_timecode_frames(s: &str, fps: f64) -> Option<f64> {
 /// The (in, out, start_offset) after moving a layer by `delta` comp seconds: all
 /// three shift together, so the bar and its content move as one. Shifting the
 /// span without `start_offset` would *slip* the content instead of moving it.
+/// Sign is preserved (K-153): the moved in point may land before comp time 0 and
+/// the out point past the comp duration; only the [0, comp_end) overlap renders.
 pub(crate) fn moved_span(
     in_point: lumit_core::time::CompTime,
     out_point: lumit_core::time::CompTime,
@@ -133,7 +135,7 @@ pub(crate) fn moved_span(
     lumit_core::time::CompTime,
 ) {
     let shift = |t: lumit_core::time::CompTime| {
-        lumit_core::time::CompTime(rational_at(t.0.to_f64() + delta))
+        lumit_core::time::CompTime(rational_at_signed(t.0.to_f64() + delta))
     };
     (shift(in_point), shift(out_point), shift(start_offset))
 }

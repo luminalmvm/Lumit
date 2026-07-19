@@ -234,8 +234,18 @@ pub(crate) fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::Blend {
 }
 
 /// Layer time → rational on the flick grid (the only f64→rational route).
+/// Clamps to ≥ 0: layer-local times (keyframes, trim edges) never precede 0.
 pub(crate) fn rational_at(seconds: f64) -> lumit_core::Rational {
     lumit_core::Rational::from_f64_on_grid(seconds.max(0.0), lumit_core::Rational::FLICK_DEN)
+        .unwrap_or(lumit_core::Rational::ZERO)
+}
+
+/// Comp time → rational on the flick grid, sign preserved (K-153). A layer's
+/// placement (in/out point and start offset) may sit before comp time 0, so the
+/// move drag and its `moved_span` convert through this instead of `rational_at`,
+/// which clamps to 0. Only the portion overlapping [0, comp_end) is rendered.
+pub(crate) fn rational_at_signed(seconds: f64) -> lumit_core::Rational {
+    lumit_core::Rational::from_f64_on_grid(seconds, lumit_core::Rational::FLICK_DEN)
         .unwrap_or(lumit_core::Rational::ZERO)
 }
 

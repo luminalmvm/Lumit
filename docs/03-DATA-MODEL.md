@@ -121,9 +121,9 @@ struct Layer {
     id: Uuid,
     name: String,                      // defaults from source; user-renameable
     kind: LayerKind,                   // one of §5.2
-    in_point: CompTime,
-    out_point: CompTime,               // exclusive; out > in
-    start_offset: CompTime,            // where layer time 0 sits on the comp timeline
+    in_point: CompTime,                // may be negative — the layer may start before comp 0 (K-153)
+    out_point: CompTime,               // exclusive; out > in; may exceed the comp duration (K-153)
+    start_offset: CompTime,            // where layer time 0 sits on the comp timeline; may be negative
     stretch: Rational,                 // uniform rate multiplier; rescales this layer's keyframes
     parent: Option<Uuid>,              // transform parenting; cycles are invalid states
     switches: Switches,
@@ -147,8 +147,13 @@ struct Switches {
 ```
 
 Invariants:
-- `in_point`/`out_point` clamp within the comp duration for rendering but MAY extend beyond
-  (AE-style) without data loss.
+- A layer sits freely across the comp boundaries (K-153): `in_point` may be **negative**
+  (the layer starts before comp time 0) and `out_point` may exceed the comp **duration**.
+  Only `out > in` is enforced. The engine renders and plays a layer solely where its span
+  `[in_point, out_point)` **intersects the comp window `[0, comp_end)`** — frames outside the
+  window are simply never sampled — so an over-hanging head or tail is carried without data
+  loss and is recoverable by sliding the layer. Import never trims a long clip to fit: a
+  footage/precomp layer keeps its full source/nested duration, positioned from the comp start.
 - A matte reference to a missing/deleted layer degrades to "no matte" with a badge, never an error.
 - Any layer can serve as a matte for any number of consumers; the engine evaluates it once
   ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)).

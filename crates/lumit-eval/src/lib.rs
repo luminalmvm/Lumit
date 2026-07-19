@@ -859,6 +859,37 @@ mod tests {
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &c, 1.0));
     }
 
+    /// GEN-3 (K-153): a layer may sit across the comp boundaries — starting
+    /// before comp time 0 or ending past the comp duration. Only the portion
+    /// overlapping [0, comp_end) is ever sampled, so the out-of-window head or
+    /// tail changes no rendered frame. In/out points gate presence; they never
+    /// feed the hash, and rendered frames only exist within the comp window.
+    #[test]
+    fn layers_crossing_comp_bounds_render_only_the_in_window_overlap() {
+        let doc = Document::new();
+        // Negative start: in = -3, out = 2, offset 0 — the head before comp 0 is
+        // never sampled, so across [0, 2) every rendered frame keys identically
+        // to the same content placed exactly at 0.
+        let crossing = comp_with(vec![text_layer("x", -3.0, 2.0, 0.0)]);
+        let in_window = comp_with(vec![text_layer("x", 0.0, 2.0, 0.0)]);
+        for t in [0.0, 0.5, 1.9] {
+            assert_eq!(key(&doc, &crossing, t), key(&doc, &in_window, t));
+        }
+        // Past its out point the crossing layer is gone (empty-comp key), just
+        // like the in-window one — a negative start does not extend the tail.
+        let empty = comp_with(vec![]);
+        assert_eq!(key(&doc, &crossing, 2.0), key(&doc, &empty, 2.0));
+
+        // Ending past comp end: out = 20 while the comp is 10 s long. It is
+        // present at the last comp frames and keys like a layer trimmed exactly
+        // to the comp end, because frames only exist within [0, comp_end).
+        let over_end = comp_with(vec![text_layer("y", 0.0, 20.0, 0.0)]);
+        let to_end = comp_with(vec![text_layer("y", 0.0, 10.0, 0.0)]);
+        for t in [8.0, 9.5] {
+            assert_eq!(key(&doc, &over_end, t), key(&doc, &to_end, t));
+        }
+    }
+
     /// Evaluated values, not keyframe data: adding a keyframe beyond the
     /// evaluated point (linear span unchanged before it) keeps the key;
     /// changing the value at the point changes it.

@@ -1684,3 +1684,27 @@ Auto-scale cover behaviour itself is gone (an intentional change — the wobble 
 zooms to hide edges). CPU/GPU parity and the §1.6 oracle hold across all three edge modes.
 Spec: [08-EFFECTS.md](08-EFFECTS.md) §3.4. Built in an isolated worktree; not pushed —
 another agent may also claim K-146, renumber on merge if so.
+
+**K-153 · DECIDED · Layers sit freely across the comp boundaries (GEN-3).** From the owner
+(2026-07-19). A layer in the lane area may start **before comp time 0** (`in_point` and
+`start_offset` may be negative) and end **past the comp duration** (`out_point` may exceed
+it); only `out > in` is still enforced. The engine renders and plays a layer solely where its
+span `[in_point, out_point)` **intersects the comp window `[0, comp_end)`** — out-of-window
+frames are never sampled — so an over-hanging head or tail is carried without data loss and is
+recoverable by sliding the layer. This is already how presence is gated (`t ∈ [in, out)` for a
+`t` that only ranges over the comp window) in the evaluator, the preview job collector and the
+exporter, and how audio places (`place_on_timeline` + `mix_stereo` clip a negative-offset head
+and a past-the-end tail to `[0, comp_end)`); GEN-3 removes the *authoring* clamps that stopped
+the model reaching those states. Consequences:
+- The lane **move drag** no longer clamps a layer's start to 0 (`moved_span` converts through a
+  sign-preserving `rational_at_signed`, not the ≥ 0 `rational_at`); frame/marker snapping is
+  unchanged. Trim-edge and keyframe times stay ≥ 0 (layer-local times never precede 0).
+- **Import never trims a long clip to fit.** A footage layer keeps its full media duration and
+  a Precomp layer its full nested duration, positioned from the comp start
+  (`add_footage_to_comp` / `add_precomp_to_comp`), instead of clamping the out point to the
+  comp — matching the "layers extend beyond bounds without data loss" invariant in
+  [03-DATA-MODEL.md](03-DATA-MODEL.md) §5.1. Preview == export and determinism are unaffected
+  (the render/decode/audio paths already only sample the intersection). Known v1 limit: the
+  timeline view does not scroll to negative time, so a bar that starts before 0 is drawn
+  clipped at the lane's left edge (its in-window body stays grabbable). Built in an isolated
+  worktree; not pushed — another agent may also claim K-153, renumber on merge if so.

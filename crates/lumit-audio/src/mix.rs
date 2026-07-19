@@ -202,6 +202,38 @@ mod tests {
     }
 
     #[test]
+    fn placement_before_comp_start_clips_the_pre_zero_head() {
+        // GEN-3 (K-153): a layer dragged so it starts before comp time 0. Its
+        // in point and start offset move together (the body-drag covenant), so
+        // in_s == offset_s == -1: at comp 0 the source is already 1 s in. The
+        // active span intersected with the comp window [0, 2) is what sounds;
+        // the second of source that falls before comp 0 is clipped, not wrapped.
+        let rate = 48_000u32;
+        let src_frames = 4 * rate as usize; // 4 s source
+        let (out_start, src_start, len) =
+            place_on_timeline(-1.0, 2.0, -1.0, src_frames, rate).unwrap();
+        // audible_start = max(in, offset) = -1; source runs from its own frame 0,
+        // landing one second before the strip; length spans -1..2 = 3 s.
+        assert_eq!(out_start, -i64::from(rate));
+        assert_eq!(src_start, 0);
+        assert_eq!(len, 3 * rate as usize);
+        // Mixed onto a 2 s comp strip: the pre-0 second is dropped and the whole
+        // in-window span [0, 2) sounds the source from its 1 s mark onward.
+        let src = tone(src_frames, 0.5);
+        let placed = PlacedAudio {
+            start_frame: out_start,
+            samples: &src[src_start * 2..(src_start + len) * 2],
+            gain: 1.0,
+        };
+        let out = mix_stereo(&[placed], 2 * rate as usize);
+        assert_eq!(out.len(), 2 * rate as usize * 2);
+        assert!(
+            out.iter().all(|s| (*s - 0.5).abs() < 1e-6),
+            "the whole in-window span sounds; nothing before comp 0 bleeds in"
+        );
+    }
+
+    #[test]
     fn empty_mix_is_silence() {
         assert_eq!(mix_stereo(&[], 4), vec![0.0; 8]);
     }

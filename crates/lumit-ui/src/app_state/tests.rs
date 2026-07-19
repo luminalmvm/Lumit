@@ -924,3 +924,75 @@ fn deleting_the_audio_layer_silences_the_comp() {
         "a comp with no audio layer must unload its mix"
     );
 }
+
+/// GEN-3 (K-153): importing a clip longer than the comp keeps its FULL media
+/// duration — positioned from the comp start — instead of being trimmed to fit.
+/// The comp window clips it at render time; the model keeps the whole layer, so
+/// its tail is recoverable by sliding the layer across the comp end.
+#[cfg(feature = "media")]
+#[test]
+fn a_long_import_keeps_its_full_media_duration() {
+    use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+    let mut app = AppState::default();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    let comp_id = app.selected_comp.unwrap();
+    let comp_dur = app
+        .store
+        .snapshot()
+        .comp(comp_id)
+        .unwrap()
+        .duration
+        .0
+        .to_f64();
+    let item_id = Uuid::now_v7();
+    app.commit(Op::AddItem {
+        index: app.store.snapshot().items.len(),
+        item: Box::new(ProjectItem::Footage(FootageItem {
+            id: item_id,
+            name: "long.mp4".into(),
+            extra: serde_json::Map::new(),
+            media: MediaRef {
+                relative_path: "long.mp4".into(),
+                absolute_path: "/tmp/long.mp4".into(),
+                extra: serde_json::Map::new(),
+            },
+        })),
+    });
+    // A Ready probe far longer than the comp (the default comp is 30 s).
+    let media_dur = comp_dur + 20.0;
+    app.media.map.insert(
+        item_id,
+        media::MediaStatus::Ready {
+            probe: lumit_media::MediaProbe {
+                duration_seconds: media_dur,
+                container: "mp4".into(),
+                video: Some(lumit_media::VideoInfo {
+                    width: 1920,
+                    height: 1080,
+                    fps_num: 60,
+                    fps_den: 1,
+                    codec: "h264".into(),
+                }),
+                audio: None,
+            },
+            frames: (media_dur * 60.0).round() as usize,
+            vfr: false,
+        },
+    );
+    app.preview_comp = Some(comp_id);
+    app.add_footage_to_comp(item_id);
+
+    let layer = app.store.snapshot().comp(comp_id).unwrap().layers[0].clone();
+    // Placed from the comp start, keeping its whole length — NOT trimmed to fit.
+    assert!(layer.in_point.0.is_zero(), "placed at the comp start");
+    assert!(
+        (layer.out_point.0.to_f64() - media_dur).abs() < 0.05,
+        "keeps its full {media_dur} s, not the {comp_dur} s comp: {}",
+        layer.out_point.0.to_f64()
+    );
+    assert!(
+        layer.out_point.0.to_f64() > comp_dur,
+        "a long import must extend past the comp end"
+    );
+}

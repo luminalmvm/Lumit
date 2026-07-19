@@ -1639,6 +1639,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
 - `crates/lumit-ui/src/shell.rs` + `app_state.rs` — **the window**: panels, menus,
   shortcuts, and the state glue (current project, dirty flag, autosave timer, recovery
   prompt).
+- **Layers can hang over the edges of the composition** (K-153, GEN-3). Think of a
+  composition as a fixed-length window of time — say ten seconds. A layer used to be forced to
+  live entirely inside that window: you could not slide it so it *started before* the comp's
+  zero mark, and importing a clip longer than the comp chopped it down to fit. Now a layer sits
+  wherever you drag it. Its start may be a negative time (it begins "off to the left", before
+  the comp starts) and its end may run past the comp's end. The program only ever *shows and
+  plays the part that overlaps the ten-second window* — the bit hanging off either edge is
+  simply never asked for — but nothing is thrown away, so sliding the layer back brings the
+  hidden footage straight back. Two everyday wins: a long clip keeps its whole length on
+  import (you position it, the window trims the view, not the clip), and you can push a layer
+  left so an earlier moment of it lands on the very first frame. Under the bonnet this needed
+  almost nothing in the engine — the picture and the sound were already built to render only
+  the overlapping slice — so the change was really just *removing* the old "snap it back inside
+  the comp" rules from the drag and the import. One rough edge for now: the timeline can't
+  scroll to show negative time, so a layer that starts before zero is drawn tucked under the
+  left edge (you can still grab the part that's on screen).
 
 ## 5. Making a change safely (the recipe)
 

@@ -708,8 +708,10 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     let move_dx = match app.move_edit {
                         Some((id, raw_in)) if id == layer.id => {
                             let thr = drag_secs(6.0, px_per_sec);
+                            // A layer may sit before comp 0 (K-153): snap the raw
+                            // in point sign-preserved, never clamped to 0.
                             let snapped = lumit_core::markers::snap_time(
-                                rational_at(raw_in.max(0.0)),
+                                rational_at_signed(raw_in),
                                 &comp.markers,
                                 rational_at(thr),
                             )
@@ -1044,14 +1046,17 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                     Some((id, s)) if id == layer.id => s,
                                     _ => layer.in_point.0.to_f64(),
                                 };
-                                app.move_edit = Some((layer.id, (base + dx_secs).max(0.0)));
+                                // A layer may start before comp 0 (K-153), so the
+                                // move is not clamped to 0; the comp window clips
+                                // whatever falls outside [0, comp_end) at render.
+                                app.move_edit = Some((layer.id, base + dx_secs));
                             }
                             if resp.drag_stopped() {
                                 if let Some((id, raw_in)) = app.move_edit.take() {
                                     if id == layer.id {
                                         let thr = drag_secs(6.0, px_per_sec);
                                         let snapped = lumit_core::markers::snap_time(
-                                            rational_at(raw_in.max(0.0)),
+                                            rational_at_signed(raw_in),
                                             &comp.markers,
                                             rational_at(thr),
                                         )

@@ -336,3 +336,39 @@ mod lane_marquee_interaction_tests {
         assert!(!row_clicked, "a drag must not read as a click on the row");
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod span_move_tests {
+    use super::*;
+    use lumit_core::time::{CompTime, Rational};
+
+    fn ct(s: f64) -> CompTime {
+        CompTime(Rational::from_f64_on_grid(s, Rational::FLICK_DEN).unwrap())
+    }
+
+    /// GEN-3 (K-153): moving a layer left past comp 0 lands a NEGATIVE in point
+    /// (and start offset) — no longer clamped to 0. In/out/offset shift together
+    /// so the bar and its content move as one; the comp window clips the pre-0
+    /// head at render time.
+    #[test]
+    fn moving_a_layer_before_comp_start_keeps_a_negative_in_point() {
+        // Layer at [1, 4) with offset 1; drag left by 3 s.
+        let (in_p, out_p, off) = moved_span(ct(1.0), ct(4.0), ct(1.0), -3.0);
+        assert!(in_p.0.is_negative(), "in point crosses before 0: {in_p:?}");
+        assert!((in_p.0.to_f64() - (-2.0)).abs() < 1e-9);
+        assert!((out_p.0.to_f64() - 1.0).abs() < 1e-9);
+        assert!((off.0.to_f64() - (-2.0)).abs() < 1e-9);
+        // Span length and the in↔offset relation are preserved by the move.
+        assert!(((out_p.0.to_f64() - in_p.0.to_f64()) - 3.0).abs() < 1e-9);
+        assert!((in_p.0.to_f64() - off.0.to_f64()).abs() < 1e-9);
+    }
+
+    /// The out point may also cross past the comp end (unbounded above).
+    #[test]
+    fn moving_a_layer_right_lets_the_out_point_pass_the_comp_end() {
+        let (in_p, out_p, _off) = moved_span(ct(0.0), ct(5.0), ct(0.0), 8.0);
+        assert!((in_p.0.to_f64() - 8.0).abs() < 1e-9);
+        assert!((out_p.0.to_f64() - 13.0).abs() < 1e-9);
+    }
+}
