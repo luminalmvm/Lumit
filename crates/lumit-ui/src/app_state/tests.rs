@@ -671,6 +671,63 @@ fn copy_move_paste_replays_keys_at_the_playhead() {
     );
 }
 
+/// T4: Ctrl+C in the GRAPH view copies the graph-editor selection, not just the
+/// lanes. With `lane_selection` empty and the marquee's keys pinned in
+/// `graph_selection`, `copy_selected_keyframes` must still fill the clipboard.
+#[test]
+fn copy_uses_the_graph_selection_when_the_lanes_are_empty() {
+    use lumit_core::anim::{Animation, Keyframe, SideInterp};
+    use lumit_core::model::TransformProp;
+    let mut app = AppState::default();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    app.add_solid_layer();
+    let comp_id = app.selected_comp.unwrap();
+    let layer_id = app.store.snapshot().comp(comp_id).unwrap().layers[0].id;
+    let t1 = Rational::from_f64_on_grid(1.0, Rational::FLICK_DEN).unwrap();
+    let t2 = Rational::from_f64_on_grid(2.0, Rational::FLICK_DEN).unwrap();
+    let keys = vec![
+        Keyframe {
+            time: t1,
+            value: 10.0,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        },
+        Keyframe {
+            time: t2,
+            value: 20.0,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        },
+    ];
+    app.commit(Op::SetTransformProperty {
+        comp: comp_id,
+        layer: layer_id,
+        prop: TransformProp::Rotation,
+        animation: Animation::Keyframed(keys),
+    });
+    // No lane selection; the graph editor holds the picked keys instead.
+    app.lane_selection.clear();
+    app.graph_selection = Some(crate::app_state::GraphSelection {
+        layer: layer_id,
+        prop: TransformProp::Rotation,
+        retime: false,
+        keys: vec![(0, t1), (1, t2)],
+    });
+    app.copy_selected_keyframes();
+    assert_eq!(
+        app.keyframe_clipboard.len(),
+        2,
+        "both graph-selected keys must be copied"
+    );
+    assert!(
+        app.keyframe_clipboard
+            .iter()
+            .all(|c| c.row == PropRow::Transform(TransformProp::Rotation)),
+        "copied onto the graphed rotation channel"
+    );
+}
+
 /// UI-7 supporting fact: a lane-key glyph is drawn with `Sense::click_and_drag`,
 /// which egui marks focusable — but selecting one (a click) does not leave it
 /// holding keyboard focus. So `keyframe_clipboard_shortcuts`' "skip while a

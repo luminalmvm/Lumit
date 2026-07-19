@@ -439,7 +439,9 @@ impl AppState {
     pub fn copy_selected_keyframes(&mut self) {
         use lumit_core::anim::{Animation, Keyframe};
         use lumit_core::model::{EffectValue, Layer, TransformProp};
-        if self.lane_selection.is_empty() {
+        // The lane selection OR the graph-editor selection (T4): Ctrl+C in the
+        // graph view keys off `graph_selection`, not the lanes.
+        if self.lane_selection.is_empty() && self.graph_selection.is_none() {
             return;
         }
         let doc = self.store.snapshot();
@@ -501,6 +503,33 @@ impl AppState {
                 // The Retime channel's keys aren't drawn as selectable lane
                 // glyphs, so a lane selection never carries one.
                 PropRow::Retime => {}
+            }
+        }
+        // Graph-editor selection (T4): when the marquee lives in the graph view,
+        // `lane_selection` is empty and the picked keys are pinned in
+        // `graph_selection` instead. Copy that channel's selected transform keys.
+        // (Retime's Time channel has no paste target, so it is skipped, matching
+        // the lane path.)
+        if collected.is_empty() {
+            if let Some(sel) = &self.graph_selection {
+                if !sel.retime {
+                    if let Some(layer) = comp.layers.iter().find(|l| l.id == sel.layer) {
+                        if let Animation::Keyframed(keys) = &layer.transform.get(sel.prop).animation
+                        {
+                            if let Some(indices) = sel.indices_for(keys) {
+                                for i in indices {
+                                    let k = keys[i];
+                                    collected.push((
+                                        sel.layer,
+                                        PropRow::Transform(sel.prop),
+                                        k.time.to_f64(),
+                                        k,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         if collected.is_empty() {
