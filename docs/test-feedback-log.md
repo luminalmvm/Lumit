@@ -116,7 +116,8 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 - [ ] **GEN-2** Add a **Vibrancy** effect to complement Saturation.
 - [ ] **GEN-3** Lanes: layers should move either side of the composition bounds (before 0,
   past the end) without trimming. Also fixes long-import auto-trim.
-- [ ] **GEN-4** Audio is broken: mute does nothing; moving an audio layer doesn't move the
-  audio; audio plays outside the layer's active span; deleting the audio layer leaves the
-  audio in the comp. (Blocks FX-15.)
+- [x] **GEN-4** Audio fixed (K-141): the comp mix now re-derives from the document each
+  frame, so mute, move, trim (active span) and delete all take effect live. Caveat: editing
+  one of several audio layers mid-playback has a brief re-decode snap; all-silent is instant.
+  Unblocks FX-15.
 - [x] **GEN-5** Default the lane-timeline grid to **time**, not beats. — done.
