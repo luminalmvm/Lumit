@@ -130,17 +130,32 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // consume bit-identical numbers. A neutral shake (zero wobble)
         // maps to the identity affine — the bit-exact passthrough the
         // Transform reference pins. `edge` is Shake's own Edges control.
+        // With motion blur (T18) the wobble is resampled at each sub-frame
+        // placement and the results averaged; without it, one resample.
         Resolved::Shake {
             offset_px,
             rotation_deg,
             zoom,
             edge,
             mix,
-        } => {
-            let (anchor, position, scale, rot) =
-                super::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
-            transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
-        }
+            mb,
+        } => match mb {
+            Some(samples) => {
+                let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); super::SHAKE_MB_SAMPLES];
+                for (op, s) in ops.iter_mut().zip(samples.iter()) {
+                    let (anchor, position, scale, rot) =
+                        super::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+                    let (m, o, _opacity) = super::transform_op(anchor, position, scale, rot, 1.0);
+                    *op = (m, o);
+                }
+                transform_average(rgba, w, h, &ops, *edge, *mix);
+            }
+            None => {
+                let (anchor, position, scale, rot) =
+                    super::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
+                transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
+            }
+        },
         Resolved::BlockGlitch {
             intensity,
             seed,
@@ -290,6 +305,50 @@ pub fn transform(
             let s = bilinear_edge(&original, w, h, qx, qy, edge);
             for c in 0..4 {
                 let v = s[c] * opacity;
+                rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
+            }
+        }
+    }
+}
+
+/// The average of several transform resamples of one image — the reference for
+/// the shake's own motion blur (T18, K-165). Each `(m, off)` is a host-computed
+/// inverse affine (`lumit_core::fx::transform_op`): every output pixel centre is
+/// resampled through all of them (opacity 1, the same `edge` policy and
+/// `bilinear_edge` the single resample uses), the premultiplied results summed
+/// in order and divided by the count, then blended against the untouched input
+/// by `mix`. The accumulation order and the divide-by-count match the WGSL
+/// kernel op-for-op, so both paths agree within the cheap-class fp16 bound
+/// (§1.6). An empty `ops` is a defensive no-op (the caller never passes one).
+pub fn transform_average(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    ops: &[([f32; 4], [f32; 2])],
+    edge: u32,
+    mix: f32,
+) {
+    if ops.is_empty() {
+        return;
+    }
+    let original = rgba.to_vec();
+    let n = ops.len() as f32;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let mut acc = [0.0f32; 4];
+            for (m, o) in ops {
+                let qx = m[0] * px + m[1] * py + o[0];
+                let qy = m[2] * px + m[3] * py + o[1];
+                let s = bilinear_edge(&original, w, h, qx, qy, edge);
+                for c in 0..4 {
+                    acc[c] += s[c];
+                }
+            }
+            for c in 0..4 {
+                let v = acc[c] / n;
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
             }
         }

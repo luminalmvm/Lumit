@@ -59,6 +59,11 @@ pub struct FxEngine {
     contrast: wgpu::ComputePipeline,
     gamma: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
+    /// The shake's own motion blur (docs/08 §3.4, T18/K-165): averages the
+    /// shake resampled at its motion-blur sub-frames. Its own kernel rather
+    /// than the Transform kernel because it reads the input at several affines
+    /// in one pass; it uses the shared two-input layout all the same.
+    shake_mb: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     block_glitch: wgpu::ComputePipeline,

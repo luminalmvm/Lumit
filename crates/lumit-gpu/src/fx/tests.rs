@@ -1477,6 +1477,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
             zoom,
             edge,
             mix,
+            mb: None,
         };
         let mut cpu = img.clone();
         lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
@@ -1512,6 +1513,149 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU shake must be bit-stable");
     }
+}
+
+/// The §1.6 oracle for the shake's own motion blur (docs/08 §3.4, T18/K-165):
+/// the `fx_shake_mb` kernel averages the wobble resampled at its motion-blur
+/// sub-frames, and must agree with `cpu::transform_average` (reached through
+/// `cpu::apply` on a `Resolved::Shake` carrying the sub-frames). The sub-frames
+/// come from the shared `ShakeWobble`/`shake_mb_offsets` the resolver uses, so
+/// this exercises the whole T18 path. One bilinear tap per sub-frame, so the
+/// cheap-class ≤ 2 fp16 ULP bound holds; the GPU is bit-stable (§2.4). The Edges
+/// control is swept across Transparent / Repeat / Mirror.
+#[test]
+fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
+    // The GPU crate can't name lumit-core's const (dev-dependency only), so pin
+    // the two — and the WGSL `array<Tap, 9>` literal — in agreement here.
+    assert_eq!(SHAKE_MB_SAMPLES, lumit_core::fx::SHAKE_MB_SAMPLES);
+
+    let Ok(ctx) = GpuContext::headless() else {
+        eprintln!("no GPU adapter; skipping WGSL parity test");
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+
+    // A realistic sub-frame set: the same sampler the resolver uses, spread
+    // across the shutter, with rotation and a touch of z (depth) shake so the
+    // average smears translation, rotation and zoom together.
+    let wobble = lumit_core::fx::ShakeWobble {
+        seed: 7,
+        amp_px: 6.0,
+        x_amp: 1.0,
+        y_amp: 1.0,
+        rot_amount: 4.0,
+        z_amp: 0.08,
+        x_freq: 1.0,
+        y_freq: 1.3,
+        z_freq: 0.7,
+    };
+    let base = 2.0f64;
+    let offsets = lumit_core::fx::shake_mb_offsets(0.8);
+    let mut samples = [lumit_core::fx::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
+    for (s, db) in samples.iter_mut().zip(offsets) {
+        let (offset_px, rotation_deg, zoom) = wobble.at(base + db);
+        *s = lumit_core::fx::ShakeSample {
+            offset_px,
+            rotation_deg,
+            zoom,
+        };
+    }
+    let centre = samples[SHAKE_MB_SAMPLES / 2];
+
+    for (name, edge, mix) in [
+        ("smear-transparent", 0u32, 1.0f32),
+        ("smear-repeat", 1, 1.0),
+        ("smear-mirror-mixed", 2, 0.7),
+    ] {
+        let shake = lumit_core::fx::Resolved::Shake {
+            offset_px: centre.offset_px,
+            rotation_deg: centre.rotation_deg,
+            zoom: centre.zoom,
+            edge,
+            mix,
+            mb: Some(samples),
+        };
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
+
+        // The exact run_ops mapping: each sub-frame's shared affine → transform
+        // op → one tap of the averaging kernel.
+        let mut taps = [ShakeMbTap {
+            m: [1.0, 0.0, 0.0, 1.0],
+            off: [0.0, 0.0],
+        }; SHAKE_MB_SAMPLES];
+        for (t, s) in taps.iter_mut().zip(samples.iter()) {
+            let (anchor, position, scale, rotation) =
+                lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+            let (m, off, _opacity) =
+                lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+            *t = ShakeMbTap { m, off };
+        }
+        let op = ShakeMbOp {
+            taps,
+            count: SHAKE_MB_SAMPLES as u32,
+            edge,
+            mix,
+        };
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.shake_mb(&ctx, &tex, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("shake-mb {name}: worst {worst} ulp");
+        assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+        assert_ne!(gpu, img, "{name}: the motion blur moves pixels");
+
+        let out2 = fx.shake_mb(&ctx, &tex, w, h, &op);
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "GPU shake motion blur must be bit-stable");
+    }
+
+    // A single tap equal to the frame wobble is the plain Shake: the averaging
+    // kernel at count 1 matches the Transform kernel within the cheap bound.
+    let (anchor, position, scale, rotation) =
+        lumit_core::fx::shake_affine(w, h, centre.offset_px, centre.rotation_deg, centre.zoom);
+    let (m, off, opacity) = lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let mut taps = [ShakeMbTap {
+        m: [1.0, 0.0, 0.0, 1.0],
+        off: [0.0, 0.0],
+    }; SHAKE_MB_SAMPLES];
+    taps[0] = ShakeMbTap { m, off };
+    let single = fx.shake_mb(
+        &ctx,
+        &tex,
+        w,
+        h,
+        &ShakeMbOp {
+            taps,
+            count: 1,
+            edge: 1,
+            mix: 1.0,
+        },
+    );
+    let single_gpu = readback_linear_f32(&ctx, &single, w, h).unwrap();
+    let plain = fx.transform(
+        &ctx,
+        &tex,
+        w,
+        h,
+        &TransformOp {
+            m,
+            off,
+            opacity,
+            mix: 1.0,
+            edge: 1,
+        },
+    );
+    let plain_gpu = readback_linear_f32(&ctx, &plain, w, h).unwrap();
+    let worst = worst_f16_ulp(&single_gpu, &plain_gpu);
+    assert!(
+        worst <= 2,
+        "count-1 motion blur == plain shake: worst {worst}"
+    );
 }
 
 /// The §1.6 oracle for glow: WGSL agrees with the CPU reference on the

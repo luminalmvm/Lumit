@@ -3567,15 +3567,21 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     assert!(e.param("zoom_pump").is_none());
     assert!(e.param("auto_scale").is_none());
     assert!(matches!(e.param("seed"), Some(EffectValue::Seed(_))));
-    // The schema declares the twirl group over exactly the per-axis params.
+    // The shake's own motion blur (T18) ships off, with a 0.5 shutter default.
+    assert_eq!(e.bool_of("motion_blur"), Some(false));
+    assert_eq!(e.float_at("mb_amount", 0.0), Some(0.5));
+    // The schema declares two twirl groups over contiguous param runs.
     let schema = schema("shake").unwrap();
-    assert_eq!(schema.groups.len(), 1);
+    assert_eq!(schema.groups.len(), 2);
     assert_eq!(schema.groups[0].label, "Per-axis wobble");
     assert!(schema.groups[0].collapsed);
     assert_eq!(
         schema.groups[0].params,
         &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"]
     );
+    assert_eq!(schema.groups[1].label, "Motion blur");
+    assert!(schema.groups[1].collapsed);
+    assert_eq!(schema.groups[1].params, &["motion_blur", "mb_amount"]);
 
     // Resolving is deterministic: the same instance at the same time
     // yields the identical wobble, twice.
@@ -3654,6 +3660,7 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
         zoom: 1.0,
         edge: 1,
         mix: 1.0,
+        mb: None,
     };
     let mut n = img.clone();
     cpu::apply(&mut n, w, h, &neutral);
@@ -3667,6 +3674,7 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
         zoom: 1.0,
         edge: 0,
         mix: 1.0,
+        mb: None,
     };
     let mut s = img.clone();
     cpu::apply(&mut s, w, h, &shaken);
@@ -3700,6 +3708,7 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
                 zoom: 1.0,
                 edge,
                 mix: 1.0,
+                mb: None,
             },
         );
         c
@@ -3718,6 +3727,168 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
             corner_alpha(&held)
         );
     }
+}
+
+/// A shake instance with its motion blur enabled at `amount`.
+fn shake_with_mb(amount: f64) -> crate::model::EffectInstance {
+    let mut e = instantiate("shake").unwrap();
+    for p in &mut e.params {
+        match p.id.as_str() {
+            "motion_blur" => p.value = EffectValue::Bool(true),
+            "mb_amount" => p.value = EffectValue::Float(crate::anim::Property::fixed(amount)),
+            _ => {}
+        }
+    }
+    e
+}
+
+#[test]
+fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
+    // Off (the default) resolves to a single wobble — no sub-frame set.
+    let off = instantiate("shake").unwrap();
+    let r = resolve_stack(
+        std::slice::from_ref(&off),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake { mb, .. } = r[0] else {
+        panic!("expected a Shake");
+    };
+    assert!(mb.is_none(), "motion blur off carries no sub-frames");
+
+    // On: the sub-frame set is present, its centre sample is the frame-time
+    // wobble exactly, and the samples actually differ across the shutter.
+    let on = shake_with_mb(0.5);
+    let r = resolve_stack(
+        std::slice::from_ref(&on),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake {
+        offset_px,
+        rotation_deg,
+        zoom,
+        mb,
+        ..
+    } = r[0]
+    else {
+        panic!("expected a Shake");
+    };
+    let samples = mb.expect("motion blur on carries sub-frames");
+    assert_eq!(samples.len(), SHAKE_MB_SAMPLES);
+    let centre = samples[SHAKE_MB_SAMPLES / 2];
+    assert_eq!(centre.offset_px, offset_px, "centre sample is the frame");
+    assert_eq!(centre.rotation_deg, rotation_deg);
+    assert_eq!(centre.zoom, zoom);
+    assert_ne!(
+        samples[0].offset_px,
+        samples[SHAKE_MB_SAMPLES - 1].offset_px,
+        "the wobble moves across the shutter"
+    );
+
+    // Determinism: same instance, same time, identical sub-frames twice.
+    let r2 = resolve_stack(
+        std::slice::from_ref(&on),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(r, r2);
+
+    // A zero shutter is treated as no smear (the bit-exact single resample).
+    let zero = shake_with_mb(0.0);
+    let r = resolve_stack(
+        std::slice::from_ref(&zero),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake { mb, .. } = r[0] else {
+        panic!("expected a Shake");
+    };
+    assert!(mb.is_none(), "a zero shutter carries no sub-frames");
+}
+
+#[test]
+fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
+    let (w, h) = (24u32, 16u32);
+    let img = transform_card(w, h);
+
+    // A shake carrying a wobble, resolved without motion blur.
+    let base = shake_with_mb(0.0); // amount 0 ⇒ mb None ⇒ the plain shake
+    let plain = resolve_stack(
+        std::slice::from_ref(&base),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::Shake { mb: None, .. } = plain[0] else {
+        panic!("expected a plain Shake");
+    };
+    let mut a = img.clone();
+    cpu::apply(&mut a, w, h, &plain[0]);
+
+    // The same shake with motion blur on smears: the averaged result differs
+    // from the plain single resample.
+    let blurred = resolve_stack(
+        std::slice::from_ref(&shake_with_mb(0.8)),
+        0.4,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert!(
+        matches!(blurred[0], Resolved::Shake { mb: Some(_), .. }),
+        "motion blur on carries sub-frames"
+    );
+    let mut b = img.clone();
+    cpu::apply(&mut b, w, h, &blurred[0]);
+    assert_ne!(a, b, "motion blur smears the shake");
+
+    // A degenerate sub-frame set — every sample equal to one wobble — averages
+    // back to that single resample (to within f32 rounding of the sum ÷ count),
+    // pinning the averaging maths against the plain transform reference.
+    let one = ShakeSample {
+        offset_px: [3.0, -2.0],
+        rotation_deg: 5.0,
+        zoom: 1.02,
+    };
+    let flat = Resolved::Shake {
+        offset_px: one.offset_px,
+        rotation_deg: one.rotation_deg,
+        zoom: one.zoom,
+        edge: 1,
+        mix: 1.0,
+        mb: Some([one; SHAKE_MB_SAMPLES]),
+    };
+    let mut avg = img.clone();
+    cpu::apply(&mut avg, w, h, &flat);
+    let single = Resolved::Shake {
+        offset_px: one.offset_px,
+        rotation_deg: one.rotation_deg,
+        zoom: one.zoom,
+        edge: 1,
+        mix: 1.0,
+        mb: None,
+    };
+    let mut one_shot = img.clone();
+    cpu::apply(&mut one_shot, w, h, &single);
+    let worst = avg
+        .iter()
+        .zip(&one_shot)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max);
+    assert!(
+        worst < 1e-4,
+        "averaging identical sub-frames is the single resample (worst {worst})"
+    );
 }
 
 #[test]

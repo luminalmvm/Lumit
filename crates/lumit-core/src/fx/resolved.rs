@@ -150,6 +150,29 @@ pub struct MatteKeyParams {
     pub mix: f32,
 }
 
+/// One sub-frame state of a shake's own motion blur (T18, K-165): the wobble
+/// sampled at one point in the shutter, in the same `(offset_px, rotation_deg,
+/// zoom)` form the frame-time shake carries. The dispatch turns each into an
+/// affine through [`shake_affine`] and averages the resamples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShakeSample {
+    /// Wobble offset at this sub-frame, raster pixels.
+    pub offset_px: [f32; 2],
+    /// Rotation wobble at this sub-frame, degrees.
+    pub rotation_deg: f32,
+    /// Zoom factor at this sub-frame; 1 = no depth (z) shake.
+    pub zoom: f32,
+}
+
+impl ShakeSample {
+    /// The neutral (identity) sample — the fixed-size array's initialiser.
+    pub const IDENTITY: Self = Self {
+        offset_px: [0.0, 0.0],
+        rotation_deg: 0.0,
+        zoom: 1.0,
+    };
+}
+
 /// One effect, resolved to plain numbers at a frame — the flat form both the
 /// WGSL kernels (lumit-gpu) and the CPU references below consume.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -447,6 +470,16 @@ pub enum Resolved {
         edge: u32,
         /// 0..1.
         mix: f32,
+        /// The shake's own motion blur (T18, K-165): `Some` when the toggle is
+        /// on and the amount is non-zero — the wobble sampled at
+        /// [`SHAKE_MB_SAMPLES`] sub-frame placements across the shutter, which
+        /// the dispatch resamples and averages in premultiplied linear space
+        /// (the accumulation-motion-blur philosophy, applied to this effect
+        /// alone). `None` is the plain single resample, the bit-exact
+        /// passthrough. The centre sample equals the frame-time wobble above.
+        /// Sampled host-side because the noise lattice needs 64-bit integers
+        /// the GPU has not got (docs/08 §3.12).
+        mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
     },
     /// Block glitch (docs/08 §3.12, split out by K-107). `tick` is the
     /// local time already discretised at [`GLITCH_TICK_HZ`] (host-side, so
@@ -1166,18 +1199,48 @@ fn resolve_one(
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
             // The wobble: independent noise channels sampled at local time ×
             // frequency (per axis, §3.4) — deterministic, hop-free, identical
-            // on every machine (§2.4).
+            // on every machine (§2.4). One sampler drives the frame-time wobble
+            // and the motion-blur sub-frames, so they agree bit-for-bit.
             let base = lt * freq;
             let amp_px = (amp_pct / 100.0 * diag_px).max(0.0);
+            let wobble = ShakeWobble {
+                seed,
+                amp_px,
+                x_amp,
+                y_amp,
+                rot_amount,
+                z_amp,
+                x_freq,
+                y_freq,
+                z_freq,
+            };
+            let (offset_px, rotation_deg, zoom) = wobble.at(base);
+            // The shake's own motion blur (T18, K-165): when the toggle is on
+            // and the amount is non-zero, sample the wobble across the shutter
+            // for the dispatch to average; off is the plain single resample
+            // (the bit-exact passthrough). The centre offset is 0, so the middle
+            // sample equals the frame-time wobble exactly.
+            let motion_blur = e.bool_of("motion_blur").unwrap_or(false);
+            let mb_amount = e.float_at("mb_amount", lt).unwrap_or(0.5);
+            let mb = (motion_blur && mb_amount > 0.0).then(|| {
+                let mut samples = [ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
+                for (s, db) in samples.iter_mut().zip(shake_mb_offsets(mb_amount)) {
+                    let (offset_px, rotation_deg, zoom) = wobble.at(base + db);
+                    *s = ShakeSample {
+                        offset_px,
+                        rotation_deg,
+                        zoom,
+                    };
+                }
+                samples
+            });
             Some(Resolved::Shake {
-                offset_px: [
-                    amp_px * x_amp * shake_noise(seed, 0, base * x_freq) as f32,
-                    amp_px * y_amp * shake_noise(seed, 1, base * y_freq) as f32,
-                ],
-                rotation_deg: rot_amount * shake_noise(seed, 2, base) as f32,
-                zoom: 1.0 + z_amp * shake_noise(seed, 3, base * z_freq) as f32,
+                offset_px,
+                rotation_deg,
+                zoom,
                 edge: edge.code(),
                 mix,
+                mb,
             })
         }
         "block_glitch" => {

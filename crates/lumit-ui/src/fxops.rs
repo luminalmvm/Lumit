@@ -523,33 +523,65 @@ pub fn run_ops(
             // Shake dispatches the Transform kernel (docs/08 §3.4: a
             // transform-domain effect): the shared affine turns the
             // resolved wobble into the same op the CPU reference builds,
-            // so both paths consume bit-identical numbers.
+            // so both paths consume bit-identical numbers. With its own
+            // motion blur on (T18/K-165) it instead builds one affine per
+            // sub-frame and dispatches the averaging kernel, the same
+            // sub-frames `cpu::transform_average` averages.
             Resolved::Shake {
                 offset_px,
                 rotation_deg,
                 zoom,
                 edge,
                 mix,
-            } => {
-                let (anchor, position, scale, rot) =
-                    lumit_core::fx::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
-                let (m, off, opacity) =
-                    lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
-                tex = fx.transform(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::TransformOp {
-                        m,
-                        off,
-                        opacity,
-                        mix: *mix,
-                        // Shake's own Edges control governs the revealed border.
-                        edge: *edge,
-                    },
-                );
-            }
+                mb,
+            } => match mb {
+                Some(samples) => {
+                    let mut taps = [lumit_gpu::fx::ShakeMbTap {
+                        m: [1.0, 0.0, 0.0, 1.0],
+                        off: [0.0, 0.0],
+                    }; lumit_gpu::fx::SHAKE_MB_SAMPLES];
+                    for (t, s) in taps.iter_mut().zip(samples.iter()) {
+                        let (anchor, position, scale, rot) =
+                            lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+                        let (m, off, _opacity) =
+                            lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                        *t = lumit_gpu::fx::ShakeMbTap { m, off };
+                    }
+                    tex = fx.shake_mb(
+                        ctx,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::ShakeMbOp {
+                            taps,
+                            count: samples.len() as u32,
+                            // Shake's own Edges control governs the revealed border.
+                            edge: *edge,
+                            mix: *mix,
+                        },
+                    );
+                }
+                None => {
+                    let (anchor, position, scale, rot) =
+                        lumit_core::fx::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
+                    let (m, off, opacity) =
+                        lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                    tex = fx.transform(
+                        ctx,
+                        &tex,
+                        w,
+                        h,
+                        &lumit_gpu::fx::TransformOp {
+                            m,
+                            off,
+                            opacity,
+                            mix: *mix,
+                            // Shake's own Edges control governs the revealed border.
+                            edge: *edge,
+                        },
+                    );
+                }
+            },
             Resolved::BlockGlitch {
                 intensity,
                 seed,

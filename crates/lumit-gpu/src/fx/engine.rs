@@ -220,6 +220,7 @@ impl FxEngine {
         let contrast_mod = module(include_str!("../fx_contrast.wgsl"), "fx-contrast");
         let gamma_mod = module(include_str!("../fx_gamma.wgsl"), "fx-gamma");
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
+        let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
         let block_glitch_mod = module(include_str!("../fx_block_glitch.wgsl"), "fx-block-glitch");
         let scanlines_mod = module(include_str!("../fx_scanlines.wgsl"), "fx-scanlines");
@@ -256,6 +257,7 @@ impl FxEngine {
         let contrast = pipeline(&contrast_mod, "fx-contrast", "contrast");
         let gamma = pipeline(&gamma_mod, "fx-gamma", "gamma");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
+        let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
         let block_glitch = pipeline(&block_glitch_mod, "fx-block-glitch", "block_glitch");
@@ -336,6 +338,7 @@ impl FxEngine {
             contrast,
             gamma,
             transform,
+            shake_mb,
             glow_bright,
             glow_combine,
             block_glitch,

@@ -130,6 +130,58 @@ struct TransformParams {
     _pad2: f32,
 }
 
+/// The number of Shake motion-blur sub-frame taps (T18/K-165): the fixed-size
+/// end of the uniform array and the WGSL kernel's `array<Tap, 9>` / `MAX_TAPS`.
+/// Must equal `lumit_core::fx::SHAKE_MB_SAMPLES` — the GPU crate can't name that
+/// const (lumit-core is a dev-dependency only), so the oracle tests assert the
+/// two agree, and the WGSL literal is kept in step by the same tests.
+pub const SHAKE_MB_SAMPLES: usize = 9;
+
+/// One resolved Shake motion blur (docs/08 §3.4, T18/K-165): the shake's own
+/// inter-frame smear. Each tap is a host-computed inverse affine (the same
+/// `shake_affine` → `transform_op` construction the plain Shake uses, one per
+/// motion-blur sub-frame); the kernel resamples the input through the first
+/// `count` taps and averages them in premultiplied linear space. `count` is
+/// always ≥ 1 (the host only builds this when motion blur is on). Mirrors
+/// `lumit_core::fx::cpu::transform_average`.
+#[derive(Debug, Clone, Copy)]
+pub struct ShakeMbOp {
+    /// Up to [`SHAKE_MB_SAMPLES`] inverse affines `(m, off)`.
+    pub taps: [ShakeMbTap; SHAKE_MB_SAMPLES],
+    /// Active taps, `1..=SHAKE_MB_SAMPLES`.
+    pub count: u32,
+    /// The revealed border's edge policy (P3, K-145): 0 Transparent, 1 Repeat,
+    /// 2 Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// One motion-blur sub-frame's inverse affine `(m, off)` (T18): row-major
+/// inverse linear 2×2 and the inverse translation, exactly as [`TransformOp`].
+#[derive(Debug, Clone, Copy)]
+pub struct ShakeMbTap {
+    pub m: [f32; 4],
+    pub off: [f32; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ShakeMbTapUniform {
+    m: [f32; 4],
+    off: [f32; 4], // .xy used; .zw pad to the uniform's 16-byte stride
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ShakeMbParams {
+    taps: [ShakeMbTapUniform; SHAKE_MB_SAMPLES],
+    count: u32,
+    edge: u32,
+    mix_amt: f32,
+    _pad: f32,
+}
+
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
 /// Glitch effect by K-107). `tick` arrives already computed from local time
 /// (`lumit_core::fx::GLITCH_TICK_HZ`), so the kernel never sees raw time or
@@ -312,6 +364,46 @@ impl FxEngine {
                 _pad0: 0.0,
                 _pad1: 0.0,
                 _pad2: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Shake motion blur (docs/08 §3.4, T18/K-165): resample the input
+    /// through the op's sub-frame inverse affines and average them, then blend
+    /// by mix — the shake's own inter-frame smear, on this effect alone. One
+    /// pass with up to [`SHAKE_MB_SAMPLES`] bilinear taps.
+    pub fn shake_mb(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ShakeMbOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-shake-mb-out");
+        let mut taps = [ShakeMbTapUniform {
+            m: [1.0, 0.0, 0.0, 1.0],
+            off: [0.0; 4],
+        }; SHAKE_MB_SAMPLES];
+        for (dst, s) in taps.iter_mut().zip(op.taps.iter()) {
+            dst.m = s.m;
+            dst.off = [s.off[0], s.off[1], 0.0, 0.0];
+        }
+        self.dispatch(
+            ctx,
+            &self.shake_mb,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ShakeMbParams {
+                taps,
+                count: op.count.clamp(1, SHAKE_MB_SAMPLES as u32),
+                edge: op.edge,
+                mix_amt: op.mix,
+                _pad: 0.0,
             }),
         );
         out

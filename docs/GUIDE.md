@@ -451,7 +451,18 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   button rolls a fresh one. Shake also taught the frame cache a lesson: its parameters can
   sit constant while the picture moves every frame, so for effects that declare seeded
   randomness the cache key now includes the layer's local time — without that, a shaken
-  solid would replay its first cached frame forever.
+  solid would replay its first cached frame forever. A second twirl, **Motion blur**, gives
+  the shake *its own* motion blur (separate from the layer and comp motion blur, and touching
+  only this effect). Because the wobble is pure maths of time, the engine can ask "where was
+  the shake a moment before, and a moment after this frame" and draw the picture at several of
+  those in-between positions, then average them — so a fast shake smears along its own path
+  instead of snapping frame to frame, the way a real camera blurs when it jolts. It is off by
+  default; the **Shutter** dial (0 to 1) sets how long that smear is, and 0 (or the toggle
+  off) is exactly the plain, un-blurred shake. The in-between positions are worked out on the
+  CPU because the noise recipe needs 64-bit whole numbers the graphics card cannot do, then a
+  small dedicated GPU program does the averaging. The smear's length is measured in the
+  shake's own rhythm rather than in seconds, so it looks the same whether your project runs at
+  30 or 60 frames a second (K-165).
 - **Edges control (a shared effect building block).** Several effects move pixels around —
   a blur that smears sideways, a shake that slides the whole frame — and wherever the
   picture shifts, it can pull in area from *outside* the layer that has no pixels of its

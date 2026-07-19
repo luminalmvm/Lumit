@@ -13,14 +13,23 @@ pub const EDGE_OPTIONS: &[&str] = EdgesMode::OPTIONS;
 /// the common case, spelled once so every ungrouped Choice reads the same.
 pub const CHOICE_UNGROUPED: &[u32] = &[];
 
-/// Shake's per-axis wobble (FX-11, K-146), tucked behind a twirl (P4): the
-/// master Amplitude/Frequency drive x and y together, and this group biases
-/// each axis, adding the z (depth/scale) shake that replaces the old Zoom pump.
-const SHAKE_GROUPS: &[ParamGroup] = &[ParamGroup {
-    label: "Per-axis wobble",
-    params: &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"],
-    collapsed: true,
-}];
+/// Shake's twirls (P4): the per-axis wobble (FX-11, K-146) — the master
+/// Amplitude/Frequency drive x and y together while this group biases each axis
+/// and adds the z (depth/scale) shake that replaced the old Zoom pump — and the
+/// Motion blur group (T18, K-165), the shake's own inter-frame smear (toggle +
+/// amount). Each group's ids are a contiguous run of the schema's `params`.
+const SHAKE_GROUPS: &[ParamGroup] = &[
+    ParamGroup {
+        label: "Per-axis wobble",
+        params: &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"],
+        collapsed: true,
+    },
+    ParamGroup {
+        label: "Motion blur",
+        params: &["motion_blur", "mb_amount"],
+        collapsed: true,
+    },
+];
 
 /// The host-uniform Mix parameter every effect ends with (docs/08 §1.5),
 /// in per cent, blending processed over unprocessed input.
@@ -1602,6 +1611,29 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 1.0,
                     slider: (0.0, 4.0),
                     hard: (Some(0.0), None),
+                },
+            },
+            // The "Motion blur" twirl (SHAKE_GROUPS, T18/K-165): the shake's own
+            // motion blur, smeared along the wobble's inter-frame movement and
+            // applied to this effect alone. Off by default; the amount is a
+            // shutter-like 0..1 fraction (a genuine ratio, so a 0..1 range is
+            // the natural unit, P5/K-135).
+            ParamSchema {
+                id: "motion_blur",
+                label: "Motion blur",
+                kind: ParamKind::Bool { default: false },
+            },
+            ParamSchema {
+                id: "mb_amount",
+                label: "Shutter",
+                // 0..1 shutter fraction: how far across the shutter window the
+                // wobble is sampled and averaged. 0 is the plain shake (no
+                // smear); the resolver also treats motion blur off as no smear,
+                // so both are the bit-exact single resample.
+                kind: ParamKind::Float {
+                    default: 0.5,
+                    slider: (0.0, 1.0),
+                    hard: (Some(0.0), Some(1.0)),
                 },
             },
             ParamSchema {

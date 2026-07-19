@@ -171,6 +171,75 @@ pub fn shake_noise(seed: u32, channel: u32, x: f64) -> f64 {
     (value_noise_1d(seed, channel, x) + 0.5 * value_noise_1d(seed, channel + 4, x * 2.0)) / 1.5
 }
 
+/// The time-independent configuration of one shake's wobble (docs/08 §3.4):
+/// the seed, the per-axis amplitudes (already in raster pixels for x/y and a
+/// 0..1 scale-pump for z) and the per-axis frequency multipliers. `at(base)`
+/// samples the wobble at a noise base — local time × the master frequency —
+/// returning the `(offset_px, rotation_deg, zoom)` ingredients
+/// [`shake_affine`] turns into a transform. One sampler serves both the
+/// frame-time wobble and the motion-blur sub-frames (T18), so a shake and its
+/// own motion blur are drawn from bit-identical numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShakeWobble {
+    pub seed: u32,
+    /// Master amplitude in raster pixels (% comp diagonal × the preview factor).
+    pub amp_px: f32,
+    pub x_amp: f32,
+    pub y_amp: f32,
+    /// Peak rotation wobble in degrees.
+    pub rot_amount: f32,
+    /// Depth (z) scale-pump magnitude, 0..1.
+    pub z_amp: f32,
+    pub x_freq: f64,
+    pub y_freq: f64,
+    pub z_freq: f64,
+}
+
+impl ShakeWobble {
+    /// The wobble at noise base `base`: `(offset_px, rotation_deg, zoom)`. The
+    /// arithmetic order matches the historical inline resolve, so an unchanged
+    /// shake stays bit-for-bit itself.
+    pub fn at(self, base: f64) -> ([f32; 2], f32, f32) {
+        (
+            [
+                self.amp_px * self.x_amp * shake_noise(self.seed, 0, base * self.x_freq) as f32,
+                self.amp_px * self.y_amp * shake_noise(self.seed, 1, base * self.y_freq) as f32,
+            ],
+            self.rot_amount * shake_noise(self.seed, 2, base) as f32,
+            1.0 + self.z_amp * shake_noise(self.seed, 3, base * self.z_freq) as f32,
+        )
+    }
+}
+
+/// The fixed number of sub-frame samples the shake's own motion blur averages
+/// (T18, K-165): odd, so the centre sample lands exactly on the frame time.
+/// A fixed count and order keep the smear deterministic (docs/14 §3), and the
+/// value is small because a shake moves little — a Cheap effect stays cheap.
+pub const SHAKE_MB_SAMPLES: usize = 9;
+
+/// The motion-blur shutter's full width in the noise base domain at amount 1
+/// (T18, K-165). The wobble is a pure function of time, so its motion blur
+/// samples it across `± SHAKE_MB_SPAN_BASE · amount / 2` around the frame's
+/// base. The window is expressed in **base units** (local time × frequency),
+/// not seconds: this keeps the smear frame-rate independent and needs no fps
+/// in the frame-rate-agnostic effect resolver. A faster axis (higher frequency
+/// multiplier) advances further through its noise over the same window, so it
+/// smears more — the shake's own inter-frame movement, scaled by amount.
+pub const SHAKE_MB_SPAN_BASE: f64 = 1.0;
+
+/// The signed base offsets of the motion-blur sub-frames across the shutter
+/// (T18, K-165), symmetric about 0 so the centre sample is the frame itself.
+/// `amount` is the shutter fraction, clamped to 0..1.
+pub fn shake_mb_offsets(amount: f64) -> [f64; SHAKE_MB_SAMPLES] {
+    let window = amount.clamp(0.0, 1.0) * SHAKE_MB_SPAN_BASE;
+    let last = (SHAKE_MB_SAMPLES - 1) as f64;
+    let mut out = [0.0f64; SHAKE_MB_SAMPLES];
+    for (k, o) in out.iter_mut().enumerate() {
+        *o = (k as f64 / last - 0.5) * window;
+    }
+    out
+}
+
 /// A 32-bit avalanche mixer, in the same five-line-portability spirit as
 /// [`splitmix64`] above (public-domain "splitmix32" shape: golden-ratio
 /// increment, xorshift/multiply/xorshift finalisation) — Glitch's per-block

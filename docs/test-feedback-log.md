@@ -182,7 +182,13 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [x] T15 Sharpen gained a Radius param (neighbour distance in px; 1 = 3×3, larger = coarser). Full 4-site + oracle.
 - [x] T16 Vignette: added a Ramp param (gamma on the smoothstep falloff; default 1.0, 0.2–4, hard min 0.05). Full 4-site + oracle (non-identity ramp case).
 - [x] T17 RGB split: removed the Radial option (K-161); added the shared 3-colour picker. Now a linear tinted-tap fringe — default red/green/blue tints reproduce the classic split bit-for-bit. Full 4-site + oracle.
-- [ ] T18 Shake: add its own motion-blur twirl (toggle + amount), computed from inter-frame movement, applying only to this effect.
+- [x] T18 Shake: added a **Motion blur** twirl (toggle + Shutter 0–1, off by default; K-165).
+  The wobble is a pure function of time, so it is sampled at 9 sub-frame placements across the
+  shutter (host-side — the noise needs 64-bit ints the GPU lacks) and averaged in a dedicated
+  `fx_shake_mb` kernel; translation, rotation and zoom smear together, on this effect alone.
+  Off / Shutter 0 is the bit-exact single resample. Shutter measured in the shake's own phase
+  (frame-rate independent), so no fps threading into the resolver. Full 4-site + CPU/GPU oracle
+  (worst 1 fp16 ULP on NVIDIA).
 - [x] T19 (K-164) Datamosh reimplemented as a flow-driven **streamline melt**: per pixel a walk
   follows the flow out of the -1 neighbour (re-sampling the flow each step so the smear curves),
   accumulating a melting prediction over the current frame. New params **Displacement** (frames of

@@ -2066,3 +2066,38 @@ the ≤ 2 bound. Sites: schema (`fx/builtins.rs`), `Resolved::Datamosh` variant 
 (`lumit-gpu/src/fx/temporal.rs`) + UI dispatch (`lumit-ui/src/fxops.rs`); docs (§3.12, GUIDE).
 Built in an isolated worktree; renumbered from K-161 to K-164 on merge (K-161-163 were taken by
 the main session's T17 / T24 / A1).
+
+**K-165 · DECIDED · The Shake effect's own motion blur is host-side sub-frame averaging over
+a phase-domain shutter.** From the owner (T18): "Shake: add its own motion-blur twirl (toggle
++ amount), computed from inter-frame movement, applying only to this effect." Decisions:
+- **Approach (a), true sub-frame averaging.** The shake wobble is a pure function of time
+  (`shake_noise` at `local time × frequency`), so its motion blur samples the wobble at a
+  fixed, odd count of sub-frame placements across the shutter (`SHAKE_MB_SAMPLES = 9`, the
+  centre sample being the frame itself), resamples the input through each as a full
+  transform-domain affine, and averages the premultiplied results — the same
+  premultiplied-linear mean the accumulation motion blur uses (docs/06 §4). Translation,
+  rotation and zoom all smear. This applies to **this effect's output only** — independent of
+  the per-layer and comp motion blur. A dedicated one-pass kernel (`fx_shake_mb.wgsl`, up to
+  9 bilinear taps) mirrors the new CPU reference `cpu::transform_average` op-for-op; the
+  toggle off (or Shutter 0) is the bit-exact single resample, pinned by test.
+- **The sub-frames are computed host-side.** The noise lattice uses `splitmix64`, and WGSL
+  has no 64-bit integer (docs/08 §3.12), so the GPU cannot sample the noise. The resolver
+  computes the 9 sub-frame `(offset, rotation, zoom)` states and the dispatch is handed ready
+  affines — the same split the plain Shake already uses.
+- **The shutter window is measured in the shake's own phase, not seconds.** The window spans
+  `± SHAKE_MB_SPAN_BASE · amount / 2` in the noise base domain (`local time × frequency`),
+  with `SHAKE_MB_SPAN_BASE = 1.0` and the Shutter amount a 0–1 fraction (default 0.5). This
+  was chosen over threading a frame rate into the effect resolver: `resolve_stack` is
+  deliberately frame-rate-agnostic (it carries only local time, the diagonal in pixels and
+  the preview factor), and rewiring an fps through it and its many call sites for a cosmetic
+  smear was not worth it. The consequence — a virtue — is that the smear is **frame-rate
+  independent** (a shake motion-blurs identically at 30 or 60 fps) and still a genuine
+  function of the shake's own inter-frame movement: a faster axis (higher frequency
+  multiplier) advances further through its noise over the same window, so it smears more,
+  exactly as real inter-frame movement would. If a seconds-anchored shutter is ever wanted,
+  it is an additive change (thread fps, convert to base units at resolve).
+- Two schema params in a **Motion blur** twirl (P4): `motion_blur` (Bool, default off) and
+  `mb_amount` (the Shutter, 0–1, default 0.5). Off by default so existing shakes and the
+  established look are unchanged; the old spec-table default of "on" (docs/08 §3.4) is
+  superseded. Built in an isolated worktree against a base predating K-161–K-163; renumbered
+  from K-164 to K-165 on merge (T19 Datamosh had already taken K-164).
