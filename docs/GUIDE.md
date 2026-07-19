@@ -713,26 +713,43 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   fuller version, which shifts the picture along real colour-temperature lines and adds a
   green/magenta Tint axis, is a later Tier-2 job); it is the everyday "make it feel warmer"
   control, and it animates like every other grade.
-- **Matte key — greenscreen removal.** Drop this on green-screen footage and it makes the
-  green vanish, leaving whatever was shot in front of it on a clean transparent background.
-  It works by *colour distance*: you tell it the screen colour (the **Key colour**, a green by
-  default, so it works the moment you add it), and every pixel close to that colour has its
-  transparency turned up until the screen disappears. "Close" is measured ignoring brightness,
-  so a green screen that is brighter in one corner and shadowed in another still keys as one
-  colour. Three dials tune it. **Tolerance** is how close a colour has to be to count as
-  screen — widen it if patches of green survive, narrow it if the foreground starts
-  disappearing. **Softness** is the width of the fuzzy edge between "kept" and "removed": a
-  little softness gives hair and motion-blurred edges a natural fade instead of a jagged
-  cut-out. And **Spill suppression** tackles the green *tint* that a bright screen throws onto
-  the edges of the subject — it gently drains that green back out of the kept pixels so a
-  person's shoulders don't glow green against their new background. Two design points worth
-  knowing: the removal is deliberately a *gradual fade* rather than a hard on/off switch (a
-  hard switch would make the CPU and graphics-card versions disagree by a hair, which the
-  agreement test forbids — same rule as everywhere else), and like the other colour tools it
-  works on the picture's *straight* colours, undoing the alpha pre-multiply first, so it judges
-  edge pixels by their true colour and doesn't leave a fringe. Setting the Key colour is now a
-  point-and-click job: use the **eyedropper** beside its swatch to sample the screen straight
-  from the Viewer (see the colour picker and eyedropper note below).
+- **Matte key — greenscreen removal (K-154).** Drop this on green-screen footage and it makes
+  the green vanish, leaving whatever was shot in front of it on a clean transparent background.
+  It is modelled on the professional keyer *Keylight*: you tell it the **Screen colour** (a
+  green by default, so it works the moment you add it — but its brightest channel decides the
+  screen, so a blue screen keys just as well), and it measures each pixel's screen colour
+  against the two *other* colours to decide how much is screen and how much is subject. The
+  top-level dials are the ones you reach for first. **Screen gain** is the overall strength —
+  turn it up if patches of green survive, down if the foreground starts thinning. **Screen
+  balance** decides how the two non-screen channels are combined into the reference the screen
+  is measured against; the middle setting suits most shots, and nudging it either way rescues
+  awkward tints. **Despill amount** tackles the green *spill* a bright screen throws onto the
+  subject's edges — it drains that green back out so shoulders and hair don't glow green
+  against the new background. Two colour swatches, **Despill bias** and **Alpha bias**, let you
+  tell the keyer what should count as "neutral" for the spill and for the matte respectively;
+  left grey they do nothing, which is the usual starting point.
+  - The **View** menu at the top is how you *see* what you are keying: **Final result** is the
+    finished cut-out, **Screen matte** shows the transparency itself as a black-and-white image
+    (white stays, black goes) so you can spot holes and grey patches, and **Status** tints the
+    uncertain in-between areas so problem edges jump out.
+  - The **Screen matte** twirl holds the clean-up controls. **Clip black** forces the nearly
+    transparent parts fully transparent (killing background haze), **Clip white** forces the
+    nearly solid parts fully solid (filling pinholes in the subject), and **Clip rollback**
+    eases those two back off a touch to win back fine detail like stray hairs. **Replace
+    method** (with its **Replace colour**) decides what colour fills the de-spilled edges —
+    *Soft colour*, the default, tints them with the replace colour scaled to the edge's own
+    brightness so it settles in naturally; *Hard colour* uses it flat; *Source* keeps the
+    original edge colour; *None* leaves the plainly de-spilled colour.
+  - Two design points worth knowing: every step is a *gradual blend* rather than a hard on/off
+    switch (a hard switch would make the CPU and graphics-card versions disagree by a hair,
+    which the agreement test forbids — same rule as everywhere else), and like the other colour
+    tools it works on the picture's *straight* colours, undoing the alpha pre-multiply first, so
+    it judges edge pixels by their true colour and doesn't leave a fringe. Any of the colour
+    swatches can be set with the **eyedropper** beside it, sampling straight from the Viewer
+    (see the colour picker and eyedropper note below). A project made before this expansion
+    keeps its old screen colour and spill amount and simply re-keys with the new controls at
+    their defaults. Some further Keylight refinements — blurring and shrinking the matte,
+    garbage masks, per-region colour correction and edge crops — are noted for a later pass.
 - **Invert (K-126).** The classic negative: every colour flips to its opposite — black becomes
   white, blue becomes orange, and so on (each channel is replaced by "one minus itself"). There
   are no dials except the shared **Mix**, so it always inverts; turn Mix down to blend the

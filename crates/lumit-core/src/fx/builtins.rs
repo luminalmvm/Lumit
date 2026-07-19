@@ -2148,25 +2148,38 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
-    // Matte key (docs/08 §3.21): a soft chroma key — a greenscreen remover.
-    // Alpha is driven down where a pixel's chroma sits close to the key
-    // colour's chroma, on straight (unpremultiplied) colour (§2.2, the wrap
-    // fused into the kernel like Saturation's). The distance is Euclidean in
-    // the chroma plane (RGB minus Rec. 709 luma), so greens of varying
-    // brightness key alike; a smoothstep between Tolerance and
-    // Tolerance + Softness makes the key continuous everywhere (no hard step,
-    // so the §1.6 ULP oracle holds — cost class `cheap`). Spill suppression
-    // pulls the residual key-hue projection out of the kept pixels' colour
-    // (desaturating toward luma along the key hue) so green fringes fade.
-    // Category Utility, beside Transform. The default green + Tolerance visibly
-    // keys a typical green screen ("drop it on and it works", §1.2); there is
-    // no neutral no-op default (Mix 0 is the identity). A viewer eyedropper to
-    // pick the key colour off the image is a nice follow-up, out of scope here.
+    // Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
+    // keyer — a proper greenscreen keyer, expanded from the K-121 chroma-distance
+    // key. It works on straight (unpremultiplied) colour (§2.2, the wrap fused into
+    // the kernel like Saturation's). The screen colour's largest channel is the
+    // primary screen axis; a pixel's primary-minus-(balance-weighted)-secondary
+    // difference, normalised by the screen colour's own, drives the screen matte
+    // (Screen gain scales the fall-off, Screen balance weights the two secondaries).
+    // Clip black/white/rollback tidy the matte's ends, despill drains screen tint
+    // from kept pixels, and the Replace method recolours where spill was removed.
+    // Every step is clamp/min/max/lerp — continuous, so the §1.6 ULP oracle holds
+    // (cost class `cheap`). Category Utility, beside Transform. The default green +
+    // 100 % gain visibly keys a typical green screen ("drop it on and it works",
+    // §1.2); there is no neutral no-op default (Mix 0 is the identity). The spatial
+    // Keylight controls (screen pre-blur / shrink-grow / softness / despot) and the
+    // inside-outside garbage masks, colour correction and source crops are deferred
+    // follow-ups (§3.21 status). Migration: a project saved before K-154 keeps its
+    // stored Screen colour and Spill; the superseded Tolerance/Softness go unread.
     EffectSchema {
-        groups: &[],
+        groups: &[ParamGroup {
+            label: "Screen matte",
+            params: &[
+                "clip_black",
+                "clip_white",
+                "clip_rollback",
+                "replace_method",
+                "replace_colour",
+            ],
+            collapsed: true,
+        }],
         match_name: "matte_key",
         label: "Matte key",
-        version: 1,
+        version: 2,
         category: FxCategory::Utility,
         traits: EffectTraits {
             cost: CostClass::Cheap,
@@ -2178,47 +2191,133 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                id: "view",
+                label: "View",
+                // Final result (the keyed picture), Screen matte (the alpha as
+                // greyscale), or Status (a continuous heat of the matte). Default
+                // Final so the effect keys the moment it is dropped on.
+                kind: ParamKind::Choice {
+                    options: &["Final result", "Screen matte", "Status"],
+                    default: 0,
+                },
+            },
+            ParamSchema {
                 id: "key",
-                label: "Key colour",
-                // Scene-linear RGBA; alpha ignored. Default a saturated green,
-                // the greenscreen the effect exists to remove.
+                label: "Screen colour",
+                // Scene-linear RGBA; alpha ignored. Default a saturated green, the
+                // greenscreen the effect exists to remove. Its largest channel
+                // picks the primary screen axis (so a blue screen keys too).
                 kind: ParamKind::Colour {
                     default: [0.0, 0.6, 0.0, 1.0],
                     range: (0.0, 4.0),
                 },
             },
             ParamSchema {
-                id: "tolerance",
-                label: "Tolerance",
-                // Per cent, the chroma-distance threshold below which a pixel
-                // is fully keyed (alpha ·= 0). Resolves to a plain 0..1
-                // fraction read against the Euclidean chroma metric.
+                id: "screen_gain",
+                label: "Screen gain",
+                // Per cent → a 0.. multiplier on the matte fall-off. 100 % keys
+                // the exact screen colour to zero; higher keys more aggressively.
                 kind: ParamKind::Float {
-                    default: 20.0,
+                    default: 100.0,
+                    slider: (0.0, 200.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "screen_balance",
+                label: "Screen balance",
+                // Per cent → 0..1: how the two non-screen channels are weighted
+                // into the reference (0 = their min, 100 = their max, 50 = mean).
+                kind: ParamKind::Float {
+                    default: 50.0,
                     slider: (0.0, 100.0),
                     hard: (Some(0.0), Some(100.0)),
                 },
             },
             ParamSchema {
-                id: "softness",
-                label: "Softness",
-                // Per cent, the soft-edge width above Tolerance across which
-                // the keep-factor smoothsteps from 0 to 1.
-                kind: ParamKind::Float {
-                    default: 10.0,
-                    slider: (0.0, 100.0),
-                    hard: (Some(0.0), Some(100.0)),
+                id: "despill_bias",
+                label: "Despill bias",
+                // Scene-linear RGBA; shifts the reference the despill clamps the
+                // primary down to. A neutral grey is a no-op.
+                kind: ParamKind::Colour {
+                    default: [0.5, 0.5, 0.5, 1.0],
+                    range: (0.0, 4.0),
+                },
+            },
+            ParamSchema {
+                id: "alpha_bias",
+                label: "Alpha bias",
+                // Scene-linear RGBA; shifts what colour counts as neutral for the
+                // screen matte. A neutral grey is a no-op.
+                kind: ParamKind::Colour {
+                    default: [0.5, 0.5, 0.5, 1.0],
+                    range: (0.0, 4.0),
                 },
             },
             ParamSchema {
                 id: "spill",
-                label: "Spill suppression",
-                // Per cent of the residual key-hue chroma pulled out of the
-                // kept colour (0 = off, the default: keying without despill).
+                label: "Despill amount",
+                // Per cent of the primary's screen excess drained from kept pixels
+                // (defaults full-on, Keylight-like; an older instance keeps its
+                // stored value, an even older one without the param reads 0).
+                kind: ParamKind::Float {
+                    default: 100.0,
+                    slider: (0.0, 100.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            // Screen matte twirl (the K-145 collapsible group above).
+            ParamSchema {
+                id: "clip_black",
+                label: "Clip black",
+                // Per cent → 0..1: matte at/below this maps to 0 (fully keyed),
+                // cleaning residual grey out of the background.
                 kind: ParamKind::Float {
                     default: 0.0,
                     slider: (0.0, 100.0),
                     hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "clip_white",
+                label: "Clip white",
+                // Per cent → 0..1: matte at/above this maps to 1 (fully kept),
+                // filling holes in the foreground.
+                kind: ParamKind::Float {
+                    default: 100.0,
+                    slider: (0.0, 100.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "clip_rollback",
+                label: "Clip rollback",
+                // Per cent → 0..1: eases the clips back toward the un-clipped
+                // matte, recovering fine edge detail (0 = full clip, the default).
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 100.0),
+                    hard: (Some(0.0), Some(100.0)),
+                },
+            },
+            ParamSchema {
+                id: "replace_method",
+                label: "Replace method",
+                // How despilled areas are recoloured. Default Soft colour, as
+                // Keylight (it settles into shading rather than a flat patch).
+                kind: ParamKind::Choice {
+                    options: &["Source", "Hard colour", "Soft colour", "None"],
+                    default: 2,
+                },
+            },
+            ParamSchema {
+                id: "replace_colour",
+                label: "Replace colour",
+                // Scene-linear RGBA used by the Hard/Soft replace methods; a
+                // neutral grey desaturates spill edges without a colour cast.
+                kind: ParamKind::Colour {
+                    default: [0.5, 0.5, 0.5, 1.0],
+                    range: (0.0, 4.0),
                 },
             },
             MIX_PARAM,

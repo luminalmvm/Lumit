@@ -340,24 +340,26 @@ pub fn run_ops(
                     },
                 );
             }
-            Resolved::MatteKey {
-                key,
-                tol,
-                soft,
-                spill,
-                mix,
-            } => {
+            Resolved::MatteKey(p) => {
                 tex = fx.matte_key(
                     ctx,
                     &tex,
                     w,
                     h,
                     &lumit_gpu::fx::MatteKeyOp {
-                        key: *key,
-                        tol: *tol,
-                        soft: *soft,
-                        spill: *spill,
-                        mix: *mix,
+                        view: p.view,
+                        key: p.key,
+                        gain: p.gain,
+                        balance: p.balance,
+                        despill_bias: p.despill_bias,
+                        alpha_bias: p.alpha_bias,
+                        spill: p.spill,
+                        clip_black: p.clip_black,
+                        clip_white: p.clip_white,
+                        clip_rollback: p.clip_rollback,
+                        replace_method: p.replace_method,
+                        replace_colour: p.replace_colour,
+                        mix: p.mix,
                     },
                 );
             }

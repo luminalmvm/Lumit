@@ -623,14 +623,17 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for matte key: a cheap pointwise chroma key, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
-/// Mix 0 is the bit-exact identity on both paths. The corpus mixes
-/// near-key greens, far-from-key colours, partial-alpha (premultiplied)
-/// pixels and an HDR spike, and the settings sweep Tolerance / Softness /
-/// Spill so the smoothstep transition and the despill path are exercised.
+/// The §1.6 oracle for matte key: a cheap pointwise Keylight-style keyer, so
+/// the CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4),
+/// and Mix 0 is the bit-exact identity on both paths. The corpus mixes
+/// near-screen greens, far-from-screen colours, partial-alpha (premultiplied)
+/// pixels and an HDR spike; the settings sweep gain / balance / despill /
+/// clips / replace method / bias colours and the three View modes so the
+/// screen-matte, clip, despill, replace and diagnostic paths are all
+/// exercised.
 #[test]
 fn wgsl_matte_key_matches_the_cpu_oracle() {
+    use lumit_core::fx::MatteKeyParams;
     let Ok(ctx) = GpuContext::headless() else {
         eprintln!("no GPU adapter; skipping WGSL parity test");
         return;
@@ -661,53 +664,92 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
     img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 0.5]);
     let img: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
 
-    let green = [0.0f32, 0.6, 0.0, 1.0];
-    for (name, op) in [
+    let grey = [0.5f32, 0.5, 0.5, 1.0];
+    // A base op mirroring the schema defaults; each case overrides a field or two.
+    let base = MatteKeyParams {
+        view: 0,
+        key: [0.0, 0.6, 0.0, 1.0],
+        gain: 1.0,
+        balance: 0.5,
+        despill_bias: grey,
+        alpha_bias: grey,
+        spill: 1.0,
+        clip_black: 0.0,
+        clip_white: 1.0,
+        clip_rollback: 0.0,
+        replace_method: 2,
+        replace_colour: grey,
+        mix: 1.0,
+    };
+    let to_op = |p: &MatteKeyParams| MatteKeyOp {
+        view: p.view,
+        key: p.key,
+        gain: p.gain,
+        balance: p.balance,
+        despill_bias: p.despill_bias,
+        alpha_bias: p.alpha_bias,
+        spill: p.spill,
+        clip_black: p.clip_black,
+        clip_white: p.clip_white,
+        clip_rollback: p.clip_rollback,
+        replace_method: p.replace_method,
+        replace_colour: p.replace_colour,
+        mix: p.mix,
+    };
+
+    for (name, p) in [
+        ("default_soft", base),
         (
-            "default",
-            MatteKeyOp {
-                key: green,
-                tol: 0.2,
-                soft: 0.1,
+            "high_gain_low_balance",
+            MatteKeyParams {
+                gain: 1.6,
+                balance: 0.15,
+                ..base
+            },
+        ),
+        (
+            "clips_and_rollback",
+            MatteKeyParams {
+                clip_black: 0.15,
+                clip_white: 0.85,
+                clip_rollback: 0.4,
+                ..base
+            },
+        ),
+        (
+            "hard_replace_tinted_bias",
+            MatteKeyParams {
+                replace_method: 1,
+                replace_colour: [0.2, 0.1, 0.4, 1.0],
+                despill_bias: [0.6, 0.5, 0.4, 1.0],
+                alpha_bias: [0.55, 0.5, 0.45, 1.0],
+                ..base
+            },
+        ),
+        (
+            "source_replace_no_spill",
+            MatteKeyParams {
+                replace_method: 0,
                 spill: 0.0,
-                mix: 1.0,
+                ..base
             },
         ),
-        (
-            "wide+spill",
-            MatteKeyOp {
-                key: green,
-                tol: 0.35,
-                soft: 0.2,
-                spill: 0.5,
-                mix: 1.0,
-            },
-        ),
-        (
-            "tight+despill",
-            MatteKeyOp {
-                key: green,
-                tol: 0.1,
-                soft: 0.05,
-                spill: 1.0,
-                mix: 0.8,
-            },
-        ),
+        ("screen_matte_view", MatteKeyParams { view: 1, ..base }),
+        ("status_view", MatteKeyParams { view: 2, ..base }),
         (
             "identity_mix0",
-            MatteKeyOp {
-                key: green,
-                tol: 0.2,
-                soft: 0.1,
-                spill: 0.3,
+            MatteKeyParams {
+                spill: 0.4,
                 mix: 0.0,
+                ..base
             },
         ),
     ] {
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::matte_key(&mut cpu, op.key, op.tol, op.soft, op.spill, op.mix);
+        lumit_core::fx::cpu::matte_key(&mut cpu, &p);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
+        let op = to_op(&p);
         let out = fx.matte_key(&ctx, &tex, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 

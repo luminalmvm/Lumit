@@ -1,4 +1,4 @@
-use super::{MbView, Resolved};
+use super::{MatteKeyParams, MbView, Resolved};
 
 /// Apply one resolved effect to an RGBA f32 image (premultiplied,
 /// linear light), in place.
@@ -64,13 +64,7 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         } => colour_balance(rgba, *lift, *gamma, *gain, *mix),
         Resolved::Saturation { saturation, mix } => saturate(rgba, *saturation, *mix),
         Resolved::Vibrancy { amount, mix } => vibrance(rgba, *amount, *mix),
-        Resolved::MatteKey {
-            key,
-            tol,
-            soft,
-            spill,
-            mix,
-        } => matte_key(rgba, *key, *tol, *soft, *spill, *mix),
+        Resolved::MatteKey(p) => matte_key(rgba, p),
         Resolved::Vignette {
             amount,
             radius,
@@ -378,60 +372,150 @@ pub fn vibrance(rgba: &mut [f32], amount: f32, mix: f32) {
     }
 }
 
-/// Matte key (docs/08 §3.21): a soft chroma key (greenscreen removal), on
-/// straight (unpremultiplied) colour (§2.2) — unpremultiply → key + despill
-/// → re-premultiply, exactly Saturation's premultiply handling. The metric
-/// is Euclidean distance in the chroma plane: each colour's chroma is
-/// `rgb − luma` (Rec. 709 luma, [`LUMA`]), a pure-chroma vector, so greens
-/// of any brightness sit at the same point and key alike. A **smoothstep**
-/// keep-factor is 0 (fully keyed, alpha ·= 0) at chroma distance ≤ `tol`,
-/// 1 (fully kept) at ≥ `tol + soft`, and smooth between — no hard step, so
-/// the effect is continuous everywhere and safe under the §1.6 fp16 ULP
-/// oracle (the WGSL twin matches op-for-op). Spill suppression pulls a
-/// `spill` fraction of the pixel's key-hue projection out of its chroma
-/// (desaturating toward luma along the key hue), fading green fringes on
-/// kept pixels. The key's chroma/hue direction are derived here once and
-/// per-invocation in the kernel from the identical `key`, so both paths use
-/// the same numbers; a grey key (no hue) makes spill a no-op. Mix 0 is the
-/// bit-exact identity (the `× (1 − mix) + · × mix` blend collapses to the
-/// input). `soft`'s transition width floors at a small epsilon so `soft` 0
-/// reads as a steep edge rather than a division by zero.
-pub fn matte_key(rgba: &mut [f32], key: [f32; 4], tol: f32, soft: f32, spill: f32, mix: f32) {
-    // Key chroma (a pure-chroma vector: its own luma is zero) and unit hue
-    // direction; a grey key has no hue, so its direction is zero and spill
-    // does nothing.
-    let kl = key[0] * LUMA[0] + key[1] * LUMA[1] + key[2] * LUMA[2];
-    let kc = [key[0] - kl, key[1] - kl, key[2] - kl];
-    let klen = (kc[0] * kc[0] + kc[1] * kc[1] + kc[2] * kc[2]).sqrt();
-    let kdir = if klen > 1e-6 {
-        [kc[0] / klen, kc[1] / klen, kc[2] / klen]
+/// The screen's primary channel index (0 R, 1 G, 2 B) and its two secondary
+/// indices, chosen from the screen colour's largest component. Ties resolve
+/// green > red > blue; the WGSL kernel runs the identical comparisons on the same
+/// `key`, so both pick the same axis for a given screen colour.
+fn matte_key_axis(key: [f32; 3]) -> (usize, usize, usize) {
+    if key[1] >= key[0] && key[1] >= key[2] {
+        (1, 0, 2) // green primary
+    } else if key[0] >= key[1] && key[0] >= key[2] {
+        (0, 1, 2) // red primary
     } else {
-        [0.0; 3]
-    };
-    let e1 = tol + soft.max(1e-6);
+        (2, 0, 1) // blue primary
+    }
+}
+
+/// The balance-weighted secondary reference of a colour (docs/08 §3.21): the two
+/// non-screen channels blended by `balance` (0 = their min, 1 = their max, 0.5 =
+/// their average). The primary is measured against this to tell screen from
+/// foreground. Continuous (min/max/lerp), so the §1.6 oracle holds.
+fn matte_key_secref(c: [f32; 3], si: usize, sj: usize, balance: f32) -> f32 {
+    let lo = c[si].min(c[sj]);
+    let hi = c[si].max(c[sj]);
+    balance * hi + (1.0 - balance) * lo
+}
+
+/// Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
+/// keyer, on straight (unpremultiplied) colour (§2.2) — unpremultiply → key +
+/// despill → re-premultiply, exactly Saturation's premultiply handling. It is the
+/// §1.6 oracle the WGSL kernel (`fx_matte_key.wgsl`) matches op-for-op, so preview
+/// and export agree pixel-for-pixel (K-031).
+///
+/// **Screen matte.** The screen colour's largest channel is the *primary* axis
+/// (green for a green screen); the other two are *secondaries*, blended by
+/// [`matte_key_secref`] into a reference. A pixel's *screen difference* is
+/// `primary − reference`: large on the screen, small or negative on the
+/// foreground. Normalising by the screen colour's own difference gives 1 on the
+/// exact screen and 0 on a neutral, so `matte = clamp(1 − gain·raw, 0, 1)` keys
+/// the screen to 0 and keeps the foreground at 1. **Alpha bias** shifts what
+/// counts as neutral (a grey bias is a no-op). **Clip black/white** then remap the
+/// matte's ends and **clip rollback** eases those clips back toward the un-clipped
+/// matte to recover fine detail. Everything is `clamp`/`min`/`max`/`lerp` —
+/// continuous — so there is no hard step and the fp16 ULP oracle holds.
+///
+/// **Despill.** The primary channel is pulled down toward the (despill-bias
+/// shifted) secondary reference by the `spill` fraction, draining screen tint from
+/// kept pixels. **Replace method** then recolours where spill was removed: Source
+/// keeps the original colour, Hard/Soft blend in the replace colour (Soft scaled
+/// by the pixel's brightness), None leaves the despilled colour.
+///
+/// **View** selects the output — Final (the keyed picture), Screen matte (the
+/// matte as greyscale), or Status (a continuous heat of the matte). Mix 0 is the
+/// bit-exact identity (the blend collapses to the input) on every view.
+pub fn matte_key(rgba: &mut [f32], p: &MatteKeyParams) {
+    let key = [p.key[0], p.key[1], p.key[2]];
+    let (pi, si, sj) = matte_key_axis(key);
+    let bal = p.balance;
+
+    // Alpha-bias neutral: subtracted from every screen difference, so a grey bias
+    // (its primary equals its secondary reference) contributes zero and the matte
+    // reduces to the plain colour difference.
+    let ab = [p.alpha_bias[0], p.alpha_bias[1], p.alpha_bias[2]];
+    let ab_off = ab[pi] - matte_key_secref(ab, si, sj, bal);
+    // The screen colour's own biased difference, floored so the divide is safe.
+    let sd = ((key[pi] - matte_key_secref(key, si, sj, bal)) - ab_off).max(1e-6);
+    // Despill-bias neutral: raises the target the primary is clamped down to.
+    let db = [p.despill_bias[0], p.despill_bias[1], p.despill_bias[2]];
+    let db_off = db[pi] - matte_key_secref(db, si, sj, bal);
+
+    let repl = [
+        p.replace_colour[0],
+        p.replace_colour[1],
+        p.replace_colour[2],
+    ];
+    let den = (p.clip_white - p.clip_black).max(1e-6);
+
     for px in rgba.chunks_exact_mut(4) {
         let a = px[3];
         let u = unpremult(px);
-        let pl = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
-        let pc = [u[0] - pl, u[1] - pl, u[2] - pl];
-        // Distance from the key's chroma → smoothstep keep-factor.
-        let dc = [pc[0] - kc[0], pc[1] - kc[1], pc[2] - kc[2]];
-        let d = (dc[0] * dc[0] + dc[1] * dc[1] + dc[2] * dc[2]).sqrt();
-        let t = ((d - tol) / (e1 - tol)).clamp(0.0, 1.0);
-        let keep = t * t * (3.0 - 2.0 * t);
-        // Spill: remove the key-hue projection from the kept colour.
-        let proj = (pc[0] * kdir[0] + pc[1] * kdir[1] + pc[2] * kdir[2]).max(0.0) * spill;
-        let despilled = [
-            u[0] - proj * kdir[0],
-            u[1] - proj * kdir[1],
-            u[2] - proj * kdir[2],
-        ];
-        let out_a = a * keep;
+
+        // Screen matte, before clips: 1 on the neutral, 0 on the screen colour.
+        let pd = (u[pi] - matte_key_secref(u, si, sj, bal)) - ab_off;
+        let raw = pd / sd;
+        let m0 = (1.0 - p.gain * raw).clamp(0.0, 1.0);
+        // Clip black/white, then rollback recovers detail toward the pre-clip matte.
+        let mc = ((m0 - p.clip_black) / den).clamp(0.0, 1.0);
+        let m = mc + p.clip_rollback * (m0 - mc);
+
+        // Unspill: pull the primary down toward the (bias-shifted) reference.
+        let target = matte_key_secref(u, si, sj, bal) + db_off;
+        let removed = (u[pi] - target).max(0.0);
+        let despill = p.spill * removed;
+        let mut despilled = u;
+        despilled[pi] = u[pi] - despill;
+
+        // Replace method: recolour where spill was removed (`t_repl` = how much).
+        let t_repl = (despill / sd).clamp(0.0, 1.0);
+        let dl = despilled[0] * LUMA[0] + despilled[1] * LUMA[1] + despilled[2] * LUMA[2];
+        // The blends use the `a·(1−t) + b·t` form so they match WGSL `mix`
+        // op-for-op (§1.6).
+        let lerp3 = |a: [f32; 3], b: [f32; 3], t: f32| {
+            [
+                a[0] * (1.0 - t) + b[0] * t,
+                a[1] * (1.0 - t) + b[1] * t,
+                a[2] * (1.0 - t) + b[2] * t,
+            ]
+        };
+        let rgb = match p.replace_method {
+            0 => u,                              // Source: the original straight colour
+            1 => lerp3(despilled, repl, t_repl), // Hard colour
+            2 => lerp3(
+                despilled,
+                [repl[0] * dl, repl[1] * dl, repl[2] * dl],
+                t_repl,
+            ), // Soft colour
+            _ => despilled,                      // None
+        };
+
+        // View select (all continuous in `m`, so the oracle holds).
+        let (proc_rgb, proc_a) = match p.view {
+            1 => ([m, m, m], 1.0), // Screen matte
+            2 => {
+                // Status: greyscale matte tinted where the matte is uncertain
+                // (peaks at m = 0.5, zero at the fully-keyed/kept ends).
+                let warn = 4.0 * m * (1.0 - m) * 0.5;
+                (
+                    [
+                        m + warn * (1.0 - m),
+                        m + warn * (0.3 - m),
+                        m + warn * (0.3 - m),
+                    ],
+                    1.0,
+                )
+            }
+            _ => {
+                // Final: re-premultiply the keyed colour by the new alpha.
+                let out_a = a * m;
+                ([rgb[0] * out_a, rgb[1] * out_a, rgb[2] * out_a], out_a)
+            }
+        };
+
+        // Mix against the untouched premultiplied input; Mix 0 is the identity.
         for c in 0..3 {
-            let proc = despilled[c] * out_a;
-            px[c] = px[c] * (1.0 - mix) + proc * mix;
+            px[c] = px[c] * (1.0 - p.mix) + proc_rgb[c] * p.mix;
         }
-        px[3] = a * (1.0 - mix) + out_a * mix;
+        px[3] = a * (1.0 - p.mix) + proc_a * p.mix;
     }
 }
 

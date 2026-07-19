@@ -1894,12 +1894,18 @@ fn vibrancy_instantiates_and_resolves_neutral() {
 #[test]
 fn matte_key_instantiates_and_resolves_defaults() {
     let e = instantiate("matte_key").unwrap();
-    // The defaults visibly key a green screen (a green key + a 20 %
-    // tolerance); Spill is off so a fresh instance keys without despill.
+    // The defaults visibly key a green screen (a green screen colour + 100 %
+    // gain); despill defaults full-on, and the view defaults to Final.
     assert_eq!(e.colour_at("key", 0.0), Some([0.0, 0.6, 0.0, 1.0]));
-    assert_eq!(e.float_at("tolerance", 0.0), Some(20.0));
-    assert_eq!(e.float_at("softness", 0.0), Some(10.0));
-    assert_eq!(e.float_at("spill", 0.0), Some(0.0));
+    assert_eq!(e.float_at("screen_gain", 0.0), Some(100.0));
+    assert_eq!(e.float_at("screen_balance", 0.0), Some(50.0));
+    assert_eq!(e.float_at("spill", 0.0), Some(100.0));
+    assert_eq!(e.float_at("clip_white", 0.0), Some(100.0));
+    assert!(matches!(e.param("view"), Some(EffectValue::Choice(0))));
+    assert!(matches!(
+        e.param("replace_method"),
+        Some(EffectValue::Choice(2)) // Soft colour, as Keylight
+    ));
     let r = resolve_stack(
         std::slice::from_ref(&e),
         0.0,
@@ -1909,14 +1915,64 @@ fn matte_key_instantiates_and_resolves_defaults() {
     );
     assert_eq!(
         r,
-        vec![Resolved::MatteKey {
+        vec![Resolved::MatteKey(MatteKeyParams {
+            view: 0,
             key: [0.0, 0.6, 0.0, 1.0],
-            tol: 0.2,
-            soft: 0.1,
-            spill: 0.0,
+            gain: 1.0,
+            balance: 0.5,
+            despill_bias: [0.5, 0.5, 0.5, 1.0],
+            alpha_bias: [0.5, 0.5, 0.5, 1.0],
+            spill: 1.0,
+            clip_black: 0.0,
+            clip_white: 1.0,
+            clip_rollback: 0.0,
+            replace_method: 2,
+            replace_colour: [0.5, 0.5, 0.5, 1.0],
             mix: 1.0,
-        }]
+        })]
     );
+}
+
+#[test]
+fn matte_key_migrates_pre_k154_projects() {
+    // A project saved before K-154 stored only key / tolerance / softness /
+    // spill / mix. It must still resolve (no crash): the Screen colour and Spill
+    // carry over, tolerance/softness are ignored, and the new controls take
+    // their Keylight defaults.
+    let mut e = instantiate("matte_key").unwrap();
+    e.params
+        .retain(|p| matches!(p.id.as_str(), "key" | "spill" | "mix"));
+    e.params.push(crate::model::EffectParam {
+        id: "tolerance".into(),
+        value: EffectValue::Float(Property::fixed(40.0)),
+        extra: serde_json::Map::new(),
+    });
+    e.params.push(crate::model::EffectParam {
+        id: "softness".into(),
+        value: EffectValue::Float(Property::fixed(25.0)),
+        extra: serde_json::Map::new(),
+    });
+    // Force the stored Spill to a legacy value to prove it carries over.
+    for p in &mut e.params {
+        if p.id == "spill" {
+            p.value = EffectValue::Float(Property::fixed(30.0));
+        }
+    }
+    let r = resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let Resolved::MatteKey(p) = r[0] else {
+        panic!("expected a resolved matte key");
+    };
+    assert_eq!(p.key, [0.0, 0.6, 0.0, 1.0], "screen colour carries over");
+    assert!((p.spill - 0.30).abs() < 1e-6, "legacy spill carries over");
+    assert_eq!(p.gain, 1.0, "new gain takes its default");
+    assert_eq!(p.balance, 0.5, "new balance takes its default");
+    assert_eq!(p.view, 0, "new view defaults to Final");
 }
 
 #[test]
@@ -2671,57 +2727,103 @@ fn cpu_vibrance_behaves() {
 
 #[test]
 fn cpu_matte_key_behaves() {
-    let key = [0.0_f32, 0.6, 0.0, 1.0];
+    // A base op: default green screen, unit gain, mid balance, neutral biases,
+    // no clips. `view` / `spill` / `replace_method` / `mix` are varied per case.
+    let base = |view: u32, gain: f32, spill: f32, replace: u32, mix: f32| MatteKeyParams {
+        view,
+        key: [0.0, 0.6, 0.0, 1.0],
+        gain,
+        balance: 0.5,
+        despill_bias: [0.5, 0.5, 0.5, 1.0],
+        alpha_bias: [0.5, 0.5, 0.5, 1.0],
+        spill,
+        clip_black: 0.0,
+        clip_white: 1.0,
+        clip_rollback: 0.0,
+        replace_method: replace,
+        replace_colour: [0.5, 0.5, 0.5, 1.0],
+        mix,
+    };
 
-    // A pixel exactly the key colour keys out fully (alpha → 0), and its
+    // A pixel exactly the screen colour keys out fully (alpha → 0), and its
     // premultiplied colour collapses with it.
     let mut on_key = vec![0.0_f32, 0.6, 0.0, 1.0];
-    cpu::matte_key(&mut on_key, key, 0.2, 0.1, 0.0, 1.0);
+    cpu::matte_key(&mut on_key, &base(0, 1.0, 1.0, 3, 1.0));
     assert_eq!(
         on_key,
         vec![0.0, 0.0, 0.0, 0.0],
-        "the key colour is removed"
+        "the screen colour is removed"
     );
 
-    // A half-alpha key pixel (premultiplied [0,0.3,0,0.5] = straight
-    // [0,0.6,0]) keys to nothing too — the metric works on straight colour.
+    // A half-alpha screen pixel (premultiplied [0,0.3,0,0.5] = straight
+    // [0,0.6,0]) keys to nothing too — the keyer works on straight colour.
     let mut half = vec![0.0_f32, 0.3, 0.0, 0.5];
-    cpu::matte_key(&mut half, key, 0.2, 0.1, 0.0, 1.0);
-    assert_eq!(half, vec![0.0, 0.0, 0.0, 0.0], "partial-alpha key removed");
+    cpu::matte_key(&mut half, &base(0, 1.0, 1.0, 3, 1.0));
+    assert_eq!(
+        half,
+        vec![0.0, 0.0, 0.0, 0.0],
+        "partial-alpha screen removed"
+    );
 
-    // A far-from-key colour (red) is kept exactly, with Spill off.
+    // A far-from-screen colour (red) is kept exactly — no primary excess, so
+    // nothing to despill and nothing to replace.
     let red = vec![0.8_f32, 0.0, 0.0, 1.0];
     let mut r = red.clone();
-    cpu::matte_key(&mut r, key, 0.2, 0.1, 0.0, 1.0);
-    assert_eq!(r, red, "far-from-key pixels are kept exactly");
+    cpu::matte_key(&mut r, &base(0, 1.0, 1.0, 2, 1.0));
+    assert_eq!(r, red, "far-from-screen pixels are kept exactly");
 
     // Mix 0 is the exact identity whatever the settings.
     let mut m0 = red.clone();
-    cpu::matte_key(&mut m0, key, 0.2, 0.1, 1.0, 0.0);
+    cpu::matte_key(&mut m0, &base(0, 1.0, 1.0, 2, 0.0));
     assert_eq!(m0, red, "Mix 0 is the identity");
 
-    // Spill: a kept pixel that is grey plus a pure key-hue tint desaturates
-    // to that grey at full Spill — its chroma is entirely along the key
-    // hue, so removing it lands every channel on the pixel's own luma.
+    // Despill: a kept pixel with a green excess over its red/blue reference has
+    // its green pulled down to that reference at full despill. Gain 0 keeps the
+    // pixel fully opaque so the despilled colour is what lands. [0.4,0.6,0.4]
+    // has a red/blue reference of 0.4, so full despill flattens it to grey 0.4.
     let mut spill = vec![0.4_f32, 0.6, 0.4, 1.0];
-    cpu::matte_key(&mut spill, key, 0.2, 0.1, 1.0, 1.0);
-    let luma = 0.4 * cpu::LUMA[0] + 0.6 * cpu::LUMA[1] + 0.4 * cpu::LUMA[2];
+    cpu::matte_key(&mut spill, &base(0, 0.0, 1.0, 3, 1.0));
     for (c, v) in spill.iter().take(3).enumerate() {
-        assert!((v - luma).abs() < 1e-4, "channel {c} despilled to luma");
+        assert!(
+            (v - 0.4).abs() < 1e-6,
+            "channel {c} despilled to the reference"
+        );
     }
     assert_eq!(spill[3], 1.0, "a kept pixel keeps its alpha");
 
-    // The soft edge is continuous: a pixel whose chroma distance lands
-    // between tol and tol+soft keeps a partial alpha, never a hard 0 or 1
-    // — the smoothstep that keeps the effect oracle-safe (§1.6). This
-    // pixel is grey + 0.6·(key chroma), so its distance is 0.4·|key chroma|.
-    let mut edge = vec![0.2425_f32, 0.6025, 0.2425, 1.0];
-    cpu::matte_key(&mut edge, key, 0.2, 0.1, 0.0, 1.0);
+    // The key is continuous: a pixel with a middling green excess keeps a
+    // partial alpha, never a hard 0 or 1 — what keeps the effect oracle-safe
+    // (§1.6). [0.3,0.5,0.3] has excess 0.2 against a screen excess of 0.6, so
+    // raw = 1/3 and the matte lands at 2/3. Spill off, so colour is untouched.
+    let mut edge = vec![0.3_f32, 0.5, 0.3, 1.0];
+    cpu::matte_key(&mut edge, &base(0, 1.0, 0.0, 3, 1.0));
     assert!(
         edge[3] > 0.0 && edge[3] < 1.0,
         "soft edge keeps a partial alpha: {}",
         edge[3]
     );
+
+    // Screen matte view: the matte itself as opaque greyscale. The edge pixel's
+    // matte is 2/3, so every RGB channel reads 2/3 and alpha is 1.
+    let mut mv = vec![0.3_f32, 0.5, 0.3, 1.0];
+    cpu::matte_key(&mut mv, &base(1, 1.0, 0.0, 3, 1.0));
+    for (c, v) in mv.iter().take(3).enumerate() {
+        assert!((v - 2.0 / 3.0).abs() < 1e-4, "matte channel {c} shows 2/3");
+    }
+    assert_eq!(mv[3], 1.0, "the screen-matte view is opaque");
+
+    // Blue screens key too: the primary axis follows the screen colour's max
+    // channel, so a blue key removes a blue pixel and keeps a red one.
+    let blue_key = MatteKeyParams {
+        key: [0.0, 0.0, 0.6, 1.0],
+        ..base(0, 1.0, 1.0, 3, 1.0)
+    };
+    let mut on_blue = vec![0.0_f32, 0.0, 0.6, 1.0];
+    cpu::matte_key(&mut on_blue, &blue_key);
+    assert_eq!(on_blue, vec![0.0, 0.0, 0.0, 0.0], "a blue screen keys out");
+    let mut red2 = vec![0.8_f32, 0.0, 0.0, 1.0];
+    cpu::matte_key(&mut red2, &blue_key);
+    assert_eq!(red2, vec![0.8, 0.0, 0.0, 1.0], "red survives a blue key");
 }
 
 #[test]

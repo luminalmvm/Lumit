@@ -1814,3 +1814,55 @@ the model reaching those states. Consequences:
   timeline view does not scroll to negative time, so a bar that starts before 0 is drawn
   clipped at the lane's left edge (its in-window body stays grabbable). Built in an isolated
   worktree; not pushed — another agent may also claim K-153, renumber on merge if so.
+
+**K-154 · DECIDED · Matte key becomes a Keylight-style colour-difference keyer (docs/08
+§3.21, FX-21).** The K-121 chroma-distance key is expanded (same `matte_key` effect, version
+1 → 2) into a proper greenscreen keyer with the strength/balance/clip/despill controls a
+colourist expects from Foundry's Keylight. The screen matte is a **colour difference**, not a
+distance: the **Screen colour**'s largest channel is the *primary* axis (green for a green
+screen, blue for a blue one — a general improvement over the hue-agnostic distance metric),
+the two others are *secondaries* blended by **Screen balance** into a reference, and a
+pixel's `primary − reference`, normalised by the screen colour's own difference, gives `raw`
+(1 on the exact screen, 0 on a neutral); `matte = clamp(1 − gain·raw, 0, 1)` with **Screen
+gain** scaling the fall-off. **Alpha bias** subtracts a bias-colour neutral (grey ⇒ no-op) so
+a tinted bias re-defines neutral; **Clip black/white** remap the matte's ends and **Clip
+rollback** eases them back toward the un-clipped matte to recover fine detail. **Despill**
+pulls the primary channel down toward the (**Despill bias**-shifted) secondary reference by
+the **Despill amount**, draining screen tint; **Replace method** (Source / Hard / Soft /
+None, default Soft) then recolours where spill was removed, Soft scaling the **Replace
+colour** by the pixel's brightness. A **View** enum (Final result / Screen matte / Status)
+lets the user see the matte they are pulling; the Status view is a *continuous* heat
+(`4·m·(1−m)` tint) so it stays oracle-safe. It still runs on straight colour (§2.2,
+`premultiplied: false`) and stays `cheap`/`exact`/`{0}`. Every step is `clamp`/`min`/`max`/
+`mix` — **continuous everywhere** — and the screen's primary axis and reference are derived
+from the resolved Screen colour identically on the CPU reference (`cpu::matte_key`, the
+oracle) and the WGSL kernel (`fx_matte_key.wgsl`), so preview == export (K-031) and the §1.6
+oracle holds to ≤ 2 fp16 ULP (test `wgsl_matte_key_matches_the_cpu_oracle`, sweeping gain /
+balance / clips / despill / replace / bias colours and all three views over a near-screen /
+far-from-screen / partial-alpha / HDR corpus). Colour, bias and replace swatches render
+through the existing `ParamKind::Colour` inspector arm (each with the eyedropper); the Screen
+matte controls sit in a K-145 `ParamGroup` twirl. There is **no neutral no-op default** (the
+default green + 100 % gain keys out of the box, §1.2); **Mix 0 is the bit-exact identity**,
+pinned by test. **Migration:** a project saved before K-154 keeps its stored `key` (Screen
+colour) and `spill` (now Despill amount); its now-unread `tolerance`/`softness` are superseded
+by gain/balance/clip, and the new controls take their Keylight defaults — resolve reads every
+new parameter with an `unwrap_or(default)`, so no old project faults and none re-serialises
+until edited. Distinct from the Tier 2 §4 keying suite (luma/screen key) still tracked
+separately. Builds on K-121 (which it supersedes without editing). Built in an isolated
+worktree; not pushed — another agent may also claim K-154, renumber on merge if so.
+
+**K-155 · DECIDED · The spatial and layer-input Keylight controls are a deferred follow-up
+(docs/08 §3.21).** The pointwise K-154 landing deliberately leaves out the Keylight features
+that are *not* a single pointwise pass, so each can arrive with its own oracle rather than
+being half-implemented: the **spatial screen-matte controls** — Screen pre-blur, Screen
+shrink/grow (morphological erode/dilate), Screen softness (blur), Screen despot black/white
+(speck removal) — which need a multi-pass morphology/blur pipeline and a costlier oracle
+class; the **Inside/Outside garbage masks**, a layer-input holdout reusing the DoF
+layer-reference plumbing (`ParamKind::Layer`, docs/impl/layer-input.md) with per-mask softness
+and invert; the **Colour correction** twirls (Foreground and Edge: enable + saturation /
+contrast / brightness / colour balance, Edge adding hardness / grow); and the **Source crops**
+(per-axis edge method — Colour / Repeat / Reflect / Wrap — an edge colour, and Left / Right /
+Top / Bottom crop amounts). None is required for "properly key footage" — the K-154 core
+(screen matte + clips + despill + views) is — so they are ordered after it and tracked here.
+When they land, each keeps the K-031 preview==export and §1.6 oracle guarantees. Numbered
+K-155, alongside K-154; renumber on merge if another agent also claims it.

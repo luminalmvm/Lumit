@@ -5,21 +5,37 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One resolved matte key (docs/08 §3.21): a soft chroma key on straight
-/// (unpremultiplied) colour. `key` is the scene-linear RGBA key colour (alpha
-/// ignored); `tol`/`soft`/`spill` are 0..1 fractions. The kernel derives the
-/// key's chroma and hue direction from `key`, exactly as the CPU reference
-/// does, so both paths use the same numbers.
+/// One resolved matte key (docs/08 §3.21, K-121/K-154): a Keylight-style
+/// colour-difference keyer on straight (unpremultiplied) colour. Mirrors
+/// `lumit_core::fx::MatteKeyParams` field-for-field so the kernel and the CPU
+/// oracle consume the identical numbers (K-031). The kernel derives the screen's
+/// primary channel and reference from `key`, exactly as the CPU reference does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MatteKeyOp {
-    /// Scene-linear RGBA key colour (alpha ignored).
+    /// Output view wire code: 0 Final, 1 Screen matte, 2 Status.
+    pub view: u32,
+    /// Scene-linear RGBA screen (key) colour; alpha ignored.
     pub key: [f32; 4],
-    /// Chroma-distance threshold, 0..1: at/below it a pixel is fully keyed.
-    pub tol: f32,
-    /// Soft-edge width above `tol`, 0..1: the smoothstep transition span.
-    pub soft: f32,
-    /// Key-hue spill removal, 0..1.
+    /// Screen gain (matte fall-off strength), `≥ 0`.
+    pub gain: f32,
+    /// Screen balance, 0..1 (secondary-channel weighting).
+    pub balance: f32,
+    /// Despill bias (scene-linear RGBA, alpha ignored).
+    pub despill_bias: [f32; 4],
+    /// Alpha bias (scene-linear RGBA, alpha ignored).
+    pub alpha_bias: [f32; 4],
+    /// Despill amount, 0..1.
     pub spill: f32,
+    /// Clip black, 0..1.
+    pub clip_black: f32,
+    /// Clip white, 0..1.
+    pub clip_white: f32,
+    /// Clip rollback, 0..1.
+    pub clip_rollback: f32,
+    /// Replace method wire code: 0 Source, 1 Hard, 2 Soft, 3 None.
+    pub replace_method: u32,
+    /// Scene-linear RGBA replace colour.
+    pub replace_colour: [f32; 4],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -27,11 +43,24 @@ pub struct MatteKeyOp {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct MatteKeyParams {
+    // Four vec4 colours first (each 16-byte aligned for the WGSL uniform).
     key: [f32; 4],
-    tol: f32,
-    soft: f32,
+    despill_bias: [f32; 4],
+    alpha_bias: [f32; 4],
+    replace_colour: [f32; 4],
+    // Then the scalars, packed to a 16-byte multiple with three pad floats.
+    gain: f32,
+    balance: f32,
     spill: f32,
+    clip_black: f32,
+    clip_white: f32,
+    clip_rollback: f32,
+    view: u32,
+    replace_method: u32,
     mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// One resolved vignette (docs/08 §3.14): darkens toward black away from
@@ -171,11 +200,11 @@ struct ScanlinesParams {
 }
 
 impl FxEngine {
-    /// Apply one matte key (docs/08 §3.21) to a linear working texture,
-    /// returning a new texture of the same size. One pointwise pass; the §2.2
-    /// unpremultiply wrap is fused into the kernel, which derives the key's
-    /// chroma/hue direction from `key` exactly as the CPU reference does. There
-    /// is no neutral short-circuit (the default keys); Mix 0 is the identity.
+    /// Apply one matte key (docs/08 §3.21, K-121/K-154) to a linear working
+    /// texture, returning a new texture of the same size. One pointwise pass; the
+    /// §2.2 unpremultiply wrap is fused into the kernel, which derives the screen's
+    /// primary channel and reference from `key` exactly as the CPU reference does.
+    /// There is no neutral short-circuit (the default keys); Mix 0 is the identity.
     pub fn matte_key(
         &self,
         ctx: &GpuContext,
@@ -195,10 +224,21 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&MatteKeyParams {
                 key: op.key,
-                tol: op.tol,
-                soft: op.soft,
+                despill_bias: op.despill_bias,
+                alpha_bias: op.alpha_bias,
+                replace_colour: op.replace_colour,
+                gain: op.gain,
+                balance: op.balance,
                 spill: op.spill,
+                clip_black: op.clip_black,
+                clip_white: op.clip_white,
+                clip_rollback: op.clip_rollback,
+                view: op.view,
+                replace_method: op.replace_method,
                 mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out

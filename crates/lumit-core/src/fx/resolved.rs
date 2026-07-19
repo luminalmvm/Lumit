@@ -29,6 +29,127 @@ impl MbView {
     }
 }
 
+/// The Matte key output view (docs/08 §3.21, K-154): the finished keyed picture,
+/// or a diagnostic look at the screen matte the key derives. A per-op choice the
+/// kernel and CPU reference branch on (identically) at the end. The integer codes
+/// are the wire form the WGSL uniform reads: 0 Final, 1 Screen matte, 2 Status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatteKeyView {
+    /// The keyed, despilled, matte-applied picture (the default).
+    Final,
+    /// The screen matte itself as greyscale (white kept, black keyed) — for
+    /// seeing exactly what the key is holding out.
+    ScreenMatte,
+    /// A continuous heat view of the matte: greyscale, with the uncertain
+    /// mid-tones tinted so at-risk edges and holes stand out.
+    Status,
+}
+
+impl MatteKeyView {
+    /// The kernel's integer code (0 Final, 1 Screen matte, 2 Status), so the CPU
+    /// oracle and the WGSL uniform agree.
+    pub fn code(self) -> u32 {
+        match self {
+            MatteKeyView::Final => 0,
+            MatteKeyView::ScreenMatte => 1,
+            MatteKeyView::Status => 2,
+        }
+    }
+
+    /// The view for a stored Choice index, clamped to the known set (unknown
+    /// codes fall back to Final — a safe, non-diagnostic default).
+    pub fn from_code(code: u32) -> Self {
+        match code {
+            1 => MatteKeyView::ScreenMatte,
+            2 => MatteKeyView::Status,
+            _ => MatteKeyView::Final,
+        }
+    }
+}
+
+/// How the Matte key recolours pixels where despill removed screen tint (docs/08
+/// §3.21, K-154, Keylight's Replace method). Codes are the WGSL wire form: 0
+/// Source, 1 Hard colour, 2 Soft colour, 3 None.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplaceMethod {
+    /// Keep the original source colour (no colour replacement; alpha still keys).
+    Source,
+    /// Blend in the flat replace colour where spill was removed.
+    HardColour,
+    /// Blend in the replace colour scaled by the pixel's own brightness (the
+    /// default — it settles into shading rather than reading as a flat patch).
+    SoftColour,
+    /// Leave the despilled colour untouched.
+    None,
+}
+
+impl ReplaceMethod {
+    /// The kernel's integer code (0 Source, 1 Hard colour, 2 Soft colour, 3 None).
+    pub fn code(self) -> u32 {
+        match self {
+            ReplaceMethod::Source => 0,
+            ReplaceMethod::HardColour => 1,
+            ReplaceMethod::SoftColour => 2,
+            ReplaceMethod::None => 3,
+        }
+    }
+
+    /// The method for a stored Choice index, clamped to the known set (unknown
+    /// codes fall back to Soft colour, the tasteful default).
+    pub fn from_code(code: u32) -> Self {
+        match code {
+            0 => ReplaceMethod::Source,
+            1 => ReplaceMethod::HardColour,
+            3 => ReplaceMethod::None,
+            _ => ReplaceMethod::SoftColour,
+        }
+    }
+}
+
+/// The Matte key's full resolved parameter bundle (docs/08 §3.21, K-154): the
+/// Keylight-style colour-difference keyer, flattened to plain numbers that the CPU
+/// reference ([`cpu::matte_key`](crate::fx::cpu::matte_key)) and the WGSL kernel
+/// both read, so preview and export match op-for-op (K-031). Every field is
+/// already unit-normalised by the resolve step; the maths derive the screen's
+/// primary channel and reference from `key` identically on both paths.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MatteKeyParams {
+    /// Which picture to output (Final / Screen matte / Status), as a wire code.
+    pub view: u32,
+    /// Scene-linear RGBA screen (key) colour; alpha ignored. Its largest channel
+    /// picks the primary screen axis.
+    pub key: [f32; 4],
+    /// Screen gain (Keylight's Screen strength): scales the matte's fall-off. 1.0
+    /// keys the exact screen to zero; > 1 keys more aggressively. `≥ 0`.
+    pub gain: f32,
+    /// Screen balance, 0..1: how the two non-screen channels are weighted into the
+    /// reference the primary is measured against (0 = their min, 1 = their max,
+    /// 0.5 = their average, the default).
+    pub balance: f32,
+    /// Despill bias (scene-linear RGBA, alpha ignored): shifts the reference the
+    /// unspill clamps the primary down to. A neutral grey is a no-op.
+    pub despill_bias: [f32; 4],
+    /// Alpha bias (scene-linear RGBA, alpha ignored): shifts what colour counts as
+    /// neutral for the matte. A neutral grey is a no-op.
+    pub alpha_bias: [f32; 4],
+    /// Despill amount, 0..1: fraction of the primary's screen excess pulled out of
+    /// kept pixels (Keylight's screen despill).
+    pub spill: f32,
+    /// Clip black, 0..1: screen-matte values at/below this map to 0 (fully keyed).
+    pub clip_black: f32,
+    /// Clip white, 0..1: screen-matte values at/above this map to 1 (fully kept).
+    pub clip_white: f32,
+    /// Clip rollback, 0..1: pulls the clipped matte back toward the un-clipped
+    /// matte, recovering fine edge detail the clips would erode (0 = full clip).
+    pub clip_rollback: f32,
+    /// Replace method wire code (0 Source, 1 Hard, 2 Soft, 3 None).
+    pub replace_method: u32,
+    /// Scene-linear RGBA replace colour used by the Hard/Soft replace methods.
+    pub replace_colour: [f32; 4],
+    /// 0..1, blended against the untouched premultiplied input; 0 is the identity.
+    pub mix: f32,
+}
+
 /// One effect, resolved to plain numbers at a frame — the flat form both the
 /// WGSL kernels (lumit-gpu) and the CPU references below consume.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -178,25 +299,12 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
-    /// Matte key (docs/08 §3.21): a soft chroma key. `key` is the scene-linear
-    /// RGBA key colour (resolved at frame time like Vignette's tint, alpha
-    /// ignored); the CPU/GPU maths derive its chroma and hue direction from it
-    /// identically. `tol`/`soft`/`spill` are plain 0..1 fractions. The keep
-    /// factor smoothsteps from 0 (fully keyed, alpha ·= 0) at chroma distance
-    /// `tol` to 1 (fully kept) at `tol + soft`, so it is continuous
-    /// everywhere. There is no neutral no-op default; Mix 0 is the identity.
-    MatteKey {
-        /// Scene-linear RGBA key colour (alpha ignored).
-        key: [f32; 4],
-        /// Chroma-distance threshold, 0..1: at/below it the pixel is fully keyed.
-        tol: f32,
-        /// Soft-edge width above `tol`, 0..1: the smoothstep transition span.
-        soft: f32,
-        /// Key-hue spill removal, 0..1: fraction of residual key chroma pulled out.
-        spill: f32,
-        /// 0..1.
-        mix: f32,
-    },
+    /// Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
+    /// keyer. The op carries its full parameter bundle ([`MatteKeyParams`]) so the
+    /// CPU reference and the WGSL kernel consume the identical numbers (K-031). The
+    /// maths are continuous everywhere (no hard step), so the §1.6 oracle holds; the
+    /// default green screen colour keys out of the box, and Mix 0 is the identity.
+    MatteKey(MatteKeyParams),
     /// Vignette (docs/08 §3.14): darkens toward black away from the frame
     /// centre. `radius`/`softness` are read against the Roundness-blended
     /// distance metric [`cpu::vignette`] computes from `w`/`h` — no raster
@@ -758,22 +866,54 @@ fn resolve_one(
             Some(Resolved::Vibrancy { amount, mix })
         }
         "matte_key" => {
-            // The colour is resolved to a scene-linear array at frame time,
-            // like Vignette's tint would be; the CPU reference and the WGSL
-            // kernel derive its chroma/hue direction from it identically.
-            // Tolerance/Softness/Spill are per cent → plain 0..1 fractions.
-            let key = e.colour_at("key", lt).unwrap_or([0.0, 0.6, 0.0, 1.0]);
-            let tol = (e.float_at("tolerance", lt).unwrap_or(20.0) as f32 / 100.0).max(0.0);
-            let soft = (e.float_at("softness", lt).unwrap_or(10.0) as f32 / 100.0).max(0.0);
-            let spill = (e.float_at("spill", lt).unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
+            // Keylight-style colour-difference keyer (K-154, superseding the
+            // K-121 chroma-distance key). Every colour resolves to a scene-linear
+            // array at frame time; the CPU reference and the WGSL kernel derive
+            // the screen's primary channel and reference from `key` identically.
+            // Per-cent dials become plain 0..1 fractions. A project saved before
+            // K-154 keeps its stored `key` (screen colour) and `spill` (now the
+            // despill amount); its old `tolerance`/`softness` are superseded by
+            // gain/balance/clip and simply go unread, and the new controls take
+            // their Keylight defaults — see the §3.21 migration note.
+            let colour = |id: &str, def: [f64; 4]| -> [f32; 4] {
+                e.colour_at(id, lt).unwrap_or(def).map(|c| c as f32)
+            };
+            let view = match e.param("view") {
+                Some(EffectValue::Choice(c)) => *c,
+                _ => 0,
+            };
+            let gain = (e.float_at("screen_gain", lt).unwrap_or(100.0) as f32 / 100.0).max(0.0);
+            let balance =
+                (e.float_at("screen_balance", lt).unwrap_or(50.0) as f32 / 100.0).clamp(0.0, 1.0);
+            // Despill defaults on (Keylight-like); an older instance carrying a
+            // Spill value keeps it, an even older one without the param reads 0.
+            let spill = (e.float_at("spill", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            let clip_black =
+                (e.float_at("clip_black", lt).unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
+            let clip_white =
+                (e.float_at("clip_white", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            let clip_rollback =
+                (e.float_at("clip_rollback", lt).unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
+            let replace_method = match e.param("replace_method") {
+                Some(EffectValue::Choice(c)) => ReplaceMethod::from_code(*c).code(),
+                _ => ReplaceMethod::SoftColour.code(),
+            };
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::MatteKey {
-                key: key.map(|c| c as f32),
-                tol,
-                soft,
+            Some(Resolved::MatteKey(MatteKeyParams {
+                view: MatteKeyView::from_code(view).code(),
+                key: colour("key", [0.0, 0.6, 0.0, 1.0]),
+                gain,
+                balance,
+                despill_bias: colour("despill_bias", [0.5, 0.5, 0.5, 1.0]),
+                alpha_bias: colour("alpha_bias", [0.5, 0.5, 0.5, 1.0]),
                 spill,
+                clip_black,
+                clip_white,
+                clip_rollback,
+                replace_method,
+                replace_colour: colour("replace_colour", [0.5, 0.5, 0.5, 1.0]),
                 mix,
-            })
+            }))
         }
         "vignette" => {
             let amount = (e.float_at("amount", lt).unwrap_or(0.5) as f32).clamp(0.0, 1.0);

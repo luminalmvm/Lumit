@@ -146,8 +146,8 @@ first/last passes where possible. The Tier 1 effects requiring this: **the colou
 otherwise). Contrast and Gamma join the list because Contrast's `− pivot` offset makes it
 *affine* and Gamma's power curve is *non-linear* — neither is a pure scale, so unlike Exposure
 and Hue shift they do not commute with premultiplied alpha (§3.18, §3.19). Matte key joins it
-because its chroma metric and despill read straight colour: keying the premultiplied values
-would judge (and fringe) the edge pixels by their coverage rather than their true colour
+because its colour-difference matte and despill read straight colour: keying the premultiplied
+values would judge (and fringe) the edge pixels by their coverage rather than their true colour
 (§3.21). All others consume premultiplied input directly (Block glitch, Scanlines and Datamosh
 among them — §3.12).
 
@@ -216,7 +216,7 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.18 | Contrast | stock CC pack contrast/levels | cheap | `{0}` |
 | 3.19 | Gamma | stock CC pack gamma/levels | cheap | `{0}` |
 | 3.20 | Temperature | stock CC pack white-balance | cheap | `{0}` |
-| 3.21 | Matte key | Keylight (basic) / stock chroma keyer | cheap | `{0}` |
+| 3.21 | Matte key | Keylight-style colour-difference keyer | cheap | `{0}` |
 | 3.22 | Depth of field | Frischluft / Camera Lens Blur | moderate | `{0}` |
 | 3.23 | Invert | stock CC pack invert | cheap | `{0}` |
 | 3.24 | Tint | AE Tint / duotone | cheap | `{0}` |
@@ -994,45 +994,76 @@ warmth lever — a per-channel ±0.75·k R/B gain with green held (K-135) — no
 balance sketched for Tier 2 (§3.10: a Bradford-adapted CCT shift with a Tint axis); it is the
 common one-click warm/cool move, animatable like every other grade.
 
-### 3.21 Matte key — soft chroma key (greenscreen removal)
+### 3.21 Matte key — Keylight-style colour-difference keyer (greenscreen removal)
 
-Removes a chosen key colour by driving alpha down where a pixel is close to it — the montage
-greenscreen staple, and a v1 pull-forward of the colour-key portion of the Tier 2 Keying
-entry (§4). A **soft** key: continuous everywhere, so it is safe under the §1.6 ULP oracle,
-unlike a hard threshold.
+Pulls a proper key off a green (or blue) screen: alpha is driven down where a pixel matches
+a chosen **screen colour**, with the strength/balance/clip/despill controls a colourist
+expects from Foundry's Keylight. It began (K-121) as a soft chroma-distance key and was
+expanded (K-154) into the colour-difference keyer below. Everything is
+`clamp`/`min`/`max`/`mix` — **continuous everywhere**, so it is safe under the §1.6 ULP
+oracle, unlike a hard threshold.
 
-**Parameters:** Key colour (a colour param, scene-linear RGBA, default a green ≈ `[0, 0.6, 0]`
-— the screen to remove), Tolerance (%, default 20, how close counts as key), Softness (%,
-default 10, the soft-edge width above Tolerance), Spill suppression (%, default 0, pulls
-residual key-hue out of the kept colour), Mix.
+**Parameters.** Top level, always visible:
+- **View** (choice, default Final result): **Final result** the keyed picture, **Screen
+  matte** the alpha as greyscale (white kept, black keyed), **Status** a continuous heat of
+  the matte (greyscale, with the uncertain mid-tones tinted so at-risk edges and holes stand
+  out) — so the user can see what they are keying.
+- **Screen colour** (colour, default green ≈ `[0, 0.6, 0]` — the screen to remove; its
+  largest channel picks the primary screen axis, so a blue screen keys too).
+- **Screen gain** (%, default 100, the matte fall-off strength — 100 % keys the exact screen
+  to zero, higher keys more aggressively).
+- **Screen balance** (%, default 50, how the two non-screen channels are weighted into the
+  reference — 0 their min, 100 their max, 50 their mean).
+- **Despill bias** (colour, default neutral grey — shifts the reference the despill clamps
+  the primary down to; grey is a no-op) and **Alpha bias** (colour, default grey — shifts
+  what counts as neutral for the matte; grey is a no-op).
+- **Despill amount** (%, default 100, the Keylight screen despill).
+
+**Screen matte** twirl (collapsed): **Clip black** (%, default 0, matte at/below maps to 0),
+**Clip white** (%, default 100, matte at/above maps to 1), **Clip rollback** (%, default 0,
+eases the clips back toward the un-clipped matte to recover fine edge detail), **Replace
+method** (choice: Source / Hard colour / Soft colour / None, default Soft colour) and
+**Replace colour** (colour, default grey). Then the shared **Mix**.
 
 **Algorithm sketch.** Operates on **straight (unpremultiplied) colour** (`alpha mode:
-unpremultiplied`, §2.2), wrapped unpremultiply → key → re-premultiply exactly like Saturation.
-The chroma metric is **Euclidean distance in the chroma plane**: a colour's chroma is
-`rgb − luma` (Rec. 709 luma), a pure-chroma vector, so a pixel's distance from the key ignores
-brightness and greens of any exposure key alike. That distance `d` feeds a **smoothstep**
-keep-factor: `keep = smoothstep(tol, tol + soft, d)` — 0 (fully keyed, alpha `·= 0`) at
-`d ≤ tol`, 1 (fully kept) at `d ≥ tol + soft`, smooth between, so there is **no hard step**
-(a hard `step` would blow the cheap-class ULP oracle). The existing alpha is multiplied by
-`keep`. Spill suppression removes a `spill` fraction of the pixel's projection onto the key
-hue direction (`normalize(key chroma)`) from its chroma, desaturating the kept pixel toward its
-own luma along the key hue so green fringes fade; a grey key has no hue direction, so spill is
-then a no-op. `cheap` cost, `exact` ROI, `{0}` temporal. Category **Utility**, beside Transform.
+unpremultiplied`, §2.2), wrapped unpremultiply → key + despill → re-premultiply exactly like
+Saturation. The screen colour's largest channel is the **primary** axis (green for a green
+screen); the two others are **secondaries**, blended by Screen balance into a *reference*. A
+pixel's **screen difference** is `primary − reference`: large on the screen, small or
+negative on the foreground. Normalising by the screen colour's own difference gives 1 on the
+exact screen and 0 on a neutral, so `matte = clamp(1 − gain·raw, 0, 1)` keys the screen to 0
+and holds the foreground at 1. **Alpha bias** subtracts a bias-colour neutral so a tinted
+bias shifts what counts as neutral (grey ⇒ no-op). **Clip black/white** remap the matte's
+ends and **Clip rollback** blends back toward the un-clipped matte. **Despill** pulls the
+primary channel down toward the (despill-bias shifted) secondary reference by the despill
+fraction, draining screen tint; **Replace method** then recolours where spill was removed —
+Source keeps the original colour, Hard/Soft blend in the replace colour (Soft scaled by the
+pixel's brightness), None leaves the despilled colour. `cheap` cost, `exact` ROI, `{0}`
+temporal. Category **Utility**, beside Transform.
 
-**Status (v1, shipped, K-121):** the chroma metric, soft key and spill model above, with the default
-green key + 20 % Tolerance visibly keying a typical green screen ("drop it on and it works",
-§1.2). The key's chroma and hue direction are derived from the resolved colour identically on
-the CPU reference and in the WGSL kernel, so both paths use the same numbers; the effect is
-continuous (a smoothstep, never a hard step), so the §1.6 oracle holds to ≤ 2 fp16 ULP over a
-corpus of near-key, far-from-key and partial-alpha pixels. There is **no neutral no-op default**
-(the effect exists to key, and the "no no-op default" rule §1.2 applies — the tasteful default
-keys); **Mix 0 is the bit-exact identity**, pinned by test. The softness width floors at a small
-epsilon so Softness 0 reads as a steep edge rather than a division by zero. **Follow-ups:** a
-viewer **eyedropper** to pick the key colour off the image (a nice UX addition, out of scope of
-the first landing); a matte-choker companion (grow/shrink/soften, the Tier 2 §4 entry); and the
-fuller keying suite (luma key, screen key) the Tier 2 Keying row still tracks. The colour param
-renders through the inspector's existing `ParamKind::Colour` arm — no inspector change was
-needed.
+**Status (K-154, shipped — supersedes the K-121 chroma-distance key):** the colour-difference
+screen matte, clips, despill and replace model above, with the default green screen + 100 %
+gain visibly keying a typical green screen ("drop it on and it works", §1.2). The screen's
+primary channel and reference are derived from the resolved Screen colour identically on the
+CPU reference and in the WGSL kernel, so both paths use the same numbers (K-031); the effect
+is continuous (no hard step), so the §1.6 oracle holds to ≤ 2 fp16 ULP over a corpus of
+near-screen, far-from-screen, partial-alpha and HDR pixels swept across gain / balance /
+clips / despill / replace / bias and all three View modes. There is **no neutral no-op
+default** (the effect exists to key, §1.2 — the tasteful default keys); **Mix 0 is the
+bit-exact identity**, pinned by test. The Screen colour and the bias/replace swatches render
+through the inspector's existing `ParamKind::Colour` arm (each with the eyedropper); the twirl
+uses the K-145 `ParamGroup`. **Migration:** a project saved before K-154 keeps its stored
+Screen colour (`key`) and Spill (now Despill amount); its old Tolerance/Softness are
+superseded by gain/balance/clip and simply go unread, and the new controls take their Keylight
+defaults (version bumped 1 → 2, so the frame cache re-keys).
+
+**Deferred to a follow-up (K-155):** the **spatial** Keylight controls — Screen pre-blur,
+Screen shrink/grow, Screen softness, Screen despot black/white — need a multi-pass
+morphology/blur pipeline with its own oracle and are out of scope of this pointwise landing;
+the **Inside/Outside garbage masks** (a layer-input holdout, reusing the DoF layer-reference
+pattern, §3.22); the **Colour correction** twirls (Foreground/Edge saturation, contrast,
+brightness, colour balance); and the **Source crops** (per-axis edge method + crop amounts).
+The core keyer above is what "properly key footage" needs; these refine it.
 
 ### 3.22 Depth of field — depth-driven lens blur (Frischluft / Camera Lens Blur-class)
 
