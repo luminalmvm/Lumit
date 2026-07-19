@@ -306,15 +306,30 @@ consumer of the §3.1 flow field. Its temporal window is `{0, 1}`: the flow engi
 the per-pixel motion between the current source frame and the next, and the smear runs each
 pixel along that vector. The field is computed **in the decode worker**, where both frames
 already live as decoded RGBA (mirroring how the Flow retiming policy computes flow there),
-and handed to the kernel as a two-channel `rg32float` texture threaded exactly as Echo's
-neighbour frames are (decode → draw → realise/export → the pass). Preview and export compute
-it the same way — the same `to_gray` → `lumit_flow` forward-flow call on the same source
-frames — so they match (K-031); the exact f32 flow texture keeps the CPU/GPU oracle at the
-cheap-class ≤ 2 fp16 ULP bound, the only rounding being the colour taps. The v1 parameter set
+and handed to the kernel as an `rgba32float` texture threaded exactly as Echo's
+neighbour frames are (decode → draw → realise/export → the pass): `.xy` the flow vectors,
+`.z` a per-pixel **confidence** in 0..1. Preview and export compute
+it the same way — the same `to_gray` → `lumit_flow` forward/backward-flow call on the same
+source frames — so they match (K-031); the exact f32 flow texture keeps the CPU/GPU oracle at
+the cheap-class ≤ 2 fp16 ULP bound, the only rounding being the colour taps.
+
+**Confidence, not a hard cut (FX-19).** A patch-based flow field is unreliable at occlusions and
+motion boundaries; gating the blur on/off there leaves hard un-blurred cut regions. Instead each
+pixel's streak length is **scaled smoothly by its confidence** — `lumit_flow::confidence`, a
+0..1 forward–backward-consistency measure (1 where the two flows agree, tapering to 0 where they
+disagree, an invalid patch fully suspect), 3×3 box-blurred so the falloff has no seam. So
+suspect regions fade toward unblurred gradually rather than cutting. Confidence 0 is a bit-exact
+passthrough for that pixel (the streak collapses onto it), so it composes with the zero-motion
+and zero-shutter passthroughs.
+
+The v1 parameter set
 is trimmed to **Shutter angle** (0–720°, default 180 — streak length is shutter ÷ 360 of the
 inter-frame motion, so 180° is half of it, the film-standard look), **Samples** (a fixed
-per-frame tap count, slider 8–32, so the CPU and GPU integrate identically) and the host
-**Mix**. Blur length in pixels = motion vector × (shutter ÷ 360); the streak is a centred
+per-frame tap count, slider 8–32, so the CPU and GPU integrate identically), a **View** enum
+(*Rendered* | *Motion vectors* | *Confidence*, default Rendered — the diagnostic views output
+the flow colour-coded, or the confidence as greyscale, so a user can see what the smear follows
+and where it fades) and the host **Mix**. Blur length in pixels = motion vector × (shutter ÷ 360)
+× confidence; the streak is a centred
 box integral of `Samples` evenly spaced bilinear taps, edges clamped so a full-frame smear
 never darkens the border. Pinned simplifications, each stable when the rest of §3.2 lands:
 **Vector source is Flow only** (Auto's transform-derivative path and the engine-motion-blur

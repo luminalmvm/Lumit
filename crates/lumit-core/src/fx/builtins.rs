@@ -1749,6 +1749,18 @@ pub const BUILTINS: &[EffectSchema] = &[
                     hard: (Some(2.0), Some(64.0)),
                 },
             },
+            ParamSchema {
+                id: "view",
+                label: "View",
+                // Diagnostic outputs (FX-19): the blurred picture, the flow
+                // vectors colour-coded (red +x, green +y), or the confidence as
+                // greyscale (white = trusted, black = suspect — where the streak
+                // fades out). Rendered by default.
+                kind: ParamKind::Choice {
+                    options: &["Rendered", "Motion vectors", "Confidence"],
+                    default: 0,
+                },
+            },
             MIX_PARAM,
         ],
     },

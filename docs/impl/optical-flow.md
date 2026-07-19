@@ -145,6 +145,19 @@ out = (1/W) Σ_{i=−S..S} w_i · frame(x + v·(i/(2S)))   // w_i = 1 (box) — 
   to a layer, the effect receives a flag and must not add transform-derived velocity
   ([06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md) §motion-blur).
 
+**Shipped v1 (labelled "Fast motion blur", FX-19).** The v1 effect measures the single forward
+neighbour (+1) and streaks each pixel with a fixed centred box of `Samples` taps. Crucially it
+does **not** drop occluded taps from the sum (a per-tap on/off gate showed as hard blurred /
+un-blurred cut regions). Instead the *streak length* is scaled smoothly by a per-pixel
+**confidence** in 0..1: `lumit_flow::confidence(fwd, bwd)` — the raw forward–backward consistency
+mapped to 1 (agree) … 0 (disagree, at the same rel/abs scale the binary occlusion cut uses, an
+invalid patch fully suspect), then 3×3 box-blurred so the taper has no seam. The confidence
+rides in the flow texture's `.z` (an `rgba32float` field), and the kernel does `sv = flow ·
+shutter_frac · conf`; confidence 0 collapses the streak to the pixel (a passthrough there). A
+**View** enum outputs the finished blur, the flow colour-coded, or the confidence as greyscale.
+CPU oracle (`lumit_core::fx::cpu::motion_blur`) and WGSL stay op-for-op (§1.6). Adaptive per-tap
+counts, the ±1 central difference and the destination-flow fixed point remain follow-ups.
+
 ## 5. Parameters and defaults (user-facing, per [08-EFFECTS.md](../08-EFFECTS.md))
 
 Flow interpolation: quality Half/Full (working res), smoothness σ (densification), and

@@ -2,6 +2,33 @@ use super::markers::flash_nth;
 use super::*;
 use crate::model::{EffectInstance, EffectNamespace, EffectValue};
 
+/// The Fast motion blur output view (docs/08 §3.2, FX-19): the finished blurred
+/// picture, or a diagnostic look at the motion field or the confidence that
+/// tapers the streak length. A per-pixel choice the kernel branches on last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MbView {
+    /// The blurred picture (the default).
+    Rendered,
+    /// The per-pixel flow vectors, colour-coded (red = +x, green = +y, grey =
+    /// still) — for checking the motion the smear follows.
+    MotionVectors,
+    /// The per-pixel confidence as greyscale (white = trusted, black = suspect)
+    /// — for seeing where the streak fades out.
+    Confidence,
+}
+
+impl MbView {
+    /// The kernel's integer code for this view (0 Rendered, 1 Motion vectors, 2
+    /// Confidence), so the CPU oracle and the WGSL uniform agree.
+    pub fn code(self) -> i32 {
+        match self {
+            MbView::Rendered => 0,
+            MbView::MotionVectors => 1,
+            MbView::Confidence => 2,
+        }
+    }
+}
+
 /// One effect, resolved to plain numbers at a frame — the flat form both the
 /// WGSL kernels (lumit-gpu) and the CPU references below consume.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -354,6 +381,9 @@ pub enum Resolved {
         samples: i32,
         /// 0..1.
         mix: f32,
+        /// Which view to output (docs/08 §3.2, FX-19): the blurred picture, or a
+        /// diagnostic look at the flow field or the confidence.
+        view: MbView,
     },
     /// LUT (docs/08 §3.11, docs/impl/lut.md, K-114): a 3D `.cube` colour
     /// lookup. Only the host Mix is `Copy`-carried here; the parsed-and-
@@ -910,10 +940,18 @@ fn resolve_one(
                 (e.float_at("shutter_angle", lt).unwrap_or(180.0) as f32 / 360.0).max(0.0);
             let samples = (e.float_at("samples", lt).unwrap_or(16.0).round() as i32).clamp(2, 64);
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            // View (FX-19): a diagnostic look at the flow or confidence, else the
+            // blurred picture. An older project without the row reads Rendered.
+            let view = match e.param("view") {
+                Some(EffectValue::Choice(1)) => MbView::MotionVectors,
+                Some(EffectValue::Choice(2)) => MbView::Confidence,
+                _ => MbView::Rendered,
+            };
             Some(Resolved::MotionBlur {
                 shutter_frac,
                 samples,
                 mix,
+                view,
             })
         }
         "transform" => {

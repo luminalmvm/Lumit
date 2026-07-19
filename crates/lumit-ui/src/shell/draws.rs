@@ -684,12 +684,12 @@ pub(crate) fn build_comp_draws_at(
                     .collect()
             })
             .unwrap_or_default();
-        // The dense motion field for Flow motion blur, carried from the same
-        // decode job (its `(u, v)` are at the layer's decoded size).
+        // The dense motion field for Fast motion blur, carried from the same
+        // decode job (its `(u, v, conf)` are at the layer's decoded size).
         let flow_field = pixels_by_layer.get(&layer.id).and_then(|lp| {
             lp.flow_field
                 .as_ref()
-                .map(|(u, v)| (u.clone(), v.clone(), lp.width, lp.height))
+                .map(|(u, v, conf)| (u.clone(), v.clone(), conf.clone(), lp.width, lp.height))
         });
         draws.push(CompLayerDraw {
             source,

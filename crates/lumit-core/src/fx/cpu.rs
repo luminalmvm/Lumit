@@ -1,4 +1,4 @@
-use super::Resolved;
+use super::{MbView, Resolved};
 
 /// Apply one resolved effect to an RGBA f32 image (premultiplied,
 /// linear light), in place.
@@ -699,19 +699,25 @@ pub fn echo(
     out
 }
 
-/// The §1.6 oracle for Flow motion blur (docs/08 §3.2): the CPU twin of
+/// The §1.6 oracle for Fast motion blur (docs/08 §3.2): the CPU twin of
 /// `fx_motionblur.wgsl`, op-for-op. `rgba` is linear premultiplied RGBA,
 /// mutated in place; `u`/`v` are the per-pixel forward flow (pixels of
 /// this raster, one entry per pixel) the decode worker measured between
-/// the current source frame and the next. Each pixel's streak vector is
-/// its own motion scaled by `shutter_frac` (shutter ÷ 360); the streak is
-/// a centred box integral of `samples` evenly spaced bilinear taps — the
-/// same line-integral shape as [`blur_directional`], but per-pixel
-/// directed by the flow rather than one global angle. Fixed tap order and
-/// count for determinism (§2.4). Edges clamp (the shared [`bilinear`]
-/// rule), so a full-frame smear never darkens the border. A zero streak —
-/// `shutter_frac == 0.0` or a still pixel — collapses every tap onto the
-/// pixel itself, so with `mix == 1.0` the result is the bit-exact input.
+/// the current source frame and the next, and `conf` is the matching
+/// per-pixel confidence in 0..1 ([`lumit_flow::confidence`]). Each pixel's
+/// streak vector is its own motion scaled by `shutter_frac` (shutter ÷ 360)
+/// **and by its confidence** (FX-19): a suspect pixel shortens its streak
+/// smoothly toward no blur, so occlusions and motion boundaries fade out
+/// instead of leaving a hard cut. The streak is a centred box integral of
+/// `samples` evenly spaced bilinear taps — the same line-integral shape as
+/// [`blur_directional`], but per-pixel directed by the flow rather than one
+/// global angle. Fixed tap order and count for determinism (§2.4). Edges
+/// clamp (the shared [`bilinear`] rule), so a full-frame smear never darkens
+/// the border. A zero streak — `shutter_frac == 0.0`, a still pixel, or zero
+/// confidence — collapses every tap onto the pixel itself, so with
+/// `mix == 1.0` the result is the bit-exact input. `view` selects the output:
+/// the blurred picture, the colour-coded flow, or the confidence as greyscale
+/// (the diagnostic views ignore `mix` — they show the field itself).
 #[allow(clippy::too_many_arguments)]
 pub fn motion_blur(
     rgba: &mut [f32],
@@ -719,9 +725,11 @@ pub fn motion_blur(
     h: u32,
     u: &[f32],
     v: &[f32],
+    conf: &[f32],
     shutter_frac: f32,
     samples: i32,
     mix: f32,
+    view: MbView,
 ) {
     let original = rgba.to_vec();
     let n = samples.max(1);
@@ -730,22 +738,46 @@ pub fn motion_blur(
         for x in 0..w {
             let idx = (y * w + x) as usize;
             let i = idx * 4;
-            let pos = (x as f32 + 0.5, y as f32 + 0.5);
-            // The full streak vector: this pixel's inter-frame motion,
-            // shortened by the shutter fraction. Taps span it centred.
-            let sv = (u[idx] * shutter_frac, v[idx] * shutter_frac);
-            let mut acc = [0.0f32; 4];
-            for k in 0..n {
-                let t = (k as f32 + 0.5) / nf - 0.5;
-                let s = bilinear(&original, w, h, pos.0 + t * sv.0, pos.1 + t * sv.1);
-                for c in 0..4 {
-                    acc[c] += s[c];
+            let out: [f32; 4] = match view {
+                MbView::Rendered => {
+                    let pos = (x as f32 + 0.5, y as f32 + 0.5);
+                    // The full streak vector: this pixel's inter-frame motion,
+                    // shortened by the shutter fraction and its confidence.
+                    let c = conf[idx];
+                    let sv = (u[idx] * shutter_frac * c, v[idx] * shutter_frac * c);
+                    let mut acc = [0.0f32; 4];
+                    for k in 0..n {
+                        let t = (k as f32 + 0.5) / nf - 0.5;
+                        let s = bilinear(&original, w, h, pos.0 + t * sv.0, pos.1 + t * sv.1);
+                        for cc in 0..4 {
+                            acc[cc] += s[cc];
+                        }
+                    }
+                    let mut o = [0.0f32; 4];
+                    for cc in 0..4 {
+                        let vv = acc[cc] / nf;
+                        o[cc] = original[i + cc] * (1.0 - mix) + vv * mix;
+                    }
+                    o
                 }
-            }
-            for c in 0..4 {
-                let vv = acc[c] / nf;
-                rgba[i + c] = original[i + c] * (1.0 - mix) + vv * mix;
-            }
+                MbView::MotionVectors => {
+                    // Colour-code the raw flow: red = +x, green = +y, mid-grey
+                    // = still. Opaque (premultiplied, alpha 1). k maps ±16 px to
+                    // the full 0..1 range.
+                    let k = 1.0 / 32.0;
+                    [
+                        (0.5 + u[idx] * k).clamp(0.0, 1.0),
+                        (0.5 + v[idx] * k).clamp(0.0, 1.0),
+                        0.5,
+                        1.0,
+                    ]
+                }
+                MbView::Confidence => {
+                    let c = conf[idx].clamp(0.0, 1.0);
+                    [c, c, c, 1.0]
+                }
+            };
+            rgba[i..i + 4].copy_from_slice(&out);
         }
     }
 }

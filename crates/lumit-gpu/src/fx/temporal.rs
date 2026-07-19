@@ -38,6 +38,10 @@ pub struct MotionBlurOp {
     pub samples: i32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Output view (FX-19): 0 Rendered, 1 Motion vectors, 2 Confidence — the
+    /// `lumit_core::fx::MbView::code()` integer, so the kernel matches the CPU
+    /// oracle's `view` branch.
+    pub view: i32,
 }
 
 #[repr(C)]
@@ -46,7 +50,7 @@ struct MotionBlurParams {
     shutter_frac: f32,
     samples: i32,
     mix_amt: f32,
-    _pad0: f32,
+    view: i32,
 }
 
 /// One resolved Datamosh pass (docs/08 §3.12, K-104; its own effect since
@@ -165,7 +169,7 @@ impl FxEngine {
                     shutter_frac: op.shutter_frac,
                     samples: op.samples.max(1),
                     mix_amt: op.mix,
-                    _pad0: 0.0,
+                    view: op.view,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });

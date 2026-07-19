@@ -635,6 +635,65 @@ fn occlusion_raw(f: &FlowField, g: &FlowField) -> Vec<u8> {
     raw
 }
 
+/// A smooth per-pixel **confidence** in 0..1 for the forward flow `f` measured
+/// against its backward twin `g` (docs/08 §3.2, FX-19): 1 where the two agree
+/// (a trustworthy vector), tapering to 0 where they disagree — occlusion, a
+/// motion boundary, or textureless drift. The *smooth* cousin of the binary
+/// [`occlusion`] mask, with **no hard threshold**: Fast motion blur scales each
+/// pixel's streak length by this, so unreliable regions fade toward unblurred
+/// gradually instead of leaving a hard cut. The raw consistency (1 at a perfect
+/// match, ramping linearly to 0 at the same rel/abs mismatch the binary test
+/// cuts at, an invalid patch fully suspect) is then 3×3 box-blurred, so the
+/// falloff widens by a pixel and has no seam. Deterministic and side-effect
+/// free, so preview and export derive the identical field (K-031). A
+/// mismatched-size `g` returns all-1 (claim nothing suspect — degrade to the
+/// plain smear, never a fault).
+pub fn confidence(f: &FlowField, g: &FlowField) -> Vec<f32> {
+    let (w, h) = (f.w, f.h);
+    let n = w * h;
+    if g.w != w || g.h != h || f.u.len() != n || g.u.len() != n {
+        return vec![1.0; n];
+    }
+    let mut raw = vec![0f32; n];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            if f.valid[i] == 0 {
+                raw[i] = 0.0; // nothing explained this patch: fully suspect
+                continue;
+            }
+            let (fu, fv) = (f.u[i], f.v[i]);
+            let gu = sample_scalar(&g.u, w, h, x as f32 + fu, y as f32 + fv);
+            let gv = sample_scalar(&g.v, w, h, x as f32 + fu, y as f32 + fv);
+            let cn = ((fu + gu) * (fu + gu) + (fv + gv) * (fv + gv)).sqrt();
+            let fn_ = (fu * fu + fv * fv).sqrt();
+            let gn = (gu * gu + gv * gv).sqrt();
+            // Same rel/abs scale the occlusion cut-off uses (§2): cn == 0 → 1,
+            // cn == thr → 0, linear and clamped between. Smooth, no step.
+            let thr = (OCC_REL * (fn_ + gn)).max(OCC_ABS);
+            raw[i] = (1.0 - cn / thr).clamp(0.0, 1.0);
+        }
+    }
+    // 3×3 box blur: ramp the confidence over a pixel so the streak-length taper
+    // has no visible seam.
+    let mut out = vec![0f32; n];
+    for y in 0..h {
+        for x in 0..w {
+            let (mut acc, mut cnt) = (0f32, 0f32);
+            for oy in -1i32..=1 {
+                for ox in -1i32..=1 {
+                    let qx = (x as i32 + ox).clamp(0, w as i32 - 1) as usize;
+                    let qy = (y as i32 + oy).clamp(0, h as i32 - 1) as usize;
+                    acc += raw[qy * w + qx];
+                    cnt += 1.0;
+                }
+            }
+            out[y * w + x] = acc / cnt;
+        }
+    }
+    out
+}
+
 /// 3×3 max filter (grow a mask by one pixel).
 fn dilate3(mask: &[u8], w: usize, h: usize) -> Vec<u8> {
     let mut out = vec![0u8; w * h];
@@ -1207,6 +1266,49 @@ mod tests {
         assert_eq!(f1.valid, f2.valid);
         assert_eq!(g1.u, g2.u);
         assert_eq!(g1.v, g2.v);
+    }
+
+    // confidence (docs/08 §3.2, FX-19): high where forward and backward flow
+    // agree, low where they disagree, always in 0..1, and a graceful all-1 for a
+    // mismatched-size pair (the smooth cut-free replacement for a hard gate).
+    #[test]
+    fn confidence_is_high_for_a_consistent_pair_and_low_when_they_disagree() {
+        let (w, h) = (4usize, 4usize);
+        let n = w * h;
+        let field = |u: f32, v: f32, valid: u8| FlowField {
+            w,
+            h,
+            u: vec![u; n],
+            v: vec![v; n],
+            valid: vec![valid; n],
+        };
+        // Forward (1,0), backward (-1,0): f + g(x+f) ≈ 0 → near-full confidence.
+        let f = field(1.0, 0.0, 1);
+        let g = field(-1.0, 0.0, 1);
+        let c = confidence(&f, &g);
+        assert_eq!(c.len(), n);
+        assert!(
+            c.iter().all(|&x| (0.0..=1.0).contains(&x) && x > 0.9),
+            "a consistent pair is near-full confidence"
+        );
+        // Backward pointing the SAME way: f + g is large → confidence drops.
+        let c2 = confidence(&f, &field(1.0, 0.0, 1));
+        assert!(
+            c2.iter().all(|&x| x < 0.9),
+            "an inconsistent pair loses confidence"
+        );
+        // An all-invalid forward is fully suspect everywhere (0 after the blur).
+        let c3 = confidence(&field(1.0, 0.0, 0), &g);
+        assert!(c3.iter().all(|&x| x == 0.0));
+        // A mismatched-size twin degrades to all-1 (claim nothing suspect).
+        let small = FlowField {
+            w: 2,
+            h: 2,
+            u: vec![0.0; 4],
+            v: vec![0.0; 4],
+            valid: vec![1; 4],
+        };
+        assert!(confidence(&f, &small).iter().all(|&x| x == 1.0));
     }
 
     // ---- The WGSL backend against the CPU oracle (impl note §6.5) ----

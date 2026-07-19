@@ -612,11 +612,13 @@ pub fn run_ops(
                 shutter_frac,
                 samples,
                 mix,
+                view,
             } => {
-                // Flow motion blur reads the layer's dense motion field, which
-                // the decode worker computed from the current + next source
-                // frames. With no field (a plain layer, or a decode that
-                // dropped the neighbour) it is a passthrough — never a fault.
+                // Fast motion blur reads the layer's dense motion field (with a
+                // confidence channel, FX-19), which the decode worker computed
+                // from the current + next source frames. With no field (a plain
+                // layer, or a decode that dropped the neighbour) it is a
+                // passthrough — never a fault.
                 if let Some(flow) = flow_field {
                     tex = fx.motion_blur(
                         ctx,
@@ -628,6 +630,7 @@ pub fn run_ops(
                             shutter_frac: *shutter_frac,
                             samples: *samples,
                             mix: *mix,
+                            view: view.code(),
                         },
                     );
                 }

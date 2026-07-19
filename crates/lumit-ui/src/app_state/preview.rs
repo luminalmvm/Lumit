@@ -69,13 +69,14 @@ pub struct CompLayerPixels {
     /// Decoded neighbour frames for a temporal effect (see
     /// [`CompJob::temporal`]): `(offset, rgba)`, same size as `rgba`.
     pub temporal: Vec<(i32, Vec<u8>)>,
-    /// Dense forward flow (per-pixel `(u, v)` motion in pixels, row-major,
-    /// same `width × height` as `rgba`) from this frame to the neighbour
-    /// at [`CompJob::flow_neighbour`]'s offset, present only when that
-    /// neighbour decoded. Flow motion blur (docs/08 §3.2, offset `1`)
-    /// smears along it; Datamosh (§3.12, K-104, offset `-1`) warps the
-    /// previous frame along it.
-    pub flow_field: Option<(Vec<f32>, Vec<f32>)>,
+    /// Dense forward flow (per-pixel `(u, v)` motion in pixels, plus a per-pixel
+    /// `conf`idence in 0..1, row-major, same `width × height` as `rgba`) from
+    /// this frame to the neighbour at [`CompJob::flow_neighbour`]'s offset,
+    /// present only when that neighbour decoded. Fast motion blur (docs/08 §3.2,
+    /// offset `1`) smears along it, scaling the streak by `conf` (FX-19);
+    /// Datamosh (§3.12, K-104, offset `-1`) warps the previous frame along the
+    /// `(u, v)` and ignores `conf`.
+    pub flow_field: Option<(Vec<f32>, Vec<f32>, Vec<f32>)>,
 }
 
 pub struct CompFrame {
@@ -307,10 +308,14 @@ fn decode_comp(
                     let (w, h) = (px.width as usize, px.height as usize);
                     let ga = lumit_flow::to_gray(&px.rgba, w, h);
                     let gb = lumit_flow::to_gray(other, w, h);
-                    let (fwd, _bwd) = flow_engine
+                    let (fwd, bwd) = flow_engine
                         .get_or_insert_with(lumit_flow::FlowEngine::new_auto)
                         .flow_pair(&ga, &gb);
-                    (fwd.u, fwd.v)
+                    // The per-pixel confidence Fast motion blur tapers the streak
+                    // by (FX-19); the same deterministic function export runs, so
+                    // the two match (K-031). Datamosh ignores it.
+                    let conf = lumit_flow::confidence(&fwd, &bwd);
+                    (fwd.u, fwd.v, conf)
                 })
         });
         // Blend / Flow policy: combine with the next source frame.

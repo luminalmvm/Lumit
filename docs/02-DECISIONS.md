@@ -1437,3 +1437,23 @@ render (K-031). Boundary: the force reaches the top-level below layers; nested-P
 layers keep their own switches (a v1 follow-up). Renaming is label-only — the `accumulation_mb`
 / `motion_blur` match names and saved projects are unchanged. Concurrent-worktree risk: another
 agent may also claim K-139 — renumber on merge if so. Built in an isolated worktree; not pushed.
+
+**K-140 · DECIDED · Fast motion blur scales the streak by a smooth confidence, not a hard gate,
+and gains a View enum (docs/08 §3.2, docs/impl/optical-flow.md §4).** The optical-flow motion
+blur (§3.2, renamed to **Fast motion blur** in K-139) left hard un-blurred cut regions wherever
+the patch-based flow was unreliable (occlusions, motion boundaries). Fix: the decode worker now
+computes a per-pixel **confidence** in 0..1 alongside the flow — `lumit_flow::confidence(fwd,
+bwd)`, the raw forward–backward consistency mapped 1 (agree) … 0 (disagree, at the same rel/abs
+scale the binary occlusion cut uses; an invalid patch fully suspect), 3×3 box-blurred so the
+taper has no seam — and the kernel scales each pixel's **streak length** by it (`sv = flow ·
+shutter_frac · conf`). Suspect regions fade toward unblurred smoothly instead of cutting;
+confidence 0 is a bit-exact passthrough for that pixel, composing with the existing zero-motion
+and zero-shutter passthroughs. The confidence rides in a new `.z` channel of the flow texture
+(now `rgba32float`, not `rg32float`; Datamosh shares it and reads only `.xy`, so it is
+unaffected). New **View** enum parameter (*Rendered* | *Motion vectors* | *Confidence*, default
+Rendered): the diagnostic views output the flow colour-coded or the confidence as greyscale.
+Full CPU/GPU parity is kept — `lumit_core::fx::cpu::motion_blur` gains matching `conf`/`view`
+arguments and stays op-for-op with `fx_motionblur.wgsl` at the cheap-class ≤ 2 fp16 ULP oracle
+bound; preview and export compute confidence with the identical deterministic function (K-031).
+Concurrent-worktree risk: another agent may also claim K-140 — renumber on merge if so. Built in
+an isolated worktree; not pushed.

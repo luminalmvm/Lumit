@@ -796,8 +796,9 @@ impl Renderer<'_> {
     /// current frame and the requested neighbour are picked exactly as
     /// [`Self::footage_neighbours`] picks its frames (same retime mapping,
     /// same comp step, unmasked), and flow runs on the shared [`Self::flow`]
-    /// engine; the field uploads as an `rg32float` texture the same size as
-    /// the source, matching the prepared texture at full-resolution export.
+    /// engine; the field uploads as an `rgba32float` texture the same size as
+    /// the source (`.xy` motion, `.z` confidence, FX-19), matching the prepared
+    /// texture at full-resolution export.
     fn footage_flow_field(
         &mut self,
         layer: &lumit_core::model::Layer,
@@ -840,9 +841,13 @@ impl Renderer<'_> {
         }
         let ga = lumit_flow::to_gray(&cur.rgba, w, h);
         let gb = lumit_flow::to_gray(&next.rgba, w, h);
-        let (fwd, _bwd) = self.flow.flow_pair(&ga, &gb);
+        let (fwd, bwd) = self.flow.flow_pair(&ga, &gb);
+        // The per-pixel confidence Fast motion blur tapers the streak by (FX-19)
+        // — the same deterministic function the preview runs, so the two match
+        // (K-031); it rides in the flow texture's .z channel.
+        let conf = lumit_flow::confidence(&fwd, &bwd);
         Ok(Some(lumit_gpu::fx::upload_flow_field(
-            self.gpu, &fwd.u, &fwd.v, cur.width, cur.height,
+            self.gpu, &fwd.u, &fwd.v, &conf, cur.width, cur.height,
         )))
     }
 

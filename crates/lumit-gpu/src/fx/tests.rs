@@ -1870,20 +1870,42 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     }
     let varying = (vary_u, vary_v);
 
+    use lumit_core::fx::MbView;
+    let full = vec![1.0f32; n];
+    // A smoothly varying confidence (FX-19): proves the GPU scales the streak by
+    // .z exactly as the CPU oracle does.
+    let mut conf_vary = vec![0f32; n];
+    for (i, c) in conf_vary.iter_mut().enumerate() {
+        *c = ((i % 5) as f32) / 4.0; // 0, .25, .5, .75, 1 repeating
+    }
+
     let cases = [
-        (&constant, 0.5f32, 16i32, 1.0f32, "constant"),
-        (&varying, 1.0, 12, 0.7, "varying"),
-        (&constant, 0.25, 8, 1.0, "short"),
+        (&constant, &full, 0.5f32, 16i32, 1.0f32, "constant"),
+        (&varying, &full, 1.0, 12, 0.7, "varying"),
+        (&constant, &full, 0.25, 8, 1.0, "short"),
+        (&varying, &conf_vary, 1.0, 12, 1.0, "confidence-scaled"),
     ];
-    for (field, shutter_frac, samples, mix, name) in cases {
+    for (field, conf, shutter_frac, samples, mix, name) in cases {
         let (u, v) = field;
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::motion_blur(&mut cpu, w, h, u, v, shutter_frac, samples, mix);
-        let flow_t = upload_flow_field(&ctx, u, v, w, h);
+        lumit_core::fx::cpu::motion_blur(
+            &mut cpu,
+            w,
+            h,
+            u,
+            v,
+            conf,
+            shutter_frac,
+            samples,
+            mix,
+            MbView::Rendered,
+        );
+        let flow_t = upload_flow_field(&ctx, u, v, conf, w, h);
         let op = MotionBlurOp {
             shutter_frac,
             samples,
             mix,
+            view: MbView::Rendered.code(),
         };
         let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -1898,9 +1920,28 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         );
     }
 
+    // The diagnostic views (FX-19) match the CPU oracle too, on the varying
+    // field with the varying confidence.
+    let (u, v) = &varying;
+    let flow_t = upload_flow_field(&ctx, u, v, &conf_vary, w, h);
+    for view in [MbView::MotionVectors, MbView::Confidence] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::motion_blur(&mut cpu, w, h, u, v, &conf_vary, 0.5, 16, 1.0, view);
+        let op = MotionBlurOp {
+            shutter_frac: 0.5,
+            samples: 16,
+            mix: 1.0,
+            view: view.code(),
+        };
+        let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        assert!(worst <= 2, "view {view:?}: worst {worst} fp16 ULP");
+    }
+
     // A zero flow, and a real motion with a closed shutter, are both
     // bit-exact passthroughs (every tap collapses onto the pixel itself).
-    let zero = upload_flow_field(&ctx, &vec![0.0; n], &vec![0.0; n], w, h);
+    let zero = upload_flow_field(&ctx, &vec![0.0; n], &vec![0.0; n], &full, w, h);
     let out = fx.motion_blur(
         &ctx,
         &src,
@@ -1911,6 +1952,7 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
             shutter_frac: 0.5,
             samples: 16,
             mix: 1.0,
+            view: MbView::Rendered.code(),
         },
     );
     assert_eq!(
@@ -1918,7 +1960,7 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         img,
         "zero flow must be a bit-exact passthrough"
     );
-    let moving = upload_flow_field(&ctx, &constant.0, &constant.1, w, h);
+    let moving = upload_flow_field(&ctx, &constant.0, &constant.1, &full, w, h);
     let out = fx.motion_blur(
         &ctx,
         &src,
@@ -1929,6 +1971,7 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
             shutter_frac: 0.0,
             samples: 16,
             mix: 1.0,
+            view: MbView::Rendered.code(),
         },
     );
     assert_eq!(
@@ -1991,7 +2034,8 @@ fn wgsl_datamosh_matches_the_cpu_oracle() {
     ] {
         let (u, v) = field;
         let cpu = lumit_core::fx::cpu::datamosh(&current, &prev, w, h, u, v, intensity);
-        let flow_t = upload_flow_field(&ctx, u, v, w, h);
+        // Datamosh reads only the flow .xy; confidence is irrelevant (empty).
+        let flow_t = upload_flow_field(&ctx, u, v, &[], w, h);
         let op = DatamoshOp { intensity };
         let out = fx.datamosh(&ctx, &cur_t, &prev_t, &flow_t, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -2007,7 +2051,7 @@ fn wgsl_datamosh_matches_the_cpu_oracle() {
     }
 
     // Intensity 0 must be a bit-exact passthrough regardless of motion.
-    let moving = upload_flow_field(&ctx, &constant.0, &constant.1, w, h);
+    let moving = upload_flow_field(&ctx, &constant.0, &constant.1, &[], w, h);
     let out = fx.datamosh(
         &ctx,
         &cur_t,

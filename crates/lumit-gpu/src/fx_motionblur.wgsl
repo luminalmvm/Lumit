@@ -1,21 +1,26 @@
-// Flow motion blur (docs/08-EFFECTS.md §3.2): smear each pixel along its own
+// Fast motion blur (docs/08-EFFECTS.md §3.2): smear each pixel along its own
 // motion vector. Mirrors lumit_core::fx::cpu::motion_blur op-for-op (§1.6: the
 // CPU is the oracle) — the same tap count, the same evenly spaced bilinear
 // taps in the same order, box weighted and normalised, edges clamped.
 //
 // The motion is a dense flow field (per-pixel forward vectors, in raster
 // pixels) the decode worker computed between the current source frame and the
-// next (§3.1). It arrives as a two-channel texture the same size as the input;
-// binding 2 samples it. binding 0 is the source (the taps sample it), binding
-// 1 the same texture read as the unprocessed original for the host Mix — the
-// shared 2-input convention, with the flow texture the one extra binding
-// (modelled on fx_adjust.wgsl's third input).
+// next (§3.1). It arrives as an rgba32float texture the same size as the input:
+// .xy are the flow vectors, .z the per-pixel confidence in 0..1
+// (lumit_flow::confidence). binding 2 samples it. binding 0 is the source (the
+// taps sample it), binding 1 the same texture read as the unprocessed original
+// for the host Mix — the shared 2-input convention, with the flow texture the
+// one extra binding (modelled on fx_adjust.wgsl's third input).
+//
+// FX-19: the streak length is scaled by the confidence, so an occlusion or a
+// motion boundary fades toward unblurred smoothly instead of leaving a hard
+// cut; `view` swaps the output for a diagnostic look at the flow or confidence.
 
 struct Params {
     shutter_frac: f32, // shutter / 360: streak length as a fraction of motion
     samples: i32,      // taps along the streak (== cpu::motion_blur's samples)
     mix_amt: f32,      // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    view: i32,         // 0 Rendered, 1 Motion vectors, 2 Confidence
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -53,9 +58,25 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
-    // This pixel's inter-frame motion, shortened by the shutter fraction —
-    // the full streak vector; taps span it centred on the pixel.
-    let sv = textureLoad(flow, xy, 0).xy * p.shutter_frac;
+    let fl = textureLoad(flow, xy, 0);
+    let conf = fl.z;
+    // Diagnostic views (FX-19), matching cpu::motion_blur exactly.
+    if (p.view == 1) {
+        // Motion vectors: red = +x, green = +y, mid-grey = still. Opaque.
+        let k = 1.0 / 32.0;
+        let r = clamp(0.5 + fl.x * k, 0.0, 1.0);
+        let g = clamp(0.5 + fl.y * k, 0.0, 1.0);
+        textureStore(dst, xy, vec4<f32>(r, g, 0.5, 1.0));
+        return;
+    }
+    if (p.view == 2) {
+        let c = clamp(conf, 0.0, 1.0);
+        textureStore(dst, xy, vec4<f32>(c, c, c, 1.0));
+        return;
+    }
+    // This pixel's inter-frame motion, shortened by the shutter fraction and its
+    // confidence — the full streak vector; taps span it centred on the pixel.
+    let sv = fl.xy * p.shutter_frac * conf;
     let n = p.samples;
     let nf = f32(n);
     var acc = vec4<f32>(0.0);

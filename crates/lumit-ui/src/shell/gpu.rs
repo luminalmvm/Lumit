@@ -146,10 +146,13 @@ pub struct CompLayerDraw {
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
     /// source. Empty unless the stack is temporal.
     pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
-    /// The layer's dense forward flow field `(u, v, w, h)` for Flow motion
-    /// blur (docs/08 §3.2), carried from its decode job — `w × h` matches the
-    /// decoded source. None unless the stack wants one.
-    pub flow_field: Option<(Vec<f32>, Vec<f32>, u32, u32)>,
+    /// The layer's dense forward flow field `(u, v, conf, w, h)` for Fast
+    /// motion blur (docs/08 §3.2), carried from its decode job — `w × h` matches
+    /// the decoded source. `conf` is the per-pixel confidence in 0..1 (FX-19)
+    /// that tapers the streak; Datamosh reads only `(u, v)`. None unless the
+    /// stack wants one.
+    #[allow(clippy::type_complexity)]
+    pub flow_field: Option<(Vec<f32>, Vec<f32>, Vec<f32>, u32, u32)>,
     /// The ordered file paths of the layer's enabled built-in `lut` effects
     /// (docs/08 §3.11; None = unset). Because `resolve_stack` keeps the same
     /// filter and order and a `lut` effect always resolves to exactly one
@@ -641,11 +644,12 @@ impl Realiser<'_> {
                         (*offset, self.engine.linearise(&self.ctx, &src))
                     })
                     .collect();
-                // The dense motion field for Flow motion blur, uploaded as its
-                // own texture (only when it matches the layer's raster).
-                let flow = l.flow_field.as_ref().and_then(|(u, v, fw, fh)| {
+                // The dense motion field for Fast motion blur, uploaded as its
+                // own texture (only when it matches the layer's raster). The
+                // confidence rides in the .z channel (FX-19).
+                let flow = l.flow_field.as_ref().and_then(|(u, v, conf, fw, fh)| {
                     (*fw == w && *fh == h)
-                        .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, w, h))
+                        .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h))
                 });
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
                 // `Resolved::Lut` ops (§3.11); the same load export uses (K-031).

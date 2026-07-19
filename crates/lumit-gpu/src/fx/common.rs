@@ -91,14 +91,25 @@ pub fn upload_lut_3d(ctx: &GpuContext, size: u32, data: &[[f32; 3]]) -> wgpu::Te
     tex
 }
 
-/// Upload a dense flow field (per-pixel `(u, v)` motion, raster pixels) as a
-/// two-channel `rg32float` texture for [`FxEngine::motion_blur`]. `u` and `v`
-/// are row-major, one entry per pixel (`w × h`). rg32float, not the working
-/// fp16 format, so the kernel reads the exact f32 vectors the CPU oracle
-/// integrates — the only fp16 rounding then is the colour taps, matching the
-/// other tap-based kernels. Interleaved [u, v] per texel; `textureLoad` in the
-/// kernel reads `.xy`.
-pub fn upload_flow_field(ctx: &GpuContext, u: &[f32], v: &[f32], w: u32, h: u32) -> wgpu::Texture {
+/// Upload a dense flow field (per-pixel `(u, v)` motion, raster pixels, plus a
+/// per-pixel confidence `conf` in 0..1) as an `rgba32float` texture for
+/// [`FxEngine::motion_blur`]. `u`, `v` and `conf` are row-major, one entry per
+/// pixel (`w × h`). rgba32float, not the working fp16 format, so the kernel
+/// reads the exact f32 vectors the CPU oracle integrates — the only fp16
+/// rounding then is the colour taps, matching the other tap-based kernels.
+/// Interleaved `[u, v, conf, 0]` per texel; `textureLoad` in the kernel reads
+/// `.xy` for the motion and `.z` for the confidence (FX-19). Datamosh shares
+/// this texture and reads only `.xy`, so a missing/uniform `conf` is harmless
+/// to it. A short `conf` (fewer entries than pixels) reads as full confidence
+/// where absent, so an older caller degrades to the plain smear.
+pub fn upload_flow_field(
+    ctx: &GpuContext,
+    u: &[f32],
+    v: &[f32],
+    conf: &[f32],
+    w: u32,
+    h: u32,
+) -> wgpu::Texture {
     let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("fx-flow-field"),
         size: wgpu::Extent3d {
@@ -109,15 +120,17 @@ pub fn upload_flow_field(ctx: &GpuContext, u: &[f32], v: &[f32], w: u32, h: u32)
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rg32Float,
+        format: wgpu::TextureFormat::Rgba32Float,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
     let n = (w * h) as usize;
-    let mut interleaved = vec![0f32; n * 2];
-    for i in 0..n.min(u.len()).min(v.len()) {
-        interleaved[i * 2] = u[i];
-        interleaved[i * 2 + 1] = v[i];
+    let mut interleaved = vec![0f32; n * 4];
+    for i in 0..n {
+        interleaved[i * 4] = u.get(i).copied().unwrap_or(0.0);
+        interleaved[i * 4 + 1] = v.get(i).copied().unwrap_or(0.0);
+        // Absent confidence reads as full (no streak scaling).
+        interleaved[i * 4 + 2] = conf.get(i).copied().unwrap_or(1.0);
     }
     ctx.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
@@ -129,7 +142,7 @@ pub fn upload_flow_field(ctx: &GpuContext, u: &[f32], v: &[f32], w: u32, h: u32)
         bytemuck::cast_slice(&interleaved),
         wgpu::TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(w * 8),
+            bytes_per_row: Some(w * 16),
             rows_per_image: Some(h),
         },
         wgpu::Extent3d {
