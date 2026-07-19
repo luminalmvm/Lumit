@@ -173,7 +173,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [x] T6 Clicking an effect title now selects the whole effect (highlights the title, joins the selection); title highlights when any of its params is selected.
 - [x] T7 Shift-range now stops at section boundaries: a cross-effect (or cross-kind) shift-click just picks the target; within one effect it ranges.
 - [x] T8 Flow input rate now shows a concrete fps (defaults to the comp/layer frame rate), no "Native" word; typing 0 still conforms to native.
-- [ ] T9 Per-layer MB toggle appears to do nothing (should blur the layer's transform motion).
+- [x] T9 Per-layer MB looked dead because the comp MB MASTER was buried in comp settings. Added a master "MB" toggle to the timeline bottom bar; with it on, MB-switched layers blur along their transform. (T22: the comp master is the composition-level MB the owner asked for.)
 - [ ] T10 Bottom-bar graph icons still ~1-2px clipped; match the magnet icon's placement.
 - [ ] T11 Viewfinder still spills over the inner border; round-mode bottom bar not rounded.
 - [ ] T12 Posterize time still does nothing at any frame rate.

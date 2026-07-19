@@ -173,6 +173,33 @@ pub(crate) fn timeline_bottom_bar(
         app.magnet_snap = !app.magnet_snap;
     }
 
+    // Composition motion-blur master (T9): the comp-wide enable that the
+    // per-layer motion-blur switches need — previously reachable only in Comp
+    // settings, so a per-layer switch looked dead. Surfaced here as a master
+    // toggle (AE's timeline motion-blur button); with it on, every layer whose
+    // own MB switch is set blurs along its motion.
+    if let Some(comp_id) = app.preview_comp {
+        let mut mb = app
+            .store
+            .snapshot()
+            .comp(comp_id)
+            .map(|c| c.motion_blur)
+            .unwrap_or_default();
+        if zc
+            .selectable_label(mb.enabled, egui::RichText::new("MB").small())
+            .on_hover_text(
+                "Composition motion blur (master): layers with their own motion-blur switch on then blur",
+            )
+            .clicked()
+        {
+            mb.enabled = !mb.enabled;
+            app.commit(lumit_core::Op::SetCompMotionBlur {
+                comp: comp_id,
+                motion_blur: mb,
+            });
+        }
+    }
+
     // The value/speed lens toggle (graph mode only): one lens shared by every
     // curve, so it lives here rather than in each plot's header. Its own group,
     // split from the zoom cluster by a hairline divider. The wording follows
