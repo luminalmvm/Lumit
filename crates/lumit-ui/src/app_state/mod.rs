@@ -906,6 +906,15 @@ pub struct AppState {
     /// the front so the user sees where the new item landed. Consumed each frame
     /// after the dock draws, like `pop_out_timeline`.
     pub focus_project_tab: bool,
+    /// Set after applying an effect (owner): the shell brings the Effect
+    /// Controls tab to the front so the freshly added effect is visible and
+    /// selected. Consumed each frame after the dock draws, like
+    /// `focus_project_tab`.
+    pub focus_effects_tab: bool,
+    /// The Project panel's width this frame (measured by the dock as it draws),
+    /// so the timeline outline can default to the same width on first use
+    /// (owner). 0 until the panel has drawn once.
+    pub project_panel_w: f32,
     /// The layer whose name is being edited inline in the Timeline outline, and
     /// its live edit buffer. Double-clicking a layer name opens the editor;
     /// Enter or focus-loss commits a `RenameLayer`, Escape cancels. Session
@@ -1015,7 +1024,9 @@ impl Default for AppState {
             view_zoom: 1.0,
             view_pan: egui::Vec2::ZERO,
             last_display_scale: 1.0,
-            timeline_name_w: 300.0,
+            // 0 = "not set yet" (owner): the timeline defaults its outline to
+            // the Project panel's width until the user drags the divider.
+            timeline_name_w: 0.0,
             timeline_divider_raw: None,
             magnet_snap: true,
             timeline_zoom: 1.0,
@@ -1039,6 +1050,8 @@ impl Default for AppState {
             open_comps: Vec::new(),
             pop_out_timeline: false,
             focus_project_tab: false,
+            focus_effects_tab: false,
+            project_panel_w: 0.0,
             renaming_layer: None,
             layer_reorder: None,
             selected_item: None,

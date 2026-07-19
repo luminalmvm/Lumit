@@ -48,9 +48,29 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     let panel_left = ui.max_rect().left();
     let panel_right = ui.max_rect().right();
     // Draggable left-column width (Mack): clamp so it can't swallow the track.
-    let name_w = app
-        .timeline_name_w
-        .clamp(96.0, (panel_right - panel_left - 120.0).max(96.0));
+    // First use defaults to the Project (top-left) panel's width so the two
+    // columns line up (owner); a drag overrides and is remembered per project
+    // (egui's persisted storage, keyed by the project path).
+    let name_w_key = egui::Id::new((
+        "timeline-name-w",
+        app.path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+    ));
+    if app.timeline_name_w <= 0.0 {
+        app.timeline_name_w = ui
+            .data_mut(|d| d.get_persisted::<f32>(name_w_key))
+            .unwrap_or(0.0);
+    }
+    let base_w = if app.timeline_name_w > 0.0 {
+        app.timeline_name_w
+    } else if app.project_panel_w > 0.0 {
+        app.project_panel_w
+    } else {
+        300.0
+    };
+    let name_w = base_w.clamp(96.0, (panel_right - panel_left - 120.0).max(96.0));
     let duration = comp.duration.0.to_f64().max(1e-6);
     let frames = app.comp_frame_count(comp).max(1);
     let track_left = panel_left + name_w;
@@ -119,20 +139,30 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         TimelineWheel::Graph | TimelineWheel::Scroll => {}
     }
 
-    // The taller time bar's top row (TL4): current time/frame, a layer-search
-    // box, and the view + motion-blur-master toggles (moved up from the bottom
-    // bar, T22). Drawn above the ruler so the whole time bar reads taller.
-    timeline_top_row(
+    // The time bar's top row (TL4): current time/frame, a layer-search box and
+    // the view / hide / motion-blur toggles — over the OUTLINE column only
+    // (owner). Right of `track_left` the strip belongs to the ruler, so the
+    // scrub area is a row taller there.
+    let top_rect = timeline_top_row(
         ui,
         theme,
         app,
         comp_id,
         comp.frame_rate.fps(),
         app.preview_frame,
+        track_left,
     );
 
-    let (ruler_rect, ruler_resp) = ui.allocate_exact_size(
-        egui::vec2(ui.available_width(), 20.0),
+    let (ruler_rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::hover());
+    // The scrub interaction spans the ruler AND the top strip right of the
+    // outline (owner): one tall click-and-drag region, easier to grab.
+    let ruler_resp = ui.interact(
+        egui::Rect::from_min_max(
+            egui::pos2(track_left, top_rect.top()),
+            egui::pos2(ruler_rect.right(), ruler_rect.bottom()),
+        ),
+        ui.id().with(("ruler-scrub", comp_id)),
         egui::Sense::click_and_drag(),
     );
     ui.painter().rect_filled(ruler_rect, 0.0, theme.surface_2);
@@ -231,7 +261,8 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     .gamma_multiply(0.25 + 0.55 * confidence.clamp(0.0, 1.0)),
                 ruler_rect.top() + 9.0,
             ),
-            _ => (theme.accent, ruler_rect.top()),
+            // The playhead reaches up through the taller scrub strip (owner).
+            _ => (theme.accent, top_rect.top()),
         };
         ui.painter().line_segment(
             [egui::pos2(x, top), egui::pos2(x, ruler_rect.bottom())],
@@ -505,6 +536,13 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     };
                     if let Some(payload) = dnd_release_of::<EffectDragPayload>(&drop) {
                         if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
+                            // Select the fresh effect and land on its controls
+                            // (owner).
+                            app.focus_applied_effect(
+                                layer.id,
+                                layer.effects.len(),
+                                inst.params.len(),
+                            );
                             let mut effects = layer.effects.clone();
                             effects.push(inst);
                             app.commit(lumit_core::Op::SetLayerEffects {
@@ -512,7 +550,6 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                 layer: layer.id,
                                 effects,
                             });
-                            app.selected_layer = Some(layer.id);
                             #[cfg(feature = "media")]
                             app.refresh_preview();
                         }
@@ -539,6 +576,9 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 let mut start_rename = false;
                 let mut duplicate_this = false;
                 let mut delete_this = false;
+                // (effect index, param count) when the menu applied an effect,
+                // so it gets selected and focused (owner).
+                let mut applied_effect: Option<(usize, usize)> = None;
                 // Layer's natural pixel space, for the "Add mask" sizes (computed
                 // outside the menu closure so it needn't borrow `app`).
                 let (mask_w, mask_h) = mask_space(layer, app, comp);
@@ -730,6 +770,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                 &mut delete_this,
                                 &mut convert_layer,
                                 &mut trim_to_source,
+                                &mut applied_effect,
                             );
                         });
                     }
@@ -779,6 +820,11 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 }
                 if let Some(op) = ctx_op {
                     app.selected_layer = Some(layer.id);
+                    // "Add effect" from the menu: select the fresh effect and
+                    // land on its controls (owner).
+                    if let Some((idx, n_params)) = applied_effect {
+                        app.focus_applied_effect(layer.id, idx, n_params);
+                    }
                     pending = Some(op);
                 }
                 if duplicate_this {
@@ -1466,9 +1512,14 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     }
                     // Effects group (docs/08): the layer's effect stack. Each
                     // effect is a compact block — enable / name / remove on its
-                    // title row, then one animatable row per parameter.
+                    // title row, then one animatable row per parameter. The
+                    // header only shows once the layer has effects (owner):
+                    // an empty stack has nothing to twirl open, and effects
+                    // arrive by drag / right-click / palette, not from here.
                     let fx_id = ui.id().with(("effects-group", layer.id));
-                    if group_header_row(ui, theme, "Effects", fx_id, false, viewport) {
+                    if !layer.effects.is_empty()
+                        && group_header_row(ui, theme, "Effects", fx_id, false, viewport)
+                    {
                         let fps2 = comp.frame_rate.fps().max(1.0);
                         let fx_ctx = RowCtx {
                             theme,
@@ -1484,6 +1535,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             px_per_sec,
                             view_start,
                             graph_mode: app.timeline_graph_mode,
+                            effects_toolbar: false,
                             selected_prop: app.selected_prop,
                             selected_props: app.selected_props.clone(),
                         };
@@ -1527,6 +1579,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                 px_per_sec,
                                 view_start,
                                 graph_mode: app.timeline_graph_mode,
+                            effects_toolbar: false,
                                 selected_prop: app.selected_prop,
                                 selected_props: app.selected_props.clone(),
                             };
@@ -1694,13 +1747,18 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 // the divider doesn't start moving back until the cursor returns to
                 // the divider's actual position — not the instant the mouse reverses.
                 let max_w = (panel_right - panel_left - 120.0).clamp(96.0, 900.0);
-                let raw =
-                    app.timeline_divider_raw.unwrap_or(app.timeline_name_w) + hresp.drag_delta().x;
+                // Seed from the SHOWN width, not the stored field — before the
+                // first drag the field is the 0 "use the default" sentinel and
+                // the divider would jump to the minimum (owner TL-B).
+                let raw = app.timeline_divider_raw.unwrap_or(name_w) + hresp.drag_delta().x;
                 app.timeline_divider_raw = Some(raw);
                 app.timeline_name_w = raw.clamp(96.0, max_w);
             }
             if hresp.drag_stopped() {
                 app.timeline_divider_raw = None;
+                // Remember the chosen width for this project (owner TL-B).
+                let w = app.timeline_name_w;
+                ui.data_mut(|d| d.insert_persisted(name_w_key, w));
             }
         }
         // Full-height division between the outline and the lanes: a strong

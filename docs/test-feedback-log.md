@@ -217,6 +217,40 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 
 ## Timeline layout (TL — ref screenshot 145, AE-style columns)
 - [ ] TL1 Similar row treatment to Effect Controls (dividers, aligned values).
-- [ ] TL2 DEFERRED (big, design-heavy — do together). The outline already carries most of these switches, but grouping them into the 5 AE column clusters that "move together" (AE's F4-style show/hide-a-group toggle, drag-to-reorder) is a major outline restructure. Needs decisions: which groups always show vs toggle, is it a swap (Switches↔Modes) or full drag-reorder, plus solo/lock/quality(bilinear|bicubic)/preserve-T switches that don't exist yet. Best scoped with the app open.
+- [ ] TL2 DEFERRED — owner (2026-07-19): "leave TL2 till after everything I've said, then we come back to that". The outline already carries most of these switches, but grouping them into the 5 AE column clusters that "move together" (AE's F4-style show/hide-a-group toggle, drag-to-reorder) is a major outline restructure. Needs decisions: which groups always show vs toggle, is it a swap (Switches↔Modes) or full drag-reorder, plus solo/lock/quality(bilinear|bicubic)/preserve-T switches that don't exist yet. Scope together with the app open, AFTER the pass-4 items are verified.
 - [~] TL3 Clicking empty timeline space now reveals the comp in the Project panel (selects it as the project item); a right-click there gives "Composition settings…" and "Reveal in project" (focuses the project tab). (Kept the settings behind a right-click rather than firing a dialog on every deselect-click; comp-title click still TODO.)
 - [x] TL4 Top row above the ruler (`timeline_top_row`): current time (m:ss:ff + frame) top-left, a layer-search box in the middle (filters the outline by name), and the graph-view toggle + a hide-switched-off-layers toggle (eye-closed) + MB master top-right — all moved up from the bottom bar. (Interpreted "hide-layer icon" as hide invisible/switched-off layers — eyeball whether that's the meaning you wanted.)
+
+---
+
+# Pass 4 — 2026-07-19 evening (owner's immediate notes from the app)
+
+Timeline UI:
+- [x] P4-T1 The top row now spans ONLY the outline column; right of it the strip is ruler
+  background, the scrub click-and-drag region covers both rows (a taller grab area), and the
+  playhead line reaches up through it. The time text / search / toggles pack within the
+  outline width (the search box takes whatever sits between them and hides below ~36 px).
+- [x] P4-T2 First use defaults the outline width to the Project (top-left) panel's measured
+  width; dragging the divider overrides it and the choice is remembered per project (egui
+  persisted storage keyed by the project path — survives restarts when eframe persistence is
+  on; otherwise per-session). Drag seeding fixed so the first drag no longer jumps.
+- [x] P4-T3 The Effects group header in a layer's twirl-down only shows when the layer HAS
+  effects.
+- [x] P4-T4 The Add effect / Presets toolbar row is gone from the timeline's effect dropdown
+  (`RowCtx::effects_toolbar`); the Effect Controls panel keeps it.
+- [x] P4-T5 Row dividers now stretch across the lane area too (layers view; in graph mode
+  they stay on the outline so the curve stays clean), and run below EVERY line including the
+  group headers.
+- [x] P4-T6 ROW_H 22 → 24 with vertically centred content, so value boxes and the pair rows'
+  link no longer sit on the divider (Screenshot_146). Applies to the timeline AND the Effect
+  Controls panel (shared row frame).
+
+General:
+- [x] P4-G1 Applying an effect — from the Effect Controls toolbar, an Effects & Presets drag
+  onto a timeline row or the panel, the layer right-click menu, or the command palette — now
+  selects the fresh effect (all its param rows, like clicking its title) and brings the
+  Effect Controls tab to the front (`focus_applied_effect` + `focus_effects_tab`).
+- [x] P4-G2 Effect Controls values now sit snugly right of the panel's MIDLINE
+  (`snap_to_value_column` — a shared value column), not the far right; Float, Choice, Bool,
+  Seed, Colour and the X/Y pair row all use it, and the timeline's effect rows share the
+  same rule. Divider clipping fixed by P4-T6.

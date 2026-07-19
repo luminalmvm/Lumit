@@ -226,12 +226,17 @@ impl Shell {
                     if let (Some(mut effects), Some(inst)) =
                         (current, lumit_core::fx::instantiate(name))
                     {
+                        // Select the fresh effect and land on its controls
+                        // (owner).
+                        let idx = effects.len();
+                        let n_params = inst.params.len();
                         effects.push(inst);
                         self.app.commit(lumit_core::Op::SetLayerEffects {
                             comp,
                             layer: layer_id,
                             effects,
                         });
+                        self.app.focus_applied_effect(layer_id, idx, n_params);
                         #[cfg(feature = "media")]
                         self.app.refresh_preview();
                     }

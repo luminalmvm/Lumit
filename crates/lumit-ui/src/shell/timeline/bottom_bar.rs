@@ -5,9 +5,11 @@
 use super::*;
 
 /// The timeline's top row (TL4): the current time/frame on the left, a
-/// layer-search box in the middle, and the graph-view toggle + the composition
-/// motion-blur master on the right (both moved up from the bottom bar, T22).
-/// Drawn above the ruler, making the time bar taller. Edits `app` in place.
+/// layer-search box in the middle, and the view / hide-layers / motion-blur
+/// toggles on the right. It spans ONLY the outline column (owner): the strip to
+/// the right of `track_left` is left as ruler background, so the scrub area is
+/// a row taller there and the playhead is easier to grab. Returns the row's
+/// rect so the caller can extend the ruler's interaction over that strip.
 pub(crate) fn timeline_top_row(
     ui: &mut egui::Ui,
     theme: &Theme,
@@ -15,34 +17,48 @@ pub(crate) fn timeline_top_row(
     comp_id: uuid::Uuid,
     fps: f64,
     frame: usize,
-) {
+    track_left: f32,
+) -> egui::Rect {
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme.surface_1);
+    // Outline part: its own strip with a bottom hairline. Lane part: the ruler's
+    // background, so the taller scrub area reads as one surface with the ruler.
+    let outline = egui::Rect::from_min_max(rect.min, egui::pos2(track_left, rect.bottom()));
+    let lane = egui::Rect::from_min_max(egui::pos2(track_left, rect.top()), rect.max);
+    ui.painter().rect_filled(outline, 0.0, theme.surface_1);
+    ui.painter().rect_filled(lane, 0.0, theme.surface_2);
     ui.painter().line_segment(
         [
-            egui::pos2(rect.left(), rect.bottom()),
-            egui::pos2(rect.right(), rect.bottom()),
+            egui::pos2(outline.left(), outline.bottom()),
+            egui::pos2(outline.right(), outline.bottom()),
         ],
         egui::Stroke::new(1.0_f32, theme.hairline),
     );
 
-    // Current time / frame, top-left (m:ss:ff plus the raw frame number).
+    // Current time / frame at the left (m:ss:ff plus the raw frame number).
     let f = fps.max(1.0).round() as usize;
     let (mm, ss, ff) = (frame / (f * 60), (frame / f) % 60, frame % f);
-    ui.painter().text(
-        rect.left_center() + egui::vec2(8.0, 0.0),
-        egui::Align2::LEFT_CENTER,
-        format!("{mm}:{ss:02}:{ff:02}   f{frame}"),
+    let galley = ui.painter().layout_no_wrap(
+        format!("{mm}:{ss:02}:{ff:02}  f{frame}"),
         egui::FontId::proportional(12.0),
         theme.text_secondary,
     );
+    let time_right = outline.left() + 8.0 + galley.rect.width();
+    ui.painter().galley(
+        egui::pos2(
+            outline.left() + 8.0,
+            outline.center().y - galley.rect.height() * 0.5,
+        ),
+        galley,
+        theme.text_secondary,
+    );
 
-    // Right cluster: MB master then the view toggle (right-to-left, so the view
-    // glyphs sit at the far right).
+    // Right cluster: MB master + hide toggle + the view toggle (right-to-left,
+    // so the view glyphs sit at the column's right edge).
+    let cluster_w = 148.0;
     let right = egui::Rect::from_min_max(
-        egui::pos2(rect.right() - 118.0, rect.top()),
-        egui::pos2(rect.right() - 4.0, rect.bottom()),
+        egui::pos2((outline.right() - cluster_w).max(time_right), outline.top()),
+        egui::pos2(outline.right() - 4.0, outline.bottom()),
     );
     let mut rc = ui.new_child(
         egui::UiBuilder::new()
@@ -66,7 +82,7 @@ pub(crate) fn timeline_top_row(
         app.timeline_graph_mode = false;
     }
     // Hide switched-off layers (TL4): declutter the outline to the live layers.
-    rc.add_space(6.0);
+    rc.add_space(4.0);
     if rc
         .selectable_label(
             app.timeline_hide_invisible,
@@ -85,7 +101,7 @@ pub(crate) fn timeline_top_row(
         .comp(comp_id)
         .map(|c| c.motion_blur)
         .unwrap_or_default();
-    rc.add_space(6.0);
+    rc.add_space(4.0);
     if rc
         .selectable_label(mb.enabled, egui::RichText::new("MB").small())
         .on_hover_text(
@@ -100,23 +116,26 @@ pub(crate) fn timeline_top_row(
         });
     }
 
-    // Layer-search box, middle.
-    let sw = 170.0;
+    // Layer-search box: fills whatever sits between the time readout and the
+    // right cluster (the outline column is narrow, so it takes what it can get).
     let search = egui::Rect::from_min_max(
-        egui::pos2(rect.center().x - sw * 0.5, rect.top() + 2.0),
-        egui::pos2(rect.center().x + sw * 0.5, rect.bottom() - 2.0),
+        egui::pos2(time_right + 6.0, outline.top() + 2.0),
+        egui::pos2(right.left() - 4.0, outline.bottom() - 2.0),
     );
-    let mut sc = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(search)
-            .layout(egui::Layout::left_to_right(egui::Align::Center)),
-    );
-    sc.set_clip_rect(search);
-    sc.add(
-        egui::TextEdit::singleline(&mut app.timeline_layer_search)
-            .hint_text("Search layers")
-            .desired_width(sw),
-    );
+    if search.width() > 36.0 {
+        let mut sc = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(search)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        sc.set_clip_rect(search);
+        sc.add(
+            egui::TextEdit::singleline(&mut app.timeline_layer_search)
+                .hint_text("Search layers")
+                .desired_width(search.width()),
+        );
+    }
+    rect
 }
 
 /// The lane-view bottom bar spanning the lanes area: zoom controls (`− + Fit` +

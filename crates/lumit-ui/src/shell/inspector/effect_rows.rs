@@ -210,6 +210,7 @@ pub(crate) fn effect_xy_row(
             c.data_mut(|d| d.remove::<f64>(id));
         }
     };
+    snap_to_value_column(&mut c);
     axis_box(&mut c, xi, &xf);
     axis_box(&mut c, yi, &yf);
 
@@ -348,8 +349,10 @@ pub(crate) fn effects_rows(
             effects,
         };
 
-    // The add row.
-    {
+    // The Add effect / Presets toolbar row — Effect Controls panel only
+    // (owner): the timeline adds effects by drag, right-click or the palette,
+    // so its dropdown carries no toolbar.
+    if ctx.effects_toolbar {
         let (_row, mut c) = row_frame(ui, ctx, false);
         c.menu_button(
             egui::RichText::new("Add effect")
@@ -367,6 +370,13 @@ pub(crate) fn effects_rows(
                         for schema in members {
                             if ui.button(schema.label).clicked() {
                                 if let Some(inst) = fx::instantiate(schema.match_name) {
+                                    // Select the fresh effect and land on its
+                                    // controls (owner).
+                                    app.focus_applied_effect(
+                                        layer.id,
+                                        layer.effects.len(),
+                                        inst.params.len(),
+                                    );
                                     let mut effects = layer.effects.clone();
                                     effects.push(inst);
                                     *pending = Some(commit(effects));
@@ -750,76 +760,73 @@ pub(crate) fn effects_rows(
                             .small()
                             .color(ctx.theme.text_muted),
                     );
-                    // Value box right-aligned on the row (EC3); the DoF Focus
-                    // eyedropper sits just to its left.
-                    c.with_layout(egui::Layout::right_to_left(egui::Align::Center), |c| {
-                        let committed = prop.value_at(ctx.lt);
-                        let id = egui::Id::new(("fxparam", e.id, pi));
-                        let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
-                        let lo = hard.0.unwrap_or(f64::NEG_INFINITY);
-                        let hi = hard.1.unwrap_or(f64::INFINITY);
-                        let resp = c.add(
-                            egui::DragValue::new(&mut v)
-                                .speed((slider.1 - slider.0).abs().max(1.0) / 200.0)
-                                .range(lo..=hi)
-                                .max_decimals(2),
-                        );
-                        if resp.dragged() || resp.has_focus() {
-                            c.data_mut(|d| d.insert_temp(id, v));
-                            // Drive the live preview: re-run the effect stack with
-                            // this provisional value each frame until release.
-                            *fx_edit = Some((layer.id, idx, pi, v));
-                        }
-                        if resp.drag_stopped() || resp.lost_focus() {
-                            if (v - committed).abs() > 1e-9 {
-                                let mut effects = layer.effects.clone();
-                                let animation = if is_animated {
-                                    lumit_core::anim::Animation::Keyframed(upsert_key(
-                                        prop, ctx.lt, v,
-                                    ))
-                                } else {
-                                    lumit_core::anim::Animation::Static(v)
-                                };
-                                effects[idx].params[pi].value =
-                                    EffectValue::Float(lumit_core::anim::Property {
-                                        animation,
-                                        extra: serde_json::Map::new(),
-                                    });
-                                *pending = Some(commit(effects));
-                            }
-                            c.data_mut(|d| d.remove::<f64>(id));
-                        }
-                        // Depth of field's Focus: an eyedropper that samples depth
-                        // (the luma of the picked pixel as a proxy — the depth
-                        // layer's own pixels are not separately readable from the
-                        // UI) and sets Focus to it (docs/08 §3.22, K-123 companion).
-                        if schema.match_name == "dof" && ps.id == "focus" {
-                            let (eye, eye_resp) =
-                                c.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
-                            let eye_col = if eye_resp.hovered() {
-                                ctx.theme.text_primary
+                    // Value box on the shared value column (owner EC3): snugly
+                    // right of the row's midline, the DoF Focus eyedropper after.
+                    snap_to_value_column(&mut c);
+                    let committed = prop.value_at(ctx.lt);
+                    let id = egui::Id::new(("fxparam", e.id, pi));
+                    let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+                    let lo = hard.0.unwrap_or(f64::NEG_INFINITY);
+                    let hi = hard.1.unwrap_or(f64::INFINITY);
+                    let resp = c.add(
+                        egui::DragValue::new(&mut v)
+                            .speed((slider.1 - slider.0).abs().max(1.0) / 200.0)
+                            .range(lo..=hi)
+                            .max_decimals(2),
+                    );
+                    if resp.dragged() || resp.has_focus() {
+                        c.data_mut(|d| d.insert_temp(id, v));
+                        // Drive the live preview: re-run the effect stack with
+                        // this provisional value each frame until release.
+                        *fx_edit = Some((layer.id, idx, pi, v));
+                    }
+                    if resp.drag_stopped() || resp.lost_focus() {
+                        if (v - committed).abs() > 1e-9 {
+                            let mut effects = layer.effects.clone();
+                            let animation = if is_animated {
+                                lumit_core::anim::Animation::Keyframed(upsert_key(prop, ctx.lt, v))
                             } else {
-                                ctx.theme.text_secondary
+                                lumit_core::anim::Animation::Static(v)
                             };
-                            eyedropper::paint_icon(c.painter(), eye, eye_col);
-                            if eye_resp
-                                .on_hover_text("Pick focus depth from the Viewer")
-                                .clicked()
-                            {
-                                eyedropper::request_arm(
-                                    c.ctx(),
-                                    EyedropperTarget {
-                                        layer: layer.id,
-                                        effect: idx,
-                                        param: pi,
-                                        mode: EyedropperMode::Depth,
-                                    },
-                                );
-                            }
+                            effects[idx].params[pi].value =
+                                EffectValue::Float(lumit_core::anim::Property {
+                                    animation,
+                                    extra: serde_json::Map::new(),
+                                });
+                            *pending = Some(commit(effects));
                         }
-                    }); // end EC3 right-aligned value group
-                        // Selectable, draggable keys on the lane, like any property
-                        // row (notes 2.1/2.6). The row is this effect's parameter.
+                        c.data_mut(|d| d.remove::<f64>(id));
+                    }
+                    // Depth of field's Focus: an eyedropper that samples depth
+                    // (the luma of the picked pixel as a proxy — the depth
+                    // layer's own pixels are not separately readable from the
+                    // UI) and sets Focus to it (docs/08 §3.22, K-123 companion).
+                    if schema.match_name == "dof" && ps.id == "focus" {
+                        let (eye, eye_resp) =
+                            c.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+                        let eye_col = if eye_resp.hovered() {
+                            ctx.theme.text_primary
+                        } else {
+                            ctx.theme.text_secondary
+                        };
+                        eyedropper::paint_icon(c.painter(), eye, eye_col);
+                        if eye_resp
+                            .on_hover_text("Pick focus depth from the Viewer")
+                            .clicked()
+                        {
+                            eyedropper::request_arm(
+                                c.ctx(),
+                                EyedropperTarget {
+                                    layer: layer.id,
+                                    effect: idx,
+                                    param: pi,
+                                    mode: EyedropperMode::Depth,
+                                },
+                            );
+                        }
+                    }
+                    // Selectable, draggable keys on the lane, like any property
+                    // row (notes 2.1/2.6). The row is this effect's parameter.
                     if let lumit_core::anim::Animation::Keyframed(keys) = &prop.animation {
                         lane_keys(
                             ui,
@@ -850,23 +857,22 @@ pub(crate) fn effects_rows(
                             .color(ctx.theme.text_muted),
                     );
                     let cur_label = options.get(*cur as usize).copied().unwrap_or("?");
-                    // Right-aligned dropdown (EC3).
-                    c.with_layout(egui::Layout::right_to_left(egui::Align::Center), |c| {
-                        bare_dropdown(c, egui::RichText::new(cur_label).small(), |ui| {
-                            for (oi, opt) in options.iter().enumerate() {
-                                if ui.selectable_label(oi as u32 == *cur, *opt).clicked() {
-                                    let mut effects = layer.effects.clone();
-                                    effects[idx].params[pi].value = EffectValue::Choice(oi as u32);
-                                    *pending = Some(commit(effects));
-                                    ui.close_menu();
-                                }
-                                // Group divider after this option (T21), e.g. Echo's
-                                // effect-only orders above the standard blend modes.
-                                if dividers_after.contains(&(oi as u32)) {
-                                    ui.separator();
-                                }
+                    // Dropdown on the shared value column (owner EC3).
+                    snap_to_value_column(&mut c);
+                    bare_dropdown(&mut c, egui::RichText::new(cur_label).small(), |ui| {
+                        for (oi, opt) in options.iter().enumerate() {
+                            if ui.selectable_label(oi as u32 == *cur, *opt).clicked() {
+                                let mut effects = layer.effects.clone();
+                                effects[idx].params[pi].value = EffectValue::Choice(oi as u32);
+                                *pending = Some(commit(effects));
+                                ui.close_menu();
                             }
-                        });
+                            // Group divider after this option (T21), e.g. Echo's
+                            // effect-only orders above the standard blend modes.
+                            if dividers_after.contains(&(oi as u32)) {
+                                ui.separator();
+                            }
+                        }
                     });
                 }
                 (EffectValue::Bool(cur), ParamKind::Bool { .. }) => {
@@ -877,15 +883,14 @@ pub(crate) fn effects_rows(
                             .small()
                             .color(ctx.theme.text_muted),
                     );
-                    // Right-aligned checkbox (EC3): label on the left, box on the right.
-                    c.with_layout(egui::Layout::right_to_left(egui::Align::Center), |c| {
-                        let mut v = *cur;
-                        if c.checkbox(&mut v, "").changed() {
-                            let mut effects = layer.effects.clone();
-                            effects[idx].params[pi].value = EffectValue::Bool(v);
-                            *pending = Some(commit(effects));
-                        }
-                    });
+                    // Checkbox on the shared value column (owner EC3).
+                    snap_to_value_column(&mut c);
+                    let mut v = *cur;
+                    if c.checkbox(&mut v, "").changed() {
+                        let mut effects = layer.effects.clone();
+                        effects[idx].params[pi].value = EffectValue::Bool(v);
+                        *pending = Some(commit(effects));
+                    }
                 }
                 (EffectValue::Seed(cur), ParamKind::Seed) => {
                     // An integer drag plus the §2.4 reseed button; the
@@ -898,6 +903,7 @@ pub(crate) fn effects_rows(
                             .small()
                             .color(ctx.theme.text_muted),
                     );
+                    snap_to_value_column(&mut c);
                     let id = egui::Id::new(("fxseed", e.id, pi));
                     let mut v = c.data(|d| d.get_temp::<u32>(id)).unwrap_or(*cur);
                     let resp = c.add(egui::DragValue::new(&mut v).speed(1));
@@ -940,6 +946,7 @@ pub(crate) fn effects_rows(
                     // button edits, so the values pass straight through (clamped
                     // to 0..1 for the picker's gamut). A change commits the same
                     // undoable SetLayerEffects the RGB drags use.
+                    snap_to_value_column(&mut c);
                     let mut rgb = [
                         chs[0].value_at(ctx.lt).clamp(0.0, 1.0) as f32,
                         chs[1].value_at(ctx.lt).clamp(0.0, 1.0) as f32,

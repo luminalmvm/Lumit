@@ -51,6 +51,10 @@ pub(crate) struct RowCtx<'a> {
     /// True in graph mode (K-070): the outline half of every row still draws,
     /// but nothing is painted on the lane side — the curve owns that area.
     pub(crate) graph_mode: bool,
+    /// Whether `effects_rows` draws its Add effect / Presets toolbar row
+    /// (owner): true in the Effect Controls panel, false in the timeline —
+    /// effects are added there by drag, right-click or the palette instead.
+    pub(crate) effects_toolbar: bool,
     /// The anchor of the property-row selection (note 2.8.1) — the most recently
     /// clicked row, which a Shift-click ranges to and the graph follows.
     pub(crate) selected_prop: Option<crate::app_state::PropSel>,
@@ -70,6 +74,18 @@ impl RowCtx<'_> {
             row,
         };
         self.selected_props.contains(&ps) || self.selected_prop == Some(ps)
+    }
+}
+
+/// Snap the row cursor to just right of the control column's midline (owner):
+/// property values sit on one shared vertical line down the middle of the
+/// column, however long their labels run. A no-op when the label has already
+/// passed the middle — the value then packs on as before rather than clipping.
+pub(crate) fn snap_to_value_column(c: &mut egui::Ui) {
+    let mid = (c.max_rect().left() + c.max_rect().right()) * 0.5;
+    let cur = c.cursor().left();
+    if mid > cur {
+        c.add_space(mid - cur);
     }
 }
 
@@ -125,13 +141,12 @@ pub(crate) fn section_bar(ui: &egui::Ui, ctx: &RowCtx, row_rect: egui::Rect, hig
     );
 }
 
-/// The height of one property row on the timeline. 20 px matches the collapsed
-/// layer rows above (an even vertical rhythm) and, crucially, gives each row's
-/// value DragValue box (egui's ~18 px `interact_size.y`) a pixel of breathing
-/// room top and bottom — at the old 18 px the box filled the row exactly and its
-/// frame was shaved by the clip (note 2.8.3, the "slightly clipped" defect). 22
-/// gives the linked/combined pair value boxes headroom too (T1).
-pub(crate) const ROW_H: f32 = 22.0;
+/// The height of one property row on the timeline. Grew 20 → 22 (T1, pair
+/// value-box headroom) → 24 (owner): the row-bottom divider hairline needs a
+/// few clear pixels below the ~18 px value boxes and the pair rows' link glyph,
+/// or they sit on the line. Content is vertically centred, so the extra height
+/// becomes breathing room above and below.
+pub(crate) const ROW_H: f32 = 24.0;
 
 /// Allocate one property timeline row (`ROW_H` tall) and return (row_rect,
 /// left-column child ui). The child is clipped so widgets never spill into the
@@ -159,13 +174,18 @@ pub(crate) fn row_frame(
             ctx.theme.surface_2,
         );
     }
-    // A hairline under each property row (EC1 / TL1): separates the stacked
-    // prop/value rows, drawn only across the outline column so it never crosses
-    // the lanes. Header rows don't call `row_frame`, so they stay undivided.
+    // A hairline under each property row (EC1 / TL1; owner: it also crosses the
+    // lane area, so a keyframe reads against its property at a glance). In graph
+    // mode the curve owns the lane side, so the line stays on the outline there
+    // (which, in the Effect Controls panel — no lane — is the whole panel).
     {
         let mut dp = ui.painter().clone();
         dp.set_clip_rect(ctx.viewport);
-        let right = (ctx.track_left - 6.0).max(row_rect.left());
+        let right = if ctx.graph_mode {
+            (ctx.track_left - 6.0).max(row_rect.left())
+        } else {
+            row_rect.right()
+        };
         dp.hline(
             row_rect.left()..=right,
             row_rect.bottom() - 0.5_f32,

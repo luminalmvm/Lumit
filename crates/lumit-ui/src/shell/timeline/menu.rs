@@ -35,6 +35,9 @@ pub(crate) fn layer_context_menu(
     delete_this: &mut bool,
     convert_layer: &mut bool,
     trim_to_source: &mut bool,
+    // Set to (effect index, its param count) when "Add effect" applied one, so
+    // the caller can select it and focus the Effect Controls tab (owner).
+    applied_effect: &mut Option<(usize, usize)>,
 ) {
     use lumit_core::fx;
     ui.set_min_width(170.0);
@@ -54,6 +57,7 @@ pub(crate) fn layer_context_menu(
                 for schema in members {
                     if ui.button(schema.label).clicked() {
                         if let Some(inst) = fx::instantiate(schema.match_name) {
+                            *applied_effect = Some((layer.effects.len(), inst.params.len()));
                             let mut effects = layer.effects.clone();
                             effects.push(inst);
                             *ctx_op = Some(lumit_core::Op::SetLayerEffects {

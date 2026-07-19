@@ -165,6 +165,13 @@ pub(crate) fn group_header_row(
             theme.surface_1
         },
     );
+    // The row divider runs below headers too (owner): every line in the
+    // outline carries one, so rows and their lanes read as bands.
+    p.hline(
+        rect.left()..=rect.right(),
+        rect.bottom() - 0.5_f32,
+        egui::Stroke::new(1.0_f32, theme.hairline),
+    );
     if resp.clicked() {
         open = !open;
         ui.data_mut(|d| d.insert_temp(id, open));
@@ -225,6 +232,7 @@ pub(crate) fn transform_property_rows(
         px_per_sec,
         view_start,
         graph_mode: app.timeline_graph_mode,
+        effects_toolbar: false,
         selected_prop: app.selected_prop,
         selected_props: app.selected_props.clone(),
     };

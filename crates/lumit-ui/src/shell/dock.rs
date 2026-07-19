@@ -77,7 +77,12 @@ pub(crate) fn render_panel(
         Panel::Viewer => viewer_panel(ui, theme, app, preview_display),
         // The Project panel reuses the Viewer's decoded frame as a footage
         // thumbnail in its info box (UI-4) — no decode of its own.
-        Panel::Project => project_panel(ui, theme, app, preview_display),
+        Panel::Project => {
+            // Measured each frame so the timeline outline can default to the
+            // same width on first use (owner).
+            app.project_panel_w = ui.max_rect().width();
+            project_panel(ui, theme, app, preview_display)
+        }
         Panel::Timeline => timeline_panel(ui, theme, app),
         Panel::EffectControls => effect_controls_panel(ui, theme, app),
         Panel::EffectsAndPresets => effects_panel(ui, theme, app),

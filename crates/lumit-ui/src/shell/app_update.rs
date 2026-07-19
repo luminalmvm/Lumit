@@ -1035,6 +1035,11 @@ impl Shell {
         if std::mem::take(&mut app.focus_project_tab) {
             activate_panel_tab(dock, Panel::Project);
         }
+        // Owner: after applying an effect, bring the Effect Controls tab to the
+        // front so the freshly added (and now selected) effect is visible.
+        if std::mem::take(&mut app.focus_effects_tab) {
+            activate_panel_tab(dock, Panel::EffectControls);
+        }
 
         // Render each floating panel in its own OS window (an immediate
         // viewport, so it can borrow the live app state). Closing the window

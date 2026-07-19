@@ -1283,6 +1283,8 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         );
         if let Some(payload) = dnd_release_of::<EffectDragPayload>(&drop) {
             if let Some(inst) = lumit_core::fx::instantiate(payload.0) {
+                // Select the fresh effect (owner) — already on its controls here.
+                app.focus_applied_effect(layer_id, layer.effects.len(), inst.params.len());
                 let mut effects = layer.effects.clone();
                 effects.push(inst);
                 app.commit(lumit_core::Op::SetLayerEffects {
@@ -1405,6 +1407,9 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         px_per_sec: 1.0,
         view_start: 0.0,
         graph_mode: true,
+        // The panel keeps the Add effect / Presets toolbar (owner): the
+        // timeline's effect dropdown drops it.
+        effects_toolbar: true,
         selected_prop: app.selected_prop,
         selected_props: app.selected_props.clone(),
     };

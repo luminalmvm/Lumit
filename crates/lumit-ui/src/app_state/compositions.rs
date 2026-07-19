@@ -377,6 +377,23 @@ impl AppState {
         }
     }
 
+    /// After applying an effect (owner): select the fresh effect — every one of
+    /// its parameter rows joins the selection, exactly as clicking its title
+    /// does (T6) — and ask the shell to bring the Effect Controls tab to the
+    /// front so the user lands on its controls.
+    pub fn focus_applied_effect(&mut self, layer: Uuid, effect: usize, n_params: usize) {
+        use super::{PropRow, PropSel};
+        self.selected_layer = Some(layer);
+        self.selected_props = (0..n_params)
+            .map(|param| PropSel {
+                layer,
+                row: PropRow::Effect { effect, param },
+            })
+            .collect();
+        self.selected_prop = self.selected_props.first().copied();
+        self.focus_effects_tab = true;
+    }
+
     /// Plain click in the Project panel: select just `id` (A3 clears any
     /// multi-selection).
     pub fn select_project_item(&mut self, id: Uuid) {
