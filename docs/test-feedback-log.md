@@ -7,10 +7,10 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 
 ## Reusable primitives (build first — several items depend on these)
 
-- [ ] **P1 — Matte/depth-input combobox.** Replace the "after effects" bool with a
-  combobox next to the layer picker: **None / Masks / Effects and Masks**. Applies
-  anywhere a layer-input matte/depth is selected (matte key, DoF depth, …). Remove the
-  separate bool box everywhere. (from FX-4)
+- [x] **P1 — Matte/depth-input combobox.** (done, K-142) None / Masks / Effects and masks on
+  track matte + DoF depth; old bool migrated (true→Effects and masks, false→None). NOTE: the old
+  source-only path already applied masks, so false→None strips masks from a *masked* source —
+  flip to false→Masks if you'd rather preserve old behaviour (one-liner).
 - [ ] **P2 — Channel-colour picker.** A reusable three-colour selector (default red /
   green / blue, per Screenshot_135) used by RGB split and chromatic aberration, designed
   to be reused by more effects. (from FX-10, FX-9)
@@ -76,7 +76,8 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 - [x] **FX-3** Sharpen is an unsharp filter — rename it **Unsharp Mask**, and add a plain
   **Sharpen** (amount). — done (K-138): existing effect relabelled "Unsharp mask"; new
   "Sharpen" is a 3×3 high-pass with an Amount dial + oracle test.
-- [ ] **FX-4** Matte after-effects → combobox (see **P1**); remove the bool everywhere.
+- [x] **FX-4** Matte/depth after-effects → **None / Masks / Effects and masks** combobox (K-142),
+  bool removed. Real sites were the track matte + DoF depth (the "Matte key" effect has no layer input).
 - [x] **FX-5** Saturation should exceed 200. — done (K-135): hard cap lifted, slider to 400 %.
 - [x] **FX-6** Vignette softness now `0..inf` (K-135), roundness stays 0–1.
 - [x] **FX-7** Hue shift preserve-luminance bool (K-136): on = constant-luminance, off = plain-RGB spin.
