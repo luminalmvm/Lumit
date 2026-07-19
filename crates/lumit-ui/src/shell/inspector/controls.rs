@@ -187,6 +187,7 @@ pub(crate) fn blend_name(b: lumit_core::model::BlendMode) -> &'static str {
         BlendMode::HardLight => "Hard light",
         BlendMode::Lighten => "Lighten",
         BlendMode::Darken => "Darken",
+        BlendMode::Subtract => "Subtract",
     }
 }
 
@@ -212,6 +213,7 @@ pub(crate) fn blend_control(
                 BlendMode::HardLight,
                 BlendMode::Lighten,
                 BlendMode::Darken,
+                BlendMode::Subtract,
             ] {
                 if ui
                     .selectable_label(layer.blend == mode, blend_name(mode))

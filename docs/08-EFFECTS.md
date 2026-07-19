@@ -600,12 +600,21 @@ grade's tasteful default is a preset choice — see the browser below):
 - **Saturation** (per cent about Rec. 709 luma in linear light; 0 = greyscale, 100 = neutral,
   200 = doubled) — the hard ceiling is **open** (K-135): the luma/colour mix keeps
   extrapolating past 200, so the slider reaches a heavy 400 and typing higher pushes further.
+- **Vibrancy** (v1, shipped, K-152) — a saturation boost *weighted by each pixel's current
+  colourfulness*: the per-pixel factor is `1 + amount·(1 − sat)`, where `sat = (max − min)/max`
+  is the scale-invariant HSV saturation (clamped 0..1), so less-saturated pixels lift more and
+  already-vivid ones little — skin tones and near-neutrals gain while saturated areas are
+  protected from clipping, unlike Saturation's uniform scale. One **Amount** dial (per cent):
+  0 is the neutral, bit-exact identity; the slider reaches a heavy 200 and typing higher pushes
+  further (open ceiling, K-135, floored at 0). Same domain as Saturation — linear light,
+  unpremultiplied (§2.2), re-premultiplied, colour scaled about Rec. 709 luma and clamped at
+  zero. `cheap` cost, `Exact` ROI; the §1.6 CPU/GPU oracle holds to ≤ 2 fp16 ULP, and the
+  neutral is the bit-exact identity on both paths.
 
 **Vignette** (§3.14, shipped) is one of these single-purpose colour effects, because every CC
 pack has one. The remaining "CC" stages arrive the same way: **exposure / white balance**
-(stops; Temperature via Bradford-adapted CCT shift; Tint), **vibrance** (protects
-skin/already-saturated values), and **curves** (master + R/G/B bezier, evaluated as 1D LUTs
-baked per frame when animated).
+(stops; Temperature via Bradford-adapted CCT shift; Tint) and **curves** (master + R/G/B
+bezier, evaluated as 1D LUTs baked per frame when animated).
 
 **Preset browser.** Colour presets get a dedicated browser (per
 [07-UI-SPEC.md](07-UI-SPEC.md)): a panel of live thumbnails, each preset applied to the

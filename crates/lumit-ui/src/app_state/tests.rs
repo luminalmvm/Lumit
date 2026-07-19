@@ -146,6 +146,42 @@ fn centred_transform_puts_origin_at_object_centre() {
 }
 
 #[test]
+fn a_new_solid_layer_centres_its_anchor_on_its_own_content() {
+    // FX-20 (K-150): a fresh solid anchors at its own centre and sits at the
+    // comp centre, so it appears centred and pivots about its middle. The
+    // default comp is 1920×1080 and a solid is comp-sized.
+    let mut app = AppState::default();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    app.add_solid_layer();
+    let comp_id = app.selected_comp.unwrap();
+    let doc = app.store.snapshot();
+    let tr = &doc.comp(comp_id).unwrap().layers[0].transform;
+    assert_eq!(tr.anchor_x.value_at(0.0), 960.0);
+    assert_eq!(tr.anchor_y.value_at(0.0), 540.0);
+    assert_eq!(tr.position_x.value_at(0.0), 960.0);
+    assert_eq!(tr.position_y.value_at(0.0), 540.0);
+}
+
+#[test]
+fn a_new_adjustment_layer_centres_its_anchor() {
+    // FX-20 (K-150): a comp-sized adjustment layer anchors at the comp
+    // centre so scale/rotation pivot about the middle. Its net placement
+    // stays identity, so the K-091 coverage staging is unchanged.
+    let mut app = AppState::default();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    app.add_adjustment_layer();
+    let comp_id = app.selected_comp.unwrap();
+    let doc = app.store.snapshot();
+    let tr = &doc.comp(comp_id).unwrap().layers[0].transform;
+    assert_eq!(tr.anchor_x.value_at(0.0), 960.0);
+    assert_eq!(tr.anchor_y.value_at(0.0), 540.0);
+    assert_eq!(tr.position_x.value_at(0.0), 960.0);
+    assert_eq!(tr.position_y.value_at(0.0), 540.0);
+}
+
+#[test]
 fn auto_folders_collect_solids_and_comps() {
     let mut app = AppState::default();
     app.new_composition();

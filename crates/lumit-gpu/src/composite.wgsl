@@ -12,7 +12,7 @@ struct LayerUniform {
     params: vec4<f32>,
     // xy: comp target size in pixels (normalises frag position to matte uv)
     // z: snapshot-blend selector (0 screen · 1 overlay · 2 soft light ·
-    //    3 hard light · 4 lighten · 5 darken)
+    //    3 hard light · 4 lighten · 5 darken · 6 subtract)
     target_size: vec4<f32>,
 };
 
@@ -112,8 +112,10 @@ fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
         blended = srgb_decode_c(blend_encoded(mode, s_enc, d_enc));
     } else if (mode < 4.5) { // lighten: per-channel max, linear
         blended = max(texel.rgb, dst.rgb);
-    } else { // darken: per-channel min, linear
+    } else if (mode < 5.5) { // darken: per-channel min, linear
         blended = min(texel.rgb, dst.rgb);
+    } else { // subtract: dst − src, clamped at black, linear
+        blended = max(dst.rgb - texel.rgb, vec3<f32>(0.0));
     }
     let rgb = mix(dst.rgb, blended, a);
     let out_a = a + dst.a * (1.0 - a);

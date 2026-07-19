@@ -1708,6 +1708,52 @@ fn saturation_instantiates_and_resolves_neutral() {
 }
 
 #[test]
+fn vibrancy_instantiates_and_resolves_neutral() {
+    let e = instantiate("vibrancy").unwrap();
+    // Default 0 = neutral (K-152): a fresh Vibrancy is the bit-exact identity.
+    assert_eq!(e.float_at("amount", 0.0), Some(0.0));
+    let r = resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(
+        r,
+        vec![Resolved::Vibrancy {
+            amount: 0.0,
+            mix: 1.0
+        }]
+    );
+
+    // K-135: the ceiling is open, so a heavy 250 % resolves to 2.5 — no clamp.
+    let s = schema("vibrancy").unwrap();
+    let amt = s.params.iter().find(|p| p.id == "amount").unwrap();
+    assert!(matches!(
+        amt.kind,
+        ParamKind::Float {
+            slider: (0.0, 200.0),
+            hard: (Some(0.0), None),
+            ..
+        }
+    ));
+    let mut heavy = e;
+    for p in &mut heavy.params {
+        if p.id == "amount" {
+            p.value = EffectValue::Float(Property::fixed(250.0));
+        }
+    }
+    assert_eq!(
+        resolve_stack(&[heavy], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
+        vec![Resolved::Vibrancy {
+            amount: 2.5,
+            mix: 1.0
+        }]
+    );
+}
+
+#[test]
 fn matte_key_instantiates_and_resolves_defaults() {
     let e = instantiate("matte_key").unwrap();
     // The defaults visibly key a green screen (a green key + a 20 %
@@ -2432,6 +2478,57 @@ fn cpu_saturation_behaves() {
         assert_eq!(v[3], 1.0);
         assert_eq!(v[7], 0.5);
     }
+}
+
+#[test]
+fn cpu_vibrance_behaves() {
+    let img = colour_quartet();
+
+    // Amount 0 is the bit-exact identity (whole-effect short-circuit, K-152).
+    let mut n = img.clone();
+    cpu::vibrance(&mut n, 0.0, 1.0);
+    assert_eq!(n, img);
+
+    // Mix 0 is the exact identity whatever the amount.
+    let mut m0 = img.clone();
+    cpu::vibrance(&mut m0, 1.0, 0.0);
+    assert_eq!(m0, img);
+
+    // The defining property: a boost lifts LESS-saturated pixels MORE. Two
+    // opaque pixels — one near-neutral (low chroma), one vivid — boosted at
+    // the same amount: the near-neutral's colourfulness grows by the larger
+    // factor.
+    let spread = |px: &[f32]| {
+        let mx = px[0].max(px[1]).max(px[2]);
+        let mn = px[0].min(px[1]).min(px[2]);
+        mx - mn
+    };
+    let mut pair = vec![
+        0.50, 0.55, 0.45, 1.0, // low saturation
+        0.90, 0.10, 0.10, 1.0, // high saturation
+    ];
+    let before_low = spread(&pair[0..4]);
+    let before_high = spread(&pair[4..8]);
+    cpu::vibrance(&mut pair, 1.0, 1.0);
+    let after_low = spread(&pair[0..4]);
+    let after_high = spread(&pair[4..8]);
+    assert!(
+        after_low > before_low && after_high > before_high,
+        "both pixels gain saturation"
+    );
+    assert!(
+        after_low / before_low > after_high / before_high,
+        "the less-saturated pixel gains more: {} vs {}",
+        after_low / before_low,
+        after_high / before_high
+    );
+
+    // Alpha is untouched; a transparent pixel stays empty.
+    let mut q = img.clone();
+    cpu::vibrance(&mut q, 1.5, 1.0);
+    assert_eq!(q[3], 1.0);
+    assert_eq!(q[7], 0.5);
+    assert_eq!(&q[12..16], &[0.0; 4], "empty pixels stay empty");
 }
 
 #[test]

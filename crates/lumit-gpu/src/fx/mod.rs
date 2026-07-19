@@ -48,6 +48,7 @@ pub struct FxEngine {
     flash: wgpu::ComputePipeline,
     colour_balance: wgpu::ComputePipeline,
     saturation: wgpu::ComputePipeline,
+    vibrancy: wgpu::ComputePipeline,
     matte_key: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,

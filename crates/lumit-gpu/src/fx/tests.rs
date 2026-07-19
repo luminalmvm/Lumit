@@ -559,6 +559,70 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
     }
 }
 
+/// The §1.6 oracle for vibrancy (K-152): a cheap pointwise effect, so the CPU
+/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
+/// amount 0 is the bit-exact identity on both paths.
+#[test]
+fn wgsl_vibrancy_matches_the_cpu_oracle() {
+    let Ok(ctx) = GpuContext::headless() else {
+        eprintln!("no GPU adapter; skipping WGSL parity test");
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    for (name, op) in [
+        (
+            "neutral",
+            VibrancyOp {
+                amount: 0.0,
+                mix: 1.0,
+            },
+        ),
+        (
+            "gentle",
+            VibrancyOp {
+                amount: 0.5,
+                mix: 1.0,
+            },
+        ),
+        (
+            // K-135: above 100 % — the per-pixel factor keeps extrapolating,
+            // so CPU/GPU parity must still hold here.
+            "heavy",
+            VibrancyOp {
+                amount: 2.0,
+                mix: 1.0,
+            },
+        ),
+        (
+            "mixed",
+            VibrancyOp {
+                amount: 1.0,
+                mix: 0.6,
+            },
+        ),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::vibrance(&mut cpu, op.amount, op.mix);
+
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.vibrancy(&ctx, &tex, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("vibrancy {name}: worst {worst} ulp");
+        assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+        if name == "neutral" {
+            assert_eq!(gpu, img, "neutral vibrancy must be the bit-exact identity");
+        }
+
+        let out2 = fx.vibrancy(&ctx, &tex, w, h, &op);
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "GPU vibrancy must be bit-stable");
+    }
+}
+
 /// The §1.6 oracle for matte key: a cheap pointwise chroma key, so the CPU
 /// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
 /// Mix 0 is the bit-exact identity on both paths. The corpus mixes

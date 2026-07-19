@@ -1685,6 +1685,55 @@ zooms to hide edges). CPU/GPU parity and the §1.6 oracle hold across all three 
 Spec: [08-EFFECTS.md](08-EFFECTS.md) §3.4. Built in an isolated worktree; not pushed —
 another agent may also claim K-146, renumber on merge if so.
 
+**K-150 · DECIDED · A new layer's transform centres its anchor on its own content (FX-20).**
+A freshly added layer defaults its **anchor** (origin) to the centre of its *own* pixel
+content and its **position** to the composition centre, so it appears centred and pivots
+about its middle under scale and rotation — the After Effects default the glossary already
+describes ([01-GLOSSARY.md](01-GLOSSARY.md) §2, "New layers default their anchor to the
+centre of their content"). Sized per layer kind: **footage** by the footage's natural pixel
+size (comp size until the probe lands), **precomp** by the nested comp's size, **solid** by
+the `SolidDef`'s own size, **sequenced layer** by the comp (a "fancy precomp", K-071), and
+comp-sized kinds (**adjustment**) by the comp. One private helper,
+`AppState::centred_transform(nat_w, nat_h, comp_w, comp_h)`, is the single wiring point every
+add-layer path routes through, so the rule cannot drift between kinds. Two deliberate
+exceptions: a **camera** is a viewpoint, not a picture, so it keeps position at the comp
+centre with no content anchor; a **text** layer keeps its origin at the text insertion point
+(anchor 0,0) because its content size is only known after glyph layout, matching AE's
+point-text convention. Only *new* layers default this way — saved projects load their stored
+transforms unchanged (the transform is serialised in full). Added 2026-07-19 at Mack's
+request. Built in an isolated worktree; not pushed — another agent may also claim K-150,
+renumber on merge if so.
+
+**K-151 · DECIDED · Blend modes gain Darken and Subtract (GEN-1).** The layer blend-mode set
+adds **Darken** (`min(dst, src)` per channel) and **Subtract** (`dst − src` per channel,
+clamped at black). Darken is domain-invariant (per-channel min commutes with the monotone
+transfer function) and runs in linear alongside Lighten. Subtract runs in **linear light** —
+it is Add's darkening twin, the physical removal of light — not in the encoded/perceptual
+domain, and clamps at zero so it never produces negative light. Both take the compositor's
+snapshot path (like Screen and the per-channel min/max modes), so layer opacity and mattes
+mix by coverage correctly; the premultiplied-alpha maths is the shared
+`rgb = mix(dst, blended, a)`, `a_out = a + dst_a·(1−a)` every snapshot blend uses. Darken was
+already present in the enum, the UI dropdown and both GPU mappings when this work began; GEN-1
+adds Subtract to match. CPU/GPU parity holds (the compositor's inline oracle tests pin each
+mode's formula). Spec: [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §3.5. Added 2026-07-19 at
+Mack's request. Built in an isolated worktree; not pushed — another agent may also claim
+K-151, renumber on merge if so.
+
+**K-152 · DECIDED · Vibrancy, a saturation-aware colour effect (GEN-2).** A new **Colour**
+effect complementing Saturation (§3.10): where Saturation scales colourfulness uniformly,
+**Vibrancy** raises it *more* for less-saturated pixels and *less* for already-vivid ones, so
+near-neutrals and skin tones lift while saturated regions are protected from clipping. One
+**Amount** dial (per cent): 0 is the neutral, bit-exact identity; the slider reaches a heavy
+200 and typing higher pushes further (value-range policy K-135, open above, floored at 0). The
+maths, in linear light on unpremultiplied colour (§2.2) exactly like Saturation: measure each
+pixel's HSV-style saturation `sat = (max−min)/max` (clamped to 0..1, scale-invariant), form a
+per-pixel factor `1 + amount·(1−sat)`, and scale colour about Rec. 709 luma by it, clamped at
+zero and re-premultiplied. Built to the four-site pattern (schema → Resolved + resolve → CPU
+reference oracle → WGSL kernel → the `wgsl_vibrancy_matches_the_cpu_oracle` parity test), so
+preview equals export (K-031). Spec: [08-EFFECTS.md](08-EFFECTS.md) §3.10. Added 2026-07-19 at
+Mack's request. Built in an isolated worktree; not pushed — another agent may also claim
+K-152, renumber on merge if so.
+
 **K-153 · DECIDED · Layers sit freely across the comp boundaries (GEN-3).** From the owner
 (2026-07-19). A layer in the lane area may start **before comp time 0** (`in_point` and
 `start_offset` may be negative) and end **past the comp duration** (`out_point` may exceed

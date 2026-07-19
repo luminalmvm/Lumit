@@ -585,6 +585,7 @@ fn blend_tag(b: lumit_core::model::BlendMode) -> u8 {
         BlendMode::HardLight => 6,
         BlendMode::Lighten => 7,
         BlendMode::Darken => 8,
+        BlendMode::Subtract => 9,
     }
 }
 

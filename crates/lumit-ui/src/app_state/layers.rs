@@ -316,7 +316,7 @@ impl AppState {
     /// container whose stack applies to everything beneath it within its span
     /// (docs/01-GLOSSARY.md), staged and blended by coverage as of K-091.
     pub fn add_adjustment_layer(&mut self) {
-        use lumit_core::model::{Layer, LayerKind, Switches, TransformGroup};
+        use lumit_core::model::{Layer, LayerKind, Switches};
         use lumit_core::time::CompTime;
         let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
             self.error = Some("select a composition first".into());
@@ -333,7 +333,15 @@ impl AppState {
             in_point: CompTime(Rational::ZERO),
             out_point: CompTime(comp.duration.0),
             start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
+            // Comp-sized layer: anchor at the comp centre so scale/rotation
+            // pivot about the middle (FX-20, K-150). The net placement stays
+            // identity, so the K-091 coverage staging is unchanged.
+            transform: centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            ),
             matte: None,
             parent: None,
             blend: Default::default(),

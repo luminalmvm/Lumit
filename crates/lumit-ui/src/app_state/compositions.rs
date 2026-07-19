@@ -63,9 +63,7 @@ impl AppState {
     /// auto-folder (docs/03-DATA-MODEL.md §2: solids are assets so they
     /// dedupe). One batch, one undo step.
     pub fn add_solid_layer(&mut self) {
-        use lumit_core::model::{
-            Layer, LayerKind, LinearColour, SolidDef, Switches, TransformGroup,
-        };
+        use lumit_core::model::{Layer, LayerKind, LinearColour, SolidDef, Switches};
         use lumit_core::ops::AutoFolderKind;
         use lumit_core::time::CompTime;
         let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
@@ -106,13 +104,14 @@ impl AppState {
             in_point: CompTime(Rational::ZERO),
             out_point: CompTime(comp.duration.0),
             start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup {
-                position_x: lumit_core::anim::Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: lumit_core::anim::Property::fixed(f64::from(comp.height) * 0.5),
-                anchor_x: lumit_core::anim::Property::fixed(f64::from(comp.width) * 0.5),
-                anchor_y: lumit_core::anim::Property::fixed(f64::from(comp.height) * 0.5),
-                ..TransformGroup::default()
-            },
+            // A comp-sized solid: anchor at its own centre, placed at the comp
+            // centre (FX-20, K-150).
+            transform: centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            ),
             matte: None,
             parent: None,
             blend: Default::default(),
@@ -348,7 +347,7 @@ impl AppState {
     /// Add a layer referencing an existing SolidDef (dragging a solid asset
     /// back into a comp — the def dedupes, no new asset).
     pub fn add_solid_def_layer(&mut self, def_id: Uuid) {
-        use lumit_core::model::{Layer, LayerKind, Switches, TransformGroup};
+        use lumit_core::model::{Layer, LayerKind, Switches};
         use lumit_core::time::CompTime;
         let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
             self.error = Some("select a composition first".into());
@@ -365,13 +364,14 @@ impl AppState {
             in_point: CompTime(Rational::ZERO),
             out_point: CompTime(comp.duration.0),
             start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup {
-                position_x: lumit_core::anim::Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: lumit_core::anim::Property::fixed(f64::from(comp.height) * 0.5),
-                anchor_x: lumit_core::anim::Property::fixed(f64::from(def.width) * 0.5),
-                anchor_y: lumit_core::anim::Property::fixed(f64::from(def.height) * 0.5),
-                ..TransformGroup::default()
-            },
+            // Anchor at the solid's own centre, placed at the comp centre
+            // (FX-20, K-150).
+            transform: centred_transform(
+                f64::from(def.width),
+                f64::from(def.height),
+                comp.width,
+                comp.height,
+            ),
             matte: None,
             parent: None,
             blend: Default::default(),

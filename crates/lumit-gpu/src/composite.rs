@@ -36,6 +36,10 @@ pub enum Blend {
     /// domains) — snapshot path so opacity and mattes mix correctly.
     Lighten,
     Darken,
+    /// dst − src per channel, clamped at black — the photographic subtract
+    /// (GEN-1, K-151), computed in linear (Add's darkening twin). Snapshot
+    /// path so opacity and mattes mix correctly.
+    Subtract,
 }
 
 impl Blend {
@@ -53,6 +57,7 @@ impl Blend {
             Blend::HardLight => 3.0,
             Blend::Lighten => 4.0,
             Blend::Darken => 5.0,
+            Blend::Subtract => 6.0,
             Blend::Normal | Blend::Add | Blend::Multiply => -1.0,
         }
     }
@@ -1607,6 +1612,63 @@ mod tests {
         assert!(
             (i16::from(added) - expect).abs() <= 2,
             "add {added} vs {expect}"
+        );
+    }
+
+    /// Subtract removes light in LINEAR (GEN-1, K-151): a darker grey layer
+    /// over a lighter grey background lands at sRGB-encode(max(dst − src, 0)),
+    /// the photographic subtract, and never goes negative. Its snapshot path
+    /// mixes by coverage, so full-opacity opaque solids read the raw formula.
+    #[test]
+    fn subtract_blend_removes_light_linearly() {
+        let Ok(ctx) = GpuContext::headless() else {
+            eprintln!("skipping: no GPU adapter");
+            return;
+        };
+        let colour = ColourEngine::new(&ctx);
+        let compositor = Compositor::new(&ctx);
+        // Layer sRGB 64 over background sRGB 200: dst − src is a real, positive
+        // remainder in linear light.
+        let (s8, d8) = (64u8, 200u8);
+        let src = solid_linear(&ctx, &colour, [s8, s8, s8, 255], 4, 4);
+        let d_lin = srgb_decode(f64::from(d8) / 255.0);
+        let s_lin = srgb_decode(f64::from(s8) / 255.0);
+        let shown = render_for_display(
+            &ctx,
+            &colour,
+            &compositor,
+            4,
+            4,
+            [d_lin, d_lin, d_lin, 1.0],
+            &[CompositeLayer {
+                texture: &src,
+                size: (4.0, 4.0),
+                position: (0.0, 0.0),
+                anchor: (0.0, 0.0),
+                scale: (100.0, 100.0),
+                rotation_deg: 0.0,
+                opacity: 100.0,
+                matte: None,
+                blend: Blend::Subtract,
+                z: 0.0,
+                rotation_x_deg: 0.0,
+                rotation_y_deg: 0.0,
+                three_d: false,
+                layer_mask: None,
+                pre: None,
+            }],
+        );
+        let out = colour.readback8(&ctx, &shown).unwrap()[0];
+        let expect = (srgb_encode((d_lin - s_lin).max(0.0)) * 255.0).round() as i16;
+        assert!(
+            (i16::from(out) - expect).abs() <= 2,
+            "subtract {out} vs {expect}"
+        );
+        // And it is genuinely a LINEAR subtract, not a byte one: naive
+        // 200 − 64 = 136 in sRGB space would read very differently.
+        assert!(
+            (i16::from(out) - 136).abs() > 10,
+            "subtract looks byte-naive: {out}"
         );
     }
 

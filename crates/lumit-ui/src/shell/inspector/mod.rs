@@ -230,6 +230,7 @@ pub(crate) fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::Blend {
         BlendMode::HardLight => lumit_gpu::Blend::HardLight,
         BlendMode::Lighten => lumit_gpu::Blend::Lighten,
         BlendMode::Darken => lumit_gpu::Blend::Darken,
+        BlendMode::Subtract => lumit_gpu::Blend::Subtract,
     }
 }
 

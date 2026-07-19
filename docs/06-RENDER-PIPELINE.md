@@ -269,6 +269,7 @@ target audience. Out-of-range values pass through the extended (unclamped) trans
 |---|---|---|
 | Normal | linear | Premultiplied `over`: `A + B·(1−a_A)`. |
 | Add | linear | Physically additive; the montage staple for glows/flashes. |
+| Subtract | linear | `dst − src` per channel, clamped at black — Add's darkening twin (GEN-1, K-151). |
 | Multiply | linear | Physical filter/shadow behaviour. |
 | Darken, Lighten | either (invariant) | Per-channel min/max; monotonic transfer makes the domain irrelevant. Computed in linear. |
 | Screen | perceptual | |
@@ -285,7 +286,7 @@ luma = Rec.709 Y of the sRGB-encoded signal (perceptual luma), so a 50% grey sol
 approximately 50% coverage, matching editor expectation. This is a single normative definition;
 no per-feature variation.
 
-Modes not listed (Dissolve, Linear/Vivid/Pin light, Hard mix, Divide, Subtract, legacy
+Modes not listed (Dissolve, Linear/Vivid/Pin light, Hard mix, Divide, legacy
 "Classic" variants) are post-v1; the enum is open-ended and serialised by name
 ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)) so adding modes never breaks projects.
 

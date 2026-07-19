@@ -816,6 +816,9 @@ pub enum BlendMode {
     HardLight,
     Lighten,
     Darken,
+    /// dst − src per channel, clamped at black — the photographic subtract
+    /// (GEN-1, K-151). Computed in linear light like Add's light-addition twin.
+    Subtract,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

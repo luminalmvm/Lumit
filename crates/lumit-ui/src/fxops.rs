@@ -328,6 +328,18 @@ pub fn run_ops(
                     },
                 );
             }
+            Resolved::Vibrancy { amount, mix } => {
+                tex = fx.vibrancy(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::VibrancyOp {
+                        amount: *amount,
+                        mix: *mix,
+                    },
+                );
+            }
             Resolved::MatteKey {
                 key,
                 tol,
