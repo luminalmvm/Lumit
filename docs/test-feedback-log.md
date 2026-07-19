@@ -38,9 +38,10 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 - [ ] **UI-6** Layer area: selecting a property *name* (Transform, an effect, …) should
   support multi-select, so a user can key several at the same point at once.
 - [x] **UI-7** Copy/paste keyframes fixed: egui-winit emits Copy/Paste events (not Key C/V), so the old shortcut watch never fired; now reads the events. (Nuance: needs non-empty OS clipboard, which self-heals on first copy.)
-- [ ] **UI-8** Graph view scroll also scrolls the layer area, and the scrollbar sits in the
-  graph view. Move the scrollbar back to the right of the layer area so both scroll
-  independently. (Layer view scroll is already correct.)
+- [x] **UI-8** (K-159) Per-mode wheel router: LANE view keeps outline+lanes synced (one
+  scrollbar, unchanged); GRAPH view decouples them — the layer list gets its own scrollbar at
+  the outline's right edge and the graph wheel pans the curve only. (Column-resize is
+  layers-view-only now, to keep the graph scrollbar draggable — eyeball.)
 - [x] **UI-9** Dropper cursor now shows whenever the tool is armed (painted on a foreground
   layer at the pointer, OS cursor hidden), not just over the image; magnifier stays
   viewfinder-only. (Please eyeball the cursor across panels.)
