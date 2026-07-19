@@ -11,9 +11,8 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
   track matte + DoF depth; old bool migrated (true→Effects and masks, false→None). NOTE: the old
   source-only path already applied masks, so false→None strips masks from a *masked* source —
   flip to false→Masks if you'd rather preserve old behaviour (one-liner).
-- [ ] **P2 — Channel-colour picker.** A reusable three-colour selector (default red /
-  green / blue, per Screenshot_135) used by RGB split and chromatic aberration, designed
-  to be reused by more effects. (from FX-10, FX-9)
+- [x] **P2 — Channel-colour picker.** (done, K-143) reusable `channel_picker` widget keyed by
+  `channel_colour_1/2/3` ids; chromatic aberration is the first adopter.
 - [x] **P3 — Edges mode enum.** (done, K-145) Transparent / Repeat / Mirror, reusable wherever edges
   can become visible (radial blur already has it; shake, etc.). (from FX-11)
 - [x] **P4 — Collapsible "twirl" sub-section.** (done, K-145) A disclosure group inside an effect's
@@ -82,10 +81,10 @@ changes update `docs/08` and ship their oracle test; new concepts update `GUIDE.
 - [x] **FX-6** Vignette softness now `0..inf` (K-135), roundness stays 0–1.
 - [x] **FX-7** Hue shift preserve-luminance bool (K-136): on = constant-luminance, off = plain-RGB spin.
 - [x] **FX-8** Temperature widened (K-135): slider ±150 / hard ±200, per-unit gain 0.5→0.75.
-- [ ] **FX-9** RGB split: add per-channel R/G/B amount sliders; give wavelength more
-  samples, with an extra property so the user controls sample count.
-- [ ] **FX-10** Chromatic aberration: add RGB-split's wavelength, and a way to pick the
-  three colours (default r/g/b, per Screenshot_135 / s_distortchroma). Reuse **P2**.
+- [x] **FX-9** RGB split: per-channel R/G/B amount scales + a **Samples** control on the
+  wavelength/spectral mode (defaults reproduce the classic split). (K-143)
+- [x] **FX-10** Chromatic aberration (K-144): three tinted taps via the P2 channel picker
+  (default r/g/b) + RGB-split's Wavelength/Samples spectral machinery.
 - [x] **FX-11** Shake reworked (K-146): per-axis x/y/z amp+freq in a twirl sub-section (z
   replaces zoom pump); auto-scale removed, replaced with Edges (Transparent/Repeat/Mirror).
   Built the reusable **P3** `EdgesMode` enum + **P4** twirl `ParamGroup` (K-145) for other effects.
