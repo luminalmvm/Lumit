@@ -728,6 +728,40 @@ fn copy_uses_the_graph_selection_when_the_lanes_are_empty() {
     );
 }
 
+/// A3: the Project panel's multi-selection model. A plain select is single; a
+/// Ctrl/Shift toggle seeds from the current single selection and then adds or
+/// removes; `project_selection` and `is_item_selected` follow either mode.
+#[test]
+fn project_multi_selection_toggles_and_reports() {
+    let mut app = AppState::default();
+    let (a, b, c) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+
+    // Plain select: single, no multi-set.
+    app.select_project_item(a);
+    assert!(app.selected_items.is_empty());
+    assert!(app.is_item_selected(a));
+    assert!(!app.is_item_selected(b));
+    assert_eq!(app.project_selection(), vec![a]);
+
+    // Ctrl-add b: the set seeds from a, then adds b (a stays selected).
+    app.toggle_project_item(b);
+    assert!(app.is_item_selected(a) && app.is_item_selected(b));
+    assert_eq!(app.project_selection(), vec![a, b]);
+
+    // Ctrl-add c, then Ctrl-remove a.
+    app.toggle_project_item(c);
+    app.toggle_project_item(a);
+    assert!(!app.is_item_selected(a));
+    assert!(app.is_item_selected(b) && app.is_item_selected(c));
+    assert_eq!(app.project_selection(), vec![b, c]);
+
+    // A plain click collapses back to a single selection.
+    app.select_project_item(c);
+    assert!(app.selected_items.is_empty());
+    assert_eq!(app.project_selection(), vec![c]);
+    assert!(!app.is_item_selected(b));
+}
+
 /// UI-7 supporting fact: a lane-key glyph is drawn with `Sense::click_and_drag`,
 /// which egui marks focusable — but selecting one (a click) does not leave it
 /// holding keyboard focus. So `keyframe_clipboard_shortcuts`' "skip while a

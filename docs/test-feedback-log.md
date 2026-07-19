@@ -194,7 +194,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 ## Also (A)
 - [x] A1 Picker now drives BOTH modes in chromatic aberration and RGB split. Classic mode: tinted taps (K-161/T17). Wavelength mode: the physical SPECTRAL_BASIS is retired and replaced by a colour1→colour2→colour3 gradient (owner chose "replace the basis", K-163) — default red/green/blue still gives red→green→blue dispersion; other colours re-tint it. Full 4-site + oracle (custom-colour case added).
 - [ ] A2 Fast motion blur: still blocky sometimes; want better sampling / a quality selector, and optionally a depth-map or motion-vector-map input to help. (3 reference shots: base, confidence, motion vectors.)
-- [ ] A3 Project tab: shift/ctrl-click to multi-select items (drag several into a comp at once).
+- [x] A3 Project tab: Ctrl/Cmd or Shift-click now toggles items into a multi-selection (`selected_items`); dragging any one of them into a comp brings the whole set in at once (`add_items_to_comp`). Plain click collapses back to single-select. (Shift is additive-toggle, not a range, for now — the tree order isn't threaded through the recursive rows yet.)
 - [ ] A4 Lane view: dragging the selection box (marquee) over a Time keyframe still doesn't select it.
 - [ ] A5 When a layer's last keyframe is removed, the stopwatch should switch off and the ◄ ◆ ► buttons disappear.
 

@@ -113,6 +113,9 @@ pub(crate) fn viewer_panel(
 /// rows only read state, so the borrow stays clean).
 pub(crate) enum PanelAction {
     Select(uuid::Uuid),
+    /// Ctrl/Shift-click: toggle the item in the Project panel's multi-selection
+    /// (A3), so several items can drag into a comp at once.
+    ToggleSelect(uuid::Uuid),
     OpenComp(uuid::Uuid),
     PreviewFootage(uuid::Uuid),
     MoveTo {
@@ -269,8 +272,9 @@ pub(crate) fn project_panel(
                 // Selection only drives the info header/highlight. The active
                 // Timeline comp changes only when a comp is opened (double-click
                 // or a tab), so selecting a comp must not switch tabs underfoot.
-                app.selected_item = Some(id);
+                app.select_project_item(id);
             }
+            PanelAction::ToggleSelect(id) => app.toggle_project_item(id),
             PanelAction::OpenComp(id) => app.open_comp(id),
             PanelAction::PreviewFootage(id) => {
                 app.preview_item = Some(id);
@@ -292,6 +296,7 @@ pub(crate) fn project_panel(
                 if app.selected_item == Some(id) {
                     app.selected_item = None;
                 }
+                app.selected_items.retain(|x| *x != id);
             }
         }
     }
@@ -721,7 +726,7 @@ pub(crate) fn item_rows(
         ProjectItem::Composition(_) => (Icon::Comp, theme.accent),
         ProjectItem::Solid(_) => (Icon::Solid, theme.text_muted),
     };
-    let selected = app.selected_item == Some(id);
+    let selected = app.is_item_selected(id);
     let open_id = ui.id().with(("folder-open", id));
     // While searching, folders force open so matches beneath them are visible;
     // the stored open state is left untouched for when the search clears (UI-3).
@@ -754,9 +759,17 @@ pub(crate) fn item_rows(
     // browsing stays a one-click scrub. A comp opens in the Timeline on a
     // double-click (AE: single-click selects, double-click opens).
     if row.clicked() {
-        actions.push(PanelAction::Select(id));
-        if let ProjectItem::Footage(_) = item {
-            actions.push(PanelAction::PreviewFootage(id));
+        // Ctrl/Cmd or Shift extends the multi-selection (A3); a plain click
+        // selects just this item. A multi-select doesn't scrub the previewer —
+        // the user is gathering items to drag, not browsing.
+        let mods = ui.input(|i| i.modifiers);
+        if mods.command || mods.shift {
+            actions.push(PanelAction::ToggleSelect(id));
+        } else {
+            actions.push(PanelAction::Select(id));
+            if let ProjectItem::Footage(_) = item {
+                actions.push(PanelAction::PreviewFootage(id));
+            }
         }
     }
     if row.double_clicked() {
@@ -1012,7 +1025,14 @@ pub(crate) fn comp_tab_strip(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
         if app.store.snapshot().comp(dropped).is_some() {
             app.open_comp(dropped); // open beside the tabs as a separate tab
         } else {
-            app.add_item_to_comp(dropped); // footage/solid → into the active comp
+            // Dragging one of a multi-selection brings the whole set in at once
+            // (A3); dragging an unselected item brings just it.
+            let sel = app.project_selection();
+            if sel.len() > 1 && sel.contains(&dropped) {
+                app.add_items_to_comp(&sel);
+            } else {
+                app.add_item_to_comp(dropped); // footage/solid → into the active comp
+            }
         }
     }
 }

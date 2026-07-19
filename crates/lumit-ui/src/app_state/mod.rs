@@ -568,8 +568,14 @@ pub struct AppState {
     journal: Option<JournalFile>,
     pub dirty: bool,
     pub selected_comp: Option<Uuid>,
-    /// Item highlighted in the Project panel (any kind, not just comps).
+    /// Item highlighted in the Project panel (any kind, not just comps). The
+    /// primary of a multi-selection: the info header follows it and it anchors
+    /// Ctrl-additions to [`Self::selected_items`].
     pub selected_item: Option<Uuid>,
+    /// The Project panel's multi-selection (A3): Ctrl/Shift-click builds this set
+    /// so several items drag into a comp at once. Empty means the selection is
+    /// just [`Self::selected_item`] (the ordinary single-select case).
+    pub selected_items: Vec<Uuid>,
     /// Open composition-settings dialogue, if any.
     pub comp_dialog: Option<CompDialog>,
     pub pending_recovery: Option<PendingRecovery>,
@@ -1020,6 +1026,7 @@ impl Default for AppState {
             renaming_layer: None,
             layer_reorder: None,
             selected_item: None,
+            selected_items: Vec::new(),
             mask_drag: None,
             tool: ToolMode::default(),
             eyedropper: None,

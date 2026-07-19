@@ -344,6 +344,64 @@ impl AppState {
         }
     }
 
+    /// Add several project items to the active comp in one gesture (A3: dragging
+    /// a multi-selection in). Each lands as a new top layer; they stack in
+    /// reverse of the given order (every insert goes to index 0), matching how
+    /// dropping items one after another would stack them. Folders are skipped
+    /// (there is nothing to instantiate) and a Precomp that would loop is
+    /// rejected per-item by `add_precomp_to_comp`.
+    pub fn add_items_to_comp(&mut self, ids: &[Uuid]) {
+        for id in ids {
+            self.add_item_to_comp(*id);
+        }
+    }
+
+    /// The Project panel's effective selection (A3): the multi-selection set if
+    /// one is built, otherwise the single `selected_item` (or nothing).
+    pub fn project_selection(&self) -> Vec<Uuid> {
+        if self.selected_items.is_empty() {
+            self.selected_item.into_iter().collect()
+        } else {
+            self.selected_items.clone()
+        }
+    }
+
+    /// Is `id` shown as selected in the Project panel (A3)? True if it is in the
+    /// multi-selection, or (when there is no multi-selection) it is the single
+    /// `selected_item`.
+    pub fn is_item_selected(&self, id: Uuid) -> bool {
+        if self.selected_items.is_empty() {
+            self.selected_item == Some(id)
+        } else {
+            self.selected_items.contains(&id)
+        }
+    }
+
+    /// Plain click in the Project panel: select just `id` (A3 clears any
+    /// multi-selection).
+    pub fn select_project_item(&mut self, id: Uuid) {
+        self.selected_item = Some(id);
+        self.selected_items.clear();
+    }
+
+    /// Ctrl/Shift-click in the Project panel (A3): toggle `id` in the
+    /// multi-selection, seeding the set from the current single selection so the
+    /// first Ctrl-click keeps what was already highlighted. `id` becomes the
+    /// primary (the info header follows it).
+    pub fn toggle_project_item(&mut self, id: Uuid) {
+        if self.selected_items.is_empty() {
+            if let Some(prev) = self.selected_item {
+                self.selected_items.push(prev);
+            }
+        }
+        if let Some(pos) = self.selected_items.iter().position(|x| *x == id) {
+            self.selected_items.remove(pos);
+        } else {
+            self.selected_items.push(id);
+        }
+        self.selected_item = Some(id);
+    }
+
     /// Add a layer referencing an existing SolidDef (dragging a solid asset
     /// back into a comp — the def dedupes, no new asset).
     pub fn add_solid_def_layer(&mut self, def_id: Uuid) {
