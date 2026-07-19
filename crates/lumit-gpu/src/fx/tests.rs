@@ -189,18 +189,23 @@ fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
     let fx = FxEngine::new(&ctx);
     let (w, h) = (32u32, 24u32);
     let img = corpus_with_partials(w, h);
-    for (name, amount, mix) in [
-        ("classic", 1.0f32, 1.0f32),
-        ("strong", 3.0, 1.0),
-        ("mixed", 2.0, 0.6),
-        ("amount-zero", 0.0, 1.0),
-        ("mix-zero", 2.5, 0.0),
+    for (name, amount, radius, mix) in [
+        ("classic", 1.0f32, 1.0f32, 1.0f32),
+        ("strong", 3.0, 1.0, 1.0),
+        ("wide-radius", 2.0, 3.0, 1.0),
+        ("mixed", 2.0, 1.0, 0.6),
+        ("amount-zero", 0.0, 1.0, 1.0),
+        ("mix-zero", 2.5, 1.0, 0.0),
     ] {
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::sharpen_simple(&mut cpu, w, h, amount, mix);
+        lumit_core::fx::cpu::sharpen_simple(&mut cpu, w, h, amount, radius, mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let op = SharpenSimpleOp { amount, mix };
+        let op = SharpenSimpleOp {
+            amount,
+            radius,
+            mix,
+        };
         let out = fx.sharpen_simple(&ctx, &tex, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 

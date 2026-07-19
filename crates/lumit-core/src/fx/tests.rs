@@ -2979,6 +2979,7 @@ fn sharpen_simple_instantiates_and_resolves() {
         r,
         vec![Resolved::SharpenSimple {
             amount: 1.0,
+            radius: 1.0,
             mix: 1.0
         }]
     );
@@ -2999,18 +3000,18 @@ fn cpu_sharpen_simple_identity_edge_overshoot_and_alpha() {
 
     // Amount 0 is the bit-exact identity, whatever the Mix.
     let mut a0 = img.clone();
-    cpu::sharpen_simple(&mut a0, w, h, 0.0, 1.0);
+    cpu::sharpen_simple(&mut a0, w, h, 0.0, 1.0, 1.0);
     assert_eq!(a0, img);
 
     // Mix 0 is the exact identity, whatever the Amount.
     let mut m0 = img.clone();
-    cpu::sharpen_simple(&mut m0, w, h, 2.0, 0.0);
+    cpu::sharpen_simple(&mut m0, w, h, 2.0, 1.0, 0.0);
     assert_eq!(m0, img);
 
     // A flat region is untouched (the high-pass of constant colour is zero);
     // the step edge overshoots both ways.
     let mut s = img.clone();
-    cpu::sharpen_simple(&mut s, w, h, 1.0, 1.0);
+    cpu::sharpen_simple(&mut s, w, h, 1.0, 1.0, 1.0);
     let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let far = px(1, 4);
     assert!((s[far] - img[far]).abs() < 1e-5, "flat area stays put");
@@ -3021,7 +3022,7 @@ fn cpu_sharpen_simple_identity_edge_overshoot_and_alpha() {
 
     // Fully transparent input stays fully transparent (no invented light).
     let mut clear = vec![0.0f32; (w * h * 4) as usize];
-    cpu::sharpen_simple(&mut clear, w, h, 3.0, 1.0);
+    cpu::sharpen_simple(&mut clear, w, h, 3.0, 1.0, 1.0);
     assert!(clear.iter().all(|v| *v == 0.0));
 }
 

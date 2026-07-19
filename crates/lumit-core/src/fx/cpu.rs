@@ -31,7 +31,11 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         } => sharpen(
             rgba, w, h, *amount, *radius_px, *threshold, *luma_only, *mix,
         ),
-        Resolved::SharpenSimple { amount, mix } => sharpen_simple(rgba, w, h, *amount, *mix),
+        Resolved::SharpenSimple {
+            amount,
+            radius,
+            mix,
+        } => sharpen_simple(rgba, w, h, *amount, *radius, *mix),
         Resolved::RgbSplit {
             amount_px,
             angle_deg,
@@ -1318,10 +1322,13 @@ pub fn sharpen(
 /// unpremultiply → re-premultiply round trip, cannot both be relied on to be
 /// bit-exact, so the neutral case returns early — the WGSL twin matches with
 /// its own early store). Mix 0 is likewise the identity.
-pub fn sharpen_simple(rgba: &mut [f32], w: u32, h: u32, amount: f32, mix: f32) {
+pub fn sharpen_simple(rgba: &mut [f32], w: u32, h: u32, amount: f32, radius: f32, mix: f32) {
     if amount == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
+    // Neighbour distance in pixels (T15): 1 = a 3×3 kernel, larger reads a
+    // coarser neighbourhood. Host-rounded so CPU and GPU sample the same taps.
+    let r = radius.round().max(1.0) as i64;
     let original = rgba.to_vec();
     let (wi, hi) = (w as i64, h as i64);
     // Unpremultiplied colour at a clamp-addressed integer pixel.
@@ -1334,10 +1341,10 @@ pub fn sharpen_simple(rgba: &mut [f32], w: u32, h: u32, amount: f32, mix: f32) {
             let i = ((y * wi + x) * 4) as usize;
             let a = original[i + 3];
             let c = at(x, y);
-            let up = at(x, y - 1);
-            let down = at(x, y + 1);
-            let left = at(x - 1, y);
-            let right = at(x + 1, y);
+            let up = at(x, y - r);
+            let down = at(x, y + r);
+            let left = at(x - r, y);
+            let right = at(x + r, y);
             for ch in 0..3 {
                 let hp = 4.0 * c[ch] - up[ch] - down[ch] - left[ch] - right[ch];
                 let sharpened = (c[ch] + amount * hp).max(0.0) * a;

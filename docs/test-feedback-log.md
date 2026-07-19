@@ -179,7 +179,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [x] T12 Posterize now holds the carrying layer's own source (so applying it to a footage layer steps that footage); Everything-below also holds below-layers on any layer kind, not just adjustment layers. (Before, a Posterize on footage held nothing.)
 - [x] T13 Effect dropdowns use a real ComboBox popup, not menu_button (two adjacent menu buttons acted like a menu bar and switched on hover). Also gives an AE-like framed combo. (Eyeball the new look.)
 - [ ] T14 New x/y param type: combine Centre X/Y into one row (two float boxes + a viewfinder pixel picker like the dropper). Apply to all x/y-position params.
-- [ ] T15 Sharpen: add an adjustable kernel size.
+- [x] T15 Sharpen gained a Radius param (neighbour distance in px; 1 = 3×3, larger = coarser). Full 4-site + oracle.
 - [ ] T16 Vignette: add a ramp/curve control shaping the black↔nothing alpha falloff.
 - [ ] T17 RGB split: remove the Radial option (that's chromatic aberration); add the 3-colour picker from chromatic aberration.
 - [ ] T18 Shake: add its own motion-blur twirl (toggle + amount), computed from inter-frame movement, applying only to this effect.

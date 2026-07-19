@@ -125,6 +125,8 @@ struct SharpenParams {
 pub struct SharpenSimpleOp {
     /// High-pass strength (1 = the classic 5/−1 kernel); 0 is a passthrough.
     pub amount: f32,
+    /// Neighbour distance in raster pixels (T15): 1 = a 3×3 kernel.
+    pub radius: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -133,8 +135,9 @@ pub struct SharpenSimpleOp {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct SharpenSimpleParams {
     amount: f32,
+    radius: f32,
     mix_amt: f32,
-    _pad: [f32; 2],
+    _pad: [f32; 1],
 }
 
 /// One resolved glow (docs/08 §3.3, v1 core): bright-pass with a soft knee,
@@ -380,8 +383,9 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&SharpenSimpleParams {
                 amount: op.amount,
+                radius: op.radius,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                _pad: [0.0; 1],
             }),
         );
         out

@@ -203,7 +203,11 @@ pub fn run_ops(
                     },
                 );
             }
-            Resolved::SharpenSimple { amount, mix } => {
+            Resolved::SharpenSimple {
+                amount,
+                radius,
+                mix,
+            } => {
                 tex = fx.sharpen_simple(
                     ctx,
                     &tex,
@@ -211,6 +215,7 @@ pub fn run_ops(
                     h,
                     &lumit_gpu::fx::SharpenSimpleOp {
                         amount: *amount,
+                        radius: *radius,
                         mix: *mix,
                     },
                 );

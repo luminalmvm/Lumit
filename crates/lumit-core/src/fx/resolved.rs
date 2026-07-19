@@ -215,6 +215,8 @@ pub enum Resolved {
         /// High-pass strength; 0 is the neutral point (1 = the classic 5/−1
         /// kernel).
         amount: f32,
+        /// Neighbour distance in raster pixels (T15): 1 = a 3×3 kernel.
+        radius: f32,
         /// 0..1.
         mix: f32,
     },
@@ -717,8 +719,13 @@ fn resolve_one(
             // The plain 3×3 sharpen (docs/08 §3.9, K-138): Amount is a raw
             // high-pass strength (not a per-cent), clamped ≥ 0.
             let amount = (e.float_at("amount", lt)? as f32).max(0.0);
+            let radius = (e.float_at("radius", lt).unwrap_or(1.0) as f32).max(1.0);
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::SharpenSimple { amount, mix })
+            Some(Resolved::SharpenSimple {
+                amount,
+                radius,
+                mix,
+            })
         }
         "rgb_split" => {
             let amount_pct = e.float_at("amount", lt)? as f32;

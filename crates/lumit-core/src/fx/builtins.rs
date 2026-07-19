@@ -309,6 +309,17 @@ pub const BUILTINS: &[EffectSchema] = &[
                     hard: (Some(0.0), None),
                 },
             },
+            ParamSchema {
+                id: "radius",
+                label: "Radius",
+                // Neighbour distance in raster pixels (T15): 1 = the classic 3×3
+                // kernel, larger sharpens over a coarser neighbourhood.
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (1.0, 8.0),
+                    hard: (Some(1.0), None),
+                },
+            },
             MIX_PARAM,
         ],
     },
