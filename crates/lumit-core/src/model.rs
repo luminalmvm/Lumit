@@ -263,23 +263,125 @@ impl TransformGroup {
     }
 }
 
+/// How a layer-input parameter samples the layer it references (K-142,
+/// revising K-125's two-way "after effects" bool). Applies uniformly to a
+/// track matte's source ([`MatteRef`]) and to an effect's Layer-reference
+/// input (the Depth of field depth layer, docs/impl/layer-input.md):
+/// - `None` — the referenced layer's **raw** footage/solid only: no masks,
+///   no effects (the rawest input a consumer can read).
+/// - `Masks` — the source **with its own masks** applied, but not its effects.
+/// - `EffectsAndMasks` — the source **with its effects and masks** (K-125's
+///   `after_effects = true`): a keyed greenscreen matte, a graded depth pass.
+///
+/// Temporal effects on the source (echo, flow motion blur, a nested depth
+/// reference) are still not sub-sampled through a layer input in v1 — the
+/// spatial and colour stack applies, but an echo/flow effect degrades to a
+/// still (the documented K-125 boundary, unchanged by K-142).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum LayerInputSource {
+    /// Raw source pixels only — no masks, no effects.
+    #[default]
+    None,
+    /// Source plus its own masks, but not its effects.
+    Masks,
+    /// Source with its effects and masks (K-125's `after_effects = true`).
+    EffectsAndMasks,
+}
+
+impl LayerInputSource {
+    /// Migrate K-125's boolean: `true` (after effects) → `EffectsAndMasks`;
+    /// `false`/absent (source-only) → `None`. The historical source-only path
+    /// read raw source pixels, so it maps to `None`.
+    pub fn from_after_effects(after_effects: bool) -> Self {
+        if after_effects {
+            Self::EffectsAndMasks
+        } else {
+            Self::None
+        }
+    }
+
+    /// From a `Choice` param's index (0 = None, 1 = Masks, 2 = Effects and
+    /// masks); any other value falls back to the default.
+    pub fn from_choice(v: u32) -> Self {
+        match v {
+            1 => Self::Masks,
+            2 => Self::EffectsAndMasks,
+            _ => Self::None,
+        }
+    }
+
+    /// This mode's `Choice` index (0/1/2), for storing on an effect parameter.
+    pub fn to_choice(self) -> u32 {
+        match self {
+            Self::None => 0,
+            Self::Masks => 1,
+            Self::EffectsAndMasks => 2,
+        }
+    }
+
+    /// A stable byte for the frame cache key: switching modes must retire stale
+    /// frames, so the discriminant joins the key (0/1/2).
+    pub fn key_byte(self) -> u8 {
+        self.to_choice() as u8
+    }
+
+    /// Whether the referenced layer's own masks gate the sampled input.
+    pub fn applies_masks(self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    /// Whether the referenced layer's own effect stack runs into the input.
+    pub fn folds_effects(self) -> bool {
+        matches!(self, Self::EffectsAndMasks)
+    }
+}
+
 /// Using another layer's alpha or luma to gate this layer
 /// (docs/01-GLOSSARY.md §6: matte — any layer, one matte may serve many).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "MatteRefRepr")]
 pub struct MatteRef {
     pub layer: Uuid,
     pub channel: MatteChannel,
     pub inverted: bool,
-    /// Whether the matte samples the source layer *after* its own effect stack
-    /// (a keyed greenscreen, a blurred edge) rather than its raw source pixels.
-    /// Default false — a matte reads source pixels only, matching the historical
-    /// behaviour and letting the source's effects be irrelevant to the matte.
-    /// When true the source's effects run into the matte texture before it gates
-    /// the consumer (docs/impl/layer-input.md; K-decision). Temporal effects on
-    /// the source (echo, flow motion blur) are not sub-sampled through a matte in
-    /// v1 — a matte after-effects applies the source's spatial and colour stack.
+    /// How the matte samples its source layer (K-142): raw source (`None`),
+    /// source + masks (`Masks`), or the source's processed picture
+    /// (`EffectsAndMasks` — a keyed or blurred matte). Replaces K-125's
+    /// `after_effects` bool; old projects migrate through [`MatteRefRepr`]
+    /// (`after_effects: true` → `EffectsAndMasks`, else `None`).
     #[serde(default)]
-    pub after_effects: bool,
+    pub source: LayerInputSource,
+}
+
+/// Deserialisation shim for [`MatteRef`] that accepts both the current
+/// `source: LayerInputSource` field and K-125's legacy `after_effects: bool`,
+/// so saved projects still load (K-142). When `source` is present it wins;
+/// otherwise the legacy bool is migrated (`true` → `EffectsAndMasks`, else
+/// `None`). New projects always serialise `source`.
+#[derive(Deserialize)]
+struct MatteRefRepr {
+    layer: Uuid,
+    channel: MatteChannel,
+    #[serde(default)]
+    inverted: bool,
+    #[serde(default)]
+    source: Option<LayerInputSource>,
+    #[serde(default)]
+    after_effects: Option<bool>,
+}
+
+impl From<MatteRefRepr> for MatteRef {
+    fn from(r: MatteRefRepr) -> Self {
+        let source = r.source.unwrap_or_else(|| {
+            LayerInputSource::from_after_effects(r.after_effects.unwrap_or(false))
+        });
+        MatteRef {
+            layer: r.layer,
+            channel: r.channel,
+            inverted: r.inverted,
+            source,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -477,6 +579,22 @@ impl EffectInstance {
             EffectValue::Layer(l) => *l,
             _ => None,
         }
+    }
+
+    /// How a Layer-reference parameter `id` samples its source (K-142): the
+    /// `<id>_source` Choice param if present (the current form, written by the
+    /// inspector combobox), else the legacy `<id>_after_effects` bool (K-125:
+    /// `true` → `EffectsAndMasks`, `false` → `None`), else the default. Reading
+    /// the legacy bool lets a project saved with the old checkbox keep its
+    /// behaviour without a migration pass over the effect stack.
+    pub fn layer_source(&self, id: &str) -> LayerInputSource {
+        if let Some(EffectValue::Choice(v)) = self.param(&format!("{id}_source")) {
+            return LayerInputSource::from_choice(*v);
+        }
+        if let Some(b) = self.bool_of(&format!("{id}_after_effects")) {
+            return LayerInputSource::from_after_effects(b);
+        }
+        LayerInputSource::default()
     }
 }
 
@@ -930,19 +1048,107 @@ mod tests {
     }
 
     #[test]
-    fn matte_ref_after_effects_defaults_false() {
-        // A matte saved before the after-effects toggle existed loads source-only
-        // (the historical behaviour), so old projects render unchanged.
-        let m = MatteRef {
+    fn matte_ref_source_migrates_from_after_effects_bool() {
+        // K-142: a matte saved with K-125's `after_effects` bool migrates to the
+        // three-way source, so old projects still load.
+        let base = serde_json::json!({
+            "layer": Uuid::now_v7(),
+            "channel": "Alpha",
+            "inverted": false,
+        });
+        // Legacy `after_effects: true` → EffectsAndMasks (the source's picture).
+        let mut with_true = base.clone();
+        with_true
+            .as_object_mut()
+            .unwrap()
+            .insert("after_effects".into(), serde_json::json!(true));
+        let m: MatteRef = serde_json::from_value(with_true).unwrap();
+        assert_eq!(m.source, LayerInputSource::EffectsAndMasks);
+
+        // Legacy `after_effects: false` → None (raw source).
+        let mut with_false = base.clone();
+        with_false
+            .as_object_mut()
+            .unwrap()
+            .insert("after_effects".into(), serde_json::json!(false));
+        let m: MatteRef = serde_json::from_value(with_false).unwrap();
+        assert_eq!(m.source, LayerInputSource::None);
+
+        // Absent entirely (pre-K-125) → None as well.
+        let m: MatteRef = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(m.source, LayerInputSource::None);
+
+        // The current form round-trips through `source`, and never re-emits the
+        // legacy bool.
+        let now = MatteRef {
             layer: Uuid::now_v7(),
-            channel: MatteChannel::Alpha,
-            inverted: false,
-            after_effects: false,
+            channel: MatteChannel::Luma,
+            inverted: true,
+            source: LayerInputSource::Masks,
         };
-        let mut v = serde_json::to_value(m).unwrap();
-        v.as_object_mut().unwrap().remove("after_effects");
+        let v = serde_json::to_value(now).unwrap();
+        assert!(v.get("after_effects").is_none());
         let back: MatteRef = serde_json::from_value(v).unwrap();
-        assert!(!back.after_effects);
+        assert_eq!(back.source, LayerInputSource::Masks);
+    }
+
+    #[test]
+    fn effect_layer_source_reads_choice_then_legacy_bool() {
+        // K-142: `layer_source` prefers the `<id>_source` Choice, falls back to
+        // the legacy `<id>_after_effects` bool, then the default.
+        let mut e = crate::fx::instantiate("dof").unwrap();
+        // Fresh instance carries neither sibling, so it is the default (None).
+        assert_eq!(e.layer_source("depth"), LayerInputSource::None);
+
+        // A legacy bool is honoured (true → EffectsAndMasks).
+        e.params.push(EffectParam {
+            id: "depth_after_effects".into(),
+            value: EffectValue::Bool(true),
+            extra: serde_json::Map::new(),
+        });
+        assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
+
+        // The current Choice sibling wins over the legacy bool when both exist.
+        e.params.push(EffectParam {
+            id: "depth_source".into(),
+            value: EffectValue::Choice(LayerInputSource::Masks.to_choice()),
+            extra: serde_json::Map::new(),
+        });
+        assert_eq!(e.layer_source("depth"), LayerInputSource::Masks);
+    }
+
+    #[test]
+    fn layer_input_source_maps_each_option_to_its_sampling() {
+        // K-142: the render paths (draws.rs / export.rs) branch on these two
+        // predicates to choose masks and effects, so pin the mapping here — each
+        // option selects the intended sampling.
+        use LayerInputSource::*;
+        // None: raw source only (no masks, no effects).
+        assert!(!None.applies_masks());
+        assert!(!None.folds_effects());
+        // Masks: source + masks, no effects.
+        assert!(Masks.applies_masks());
+        assert!(!Masks.folds_effects());
+        // Effects and masks: source + masks + effects.
+        assert!(EffectsAndMasks.applies_masks());
+        assert!(EffectsAndMasks.folds_effects());
+
+        // The Choice index round-trips, and the cache-key byte is distinct per
+        // mode (so switching modes retires stale frames).
+        for m in [None, Masks, EffectsAndMasks] {
+            assert_eq!(LayerInputSource::from_choice(m.to_choice()), m);
+            assert_eq!(m.key_byte() as u32, m.to_choice());
+        }
+        assert_eq!(
+            [
+                None.key_byte(),
+                Masks.key_byte(),
+                EffectsAndMasks.key_byte()
+            ],
+            [0, 1, 2]
+        );
+        // The default is None (matches the migrated `after_effects = false`).
+        assert_eq!(LayerInputSource::default(), None);
     }
 
     #[test]
@@ -1212,7 +1418,7 @@ mod tests {
             layer: pre.id,
             channel: MatteChannel::Alpha,
             inverted: false,
-            after_effects: false,
+            source: LayerInputSource::None,
         });
         let mut comp2 = comp.clone();
         comp2.layers.push(consumer);
@@ -1237,7 +1443,7 @@ mod tests {
             layer: inner_matted.layers[0].id,
             channel: MatteChannel::Alpha,
             inverted: false,
-            after_effects: false,
+            source: LayerInputSource::None,
         });
         inner_matted.layers.push(inner);
         let nested_real_id = inner_matted.id;

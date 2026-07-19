@@ -22,17 +22,18 @@ pub struct MatteDraw {
     pub luma: bool,
     pub inverted: bool,
     /// The matte source's own effect stack, resolved at the matte's layer time
-    /// (docs/impl/layer-input.md; K-decision). Non-empty only when the consumer's
-    /// `MatteRef::after_effects` is set — the effects then run on the matte
+    /// (docs/impl/layer-input.md; K-142). Non-empty only when the consumer's
+    /// `MatteRef::source` is `EffectsAndMasks` — the effects then run on the matte
     /// texture (upload → linearise → `run_ops`) before it is composited alone, so
-    /// a keyed or blurred matte gates by its processed pixels. Empty is the
-    /// source-only default. Temporal inputs (neighbours/flow/depth) are not fed
-    /// through an after-effects matte in v1, so an echo or flow effect on the
-    /// matte source degrades to a still (documented boundary).
+    /// a keyed or blurred matte gates by its processed pixels. Empty for None /
+    /// Masks (the raw pixels carried in `rgba`, with or without masks baked in).
+    /// Temporal inputs (neighbours/flow/depth) are not fed through an
+    /// effects-and-masks matte in v1, so an echo or flow effect on the matte
+    /// source degrades to a still (documented boundary).
     pub fx: Vec<lumit_core::fx::Resolved>,
     /// The matte source's `lut` file paths, 1:1 and in order with the `Resolved::
-    /// Lut` ops in `fx` (as for a layer's own `lut_files`). Empty unless
-    /// `after_effects` and the matte source has a LUT.
+    /// Lut` ops in `fx` (as for a layer's own `lut_files`). Empty unless the
+    /// source mode is `EffectsAndMasks` and the matte source has a LUT.
     pub lut_files: Vec<Option<String>>,
 }
 
@@ -50,12 +51,13 @@ pub struct DofInputDraw {
     pub tex_h: u32,
     /// The depth layer's own effect stack, resolved at its layer time — run on
     /// the depth texture before it is resampled, when the consuming effect's
-    /// `depth_after_effects` flag is set (K-125, mirroring the after-effects
-    /// matte). Empty is the source-only default. Temporal inputs are not fed
-    /// through an after-effects depth input in v1 (same boundary as the matte).
+    /// depth source is `EffectsAndMasks` (K-142, mirroring the matte). Empty for
+    /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
+    /// not fed through an effects-and-masks depth input in v1 (matte boundary).
     pub fx: Vec<lumit_core::fx::Resolved>,
     /// The depth layer's `lut` file paths, 1:1 with the `Resolved::Lut` ops in
-    /// `fx`. Empty unless `depth_after_effects` and the depth layer has a LUT.
+    /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
+    /// layer has a LUT.
     pub lut_files: Vec<Option<String>>,
 }
 
@@ -396,11 +398,11 @@ impl Realiser<'_> {
                     .engine
                     .upload_srgb8(&self.ctx, &d.rgba, d.tex_w, d.tex_h);
                 let linear = self.engine.linearise(&self.ctx, &src);
-                // After-effects depth (K-125): run the depth layer's own stack
-                // on its texture before it is resampled, when the consumer set
-                // depth_after_effects. Temporal inputs stay empty in v1 (same
-                // boundary as the after-effects matte). Export does the same, so
-                // the two depth passes match (K-031).
+                // Effects-and-masks depth (K-142): run the depth layer's own
+                // stack on its texture before it is resampled, when the consumer's
+                // depth source is Effects and masks (`d.fx` non-empty). Temporal
+                // inputs stay empty in v1 (same boundary as the matte). Export
+                // does the same, so the two depth passes match (K-031).
                 let linear = if d.fx.is_empty() {
                     linear
                 } else {

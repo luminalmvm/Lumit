@@ -128,7 +128,7 @@ struct Layer {
     parent: Option<Uuid>,              // transform parenting; cycles are invalid states
     switches: Switches,
     blend_mode: BlendMode,
-    matte: Option<MatteRef>,           // { layer, channel: Alpha|Luma, inverted, after_effects } (K-125)
+    matte: Option<MatteRef>,           // { layer, channel: Alpha|Luma, inverted, source } (K-142)
     transform: TransformGroup,         // §6
     masks: Vec<Mask>,                  // §7
     effects: Vec<EffectInstance>,      // §8, ordered top-to-bottom
@@ -152,10 +152,13 @@ Invariants:
 - A matte reference to a missing/deleted layer degrades to "no matte" with a badge, never an error.
 - Any layer can serve as a matte for any number of consumers; the engine evaluates it once
   ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)).
-- `after_effects` (default false, K-125): false gates by the matte layer's **source** pixels
-  (its own effects irrelevant); true runs the matte layer's effect stack into the matte first
-  (a keyed or blurred matte). v1 skips the source's *temporal* effects through a matte
-  (echo/flow degrade to a still — [docs/impl/layer-input.md](impl/layer-input.md)).
+- `source: LayerInputSource` (default `None`, K-142, revising K-125's `after_effects` bool):
+  **None** gates by the matte layer's **raw** pixels (no masks, no effects); **Masks** gates
+  by the source plus its own masks; **EffectsAndMasks** runs the matte layer's effect stack
+  into the matte first (a keyed or blurred matte). v1 skips the source's *temporal* effects
+  through a matte (echo/flow degrade to a still — [docs/impl/layer-input.md](impl/layer-input.md)).
+  A project saved with K-125's `after_effects` bool migrates on load (`true` →
+  `EffectsAndMasks`, `false`/absent → `None`).
 
 ### 5.2 Layer kinds
 
@@ -321,7 +324,9 @@ parameter dump, render as identity with a badge, and round-trip through save unt
 An effect parameter may also **reference another layer** as an auxiliary input (a
 Layer-reference parameter, [08-EFFECTS.md](08-EFFECTS.md) §1.2 — a depth pass for Depth of
 field): the stored value is an optional layer id, the same by-id cross-reference §5.1's matte
-uses, and a dangling reference degrades to a no-op exactly as a dangling matte does.
+uses, and a dangling reference degrades to a no-op exactly as a dangling matte does. A
+companion `<id>_source` Choice holds its `LayerInputSource` sampling mode (None / Masks /
+Effects and masks, K-142), the same three-way source a matte carries in §5.1.
 
 ## 9. Rich layer payloads
 

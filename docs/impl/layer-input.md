@@ -81,6 +81,24 @@ correct form — do it if the visited-set makes it clean.
   helper (asserted by construction / reviewed by hand, as for the LUT).
 
 ## Reference the layer BEFORE or AFTER its own effects (K-125, matte landed)
+
+> **Superseded by K-142.** The two-way "after effects" bool below is now a
+> three-way **source** combobox — `LayerInputSource { None, Masks,
+> EffectsAndMasks }` (lumit-core), beside the layer picker everywhere. **None**
+> reads the referenced layer's raw footage/solid (no masks, no effects, the new
+> default); **Masks** reads it with its own masks (the old `after_effects =
+> false` behaviour, which already applied the source's masks through the shared
+> `pixels_for`); **Effects and masks** runs its stack in first (the old
+> `after_effects = true`). `None` samples a **masks-cleared clone** through the
+> same `pixels_for`/`prepare` helpers, so preview == export (K-031). Storage: the
+> matte carries `MatteRef::source` (serde-migrated from the bool); a layer-input
+> effect carries a sibling `<id>_source` Choice read by
+> `EffectInstance::layer_source`, which falls back to the legacy
+> `<id>_after_effects` bool so old projects still load. The frame key hashes the
+> mode discriminant (0/1/2) in place of the bool byte. The v1 temporal boundary
+> (echo/flow degrade to a still) is unchanged. The K-125 text below is kept for
+> the render/key mechanics it pins, which K-142 reuses.
+
 Both a **track matte** and a **layer-input** (depth) offer a boolean — take the
 referenced layer's pixels **as source** (before its own effect stack, the
 default and historical behaviour) or **after** the fully processed layer. A

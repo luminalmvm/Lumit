@@ -58,7 +58,14 @@ effect's maths in a release invalidates stale cached frames rather than mixing g
   host renders that layer alone and threads its texture to the effect, exactly as a matte
   layer is rendered alone. An **unset** or **dangling** reference resolves to identity — the
   same sanctioned exception to the "no no-op default" rule, since a layer the user must
-  supply cannot have a tasteful default.
+  supply cannot have a tasteful default. Beside the picker sits a **source** combobox
+  (K-142, revising K-125's before/after bool) choosing *what of* the referenced layer is
+  read: **None** (its raw footage/solid — no masks, no effects), **Masks** (its source plus
+  its masks) or **Effects and masks** (its finished picture — a graded or blurred input).
+  The same three-way source applies to a track matte (§5.1 of
+  [03-DATA-MODEL.md](03-DATA-MODEL.md)). Temporal effects on the referenced layer (echo,
+  flow motion blur) are still not sub-sampled through the input in v1 — the spatial and
+  colour stack applies, an echo/flow degrades to a still (the K-125 boundary).
 
 ### 1.3 Traits
 
@@ -950,9 +957,11 @@ file. The GPU kernel and its §1.6 CPU oracle predate the wiring (`lumit_gpu::fx
 `fx_dof.wgsl`); this is the effect that feeds them a real depth.
 
 **Parameters:** Depth layer (a layer reference; unset until picked — a labelled no-op),
-Depth after effects (bool, default off — off reads the depth layer's source pixels, on runs the
-depth layer's own effect stack into the depth pass first, a graded/blurred depth map; K-125,
-same v1 temporal boundary as the after-effects matte), Depth invert (bool, default off — when on
+Depth source (a combobox beside the Depth layer picker, K-142: **None** reads the depth layer's
+raw pixels — no masks, no effects, the default; **Masks** reads it plus its masks; **Effects and
+masks** runs the depth layer's own effect stack into the depth pass first, a graded/blurred depth
+map — same v1 temporal boundary as the effects-and-masks matte; replaces K-125's "Depth after
+effects" checkbox), Depth invert (bool, default off — when on
 the depth is inverted, `d' = 1 − d`, before the circle-of-confusion, swapping near and far),
 Focus distance (0–1, default 0.5, the in-focus depth), Focus range (0–1, default 0.1, the
 half-width of the sharp band around focus), Aperture (px@comp, default 8, slider 0–40, the
@@ -992,16 +1001,17 @@ editing the depth pass retires stale frames.
 **Status (v1, shipped, K-124; extended K-128):** the depth-driven disc blur above, with a depth
 layer + Focus/Range/Aperture/Mix, plus (K-128) Depth invert, separate Near/Far blur under the
 Aperture master, and the Rendered/Depth map/Focus map Display views. Deliberate v1 limitations
-(documented, follow-ups tracked): the
-depth layer is rendered **source-only** (its own effect stack is not applied) and **resampled
-to the consuming layer's raster** to align with the pixels the blur runs on — a
-placement-aware or effects-aware depth is a follow-up; a depth layer built purely from
-effects (e.g. a gradient) is not yet supported. The depth layer only needs to be **in-span**
+(documented, follow-ups tracked): the depth layer is sampled per its **Depth source** mode
+(K-142) — None (raw), Masks, or Effects and masks (which runs its own stack into the depth) —
+and **resampled to the consuming layer's raster** to align with the pixels the blur runs on;
+a placement-aware depth is a follow-up (the referenced layer's own transform is not applied).
+The depth layer only needs to be **in-span**
 — it is expected to be *hidden* (a depth map should not render into the comp), and both the
 preview decode planner and export decode a hidden layer-input reference exactly as they do a
 matte source. The bokeh is a plain flat disc; shaped, bright-rimmed highlights are the
 planned "DOF PRO" second effect. The depth layer is chosen with the inspector's Layer picker
-(a dropdown of the comp's other layers); an unset or dangling reference is a no-op.
+(a dropdown of the comp's other layers), with the Depth source combobox beside it; an unset
+or dangling reference is a no-op.
 
 ### 3.23 Invert
 

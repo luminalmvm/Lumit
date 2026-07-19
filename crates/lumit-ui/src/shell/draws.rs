@@ -294,33 +294,41 @@ pub(crate) fn build_comp_draws_at(
                     if !in_span(src) {
                         return None;
                     }
-                    let (rgba, tex_w, tex_h, natural) = pixels_for(src)?;
-                    // After-effects depth (K-125): when the dof effect sets
-                    // depth_after_effects, resolve the depth layer's own stack at
-                    // its layer time so render_dof_inputs runs it on the depth
-                    // texture before resampling. Uses the depth layer's decode
-                    // scale (its px@comp radii stay honest), the same resolve
-                    // export uses (K-031). Empty when off or its fx switch is off.
-                    let (fx, lut_files) =
-                        if e.bool_of("depth_after_effects").unwrap_or(false) && src.switches.fx {
-                            let slt = t_comp - src.start_offset.0.to_f64();
-                            let comp_diag =
-                                ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-                            let scale = tex_w as f32 / natural.0.max(1.0);
-                            let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
-                            (
-                                lumit_core::fx::resolve_stack(
-                                    &src.effects,
-                                    slt,
-                                    comp_diag * scale,
-                                    scale,
-                                    &markers,
-                                ),
-                                lut_files(&src.effects, slt),
-                            )
-                        } else {
-                            (Vec::new(), Vec::new())
-                        };
+                    let mode = e.layer_source("depth");
+                    // Depth source (K-142). None samples the depth layer's raw
+                    // pixels — clear its masks so `pixels_for` skips them; Masks
+                    // and Effects and masks keep them.
+                    let (rgba, tex_w, tex_h, natural) = if mode.applies_masks() {
+                        pixels_for(src)?
+                    } else {
+                        let mut bare = src.clone();
+                        bare.masks.clear();
+                        pixels_for(&bare)?
+                    };
+                    // Effects and masks (K-142): resolve the depth layer's own
+                    // stack at its layer time so render_dof_inputs runs it on the
+                    // depth texture before resampling. Uses the depth layer's
+                    // decode scale (its px@comp radii stay honest), the same
+                    // resolve export uses (K-031). Empty otherwise.
+                    let (fx, lut_files) = if mode.folds_effects() && src.switches.fx {
+                        let slt = t_comp - src.start_offset.0.to_f64();
+                        let comp_diag =
+                            ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                        let scale = tex_w as f32 / natural.0.max(1.0);
+                        let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                        (
+                            lumit_core::fx::resolve_stack(
+                                &src.effects,
+                                slt,
+                                comp_diag * scale,
+                                scale,
+                                &markers,
+                            ),
+                            lut_files(&src.effects, slt),
+                        )
+                    } else {
+                        (Vec::new(), Vec::new())
+                    };
                     Some(DofInputDraw {
                         rgba,
                         tex_w,
@@ -585,16 +593,25 @@ pub(crate) fn build_comp_draws_at(
 
         let matte = layer.matte.as_ref().and_then(|mr| {
             let src = comp.layers.iter().find(|l| l.id == mr.layer)?;
-            let (m_rgba, m_w, m_h, m_nat) = pixels_for(src)?;
+            // Matte source mode (K-142). None reads the source's raw pixels —
+            // clear its masks so `pixels_for` skips them; Masks and Effects and
+            // masks keep them.
+            let (m_rgba, m_w, m_h, m_nat) = if mr.source.applies_masks() {
+                pixels_for(src)?
+            } else {
+                let mut bare = src.clone();
+                bare.masks.clear();
+                pixels_for(&bare)?
+            };
             let mlt = t_comp - src.start_offset.0.to_f64();
             let mtr = &src.transform;
-            // After-effects matte (K-decision): resolve the matte source's own
+            // Effects and masks matte (K-142): resolve the matte source's own
             // stack at its layer time so gpu.rs runs it on the matte texture
             // before the matte gates the consumer. Uses the source's decode scale
             // (its px@comp radii stay honest under reduced-res preview), the same
-            // §1.4 markers and the same resolve export uses (K-031). Empty when
-            // the toggle is off or the source's fx switch is off — source-only.
-            let (fx, lut_files) = if mr.after_effects && src.switches.fx {
+            // §1.4 markers and the same resolve export uses (K-031). Empty for
+            // None / Masks or when the source's fx switch is off.
+            let (fx, lut_files) = if mr.source.folds_effects() && src.switches.fx {
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = m_w as f32 / m_nat.0.max(1.0);
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);

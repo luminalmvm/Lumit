@@ -1522,3 +1522,30 @@ idle comps are untouched. A full per-audio-block re-mix from cached decoded sour
 apply with zero re-decode latency) is the natural next step but was deferred as a larger
 refactor of the single-baked-buffer engine. Built in an isolated worktree; not pushed —
 another agent may also claim K-141, renumber on merge if so.
+
+**K-142 · DECIDED · Layer-input source is a three-way combobox, not a before/after bool
+(revises K-125).** A track matte's source and an effect's Layer-reference input (the Depth of
+field depth layer) each replace K-125's "after effects" bool with a **source** combobox beside
+the layer picker offering **None** (the referenced layer's raw footage/solid — no masks, no
+effects), **Masks** (its source plus its own masks, no effects) and **Effects and masks** (its
+finished picture — the source's effects and masks run in first; K-125's `after_effects = true`).
+A shared `LayerInputSource { None, Masks, EffectsAndMasks }` (lumit-core) carries the semantics:
+`applies_masks()` gates the source's masks, `folds_effects()` runs its stack. `None` samples the
+source with its masks **cleared** (a masks-stripped clone through the same `pixels_for`/`prepare`
+the preview and export already share, so preview == export, K-031); `Masks` and `Effects and
+masks` reuse the existing source-only and after-effects paths. Storage: the matte carries
+`MatteRef::source` (replacing `after_effects`), migrated on load by a serde shim
+(`after_effects: true` → `EffectsAndMasks`, `false`/absent → `None`); a layer-input effect
+carries a sibling `<id>_source` Choice, read by `EffectInstance::layer_source`, which falls back
+to the legacy `<id>_after_effects` bool so old DoF projects still key and render correctly
+(the removed `depth_after_effects` schema param). The frame key hashes the mode discriminant in
+place of the old bool byte (0/1/2), so switching modes retires stale frames, and still folds the
+source stack only for `EffectsAndMasks`. **Migration note / open question:** the historical
+source-only path (`after_effects = false`) already applied the referenced layer's *masks* (via
+the shared `pixels_for`), so `false → None` **drops masks** from any matte/depth source that had
+them (the common unmasked case is pixel-identical; a *masked* matte/depth source in source-only
+mode renders without its masks after migration). This follows the task's stated mapping and the
+docs' "raw source pixels" framing; if the owner prefers behaviour-preserving migration, flip
+`LayerInputSource::from_after_effects(false)` and the default to `Masks` (a one-line change).
+The v1 temporal boundary is unchanged (echo/flow on the source still degrade to a still). Built
+in an isolated worktree; not pushed — another agent may also claim K-142, renumber on merge if so.

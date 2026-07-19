@@ -956,18 +956,13 @@ pub const BUILTINS: &[EffectSchema] = &[
                 // Unset until the owner picks one (a labelled no-op).
                 kind: ParamKind::Layer {},
             },
-            ParamSchema {
-                // The "after effects" companion for the depth Layer input
-                // (K-125): off (default) reads the depth layer's source pixels,
-                // on runs the depth layer's own effect stack into the depth pass
-                // first (a graded or blurred depth map). Named `<layer>_after_
-                // effects` by convention so the host can find the flag for any
-                // layer-input parameter. Off keeps the historical source-only
-                // behaviour, so old projects are unchanged.
-                id: "depth_after_effects",
-                label: "Depth after effects",
-                kind: ParamKind::Bool { default: false },
-            },
+            // The depth Layer input's sampling mode (K-142) is not a schema
+            // parameter: the inspector renders a source combobox beside the
+            // Layer picker (None / Masks / Effects and masks) and stores it as a
+            // `depth_source` Choice on the instance, read through
+            // `EffectInstance::layer_source("depth")`. A project saved with
+            // K-125's `depth_after_effects` bool still loads — `layer_source`
+            // falls back to it. Replaces the old "Depth after effects" checkbox.
             ParamSchema {
                 // Invert the depth pass (d' = 1 - d) before the circle-of-
                 // confusion, swapping near and far — the owner's "tick to

@@ -627,7 +627,9 @@ pub(crate) fn effects_rows(
                 }
                 (EffectValue::Layer(cur), ParamKind::Layer { .. }) => {
                     // A picker for a layer-reference parameter (K-123), e.g. the
-                    // DoF depth layer: this comp's other layers, plus None.
+                    // DoF depth layer: this comp's other layers, plus None. Beside
+                    // it, a source combobox (K-142) chooses what of that layer the
+                    // input reads: None (raw), Masks, or Effects and masks.
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
                     set_sel(ui, row_rect);
                     c.label(
@@ -657,6 +659,65 @@ pub(crate) fn effects_rows(
                             }
                         }
                     });
+                    // The source combobox — only meaningful once a layer is
+                    // picked (an unset reference is a no-op). Stored as the
+                    // sibling `<id>_source` Choice, read via `layer_source`.
+                    if cur.is_some() {
+                        use lumit_core::model::LayerInputSource as Lis;
+                        let mode = e.layer_source(ps.id);
+                        let label = |m: Lis| match m {
+                            Lis::None => "None",
+                            Lis::Masks => "Masks",
+                            Lis::EffectsAndMasks => "Effects and masks",
+                        };
+                        let sid = format!("{}_source", ps.id);
+                        bare_dropdown(
+                            &mut c,
+                            egui::RichText::new(label(mode))
+                                .small()
+                                .color(ctx.theme.text_secondary),
+                            |ui| {
+                                for (m, hint) in [
+                                    (
+                                        Lis::None,
+                                        "Read the layer's raw picture — no masks, no effects",
+                                    ),
+                                    (
+                                        Lis::Masks,
+                                        "Read the layer plus its masks, but not its effects",
+                                    ),
+                                    (
+                                        Lis::EffectsAndMasks,
+                                        "Read the layer's finished picture — its effects and masks",
+                                    ),
+                                ] {
+                                    if ui
+                                        .selectable_label(mode == m, label(m))
+                                        .on_hover_text(hint)
+                                        .clicked()
+                                    {
+                                        let mut effects = layer.effects.clone();
+                                        let v = EffectValue::Choice(m.to_choice());
+                                        if let Some(p) =
+                                            effects[idx].params.iter_mut().find(|p| p.id == sid)
+                                        {
+                                            p.value = v;
+                                        } else {
+                                            effects[idx].params.push(
+                                                lumit_core::model::EffectParam {
+                                                    id: sid.clone(),
+                                                    value: v,
+                                                    extra: serde_json::Map::new(),
+                                                },
+                                            );
+                                        }
+                                        *pending = Some(commit(effects));
+                                        ui.close_menu();
+                                    }
+                                }
+                            },
+                        );
+                    }
                 }
                 _ => {}
             }

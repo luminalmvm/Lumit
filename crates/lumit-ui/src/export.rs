@@ -985,19 +985,29 @@ impl Renderer<'_> {
                 && e.effect.namespace == EffectNamespace::Builtin
                 && e.effect.match_name == "dof"
         }) {
-            let after_effects = e.bool_of("depth_after_effects").unwrap_or(false);
+            let mode = e.layer_source("depth");
             let slot = match e.layer_ref("depth") {
                 Some(id) => match comp.layers.iter().find(|l| l.id == id) {
                     Some(src) if t >= src.in_point.0.to_f64() && t < src.out_point.0.to_f64() => {
-                        // Source-only by default (the pre-fx `prepare` result),
-                        // so the depth matches the preview and cannot recurse.
-                        // After-effects depth (K-125) runs the depth layer's own
-                        // stack on it first, exactly as the preview does — empty
-                        // temporal inputs in v1 (same boundary as the matte).
-                        match self.prepare(src, t, visited)? {
+                        // Depth source mode (K-142). None prepares the raw source
+                        // (masks cleared), so it matches the preview and cannot
+                        // recurse; Masks keeps the masks; Effects and masks runs
+                        // the depth layer's own stack on it first, exactly as the
+                        // preview does — empty temporal inputs in v1 (same
+                        // boundary as the matte).
+                        let bare;
+                        let src_ref = if mode.applies_masks() {
+                            src
+                        } else {
+                            let mut b = src.clone();
+                            b.masks.clear();
+                            bare = b;
+                            &bare
+                        };
+                        match self.prepare(src_ref, t, visited)? {
                             Some(p) => {
                                 let (dw, dh) = (p.tex.width(), p.tex.height());
-                                let tex = if after_effects {
+                                let tex = if mode.folds_effects() {
                                     let slt = t - src.start_offset.0.to_f64();
                                     let diag = ((comp.width as f32).powi(2)
                                         + (comp.height as f32).powi(2))
@@ -1238,15 +1248,15 @@ impl Renderer<'_> {
         }
 
         // Matte textures: the matte layer rendered alone into comp space, one per
-        // consumer. The source is rendered SOURCE-ONLY (its own effects are not
-        // applied) unless the consumer's `MatteRef::after_effects` is set, in
-        // which case the source's stack runs on it first (a keyed or blurred
-        // matte; K-decision). Both modes go through the same `prepare` the depth
-        // inputs use and the same `apply_fx` the layer's own draw uses, so the
-        // export matches the preview (K-031). Temporal inputs are not fed through
-        // an after-effects matte in v1 (empty neighbours/flow/depth — a
-        // documented boundary). Collected first because `prepare` needs `&mut
-        // self` while the layer list is borrowed from `comp`.
+        // consumer, per its `MatteRef::source` mode (K-142). None reads the raw
+        // source (masks cleared), Masks keeps them, Effects and masks runs the
+        // source's stack on it first (a keyed or blurred matte). All modes go
+        // through the same `prepare` the depth inputs use and the same `apply_fx`
+        // the layer's own draw uses, so the export matches the preview (K-031).
+        // Temporal inputs are not fed through an effects-and-masks matte in v1
+        // (empty neighbours/flow/depth — a documented boundary). Collected first
+        // because `prepare` needs `&mut self` while the layer list is borrowed
+        // from `comp`.
         let mut matte_tex: HashMap<Uuid, Tex> = HashMap::new();
         let matte_specs: Vec<(Uuid, lumit_core::model::MatteRef)> = comp
             .layers
@@ -1258,11 +1268,23 @@ impl Renderer<'_> {
             let Some(src_layer) = comp.layers.iter().find(|x| x.id == mr.layer) else {
                 continue;
             };
-            let Some(p) = self.prepare(src_layer, t, visited)? else {
+            // Matte source mode (K-142). None prepares the raw source (masks
+            // cleared, so `p.mask` is None too); Masks / Effects and masks keep
+            // them, matching the preview.
+            let bare;
+            let src_ref = if mr.source.applies_masks() {
+                src_layer
+            } else {
+                let mut b = src_layer.clone();
+                b.masks.clear();
+                bare = b;
+                &bare
+            };
+            let Some(p) = self.prepare(src_ref, t, visited)? else {
                 continue;
             };
             let mlt = t - src_layer.start_offset.0.to_f64();
-            let src_tex = if mr.after_effects {
+            let src_tex = if mr.source.folds_effects() {
                 let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, src_layer);
                 self.apply_fx(p.tex, src_layer, mlt, diag, &markers, &[], None, &[])

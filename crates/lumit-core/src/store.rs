@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn matte_op_round_trips_and_targets_any_layer() {
-        use crate::model::{MatteChannel, MatteRef};
+        use crate::model::{LayerInputSource, MatteChannel, MatteRef};
         let store = DocumentStore::new(Document::new());
         let (ops, comp_id) = scripted_ops(&store.snapshot());
         let mut layer_id = None;
@@ -899,7 +899,7 @@ mod tests {
             layer: matte_id,
             channel: MatteChannel::Luma,
             inverted: true,
-            after_effects: false,
+            source: LayerInputSource::None,
         };
         store
             .commit(Op::SetLayerMatte {

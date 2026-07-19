@@ -56,7 +56,7 @@ pub(crate) fn matte_control(
     layer: &lumit_core::model::Layer,
     pending: &mut Option<lumit_core::Op>,
 ) {
-    use lumit_core::model::{MatteChannel, MatteRef};
+    use lumit_core::model::{LayerInputSource, MatteChannel, MatteRef};
     let has_matte = layer.matte.is_some();
     let (rect, resp) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), egui::Sense::click());
@@ -107,7 +107,7 @@ pub(crate) fn matte_control(
                             .map(|m| m.channel)
                             .unwrap_or(MatteChannel::Alpha),
                         inverted: layer.matte.is_some_and(|m| m.inverted),
-                        after_effects: layer.matte.is_some_and(|m| m.after_effects),
+                        source: layer.matte.map(|m| m.source).unwrap_or_default(),
                     }));
                 }
             }
@@ -126,16 +126,42 @@ pub(crate) fn matte_control(
                     m.inverted = !m.inverted;
                     set = Some(Some(m));
                 }
-                if ui
-                    .selectable_label(m.after_effects, "After effects")
-                    .on_hover_text(
-                        "Gate with the matte layer's pixels after its own effects \
-                         (a keyed or blurred matte), not its raw source",
-                    )
-                    .clicked()
-                {
-                    m.after_effects = !m.after_effects;
-                    set = Some(Some(m));
+                // Matte source (K-142): what of the matte layer the matte reads —
+                // its raw picture, its masked picture, or its finished picture
+                // (a keyed or blurred matte). Replaces the K-125 "After effects"
+                // switch.
+                ui.separator();
+                ui.label(
+                    egui::RichText::new("Source")
+                        .small()
+                        .color(theme.text_secondary),
+                );
+                for (mode, label, hint) in [
+                    (
+                        LayerInputSource::None,
+                        "None",
+                        "Gate with the matte layer's raw picture — no masks, no effects",
+                    ),
+                    (
+                        LayerInputSource::Masks,
+                        "Masks",
+                        "Gate with the matte layer plus its masks, but not its effects",
+                    ),
+                    (
+                        LayerInputSource::EffectsAndMasks,
+                        "Effects and masks",
+                        "Gate with the matte layer's finished picture — its effects and masks \
+                         (a keyed or blurred matte)",
+                    ),
+                ] {
+                    if ui
+                        .selectable_label(m.source == mode, label)
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        m.source = mode;
+                        set = Some(Some(m));
+                    }
                 }
             }
         },

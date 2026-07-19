@@ -147,15 +147,15 @@ fn feed_comp(
 /// Fold an effect stack into the frame key (docs/08): each live effect's
 /// identity, version and evaluated parameters, plus the local time for seeded
 /// and marker-driven effects (their pixels depend on time even when parameters
-/// hold). Shared by a layer's own stack and — for an after-effects matte or
-/// depth input (K-125) — a referenced layer's stack, so editing that layer's
+/// hold). Shared by a layer's own stack and — for an effects-and-masks matte or
+/// depth input (K-142) — a referenced layer's stack, so editing that layer's
 /// effects invalidates the consumer's cached frames. `lt` is the local time the
 /// effects evaluate at (the referenced layer's own local time when hashing a
 /// referenced layer); `t` is comp time, threaded through only for nested
 /// layer-reference sources. `marker_layer` supplies the §1.4 marker context.
-/// When `allow_after_effects_refs` is true, a Layer parameter whose sibling
-/// `<id>_after_effects` bool is set also folds the referenced layer's own stack
-/// (the after-effects depth input, K-125); the nested fold passes false, so a
+/// When `allow_after_effects_refs` is true, a Layer parameter whose source mode
+/// (`EffectInstance::layer_source`) is `EffectsAndMasks` also folds the
+/// referenced layer's own stack (K-142); the nested fold passes false, so a
 /// referenced layer's own layer-refs stay source-only — bounding recursion to
 /// one level and matching the v1 render, where a referenced layer's own
 /// layer-inputs render as passthrough. Emits nothing when the fx switch is off
@@ -281,18 +281,19 @@ fn feed_effect_stack(
                                 feed_f64(h, v);
                             }
                             h.update(&[u8::from(src.switches.three_d)]);
-                            // After-effects layer input (K-125): when this Layer
-                            // param's sibling `<id>_after_effects` bool is set,
-                            // the referenced layer is consumed *after* its own
-                            // stack, so that stack is content. Fold it once — the
-                            // nested call disables further after-effects refs, so
-                            // the source's own layer-inputs stay source-only,
-                            // matching the render (they resolve to passthrough)
-                            // and bounding recursion.
-                            if allow_after_effects_refs
-                                && e.bool_of(&format!("{}_after_effects", p.id))
-                                    .unwrap_or(false)
-                            {
+                            // Layer-input source mode (K-142): None / Masks /
+                            // Effects and masks. The discriminant is content
+                            // (switching modes changes the sampled input), so it
+                            // joins the key.
+                            let mode = e.layer_source(&p.id);
+                            h.update(&[mode.key_byte()]);
+                            // Effects-and-masks input: the referenced layer is
+                            // consumed *after* its own stack, so that stack is
+                            // content. Fold it once — the nested call disables
+                            // further effect-refs, so the source's own
+                            // layer-inputs stay source-only, matching the render
+                            // (they resolve to passthrough) and bounding recursion.
+                            if allow_after_effects_refs && mode.folds_effects() {
                                 h.update(b"ref-fx/");
                                 feed_effect_stack(
                                     h,
@@ -516,7 +517,10 @@ fn feed_layer(
                 h.update(&[
                     u8::from(matches!(mr.channel, MatteChannel::Luma)),
                     u8::from(mr.inverted),
-                    u8::from(mr.after_effects),
+                    // The three-way source mode (K-142): switching None / Masks /
+                    // Effects and masks must retire stale frames, so the mode
+                    // discriminant joins the key (replacing K-125's bool byte).
+                    mr.source.key_byte(),
                 ]);
                 let mlt = t - src.start_offset.0.to_f64();
                 feed_source(h, doc, &src.kind, mlt, quality, stamper, visited)?;
@@ -537,14 +541,14 @@ fn feed_layer(
                     feed_f64(h, v);
                 }
                 h.update(&[u8::from(src.switches.three_d)]);
-                // After-effects matte (K-decision): the matte gates by the
+                // Effects-and-masks matte (K-142): the matte gates by the
                 // source's *processed* pixels, so the source's own effect stack
                 // is content — fold it into the key at the source's local time,
-                // the same way the source's own draw would. Off leaves the
-                // source-only key untouched (a bypassed source stack too).
-                if mr.after_effects {
+                // the same way the source's own draw would. None / Masks leave
+                // the key untouched (a bypassed source stack too).
+                if mr.source.folds_effects() {
                     // false: the matte render runs the source's stack with no
-                    // layer-inputs (v1), so the source's own after-effects refs
+                    // layer-inputs (v1), so the source's own layer-input refs
                     // are passthrough — don't fold them, matching the render.
                     feed_effect_stack(
                         h,
@@ -1071,11 +1075,11 @@ mod tests {
     /// is hidden here, so its stack can only reach the key through the matte —
     /// isolating the matte path from the source's own layer contribution.
     #[test]
-    fn after_effects_matte_keys_on_the_source_stack() {
+    fn effects_and_masks_matte_keys_on_the_source_stack() {
         use lumit_core::anim::{Animation, Keyframe, SideInterp};
         use lumit_core::model::{
-            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, MatteChannel,
-            MatteRef,
+            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, LayerInputSource,
+            MatteChannel, MatteRef,
         };
         use lumit_core::time::Rational;
         let doc = Document::new();
@@ -1087,7 +1091,7 @@ mod tests {
             layer: source_id,
             channel: MatteChannel::Alpha,
             inverted: false,
-            after_effects: false,
+            source: LayerInputSource::None,
         });
         let comp = comp_with(vec![consumer, source]);
         let base = key(&doc, &comp, 1.0);
@@ -1110,8 +1114,8 @@ mod tests {
             extra: serde_json::Map::new(),
         };
 
-        // Source-only matte (the default): the source's stack is not content —
-        // adding an effect to the hidden source leaves the consumer's key alone.
+        // None / Masks matte: the source's stack is not content — adding an
+        // effect to the hidden source leaves the consumer's key alone.
         let mut src_fx = comp.clone();
         src_fx.layers[1]
             .effects
@@ -1119,31 +1123,39 @@ mod tests {
         assert_eq!(
             base,
             key(&doc, &src_fx, 1.0),
-            "a source-only matte ignores the source's effect stack"
+            "a None/Masks matte ignores the source's effect stack"
         );
 
-        // The flag itself is content: flipping after_effects on (even with no
-        // source stack) keys apart — a mode bit that changes the pixels.
+        // The mode itself is content: each of None / Masks / Effects and masks
+        // keys apart — a mode discriminant that changes the sampled pixels.
+        let mut masks = comp.clone();
+        masks.layers[0].matte.as_mut().unwrap().source = LayerInputSource::Masks;
+        assert_ne!(
+            base,
+            key(&doc, &masks, 1.0),
+            "Masks differs from None (masks now gate the matte)"
+        );
         let mut flag_only = comp.clone();
-        flag_only.layers[0].matte.as_mut().unwrap().after_effects = true;
+        flag_only.layers[0].matte.as_mut().unwrap().source = LayerInputSource::EffectsAndMasks;
         assert_ne!(
             base,
             key(&doc, &flag_only, 1.0),
-            "the after_effects flag is itself content"
+            "Effects and masks differs from None even with no source stack"
         );
+        assert_ne!(key(&doc, &masks, 1.0), key(&doc, &flag_only, 1.0));
 
-        // After-effects matte with a stack: the source's effects fold into the
-        // key, so it differs from both the source-only and the flag-only keys.
+        // Effects-and-masks matte with a stack: the source's effects fold into
+        // the key, so it differs from both the mode-only keys.
         let mut after = src_fx.clone();
-        after.layers[0].matte.as_mut().unwrap().after_effects = true;
+        after.layers[0].matte.as_mut().unwrap().source = LayerInputSource::EffectsAndMasks;
         let after_key = key(&doc, &after, 1.0);
         assert_ne!(base, after_key);
         assert_ne!(key(&doc, &flag_only, 1.0), after_key);
 
         // Evaluated params, not keyframe data: an animated source radius moves
-        // the after-effects key across frames.
+        // the effects-and-masks key across frames.
         let mut animated = comp.clone();
-        animated.layers[0].matte.as_mut().unwrap().after_effects = true;
+        animated.layers[0].matte.as_mut().unwrap().source = LayerInputSource::EffectsAndMasks;
         animated.layers[1]
             .effects
             .push(glow(lumit_core::anim::Property {
@@ -1175,13 +1187,15 @@ mod tests {
         );
     }
 
-    /// An after-effects DoF depth input (K-125) folds the depth layer's own
+    /// An Effects-and-masks DoF depth input (K-142) folds the depth layer's own
     /// stack into the consumer's key, so grading the depth pass invalidates its
-    /// cached frames; the source-only default ignores it. The depth layer is
-    /// hidden, so its stack reaches the key only through the depth reference.
+    /// cached frames; None/Masks ignore it. The depth layer is hidden, so its
+    /// stack reaches the key only through the depth reference. A project saved
+    /// with K-125's legacy `depth_after_effects` bool keys the same as the
+    /// current `depth_source` Choice, so old caches migrate cleanly.
     #[test]
-    fn after_effects_depth_input_keys_on_the_source_stack() {
-        use lumit_core::model::EffectValue;
+    fn effects_and_masks_depth_input_keys_on_the_source_stack() {
+        use lumit_core::model::{EffectParam, EffectValue, LayerInputSource};
         let doc = Document::new();
         let mut depth = text_layer("d", 0.0, 10.0, 0.0);
         depth.switches.visible = false; // depth pass: referenced, not rendered as a layer
@@ -1197,7 +1211,7 @@ mod tests {
         let comp = comp_with(vec![consumer, depth]);
         let base = key(&doc, &comp, 1.0);
 
-        // A blur on the hidden depth layer, with depth_after_effects off: the
+        // A blur on the hidden depth layer, depth source None (the default): the
         // depth is read source-only, so the consumer's key is untouched.
         let mut src_fx = comp.clone();
         src_fx.layers[1]
@@ -1206,27 +1220,55 @@ mod tests {
         assert_eq!(
             base,
             key(&doc, &src_fx, 1.0),
-            "a source-only depth input ignores the depth layer's stack"
+            "a None depth input ignores the depth layer's stack"
         );
 
-        // Flip depth_after_effects on: the depth layer's stack is now content.
-        let mut after = src_fx.clone();
-        for p in &mut after.layers[0].effects[0].params {
-            if p.id == "depth_after_effects" {
-                p.value = EffectValue::Bool(true);
-            }
-        }
+        // Set depth_source = Effects and masks: the depth layer's stack folds in.
+        let set_source = |comp: &Composition, mode: LayerInputSource| {
+            let mut c = comp.clone();
+            c.layers[0].effects[0].params.push(EffectParam {
+                id: "depth_source".into(),
+                value: EffectValue::Choice(mode.to_choice()),
+                extra: serde_json::Map::new(),
+            });
+            c
+        };
+        let after = set_source(&src_fx, LayerInputSource::EffectsAndMasks);
         assert_ne!(base, key(&doc, &after, 1.0));
 
-        // The flag itself is content even with no depth stack (a mode bit).
-        let mut flag_only = comp.clone();
-        for p in &mut flag_only.layers[0].effects[0].params {
-            if p.id == "depth_after_effects" {
-                p.value = EffectValue::Bool(true);
-            }
-        }
+        // The mode itself is content even with no depth stack. Masks and Effects
+        // and masks each key apart from None (and from each other).
+        let masks = set_source(&comp, LayerInputSource::Masks);
+        let flag_only = set_source(&comp, LayerInputSource::EffectsAndMasks);
+        assert_ne!(base, key(&doc, &masks, 1.0));
         assert_ne!(base, key(&doc, &flag_only, 1.0));
+        assert_ne!(key(&doc, &masks, 1.0), key(&doc, &flag_only, 1.0));
         assert_ne!(key(&doc, &flag_only, 1.0), key(&doc, &after, 1.0));
+
+        // Legacy K-125 bool: a project that stored `depth_after_effects: true`
+        // still folds the depth layer's stack (it reads as Effects and masks
+        // through `layer_source`'s fallback). Proven by removing the depth
+        // stack: with the bool on, that removal changes the key — the fold is
+        // live on the legacy path, so old projects invalidate correctly.
+        let mut legacy = src_fx.clone();
+        legacy.layers[0].effects[0].params.push(EffectParam {
+            id: "depth_after_effects".into(),
+            value: EffectValue::Bool(true),
+            extra: serde_json::Map::new(),
+        });
+        let mut legacy_no_stack = comp.clone();
+        legacy_no_stack.layers[0].effects[0]
+            .params
+            .push(EffectParam {
+                id: "depth_after_effects".into(),
+                value: EffectValue::Bool(true),
+                extra: serde_json::Map::new(),
+            });
+        assert_ne!(
+            key(&doc, &legacy, 1.0),
+            key(&doc, &legacy_no_stack, 1.0),
+            "the legacy after-effects bool still folds the depth layer's stack"
+        );
     }
 
     /// A seeded effect's pixels move with time under constant parameters
