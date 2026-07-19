@@ -176,7 +176,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [x] T9 Per-layer MB looked dead because the comp MB MASTER was buried in comp settings. Added a master "MB" toggle to the timeline bottom bar; with it on, MB-switched layers blur along their transform. (T22: the comp master is the composition-level MB the owner asked for.)
 - [x] T10 Graph-view toggle now uses the magnet's selectable-glyph look with a 3px right inset, so it isn't clipped. (Eyeball.)
 - [ ] T11 Viewfinder still spills over the inner border; round-mode bottom bar not rounded.
-- [ ] T12 Posterize time still does nothing at any frame rate.
+- [x] T12 Posterize now holds the carrying layer's own source (so applying it to a footage layer steps that footage); Everything-below also holds below-layers on any layer kind, not just adjustment layers. (Before, a Posterize on footage held nothing.)
 - [ ] T13 Radial blur Type combobox: moving down to pick opens the Edges menu below instead (menu overlap/UI bug).
 - [ ] T14 New x/y param type: combine Centre X/Y into one row (two float boxes + a viewfinder pixel picker like the dropper). Apply to all x/y-position params.
 - [ ] T15 Sharpen: add an adjustable kernel size.

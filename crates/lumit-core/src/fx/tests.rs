@@ -154,12 +154,22 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         footage(vec![]),
     ];
     let st = posterize_sample_times(&layers, 0.37);
-    assert!((st[0] - 0.37).abs() < 1e-9, "the adjustment itself is live");
+    // Every layer below the adjustment snaps to the 10 fps grid. The adjustment's
+    // own sample time snaps too, but that is unused (it has no source to decode).
+    assert!((st[0] - 0.3).abs() < 1e-9);
     assert!(
         (st[1] - 0.3).abs() < 1e-9,
         "a layer below snaps to the 10 fps grid"
     );
     assert!((st[2] - 0.3).abs() < 1e-9);
+
+    // T12: a Posterize on a plain (footage) layer holds THAT layer's own source,
+    // so applying Posterize to footage steps it — before, only an adjustment
+    // above a layer held anything. Everything-below also holds the layer below.
+    let on_footage = vec![footage(vec![post.clone()]), footage(vec![])];
+    let stf = posterize_sample_times(&on_footage, 0.37);
+    assert!((stf[0] - 0.3).abs() < 1e-9, "the posterised footage snaps");
+    assert!((stf[1] - 0.3).abs() < 1e-9, "and everything below it snaps");
 
     // A This-layer Posterize holds only its own layer's sampling; the layer
     // below it stays live.

@@ -1,5 +1,5 @@
 use super::*;
-use crate::model::{EffectInstance, EffectNamespace, EffectValue, Layer, LayerKind};
+use crate::model::{EffectInstance, EffectNamespace, EffectValue, Layer};
 
 /// Which layers a Posterize Time effect (docs/08 §3.25) holds in time — the
 /// owner's Scope choice.
@@ -122,21 +122,22 @@ pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
         // Start from the time the adjustments above hold this layer at.
         let mut sample_t = below_hold;
         let lt = below_hold - layer.start_offset.0.to_f64();
-        // A This-layer Posterize holds this layer's own source sampling too.
-        if let Some(p) = stack_posterize(&layer.effects, layer.switches.fx, lt) {
-            if p.scope == PosterizeScope::ThisLayer {
-                sample_t = posterize_held_time(below_hold, p.rate, p.phase);
-            }
+        let here = stack_posterize(&layer.effects, layer.switches.fx, lt);
+        // A Posterize on this layer holds its own source sampling at the reduced
+        // rate, whatever the scope — so applying Posterize to a footage layer
+        // steps that footage (T12; before, nothing held unless the Posterize sat
+        // on an adjustment layer above).
+        if let Some(p) = &here {
+            sample_t = posterize_held_time(below_hold, p.rate, p.phase);
         }
         out.push(sample_t);
-        // An Everything-below Posterize on an adjustment layer holds every layer
-        // beneath it — compose its grid onto the running below-hold so nested
-        // adjustments snap the already-held time again.
-        if matches!(layer.kind, LayerKind::Adjustment) {
-            if let Some(p) = stack_posterize(&layer.effects, layer.switches.fx, lt) {
-                if p.scope == PosterizeScope::EverythingBelow {
-                    below_hold = posterize_held_time(below_hold, p.rate, p.phase);
-                }
+        // An Everything-below Posterize holds every layer beneath it too, whatever
+        // the carrying layer's kind (an adjustment stop-motion pass, or a plain
+        // layer with content below it) — compose its grid onto the running
+        // below-hold so nested holds snap the already-held time again.
+        if let Some(p) = &here {
+            if p.scope == PosterizeScope::EverythingBelow {
+                below_hold = posterize_held_time(below_hold, p.rate, p.phase);
             }
         }
     }
