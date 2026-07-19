@@ -67,6 +67,24 @@ struct SaturationParams {
     _pad: [f32; 2],
 }
 
+/// One resolved vibrancy (docs/08 §3.10, K-152): a saturation boost weighted
+/// by each pixel's current colourfulness, in linear on unpremultiplied colour.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VibrancyOp {
+    /// 0 = neutral; higher lifts less-saturated pixels more, open above (K-135).
+    pub amount: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct VibrancyParams {
+    amount: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
+}
+
 /// One resolved exposure (docs/08 §3.16): a single scene-linear gain on the
 /// RGB channels. `factor` is `2^stops`, computed host-side so the CPU
 /// reference and the kernel multiply by the identical number; alpha is
@@ -313,6 +331,36 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&SaturationParams {
                 saturation: op.saturation,
+                mix_amt: op.mix,
+                _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+
+    /// Apply one vibrancy (docs/08 §3.10, K-152) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass; the §2.2
+    /// unpremultiply wrap is fused into the kernel, and amount 0 short-circuits
+    /// inside it to the bit-exact identity.
+    pub fn vibrancy(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &VibrancyOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-vibrancy-out");
+        self.dispatch(
+            ctx,
+            &self.vibrancy,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&VibrancyParams {
+                amount: op.amount,
                 mix_amt: op.mix,
                 _pad: [0.0; 2],
             }),

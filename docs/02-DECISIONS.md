@@ -1718,3 +1718,18 @@ adds Subtract to match. CPU/GPU parity holds (the compositor's inline oracle tes
 mode's formula). Spec: [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §3.5. Added 2026-07-19 at
 Mack's request. Built in an isolated worktree; not pushed — another agent may also claim
 K-151, renumber on merge if so.
+
+**K-152 · DECIDED · Vibrancy, a saturation-aware colour effect (GEN-2).** A new **Colour**
+effect complementing Saturation (§3.10): where Saturation scales colourfulness uniformly,
+**Vibrancy** raises it *more* for less-saturated pixels and *less* for already-vivid ones, so
+near-neutrals and skin tones lift while saturated regions are protected from clipping. One
+**Amount** dial (per cent): 0 is the neutral, bit-exact identity; the slider reaches a heavy
+200 and typing higher pushes further (value-range policy K-135, open above, floored at 0). The
+maths, in linear light on unpremultiplied colour (§2.2) exactly like Saturation: measure each
+pixel's HSV-style saturation `sat = (max−min)/max` (clamped to 0..1, scale-invariant), form a
+per-pixel factor `1 + amount·(1−sat)`, and scale colour about Rec. 709 luma by it, clamped at
+zero and re-premultiplied. Built to the four-site pattern (schema → Resolved + resolve → CPU
+reference oracle → WGSL kernel → the `wgsl_vibrancy_matches_the_cpu_oracle` parity test), so
+preview equals export (K-031). Spec: [08-EFFECTS.md](08-EFFECTS.md) §3.10. Added 2026-07-19 at
+Mack's request. Built in an isolated worktree; not pushed — another agent may also claim
+K-152, renumber on merge if so.

@@ -63,6 +63,7 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
             mix,
         } => colour_balance(rgba, *lift, *gamma, *gain, *mix),
         Resolved::Saturation { saturation, mix } => saturate(rgba, *saturation, *mix),
+        Resolved::Vibrancy { amount, mix } => vibrance(rgba, *amount, *mix),
         Resolved::MatteKey {
             key,
             tol,
@@ -336,6 +337,42 @@ pub fn saturate(rgba: &mut [f32], saturation: f32, mix: f32) {
         let luma = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
         for c in 0..3 {
             let v = (luma + (u[c] - luma) * saturation).max(0.0);
+            let s = v * a;
+            px[c] = px[c] * (1.0 - mix) + s * mix;
+        }
+    }
+}
+
+/// Vibrancy (docs/08 §3.10, K-152): a saturation boost weighted by each
+/// pixel's current colourfulness — the per-pixel factor is `1 + amount·(1 −
+/// sat)`, so low-saturation pixels lift more and already-vivid ones little
+/// (protecting skin tones, avoiding clipping), unlike Saturation's uniform
+/// scale. In linear light on unpremultiplied colour (§2.2), re-premultiplied.
+/// `sat` is the scale-invariant HSV saturation `(max − min)/max`, clamped to
+/// 0..1. Amount 0 short-circuits the whole effect (bit-exact identity); the
+/// colour then scales about Rec. 709 luma exactly as Saturation does, so the
+/// two share their premultiply handling and the WGSL twin matches op-for-op.
+pub fn vibrance(rgba: &mut [f32], amount: f32, mix: f32) {
+    if amount == 0.0 {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let luma = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
+        // HSV-style saturation in 0..1, scale-invariant so HDR values above 1
+        // read the same "how colourful" as ones below.
+        let mx = u[0].max(u[1]).max(u[2]);
+        let mn = u[0].min(u[1]).min(u[2]);
+        let sat = if mx > 0.0 {
+            ((mx - mn) / mx).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        // More boost where sat is low; none where already saturated.
+        let factor = 1.0 + amount * (1.0 - sat);
+        for c in 0..3 {
+            let v = (luma + (u[c] - luma) * factor).max(0.0);
             let s = v * a;
             px[c] = px[c] * (1.0 - mix) + s * mix;
         }

@@ -171,6 +171,13 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    Vibrancy {
+        /// Per-pixel saturation-boost weight (K-152): 0 = neutral, higher lifts
+        /// less-saturated pixels more. Open above (K-135), floored at 0.
+        amount: f32,
+        /// 0..1.
+        mix: f32,
+    },
     /// Matte key (docs/08 §3.21): a soft chroma key. `key` is the scene-linear
     /// RGBA key colour (resolved at frame time like Vignette's tint, alpha
     /// ignored); the CPU/GPU maths derive its chroma and hue direction from it
@@ -735,6 +742,13 @@ fn resolve_one(
                 (e.float_at("saturation", lt).unwrap_or(100.0) as f32 / 100.0).max(0.0);
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
             Some(Resolved::Saturation { saturation, mix })
+        }
+        "vibrancy" => {
+            // Floored at 0 (neutral), open above (K-135): the per-pixel factor
+            // extrapolates cleanly, so no upper clamp.
+            let amount = (e.float_at("amount", lt).unwrap_or(0.0) as f32 / 100.0).max(0.0);
+            let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            Some(Resolved::Vibrancy { amount, mix })
         }
         "matte_key" => {
             // The colour is resolved to a scene-linear array at frame time,

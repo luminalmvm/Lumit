@@ -506,6 +506,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   than rounding them through power curves. The rest of §3.10 — exposure, white
   balance, curves, vignette, and the Looks-style preset browser — arrives as further
   single-purpose colour effects.
+- **Vibrancy** (K-152) is Saturation's smarter cousin. Saturation scales *every* pixel's
+  colourfulness by the same amount, so pushing it hard blows out the colours that were
+  already strong (and turns skin an unnatural orange). Vibrancy looks at how colourful
+  each pixel already is and lifts the dull ones more than the vivid ones — near-greys and
+  skin tones come alive while the saturated bits are left roughly alone, so nothing
+  clips. It has one **Amount** dial (0 does nothing; turn it up to taste, and it happily
+  goes past 100). Same careful plumbing as Saturation — it works on unpremultiplied
+  colour in linear light, pivots about proper luma, and never goes negative — with a GPU
+  test holding it exactly to the CPU reference.
 - **Flash.** The beat-strobe, in its manual form until beat markers exist. Its Trigger
   parameter reads unusually on purpose: *each keyframe is a hit*. Drop a keyframe with
   value 1 on a kick drum and the frame flashes to the flash colour, then fades out
@@ -1520,13 +1529,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   it as a matte) — then the switch dims to say "set, but overridden". The undoable
   switch lives in ops like every edit; the cache knows collapse changes pixels, so
   toggling it re-renders.
-- **Blend modes** — the full everyday set: Normal, Add, Multiply, Screen, Overlay,
-  Soft light, Hard light, Lighten, Darken. Two families under the hood: Add and
-  Multiply are physical light maths and run in linear; Screen, Overlay and the lights
-  are the Photoshop-era formulas people know by eye, so Lumit runs them on encoded
-  values (running them in linear is tidier maths and the wrong look). Lighten and
-  Darken are a simple per-channel max/min where the distinction doesn't matter. Every
-  mode is pinned to its textbook formula by a GPU test.
+- **Blend modes** — the full everyday set: Normal, Add, Subtract, Multiply, Screen,
+  Overlay, Soft light, Hard light, Lighten, Darken. Two families under the hood: Add,
+  Subtract and Multiply are physical light maths and run in linear; Screen, Overlay and
+  the lights are the Photoshop-era formulas people know by eye, so Lumit runs them on
+  encoded values (running them in linear is tidier maths and the wrong look). Add pours
+  light in; **Subtract** is its mirror — it takes the top layer's light away and stops
+  at black, never going negative (K-151). Lighten and Darken are a simple per-channel
+  max/min where the distinction doesn't matter. Every mode is pinned to its textbook
+  formula by a GPU test.
 - **Colour depth, in one paragraph.** Lumit's frames are "half float" (fp16) in linear
   light. Unlike AE's 16bpc — which is integer maths that clips at 1.0 — half float
   keeps brightness above 1.0 (a glow can genuinely overshoot) and negatives, which is

@@ -733,6 +733,42 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Vibrancy (docs/08 §3.10, K-152): a saturation boost weighted by each
+    // pixel's current colourfulness — low-saturation pixels gain more,
+    // already-vivid ones little, so skin tones and near-neutrals lift while
+    // saturated areas are protected from clipping (unlike Saturation's uniform
+    // scale). Same domain as Saturation: linear light, unpremultiplied (§2.2).
+    EffectSchema {
+        groups: &[],
+        match_name: "vibrancy",
+        label: "Vibrancy",
+        version: 1,
+        category: FxCategory::Colour,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::Exact,
+            temporal: &[0],
+            premultiplied: false, // §2.2: grading premult shifts matte edges
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "amount",
+                label: "Amount",
+                // Per cent: 0 = neutral (bit-exact identity), higher lifts the
+                // less-saturated pixels more. The slider reaches a heavy 200;
+                // typing higher pushes further (K-135 open ceiling), floored
+                // at 0.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 200.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
     // Vignette (docs/08 §3.14, listed as a planned colour effect in §3.10):
     // darkens toward black away from the frame centre, in premultiplied
     // colour (a coverage-like darken, not a lift/gamma/gain grade, so no

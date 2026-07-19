@@ -209,6 +209,7 @@ impl FxEngine {
             "fx-colour-balance",
         );
         let saturation_mod = module(include_str!("../fx_saturation.wgsl"), "fx-saturation");
+        let vibrancy_mod = module(include_str!("../fx_vibrancy.wgsl"), "fx-vibrancy");
         let matte_key_mod = module(include_str!("../fx_matte_key.wgsl"), "fx-matte-key");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
@@ -244,6 +245,7 @@ impl FxEngine {
         let flash = pipeline(&flash_mod, "fx-flash", "flash");
         let colour_balance = pipeline(&balance_mod, "fx-colour-balance", "colour_balance");
         let saturation = pipeline(&saturation_mod, "fx-saturation", "saturate_fx");
+        let vibrancy = pipeline(&vibrancy_mod, "fx-vibrancy", "vibrance_fx");
         let matte_key = pipeline(&matte_key_mod, "fx-matte-key", "matte_key");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
@@ -323,6 +325,7 @@ impl FxEngine {
             flash,
             colour_balance,
             saturation,
+            vibrancy,
             matte_key,
             vignette,
             exposure,
