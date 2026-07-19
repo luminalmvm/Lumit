@@ -1241,61 +1241,68 @@ mod tests {
         }
         consumer.effects.push(dof);
         let comp = comp_with(vec![consumer, depth]);
-        let base = key(&doc, &comp, 1.0);
-
-        // A blur on the hidden depth layer, depth source None (the default): the
-        // depth is read source-only, so the consumer's key is untouched.
-        let mut src_fx = comp.clone();
-        src_fx.layers[1]
-            .effects
-            .push(lumit_core::fx::instantiate("blur").unwrap());
-        assert_eq!(
-            base,
-            key(&doc, &src_fx, 1.0),
-            "a None depth input ignores the depth layer's stack"
-        );
-
-        // Set depth_source = Effects and masks: the depth layer's stack folds in.
-        let set_source = |comp: &Composition, mode: LayerInputSource| {
+        // Set (replacing any existing) the DoF depth_source on the consumer.
+        let with_source = |comp: &Composition, mode: LayerInputSource| {
             let mut c = comp.clone();
-            c.layers[0].effects[0].params.push(EffectParam {
+            let params = &mut c.layers[0].effects[0].params;
+            params.retain(|p| p.id != "depth_source");
+            params.push(EffectParam {
                 id: "depth_source".into(),
                 value: EffectValue::Choice(mode.to_choice()),
                 extra: serde_json::Map::new(),
             });
             c
         };
-        let after = set_source(&src_fx, LayerInputSource::EffectsAndMasks);
+        let blur = || lumit_core::fx::instantiate("blur").unwrap();
+
+        // Depth source None (set explicitly — the default is now Effects and
+        // masks, K-142 follow-up): the depth is read source-only, so a blur on
+        // the hidden depth layer leaves the consumer's key untouched.
+        let none_comp = with_source(&comp, LayerInputSource::None);
+        let base = key(&doc, &none_comp, 1.0);
+        let mut none_blur = none_comp.clone();
+        none_blur.layers[1].effects.push(blur());
+        assert_eq!(
+            base,
+            key(&doc, &none_blur, 1.0),
+            "a None depth input ignores the depth layer's stack"
+        );
+
+        // Effects and masks: the depth layer's stack folds in, so the same blur
+        // now changes the consumer's key.
+        let after = {
+            let mut c = with_source(&comp, LayerInputSource::EffectsAndMasks);
+            c.layers[1].effects.push(blur());
+            c
+        };
         assert_ne!(base, key(&doc, &after, 1.0));
 
-        // The mode itself is content even with no depth stack. Masks and Effects
-        // and masks each key apart from None (and from each other).
-        let masks = set_source(&comp, LayerInputSource::Masks);
-        let flag_only = set_source(&comp, LayerInputSource::EffectsAndMasks);
+        // The mode itself is content even with no depth stack. None / Masks /
+        // Effects and masks each key apart from one another.
+        let masks = with_source(&comp, LayerInputSource::Masks);
+        let flag_only = with_source(&comp, LayerInputSource::EffectsAndMasks);
         assert_ne!(base, key(&doc, &masks, 1.0));
         assert_ne!(base, key(&doc, &flag_only, 1.0));
         assert_ne!(key(&doc, &masks, 1.0), key(&doc, &flag_only, 1.0));
         assert_ne!(key(&doc, &flag_only, 1.0), key(&doc, &after, 1.0));
 
-        // Legacy K-125 bool: a project that stored `depth_after_effects: true`
-        // still folds the depth layer's stack (it reads as Effects and masks
-        // through `layer_source`'s fallback). Proven by removing the depth
-        // stack: with the bool on, that removal changes the key — the fold is
-        // live on the legacy path, so old projects invalidate correctly.
-        let mut legacy = src_fx.clone();
-        legacy.layers[0].effects[0].params.push(EffectParam {
-            id: "depth_after_effects".into(),
-            value: EffectValue::Bool(true),
-            extra: serde_json::Map::new(),
-        });
-        let mut legacy_no_stack = comp.clone();
-        legacy_no_stack.layers[0].effects[0]
-            .params
-            .push(EffectParam {
+        // Legacy K-125 bool on a project with NO depth_source: it reads as
+        // Effects and masks through `layer_source`'s fallback, so the depth
+        // layer's stack still folds. Proven by removing the depth stack: with
+        // the bool on, that removal changes the key.
+        let legacy_bool = |comp: &Composition| {
+            let mut c = comp.clone();
+            c.layers[0].effects[0].params.push(EffectParam {
                 id: "depth_after_effects".into(),
                 value: EffectValue::Bool(true),
                 extra: serde_json::Map::new(),
             });
+            c
+        };
+        let mut legacy_src = comp.clone();
+        legacy_src.layers[1].effects.push(blur());
+        let legacy = legacy_bool(&legacy_src);
+        let legacy_no_stack = legacy_bool(&comp);
         assert_ne!(
             key(&doc, &legacy, 1.0),
             key(&doc, &legacy_no_stack, 1.0),
