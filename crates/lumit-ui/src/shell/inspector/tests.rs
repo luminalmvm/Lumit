@@ -554,3 +554,39 @@ mod channel_picker_tests {
         assert_declares_channel_picker_group("rgb_split");
     }
 }
+
+/// T14 combined X/Y rows.
+#[cfg(test)]
+mod xy_row_tests {
+    use crate::shell::inspector::effect_rows::xy_label;
+
+    #[test]
+    fn xy_label_capitalises_and_despaces() {
+        assert_eq!(xy_label("centre"), "Centre");
+        assert_eq!(xy_label("position"), "Position");
+        assert_eq!(xy_label("anchor"), "Anchor");
+    }
+
+    /// The effects the combined X/Y row targets must declare matching `_x`/`_y`
+    /// Float pairs, or the pairing silently falls back to two separate rows.
+    #[test]
+    fn effects_declare_matching_xy_pairs() {
+        use lumit_core::fx::ParamKind;
+        let has_float = |name: &str, id: &str| {
+            lumit_core::fx::schema(name)
+                .unwrap()
+                .params
+                .iter()
+                .any(|p| p.id == id && matches!(p.kind, ParamKind::Float { .. }))
+        };
+        for (name, base) in [
+            ("radial_blur", "centre"),
+            ("transform", "anchor"),
+            ("transform", "position"),
+            ("transform", "scale"),
+        ] {
+            assert!(has_float(name, &format!("{base}_x")), "{name}: {base}_x");
+            assert!(has_float(name, &format!("{base}_y")), "{name}: {base}_y");
+        }
+    }
+}

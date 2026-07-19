@@ -30,6 +30,205 @@ pub(crate) fn effect_row_select(
     }
 }
 
+/// The capitalised, space-separated base name for a combined X/Y row (T14):
+/// `centre` → "Centre", `position` → "Position". Underscores become spaces.
+pub(crate) fn xy_label(base: &str) -> String {
+    base.split('_')
+        .map(|w| {
+            let mut cs = w.chars();
+            match cs.next() {
+                Some(f) => f.to_uppercase().chain(cs).collect::<String>(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A combined X/Y parameter row (T14): two Float params named `<base>_x` and
+/// `<base>_y` render as ONE row — a shared stopwatch that keys both axes, the
+/// shared ◄ ◆ ► navigator over the union of their key times, a label, and two
+/// value boxes. Modelled on the layer transform's linked pair rows, but the keys
+/// live on the effect instance, so every edit is one whole-stack `SetLayerEffects`
+/// (one undo). `effects_rows` is shared by the Effect Controls panel and the
+/// Timeline, so the pairing shows the same in both. Lane keys register on the x
+/// axis (the y follows via the shared stopwatch/nav).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn effect_xy_row(
+    app: &mut AppState,
+    ui: &mut egui::Ui,
+    ctx: &RowCtx,
+    idx: usize,
+    xi: usize,
+    yi: usize,
+    label: &str,
+    slider: (f64, f64),
+    hard: (Option<f64>, Option<f64>),
+    sel: crate::app_state::PropSel,
+    row_hl: bool,
+    pending: &mut Option<lumit_core::Op>,
+    fx_edit: &mut Option<(uuid::Uuid, usize, usize, f64)>,
+    nav_jump: &mut Option<f64>,
+) {
+    use lumit_core::anim::{Animation, Property};
+    use lumit_core::model::EffectValue;
+    let layer = ctx.layer;
+    let e = &layer.effects[idx];
+    let (Some(EffectValue::Float(xf)), Some(EffectValue::Float(yf))) = (
+        e.params.get(xi).map(|p| &p.value),
+        e.params.get(yi).map(|p| &p.value),
+    ) else {
+        return;
+    };
+    let (xf, yf) = (xf.clone(), yf.clone());
+
+    let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
+    effect_row_select(app, ui, row_rect, sel);
+
+    // One whole-stack op writing a single axis' new animation.
+    let write_axis = |ai: usize, animation: Animation| -> lumit_core::Op {
+        let mut effects = layer.effects.clone();
+        effects[idx].params[ai].value = EffectValue::Float(Property {
+            animation,
+            extra: serde_json::Map::new(),
+        });
+        lumit_core::Op::SetLayerEffects {
+            comp: ctx.comp_id,
+            layer: layer.id,
+            effects,
+        }
+    };
+    // ... and one writing both axes at once (the shared stopwatch / navigator).
+    let write_both = |xa: Animation, ya: Animation| -> lumit_core::Op {
+        let mut effects = layer.effects.clone();
+        effects[idx].params[xi].value = EffectValue::Float(Property {
+            animation: xa,
+            extra: serde_json::Map::new(),
+        });
+        effects[idx].params[yi].value = EffectValue::Float(Property {
+            animation: ya,
+            extra: serde_json::Map::new(),
+        });
+        lumit_core::Op::SetLayerEffects {
+            comp: ctx.comp_id,
+            layer: layer.id,
+            effects,
+        }
+    };
+
+    // Shared stopwatch: animated if either axis is; toggling keys/unkeys both.
+    let animated = xf.is_animated() || yf.is_animated();
+    let hover = if animated {
+        "Remove animation (freeze both axes)"
+    } else {
+        "Animate: keyframe both axes at the playhead"
+    };
+    if stopwatch_button(&mut c, ctx.theme, animated, hover) {
+        *pending = Some(if animated {
+            write_both(
+                Animation::Static(xf.value_at(ctx.lt)),
+                Animation::Static(yf.value_at(ctx.lt)),
+            )
+        } else {
+            write_both(
+                Animation::Keyframed(upsert_key(&xf, ctx.lt, xf.value_at(ctx.lt))),
+                Animation::Keyframed(upsert_key(&yf, ctx.lt, yf.value_at(ctx.lt))),
+            )
+        });
+    }
+
+    // Shared navigator over the union of both axes' key times.
+    if animated {
+        let tol = 0.5 / ctx.fps.max(1.0);
+        let mut times: Vec<f64> = Vec::new();
+        for p in [&xf, &yf] {
+            if let Animation::Keyframed(keys) = &p.animation {
+                times.extend(keys.iter().map(|k| k.time.to_f64()));
+            }
+        }
+        times.sort_by(f64::total_cmp);
+        times.dedup_by(|a, b| (*a - *b).abs() < tol);
+        match keyframe_navigator(&mut c, &times, ctx.lt, ctx.fps, true) {
+            Some(KeyNavAction::Jump(kt)) => *nav_jump = Some(kt),
+            Some(KeyNavAction::Toggle { on_key }) => {
+                let axis = |p: &Property| -> Animation {
+                    if on_key {
+                        if let Animation::Keyframed(keys) = &p.animation {
+                            let kept: Vec<_> = keys
+                                .iter()
+                                .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
+                                .cloned()
+                                .collect();
+                            if kept.is_empty() {
+                                Animation::Static(p.value_at(ctx.lt))
+                            } else {
+                                Animation::Keyframed(kept)
+                            }
+                        } else {
+                            p.animation.clone()
+                        }
+                    } else {
+                        Animation::Keyframed(upsert_key(p, ctx.lt, p.value_at(ctx.lt)))
+                    }
+                };
+                *pending = Some(write_both(axis(&xf), axis(&yf)));
+            }
+            None => {}
+        }
+    }
+
+    c.label(
+        egui::RichText::new(label)
+            .small()
+            .color(ctx.theme.text_muted),
+    );
+
+    // Two value boxes (x, y), each live-previewing and committing its own axis.
+    let mut axis_box = |c: &mut egui::Ui, ai: usize, p: &Property| {
+        let committed = p.value_at(ctx.lt);
+        let id = egui::Id::new(("fxxy", e.id, ai));
+        let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+        let lo = hard.0.unwrap_or(f64::NEG_INFINITY);
+        let hi = hard.1.unwrap_or(f64::INFINITY);
+        let resp = c.add(
+            egui::DragValue::new(&mut v)
+                .speed((slider.1 - slider.0).abs().max(1.0) / 200.0)
+                .range(lo..=hi)
+                .max_decimals(2),
+        );
+        if resp.dragged() || resp.has_focus() {
+            c.data_mut(|d| d.insert_temp(id, v));
+            *fx_edit = Some((layer.id, idx, ai, v));
+        }
+        if (resp.drag_stopped() || resp.lost_focus()) && (v - committed).abs() > 1e-9 {
+            let animation = if p.is_animated() {
+                Animation::Keyframed(upsert_key(p, ctx.lt, v))
+            } else {
+                Animation::Static(v)
+            };
+            *pending = Some(write_axis(ai, animation));
+            c.data_mut(|d| d.remove::<f64>(id));
+        }
+    };
+    axis_box(&mut c, xi, &xf);
+    axis_box(&mut c, yi, &yf);
+
+    // Lane keys for the x axis (the y follows via the shared stopwatch/nav).
+    if let Animation::Keyframed(keys) = &xf.animation {
+        lane_keys(
+            ui,
+            app,
+            ctx,
+            row_rect,
+            crate::app_state::PropRow::Effect {
+                effect: idx,
+                param: xi,
+            },
+            keys,
+        );
+    }
+}
+
 /// The keyframe navigator for an animated Float effect parameter — the effect
 /// twin of [`keyframe_nav`], which drives a transform property. Shown once the
 /// param is animated, right after its stopwatch: ◄ / ► jump the playhead to the
@@ -411,6 +610,36 @@ pub(crate) fn effects_rows(
             // by `channel_colour_1`; the other two fold into it, so skip them.
             if param.id == CHANNEL_COLOUR_IDS[1] || param.id == CHANNEL_COLOUR_IDS[2] {
                 continue;
+            }
+            // Combined X/Y row (T14): a `<base>_x` param paired with a `<base>_y`
+            // sibling renders as one row with two boxes; the `_y` folds into it.
+            if let Some(base) = param.id.strip_suffix("_y") {
+                if e.params.iter().any(|p| p.id == format!("{base}_x")) {
+                    continue; // folded into the _x row above
+                }
+            }
+            if let Some(base) = param.id.strip_suffix("_x") {
+                if let Some(yi) = e.params.iter().position(|p| p.id == format!("{base}_y")) {
+                    if let ParamKind::Float { slider, hard, .. } = ps.kind {
+                        effect_xy_row(
+                            app,
+                            ui,
+                            ctx,
+                            idx,
+                            pi,
+                            yi,
+                            &xy_label(base),
+                            slider,
+                            hard,
+                            sel,
+                            row_hl,
+                            pending,
+                            fx_edit,
+                            nav_jump,
+                        );
+                        continue;
+                    }
+                }
             }
             if param.id == CHANNEL_COLOUR_IDS[0] {
                 let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
