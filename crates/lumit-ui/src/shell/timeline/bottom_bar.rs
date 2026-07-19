@@ -65,6 +65,18 @@ pub(crate) fn timeline_top_row(
     {
         app.timeline_graph_mode = false;
     }
+    // Hide switched-off layers (TL4): declutter the outline to the live layers.
+    rc.add_space(6.0);
+    if rc
+        .selectable_label(
+            app.timeline_hide_invisible,
+            crate::icons::text(Icon::EyeClosed, 13.0),
+        )
+        .on_hover_text("Hide switched-off layers")
+        .clicked()
+    {
+        app.timeline_hide_invisible = !app.timeline_hide_invisible;
+    }
     // Composition motion-blur master (T9/T22): the comp-wide enable the per-layer
     // MB switches need. With it on, every layer whose own MB switch is set blurs.
     let mut mb = app

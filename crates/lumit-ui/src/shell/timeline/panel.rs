@@ -448,13 +448,17 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
             // `commit_reorder` carries the dragged layer and release y.
             let mut layer_row_centers: Vec<(uuid::Uuid, f32)> = Vec::new();
             let mut commit_reorder: Option<(uuid::Uuid, f32)> = None;
-            // Layer-search filter (TL4): a non-empty query hides non-matching
-            // layers from the outline (view-only; the render is unaffected).
+            // Layer-search filter + hide-switched-off filter (TL4): both are
+            // view-only (the render is unaffected).
             let layer_search = app.timeline_layer_search.trim().to_lowercase();
+            let hide_invisible = app.timeline_hide_invisible;
             for layer in &comp.layers {
                 if !layer_search.is_empty()
                     && !layer.name.to_lowercase().contains(&layer_search)
                 {
+                    continue;
+                }
+                if hide_invisible && !layer.switches.visible {
                     continue;
                 }
                 // The row response only hit-tests over the lane area (the clip

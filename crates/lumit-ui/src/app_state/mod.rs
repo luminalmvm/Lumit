@@ -638,6 +638,10 @@ pub struct AppState {
     /// contain this (case-insensitive) are hidden from the outline. Empty shows
     /// all. A view preference.
     pub timeline_layer_search: String,
+    /// Hide switched-off (invisible) layers from the outline (TL4): the top
+    /// row's hide toggle declutters the list to just the live layers. The layers
+    /// still render/exist — this is a view filter. Off by default.
+    pub timeline_hide_invisible: bool,
     /// In-flight property drag (layer, property, provisional value): commits
     /// once on release so a drag is ONE undo step, not hundreds.
     pub prop_edit: Option<(Uuid, lumit_core::model::TransformProp, f64)>,
@@ -1041,6 +1045,7 @@ impl Default for AppState {
             selected_items: Vec::new(),
             show_audio_bar: true,
             timeline_layer_search: String::new(),
+            timeline_hide_invisible: false,
             mask_drag: None,
             tool: ToolMode::default(),
             eyedropper: None,
