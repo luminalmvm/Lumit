@@ -763,6 +763,24 @@ pub(crate) fn graph_multi_selection(
     s.indices_for(keys).filter(|sel| sel.len() >= 2)
 }
 
+/// The local time a dragged Retime Time keyframe commits to (K-078). The Time
+/// channel's first key is the domain-start boundary — the clip's own clock start
+/// — which docs/04-RETIMING §3 pins at local time 0: a drag may change its
+/// source value but never its time. Pinning it here keeps the rebuilt store's
+/// first boundary at 0 so [`lumit_core::retime::Retime::from_source_keyframes`]
+/// accepts the edited list; without the pin, dragging the first key off 0 makes
+/// the rebuild return None and the whole edit is silently dropped (the reported
+/// "Retime Time keyframes won't drag" defect). Any interior or trailing boundary
+/// keeps its (snapped) dragged time, so those drag freely — like a transform
+/// property's keys.
+pub(crate) fn retime_drag_time(is_retime: bool, idx: usize, dragged_time: f64) -> f64 {
+    if is_retime && idx == 0 {
+        0.0
+    } else {
+        dragged_time
+    }
+}
+
 /// Draw one keyframed property's value/speed curve inside `rect`, with a
 /// compact Ease/Linear header and draggable keys (the Value/Speed lens toggle
 /// lives in the timeline's bottom bar). In the speed lens each key's tangent
@@ -1570,6 +1588,11 @@ pub(crate) fn graph_plot(
                         let fps = comp.frame_rate.fps().max(1.0);
                         nt = (nt * fps).round() / fps;
                     }
+                    // The Retime Time channel's first key is the domain-start
+                    // boundary, pinned at local time 0 (docs/04-RETIMING §3): a
+                    // drag edits only its source value. Pinning keeps the rebuilt
+                    // store valid so the edit commits instead of vanishing.
+                    nt = retime_drag_time(is_retime, idx, nt);
                     app.graph_edit = Some((idx, nt, v_of(p.y)));
                     if !selected {
                         // Dragging an unselected key collapses the selection

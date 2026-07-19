@@ -1600,6 +1600,69 @@ fn a_selection_reads_stale_once_the_keys_change_underneath() {
     assert_eq!(sel.indices_for(&revalued), Some(vec![0, 1]));
 }
 
+// Dragging a Retime Time keyframe horizontally (K-078): an interior/trailing
+// boundary's new time survives the commit round-trip, and the domain-start key
+// is pinned at 0 so its drag commits (source-value edit kept) instead of being
+// silently dropped by from_source_keyframes' t0 == 0 guard. Regression for the
+// "Retime Time keys won't drag left/right" defect.
+#[test]
+fn retime_time_key_horizontal_drag_commits_and_preserves_time() {
+    use lumit_core::retime::Retime;
+    // A three-boundary Time channel: 0, 2, 4 s.
+    let rt = Retime::from_source_keyframes(&[
+        marquee_key(0.0, 0.0),
+        marquee_key(2.0, 2.0),
+        marquee_key(4.0, 4.0),
+    ])
+    .expect("build the Time channel");
+
+    // Drag the interior key from t=2 to t=3: the pin leaves it alone and the new
+    // time survives the rebuild.
+    let mut keys = rt.source_keyframes();
+    let nt = retime_drag_time(true, 1, 3.0);
+    keys[1].time = rational_at(nt);
+    keys.sort_by_key(|k| k.time);
+    let rebuilt = Retime::from_source_keyframes(&keys).expect("interior drag commits");
+    let times: Vec<f64> = rebuilt
+        .source_keyframes()
+        .iter()
+        .map(|k| k.time.to_f64())
+        .collect();
+    assert!(
+        (times[1] - 3.0).abs() < 1e-6,
+        "interior Time key kept its new time: {times:?}"
+    );
+
+    // Drag the domain-start key horizontally to t=1 while also nudging its source
+    // value: the pin holds its time at 0 so the edit commits, and the value edit
+    // is preserved.
+    let mut keys = rt.source_keyframes();
+    let nt = retime_drag_time(true, 0, 1.0);
+    keys[0].time = rational_at(nt);
+    keys[0].value = 0.5;
+    keys.sort_by_key(|k| k.time);
+    let rebuilt = Retime::from_source_keyframes(&keys).expect("first-key drag commits (pinned)");
+    let ks = rebuilt.source_keyframes();
+    assert_eq!(
+        ks[0].time,
+        lumit_core::Rational::ZERO,
+        "domain-start pinned at 0"
+    );
+    assert!(
+        (ks[0].value - 0.5).abs() < 1e-6,
+        "first-key source-value edit preserved"
+    );
+
+    // Without the pin, an off-0 first key would drop the whole edit — the defect.
+    let mut unpinned = rt.source_keyframes();
+    unpinned[0].time = rational_at(1.0);
+    unpinned.sort_by_key(|k| k.time);
+    assert!(
+        Retime::from_source_keyframes(&unpinned).is_none(),
+        "an unpinned first-key drag rebuilds to None (edit dropped)"
+    );
+}
+
 // Moving a layer shifts in/out AND start_offset by the same delta — a move,
 // not a slip: duration and the in→start_offset alignment are preserved.
 #[test]
