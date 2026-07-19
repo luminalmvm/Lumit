@@ -254,3 +254,74 @@ General:
   (`snap_to_value_column` — a shared value column), not the far right; Float, Choice, Bool,
   Seed, Colour and the X/Y pair row all use it, and the timeline's effect rows share the
   same rule. Divider clipping fixed by P4-T6.
+
+# Pass 5 — 2026-07-19 overnight (owner's 26-item list, executed autonomously)
+
+All items done unless marked otherwise; autonomous choices are called out inline.
+
+- [x] P5-1 "MB" text replaced with the Iconoir motion-blur glyph (`Icon::MotionBlur`,
+  fast-arrow-right) in the bottom-bar master toggle, the outline column header and the
+  per-layer switch.
+- [x] P5-2 The timeline top bar reads as ONE taller row: ruler labels sit at the top of the
+  band, the playhead handle and scrub zone share it, and the band spans only the outline+lane
+  split it belongs to.
+- [x] P5-3 A divider now sits above the Transform row (group headers draw their own divider).
+- [x] P5-4 Vertical lane grid lines default OFF (`timeline_grid` default Off); toggleable from
+  the bottom-bar Grid picker and the new lane right-click menu.
+- [x] P5-5 Value boxes no longer touch the divider: ROW_H 24 → 26 with a 5 px bottom gap
+  (`ROW_GAP`) reserved for the divider band, shared by timeline and Effect Controls, x/y link
+  included (Screenshot_147).
+- [x] P5-6 The Effect Controls tab hides until a layer is selected (`set_visible` on the dock
+  tab; a floating EC window is left alone).
+- [x] P5-7 Multi-select drag into a new comp / an open comp adds ONLY the dragged selection
+  (`drag_expansion` — the drag payload carries the project-panel selection, not everything).
+- [x] P5-8 Layer-input (depth layer) selector boxes obey the shared value column like every
+  other row (`snap_to_value_column` in the Layer arm); File pickers too.
+- [x] P5-9 Clicking an effect *property* name selects its layer-view row exactly as transform
+  properties do (same row_click path; the T2/T3 clip-rect fix made the outline half live).
+- [x] P5-10 Effects in the layer view sit behind a per-effect twirl, collapsed by default
+  there, open by default in Effect Controls (`("fx-open", layer, effect)` egui state).
+- [x] P5-11 T4: copy in graph view works — graph selection now wins outright over a stale lane
+  selection, and stale (index,time) pins fall back to nearest-time matching.
+- [x] P5-12 T5: bezier handle LENGTHS survive copy/paste — absolute seconds are captured at
+  copy and influence is rebuilt against the destination gap, clamped to it.
+- [x] P5-13 T6 reversed: clicking an effect's title selects the layer only, not every param.
+- [x] P5-14 T7: property names are plain labels — no I-beam, no drag-selectable text.
+- [x] P5-15 T8: flow motion blur's rate is a plain float labelled "Input frame rate".
+- [x] P5-16 The outline/lane divider drags in graph view too (the strip right of the divider
+  is interactive in both views).
+- [x] P5-17 T11 was the VIEWER (Screenshot_148): the zoomed image now clips to the image area
+  so it cannot bleed over the panel corners, and the transport bar's bottom corners round to
+  match the card.
+- [x] P5-18 T12: Posterize Scope param removed — reach is implied by the carrier layer's kind
+  (adjustment = everything below, other = its own effects/source). K-166; stored Scope values
+  in old saves are ignored.
+- [x] P5-19 T14: percent-of-raster pairs (Transform effect anchor/position, twirl centres)
+  display and edit in PIXELS; the position eyedropper converts a comp click to percent
+  internally. Defaults are the layer centre (see P5-23).
+- [x] P5-20 T17: custom tap tints are normalised per output channel (columns sum to 1) so they
+  "only affect the parts that aren't aligned" — fringes recolour, exposure holds, default
+  primaries bit-exact. K-167, both RGB split and Chromatic aberration classic modes.
+- [x] P5-21 T18: Shake Edges default is Mirror.
+- [x] P5-22 T19: Datamosh Intensity default is 1.
+- [x] P5-23 T23: the Transform effect instantiates with anchor AND position at the target
+  raster's centre (`fx::instantiate_for_raster`, used by every apply site: EC toolbar, both
+  drags, right-click menu, command palette).
+- [x] P5-24 The UI-scale slider applies on release (or on a click-jump), not per-pixel while
+  dragging, so the settings window no longer flickers through scales mid-drag.
+- [x] P5-25 T25: the hidden audio waveform can be re-enabled — a toggle in the Window menu
+  (no View menu exists yet) and in the new lane-area right-click menu (alongside the grid
+  option).
+- [x] P5-26 TL2: the five AE column groups (K-168) — eye/audio/solo/lock ·
+  chip/number/name · flow-or-collapse/fx/MB/3D · matte/blend · parent. New: lock switch
+  (freezes bar/trim/reorder only — values stay editable; my choice, matching what a stray
+  drag can break), label chip (8 theme colours, `Layer.label: u8`, serde default),
+  stack number, fx bypass switch and the parent dropdown in the timeline. Deliberately NOT
+  built (no backing machinery yet; documented in K-168): shy, quality (needs bicubic
+  sampler), preserve underlying transparency (needs compositor support), pick-whip drag
+  (dropdown stands in).
+
+Autonomous scope choices this pass: the K-166 kind-implied reach model; per-channel tint
+normalisation as the reading of "only affect the parts that aren't aligned"; lock's
+enforcement boundary; the four TL2 switches deferred; graph-mode dividers staying
+outline-only so curves stay clean.

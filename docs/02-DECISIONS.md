@@ -2101,3 +2101,41 @@ a phase-domain shutter.** From the owner (T18): "Shake: add its own motion-blur 
   established look are unchanged; the old spec-table default of "on" (docs/08 §3.4) is
   superseded. Built in an isolated worktree against a base predating K-161–K-163; renumbered
   from K-164 to K-165 on merge (T19 Datamosh had already taken K-164).
+
+**K-166 · DECIDED · Posterize Time loses its Scope parameter; reach is implied by the carrier
+layer's kind (pass 5, T12).** The *Everything below* / *This layer's effects* choice duplicated
+information the layer stack already expresses: an **adjustment layer's** effect input *is* the
+composite of everything beneath it, and any **other layer's** effect input is its own source and
+stack. So the parameter is gone and the hold simply covers whatever the carrier would feed its
+effects anyway — Posterize on an adjustment layer steps the whole scene below (laid back by the
+adjustment's coverage), Posterize on a plain layer steps that layer's own effects and source
+sampling while its transform stays live. Both K-133 behaviours survive unchanged; only the
+selector is removed. Orchestration sites (`posterize_below`, `posterize_sample_times`, export's
+below-filter) key on `LayerKind::Adjustment` instead of the stored choice. Projects saved with a
+Scope value still load (unknown params are ignored on read); the stored value is simply unread.
+Pre-release, so no migration is owed (the standing backwards-compat policy).
+
+**K-167 · DECIDED · Three-tap tint columns are normalised per output channel in the classic
+split modes (pass 5, T17).** Owner report: changing the tap tints on RGB split / Chromatic
+aberration shifted the whole image's exposure, not just the fringe. Root cause: the three taps
+sum, so tints whose per-channel weights do not sum to 1 rescale even perfectly aligned regions.
+Fix: `lumit_core::fx::normalise_tint_columns` rescales each output channel's column of tap
+weights to sum to 1 (guarded below 1e-6) before resolve hands the tints to CPU or GPU — the
+same rule the Wavelength gradient already applied host-side (K-163). Consequence: custom tints
+only affect the parts of the picture where the taps disagree (the misaligned fringe); uniform
+regions pass through at original exposure, and the default red / green / blue columns already
+sum to 1, so the classic split stays bit-exact. Applied in both classic resolve arms; Wavelength
+mode was already normalised.
+
+**K-168 · DECIDED · The Timeline outline adopts After Effects' five column groups; lock and
+label-colour switches enter the model (pass 5, TL2).** Left to right: **1** visibility · audio ·
+solo · lock, **2** label chip · stack number · name, **3** flow-or-collapse · fx bypass · motion
+blur · 3D, **4** matte · blend, **5** parent. New model surface: `Op::SetLayerLocked` and
+`Op::SetLayerLabel`; `Layer.label: u8` (serde default 0, so old projects load). A locked layer's
+bar, trims and stack order refuse edits (its property values stay editable — v1 lock protects
+timing/order, the thing a stray drag breaks); the label chip cycles eight colours drawn from the
+theme's existing roles via `Theme::label_colour` (no new hex, docs/15 §4). Neither `label` nor
+`locked` feeds the frame cache key — both are organisational, never pixels. Deliberately not
+built yet, each blocked on machinery it would misrepresent without: **shy** (needs an outline
+filter row), **quality** (needs a bicubic sampler choice), **preserve underlying transparency**
+(needs compositor support), and the **pick-whip** parent drag (the dropdown stands in, K-103).

@@ -431,7 +431,7 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | *Motion blur* (twirl) | | |
 | — Motion blur | boolean | off |
 | — Shutter | 0–1 | 0.5 |
-| Edges | Transparent / Repeat / Mirror | Repeat |
+| Edges | Transparent / Repeat / Mirror | Mirror |
 | Mode | Continuous / Triggered | Continuous |
 | Trigger source | marker-trigger | comp beat markers |
 | Decay | 0.05–2 s | 0.35 s |
@@ -453,7 +453,8 @@ resample. This is the streak the S_Shake feature wiggle expressions never had.
 
 **Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, the
 Per-axis wobble twirl (X/Y/Z amount and frequency), the Motion blur twirl (T18/K-165), an
-Edges control (Transparent / Repeat / Mirror, default Repeat) and Seed (per-instance
+Edges control (Transparent / Repeat / Mirror, default Mirror — pass 5 owner feedback: the
+reflected border reads most natural under a shake) and Seed (per-instance
 default, with reseed). The generator is pinned as two octaves of seeded value noise
 (lacunarity 2, gain 0.5, smoothstep-interpolated, one independent channel per axis) sampled
 at local time × frequency — deterministic and hop-free per §2.4. Resolved host-side into an
@@ -514,6 +515,12 @@ aberration carries (`channel_colour_1/2/3`, default red / green / blue) tints th
 classic mode the primaries reduce to the historical channel-separated split; other colours
 produce coloured fringes (a cyan/magenta split, a warm/cool split, and so on). The picker drives
 the **Wavelength** mode too (A1/K-163): it defines the dispersion gradient there.
+**Normalisation (K-167, T17):** the classic mode normalises the three tints per output channel
+(each channel's column of tap weights is rescaled to sum to 1, host-side in
+`lumit_core::fx::normalise_tint_columns`, shared by CPU and GPU) — the same rule the
+Wavelength gradient already applied. So custom tints recolour only where the taps *disagree*
+(the misaligned fringe); uniform or aligned regions pass through at their original exposure,
+and the default primaries are untouched bit-for-bit (columns already sum to 1).
 
 **Wavelength samples (FX-9, K-144):** the Wavelength mode carries a **Samples** control (the
 tap count, `3..=64`, default 16). More taps fill the same `±offset` span more densely, so a
@@ -753,7 +760,8 @@ beyond the ordinary parameter-animation case.
 
 #### Datamosh
 
-**Parameters:** Intensity (default 0.5, open above per K-135), Displacement (frames, default
+**Parameters:** Intensity (default 1, open above per K-135 — pass 5 owner feedback raised it
+from 0.5 so the drop-on default is the full melt), Displacement (frames, default
 4, hard min 1, open above per K-135), Bloom (0–1, default 0.6), Reset interval (seconds,
 default 0 = off, hard min 0, open above), Mix.
 
@@ -901,7 +909,10 @@ rule only reaches `Color32`/hex-literal colours in widget code).
 (toward centre / on the pixel / away), each sampled and multiplied component-wise by its
 channel colour and summed; G and alpha stay put. Default tints red / green / blue keep only
 their own channel, so R reads outward, B inward and G on its own pixel — the classic split.
-Premultiplied throughout, edges clamp. `cheap` cost, `full-frame` ROI.
+Custom tints are normalised per output channel exactly as §3.6's classic mode is (K-167,
+`normalise_tint_columns`): fringes recolour, aligned regions keep their exposure, and the
+default primaries stay bit-exact. Premultiplied throughout, edges clamp. `cheap` cost,
+`full-frame` ROI.
 
 **Channel picker (P2, K-143):** the three tap colours are edited through the **reusable
 three-colour channel picker** — three colour swatches (defaults red / green / blue), each
@@ -1252,8 +1263,9 @@ remaps by luma rather than grading in place. The fuller shadows/mids/highlights 
 
 ### 3.25 Posterize time — temporal frame-rate hold (stop-motion look)
 
-**Parameters:** Frame rate (fps, default 12), Phase (comp seconds, default 0), Scope
-(*Everything below* | *This layer's effects*, default *Everything below*).
+**Parameters:** Input frame rate (default 12), Phase (comp seconds, default 0). There is no
+Scope parameter (K-166): what the hold covers is implied by the kind of layer carrying the
+effect — see **Reach** below.
 
 **Algorithm sketch.** A **temporal** effect, not a per-pixel one: it changes *what time* the
 layers it covers render at. The current comp time snaps down to a coarser grid —
@@ -1270,19 +1282,22 @@ rather than filters, it lives at the frame-orchestration layer — detected wher
 `run_ops` — and so resolves to **no** per-pixel op. See
 [docs/impl/temporal-rerender.md](impl/temporal-rerender.md).
 
-**Scope.** *Everything below* is **adjustment behaviour**: the composite of everything beneath
-the effect's adjustment layer re-renders at `held_t` and is laid back over the live composite
-by the adjustment's coverage (its mask × opacity), so the owner's global "posterise the whole
-scene" pass is simply the effect on a full-frame adjustment layer. *This layer's effects* holds
-only the layer's own **effect stack and its source sampling** at `held_t` (a per-layer time
-substitution — no re-render of others, no orchestration re-entry): the effects and the footage
-decode step on the coarse grid while the layer's **transform stays live**, so the layer moves
-smoothly but its own effect animation and footage playback are choppy — the AE per-layer form.
-The held effect time is `lumit_core::fx::this_layer_effect_time` (the grid computed on comp
-time, mapped into the layer's own base), fed to `resolve_stack_temporal` as the sample time so a
+**Reach (K-166 — implied by the carrier, no Scope parameter).** The effect holds whatever the
+layer carrying it would feed its effect stack anyway, so no parameter is needed. On an
+**adjustment layer** that input is the composite of everything beneath, so the whole scene
+below re-renders at `held_t` and is laid back over the live composite by the adjustment's
+coverage (its mask × opacity) — the owner's global "posterise the whole scene" pass is simply
+the effect on a full-frame adjustment layer. On any **other layer** the input is the layer's
+own source and stack, so the hold is per-layer: its **effect stack and its source sampling**
+step at `held_t` (a per-layer time substitution — no re-render of others, no orchestration
+re-entry) while the layer's **transform stays live**, so the layer moves smoothly but its own
+effect animation and footage playback are choppy — the AE per-layer form. The held effect time
+is `lumit_core::fx::this_layer_effect_time` (the grid computed on comp time, mapped into the
+layer's own base), fed to `resolve_stack_temporal` as the sample time so a
 `sample_temporally == false` effect still resolves at the live playhead; the held source frame
-comes from the same `posterize_sample_times` snap the *Everything below* layers use. Both scopes
-ship in v1.
+comes from the same `posterize_sample_times` snap the below-stack layers use. (An earlier
+build carried an explicit Scope choice; K-166 removed it — a stored Scope value in an old
+project is ignored and the kind rule above applies.)
 
 **Determinism & cache.** `held_t` is a pure function of `t`, `rate` and `phase`, so many
 frames share it and re-render identically; the frame key folds the effect's parameters, and
@@ -1332,7 +1347,7 @@ layer — detected where `build_comp_draws` + realise (preview) and `render_comp
 run, never in `run_ops` — and so resolves to **no** per-pixel op. See
 [docs/impl/temporal-rerender.md](impl/temporal-rerender.md).
 
-**Adjustment behaviour.** Like Posterize's *Everything below*, it is an adjustment effect: the
+**Adjustment behaviour.** Like Posterize on an adjustment layer, it is an adjustment effect: the
 composite beneath the effect's layer is what re-renders, laid back over the live composite by
 the adjustment's coverage (mask × opacity). The owner's global "motion-blur the whole scene"
 pass is simply the effect on a full-frame adjustment layer.

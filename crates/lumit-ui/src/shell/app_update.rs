@@ -732,6 +732,18 @@ impl Shell {
                         ui.close_menu();
                     }
                     ui.separator();
+                    // T25: the waveform bar can be hidden from its own close
+                    // button, so it needs a durable way back on — here and in
+                    // the Timeline lane right-click menu.
+                    if ui
+                        .selectable_label(self.app.show_audio_bar, "Audio waveform")
+                        .on_hover_text("Show the audio waveform bar under the Timeline lanes")
+                        .clicked()
+                    {
+                        self.app.show_audio_bar = !self.app.show_audio_bar;
+                        ui.close_menu();
+                    }
+                    ui.separator();
                     // Theme, shape, motion and performance now live in the
                     // Settings window (Appearance / Performance pages).
                     if ui.button("Settings…").clicked() {

@@ -60,25 +60,29 @@ precedence over Posterize when an adjustment somehow carries both (one temporal 
 adjustment in v1).
 
 ## 4. Posterize Time
-- Params: **Rate** (fps, e.g. 12), optional **Phase**; **Scope** = *Everything below* | *This
-  layer's effects*. Category Temporal, cost cheap (one render at the held time — often the
-  SAME held time across many frames, so the frame cache key collapses them: a big win).
+- Params: **Input frame rate** (e.g. 12), optional **Phase**. No Scope parameter (K-166): the
+  reach is implied by the carrier layer's kind — an **adjustment layer** holds everything below
+  (its effect input); any **other layer** holds its own source and stack. Category Temporal,
+  cost cheap (one render at the held time — often the SAME held time across many frames, so the
+  frame cache key collapses them: a big win).
 - Held time `τ = floor((t − phase)·rate)/rate + phase`.
-- **Everything below**: `render_below_at(…, τ)` — the adjustment path.
-- **This layer's effects**: no re-render of others; the layer the effect sits on evaluates its
+- **Adjustment carrier**: `render_below_at(…, τ)` — the below re-render path.
+- **Any other carrier**: no re-render of others; the layer the effect sits on evaluates its
   own effect stack at `τ` instead of `t` (a per-layer time substitution feeding its own stack),
-  its transform staying live. Simpler; no orchestration re-entry. **Landed (K-133):**
-  `this_layer_effect_time(effects, fx_on, lt, start_offset)` returns the held layer time (the
-  grid computed on comp time `lt + start_offset`, mapped back) for a *This layer* Posterize and
-  `lt` unchanged otherwise; both `build_comp_draws_at` (preview) and export's `apply_fx` feed it
-  to `resolve_stack_temporal` as the sample time (so `sample_temporally == false` still holds at
-  the live `lt`), so the two are identical (K-031).
+  its transform staying live. Simpler; no orchestration re-entry. **Landed (K-133, reach rule
+  K-166):** `this_layer_effect_time(effects, fx_on, lt, start_offset)` returns the held layer
+  time (the grid computed on comp time `lt + start_offset`, mapped back) whenever a live
+  Posterize is present and `lt` unchanged otherwise; both `build_comp_draws_at` (preview) and
+  export's `apply_fx` feed it to `resolve_stack_temporal` as the sample time (so
+  `sample_temporally == false` still holds at the live `lt`), so the two are identical (K-031).
+  The kind split lives at the orchestration sites: `posterize_below`/`posterize_sample_times`
+  treat only `LayerKind::Adjustment` carriers as below-holds.
 - **Footage decode snap (FX-1).** The held re-render alone quantises *comp-driven* animation
   (transforms/effects/camera); a scene that is only footage playing back would not visibly step,
   because the decode planner still chose the frame-time source frame. `posterize_sample_times(
   layers, t) -> Vec<f64>` closes that: it walks the stack top-to-bottom composing each live
-  Posterize's grid onto a running sample time (an *Everything below* adjustment holds every layer
-  beneath it; a *This layer* Posterize holds only its own layer's source sampling), and both the
+  Posterize's grid onto a running sample time (an adjustment carrier holds every layer
+  beneath it; any other carrier holds only its own layer's source sampling — K-166), and both the
   preview decode planner (`collect_comp_jobs`) and export (`prepare` on the main pass,
   `collect_below_pixels` for the held re-render) read it to snap *which source frame each covered
   layer decodes* to `τ`. So the held re-render's footage frames now match the held grid, footage
@@ -114,9 +118,9 @@ share a key — the deduplication that makes it cheap). No new non-determinism.
 1. `render_below_at` shared helper (preview + export) — the risky orchestration re-entry;
    prove preview == export on a still scene first (a re-render at the same `t` must be
    bit-identical to no re-render).
-2. Posterize Time, *Everything below* scope (one render at `τ`) — the simplest consumer.
-3. `EffectInstance.sample_temporally` (landed, K-132) + Posterize Time *this-layer* scope
-   (landed, K-133).
+2. Posterize Time on an adjustment carrier (one render at `τ`) — the simplest consumer.
+3. `EffectInstance.sample_temporally` (landed, K-132) + Posterize Time per-layer reach
+   (landed, K-133; carrier-kind rule K-166).
 4. Accumulation MB (N samples + the additive average) on top of (1) (landed, K-134).
 Each step is a K-decision + docs/08 section + oracle/parity test where one applies (these have
 no per-pixel oracle; the test is a still-scene identity + a moving-scene coverage check, as

@@ -254,13 +254,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   12 a second). Smoothing footage *between* those held frames — real motion blur on the streaks —
   is a different effect (the flow Motion blur); Posterize just quantises the playback grid. And a
   couple of exotic combinations (an echo *inside* the held part, or Posterize buried in a
-  collapsed precomp) quietly do nothing rather than risk a wrong picture. There is also a Scope
-  switch for a per-layer version, "just this layer's own effects": drop Posterize onto a normal
-  layer and set that scope, and only *that layer* goes choppy on the grid — its effects and its
-  footage playback step while the layer keeps *moving* smoothly. It needs no re-render of the rest
-  of the scene at all: the layer simply reads a "held" clock for its own effect stack and source
-  frame while its position reads the live one. That is why it is the
-  cheap, simple cousin of the whole-scene version.
+  collapsed precomp) quietly do nothing rather than risk a wrong picture. There used to be a
+  Scope switch choosing between "everything below" and "just this layer" — it is gone (K-166),
+  because the layer you drop the effect on already answers the question: an *adjustment layer's*
+  whole job is to affect everything beneath it, so Posterize there steps the whole scene; drop it
+  on a *normal* layer and only that layer goes choppy — its effects and its footage playback
+  step while the layer keeps *moving* smoothly. The per-layer form needs no re-render of the
+  rest of the scene at all: the layer simply reads a "held" clock for its own effect stack and
+  source frame while its position reads the live one. That is why it is the cheap, simple
+  cousin of the whole-scene version.
 - **"Don't re-sample this effect" — a per-effect opt-out for the choppy passes.** When
   Posterize time (and, soon, accumulation motion blur) re-renders the scene at a *different*
   moment, it normally re-runs everything at that moment. But some effects are expensive or
@@ -505,7 +507,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   its parameter block, so both paths read literally the same numbers (the same trick as
   the host-computed sines). Its columns are normalised so a flat image passes through
   unchanged — the fringe is tinted, not the exposure — and alpha still refuses to move,
-  so mattes never grow coloured rims in either mode.
+  so mattes never grow coloured rims in either mode. The classic three-tap mode now gets
+  the *same* normalisation (K-167): because the three taps are simply added together,
+  custom tints used to brighten or darken the whole picture, not just the fringe — each
+  output channel's three weights are now rescaled to add up to one before the kernel sees
+  them, so recolouring the split only recolours the parts where the taps disagree (the
+  misaligned edges), and the default red / green / blue is untouched to the bit.
 - **The Transform effect** (K-090, replacing the dropped smooth-zoom idea) is the layer
   transform group — Anchor, Position, Scale, Rotation, Opacity, same names and units —
   packaged as a stack effect. Why would you want a second transform? *Adjustment
@@ -1389,10 +1396,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the two never fight). Layers/Graph is only a change of what the lanes *draw* — the outline stays
   identical between the two, so twirling a layer open shows the same rows either way.
 - **Working the layer outline** — a few habits from other editors now work the way you
-  would expect. A row of tiny icons sits over the outline columns, level with the time
-  ruler, naming each one at a glance: an eye over visibility with the speaker (volume)
-  now sitting right beside it, "Layer" over the names, "Matte" and "Blend" over those two
-  dropdowns, the flow glyph, and a cube over the 3D switch. The thin line between the
+  would expect. The outline's switches sit in After Effects' five familiar clusters
+  (K-168), left to right: first the **eye, speaker, solo dot and padlock**; then a small
+  **label-colour chip**, the layer's **stack number** and its **name**; then the
+  **flow-or-collapse glyph, an fx bypass switch, motion blur and 3D**; then the **Matte
+  and Blend** dropdowns; and at the far right a **Parent** dropdown (the same
+  parent-and-inherit link the Effect Controls tab offers — pick another layer and this one
+  rides its transform). The padlock freezes a layer's *timing*: while locked, its bar
+  will not slide, its ends will not trim and it will not reorder in the stack — though its
+  values stay editable, since the lock exists to stop stray drags, not work. The label
+  chip cycles through eight theme colours with a click, purely for telling layers apart
+  in a tall stack; it changes nothing about the picture. A row of tiny icons sits over
+  the outline columns, level with the time ruler, naming each cluster at a glance. The
+  thin line between the
   outline and the lanes is a handle — drag it to widen or narrow the outline; if you drag
   it hard against a limit and keep pushing, it now waits for the cursor to travel back to
   where the handle actually is before it starts moving again, rather than lurching the
