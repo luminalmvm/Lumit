@@ -172,7 +172,7 @@ parallel pass left several not-quite-right). No migration burden (pre-release).
 - [ ] T5 Copy/paste of a bezier key: handle LENGTH must be preserved regardless of neighbour distance, except clamped to the gap when the next/prev key is closer than the handle length (value-graph semantics).
 - [x] T6 Clicking an effect title now selects the whole effect (highlights the title, joins the selection); title highlights when any of its params is selected.
 - [x] T7 Shift-range now stops at section boundaries: a cross-effect (or cross-kind) shift-click just picks the target; within one effect it ranges.
-- [ ] T8 Flow input rate still shows "Native"; should hold a float defaulting to the layer's framerate.
+- [x] T8 Flow input rate now shows a concrete fps (defaults to the comp/layer frame rate), no "Native" word; typing 0 still conforms to native.
 - [ ] T9 Per-layer MB toggle appears to do nothing (should blur the layer's transform motion).
 - [ ] T10 Bottom-bar graph icons still ~1-2px clipped; match the magnet icon's placement.
 - [ ] T11 Viewfinder still spills over the inner border; round-mode bottom bar not rounded.

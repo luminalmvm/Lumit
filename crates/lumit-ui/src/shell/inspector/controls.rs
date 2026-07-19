@@ -506,25 +506,22 @@ pub(crate) fn flow_group_rows(
          flow-interpolate high-speed footage into real slow motion. Type a rate, or 0 for native",
     );
 
-    // The value field: a numeric box the user types into, 0 shown as "Native".
-    // A per-widget temp holds the in-progress edit so the box tracks the drag or
-    // typed value; release commits one SetLayerRetime, like the effect rows.
+    // The value field: a numeric box the user types any rate into. It defaults
+    // to the layer's frame rate (T8) — an unset (0 = Native) value shows and
+    // edits from the comp's fps rather than the word "Native", so the box always
+    // holds a concrete float. 0 still reads as Native (the source's own rate) at
+    // render, so typing 0 conforms to native.
     let committed = prop.value_at(ctx.lt);
+    let shown_default = if committed < 0.5 { ctx.fps } else { committed };
     let id = egui::Id::new(("flow-input-rate", ctx.layer.id));
-    let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+    let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(shown_default);
     let resp = c
         .add(
             egui::DragValue::new(&mut v)
                 .speed(0.25)
                 .range(0.0..=1000.0)
                 .max_decimals(2)
-                .custom_formatter(|n, _| {
-                    if n < 0.5 {
-                        "Native".to_owned()
-                    } else {
-                        format!("{n:.0} fps")
-                    }
-                })
+                .custom_formatter(|n, _| format!("{n:.0} fps"))
                 .custom_parser(|s| {
                     let t = s.trim();
                     if t.is_empty() || t.eq_ignore_ascii_case("native") {
@@ -538,12 +535,14 @@ pub(crate) fn flow_group_rows(
                     num.parse::<f64>().ok()
                 }),
         )
-        .on_hover_text("Type a frame rate, or 0 for native");
+        .on_hover_text("Frame rate the footage is read at (type 0 for native)");
     if resp.dragged() || resp.has_focus() {
         c.data_mut(|d| d.insert_temp(id, v));
     }
     if resp.drag_stopped() || resp.lost_focus() {
-        if (v - committed).abs() > 1e-9 {
+        // Only an actual change off the shown default commits (so merely focusing
+        // the box, which shows the comp fps for a Native value, never writes).
+        if (v - shown_default).abs() > 1e-9 {
             let animation = if is_animated {
                 lumit_core::anim::Animation::Keyframed(upsert_key(&prop, ctx.lt, v))
             } else {
