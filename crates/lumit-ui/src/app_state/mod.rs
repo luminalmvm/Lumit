@@ -306,6 +306,10 @@ pub enum EyedropperMode {
     /// Sample a depth proxy (the luma of the picked pixel) and write it to a
     /// Float parameter — the depth-of-field Focus pick.
     Depth,
+    /// Pick a POSITION (T14): the clicked pixel's comp x/y are written to a pair
+    /// of Float parameters — the x goes to [`EyedropperTarget::param`], the y to
+    /// `y_param`. Used by the combined X/Y effect row's viewfinder picker.
+    Position { y_param: usize },
 }
 
 /// An armed eyedropper: which effect parameter the next Viewer click writes,

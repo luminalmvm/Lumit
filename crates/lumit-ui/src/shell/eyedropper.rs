@@ -269,6 +269,11 @@ pub(crate) fn viewer_overlay(
                                 crate::app_state::EyedropperMode::Colour => Sample::Colour(
                                     average_colour(&frame.rgba, w, h, cx, cy, region),
                                 ),
+                                // Position pick (T14): the clicked comp pixel's
+                                // x/y, written to the x/y parameter pair.
+                                crate::app_state::EyedropperMode::Position { .. } => {
+                                    Sample::Position(f64::from(cx), f64::from(cy))
+                                }
                                 crate::app_state::EyedropperMode::Depth => {
                                     Sample::Depth(depth_at.unwrap_or_else(|| {
                                         // Undecoded-reference fallback: still honour
@@ -321,6 +326,8 @@ enum Sample {
     Colour([f64; 3]),
     /// A 0..1 depth proxy for a Float parameter (DoF Focus).
     Depth(f64),
+    /// A comp-pixel position (x, y) for a pair of Float parameters (T14).
+    Position(f64, f64),
 }
 
 /// Write a sampled value back to its parameter as one undoable
@@ -346,6 +353,29 @@ fn commit_sample(app: &mut AppState, target: EyedropperTarget, sample: Sample) {
     let mut effects = layer.effects.clone();
     let params = &mut effects[target.effect].params;
     if target.param >= params.len() {
+        return;
+    }
+    // A position pick (T14) writes TWO Float params: x to `param`, y to the
+    // mode's `y_param`. Handled before the single-param match below.
+    if let Sample::Position(x, y) = sample {
+        let crate::app_state::EyedropperMode::Position { y_param } = target.mode else {
+            return;
+        };
+        if y_param >= params.len() {
+            return;
+        }
+        if !matches!(params[target.param].value, EffectValue::Float(_))
+            || !matches!(params[y_param].value, EffectValue::Float(_))
+        {
+            return;
+        }
+        params[target.param].value = EffectValue::Float(Property::fixed(x));
+        params[y_param].value = EffectValue::Float(Property::fixed(y));
+        app.commit(lumit_core::Op::SetLayerEffects {
+            comp: comp_id,
+            layer: target.layer,
+            effects,
+        });
         return;
     }
     match (&mut params[target.param].value, sample) {
@@ -562,7 +592,10 @@ fn draw_magnifier(
     let sw =
         egui::Rect::from_center_size(egui::pos2(bar.left() + 10.0, cap_y), egui::vec2(10.0, 10.0));
     let swatch_col = match mode {
-        crate::app_state::EyedropperMode::Colour => {
+        // A position pick (T14) shows the pixel under the cursor, like a colour
+        // pick — a visual anchor for where the x/y will land.
+        crate::app_state::EyedropperMode::Colour
+        | crate::app_state::EyedropperMode::Position { .. } => {
             let avg = average_colour(rgba, w, h, cx, cy, region);
             crate::theme::document_colour([
                 crate::pixels::srgb_encode(avg[0] as f32),

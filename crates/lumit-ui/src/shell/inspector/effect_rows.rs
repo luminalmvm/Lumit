@@ -213,6 +213,32 @@ pub(crate) fn effect_xy_row(
     axis_box(&mut c, xi, &xf);
     axis_box(&mut c, yi, &yf);
 
+    // Viewfinder pixel-picker (T14): arm the eyedropper in Position mode so the
+    // next Viewer click writes the clicked comp x/y into this pair — the x/y
+    // twin of the DoF Focus depth pick.
+    let (pick_rect, pick_resp) =
+        c.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+    let pick_col = if pick_resp.hovered() {
+        ctx.theme.text_primary
+    } else {
+        ctx.theme.text_secondary
+    };
+    eyedropper::paint_icon(c.painter(), pick_rect, pick_col);
+    if pick_resp
+        .on_hover_text("Pick x/y from the Viewer")
+        .clicked()
+    {
+        eyedropper::request_arm(
+            c.ctx(),
+            EyedropperTarget {
+                layer: layer.id,
+                effect: idx,
+                param: xi,
+                mode: EyedropperMode::Position { y_param: yi },
+            },
+        );
+    }
+
     // Lane keys for the x axis (the y follows via the shared stopwatch/nav).
     if let Animation::Keyframed(keys) = &xf.animation {
         lane_keys(
