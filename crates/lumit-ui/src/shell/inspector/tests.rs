@@ -187,6 +187,216 @@ mod lane_key_tests {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod prop_select_gesture_tests {
+    //! The shared list-select gesture (`prop_click_select`) drives transform,
+    //! effect and Retime rows alike (UI-6), so a mixed selection is possible.
+    use super::*;
+    use crate::app_state::{PropRow, PropSel};
+    use lumit_core::model::TransformProp;
+
+    fn tf(prop: TransformProp) -> PropSel {
+        PropSel {
+            layer: uuid::Uuid::nil(),
+            row: PropRow::Transform(prop),
+        }
+    }
+    fn eff(effect: usize, param: usize) -> PropSel {
+        PropSel {
+            layer: uuid::Uuid::nil(),
+            row: PropRow::Effect { effect, param },
+        }
+    }
+    fn retime() -> PropSel {
+        PropSel {
+            layer: uuid::Uuid::nil(),
+            row: PropRow::Retime,
+        }
+    }
+    fn ctrl() -> egui::Modifiers {
+        egui::Modifiers {
+            ctrl: true,
+            ..Default::default()
+        }
+    }
+    fn shift() -> egui::Modifiers {
+        egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        }
+    }
+
+    // A plain click on an effect row single-selects it (resetting the set) and
+    // reports the plain click so the caller can open its curve.
+    #[test]
+    fn plain_click_on_an_effect_row_single_selects() {
+        let mut anchor = Some(tf(TransformProp::Rotation));
+        let mut set = vec![tf(TransformProp::Rotation), eff(0, 0)];
+        let mut target = None;
+        let plain = prop_click_select(
+            &mut anchor,
+            &mut set,
+            &mut target,
+            eff(1, 2),
+            egui::Modifiers::default(),
+        );
+        assert!(
+            plain,
+            "a plain click reports true (open curve / single select)"
+        );
+        assert_eq!(set, vec![eff(1, 2)]);
+        assert_eq!(anchor, Some(eff(1, 2)));
+        assert_eq!(target, None);
+    }
+
+    // Ctrl-click toggles an effect row's membership without disturbing the rest.
+    #[test]
+    fn ctrl_click_toggles_an_effect_row() {
+        let mut anchor = Some(tf(TransformProp::PositionX));
+        let mut set = vec![tf(TransformProp::PositionX)];
+        let mut target = None;
+        // Add the effect row.
+        assert!(!prop_click_select(
+            &mut anchor,
+            &mut set,
+            &mut target,
+            eff(0, 0),
+            ctrl()
+        ));
+        assert_eq!(set, vec![tf(TransformProp::PositionX), eff(0, 0)]);
+        assert_eq!(anchor, Some(eff(0, 0)));
+        // Ctrl-click it again removes it.
+        assert!(!prop_click_select(
+            &mut anchor,
+            &mut set,
+            &mut target,
+            eff(0, 0),
+            ctrl()
+        ));
+        assert_eq!(set, vec![tf(TransformProp::PositionX)]);
+    }
+
+    // Shift-click an effect row marks it as the range target (resolved later
+    // against the draw order), never a plain click.
+    #[test]
+    fn shift_click_an_effect_row_sets_the_range_target() {
+        let mut anchor = Some(tf(TransformProp::PositionX));
+        let mut set = vec![tf(TransformProp::PositionX)];
+        let mut target = None;
+        let plain = prop_click_select(&mut anchor, &mut set, &mut target, eff(2, 1), shift());
+        assert!(!plain);
+        assert_eq!(target, Some(eff(2, 1)));
+    }
+
+    // The Retime row selects exactly like the other row types: plain click
+    // single-selects it; Ctrl-click adds it to a mixed selection.
+    #[test]
+    fn the_retime_row_selects_like_the_others() {
+        let mut anchor = None;
+        let mut set = Vec::new();
+        let mut target = None;
+        let plain = prop_click_select(
+            &mut anchor,
+            &mut set,
+            &mut target,
+            retime(),
+            egui::Modifiers::default(),
+        );
+        assert!(plain);
+        assert_eq!(set, vec![retime()]);
+        assert_eq!(anchor, Some(retime()));
+        // Ctrl-click a transform row: a mixed transform + Retime selection.
+        prop_click_select(
+            &mut anchor,
+            &mut set,
+            &mut target,
+            tf(TransformProp::Opacity),
+            ctrl(),
+        );
+        assert_eq!(set, vec![retime(), tf(TransformProp::Opacity)]);
+    }
+
+    // A Ctrl-built selection can mix all three row kinds at once.
+    #[test]
+    fn a_mixed_selection_spans_transform_effect_and_retime() {
+        let mut anchor = None;
+        let mut set = Vec::new();
+        let mut target = None;
+        for sel in [tf(TransformProp::PositionX), eff(0, 0), retime()] {
+            prop_click_select(&mut anchor, &mut set, &mut target, sel, ctrl());
+        }
+        assert_eq!(set, vec![tf(TransformProp::PositionX), eff(0, 0), retime()]);
+    }
+
+    // Shift-range covers the drawn rows between anchor and target even when the
+    // span mixes transform, Retime and effect rows (UI-6 draw order).
+    #[test]
+    fn range_spans_mixed_row_kinds() {
+        let order = vec![
+            retime(),
+            tf(TransformProp::PositionX),
+            tf(TransformProp::Rotation),
+            eff(0, 0),
+            eff(0, 1),
+        ];
+        let (range, _) = prop_range(&order, Some(retime()), eff(0, 0));
+        assert_eq!(
+            range,
+            vec![
+                retime(),
+                tf(TransformProp::PositionX),
+                tf(TransformProp::Rotation),
+                eff(0, 0),
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod keyframe_navigator_tests {
+    //! The decision core shared by the one consolidated ◄ ◆ ► navigator now used
+    //! by transform, linked-pair, Retime and effect rows alike (owner parity
+    //! rule): which key a prev/next arrow jumps to, and whether a key sits at the
+    //! playhead (so the diamond reads add vs remove), with the half-frame
+    //! tolerance every row used to reimplement.
+    use super::*;
+
+    #[test]
+    fn between_keys_points_at_the_neighbours() {
+        let times = [0.0, 1.0, 2.0];
+        let tol = 0.5 / 30.0;
+        let (prev, on, next) = key_nav_targets(&times, 1.4, tol);
+        assert_eq!(prev, Some(1.0));
+        assert!(!on, "1.4 s is not on a key");
+        assert_eq!(next, Some(2.0));
+    }
+
+    #[test]
+    fn within_half_a_frame_reads_as_on_the_key() {
+        let times = [0.0, 1.0, 2.0];
+        let tol = 0.5 / 30.0;
+        let (prev, on, next) = key_nav_targets(&times, 1.0 + tol * 0.4, tol);
+        assert!(on, "just inside the tolerance counts as on the key");
+        assert_eq!(prev, Some(0.0), "the on-key itself is not the prev target");
+        assert_eq!(next, Some(2.0));
+    }
+
+    #[test]
+    fn before_first_and_after_last_have_no_wrap() {
+        let times = [0.0, 1.0, 2.0];
+        let tol = 0.5 / 30.0;
+        let (prev, on, next) = key_nav_targets(&times, -1.0, tol);
+        assert_eq!(prev, None);
+        assert!(!on);
+        assert_eq!(next, Some(0.0));
+        let (prev, _, next) = key_nav_targets(&times, 5.0, tol);
+        assert_eq!(prev, Some(2.0));
+        assert_eq!(next, None);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod motion_blur_switch_tests {
     use super::*;
     use crate::theme::{ColorScheme, ThemeShape};

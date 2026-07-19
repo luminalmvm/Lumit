@@ -39,8 +39,6 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     // Live effect-value drag (layer, effect index, param index, value), applied
     // to `app.fx_edit` after the loop for the live preview.
     let mut fx_edit: Option<(uuid::Uuid, usize, usize, f64)> = None;
-    // A click that selects an effect row (note 2.8.1), applied after the loop.
-    let mut fx_select: Option<crate::app_state::PropSel> = None;
     // A per-clip speed-ramp edit (start %, end %, ease), applied after the loop.
     let mut clip_ramp_edit: Option<(f64, f64, lumit_core::retime::Ease)> = None;
     // A per-clip frame-interpolation edit, applied after the layer loop.
@@ -1409,7 +1407,6 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             &fx_ctx,
                             &mut pending,
                             &mut fx_edit,
-                            &mut fx_select,
                             &mut fx_nav_jump,
                         );
                         if let Some(kt) = fx_nav_jump {
@@ -1717,16 +1714,10 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
     if fx_edit.is_some() {
         app.fx_edit = fx_edit;
     }
-    if let Some(sel) = fx_select {
-        // Clicking an effect row is a single-select: reset the multi-row set.
-        app.selected_prop = Some(sel);
-        app.selected_props = vec![sel];
-        // UI-2: focus the row's layer too, so an effect-param click highlights
-        // the layer just like a transform-row click does.
-        app.selected_layer = Some(sel.layer);
-    }
     // A Shift-click on a property name ranges from the anchor over the rows drawn
-    // between (note 2.6b), resolved here now the whole draw order is known.
+    // between (note 2.6b), resolved here now the whole draw order is known. The
+    // order now holds transform, Retime and effect rows alike, so a range can
+    // span all three (UI-6).
     if let Some(target) = app.prop_range_target.take() {
         let (range, anchor_to_target) = prop_range(&app.prop_row_order, app.selected_prop, target);
         if anchor_to_target {

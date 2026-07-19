@@ -498,6 +498,9 @@ impl AppState {
                         collected.push((s.layer, s.row, t, k));
                     }
                 }
+                // The Retime channel's keys aren't drawn as selectable lane
+                // glyphs, so a lane selection never carries one.
+                PropRow::Retime => {}
             }
         }
         if collected.is_empty() {
@@ -576,6 +579,8 @@ impl AppState {
                         None => fx.push((c.layer, effect, param, vec![key])),
                     }
                 }
+                // Retime keys are not on the lane clipboard (see copy above).
+                PropRow::Retime => {}
             }
         }
 
@@ -640,6 +645,165 @@ impl AppState {
         };
         self.commit(op);
         self.lane_selection = new_sel;
+        #[cfg(feature = "media")]
+        self.refresh_preview();
+    }
+
+    /// Add a keyframe at the playhead to every property row in the selection
+    /// (note 2.6) — the multi-select "key selected" path. One undo step keys a
+    /// mixed set of transform, effect and Retime rows at the current frame, each
+    /// holding its present value, so the user can key several channels at the
+    /// same point at once. A static channel becomes a single key at the playhead
+    /// (like flicking its stopwatch); an animated one gains or updates the key
+    /// there. Nothing selected, or no open comp, is a no-op.
+    pub fn key_selected_props(&mut self) {
+        use lumit_core::anim::{Animation, Keyframe, SideInterp};
+        use lumit_core::model::{EffectValue, LayerKind};
+        if self.selected_props.is_empty() {
+            return;
+        }
+        let doc = self.store.snapshot();
+        let Some(comp_id) = self.selected_comp else {
+            return;
+        };
+        let Some(comp) = doc.comp(comp_id) else {
+            return;
+        };
+        let fps = comp.frame_rate.fps().max(1.0);
+        let playhead_comp = self.preview_frame as f64 / fps;
+
+        // Insert or replace a key at layer-local `lt` holding the value there.
+        let keyed = |prop: &lumit_core::anim::Property, lt: f64| -> Animation {
+            const EPS: f64 = 1.0 / 240.0;
+            let v = prop.value_at(lt);
+            let mut keys = match &prop.animation {
+                Animation::Keyframed(k) => k.clone(),
+                Animation::Static(_) => Vec::new(),
+            };
+            let t = Rational::from_f64_on_grid(lt.max(0.0), Rational::FLICK_DEN)
+                .unwrap_or(Rational::ZERO);
+            if let Some(k) = keys.iter_mut().find(|k| (k.time.to_f64() - lt).abs() < EPS) {
+                k.value = v;
+            } else {
+                keys.push(Keyframe {
+                    time: t,
+                    value: v,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                });
+                keys.sort_by_key(|k| k.time);
+            }
+            Animation::Keyframed(keys)
+        };
+
+        let mut ops: Vec<Op> = Vec::new();
+        // Transform channels commit independently; effects and Retime fold once
+        // per layer (each op replaces the whole stack / whole retime).
+        let mut fx_layers: Vec<Uuid> = Vec::new();
+        let mut rt_layers: Vec<Uuid> = Vec::new();
+        for sel in &self.selected_props {
+            let Some(layer) = comp.layers.iter().find(|l| l.id == sel.layer) else {
+                continue;
+            };
+            let lt = playhead_comp - layer.start_offset.0.to_f64();
+            match sel.row {
+                PropRow::Transform(prop) => ops.push(Op::SetTransformProperty {
+                    comp: comp_id,
+                    layer: sel.layer,
+                    prop,
+                    animation: keyed(layer.transform.get(prop), lt),
+                }),
+                PropRow::Effect { .. } => {
+                    if !fx_layers.contains(&sel.layer) {
+                        fx_layers.push(sel.layer);
+                    }
+                }
+                PropRow::Retime => {
+                    if !rt_layers.contains(&sel.layer) {
+                        rt_layers.push(sel.layer);
+                    }
+                }
+            }
+        }
+
+        // Effects: one whole-stack op per layer, folding every selected Float
+        // parameter's new key in.
+        for layer_id in fx_layers {
+            let Some(layer) = comp.layers.iter().find(|l| l.id == layer_id) else {
+                continue;
+            };
+            let lt = playhead_comp - layer.start_offset.0.to_f64();
+            let mut effects = layer.effects.clone();
+            let mut touched = false;
+            for sel in self.selected_props.iter().filter(|s| s.layer == layer_id) {
+                if let PropRow::Effect { effect, param } = sel.row {
+                    if let Some(p) = effects
+                        .get_mut(effect)
+                        .and_then(|e| e.params.get_mut(param))
+                    {
+                        if let EffectValue::Float(prop) = &mut p.value {
+                            let anim = keyed(prop, lt);
+                            prop.animation = anim;
+                            touched = true;
+                        }
+                    }
+                }
+            }
+            if touched {
+                ops.push(Op::SetLayerEffects {
+                    comp: comp_id,
+                    layer: layer_id,
+                    effects,
+                });
+            }
+        }
+
+        // Retime: a speed (velocity) key at the playhead holding the current
+        // speed — lens-independent and media-free, so keying a mixed selection
+        // stays deterministic.
+        for layer_id in rt_layers {
+            let Some(layer) = comp.layers.iter().find(|l| l.id == layer_id) else {
+                continue;
+            };
+            let LayerKind::Footage { retime, .. } = &layer.kind else {
+                continue;
+            };
+            let lt = playhead_comp - layer.start_offset.0.to_f64();
+            let dur = layer.out_point.0;
+            let speed = retime.as_ref().map(|r| r.speed_at(lt)).unwrap_or(1.0);
+            let sr = Rational::from_f64_on_grid(speed, 1000).unwrap_or(Rational::ONE);
+            let mut keys = retime
+                .as_ref()
+                .and_then(|r| r.speed_keyframes())
+                .unwrap_or_else(|| vec![(Rational::ZERO, Rational::ONE), (dur, Rational::ONE)]);
+            let t = Rational::from_f64_on_grid(lt.clamp(0.0, dur.to_f64()), 1000)
+                .unwrap_or(Rational::ZERO);
+            if let Some(k) = keys.iter_mut().find(|k| k.0 == t) {
+                k.1 = sr;
+            } else {
+                keys.push((t, sr));
+                keys.sort_by_key(|k| k.0);
+            }
+            if let Some(new_retime) =
+                lumit_core::retime::Retime::from_speed_keyframes(Rational::ZERO, &keys)
+            {
+                ops.push(Op::SetLayerRetime {
+                    comp: comp_id,
+                    layer: layer_id,
+                    retime: Some(new_retime),
+                });
+            }
+        }
+
+        if ops.is_empty() {
+            return;
+        }
+        let op = if ops.len() == 1 {
+            ops.remove(0)
+        } else {
+            Op::Batch { ops }
+        };
+        self.commit(op);
         #[cfg(feature = "media")]
         self.refresh_preview();
     }

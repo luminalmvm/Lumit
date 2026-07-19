@@ -345,6 +345,7 @@ impl AppState {
     pub fn is_interacting(&self) -> bool {
         self.preview_draft
             || self.prop_edit.is_some()
+            || self.retime_edit.is_some()
             || self.trim_edit.is_some()
             || self.move_edit.is_some()
             || self.graph_edit.is_some()
@@ -372,6 +373,9 @@ impl AppState {
             || self.scale_preview.is_some()
             || self.prop_edit.is_some()
             || self.graph_edit.is_some()
+            // A Retime "Time" drag re-decodes (a different source frame), so it
+            // must force the decode path on a cache-hit frame too.
+            || self.retime_edit.is_some()
     }
 
     pub fn target_width_for(&self, natural_w: u32) -> Option<u32> {
@@ -512,6 +516,17 @@ impl AppState {
                     }
                 }
                 LayerKind::Footage { item, retime } => {
+                    // A live "Time" drag overrides this layer's retime so the
+                    // decode picks the dragged source frame (the frame itself
+                    // changes, unlike a transform/effect live patch).
+                    let live_retime;
+                    let retime: &Option<lumit_core::retime::Retime> = match &self.retime_edit {
+                        Some((rl, rt)) if *rl == layer.id => {
+                            live_retime = Some(rt.clone());
+                            &live_retime
+                        }
+                        _ => retime,
+                    };
                     let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
                         continue;
                     };

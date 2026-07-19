@@ -3,6 +3,33 @@
 
 use super::*;
 
+/// Route an effect parameter row's click through the shared multi-select
+/// gestures (UI-6), exactly like a transform or Retime row's name: record the
+/// row in the frame's draw order and, on a click, plain-select / Ctrl-toggle /
+/// Shift-range it in `selected_props`. Any click also focuses the row's layer
+/// (UI-2), so the Effect Controls panel follows the selection. Effect
+/// parameters have no curve, so the plain-click "open curve" bit that
+/// `prop_click_select` returns is ignored.
+pub(crate) fn effect_row_select(
+    app: &mut AppState,
+    ui: &egui::Ui,
+    row_rect: egui::Rect,
+    sel: crate::app_state::PropSel,
+) {
+    app.prop_row_order.push(sel);
+    if row_click(ui, row_rect) {
+        let mods = ui.input(|i| i.modifiers);
+        prop_click_select(
+            &mut app.selected_prop,
+            &mut app.selected_props,
+            &mut app.prop_range_target,
+            sel,
+            mods,
+        );
+        app.selected_layer = Some(sel.layer);
+    }
+}
+
 /// The keyframe navigator for an animated Float effect parameter — the effect
 /// twin of [`keyframe_nav`], which drives a transform property. Shown once the
 /// param is animated, right after its stopwatch: ◄ / ► jump the playhead to the
@@ -27,8 +54,7 @@ pub(crate) fn effect_param_nav(
     let Animation::Keyframed(keys) = &prop.animation else {
         return;
     };
-    let tol = 0.5 / ctx.fps.max(1.0); // within half a frame counts as "on" it
-    let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
+    let times: Vec<f64> = keys.iter().map(|k| k.time.to_f64()).collect();
     // One whole-stack op writing this param's new animation.
     let write = |ctx: &RowCtx, animation: Animation| -> lumit_core::Op {
         let mut effects = ctx.layer.effects.clone();
@@ -43,57 +69,28 @@ pub(crate) fn effect_param_nav(
         }
     };
 
-    let has_prev = keys.iter().any(|k| k.time.to_f64() < ctx.lt - tol);
-    if c.add_enabled(has_prev, small(Icon::PrevKeyframe))
-        .on_hover_text("Previous keyframe")
-        .clicked()
-    {
-        *nav_jump = keys
-            .iter()
-            .rev()
-            .find(|k| k.time.to_f64() < ctx.lt - tol)
-            .map(|k| k.time.to_f64());
-    }
-
-    let on_key = keys.iter().any(|k| (k.time.to_f64() - ctx.lt).abs() < tol);
-    if c.add(small(if on_key {
-        Icon::KeyframeFilled
-    } else {
-        Icon::Keyframe
-    }))
-    .on_hover_text(if on_key {
-        "Remove keyframe here"
-    } else {
-        "Add keyframe here"
-    })
-    .clicked()
-    {
-        let animation = if on_key {
-            let kept: Vec<_> = keys
-                .iter()
-                .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
-                .cloned()
-                .collect();
-            if kept.is_empty() {
-                Animation::Static(prop.value_at(ctx.lt))
+    match keyframe_navigator(c, &times, ctx.lt, ctx.fps, true) {
+        // No `AppState` here, so route the jump out for the caller to apply.
+        Some(KeyNavAction::Jump(kt)) => *nav_jump = Some(kt),
+        Some(KeyNavAction::Toggle { on_key }) => {
+            let tol = 0.5 / ctx.fps.max(1.0);
+            let animation = if on_key {
+                let kept: Vec<_> = keys
+                    .iter()
+                    .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
+                    .cloned()
+                    .collect();
+                if kept.is_empty() {
+                    Animation::Static(prop.value_at(ctx.lt))
+                } else {
+                    Animation::Keyframed(kept)
+                }
             } else {
-                Animation::Keyframed(kept)
-            }
-        } else {
-            Animation::Keyframed(upsert_key(prop, ctx.lt, prop.value_at(ctx.lt)))
-        };
-        *pending = Some(write(ctx, animation));
-    }
-
-    let has_next = keys.iter().any(|k| k.time.to_f64() > ctx.lt + tol);
-    if c.add_enabled(has_next, small(Icon::NextKeyframe))
-        .on_hover_text("Next keyframe")
-        .clicked()
-    {
-        *nav_jump = keys
-            .iter()
-            .find(|k| k.time.to_f64() > ctx.lt + tol)
-            .map(|k| k.time.to_f64());
+                Animation::Keyframed(upsert_key(prop, ctx.lt, prop.value_at(ctx.lt)))
+            };
+            *pending = Some(write(ctx, animation));
+        }
+        None => {}
     }
 }
 
@@ -111,9 +108,6 @@ pub(crate) fn effects_rows(
     // Float effect parameter is being dragged, so the caller can drive a live
     // preview (`AppState::fx_edit`) without committing until release.
     fx_edit: &mut Option<(uuid::Uuid, usize, usize, f64)>,
-    // Set to the clicked row when an effect param row is clicked (note 2.8.1),
-    // for the caller to apply to `AppState::selected_prop`.
-    select: &mut Option<crate::app_state::PropSel>,
     // Set to a layer-local time when the effect-parameter navigator's prev/next
     // arrow is clicked: `effects_rows` has no `AppState`, so the caller jumps the
     // playhead (both the Timeline and the Effect Controls panel do this).
@@ -369,22 +363,18 @@ pub(crate) fn effects_rows(
             if group.is_some() && !group_open {
                 continue;
             }
-            // Row selection (note 2.8.1): this param's row identity, whether it
-            // is the highlighted one, and — set below on a click anywhere in the
-            // row — the selection to hand back to the caller.
+            // Row selection (notes 2.8.1/2.6): this param's row identity and
+            // whether it is highlighted. A click anywhere on the row routes
+            // through the shared multi-select gestures (see `effect_row_select`).
             let eff_row = crate::app_state::PropRow::Effect {
                 effect: idx,
                 param: pi,
             };
-            let row_hl = ctx.is_selected(eff_row);
-            let mut set_sel = |ui: &egui::Ui, rect: egui::Rect| {
-                if row_click(ui, rect) {
-                    *select = Some(crate::app_state::PropSel {
-                        layer: layer.id,
-                        row: eff_row,
-                    });
-                }
+            let sel = crate::app_state::PropSel {
+                layer: layer.id,
+                row: eff_row,
             };
+            let row_hl = ctx.is_selected(eff_row);
             // The reusable three-colour channel picker (P2/K-143): the three
             // `channel_colour_*` params render as one compact swatch row, driven
             // by `channel_colour_1`; the other two fold into it, so skip them.
@@ -393,7 +383,7 @@ pub(crate) fn effects_rows(
             }
             if param.id == CHANNEL_COLOUR_IDS[0] {
                 let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                set_sel(ui, row_rect);
+                effect_row_select(app, ui, row_rect, sel);
                 // Read the three channels' current scene-linear RGB (clamped to
                 // the picker's gamut, like the single-colour rows).
                 let read = |cid: &str| -> [f32; 3] {
@@ -431,7 +421,7 @@ pub(crate) fn effects_rows(
                 (EffectValue::Float(prop), ParamKind::Float { slider, hard, .. }) => {
                     let is_animated = prop.is_animated();
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     if let Some(animation) = stopwatch(&mut c, ctx.theme, prop, ctx.lt) {
                         let mut effects = layer.effects.clone();
                         effects[idx].params[pi].value =
@@ -530,7 +520,7 @@ pub(crate) fn effects_rows(
                 }
                 (EffectValue::Choice(cur), ParamKind::Choice { options, .. }) => {
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     c.label(
                         egui::RichText::new(ps.label)
                             .small()
@@ -550,7 +540,7 @@ pub(crate) fn effects_rows(
                 }
                 (EffectValue::Bool(cur), ParamKind::Bool { .. }) => {
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     let mut v = *cur;
                     if c.checkbox(&mut v, egui::RichText::new(ps.label).small())
                         .changed()
@@ -565,7 +555,7 @@ pub(crate) fn effects_rows(
                     // chosen value is stored project data, so determinism
                     // is untouched.
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     c.label(
                         egui::RichText::new(ps.label)
                             .small()
@@ -602,7 +592,7 @@ pub(crate) fn effects_rows(
                     // model; the row edits static values for now, like
                     // Bool/Choice.
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     c.label(
                         egui::RichText::new(ps.label)
                             .small()
@@ -690,7 +680,7 @@ pub(crate) fn effects_rows(
                     // project data (the hold-keyed index picks it at this time);
                     // choosing a file replaces the path set with the one pick.
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     c.label(
                         egui::RichText::new(ps.label)
                             .small()
@@ -730,7 +720,7 @@ pub(crate) fn effects_rows(
                     // it, a source combobox (K-142) chooses what of that layer the
                     // input reads: None (raw), Masks, or Effects and masks.
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
-                    set_sel(ui, row_rect);
+                    effect_row_select(app, ui, row_rect, sel);
                     c.label(
                         egui::RichText::new(ps.label)
                             .small()

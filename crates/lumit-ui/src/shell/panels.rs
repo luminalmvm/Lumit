@@ -1389,21 +1389,18 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         selected_props: app.selected_props.clone(),
     };
     let mut fx_edit = None;
-    let mut select = None;
     let mut nav_jump = None;
+    // The property-row draw order is rebuilt each frame for range-select (note
+    // 2.6b). This panel draws only effect rows, so it owns the order while it
+    // renders: clear before, resolve after (mirrors the Timeline). Whichever
+    // panel the click lands in fills and resolves its own order in one pass, so
+    // the two never tread on each other.
+    app.prop_row_order.clear();
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .id_salt("effect-controls-scroll")
         .show(ui, |ui| {
-            effects_rows(
-                ui,
-                app,
-                &ctx,
-                &mut pending,
-                &mut fx_edit,
-                &mut select,
-                &mut nav_jump,
-            );
+            effects_rows(ui, app, &ctx, &mut pending, &mut fx_edit, &mut nav_jump);
         });
     // A navigator arrow jumps the playhead to the neighbouring effect key.
     if let Some(kt) = nav_jump {
@@ -1418,13 +1415,16 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
     if fx_edit.is_some() {
         app.fx_edit = fx_edit;
     }
-    // Row selection (note 2.8.1/2.8.7): a click on any effect row highlights it,
-    // in this panel or the Timeline (both draw these rows).
-    if let Some(sel) = select {
-        app.selected_prop = Some(sel);
-        app.selected_props = vec![sel];
-        // UI-2: focus the row's layer too.
-        app.selected_layer = Some(sel.layer);
+    // Row selection (notes 2.8.1/2.8.7/2.6): clicks on effect rows are applied
+    // inside `effects_rows` now (plain / Ctrl / Shift gestures, UI-6). A
+    // Shift-click marks a range target; resolve it against this panel's freshly
+    // built draw order, exactly as the Timeline does.
+    if let Some(target) = app.prop_range_target.take() {
+        let (range, anchor_to_target) = prop_range(&app.prop_row_order, app.selected_prop, target);
+        if anchor_to_target {
+            app.selected_prop = Some(target);
+        }
+        app.selected_props = range;
     }
     if let Some(op) = pending {
         app.commit(op);

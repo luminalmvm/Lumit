@@ -75,6 +75,9 @@ pub(crate) fn build_lane_drag_op(
                     }
                 }
                 PropRow::Effect { effect, param } => add_fx(s.layer, effect, param, s.time),
+                // The Retime channel has no draggable lane glyphs, so it never
+                // appears in a lane selection.
+                PropRow::Retime => {}
             }
         }
     }

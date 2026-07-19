@@ -498,6 +498,9 @@ pub enum PropRow {
     Transform(lumit_core::model::TransformProp),
     /// One effect parameter: the effect's index in the stack and the param index.
     Effect { effect: usize, param: usize },
+    /// The footage Retime channel — the "Time"/"Velocity" speed row (K-072/K-075).
+    /// One per layer (it wears two lenses but is a single channel), so no fields.
+    Retime,
 }
 
 /// A single keyframe picked out in the timeline lane/layer view (note 2.1). The
@@ -628,6 +631,13 @@ pub struct AppState {
     /// In-flight *linked* scale drag (layer, x%, y%): the live preview needs
     /// both axes, since one drag moves both (else only x scales until release).
     pub scale_preview: Option<(Uuid, f64, f64)>,
+    /// In-flight Retime "Time" value drag (layer, provisional retime store):
+    /// unlike a transform or effect drag, changing the retime changes which
+    /// *source* frame is on screen, so the live preview must re-decode with this
+    /// store (the decode job builder overrides the layer's retime with it)
+    /// rather than re-composite the already-decoded frame. Commits once on
+    /// release, like every other value drag.
+    pub retime_edit: Option<(Uuid, lumit_core::retime::Retime)>,
     /// In-flight bar-edge trim: (layer, trimming_out_edge, provisional seconds).
     pub trim_edit: Option<(Uuid, bool, f64)>,
     /// In-flight whole-layer move (drag the bar body): (layer, provisional new
@@ -938,6 +948,7 @@ impl Default for AppState {
             prop_edit: None,
             fx_edit: None,
             scale_preview: None,
+            retime_edit: None,
             trim_edit: None,
             move_edit: None,
             selected_layer: None,

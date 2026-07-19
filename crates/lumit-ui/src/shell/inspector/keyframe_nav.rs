@@ -87,10 +87,92 @@ pub(crate) fn stopwatch(
     }
 }
 
-/// AE-style keyframe navigator for an animated property, shown next to the
-/// stopwatch: ◄ jumps the playhead to the previous keyframe, the diamond adds a
-/// keyframe at the playhead (filled ◆ when one is already there — clicking then
-/// removes it), ► jumps to the next keyframe.
+/// What the user asked of a [`keyframe_navigator`] this frame: jump the playhead
+/// to a key time, or add/remove a key at the playhead. The caller performs the
+/// commit — each channel keys differently (a transform property, a linked pair,
+/// the Retime channel, an effect parameter) — while the navigator's look and
+/// prev/toggle/next semantics stay identical everywhere (owner parity rule).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum KeyNavAction {
+    /// Move the playhead to this key time (layer-local seconds).
+    Jump(f64),
+    /// Add a key at the playhead (`on_key` false) or remove the one there
+    /// (`on_key` true).
+    Toggle { on_key: bool },
+}
+
+/// The one shared AE-style `◄ ◆ ► ` keyframe navigator, next to the stopwatch:
+/// ◄ jumps to the previous key, the diamond adds a key at the playhead (a filled
+/// ◆ when one is already there — clicking then removes it), ► jumps to the next.
+/// `times` are the channel's key times (layer-local seconds); `allow_remove` is
+/// false only where a key at the playhead is structural and must not be deleted
+/// (the Retime lens endpoints). Returns the action the user invoked, if any —
+/// the caller commits it and, for a jump, moves the playhead. Consolidating the
+/// four drifted navigators here keeps transform, Retime and effect rows
+/// identical (Iconoir glyphs, K-085; the old ◄ ◆ ► characters aren't in the UI
+/// fonts, and no colour is set so disabled buttons dim).
+pub(crate) fn keyframe_navigator(
+    c: &mut egui::Ui,
+    times: &[f64],
+    lt: f64,
+    fps: f64,
+    allow_remove: bool,
+) -> Option<KeyNavAction> {
+    let tol = 0.5 / fps.max(1.0); // within half a frame counts as "on" it
+    let (prev, on_key, next) = key_nav_targets(times, lt, tol);
+    let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
+    let mut out = None;
+
+    if c.add_enabled(prev.is_some(), small(Icon::PrevKeyframe))
+        .on_hover_text("Previous keyframe")
+        .clicked()
+    {
+        if let Some(t) = prev {
+            out = Some(KeyNavAction::Jump(t));
+        }
+    }
+
+    let can_toggle = !on_key || allow_remove;
+    if c.add_enabled(
+        can_toggle,
+        small(if on_key {
+            Icon::KeyframeFilled
+        } else {
+            Icon::Keyframe
+        }),
+    )
+    .on_hover_text(if on_key {
+        "Remove keyframe here"
+    } else {
+        "Add keyframe here"
+    })
+    .clicked()
+    {
+        out = Some(KeyNavAction::Toggle { on_key });
+    }
+
+    if c.add_enabled(next.is_some(), small(Icon::NextKeyframe))
+        .on_hover_text("Next keyframe")
+        .clicked()
+    {
+        if let Some(t) = next {
+            out = Some(KeyNavAction::Jump(t));
+        }
+    }
+
+    out
+}
+
+/// Move the playhead to a navigator's jump target (layer-local seconds) and
+/// refresh the preview — the shared tail of every navigator that owns `app`.
+pub(crate) fn nav_jump_playhead(app: &mut AppState, ctx: &RowCtx, kt: f64) {
+    app.preview_frame = ((kt + ctx.off) * ctx.fps).round().max(0.0) as usize;
+    #[cfg(feature = "media")]
+    app.refresh_preview();
+}
+
+/// The transform single-property navigator: the shared navigator plus a
+/// `SetTransformProperty` commit for the add/remove.
 pub(crate) fn keyframe_nav(
     ui: &mut egui::Ui,
     app: &mut AppState,
@@ -103,178 +185,71 @@ pub(crate) fn keyframe_nav(
     let Animation::Keyframed(keys) = &slot.animation else {
         return;
     };
-    let tol = 0.5 / ctx.fps.max(1.0); // within half a frame counts as "on" it
-                                      // Iconoir glyphs (K-085): the old ◄ ◆ ► characters aren't in the UI fonts
-                                      // and rendered as blanks. No colour is set, so disabled buttons dim.
-    let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
-    let mut jump_to: Option<f64> = None;
-
-    let has_prev = keys.iter().any(|k| k.time.to_f64() < ctx.lt - tol);
-    if ui
-        .add_enabled(has_prev, small(Icon::PrevKeyframe))
-        .on_hover_text("Previous keyframe")
-        .clicked()
-    {
-        jump_to = keys
-            .iter()
-            .rev()
-            .find(|k| k.time.to_f64() < ctx.lt - tol)
-            .map(|k| k.time.to_f64());
-    }
-
-    let on_key = keys.iter().any(|k| (k.time.to_f64() - ctx.lt).abs() < tol);
-    if ui
-        .add(small(if on_key {
-            Icon::KeyframeFilled
-        } else {
-            Icon::Keyframe
-        }))
-        .on_hover_text(if on_key {
-            "Remove keyframe here"
-        } else {
-            "Add keyframe here"
-        })
-        .clicked()
-    {
-        let animation = if on_key {
-            let kept: Vec<_> = keys
-                .iter()
-                .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
-                .cloned()
-                .collect();
-            if kept.is_empty() {
-                Animation::Static(slot.value_at(ctx.lt))
+    let times: Vec<f64> = keys.iter().map(|k| k.time.to_f64()).collect();
+    match keyframe_navigator(ui, &times, ctx.lt, ctx.fps, true) {
+        Some(KeyNavAction::Jump(kt)) => nav_jump_playhead(app, ctx, kt),
+        Some(KeyNavAction::Toggle { on_key }) => {
+            let tol = 0.5 / ctx.fps.max(1.0);
+            let animation = if on_key {
+                let kept: Vec<_> = keys
+                    .iter()
+                    .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
+                    .cloned()
+                    .collect();
+                if kept.is_empty() {
+                    Animation::Static(slot.value_at(ctx.lt))
+                } else {
+                    Animation::Keyframed(kept)
+                }
             } else {
-                Animation::Keyframed(kept)
-            }
-        } else {
-            Animation::Keyframed(upsert_key(slot, ctx.lt, slot.value_at(ctx.lt)))
-        };
-        *pending = Some(lumit_core::Op::SetTransformProperty {
-            comp: ctx.comp_id,
-            layer: ctx.layer.id,
-            prop,
-            animation,
-        });
-    }
-
-    let has_next = keys.iter().any(|k| k.time.to_f64() > ctx.lt + tol);
-    if ui
-        .add_enabled(has_next, small(Icon::NextKeyframe))
-        .on_hover_text("Next keyframe")
-        .clicked()
-    {
-        jump_to = keys
-            .iter()
-            .find(|k| k.time.to_f64() > ctx.lt + tol)
-            .map(|k| k.time.to_f64());
-    }
-
-    if let Some(kt) = jump_to {
-        app.preview_frame = ((kt + ctx.off) * ctx.fps).round().max(0.0) as usize;
-        #[cfg(feature = "media")]
-        app.refresh_preview();
+                Animation::Keyframed(upsert_key(slot, ctx.lt, slot.value_at(ctx.lt)))
+            };
+            *pending = Some(lumit_core::Op::SetTransformProperty {
+                comp: ctx.comp_id,
+                layer: ctx.layer.id,
+                prop,
+                animation,
+            });
+        }
+        None => {}
     }
 }
 
-/// The keyframe navigator for the linked Scale row — the scale twin of
-/// [`keyframe_nav`], which drives a single property. Prev/next jump across the
-/// *union* of both axes' key times, and the diamond adds or removes a keyframe
-/// on **both** axes at once (one `two_prop_batch`), so the linked pair keeps
-/// matching keys. Without this the animated Scale row showed a stopwatch but no
-/// ◄ ◆ ► navigator, unlike every other transform row (the note-2.5 bug).
-pub(crate) fn keyframe_nav_scale(
-    ui: &mut egui::Ui,
+/// The keyframe navigator for a linked transform pair (Anchor, Position,
+/// Scale) — the same shared navigator as every other row, plus a
+/// `two_prop_batch` commit so the diamond adds or removes a key on **both**
+/// axes at once and the pair keeps matching keys. Prev/next jump across the
+/// *union* of both axes' key times (a just-unlinked-then-relinked pair might not
+/// match). Shown only once either axis is animated.
+pub(crate) fn keyframe_nav_pair(
+    c: &mut egui::Ui,
     app: &mut AppState,
     ctx: &RowCtx,
-    sx: &lumit_core::anim::Property,
-    sy: &lumit_core::anim::Property,
+    px: lumit_core::model::TransformProp,
+    py: lumit_core::model::TransformProp,
     pending: &mut Option<lumit_core::Op>,
 ) {
-    use lumit_core::anim::Animation;
-    use lumit_core::model::TransformProp;
+    let sx = ctx.layer.transform.get(px);
+    let sy = ctx.layer.transform.get(py);
     if !(sx.is_animated() || sy.is_animated()) {
         return;
     }
     let tol = 0.5 / ctx.fps.max(1.0); // within half a frame counts as "on" it
-    let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
-    // The union of both axes' key times, ascending — a linked pair usually holds
-    // matching keys, but a just-unlinked-then-relinked pair might not.
-    let mut times: Vec<f64> = Vec::new();
-    for slot in [sx, sy] {
-        if let Animation::Keyframed(k) = &slot.animation {
-            times.extend(k.iter().map(|kf| kf.time.to_f64()));
+    let times = union_key_times(sx, sy, tol);
+    match keyframe_navigator(c, &times, ctx.lt, ctx.fps, true) {
+        Some(KeyNavAction::Jump(kt)) => nav_jump_playhead(app, ctx, kt),
+        Some(KeyNavAction::Toggle { on_key }) => {
+            // Add on both axes, or remove the key at the playhead from both, so
+            // the linked pair stays in step (the stopwatch drives them together
+            // too). `remove = on_key`.
+            *pending = Some(two_prop_batch(
+                ctx.comp_id,
+                ctx.layer.id,
+                (px, toggle_key_at(sx, ctx.lt, tol, on_key)),
+                (py, toggle_key_at(sy, ctx.lt, tol, on_key)),
+            ));
         }
-    }
-    times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let mut jump_to: Option<f64> = None;
-
-    let has_prev = times.iter().any(|&t| t < ctx.lt - tol);
-    if ui
-        .add_enabled(has_prev, small(Icon::PrevKeyframe))
-        .on_hover_text("Previous keyframe")
-        .clicked()
-    {
-        jump_to = times.iter().rev().find(|&&t| t < ctx.lt - tol).copied();
-    }
-
-    let on_key = times.iter().any(|&t| (t - ctx.lt).abs() < tol);
-    if ui
-        .add(small(if on_key {
-            Icon::KeyframeFilled
-        } else {
-            Icon::Keyframe
-        }))
-        .on_hover_text(if on_key {
-            "Remove keyframe here"
-        } else {
-            "Add keyframe here"
-        })
-        .clicked()
-    {
-        // Add on both axes, or remove the key at the playhead from both, so the
-        // linked pair stays in step (the stopwatch drives them together too).
-        let axis = |slot: &lumit_core::anim::Property| -> Animation {
-            if on_key {
-                if let Animation::Keyframed(k) = &slot.animation {
-                    let kept: Vec<_> = k
-                        .iter()
-                        .filter(|kf| (kf.time.to_f64() - ctx.lt).abs() >= tol)
-                        .cloned()
-                        .collect();
-                    if kept.is_empty() {
-                        Animation::Static(slot.value_at(ctx.lt))
-                    } else {
-                        Animation::Keyframed(kept)
-                    }
-                } else {
-                    slot.animation.clone()
-                }
-            } else {
-                Animation::Keyframed(upsert_key(slot, ctx.lt, slot.value_at(ctx.lt)))
-            }
-        };
-        *pending = Some(two_prop_batch(
-            ctx.comp_id,
-            ctx.layer.id,
-            (TransformProp::ScaleX, axis(sx)),
-            (TransformProp::ScaleY, axis(sy)),
-        ));
-    }
-
-    let has_next = times.iter().any(|&t| t > ctx.lt + tol);
-    if ui
-        .add_enabled(has_next, small(Icon::NextKeyframe))
-        .on_hover_text("Next keyframe")
-        .clicked()
-    {
-        jump_to = times.iter().find(|&&t| t > ctx.lt + tol).copied();
-    }
-
-    if let Some(kt) = jump_to {
-        app.preview_frame = ((kt + ctx.off) * ctx.fps).round().max(0.0) as usize;
-        #[cfg(feature = "media")]
-        app.refresh_preview();
+        None => {}
     }
 }
 

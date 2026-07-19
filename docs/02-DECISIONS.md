@@ -1895,6 +1895,40 @@ step); when no frame is to hand — still probing, a pop-out with no texture, or
 field (UI-3), which filters the tree live by name (case-insensitive substring, subtree-aware so
 the path to a hit stays visible) per the existing spec §3.1 and needs no separate decision.
 
+**K-158 · DECIDED · Every property row in the layer area — transform, effect and Retime —
+shares one selection, keying and navigator model (owner parity rule: transform and effect
+properties look and behave the same unless specified otherwise).** Four threads land together:
+(1) **UI-1 — linked pair rows no longer clip their value boxes.** The Anchor/Position/Scale
+rows carry a chain-link control plus one or two value boxes in the narrow outline column; the
+boxes were shaved at the column's right edge. The fix caps each pair value box at a fixed
+width (`PAIR_VALUE_W`) and tightens the row's inter-widget gap and button padding
+(`pair_row_tighten`), so `[x][link][y]` fits without clipping; single-axis rows keep their
+full-width box. Pixel-layout only, no model change. (2) **UI-6 — effect parameter rows and the
+footage Retime "Time"/"Velocity" row join the transform rows' multi-select model.** All three
+route their name/row click through one shared gesture (`prop_click_select`): a plain click
+single-selects (and, for transform/Retime, opens the curve), Ctrl/Cmd toggles, Shift ranges
+over the frame's draw order — which now records transform, Retime and effect rows alike, so a
+range or a mixed set can span all three. A new `PropRow::Retime` variant names the single
+per-layer Retime channel. The Effect Controls panel builds and resolves its own draw order each
+frame, mirroring the Timeline, so the two panels never tread on each other's range resolution.
+(3) A command-palette action **"Key selected properties"** (`AppState::key_selected_props`)
+keys every selected row at the playhead in one undo step, each holding its current value —
+transforms as `SetTransformProperty`, effects folded per layer into one `SetLayerEffects`, and
+the Retime channel as a velocity-lens speed key (lens-independent and media-free, so a mixed
+keying is deterministic). (4) **One shared `◄ ◆ ►` keyframe navigator** (`keyframe_navigator`
+returning a `KeyNavAction` the caller commits) replaces the four drifted copies used by
+transform single props, transform linked pairs, the Retime row and effects — the
+Position/Anchor and Retime rows had kept the older `Keyframe`/`KeyframeAdd` glyphs instead of
+the effect navigator's `KeyframeFilled`/`Keyframe` look. The only per-row deviation the shared
+navigator supports is the Retime lens's structural endpoint keys (removal disabled there).
+(5) The **Retime "Time" value drag now drives the live preview** like transform (`prop_edit`)
+and effect (`fx_edit`) drags: a new `AppState::retime_edit` field carries the provisional
+retime store, and — because a retime change alters *which source frame* is on screen rather
+than how an already-decoded frame composites — the decode job builder overrides the layer's
+retime with it and re-decodes, rather than re-compositing. Backwards compatibility is not
+required (pre-release). Built in an isolated worktree; not pushed — renumber on merge if
+another agent also claims K-158.
+
 **K-159 · DECIDED · The Timeline outline and lane/graph areas scroll together in the layers
 view but independently in the graph view (UI-8).** In the ordinary **layers view** the layer
 outline (the left column of property/layer rows) and the lane area to its right share **one**

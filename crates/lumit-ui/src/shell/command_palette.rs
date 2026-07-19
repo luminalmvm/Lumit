@@ -31,6 +31,9 @@ pub(crate) enum PaletteAction {
     AddSequenceLayer,
     DuplicateLayer,
     DeleteLayer,
+    /// Key every selected property row at the playhead (note 2.6) — the
+    /// multi-select "key selected" path.
+    KeySelectedProps,
     ResetWorkspace,
     OpenSettings,
     SetScheme(crate::theme::ColorScheme),
@@ -125,6 +128,11 @@ impl Shell {
                 "Delete layer",
                 "remove selected",
             ),
+            cmd(
+                PaletteAction::KeySelectedProps,
+                "Key selected properties",
+                "keyframe add selection playhead multi",
+            ),
             cmd(PaletteAction::NewProject, "New project", "blank"),
             cmd(PaletteAction::OpenProject, "Open project…", "load file"),
             cmd(
@@ -197,6 +205,7 @@ impl Shell {
             PaletteAction::AddSequenceLayer => self.app.add_sequence_layer(),
             PaletteAction::DuplicateLayer => self.app.duplicate_layer(),
             PaletteAction::DeleteLayer => self.app.delete_selected_layer(),
+            PaletteAction::KeySelectedProps => self.app.key_selected_props(),
             PaletteAction::ResetWorkspace => self.dock = default_layout(),
             PaletteAction::OpenSettings => self.settings_open = true,
             PaletteAction::SetScheme(scheme) => {

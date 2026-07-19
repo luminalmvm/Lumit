@@ -131,7 +131,20 @@ pub(crate) fn speed_property_row(
         |pct: f64| Rational::from_f64_on_grid(pct / 100.0, 1000).unwrap_or(Rational::ONE);
 
     let is_graphed = app.selected_layer == Some(ctx.layer.id) && app.graph_retime;
-    let (row_rect, mut c) = row_frame(ui, ctx, is_graphed);
+    // The Retime channel is one selectable row like any other (UI-6): highlight
+    // when graphed or picked, and route a click through the shared multi-select
+    // gestures so it joins transform and effect rows in `selected_props`.
+    let sel_row = crate::app_state::PropRow::Retime;
+    let (row_rect, mut c) = row_frame(ui, ctx, is_graphed || ctx.is_selected(sel_row));
+    prop_row_select(
+        app,
+        ui,
+        row_rect,
+        crate::app_state::PropSel {
+            layer: ctx.layer.id,
+            row: sel_row,
+        },
+    );
 
     // The Retime channel wears two lenses (K-076). The Velocity lens keyframes
     // speed (percentages); the Time lens keyframes the source time on screen (a
@@ -204,15 +217,13 @@ pub(crate) fn speed_property_row(
         }
     }
 
-    // Keyframe navigator, like every other property row — shown once the
+    // The shared ◄ ◆ ► navigator, like every other property row — shown once the
     // channel is keyed. The arrows jump the playhead between this lens's keys;
-    // the keyframe button adds a key at the playhead, or removes an interior
-    // one (the structural start/end keys stay, shown disabled). Iconoir glyphs
-    // (K-085) — the old ◄ ◆ ► characters weren't in the UI fonts.
+    // the diamond adds a key at the playhead, or removes an interior one (the
+    // structural start/end keys stay, so removal is disabled at an endpoint).
     let nav_on = if speed_lens { animated } else { time_enabled };
     if nav_on {
         let tol = 0.5 / fps.max(1.0);
-        let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
         let key_times: Vec<f64> = if speed_lens {
             keys.as_ref()
                 .map(|k| k.iter().map(|(t, _)| t.to_f64()).collect())
@@ -223,103 +234,65 @@ pub(crate) fn speed_property_row(
                 .map(|k| k.iter().map(|(t, _)| t.to_f64()).collect())
                 .unwrap_or_default()
         };
-        let mut jump_to: Option<f64> = None;
-
-        let has_prev = key_times.iter().any(|&t| t < ctx.lt - tol);
-        if c.add_enabled(has_prev, small(Icon::PrevKeyframe))
-            .on_hover_text("Previous keyframe")
-            .clicked()
-        {
-            jump_to = key_times
-                .iter()
-                .copied()
-                .filter(|&t| t < ctx.lt - tol)
-                .reduce(f64::max);
-        }
-
-        let on_key = key_times.iter().any(|&t| (t - ctx.lt).abs() < tol);
+        // An endpoint key is structural (the lens must keep its [0, dur] pair),
+        // so removal there is disallowed — the only per-row deviation the shared
+        // navigator supports.
         let at_endpoint = ctx.lt <= tol || (dur.to_f64() - ctx.lt).abs() < tol;
-        let removable = on_key && !at_endpoint;
-        let diamond = c
-            .add_enabled(
-                !on_key || removable,
-                small(if on_key {
-                    Icon::Keyframe
+        match keyframe_navigator(&mut c, &key_times, ctx.lt, ctx.fps, !at_endpoint) {
+            Some(KeyNavAction::Jump(kt)) => nav_jump_playhead(app, ctx, kt),
+            Some(KeyNavAction::Toggle { on_key }) => {
+                let new_retime = if speed_lens {
+                    if on_key {
+                        let kept: Vec<(Rational, Rational)> = keys
+                            .clone()
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter(|(t, _)| (t.to_f64() - ctx.lt).abs() >= tol)
+                            .collect();
+                        lumit_core::retime::Retime::from_speed_keyframes(Rational::ZERO, &kept)
+                    } else {
+                        speed_with_key(retime, dur, ctx.lt, to_speed(current))
+                    }
+                } else if on_key {
+                    let mut kv = value_keys.clone().unwrap_or_default();
+                    kv.retain(|(t, _)| (t.to_f64() - ctx.lt).abs() >= tol);
+                    lumit_core::retime::Retime::from_value_keyframes(&kv)
                 } else {
-                    Icon::KeyframeAdd
-                }),
-            )
-            .on_hover_text(if on_key {
-                "Remove keyframe here"
-            } else {
-                "Add keyframe here"
-            });
-        if diamond.clicked() {
-            let new_retime = if speed_lens {
-                if on_key {
-                    let kept: Vec<(Rational, Rational)> = keys
+                    let mut kv = value_keys
                         .clone()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter(|(t, _)| (t.to_f64() - ctx.lt).abs() >= tol)
-                        .collect();
-                    lumit_core::retime::Retime::from_speed_keyframes(Rational::ZERO, &kept)
-                } else {
-                    speed_with_key(retime, dur, ctx.lt, to_speed(current))
-                }
-            } else if on_key {
-                let mut kv = value_keys.clone().unwrap_or_default();
-                kv.retain(|(t, _)| (t.to_f64() - ctx.lt).abs() >= tol);
-                lumit_core::retime::Retime::from_value_keyframes(&kv)
-            } else {
-                let mut kv = value_keys
-                    .clone()
-                    .unwrap_or_else(|| vec![(Rational::ZERO, Rational::ZERO), (dur, dur)]);
-                upsert_value_key(&mut kv, ctx.lt, src_now, dur, fps, src_fps);
-                lumit_core::retime::Retime::from_value_keyframes(&kv)
-            };
-            *pending = Some(lumit_core::Op::SetLayerRetime {
-                comp: ctx.comp_id,
-                layer: ctx.layer.id,
-                retime: new_retime,
-            });
-        }
-
-        let has_next = key_times.iter().any(|&t| t > ctx.lt + tol);
-        if c.add_enabled(has_next, small(Icon::NextKeyframe))
-            .on_hover_text("Next keyframe")
-            .clicked()
-        {
-            jump_to = key_times
-                .iter()
-                .copied()
-                .filter(|&t| t > ctx.lt + tol)
-                .reduce(f64::min);
-        }
-
-        if let Some(kt) = jump_to {
-            app.preview_frame = ((kt + ctx.off) * ctx.fps).round().max(0.0) as usize;
-            #[cfg(feature = "media")]
-            app.refresh_preview();
+                        .unwrap_or_else(|| vec![(Rational::ZERO, Rational::ZERO), (dur, dur)]);
+                    upsert_value_key(&mut kv, ctx.lt, src_now, dur, fps, src_fps);
+                    lumit_core::retime::Retime::from_value_keyframes(&kv)
+                };
+                *pending = Some(lumit_core::Op::SetLayerRetime {
+                    comp: ctx.comp_id,
+                    layer: ctx.layer.id,
+                    retime: new_retime,
+                });
+            }
+            None => {}
         }
     }
 
     // "Time" in the value lens, "Velocity" in the derivative lens (K-076).
     let channel_name = if speed_lens { "Velocity" } else { "Time" };
-    if c.add(
-        egui::Label::new(
-            egui::RichText::new(channel_name)
-                .small()
-                .color(if is_graphed {
-                    ctx.theme.accent
-                } else {
-                    ctx.theme.text_muted
-                }),
+    let name_clicked = c
+        .add(
+            egui::Label::new(
+                egui::RichText::new(channel_name)
+                    .small()
+                    .color(if is_graphed {
+                        ctx.theme.accent
+                    } else {
+                        ctx.theme.text_muted
+                    }),
+            )
+            .sense(egui::Sense::click()),
         )
-        .sense(egui::Sense::click()),
-    )
-    .clicked()
-    {
+        .clicked();
+    // A plain click graphs the Retime channel; a Ctrl/Shift-click is a
+    // list-select gesture (handled above) and must not re-graph it.
+    if name_clicked && !ui.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.ctrl) {
         app.selected_layer = Some(ctx.layer.id);
         app.graph_retime = true; // graph the Retime channel (K-075)
         app.graph_reset_fit(); // a fresh channel starts fitted
@@ -375,22 +348,40 @@ pub(crate) fn speed_property_row(
                 .custom_formatter(move |n, _| fmt_timecode_frames(n / src_fps, src_fps))
                 .custom_parser(move |s| parse_timecode_frames(s, src_fps)),
         );
+        // The provisional retime for a dragged source time — the same value the
+        // release commits, reused for the live preview.
+        let provisional = |frames: f64| -> Option<lumit_core::retime::Retime> {
+            let new_src = frames.max(0.0) / src_fps;
+            let mut keys = value_keys
+                .clone()
+                .unwrap_or_else(|| vec![(Rational::ZERO, Rational::ZERO), (dur, dur)]);
+            upsert_value_key(&mut keys, ctx.lt, new_src, dur, fps, src_fps);
+            lumit_core::retime::Retime::from_value_keyframes(&keys)
+        };
         if resp.dragged() || resp.has_focus() {
             c.data_mut(|d| d.insert_temp(id, frames));
+            // Live preview: unlike a transform/effect drag (which re-composites
+            // the same decoded frame), a Time drag changes which *source* frame
+            // is on screen, so drive `retime_edit` — the decode job builder
+            // overrides this layer's retime with it and re-decodes.
+            app.retime_edit = provisional(frames).map(|rt| (ctx.layer.id, rt));
+        }
+        if resp.changed() {
+            // Re-request the frame so the viewer shows the dragged source time
+            // (the playhead frame is unchanged, so it isn't stale on its own).
+            #[cfg(feature = "media")]
+            app.refresh_preview();
         }
         if resp.drag_stopped() || resp.lost_focus() {
+            app.retime_edit = None;
             let new_src = frames.max(0.0) / src_fps;
             // Editing the time keyframes it (AE Time Remap), seeding endpoints
             // from the current curve when none exist yet.
             if (new_src - src_now).abs() > 0.5 / src_fps {
-                let mut keys = value_keys
-                    .clone()
-                    .unwrap_or_else(|| vec![(Rational::ZERO, Rational::ZERO), (dur, dur)]);
-                upsert_value_key(&mut keys, ctx.lt, new_src, dur, fps, src_fps);
                 *pending = Some(lumit_core::Op::SetLayerRetime {
                     comp: ctx.comp_id,
                     layer: ctx.layer.id,
-                    retime: lumit_core::retime::Retime::from_value_keyframes(&keys),
+                    retime: provisional(frames),
                 });
             }
             c.data_mut(|d| d.remove::<f64>(id));

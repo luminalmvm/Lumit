@@ -1289,7 +1289,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   (note 2.6b): **Ctrl-click** a name to add or remove that one row, **Shift-click** to select
   the whole run of rows between it and the last one you clicked. A plain click still picks a
   single row and opens its curve; a Ctrl/Shift-click only changes the highlight and leaves the
-  graphed channel alone.
+  graphed channel alone. This works the **same for every kind of row** (UI-6): transform
+  properties, effect parameters and a footage layer's Retime "Time"/"Velocity" row all select
+  and multi-select alike, and one selection can mix all three (a plain click on an effect or
+  Retime row single-selects it, exactly like a transform row). Once you have a set highlighted,
+  the command palette's **Key selected properties** adds a keyframe to every one of them at the
+  playhead in a single undo step — so you can key several channels at the same point at once,
+  each holding its current value.
   **Copy and paste keyframes (note 2.2).** With keys selected, **Ctrl/Cmd+C** copies them —
   bezier handles and all — remembering each key's time relative to the earliest one in the
   set. Move the playhead and **Ctrl/Cmd+V** drops them back down at the playhead, keeping their
@@ -1323,6 +1329,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   another. Under the bonnet each speed keyframe becomes a segment of the retiming curve (a
   straight speed ramp between keys); the frame-accurate maths that keeps cuts on the beat is
   the same engine described above. Curved (eased) speed ramps are still the graph editor's job.
+  In its **Time** lens the row shows a source timecode you can scrub, and the viewer now
+  **updates live as you drag it** — because changing the retiming changes *which frame of the
+  footage* is on screen, the preview re-fetches that frame while you drag rather than waiting
+  for release (the same instant feedback a transform or effect value already gives). Every
+  keyframe row across the whole layer area — transform properties, the Retime Time/Velocity
+  row and effect parameters — also shares **one** `◄ ◆ ►` add/step navigator now, so they look
+  and behave identically wherever you meet them.
 - **Getting around the Timeline** — the panel is split into the **layer outline** on the left
   (the stack of names, stopwatches and toggles) and the **lane area** on the right (the time
   ruler with each layer's bar on its own *lane*). Each bar wears its layer's identity colour:

@@ -3,6 +3,22 @@
 
 use super::*;
 
+/// The fixed width of a value box on a linked/combined pair row (Anchor,
+/// Position, Scale). Constraining it — with tightened row spacing — keeps
+/// [x][link][y] inside the outline column so the boxes are never shaved at its
+/// right edge (UI-1). Wide enough for a four-digit value with two decimals
+/// ("1280.00"); a single-axis row leaves its box unconstrained, so its wider
+/// values still read in full.
+pub(crate) const PAIR_VALUE_W: f32 = 48.0;
+
+/// Tighten a linked/combined pair row's child ui so its stopwatch, navigator,
+/// name, link and value boxes fit the narrow outline column (UI-1): a small
+/// inter-widget gap and slim button padding, applied once per row.
+pub(crate) fn pair_row_tighten(c: &mut egui::Ui) {
+    c.spacing_mut().item_spacing.x = 3.0;
+    c.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
+}
+
 /// Record this property row in the frame's draw order and, when it is clicked,
 /// apply the usual list-select gestures to `selected_props` (note 2.6b): plain
 /// click picks just this row, Ctrl/Cmd-click toggles it, and Shift-click marks
@@ -22,20 +38,42 @@ pub(crate) fn prop_row_select(
         return false;
     }
     let mods = ui.input(|i| i.modifiers);
+    prop_click_select(
+        &mut app.selected_prop,
+        &mut app.selected_props,
+        &mut app.prop_range_target,
+        sel,
+        mods,
+    )
+}
+
+/// The pure list-select gesture behind [`prop_row_select`] (note 2.6b), shared
+/// by transform, effect and Retime rows so a mixed selection is possible.
+/// A plain click picks just `sel` (returns `true` so the caller may open the
+/// row's curve); Ctrl/Cmd-click toggles its membership; Shift-click marks it as
+/// the range target (resolved after the whole row loop, since the rows below it
+/// aren't drawn yet). No egui here, so the gestures are unit-tested directly.
+pub(crate) fn prop_click_select(
+    selected_prop: &mut Option<crate::app_state::PropSel>,
+    selected_props: &mut Vec<crate::app_state::PropSel>,
+    prop_range_target: &mut Option<crate::app_state::PropSel>,
+    sel: crate::app_state::PropSel,
+    mods: egui::Modifiers,
+) -> bool {
     if mods.command || mods.ctrl {
-        if let Some(i) = app.selected_props.iter().position(|s| *s == sel) {
-            app.selected_props.remove(i);
+        if let Some(i) = selected_props.iter().position(|s| *s == sel) {
+            selected_props.remove(i);
         } else {
-            app.selected_props.push(sel);
+            selected_props.push(sel);
         }
-        app.selected_prop = Some(sel);
+        *selected_prop = Some(sel);
         false
     } else if mods.shift {
-        app.prop_range_target = Some(sel);
+        *prop_range_target = Some(sel);
         false
     } else {
-        app.selected_prop = Some(sel);
-        app.selected_props = vec![sel];
+        *selected_prop = Some(sel);
+        *selected_props = vec![sel];
         true
     }
 }
@@ -379,7 +417,7 @@ pub(crate) fn prop_row(
         app.graph_retime = false; // switching to a transform property
         app.graph_reset_fit(); // a fresh channel starts fitted
     }
-    axis_drag_value(&mut c, app, ctx, prop, speed, pending);
+    axis_drag_value(&mut c, app, ctx, prop, speed, None, pending);
     if let Animation::Keyframed(keys) = &slot.animation {
         lane_keys(
             ui,
@@ -404,6 +442,10 @@ pub(crate) fn axis_drag_value(
     ctx: &RowCtx,
     prop: lumit_core::model::TransformProp,
     speed: f64,
+    // Fixed box width, or `None` to let the box size to its content. The linked
+    // pair rows pass a width so both boxes plus the link fit the column (UI-1);
+    // single-axis rows pass `None` and keep their full-width value.
+    width: Option<f32>,
     pending: &mut Option<lumit_core::Op>,
 ) {
     use lumit_core::anim::Animation;
@@ -413,11 +455,16 @@ pub(crate) fn axis_drag_value(
         Some((l, p, v)) if l == ctx.layer.id && p == prop => v,
         _ => committed,
     };
-    let resp = c.add(
-        egui::DragValue::new(&mut value)
-            .speed(speed)
-            .max_decimals(2),
-    );
+    let drag = egui::DragValue::new(&mut value)
+        .speed(speed)
+        .max_decimals(2);
+    let resp = match width {
+        Some(w) => {
+            let h = c.spacing().interact_size.y;
+            c.add_sized(egui::vec2(w, h), drag)
+        }
+        None => c.add(drag),
+    };
     if resp.dragged() || resp.has_focus() {
         app.prop_edit = Some((ctx.layer.id, prop, value));
     }
@@ -518,6 +565,8 @@ pub(crate) fn combined_scale_row(
     // The linked Scale row selects as its x axis (both move together).
     let sel_row = crate::app_state::PropRow::Transform(TransformProp::ScaleX);
     let (row_rect, mut c) = row_frame(ui, ctx, is_graphed || ctx.is_selected(sel_row));
+    // Fit the value box, link and controls inside the outline column (UI-1).
+    pair_row_tighten(&mut c);
     prop_row_select(
         app,
         ui,
@@ -554,9 +603,16 @@ pub(crate) fn combined_scale_row(
             (TransformProp::ScaleY, ay),
         ));
     }
-    // The ◄ ◆ ► navigator, driving both axes (note-2.5 fix) — shown once the row
-    // is animated, matching every other transform row.
-    keyframe_nav_scale(&mut c, app, ctx, sx, sy, pending);
+    // The shared ◄ ◆ ► navigator, driving both axes (note-2.5 fix) — shown once
+    // the row is animated, identical to every other row.
+    keyframe_nav_pair(
+        &mut c,
+        app,
+        ctx,
+        TransformProp::ScaleX,
+        TransformProp::ScaleY,
+        pending,
+    );
     let name_clicked = c
         .add(
             egui::Label::new(egui::RichText::new("Scale %").small().color(if is_graphed {
@@ -586,7 +642,11 @@ pub(crate) fn combined_scale_row(
             Some((l, p, v)) if l == ctx.layer.id && p == TransformProp::ScaleX => v,
             _ => old_x,
         };
-        let resp = c.add(egui::DragValue::new(&mut value).speed(0.5).max_decimals(2));
+        let h = c.spacing().interact_size.y;
+        let resp = c.add_sized(
+            egui::vec2(PAIR_VALUE_W, h),
+            egui::DragValue::new(&mut value).speed(0.5).max_decimals(2),
+        );
         if resp.dragged() || resp.has_focus() {
             app.prop_edit = Some((ctx.layer.id, TransformProp::ScaleX, value));
             // Both axes move together, so the live preview needs both (else it
@@ -685,6 +745,10 @@ pub(crate) fn linked_pair_row(
     // The linked pair selects as its x channel (both share the row furniture).
     let sel_row = crate::app_state::PropRow::Transform(px);
     let (row_rect, mut c) = row_frame(ui, ctx, is_graphed || ctx.is_selected(sel_row));
+    // Tighten the row so [x][link][y] fits the outline column without clipping
+    // (UI-1): the stopwatch, navigator, name, link and both value boxes share a
+    // narrow column, so trim the inter-widget gap and the button padding.
+    pair_row_tighten(&mut c);
     prop_row_select(
         app,
         ui,
@@ -722,52 +786,10 @@ pub(crate) fn linked_pair_row(
         ));
     }
 
-    // The keyframe navigator over the union of both axes' keys: the arrows
+    // The shared ◄ ◆ ► navigator over the union of both axes' keys: the arrows
     // jump to the nearest key on either axis; the diamond keys or clears both
-    // axes at the playhead in one undo step.
-    let tol = 0.5 / ctx.fps.max(1.0); // within half a frame counts as "on" it
-    let times = union_key_times(sx, sy, tol);
-    if !times.is_empty() {
-        let (prev, on_key, next) = key_nav_targets(&times, ctx.lt, tol);
-        let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
-        let mut jump_to: Option<f64> = None;
-        if c.add_enabled(prev.is_some(), small(Icon::PrevKeyframe))
-            .on_hover_text("Previous keyframe")
-            .clicked()
-        {
-            jump_to = prev;
-        }
-        if c.add(small(if on_key {
-            Icon::Keyframe
-        } else {
-            Icon::KeyframeAdd
-        }))
-        .on_hover_text(if on_key {
-            "Remove keyframe here (both axes)"
-        } else {
-            "Add keyframe here (both axes)"
-        })
-        .clicked()
-        {
-            *pending = Some(two_prop_batch(
-                ctx.comp_id,
-                ctx.layer.id,
-                (px, toggle_key_at(sx, ctx.lt, tol, on_key)),
-                (py, toggle_key_at(sy, ctx.lt, tol, on_key)),
-            ));
-        }
-        if c.add_enabled(next.is_some(), small(Icon::NextKeyframe))
-            .on_hover_text("Next keyframe")
-            .clicked()
-        {
-            jump_to = next;
-        }
-        if let Some(kt) = jump_to {
-            app.preview_frame = ((kt + ctx.off) * ctx.fps).round().max(0.0) as usize;
-            #[cfg(feature = "media")]
-            app.refresh_preview();
-        }
-    }
+    // axes at the playhead in one undo step. Identical to every other row now.
+    keyframe_nav_pair(&mut c, app, ctx, px, py, pending);
 
     // The name graphs the x channel (like Scale graphs ScaleX) — plain click
     // only; Ctrl/Shift-click is a list-select gesture handled above.
@@ -793,9 +815,10 @@ pub(crate) fn linked_pair_row(
     {
         *unlinked = true;
     }
-    // Two independent value boxes: x then y, each editing only its own axis.
-    axis_drag_value(&mut c, app, ctx, px, 1.0, pending);
-    axis_drag_value(&mut c, app, ctx, py, 1.0, pending);
+    // Two independent value boxes: x then y, each editing only its own axis,
+    // width-capped so the pair stays inside the outline column (UI-1).
+    axis_drag_value(&mut c, app, ctx, px, 1.0, Some(PAIR_VALUE_W), pending);
+    axis_drag_value(&mut c, app, ctx, py, 1.0, Some(PAIR_VALUE_W), pending);
 
     // Lane: the union of both axes' keys, one glyph per time. A linked row —
     // record it so a lane drag moves both axes' keys sharing a time (2.1/2.6).

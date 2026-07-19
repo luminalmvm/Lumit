@@ -1056,3 +1056,101 @@ fn a_long_import_keeps_its_full_media_duration() {
         "a long import must extend past the comp end"
     );
 }
+
+/// UI-6: "Key selected properties" keys every row in the selection at the
+/// playhead in one undo step — here a transform channel and an effect
+/// parameter together, each becoming a single key at the current frame.
+#[test]
+fn key_selected_props_keys_transform_and_effect_at_the_playhead() {
+    use lumit_core::anim::Animation;
+    use lumit_core::model::{EffectValue, TransformProp};
+    let mut app = AppState::default();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    app.add_solid_layer();
+    let comp_id = app.selected_comp.unwrap();
+    let layer_id = app.store.snapshot().comp(comp_id).unwrap().layers[0].id;
+    // Give the layer a blur effect (its first param, "radius", is a Float).
+    let inst = lumit_core::fx::instantiate("blur").unwrap();
+    app.commit(Op::SetLayerEffects {
+        comp: comp_id,
+        layer: layer_id,
+        effects: vec![inst],
+    });
+    // Both start un-animated (static).
+    let before = app.store.snapshot().comp(comp_id).unwrap().layers[0].clone();
+    assert!(
+        !before.transform.get(TransformProp::Rotation).is_animated(),
+        "rotation starts static"
+    );
+
+    // Select the rotation row and the effect's radius row, then key at frame 30.
+    let fps = app.store.snapshot().comp(comp_id).unwrap().frame_rate.fps();
+    app.preview_frame = 30;
+    let lt = 30.0 / fps;
+    app.selected_props = vec![
+        PropSel {
+            layer: layer_id,
+            row: PropRow::Transform(TransformProp::Rotation),
+        },
+        PropSel {
+            layer: layer_id,
+            row: PropRow::Effect {
+                effect: 0,
+                param: 0,
+            },
+        },
+    ];
+    app.key_selected_props();
+
+    let layer = app.store.snapshot().comp(comp_id).unwrap().layers[0].clone();
+    let Animation::Keyframed(rot) = &layer.transform.get(TransformProp::Rotation).animation else {
+        panic!("rotation must now be keyed");
+    };
+    assert_eq!(
+        rot.len(),
+        1,
+        "one key at the playhead, not a 0-plus-lt pair"
+    );
+    assert!(
+        (rot[0].time.to_f64() - lt).abs() < 0.02,
+        "the rotation key sits at the playhead: {}",
+        rot[0].time.to_f64()
+    );
+    let EffectValue::Float(radius) = &layer.effects[0].params[0].value else {
+        panic!("radius must be a Float param");
+    };
+    let Animation::Keyframed(rk) = &radius.animation else {
+        panic!("the effect param must now be keyed");
+    };
+    assert_eq!(rk.len(), 1, "one effect key at the playhead");
+    assert!(
+        (rk[0].time.to_f64() - lt).abs() < 0.02,
+        "the effect key sits at the playhead: {}",
+        rk[0].time.to_f64()
+    );
+}
+
+/// A Retime "Time" value drag must count as a live edit so the preview
+/// re-decodes with the dragged source frame (unlike a transform/effect drag,
+/// which re-composites the same decoded frame). Guards the field wiring behind
+/// that fix: `retime_edit` participates in both preview predicates.
+#[test]
+fn a_retime_time_drag_registers_as_a_live_edit() {
+    let mut app = AppState::default();
+    assert!(!app.live_edit_active(), "nothing dragging yet");
+    assert!(!app.is_interacting());
+    app.retime_edit = Some((
+        uuid::Uuid::nil(),
+        lumit_core::retime::Retime::constant_speed(
+            Rational::from_f64_on_grid(5.0, Rational::FLICK_DEN).unwrap(),
+            Rational::ZERO,
+            Rational::ONE,
+        ),
+    ));
+    assert!(
+        app.live_edit_active(),
+        "a Time drag must force the decode path on a cache-hit frame"
+    );
+    assert!(app.is_interacting(), "a Time drag pauses background fills");
+}
