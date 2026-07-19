@@ -1243,10 +1243,10 @@ fn resolve_one(
             let count = (e.float_at("echoes", lt).unwrap_or(4.0).round() as i32).clamp(1, 16);
             let decay = (e.float_at("decay", lt).unwrap_or(0.6) as f32).clamp(0.0, 1.0);
             // Combine blend mode; the default when the param is absent matches
-            // the schema default (Screen, index 3). Clamped to the 0..9 range
-            // the CPU oracle and WGSL kernel branch over.
+            // the schema default (Screen, index 3). Clamped to the 0..=13 range
+            // the CPU oracle and WGSL kernel branch over (T21).
             let mode = match e.param("mode") {
-                Some(EffectValue::Choice(c)) => (*c).min(9),
+                Some(EffectValue::Choice(c)) => (*c).min(13),
                 _ => 3,
             };
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);

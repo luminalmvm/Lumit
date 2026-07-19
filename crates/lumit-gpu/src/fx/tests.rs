@@ -2032,20 +2032,25 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         w
     };
 
-    // The historical additive modes (Add/Behind/Max), two-tap, ≤4 ULP.
+    // The compositing orders + Add (Behind/In front/Add), two-tap, ≤4 ULP (T21).
     for (weights, mode, mix, bound) in [
         (two_tap(0.6, 0.3), 0u32, 1.0f32, 4i32),
         (two_tap(0.7, 0.4), 1, 0.8, 4),
         (two_tap(0.9, 0.5), 2, 1.0, 4),
-        // The new modes (FX-17/K-149), single-tap, ≤8 ULP: Screen, Normal,
-        // Multiply, Overlay, Soft light, Hard light, Darken.
+        // The blend modes (FX-17/K-149, T21), single-tap, ≤8 ULP: Screen,
+        // Multiply, Overlay, Soft light, Hard light, Lighten, Darken,
+        // Difference, Exclusion, Subtract. (Divide is checked separately below,
+        // with a neighbour floored away from zero.)
         (one_tap(0.6), 3, 1.0, 8),
-        (one_tap(0.5), 4, 0.9, 8),
-        (one_tap(0.7), 5, 1.0, 8),
-        (one_tap(0.6), 6, 1.0, 8),
-        (one_tap(0.5), 7, 1.0, 8),
-        (one_tap(0.8), 8, 1.0, 8),
+        (one_tap(0.7), 4, 0.9, 8),
+        (one_tap(0.6), 5, 1.0, 8),
+        (one_tap(0.5), 6, 1.0, 8),
+        (one_tap(0.8), 7, 1.0, 8),
+        (one_tap(0.6), 8, 1.0, 8),
         (one_tap(0.6), 9, 1.0, 8),
+        (one_tap(0.7), 10, 1.0, 8),
+        (one_tap(0.6), 11, 1.0, 8),
+        (one_tap(0.5), 12, 1.0, 8),
     ] {
         let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, weights, mode, mix);
         let op = EchoOp { weights, mode, mix };
@@ -2063,6 +2068,35 @@ fn wgsl_echo_matches_the_cpu_oracle() {
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
             "GPU echo must be bit-stable"
         );
+    }
+    // Divide (mode 13, T21): tested with a neighbour floored well away from
+    // zero, so the a÷n has no near-singular denominators to blow past fp16.
+    {
+        let n_div: Vec<f32> = current
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                if i % 4 == 3 {
+                    *v
+                } else {
+                    f16_to_f32(f16_bits(v * 0.5 + 0.5))
+                }
+            })
+            .collect();
+        let n_div_t = upload_linear_f32(&ctx, &n_div, w, h);
+        let gpu_neighbours: [(i32, &wgpu::Texture); 1] = [(-1, &n_div_t)];
+        let cpu_neighbours: [(i32, &[f32]); 1] = [(-1, &n_div)];
+        let op = EchoOp {
+            weights: one_tap(0.9),
+            mode: 13,
+            mix: 1.0,
+        };
+        let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, op.weights, op.mode, op.mix);
+        let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("echo mode=13 (divide): worst {worst} ulp");
+        assert!(worst <= 8, "divide: worst {worst} fp16 ULP");
     }
     // No taps, Mix 1: the accumulator is the current frame and the mix is
     // identity, so the output is the current frame bit-exactly.

@@ -779,8 +779,9 @@ static declaration, exactly the shape Motion blur's own `{0, +1}` already has, a
 ### 3.13 Echo — frame echo and trails (speed lines)
 
 **Parameters:** Echo count (1–32), Spacing (frames, may be negative to echo forward),
-Decay (per-echo opacity multiplier 0–1), Blend (Behind / Add / Screen / Front), Transform
-per echo (optional scale/rotation/offset step for stylised speed-line fans).
+Decay (per-echo opacity multiplier 0–1), Mode (Behind / In front, then the standard blend set —
+see status), Transform per echo (optional scale/rotation/offset step for stylised speed-line
+fans).
 
 **Algorithm sketch.** Composites N prior layer frames (window `{-n·spacing .. 0}`,
 resolved through Retime so slow-motion echoes stretch correctly), each transformed and
@@ -793,14 +794,20 @@ effect — the render decodes the layer's source at each offset in the stack's t
 neighbour frames too (K-094). Pinned simplifications for v1: **Echoes 1–16 at a fixed
 one-frame spacing** (the trait's `temporal` window is `&'static`, so the maximum reach is a
 fixed cap — raised from 8 to 16 by FX-17; a Spacing control and a larger/dynamic window are a
-later refinement) and **intensity `Decay^k`** per echo `k`. **Blend modes** now mirror the
-comp set — **Normal, Add, Multiply, Screen, Overlay, Soft light, Hard light, Lighten (= the
-legacy Max), Darken** — plus the echo-specific **Behind** (ghosting); the **default is
-Screen**. Each mode folds the weighted echo tap into the running trail per channel in the
-**working linear premultiplied space** (not the compositor's perceptual sRGB domain — Echo
-composites light trails, so it stays linear, which also keeps the CPU oracle and WGSL kernel
-bit-for-bit identical). The legacy mode indices 0/1/2 (Add/Behind/Max) are held so a project
-saved before FX-17 loads unchanged; the new modes are appended. It reads the layer's
+later refinement) and **intensity `Decay^k`** per echo `k`. **Mode** (T21) lists two
+effect-only compositing *orders* first — **Behind** (each echo behind the trail, ghosting) and
+**In front** (over it) — then a divider, then the order-independent light-combine blend modes:
+**Add, Screen, Multiply, Overlay, Soft light, Hard light, Lighten, Darken, Difference,
+Exclusion, Subtract, Divide**. The **default is Screen**. "Max" is gone (it was just Lighten)
+and the old "Normal" is now the clearer "In front". Each mode folds the weighted echo tap into
+the running trail per channel in the **working linear premultiplied space** (not the
+compositor's perceptual sRGB domain — Echo composites light trails, so it stays linear, which
+also keeps the CPU oracle and WGSL kernel bit-for-bit identical). The comparative modes
+(Difference / Exclusion / Subtract) therefore act on the premultiplied alpha too, so equal-alpha
+taps zero the tap's coverage — the honest per-channel result. The HSL and colour burn/dodge
+modes a layer offers are deliberately **not** in this list, being ill-defined on a premultiplied
+light trail (see Open questions). Pre-release, mode indices were renumbered with no migration.
+It reads the layer's
 **source** frames, not the upstream stack's output at those times (full temporal stacking is
 later), and echoes footage layers only — Sequence-clip and adjustment-layer temporal effects
 are deferred. Marker-triggerable intensity spikes come with the §1.4 wiring already in place.
@@ -1415,3 +1422,11 @@ mask parameters, "composite on original", effect-only precomps).
    gradient across the offset span (Wavelength becomes a smooth version of the classic split,
    fully picker-driven, abandoning the physical basis). (b)/(c) change the default Wavelength
    look and need their own oracle updates — decide before wiring, then log the choice here.
+7. **Full blend-mode parity for Echo's Mode? (T21, §3.13).** Echo's Mode offers the two
+   compositing orders (Behind / In front) plus the order-independent light-combine blends, but
+   not the HSL, colour burn/dodge, or contrast-group modes a layer has — those are ill-defined
+   on a premultiplied linear light trail (they were designed for straight-alpha encoded pixels).
+   If a use case wants, say, a "Colour" or "Vivid light" echo, decide the semantics
+   (unpremultiply + encode per tap, matching the compositor, at the cost of the current
+   linear-light look) and log it here. For now the two lists deliberately differ; the shared
+   `BlendMode` catalogue drives the layer dropdown, Echo curates the subset that suits a trail.

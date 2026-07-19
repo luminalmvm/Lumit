@@ -16,9 +16,10 @@
 struct Params {
     // Accumulate: the tap's intensity. Mix: the host Mix amount.
     weight: f32,
-    // Accumulate combine (FX-17/K-149), mirroring cpu::echo_blend op-for-op:
-    // 0 = Add, 1 = Behind, 2 = Max, 3 = Screen, 4 = Normal, 5 = Multiply,
-    // 6 = Overlay, 7 = Soft light, 8 = Hard light, 9 = Darken. Unused by
+    // Accumulate combine (FX-17/K-149, T21), mirroring cpu::echo_blend
+    // op-for-op: 0 = Behind, 1 = In front, 2 = Add, 3 = Screen, 4 = Multiply,
+    // 5 = Overlay, 6 = Soft light, 7 = Hard light, 8 = Lighten, 9 = Darken,
+    // 10 = Difference, 11 = Exclusion, 12 = Subtract, 13 = Divide. Unused by
     // echo_mix.
     mode: u32,
     _pad0: f32,
@@ -38,34 +39,42 @@ fn echo_soft_light_d(d: vec4<f32>) -> vec4<f32> {
 fn echo_blend(mode: u32, a: vec4<f32>, n: vec4<f32>) -> vec4<f32> {
     let one = vec4<f32>(1.0);
     if (mode == 0u) {
-        return a + n; // Add
-    } else if (mode == 1u) {
         return a + n * (1.0 - a.a); // Behind: accumulator over the echo
+    } else if (mode == 1u) {
+        return n + a * (1.0 - n.a); // In front: the echo over the accumulator
     } else if (mode == 2u) {
-        return max(a, n); // Max: per-channel lighten
+        return a + n; // Add
     } else if (mode == 3u) {
         return a + n - a * n; // Screen
     } else if (mode == 4u) {
-        return n + a * (1.0 - n.a); // Normal: the echo over the accumulator
-    } else if (mode == 5u) {
         return a * n; // Multiply
-    } else if (mode == 6u) {
+    } else if (mode == 5u) {
         // Overlay = hard light with the accumulator as the switch.
         let lo = 2.0 * a * n;
         let hi = one - 2.0 * (one - a) * (one - n);
         return select(hi, lo, a <= vec4<f32>(0.5));
-    } else if (mode == 7u) {
+    } else if (mode == 6u) {
         // Soft light (W3C), s = n, d = a.
         let darkened = a - (one - 2.0 * n) * a * (one - a);
         let lightened = a + (2.0 * n - one) * (echo_soft_light_d(a) - a);
         return select(lightened, darkened, n <= vec4<f32>(0.5));
-    } else if (mode == 8u) {
+    } else if (mode == 7u) {
         // Hard light: the echo is the switch.
         let lo = 2.0 * a * n;
         let hi = one - 2.0 * (one - a) * (one - n);
         return select(hi, lo, n <= vec4<f32>(0.5));
+    } else if (mode == 8u) {
+        return max(a, n); // Lighten (per-channel max)
+    } else if (mode == 9u) {
+        return min(a, n); // Darken (per-channel min)
+    } else if (mode == 10u) {
+        return abs(a - n); // Difference
+    } else if (mode == 11u) {
+        return a + n - 2.0 * a * n; // Exclusion
+    } else if (mode == 12u) {
+        return max(a - n, vec4<f32>(0.0)); // Subtract
     }
-    return min(a, n); // Darken
+    return max(a / max(n, vec4<f32>(1e-6)), vec4<f32>(0.0)); // Divide
 }
 
 @compute @workgroup_size(8, 8)

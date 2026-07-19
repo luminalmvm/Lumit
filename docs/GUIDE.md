@@ -157,9 +157,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   learned about it too: an echo frame's identity now includes the neighbours it's built from,
   so — like the flow fix earlier — you never get a stale, frozen trail. Echo now reaches back
   up to sixteen frames one frame apart (it was eight), fades each by a Decay you set, and
-  offers the full set of stacking modes — the same blend modes a layer has (Screen, Add,
-  Multiply, Overlay and so on, with Screen the default for bright glowing trails) plus the
-  echo-only Behind (ghosting) and Max (lighten). One nuance worth knowing: these blends run in
+  offers a Mode menu that starts with two echo-only choices — Behind (each echo tucked behind
+  the trail, ghosting) and In front (over it) — then a divider, then the everyday light-combine
+  blends: Add, Screen, Multiply, Overlay, Soft/Hard light, Lighten, Darken, Difference,
+  Exclusion, Subtract, Divide (Screen is the default for bright glowing trails). The old "Max"
+  is just Lighten now, and the old "Normal" is the clearer "In front". One nuance worth knowing:
+  these blends run in
   the same "linear light" the compositor adds light in, on the see-through-aware (premultiplied)
   trail — the right space for stacking glowing copies, and it keeps the CPU and graphics-card
   versions matching to the last bit. Old projects keep whichever mode they had. Wider/looser

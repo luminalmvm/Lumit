@@ -1035,42 +1035,73 @@ fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
     assert!(weights.iter().all(|w| *w > 0.0), "all 16 taps are live");
     assert!((weights[0] - 0.5).abs() < 1e-6 && (weights[15] - 0.5f32.powi(16)).abs() < 1e-9);
 
-    // Legacy modes: index 1 (Behind) and index 2 (Max) resolve unchanged.
-    for legacy_mode in [0u32, 1, 2] {
+    // Every mode index (0 Behind … 13 Divide, T21) resolves through unchanged,
+    // and an out-of-range index clamps to the top of the list rather than
+    // panicking.
+    for m in [0u32, 1, 2, 8, 12, 13] {
         let mut old = e.clone();
         for p in &mut old.params {
             if p.id == "mode" {
-                p.value = EffectValue::Choice(legacy_mode);
+                p.value = EffectValue::Choice(m);
             }
         }
         let r = resolve_stack(&[old], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
         let Resolved::Echo { mode, .. } = r[0] else {
             panic!("expected an echo op");
         };
-        assert_eq!(mode, legacy_mode, "legacy mode index preserved");
+        assert_eq!(mode, m, "mode index preserved");
     }
+    let mut oob = e.clone();
+    for p in &mut oob.params {
+        if p.id == "mode" {
+            p.value = EffectValue::Choice(99);
+        }
+    }
+    let r = resolve_stack(&[oob], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    let Resolved::Echo { mode, .. } = r[0] else {
+        panic!("expected an echo op");
+    };
+    assert_eq!(mode, 13, "out-of-range mode clamps to the last (Divide)");
 }
 
 #[test]
 fn cpu_echo_blend_modes_combine_a_single_tap() {
     // One opaque grey pixel echoed by one darker opaque neighbour, weight 1,
     // Mix 1 (so the output is the pure combine). Values chosen to be exact in
-    // f32: 0.5 and 0.25. Screen brightens, Multiply darkens, Darken takes the
-    // min — the standard blend maths mirrored into Echo (FX-17/K-149).
+    // f32: 0.5 and 0.25. The mode indices are the T21 order (0 Behind …
+    // 13 Divide); each mode applies to all four premultiplied channels.
     let current = [0.5f32, 0.5, 0.5, 1.0];
     let neighbour = [0.25f32, 0.25, 0.25, 1.0];
     let mut weights = [0.0f32; 16];
     weights[0] = 1.0;
     let run = |mode: u32| cpu::echo(&current, &[(-1, &neighbour)], weights, mode, 1.0);
 
+    // Behind (0): accumulator over the echo — opaque accumulator wins.
+    assert_eq!(run(0), vec![0.5, 0.5, 0.5, 1.0]);
+    // In front (1): echo over the accumulator — opaque echo wins.
+    assert_eq!(run(1), vec![0.25, 0.25, 0.25, 1.0]);
+    // Add (2): 0.5 + 0.25 = 0.75; alpha 1 + 1 = 2.
+    assert_eq!(run(2), vec![0.75, 0.75, 0.75, 2.0]);
     // Screen (3): 0.5 + 0.25 − 0.5×0.25 = 0.625; alpha 1 + 1 − 1 = 1.
     assert_eq!(run(3), vec![0.625, 0.625, 0.625, 1.0]);
-    // Multiply (5): 0.5 × 0.25 = 0.125.
-    assert_eq!(run(5), vec![0.125, 0.125, 0.125, 1.0]);
+    // Multiply (4): 0.5 × 0.25 = 0.125.
+    assert_eq!(run(4), vec![0.125, 0.125, 0.125, 1.0]);
+    // Overlay (5): accumulator 0.5 ≤ 0.5 → 2·0.5·0.25 = 0.25; alpha 1.
+    assert_eq!(run(5), vec![0.25, 0.25, 0.25, 1.0]);
+    // Hard light (7): echo 0.25 ≤ 0.5 → 2·0.5·0.25 = 0.25; alpha 1.
+    assert_eq!(run(7), vec![0.25, 0.25, 0.25, 1.0]);
+    // Lighten (8): max(0.5, 0.25) = 0.5 — the leading frame wins.
+    assert_eq!(run(8), vec![0.5, 0.5, 0.5, 1.0]);
     // Darken (9): min(0.5, 0.25) = 0.25.
     assert_eq!(run(9), vec![0.25, 0.25, 0.25, 1.0]);
-    // Max (2): max(0.5, 0.25) = 0.5 — the leading frame wins.
-    assert_eq!(run(2), vec![0.5, 0.5, 0.5, 1.0]);
+    // Difference (10): |0.5 − 0.25| = 0.25; alpha |1 − 1| = 0.
+    assert_eq!(run(10), vec![0.25, 0.25, 0.25, 0.0]);
+    // Exclusion (11): 0.5 + 0.25 − 2·0.5·0.25 = 0.5; alpha 1 + 1 − 2 = 0.
+    assert_eq!(run(11), vec![0.5, 0.5, 0.5, 0.0]);
+    // Subtract (12): max(0.5 − 0.25, 0) = 0.25; alpha max(1 − 1, 0) = 0.
+    assert_eq!(run(12), vec![0.25, 0.25, 0.25, 0.0]);
+    // Divide (13): 0.5 ÷ 0.25 = 2.0; alpha 1 ÷ 1 = 1.
+    assert_eq!(run(13), vec![2.0, 2.0, 2.0, 1.0]);
 }
 
 #[test]

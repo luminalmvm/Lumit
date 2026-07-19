@@ -818,35 +818,37 @@ pub fn echo(
     out
 }
 
-/// One Echo combine mode (docs/08 §3.13, FX-17/K-149): fold the weighted
+/// One Echo combine mode (docs/08 §3.13, FX-17/K-149, T21): fold the weighted
 /// neighbour tap `n` into the running accumulator `a`, both premultiplied
 /// linear RGBA. Written per channel with the exact arithmetic order the WGSL
-/// `echo_accumulate` twin uses, so the two agree bit-for-bit (§1.6). Modes
-/// 0/1/2 (Add/Behind/Max) are the historical set; 3–9 mirror the comp blend
-/// modes (Screen/Normal/Multiply/Overlay/Soft light/Hard light/Darken), each
-/// applied to all four channels in the working linear space (not the
-/// compositor's perceptual sRGB domain — Echo composites light trails, so it
-/// stays linear and premultiplied, and this keeps CPU/GPU parity exact).
+/// `echo_accumulate` twin uses, so the two agree bit-for-bit (§1.6). Indices
+/// 0/1 are the effect-only compositing orders (Behind / In front); 2..=13 are
+/// the order-independent light-combine blend modes, each applied to all four
+/// channels in the working linear space (not the compositor's perceptual sRGB
+/// domain — Echo composites light trails, so it stays linear and premultiplied,
+/// and this keeps CPU/GPU parity exact). The HSL / burn / dodge modes a layer
+/// offers are deliberately absent (ill-defined on a premultiplied trail).
 fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
     let mut o = [0.0f32; 4];
     match mode {
         0 => {
-            // Add: echoes sum light behind the leading frame.
-            for c in 0..4 {
-                o[c] = a[c] + n[c];
-            }
-        }
-        1 => {
             // Behind: the accumulator composited over the echo (ghosting).
             let k = 1.0 - a[3];
             for c in 0..4 {
                 o[c] = a[c] + n[c] * k;
             }
         }
-        2 => {
-            // Max: per-channel lighten.
+        1 => {
+            // In front: the echo composited over the accumulator.
+            let k = 1.0 - n[3];
             for c in 0..4 {
-                o[c] = a[c].max(n[c]);
+                o[c] = n[c] + a[c] * k;
+            }
+        }
+        2 => {
+            // Add: echoes sum light behind the leading frame.
+            for c in 0..4 {
+                o[c] = a[c] + n[c];
             }
         }
         3 => {
@@ -856,19 +858,12 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
             }
         }
         4 => {
-            // Normal: the echo composited over the accumulator.
-            let k = 1.0 - n[3];
-            for c in 0..4 {
-                o[c] = n[c] + a[c] * k;
-            }
-        }
-        5 => {
             // Multiply.
             for c in 0..4 {
                 o[c] = a[c] * n[c];
             }
         }
-        6 => {
+        5 => {
             // Overlay = hard light with the accumulator as the switch.
             for c in 0..4 {
                 o[c] = if a[c] <= 0.5 {
@@ -878,7 +873,7 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
                 };
             }
         }
-        7 => {
+        6 => {
             // Soft light (W3C), s = n, d = a.
             for c in 0..4 {
                 let d = a[c];
@@ -894,7 +889,7 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
                 };
             }
         }
-        8 => {
+        7 => {
             // Hard light: the echo is the switch.
             for c in 0..4 {
                 o[c] = if n[c] <= 0.5 {
@@ -904,10 +899,40 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
                 };
             }
         }
-        _ => {
+        8 => {
+            // Lighten: per-channel max (the old "Max").
+            for c in 0..4 {
+                o[c] = a[c].max(n[c]);
+            }
+        }
+        9 => {
             // Darken: per-channel min.
             for c in 0..4 {
                 o[c] = a[c].min(n[c]);
+            }
+        }
+        10 => {
+            // Difference.
+            for c in 0..4 {
+                o[c] = (a[c] - n[c]).abs();
+            }
+        }
+        11 => {
+            // Exclusion.
+            for c in 0..4 {
+                o[c] = a[c] + n[c] - 2.0 * a[c] * n[c];
+            }
+        }
+        12 => {
+            // Subtract: take the echo's light out of the trail, floored at black.
+            for c in 0..4 {
+                o[c] = (a[c] - n[c]).max(0.0);
+            }
+        }
+        _ => {
+            // Divide: accumulator ÷ echo, floored at black (linear, unclamped above).
+            for c in 0..4 {
+                o[c] = (a[c] / n[c].max(1e-6)).max(0.0);
             }
         }
     }

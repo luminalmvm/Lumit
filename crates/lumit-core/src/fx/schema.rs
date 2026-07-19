@@ -55,6 +55,12 @@ pub enum ParamKind {
     Choice {
         options: &'static [&'static str],
         default: u32,
+        /// Option indices after which the dropdown draws a group divider
+        /// (T21): e.g. Echo's Mode lists its effect-only compositing orders
+        /// (Behind / In front) first, then a divider, then the standard blend
+        /// modes. Empty for an ungrouped list. The [`CHOICE_UNGROUPED`] alias
+        /// spells "no dividers" for the common case.
+        dividers_after: &'static [u32],
     },
     Bool {
         default: bool,

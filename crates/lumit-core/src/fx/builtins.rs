@@ -9,6 +9,10 @@ use crate::model::{
 /// labels and the 0/1/2 codes stay in one place.
 pub const EDGE_OPTIONS: &[&str] = EdgesMode::OPTIONS;
 
+/// "No group dividers" for a [`ParamKind::Choice`]'s `dividers_after` (T21) —
+/// the common case, spelled once so every ungrouped Choice reads the same.
+pub const CHOICE_UNGROUPED: &[u32] = &[];
+
 /// Shake's per-axis wobble (FX-11, K-146), tucked behind a twirl (P4): the
 /// master Amplitude/Frequency drive x and y together, and this group biases
 /// each axis, adding the z (depth/scale) shake that replaces the old Zoom pump.
@@ -196,6 +200,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Spin", "Zoom"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {
@@ -204,6 +209,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: EDGE_OPTIONS,
                     default: 1, // Repeat: full-frame game footage never darkens
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             MIX_PARAM,
@@ -595,6 +601,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Manual", "Trigger", "Strobe"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {
@@ -627,6 +634,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Hard", "Fade"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {
@@ -1271,6 +1279,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Rendered", "Depth map", "Focus map"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             MIX_PARAM,
@@ -1603,6 +1612,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: EDGE_OPTIONS,
                     default: 1,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {
@@ -1927,26 +1937,33 @@ pub const BUILTINS: &[EffectSchema] = &[
             ParamSchema {
                 id: "mode",
                 label: "Mode",
-                // The standard compositing blend modes mirroring the comp
-                // set (Normal, Add, Multiply, Screen, Overlay, Soft light,
-                // Hard light, Lighten [= Max], Darken), plus the echo-specific
-                // Behind (ghosting). The legacy indices 0/1/2 (Add/Behind/Max)
-                // are held so old projects load unchanged; the new modes are
-                // appended and the default is Screen (index 3, FX-17/K-149).
+                // Two effect-only compositing ORDERS first, then a divider (T21),
+                // then the order-independent light-combine blend modes. Behind
+                // draws each echo behind the trail (ghosting); In front over it
+                // (the old "Normal"). Max is gone — it was just Lighten. The
+                // HSL / burn / dodge modes a layer offers are omitted here: they
+                // are ill-defined on a premultiplied light trail (see §3.13 Open
+                // questions). Default is Screen (K-161/FX-17). Pre-release, no
+                // migration: old stored indices simply re-map.
                 kind: ParamKind::Choice {
                     options: &[
-                        "Add",
                         "Behind",
-                        "Max",
+                        "In front",
+                        "Add",
                         "Screen",
-                        "Normal",
                         "Multiply",
                         "Overlay",
                         "Soft light",
                         "Hard light",
+                        "Lighten",
                         "Darken",
+                        "Difference",
+                        "Exclusion",
+                        "Subtract",
+                        "Divide",
                     ],
-                    default: 3,
+                    default: 3,           // Screen
+                    dividers_after: &[1], // divider after In front
                 },
             },
             MIX_PARAM,
@@ -2014,6 +2031,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Everything below", "This layer's effects"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
         ],
@@ -2191,6 +2209,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Rendered", "Motion vectors", "Confidence"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             MIX_PARAM,
@@ -2247,6 +2266,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Final result", "Screen matte", "Status"],
                     default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {
@@ -2356,6 +2376,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Choice {
                     options: &["Source", "Hard colour", "Soft colour", "None"],
                     default: 2,
+                    dividers_after: CHOICE_UNGROUPED,
                 },
             },
             ParamSchema {

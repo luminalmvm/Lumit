@@ -549,7 +549,14 @@ pub(crate) fn effects_rows(
                         );
                     }
                 }
-                (EffectValue::Choice(cur), ParamKind::Choice { options, .. }) => {
+                (
+                    EffectValue::Choice(cur),
+                    ParamKind::Choice {
+                        options,
+                        dividers_after,
+                        ..
+                    },
+                ) => {
                     let (row_rect, mut c) = row_frame(ui, ctx, row_hl);
                     effect_row_select(app, ui, row_rect, sel);
                     c.label(
@@ -565,6 +572,11 @@ pub(crate) fn effects_rows(
                                 effects[idx].params[pi].value = EffectValue::Choice(oi as u32);
                                 *pending = Some(commit(effects));
                                 ui.close_menu();
+                            }
+                            // Group divider after this option (T21), e.g. Echo's
+                            // effect-only orders above the standard blend modes.
+                            if dividers_after.contains(&(oi as u32)) {
+                                ui.separator();
                             }
                         }
                     });
