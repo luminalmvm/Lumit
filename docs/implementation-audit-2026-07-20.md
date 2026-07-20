@@ -284,7 +284,7 @@ genuine render bug (overrun clamp).
 | 12.1 | Command table keys (R/E/F/1–6/[ ]/Tab/quantise) | Not implemented | No retime commands in `shortcuts.rs`/palette; actual affordances differ (header buttons, bottom-bar labels) | — |
 | 7.3 | `freeze_at_playhead` | Partial (unwired) | `insert_freeze` implemented + tested (`retime.rs:998`); zero UI callers | — |
 | 5.4 | Delete boundary → merge via graph editor | Partial (unwired) | `merge_boundary` implemented + tested (`retime.rs:926`); no UI caller | — |
-| 5.2/9.2 | "Convert to rate" menu + drift warning badge | Partial (unwired) | Core fit implemented (`retime.rs:1041,1462`); no menu, no badge | — |
+| 5.2/9.2 | "Convert to rate" menu + drift warning badge | Partial (unwired) | Core fit implemented (`retime.rs:1041,1462`); no menu, no badge | ◑ Partial · ⚠ CI-compiled (can't build lumit-ui here) · wired a **→Rate** button in the speed-lens graph header that calls the tested `with_segment_as_rate` on the segment under the playhead and commits `SetLayerRetime`; the fit **drift** is surfaced as a status notice (e.g. "fitted, 3 ms drift") rather than a persistent badge. The always-visible drift badge is still to build · 👁 try →Rate on a mapped segment |
 | 12.2 | Preset row includes **Hold** | Partial/contradicted | Buttons are Lin/Slow/Fast/Smth/Shrp only (`graph.rs:167-173`) | — |
 | 12.3 | Bulk quantise-boundaries-to-beats | Not implemented | Only per-drag beat snapping exists | — |
 | 9.2 | Speed-lens numeric % entry; Alt-compensated edit | Partial | Only boundary/speed-key drags | — |
