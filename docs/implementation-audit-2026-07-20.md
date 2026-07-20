@@ -136,7 +136,7 @@ recovery.
 |---|---|---|---|---|
 | §2, §3.2 | "OFX plugin support"; "plugins in separate processes" | Not implemented | Only `EffectNamespace::Ofx` enum variant (`model.rs:407`) used as a hash byte. No host, no subprocess/IPC anywhere | — |
 | §2 | "an AE project importer" | Not implemented | No `.aep`/Bridge/Lottie code (see 11 below) | — |
-| §3.1 | "adaptive degradation" | Partial (unwired) | `RealtimeController` exists + tested (`lumit-eval/src/schedule.rs:256`) but never constructed by the UI; live preview hardcodes `Quality { divisor: 1 }` (`app_state/previewing.rs:102`); "Auto" res keys off display size, not load | — |
+| §3.1 | "adaptive degradation" | Partial (unwired) | `RealtimeController` exists + tested (`lumit-eval/src/schedule.rs:256`) but never constructed by the UI; live preview hardcodes `Quality { divisor: 1 }` (`app_state/previewing.rs:102`); "Auto" res keys off display size, not load | ◑ Slice built ec2abe2 · ⚠ UNTESTED — can't build lumit-ui here, CI compiles only; needs your run under a heavy comp. Cost = CPU composite time (partial proxy); render-ahead ring (06 §6.4) still separate · 👁 verify adaptation |
 | §3.1 | Performance "budgeted and CI-enforced" | Contradicted | `.github/workflows/ci.yml` has no perf/benchmark job; no criterion benches in the workspace | — |
 | §3.1 | "the UI thread never renders a frame"; interactive at thousands of layers | Unverifiable / partial | Decode/export/mix are off-thread, but preview GPU submission happens on the UI thread via eframe's shared queue (`shell/gpu.rs:865-909`); no scaling benchmark exists | — |
 | §3.2 | "treat GPU resets as routine" | Not implemented | No device-lost handling anywhere; `main.rs:48-64` only pins a backend to avoid first-frame loss | — |
@@ -203,7 +203,7 @@ is live in preview and export).
 | K-017 | UI thread never evaluates; work-stealing pool | Partial | Epoch cancellation + off-thread decode exist; no work-stealing pool — ad-hoc `thread::spawn` per job; preview GPU submit is on the UI thread | — |
 | K-018 | Degrade-never-crash governor + ladder | Partial | Autosave/recovery + VRAM eviction exist; no central governor, no ladder, no device-loss recovery | — |
 | K-025 | AE-compatible keyframe maths incl. spatial + roving | Partial | Temporal side complete and tested (`anim.rs`); spatial beziers + roving keyframes deferred (`anim.rs:276`) | — |
-| K-030 | Cached + Realtime-adaptive preview modes | Partial (unwired) | No `PreviewMode` toggle; `RealtimeController` unwired; resolution picker is manual | — |
+| K-030 | Cached + Realtime-adaptive preview modes | Partial (unwired) | No `PreviewMode` toggle; `RealtimeController` unwired; resolution picker is manual | ◑ Slice built ec2abe2 · ⚠ UNTESTED — can't build lumit-ui here, CI compiles only; needs your run under a heavy comp. Cost = CPU composite time (partial proxy); render-ahead ring (06 §6.4) still separate · 👁 verify adaptation |
 | K-034 | Perceptual ops in Oklab; params declare domain | Partial | Oklab CPU+WGSL twin exists and is used; no per-parameter domain declaration; colour keyframe interpolation does not route through Oklab | — |
 | K-035 | Universal per-effect strength matte | **Not implemented** | No strength-matte slot on `EffectInstance` (`model.rs:511`); no host mixing plumbing anywhere (also flagged under 08) | — |
 | K-050 | v1 audio sync toolkit | Partial | Beats/markers/waveform/mute real; volume keyframes and audio layers absent (see 09) | — |
@@ -353,7 +353,7 @@ eval-graph executor, and several headline claims are contradicted.
 | 5.4 | `index.db` SQLite index | Not implemented | Filesystem `is_file` check ("later speed-up", `disk.rs:8`) | — |
 | 6.2 | Degradation ladder + status readout | Partial | Only a draft-width cap (`mod.rs:59`); no ladder/readout | — |
 | 6.4 | Render-ahead ring 8–16 + ~150 ms pre-roll | Partial (unwired) | Simple lookahead window; `FrameRing` never wired; no pre-roll | — |
-| 6.5 | Cached/Realtime preview toggle (K-030) | Not implemented (unwired) | `RealtimeController` tested, never referenced by UI | — |
+| 6.5 | Cached/Realtime preview toggle (K-030) | Not implemented (unwired) | `RealtimeController` tested, never referenced by UI | ◑ Slice built ec2abe2 · ⚠ UNTESTED — can't build lumit-ui here, CI compiles only; needs your run under a heavy comp. Cost = CPU composite time (partial proxy); render-ahead ring (06 §6.4) still separate · 👁 verify adaptation |
 | 7.2 | Export compiler with baking (K-024) | Not implemented | Export renders live per frame; no flatten/bake stage | — |
 | 7.4 | Output colour transform per preset; ProRes/DNxHR; straight/premult option | Partial | sRGB display readback → YUV only; no ProRes/DNxHR, no alpha option | — |
 | 7.5 | Presets incl. 1440p60 + Master | Partial | 1080p60 / 4K60 / Vertical / Custom only (`export.rs:72-97`) | — |
@@ -564,7 +564,7 @@ decision core (ring/lookahead/adaptive controller) is built and tested but unwir
 | §1/§2.1/§7.3 | Reference comp + deterministic stress fixture in repo for CI | Not implemented | No fixtures or builder | — |
 | §3 | Resource governor (VRAM/RAM budgets, DXGI subscription, ledger, pools) | Not implemented | "Governor" exists only in comments (`shell/gpu.rs:238`, `lumit-cache/src/lib.rs:4`) | — |
 | §4 | 7-step degradation ladder, hysteresis, status chip | Not implemented | No ladder/chip; per-effect no-ops are unrelated | — |
-| §4 step 3 / K-030 | Adaptive resolution during playback | Partial (unwired) | `RealtimeController` tested, unused by `comp_playback_tick` | — |
+| §4 step 3 / K-030 | Adaptive resolution during playback | Partial (unwired) | `RealtimeController` tested, unused by `comp_playback_tick` | ◑ Slice built ec2abe2 · ⚠ UNTESTED — can't build lumit-ui here, CI compiles only; needs your run under a heavy comp. Cost = CPU composite time (partial proxy); render-ahead ring (06 §6.4) still separate · 👁 verify adaptation |
 | §2 B5–B7 | Frame pacing via render-ahead ring | Partial (unwired) | `FrameRing`/`Lookahead` unused; single-frame prefetch instead | — |
 | §5 | GPU device-loss recovery + DRED + repeated-loss CPU fallback (B9) | Not implemented | No handling anywhere | — |
 | §6 | Effect contract: cost class used by scheduler, scratch ceilings, per-effect benchmarks | Partial | Cost class declared but unused; no scheduler; no memory benchmarks | — |
