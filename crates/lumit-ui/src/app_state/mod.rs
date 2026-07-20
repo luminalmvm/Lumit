@@ -639,7 +639,12 @@ pub struct AppState {
     /// Open composition-settings dialogue, if any.
     pub comp_dialog: Option<CompDialog>,
     pub pending_recovery: Option<PendingRecovery>,
+    /// A one-line error banner (fig-tinted, docs/15 §10): decode / export /
+    /// journal failures and the like. Dismissible; session-only.
     pub error: Option<String>,
+    /// A quiet neutral notice (e.g. a completed export) kept apart from `error`
+    /// so a success never wears the fig error tint (docs/15 §10). Session-only.
+    pub notice: Option<String>,
     #[cfg(feature = "media")]
     pub media: media::MediaRegistry,
     #[cfg(feature = "media")]
@@ -1000,6 +1005,7 @@ impl Default for AppState {
             selected_comp: None,
             pending_recovery: None,
             error: None,
+            notice: None,
             #[cfg(feature = "media")]
             media: media::MediaRegistry::default(),
             #[cfg(feature = "media")]

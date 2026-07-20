@@ -213,7 +213,9 @@ impl Shell {
                             .export_encoder
                             .map(|l| format!(" — encoded with {l}"))
                             .unwrap_or_default();
-                        self.app.error = Some(format!("exported {}{with}", path.display()));
+                        // A completed export is a quiet notice, not an error
+                        // (docs/15 §10 — completion is quiet, never fig-tinted).
+                        self.app.notice = Some(format!("exported {}{with}", path.display()));
                         self.export = None;
                         self.export_progress = None;
                         self.export_encoder = None;
@@ -921,9 +923,21 @@ impl Shell {
                 }
                 if let Some(err) = self.app.error.clone() {
                     ui.separator();
-                    ui.label(egui::RichText::new(&err).small().color(self.theme.warning));
+                    // Errors are fig-tinted banners (docs/15 §10), set apart from
+                    // the quiet neutral notice.
+                    ui.label(egui::RichText::new(&err).small().color(self.theme.error));
                     if ui.small_button("Dismiss").clicked() {
                         self.app.error = None;
+                    }
+                } else if let Some(notice) = self.app.notice.clone() {
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(&notice)
+                            .small()
+                            .color(self.theme.text_secondary),
+                    );
+                    if ui.small_button("Dismiss").clicked() {
+                        self.app.notice = None;
                     }
                 }
             });

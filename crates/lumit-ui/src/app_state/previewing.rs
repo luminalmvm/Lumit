@@ -726,9 +726,13 @@ impl AppState {
         comp: &lumit_core::model::Composition,
     ) -> Vec<crate::export::AudioJob> {
         use lumit_core::model::LayerKind;
+        // Solo silences non-soloed audio exactly as it hides non-soloed video
+        // (docs/09 §6): if any layer is soloed, only soloed layers contribute
+        // sound. Mirrors the video gate in draws.rs / export.rs.
+        let any_solo = lumit_core::model::any_solo(comp);
         let mut jobs = Vec::new();
         for layer in &comp.layers {
-            if !layer.switches.audible {
+            if !layer.switches.audible || (any_solo && !layer.switches.solo) {
                 continue;
             }
             let LayerKind::Footage { item, .. } = &layer.kind else {
