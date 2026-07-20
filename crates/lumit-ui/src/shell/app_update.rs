@@ -712,15 +712,19 @@ impl Shell {
                     }
                     #[cfg(feature = "media")]
                     ui.menu_button("Detect beats", |ui| {
-                        if ui.button("Standard").clicked() {
+                        // Sensitivity slider (docs/09 §5): 0–100, higher = more
+                        // beats. 50 is the old "Standard"; the δ the detector
+                        // wants is derived from this.
+                        ui.add(
+                            egui::Slider::new(&mut self.app.beat_sensitivity, 0..=100)
+                                .text("Sensitivity"),
+                        );
+                        if ui.button("Detect").clicked() {
                             if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                                self.app.detect_beats(id, 1.5);
-                            }
-                            ui.close_menu();
-                        }
-                        if ui.button("More markers").clicked() {
-                            if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                                self.app.detect_beats(id, 1.1);
+                                let delta = lumit_audio::beat::delta_from_sensitivity(
+                                    self.app.beat_sensitivity,
+                                );
+                                self.app.detect_beats(id, delta);
                             }
                             ui.close_menu();
                         }

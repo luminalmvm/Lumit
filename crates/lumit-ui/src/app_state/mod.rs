@@ -911,6 +911,11 @@ pub struct AppState {
     /// — the divisor drops under load and recovers slowly, trading resolution
     /// for smooth motion. Off = Cached mode (the manual/Auto picker applies).
     pub preview_realtime: bool,
+    /// Beat-detection sensitivity as a 0–100 slider (docs/09-AUDIO.md §5;
+    /// higher = more beats). Mapped to the detector's δ by
+    /// `lumit_audio::beat::delta_from_sensitivity`. 50 reproduces the old
+    /// "Standard" preset.
+    pub beat_sensitivity: u8,
     /// View zoom (1.0 = fit) and pan, in screen pixels. View controls only —
     /// never part of any render (07-UI-SPEC: Viewer).
     pub view_zoom: f32,
@@ -1099,6 +1104,7 @@ impl Default for AppState {
             preview_auto_res: false,
             preview_draft: false,
             preview_realtime: false,
+            beat_sensitivity: 50,
             view_zoom: 1.0,
             view_pan: egui::Vec2::ZERO,
             last_display_scale: 1.0,

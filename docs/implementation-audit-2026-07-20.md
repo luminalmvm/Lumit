@@ -466,7 +466,7 @@ missing or hardcoded.
 | 2/3.1 | 48 kHz session rate, RAM ring, lazy decode, background import pass | Partial/deviates | Playback resamples to device rate; whole-file synchronous decode into RAM (`audio.rs:34`); export does use 48 kHz | — |
 | 4 | Multi-tier sidecar peak files (min/max/RMS at 3 zooms, content-hash keyed) | Not implemented | Live-computed single 2048-bucket strip | — |
 | 4 | Waveforms on layers and inside clips | Not implemented | One comp-wide strip only (`timeline/panel.rs:305-357`) | — |
-| 5 | Sensitivity slider 0–100 | Partial | Two hardcoded presets (1.5 / 1.1) via menu | — |
+| 5 | Sensitivity slider 0–100 | Partial | Two hardcoded presets (1.5 / 1.1) via menu | ◑ Partial · ⚠ audio half tested on CI, UI half can't build here (CI-verified) · added `lumit_audio::beat::delta_from_sensitivity(0–100→δ)` (anchored 50→1.5, 70→1.1; unit-tested) and replaced the two-item Detect-beats menu with a 0–100 slider + Detect button (`beat_sensitivity` app-state field, default 50). Keyboard quick-detect shortcuts still use the two fixed densities · 👁 try the slider |
 | 5 | BPM confirm/type + phase; grid-fill missed beats | Partial | Auto grid-snap + BPM display only; no UI, no fill | — |
 | 5 | Tap tempo | Not implemented | Nothing | — |
 | 7 | Retime mutes audio with a badge | Not implemented | Retimed footage audio plays un-retimed, un-muted, un-badged | — |
