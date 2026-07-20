@@ -1,20 +1,21 @@
 # Remaining-work dependency graph
 
-Companion to [implementation-audit-2026-07-20.md](implementation-audit-2026-07-20.md). Every box
-is something **not yet finished**; completed items are pruned from the graph entirely. An arrow
+Companion to [implementation-audit-2026-07-20.md](implementation-audit-2026-07-20.md). An arrow
 points **from a prerequisite to the box that relies on it** — so you read chains left/top → down
 as build order. Boxes with no arrows are free-standing: they can be picked up any time.
 
 Markers inside boxes:
 
 - **👁** — built and CI-green, but the behaviour needs the owner's interactive check. Once you
-  confirm one, tell me and it gets a ✅ (and is pruned on the next revision).
-- **✅** — completed since this graph was drawn (kept one revision for visibility, then pruned).
+  confirm one, tell me and it gets a ✅.
+- **✅** — completed. **Kept in the graph, not pruned** — so the owner can still find and
+  independently verify each finished item later. They stay put permanently.
 - **Decision:** — blocked on an owner decision before implementation can start.
 - **(post-v1)** — future by design per the docs; drawn faintly at the bottom for completeness.
 
 Maintenance rule: whenever a feature lands or a 👁 is confirmed, this file is updated in the same
-commit (add ✅ / re-wire arrows), so the graph stays the live picture of what remains.
+commit (add/flip the ✅ marker, re-wire arrows), so the graph stays the live picture of progress.
+Completed boxes are never removed — the graph is a growing record, not just a to-do list.
 
 ```mermaid
 flowchart TD
@@ -22,6 +23,11 @@ flowchart TD
   subgraph SVERIFY["Verify first — built, awaiting your eye"]
     RTEYE["✅ Realtime adaptive preview — render-pull rework, owner-accepted:<br/>no longer freezes (one un-superseded render at a time),<br/>fed the real decode cost so the tier drops + the box is honest.<br/>Known limit (documented): dropping res doesn't cut decode, so<br/>decode-bound comps stay a bit choppy until render-ahead (RING) —<br/>Cached is the smooth path there"]
     SETTINGSMAC["✅ Settings reachable on macOS — added to the app menu at Cmd+,<br/>(native menu bar had no Settings item); owner confirmed Cmd+, works"]
+    LUMAEYE["✅ Luma matte perceptual gate — owner-verified"]
+    LIMEYE["✅ Master limiter — owner-verified by ear"]
+    RECEYE["✅ Crash recovery — owner-accepted"]
+    KEYSEYE["✅ New keybindings — owner-verified"]
+    RATEEYE["✅ Retime to-Rate button — owner-verified<br/>(all further retime work deferred by owner to last)"]
     BANNEREYE["👁 Error banner fig tint (15 §10)"]
     SOLOEYE["👁 Audio solo — logic verified; re-test the live<br/>mix plan: edits heard on the next callback"]
     BEATEYE["👁 Beat sensitivity slider — now in the timeline<br/>empty-lane right-click menu; re-check there"]
@@ -176,6 +182,7 @@ flowchart TD
     RTCOPY["Copy/paste retime + paste-attributes (04 §8.2)"]
     FREEZE --> HOLDP
   end
+  RATEEYE --> DRIFTB
 
   subgraph SFILE["File format and relink"]
     FPRINT["MediaRef content fingerprint (10 §2, 03 §3)"]
