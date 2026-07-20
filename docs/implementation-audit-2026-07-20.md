@@ -38,6 +38,19 @@ original snapshot; this log is the running record of what has since changed.
   ramp and VRAM tier noted as future. No code change.
 - **10 §1.1 (enum serialisation "lower-kebab") — doc-synced.** Corrected to serde's default
   PascalCase / external tagging, matching the shipped `.lum` format and round-trip tests.
+- **06 §3.5a (luma mattes in linear) — fixed.** Luma/silhouette mattes now gate by Rec.709
+  luma of the sRGB-*encoded* signal (perceptual, matching AE), not linear light. lumit-gpu,
+  verified locally; new test pins ~0.735 for a linear-0.5 grey.
+- **04 §7.2 (overrun clamp) — fixed.** `sequence::resolve` clamps the mapped source position
+  to the clip's `[source_in, source_out]`, so overrun holds the trimmed boundary frame
+  instead of running into media past the trim; one seam covers preview, export, and the eval
+  cache key. lumit-core, verified locally with a new overrun test. (Footage-layer retimes have
+  no source trim, so holding at media end is already correct there — this is clip-specific.)
+- **09 §6 (audio solo) — fixed (CI-pending).** `comp_audio_jobs` now honours solo, so a soloed
+  layer silences other audio the way it hides other video. lumit-ui — verified by reading; CI
+  on the PR is its check.
+- **15 §10 (error banner) — fixed (CI-pending).** Completion notices split into a neutral
+  `notice` field; genuine errors now carry the fig error tint. lumit-ui — CI-verified on the PR.
 
 ## Status legend
 
