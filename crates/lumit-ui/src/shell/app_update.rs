@@ -614,6 +614,7 @@ impl Shell {
                     ui.menu_button("Export preset", |ui| {
                         for preset in [
                             crate::export::ExportPreset::Youtube1080p60,
+                            crate::export::ExportPreset::Youtube1440p60,
                             crate::export::ExportPreset::Youtube4k60,
                             crate::export::ExportPreset::Vertical1080p60,
                         ] {

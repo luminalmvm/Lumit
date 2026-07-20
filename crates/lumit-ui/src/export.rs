@@ -73,6 +73,7 @@ pub enum ExportPreset {
     #[default]
     Custom,
     Youtube1080p60,
+    Youtube1440p60,
     Youtube4k60,
     Vertical1080p60,
 }
@@ -94,9 +95,10 @@ pub const PRESET_AUDIO_BPS: i64 = 320_000;
 pub const EXPORT_AUDIO_RATE: u32 = 48_000;
 
 impl ExportPreset {
-    pub const ALL: [ExportPreset; 4] = [
+    pub const ALL: [ExportPreset; 5] = [
         ExportPreset::Custom,
         ExportPreset::Youtube1080p60,
+        ExportPreset::Youtube1440p60,
         ExportPreset::Youtube4k60,
         ExportPreset::Vertical1080p60,
     ];
@@ -105,6 +107,7 @@ impl ExportPreset {
         match self {
             ExportPreset::Custom => "Custom (comp size)",
             ExportPreset::Youtube1080p60 => "YouTube 1080p60",
+            ExportPreset::Youtube1440p60 => "YouTube 1440p60",
             ExportPreset::Youtube4k60 => "YouTube 4K60",
             ExportPreset::Vertical1080p60 => "Vertical 1080×1920p60",
         }
@@ -122,6 +125,14 @@ impl ExportPreset {
                 codec: VideoCodec::H264,
                 target_bps: 16_000_000,
                 peak_bps: 24_000_000,
+            }),
+            // HEVC (H.264 fallback), VBR 25 target / 35 peak — YouTube's
+            // 1440p60 band (docs/06 §7.5).
+            ExportPreset::Youtube1440p60 => Some(PresetParams {
+                size: (2560, 1440),
+                codec: VideoCodec::Hevc,
+                target_bps: 25_000_000,
+                peak_bps: 35_000_000,
             }),
             // HEVC (the ladder falls back to x265 when no hardware offers
             // it), VBR 45 target / 60 peak — YouTube's 2160p60 band.
@@ -146,6 +157,7 @@ impl ExportPreset {
         match self {
             ExportPreset::Custom => "export.mp4",
             ExportPreset::Youtube1080p60 => "youtube-1080p60.mp4",
+            ExportPreset::Youtube1440p60 => "youtube-1440p60.mp4",
             ExportPreset::Youtube4k60 => "youtube-4k60.mp4",
             ExportPreset::Vertical1080p60 => "vertical-1080x1920.mp4",
         }
