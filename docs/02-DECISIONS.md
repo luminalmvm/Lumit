@@ -2174,3 +2174,17 @@ channel accumulating (a producer outrunning a stalled UI thread), the fix is a b
 `sync_channel` with explicit latest-wins drop on the latest-wins ones, logged as a follow-up
 decision — not a silent swap. The realtime audio callback stays lock-free ring-buffer reads only
 and is unaffected by this entry.
+
+**K-171 · DECIDED · Cached preview playback renders every frame and never skips; skipping is
+Realtime mode's job alone.** The intended behaviour, stated by the owner (it predates this log
+but was never written down): in the default **Cached** mode, playback advances to the next frame
+only when that frame has rendered. When rendering is slower than realtime the playhead slows
+down with it — audio pauses (v1) or timestretches to match (later) — and every frame lands in
+the cache; once the span is cached, playback replays it at full speed from cache. The shipped
+behaviour to date — a realtime clock that drops any frame not ready in time — is *not* Cached
+mode; that clock-chasing, frame-dropping discipline belongs exclusively to **Realtime** mode
+(K-030), where responsiveness is the point and resolution degrades instead. Consequences: the
+playback tick gains a render-gated stepping path as the default; the audio clock is master only
+while playback is actually realtime (cached replay, or Realtime mode); during slower-than-
+realtime cached rendering the *frame counter* leads and audio follows or waits. 06 §6 and the
+playback-scheduler impl note describe the ring/pre-roll machinery this stepping feeds.

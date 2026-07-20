@@ -20,15 +20,16 @@ commit (add ✅ / re-wire arrows), so the graph stays the live picture of what r
 flowchart TD
 
   subgraph SVERIFY["Verify first — built, awaiting your eye"]
-    RTEYE["👁 Realtime adaptive preview slice<br/>(run a heavy comp; K-030, 06 §6.5)"]
-    LUMAEYE["👁 Luma matte perceptual gate<br/>(real footage; 06 §3.5a)"]
+    RTEYE["👁 Realtime adaptive preview slice<br/>(owner: verify on PC later; K-030, 06 §6.5)"]
+    LUMAEYE["✅ Luma matte perceptual gate — owner-verified"]
     BANNEREYE["👁 Error banner fig tint (15 §10)"]
-    SOLOEYE["👁 Audio solo silences others — by ear (09 §6)"]
-    LIMEYE["👁 Master limiter −0.3 dBFS — by ear (09 §3.1)"]
-    BEATEYE["👁 Beat sensitivity slider (09 §5)"]
-    RECEYE["👁 Crash recovery incl. Open-autosave (10 §4)"]
-    KEYSEYE["👁 New keybindings: End, Shift+F3, Ctrl+D,<br/>zoom keys, bracket move/trim (07)"]
-    RATEEYE["👁 Retime to-Rate button on a mapped segment (04 §5.2)"]
+    SOLOEYE["👁 Audio solo — logic verified; re-test the fixed<br/>fast re-mix (applies within seconds during playback)"]
+    LIMEYE["✅ Master limiter — owner-verified by ear"]
+    BEATEYE["👁 Beat sensitivity slider — now in the timeline<br/>empty-lane right-click menu; re-check there"]
+    RECEYE["✅ Crash recovery — owner-accepted"]
+    KEYSEYE["✅ New keybindings — owner-verified"]
+    RATEEYE["✅ Retime to-Rate button — owner-verified<br/>(all further retime work deferred by owner to last)"]
+    AUDIOMEMEYE["👁 Audio memory fix — re-test with the movie:<br/>RAM stays within the Settings budget, solo re-mix<br/>lands in seconds, footage relink error still shown"]
   end
 
   subgraph SSPINE["Render and evaluation spine"]
@@ -41,6 +42,7 @@ flowchart TD
     GPUSUB["GPU-submit thread owns the queue (05 §2)"]
     RING["Wire render-ahead ring and pre-roll (06 §6.4)"]
     FRAMEPACE["Frame-pacing budgets B5–B7 (13 §2)"]
+    CACHEDPLAY["Cached playback renders every frame, never skips<br/>(K-171): render-gated stepping, audio pauses/stretches,<br/>realtime replay from cache — the intended default"]
     SCOPESGPU["GPU compute scopes (06 §8, K-096)"]
     WPOOL --> PIXPASS
     SEAMS --> PIXPASS
@@ -50,6 +52,7 @@ flowchart TD
     WPOOL --> RING
     RING --> FRAMEPACE
     GPUSUB --> FRAMEPACE
+    CACHEDPLAY --> RING
   end
 
   subgraph SPERF["Performance backbone"]
@@ -162,7 +165,7 @@ flowchart TD
   end
   RTEYE --> PREVIEWPANEL
 
-  subgraph SRETIME["Retime surface (cores tested, wiring wants interactive checks)"]
+  subgraph SRETIME["Retime surface — owner: leave ALL of this until last"]
     FREEZE["Wire freeze_at_playhead (04 §7.3)"]
     HOLDP["Hold preset in the ramp shelf (04 §12.2)"]
     MERGEB["Wire merge_boundary on boundary delete (04 §5.4)"]
