@@ -308,9 +308,9 @@ crate graph are not built as specified.
 
 | § | Claim | Status | Evidence / what's missing | Resolution / next step |
 |---|---|---|---|---|
-| §1 | Crates `lumit-time`, `lumit-expr`, `lumit-ofx`, `lumit-lfx` | Not implemented | None exist; undocumented `lumit-flow`, `lumit-text` do | — |
-| §1.1 | `FrameSource`/`KernelExecutor`/`CacheStore` trait seams in eval | Not implemented | Only `SourceStamper` exists; the pixel pass those traits serve is unbuilt (`graph.rs:3-4`) | — |
-| §1.1/§9 | wgpu isolated to one owning crate | Violated | Direct dep of `lumit-gpu`, `lumit-flow`, plus `egui-wgpu` in `lumit-ui` | — |
+| §1 | Crates `lumit-time`, `lumit-expr`, `lumit-ofx`, `lumit-lfx` | Not implemented | None exist; undocumented `lumit-flow`, `lumit-text` do | ✅ Doc-synced · 05 §1: split into "exist today (v1)" vs "reserved for later" tables; `lumit-time` folded into `lumit-core`; `lumit-flow`/`lumit-text` now listed |
+| §1.1 | `FrameSource`/`KernelExecutor`/`CacheStore` trait seams in eval | Not implemented | Only `SourceStamper` exists; the pixel pass those traits serve is unbuilt (`graph.rs:3-4`) | ✅ Doc-synced · 05 §1.1: eval now stated to depend only on `lumit-core` via `SourceStamper`; pixel pass + those seams marked reserved-not-built |
+| §1.1/§9 | wgpu isolated to one owning crate | Violated | Direct dep of `lumit-gpu`, `lumit-flow`, plus `egui-wgpu` in `lumit-ui` | ✅ Doc-synced · 05 §1.1: recorded as a known deviation (wgpu direct in `lumit-gpu`+`lumit-flow`, surface use in ui/app) |
 | §2 | Work-stealing worker pool (cores−1) | Not implemented | No pool; ad-hoc `thread::spawn` per job in `lumit-ui` | — |
 | §2 | Dedicated GPU-submit thread owns the queue | Not implemented | Submission via eframe's shared device/queue on the UI thread (`shell/gpu.rs:207,281-294,865-909`) | — |
 | §2 | Persistent per-stream decode threads + bounded queues | Not implemented | One-shot spawn per request (`previewing.rs:686`, `media.rs:53`) | — |

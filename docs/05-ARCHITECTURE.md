@@ -17,36 +17,51 @@ Lumit is a single cargo workspace of small crates. Small crates keep incremental
 seconds, force interfaces to be explicit, and make the two load-bearing seams — engine/UI and
 engine/media — mechanically enforceable rather than aspirational.
 
+The crates that exist today (v1), then the ones the doc reserves for later:
+
 | Crate | Responsibility |
 |---|---|
-| `lumit-core` | The document model: project, assets, comps, layers, clips, properties, keyframes, Retime segments, markers. Pure data + command application. No IO, no GPU, no threads. |
-| `lumit-time` | Rational time types (`SourceTime`, `ClipTime`, `LayerTime`, `CompTime`, `FrameRate`) and conversions. Depended on by everything. |
-| `lumit-eval` | The heart of **Nova** (K-083), the render pipeline: compiles a comp's layer stack into the evaluation graph; scheduling, cancellation epochs, the metadata pass, job orchestration for the pixel pass. |
-| `lumit-gpu` | The one wgpu device, WGSL effect kernels, texture pool, readback, device-lost recovery, optional CUDA interop. |
-| `lumit-media` | rsmpeg demux/decode/encode, frame index, persistent decoder instances, hardware decode, proxy generation, image sequences. |
-| `lumit-audio` | **Pulsar** (K-083): cpal output, audio graph evaluation, the audio clock, peak-pyramid waveform generation, beat detection. |
-| `lumit-cache` | **Nebula** (K-083): the three-tier cache (VRAM/RAM/disk), content-hash keys, budget accounting, eviction, the resource governor. |
-| `lumit-expr` | QuickJS-ng embedding for expressions (K-063): deterministic runtime, AE-surface library, per-property sandboxing. |
-| `lumit-ofx` | OFX host: out-of-process plugin server, C ABI boundary, shared-memory/shared-texture frame transport. |
+| `lumit-core` | The document model (project, comps, layers, clips, properties, keyframes, Retime segments, markers) **and the rational time types** (`SourceTime`/`ClipTime`/`LayerTime`/`CompTime`/`FrameRate`). Pure data + command application. No IO, no GPU, no threads. |
+| `lumit-eval` | Internal codename **Nova**. Content-hash frame keys, the evaluation-graph *compiler* (structure + identity folding + source dedup), cancellation epochs, and the pure playback-scheduler decision core. NB: the graph's **pixel pass is not here yet** — v1 renders through `lumit-ui` (see below). |
+| `lumit-gpu` | The one wgpu device, WGSL effect kernels, the compositor, the colour engine, readback. |
+| `lumit-flow` | Optical flow (**DIS**, K-169) — a CPU oracle plus WGSL twin — for Retime flow interpolation and flow motion blur. |
+| `lumit-media` | rsmpeg demux/decode/encode and the frame index. |
+| `lumit-audio` | **Pulsar**: cpal output, the audio clock everything syncs to, multi-source mixing, live waveform, spectral-flux beat detection. |
+| `lumit-cache` | **Nebula**: the frame cache — RAM + disk tiers, content-hash keys, byte-budget eviction. |
+| `lumit-text` | Text rasterisation (v1: single run, embedded Inter). |
+| `lumit-project` | Serialisation: `.lum` container read/write, the operation journal, autosave. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
+| `lumit-ui` | The egui shell: a tiling dock (egui_tiles, K-074) with a bare Viewer, timeline/graph-editor/Viewer widgets, theming per [15-DESIGN.md](15-DESIGN.md) — **and, in v1, the render/present path** (the pixel pass the eval graph will eventually own). |
+| `lumit-app` | The binary: winit event loop, wiring, session lifecycle. |
+
+Reserved for later (no crate exists yet):
+
+| Crate | Responsibility |
+|---|---|
+| `lumit-time` | The rational time types — **v1 keeps these inside `lumit-core`**, not a separate crate. |
+| `lumit-gpu` (extras) | Texture pool, device-lost recovery, optional CUDA interop — future additions to the existing crate. |
+| `lumit-media` (extras) | Persistent decoder instances, hardware decode, proxy generation, image sequences — future; v1 does one-shot CPU decode. |
+| `lumit-cache` (extras) | The VRAM tier, `index.db`, and the resource governor — future. |
+| `lumit-expr` | QuickJS-ng expressions (K-063) — deterministic runtime, AE-surface library, per-property sandboxing. |
+| `lumit-ofx` | OFX host: out-of-process plugin server, C ABI, shared-memory frame transport. |
 | `lumit-lfx` | LFX host (K-062). Shares the sandbox/IPC substrate with `lumit-ofx`. |
-| `lumit-project` | Serialisation: `.lum` container read/write, operation journal, autosave, relink, migrations. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
-| `lumit-ui` | The egui shell: a tiling dock (egui_tiles, K-074) with a bare Viewer, timeline/graph-editor/Viewer widgets, theming per [15-DESIGN.md](15-DESIGN.md). |
-| `lumit-app` | The binary: winit event loop, wiring, session lifecycle, crash handler. |
 
 ### 1.1 Dependency direction rules
 
 - Dependencies point **downward only**: `lumit-app` → `lumit-ui` → engine crates →
-  `lumit-core`/`lumit-time`. No engine crate may depend on `lumit-ui` or on egui, winit, or
-  any UI crate. This is the K-012 escape hatch: the UI layer MUST be replaceable (GPUI, Qt
-  shell) without touching the engine.
-- `lumit-core` and `lumit-time` MUST have no dependency on wgpu, rsmpeg, cpal, or QuickJS.
-  The document model is testable on any machine with no GPU and no codecs.
-- `lumit-eval` depends on `lumit-core` (reads compiled snapshots) and on `lumit-gpu`,
-  `lumit-media`, `lumit-cache` through **trait objects defined in `lumit-eval` itself**
-  (`FrameSource`, `KernelExecutor`, `CacheStore`), so the graph scheduler unit-tests against
-  fakes.
-- Heavy FFI crates (`rsmpeg`, wgpu, cudarc, QuickJS bindings) live only in their one owning
-  crate. No `-sys` crate appears in more than one `[dependencies]` table.
+  `lumit-core` (which holds the rational time types). No engine crate may depend on
+  `lumit-ui` or on egui, winit, or any UI crate. This is the K-012 escape hatch: the UI
+  layer MUST be replaceable (GPUI, Qt shell) without touching the engine.
+- `lumit-core` MUST have no dependency on wgpu, rsmpeg, cpal, or QuickJS. The document model
+  (and the time types folded into it) is testable on any machine with no GPU and no codecs.
+- `lumit-eval` depends **only on `lumit-core`** (it reads compiled snapshots). The one seam
+  it defines is the `SourceStamper` trait, so source-identity folding unit-tests against
+  fakes. The graph's pixel pass — and therefore any dependency on `lumit-gpu`/`lumit-media`/
+  `lumit-cache` — is **not here yet**: in v1 the render/present path lives in `lumit-ui`. The
+  eventual `FrameSource`/`KernelExecutor`/`CacheStore` trait seams are reserved, not built.
+- Heavy FFI crates (`rsmpeg`, cudarc, QuickJS bindings) live only in their one owning crate.
+  **Known deviation:** `wgpu` is a direct dependency of both `lumit-gpu` and `lumit-flow`
+  (the flow WGSL twin needs its own device access); it also appears in `lumit-ui`/`lumit-app`
+  for surface configuration. This is the one `-sys`-adjacent crate that spans tables in v1.
 - Circular dependencies are a build error by construction; if two crates want each other, the
   shared piece moves down into a new crate or into `lumit-core`.
 
