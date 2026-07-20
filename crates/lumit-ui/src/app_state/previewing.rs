@@ -70,6 +70,28 @@ impl AppState {
         (dur * comp.frame_rate.fps()).round().max(1.0) as usize
     }
 
+    /// Total frame count of whatever the Viewer is previewing — the active comp
+    /// or a footage item — or 0 when nothing is. Mirrors the transport bar's
+    /// own length lookup so the `End` key and the scrubber agree.
+    pub fn preview_frame_count(&self) -> usize {
+        if let Some(comp_id) = self.preview_comp {
+            return self
+                .store
+                .snapshot()
+                .comp(comp_id)
+                .map(|c| self.comp_frame_count(c))
+                .unwrap_or(0);
+        }
+        #[cfg(feature = "media")]
+        if let Some(id) = self.preview_item {
+            use crate::app_state::media::MediaStatus;
+            if let Some(MediaStatus::Ready { frames, .. }) = self.media.map.get(&id) {
+                return *frames;
+            }
+        }
+        0
+    }
+
     /// Build and send the batch request rendering `preview_comp` at the
     /// current frame (evaluator v0: footage layers, no retime yet).
     #[cfg(feature = "media")]

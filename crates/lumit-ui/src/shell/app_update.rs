@@ -143,7 +143,7 @@ impl Shell {
             if (self.app.preview_item.is_some() || self.app.preview_comp.is_some())
                 && !ctx.wants_keyboard_input()
             {
-                let (space, k, l, left, right, j, home) = ctx.input(|i| {
+                let (space, k, l, left, right, j, home, end) = ctx.input(|i| {
                     (
                         i.key_pressed(egui::Key::Space),
                         i.key_pressed(egui::Key::K),
@@ -152,6 +152,7 @@ impl Shell {
                         i.key_pressed(egui::Key::ArrowRight),
                         i.key_pressed(egui::Key::J),
                         i.key_pressed(egui::Key::Home),
+                        i.key_pressed(egui::Key::End),
                     )
                 });
                 if space {
@@ -172,12 +173,15 @@ impl Shell {
                     self.app.set_work_area_edge(true);
                 }
                 let step: i64 = i64::from(right) - i64::from(left || j);
-                if step != 0 || home {
+                if step != 0 || home || end {
                     if self.app.is_playing() {
                         self.app.toggle_play(); // stepping implies pause
                     }
                     let frame = if home {
                         0
+                    } else if end {
+                        // Last frame of the current preview (comp or footage).
+                        self.app.preview_frame_count().saturating_sub(1)
                     } else {
                         self.app.preview_frame.saturating_add_signed(step as isize)
                     };

@@ -415,7 +415,7 @@ whole documented subsystems are absent.
 | 13.2 | Tooltips with shortcut text at 500 ms | Partial | Tooltips exist, no shortcut text, default delay | — |
 | 14 | Focus cycling (Ctrl+F6), Tab traversal, arrow nav, Move-panel-to | Not implemented | None bound | — |
 | 15 | Remappable keymap + conflict detection + AE preset; keymap settings page | Not implemented | Hardcoded bindings; no keymap page | — |
-| 15 | J/K/L shuttle ×2/×4/×8; Home/End; the ~30 other listed keys | Contradicted / not implemented | J = single frame-step back; L = toggle play; K = pause; End unbound; Page/I/O/,/./*/Ctrl+M/P-S-R-T-A/E/M/U/X/Z/Y etc. all unbound | — |
+| 15 | J/K/L shuttle ×2/×4/×8; Home/End; the ~30 other listed keys | Contradicted / not implemented | J = single frame-step back; L = toggle play; K = pause; End unbound; Page/I/O/,/./*/Ctrl+M/P-S-R-T-A/E/M/U/X/Z/Y etc. all unbound | ◑ Partial · ⚠ CI-compiled (can't build lumit-ui here) · bound **End** → last frame of the current preview via a new `AppState::preview_frame_count` (comp or footage); Home already sought frame 0. The shuttle multipliers and the ~30 other keys remain — a full remappable keymap is the real fix (see the row above) |
 | 15 | macOS native menu matches keymap | Contradicted (minor) | Own accelerator set (`native_menu.rs:96`) | — |
 
 ---
