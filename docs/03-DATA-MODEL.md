@@ -72,24 +72,20 @@ are future (audio is currently only a footage layer's stream, §5.2):
 ### 3. Media references and interpretation
 
 ```rust
+// v1 stores only the path pair.
 struct MediaRef {
     relative_path: String,     // relative to project file where possible
     absolute_path: String,     // last known absolute location
-    fingerprint: Fingerprint,  // size + mtime + head/tail content hash, for relinking
-}
-
-struct FootageInterpretation {
-    frame_rate_override: Option<FrameRate>,
-    alpha: AlphaMode,               // straight | premultiplied(colour) | ignore | guess
-    colour_space: ColourSpaceTag,   // default: Rec.709/sRGB assumption for game captures
-    loop_count: u32,
-    start_timecode_policy: TcPolicy,
 }
 ```
 
-A footage item whose file cannot be found enters a **missing** state: it keeps all metadata,
-renders as a labelled placeholder slate, and never blocks project open. Relink flow in
-[07-UI-SPEC.md](07-UI-SPEC.md).
+**Future** — none of this is in v1 yet:
+
+- a `fingerprint` (size + mtime + head/tail content hash) for reliable relinking (a
+  `Fingerprint` type exists in `lumit-media` but is not stored on the reference);
+- a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
+  timecode policy) — v1 treats every source as sRGB with no per-item overrides;
+- the **missing**-footage state (placeholder slate + relink flow, [07-UI-SPEC.md](07-UI-SPEC.md)).
 
 ---
 
@@ -202,14 +198,15 @@ Invariants:
 ```rust
 struct Clip {
     id: Uuid,
-    source: ClipSource,            // FootageItem | Composition
+    source: ClipSource,            // Footage(Uuid) | Comp(Uuid)
     source_in: SourceTime,         // trim into the source
     source_out: SourceTime,        // exclusive
-    place: ClipTimeSpan,           // start + duration in layer time; derived from edits, stored explicitly
+    place_start: Rational,         // clip start on the layer timeline (the doc's ClipTimeSpan,
+    place_duration: Rational,      //   stored as start + duration)
     retime: Retime,                // exact rational boundaries — see 04-RETIMING.md
-    interpolation: FrameInterp,    // Nearest | Blend | Flow  (render policy, not part of the map)
-    label: LabelColour,
+    interpolation: Interpolation,  // Nearest | Blend | Flow  (render policy, not part of the map)
 }
+// Future: a per-clip `label` (LabelColour).
 ```
 
 Invariants (binding, per K-020/K-022):
@@ -359,15 +356,18 @@ Effects and masks, K-142), the same three-way source a matte carries in §5.1.
 
 ### 9.1 Text
 
-v1 `TextDocument`: styled runs (font family/weight, size, fill, stroke, tracking, leading),
-point vs paragraph text, alignment. Per-character animators are post-v1; the document model
-keeps text as structured runs (never rasterised into the project) so animators bolt on later.
+v1 `TextDocument` is a **single run**: `{ text, size, fill }` — one font (embedded Inter), one
+size, one fill, single line. The styled-runs model — font family/weight, stroke, tracking,
+leading, point vs paragraph text, alignment, and per-character animators — is **future**; the
+document stays structured (never rasterised into the project) so runs and animators bolt on
+later.
 
-### 9.2 Shape
+### 9.2 Shape (future — no Shape layer in v1)
 
-v1 `ShapeElement` tree: groups; parametric rectangle/ellipse/polystar; bezier path; fill
-(solid, linear/radial gradient); stroke (width, caps, joins, dashes); trim paths. Repeater,
-offset, wiggle-path are tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
+There is no `LayerKind::Shape` yet. The intended `ShapeElement` tree: groups; parametric
+rectangle/ellipse/polystar; bezier path; fill (solid, linear/radial gradient); stroke (width,
+caps, joins, dashes); trim paths. Repeater, offset, wiggle-path are tier 2
+([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
 
 ### 9.3 2.5D (K-023)
 
@@ -398,9 +398,9 @@ struct Marker {
     time: OwnerTime,
     duration: Option<RationalTime>,
     label: String,
-    colour: LabelColour,
     kind: MarkerKind,        // User | Beat { confidence: f32 } | Chapter
 }
+// Future: a marker `colour` (LabelColour).
 ```
 
 Beat markers are ordinary markers with provenance; regenerating beats replaces only
@@ -408,11 +408,17 @@ Beat markers are ordinary markers with provenance; regenerating beats replaces o
 
 ## 12. Schema evolution
 
-The model is versioned (`schema_version` in the project file). Rules, binding:
+The model is versioned (`schema_version` + a `min_reader` gate in the manifest — a file too new
+for the reader is refused with a clear message, docs/10 §1). Rules, binding:
 - Additive changes only where possible; unknown fields MUST be preserved on load/save
   (forward compatibility for shared projects, K-065).
-- Any breaking change ships with a migration and a decision-log entry.
-- Pre-1.0, migrations may be dropped after six months; post-1.0, never.
+- Post-1.0, any breaking change ships with a migration and a decision-log entry.
+
+v1 reality (pre-1.0): there is **no migration framework** yet — compatibility rests on
+additive fields with serde defaults, pervasive unknown-field preservation, and a few ad-hoc
+`serde(from = …)` shims (e.g. the K-142 matte-source and K-147 scanline migrations). Under the
+standing **pre-release no-migration policy**, breaking reshapes so far have simply not owed a
+migration (they are logged in 02-DECISIONS instead). A registry lands as 1.0 nears.
 
 ## Open questions
 
