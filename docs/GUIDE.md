@@ -1576,9 +1576,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   before?" (the cache, checked before doing anything and filled afterwards). Because the
   sockets are plug-shaped, the tests plug in cardboard fakes — no GPU, no codecs — and
   prove the order, the sharing, the cache behaviour, and that a scrub landing mid-walk
-  abandons it cleanly. Plugging in the *real* parts (the GPU compositor, the decoder,
-  the frame cache) is the remaining step; until then the shipped renderer in `lumit-ui`
-  keeps drawing the picture.
+  abandons it cleanly. A second proof goes further: a *walking skeleton* test in
+  `lumit-gpu` plugs the **real GPU compositor** into the sockets, renders solid-colour
+  layers through the walker, reads the pixels back, and checks the colours are exactly
+  right — including that two layers blend in linear light and that a cache hit does zero
+  GPU work. So the sockets are proven to fit the real machinery; what remains is teaching
+  the adapters the full layer vocabulary (transforms, masks, retimes, effects) and then
+  switching preview and export over. Until then the shipped renderer in `lumit-ui` keeps
+  drawing the picture.
 - **The frame scheduler's brain (`lumit-eval::schedule`)** — the decision rules for
   smooth playback, written as plain arithmetic so tests can prove them. During playback
   Lumit renders frames ahead of the playhead onto a small shelf; each screen refresh

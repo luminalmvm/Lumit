@@ -2618,8 +2618,10 @@ dependencies = [
  "glam",
  "half",
  "lumit-core",
+ "lumit-eval",
  "pollster",
  "thiserror 2.0.18",
+ "uuid",
  "wgpu",
 ]
 
