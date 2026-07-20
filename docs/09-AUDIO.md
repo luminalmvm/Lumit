@@ -38,7 +38,9 @@ safe: no locks shared with the UI or render threads, no allocation; it reads fro
 pre-mixed ring buffer filled by a dedicated audio thread (K-017).
 
 Mixing model in v1: per-layer gain (volume keyframes, §6) → sum of all audible layers →
-master limiter (a hard safety clip at −0.3 dBFS true peak; not user-adjustable in v1) →
+master limiter (a hard safety clip at −0.3 dBFS; not user-adjustable in v1 — v1 clamps
+sample peaks to that ceiling, `lumit-audio::mix::MASTER_CEILING`; true inter-sample-peak
+limiting per ITU-R BS.1770 is future) →
 device. Sample-accurate means: layer in points, edit points, and volume keyframes are
 resolved to exact sample positions, not frame-quantised.
 

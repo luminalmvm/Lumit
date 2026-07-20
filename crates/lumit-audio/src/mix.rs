@@ -10,6 +10,14 @@
 //! buffer. It is pure arithmetic — no sound card, no decoding — so every
 //! rule here is a plain deterministic test.
 
+/// Master safety ceiling: −0.3 dBFS as a linear sample amplitude
+/// (`10^(−0.3/20) = 0.966050…`). docs/09-AUDIO.md §3.1 asks for a hard safety
+/// clip so a hot sum leaves headroom below full scale and never reaches the
+/// encoder at 0 dBFS. This is a per-sample ceiling; true inter-sample-peak
+/// limiting (4× oversampled, ITU-R BS.1770) is future — a sample clamp does
+/// not bound reconstruction overshoot, only the sample values themselves.
+pub const MASTER_CEILING: f32 = 0.966_050_9;
+
 /// One decoded stereo source placed on the comp's output strip.
 pub struct PlacedAudio<'a> {
     /// Output frame (per-channel sample index) where this source's first
@@ -24,7 +32,8 @@ pub struct PlacedAudio<'a> {
 
 /// Sum `sources` into a fresh `total_frames`-long interleaved stereo buffer.
 /// Overlaps add; anything falling outside `[0, total_frames)` is clipped; the
-/// final mix is clamped to [-1, 1] so a hot sum can't wrap or blow the DAC.
+/// final mix is clamped to ±[`MASTER_CEILING`] (−0.3 dBFS, docs/09 §3.1) so a
+/// hot sum can't wrap, blow the DAC, or reach the encoder at full scale.
 pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; total_frames * 2];
     for src in sources {
@@ -47,7 +56,7 @@ pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
         }
     }
     for s in &mut out {
-        *s = s.clamp(-1.0, 1.0);
+        *s = s.clamp(-MASTER_CEILING, MASTER_CEILING);
     }
     out
 }
@@ -343,6 +352,35 @@ mod tests {
             ],
             2,
         );
-        assert!(out.iter().all(|v| (v - 1.0).abs() < 1e-6));
+        // 0.8 + 0.8 = 1.6, held at the master ceiling, not wrapped.
+        assert!(out.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
+    }
+
+    #[test]
+    fn master_limiter_holds_minus_0_3_dbfs_both_polarities() {
+        // docs/09 §3.1: the safety clip leaves −0.3 dBFS of headroom, so a hot
+        // sum never reaches full scale on either polarity.
+        let hot_pos = tone(2, 1.5);
+        let hot_neg = tone(2, -1.5);
+        let out_pos = mix_stereo(
+            &[PlacedAudio {
+                start_frame: 0,
+                samples: &hot_pos,
+                gain: 1.0,
+            }],
+            2,
+        );
+        let out_neg = mix_stereo(
+            &[PlacedAudio {
+                start_frame: 0,
+                samples: &hot_neg,
+                gain: 1.0,
+            }],
+            2,
+        );
+        assert!(out_pos.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
+        assert!(out_neg.iter().all(|v| (v + MASTER_CEILING).abs() < 1e-6));
+        // The ceiling really is below full scale (−0.3 dBFS ≈ 0.9661).
+        assert!(MASTER_CEILING < 1.0 && MASTER_CEILING > 0.96);
     }
 }

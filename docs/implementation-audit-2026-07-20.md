@@ -455,7 +455,7 @@ missing or hardcoded.
 
 | § | Claim | Status | Evidence / what's missing | Resolution / next step |
 |---|---|---|---|---|
-| 3.1 | Master limiter: hard safety clip at −0.3 dBFS true peak | Contradicted | Plain ±1.0 sample clamp (`mix.rs:49-51`); no true-peak logic | — |
+| 3.1 | Master limiter: hard safety clip at −0.3 dBFS true peak | Contradicted | Plain ±1.0 sample clamp (`mix.rs:49-51`); no true-peak logic | ◑ Partial · ⚠ UNTESTED locally (can't build lumit-audio here — CI runs it) · `mix_stereo` now clamps to ±`MASTER_CEILING` (−0.3 dBFS = 0.96605) with a both-polarity regression test; doc 09 §3.1 updated to say sample-peak now, true inter-sample-peak (BS.1770) future |
 | 3.1/6 | Per-layer gain (volume keyframes) | Not implemented | Mix gain hardwired `1.0` (`export.rs:238`); no volume property in the model | — |
 | 6 | Fade-in/out commands | Not implemented | No fade code | — |
 | 6 | Audio solo silences non-soloed audio | Partial | Mute works; audio path never consults `solo` — soloing does not silence other audio | ✅ Done · afc7136 · CI-green · 👁 review by ear |
