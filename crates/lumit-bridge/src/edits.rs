@@ -381,15 +381,16 @@ pub(crate) fn set_comp_settings(
 
 /// The layer-local time (seconds) a comp `frame` maps to on `layer`, using the
 /// comp's own rate: `frame / fps − start_offset`. Layer-local time is where
-/// transform keyframes live (the egui frontend's convention).
-fn layer_local_seconds(c: &Composition, layer: &Layer, frame: i64) -> f64 {
+/// transform keyframes and Retime boundaries live (the egui frontend's
+/// convention); shared with [`crate::retime`] so both speak one clock.
+pub(crate) fn layer_local_seconds(c: &Composition, layer: &Layer, frame: i64) -> f64 {
     let fps = c.frame_rate.fps().max(1.0);
     frame as f64 / fps - layer.start_offset.0.to_f64()
 }
 
 /// A layer-local time (seconds, clamped ≥ 0) as a rational on the flick grid —
 /// `lumit-ui`'s `rational_at`, so bridge-made keyframes land on the same grid.
-fn rational_at(seconds: f64) -> Rational {
+pub(crate) fn rational_at(seconds: f64) -> Rational {
     Rational::from_f64_on_grid(seconds.max(0.0), Rational::FLICK_DEN).unwrap_or(Rational::ZERO)
 }
 
@@ -598,6 +599,73 @@ pub(crate) fn shift_keyframes(
     out.sort_by_key(|k| k.time);
     out.dedup_by(|a, b| a.time == b.time);
     commit_property(bridge, comp, l.id, prop, Animation::Keyframed(out), ctx)
+}
+
+/// Parse a [`SideInterp`] variant name (`Hold`/`Linear`/`Bezier`), building a
+/// `Bezier` from the supplied `speed`/`influence` when named. Any other name is
+/// an error. Shared with the retime ease parser only in spirit — this is the
+/// transform-graph interpolation vocabulary the snapshot read-back speaks.
+pub(crate) fn parse_side_interp(
+    name: &str,
+    speed: f64,
+    influence: f64,
+) -> Result<SideInterp, String> {
+    match name {
+        "Hold" => Ok(SideInterp::Hold),
+        "Linear" => Ok(SideInterp::Linear),
+        "Bezier" => Ok(SideInterp::Bezier { speed, influence }),
+        other => Err(format!("unknown interpolation '{other}'")),
+    }
+}
+
+/// Set the interpolation of the keyframe nearest the playhead `frame` on a
+/// transform property — the graph/inspector's interp edit, committed as one
+/// [`Op::SetTransformProperty`] replacing the whole animation (the same
+/// coarse-grained, exactly-invertible shape every keyframe edit uses). Each
+/// side takes `interp_in`/`interp_out` (`Hold`/`Linear`/`Bezier`); when a side
+/// is `Bezier` its `(speed, influence)` come from the matching pair. A no-op
+/// (property not animated, or no key at the playhead) is a calm error.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn set_keyframe_interp(
+    bridge: &mut Bridge,
+    comp_id: &str,
+    layer_id: &str,
+    property: &str,
+    frame: i64,
+    interp_in: &str,
+    interp_out: &str,
+    speed_in: f64,
+    influence_in: f64,
+    speed_out: f64,
+    influence_out: f64,
+) -> String {
+    let ctx = "set keyframe interp";
+    let (comp, c, l, prop) = match resolve_prop(bridge, comp_id, layer_id, property, ctx) {
+        Ok(t) => t,
+        Err(e) => return err_json(e),
+    };
+    let side_in = match parse_side_interp(interp_in, speed_in, influence_in) {
+        Ok(s) => s,
+        Err(e) => return err_json(format!("{ctx}: {e}")),
+    };
+    let side_out = match parse_side_interp(interp_out, speed_out, influence_out) {
+        Ok(s) => s,
+        Err(e) => return err_json(format!("{ctx}: {e}")),
+    };
+    let lt = layer_local_seconds(&c, &l, frame);
+    let slot = l.transform.get(prop);
+    let Animation::Keyframed(keys) = &slot.animation else {
+        return err_json("set keyframe interp: property is not animated");
+    };
+    let fps = c.frame_rate.fps().max(1.0);
+    let tol = 0.5 / fps;
+    let mut keys = keys.clone();
+    let Some(k) = keys.iter_mut().find(|k| (k.time.to_f64() - lt).abs() < tol) else {
+        return err_json("set keyframe interp: no keyframe at the playhead");
+    };
+    k.interp_in = side_in;
+    k.interp_out = side_out;
+    commit_property(bridge, comp, l.id, prop, Animation::Keyframed(keys), ctx)
 }
 
 // ---------------------------------------------------------------------------

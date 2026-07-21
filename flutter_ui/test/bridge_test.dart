@@ -197,6 +197,60 @@ class _FakeBridge implements DocumentBridge {
           double a) =>
       _op('effect_colour:$compId/$layerId/$effectId/$paramName=$r,$g,$b,$a');
 
+  // Bridge v0.4 stubs (record the op like the others; typed reads return idle).
+  @override
+  BridgeReply setKeyframeInterp(String compId, String layerId, String property,
+          int frame, String interpIn, String interpOut, double speedIn,
+          double influenceIn, double speedOut, double influenceOut) =>
+      _op('kfinterp:$compId/$layerId/$property@$frame=$interpIn/$interpOut');
+  @override
+  BridgeReply setRetimeEnabled(String compId, String layerId, bool enabled) =>
+      _op('retime_enabled:$compId/$layerId=$enabled');
+  @override
+  BridgeReply setRetimeSpeed(String compId, String layerId, double speed) =>
+      _op('retime_speed:$compId/$layerId=$speed');
+  @override
+  BridgeReply setSegmentPreset(
+          String compId, String layerId, int frame, String ease) =>
+      _op('segment_preset:$compId/$layerId@$frame=$ease');
+  @override
+  BridgeReply segmentToRate(String compId, String layerId, int frame) =>
+      _op('segment_to_rate:$compId/$layerId@$frame');
+  @override
+  BridgeReply dragBoundary(
+          String compId, String layerId, int index, int frame) =>
+      _op('drag_boundary:$compId/$layerId/$index@$frame');
+  @override
+  List<BridgeBlendMode> listBlendModes() => const [];
+  @override
+  BridgeReply setBlendMode(String compId, String layerId, String mode) =>
+      _op('blend:$compId/$layerId=$mode');
+  @override
+  BridgeReply setMatte(String compId, String layerId, String source,
+          String channel, bool inverted) =>
+      _op('matte:$compId/$layerId=$source/$channel/$inverted');
+  @override
+  BridgeReply setParent(String compId, String layerId, String parent) =>
+      _op('parent:$compId/$layerId=$parent');
+  @override
+  BridgeReply setMotionBlur(String compId, bool enabled, double shutterAngle,
+          double shutterPhase, int samples) =>
+      _op('motion_blur:$compId=$enabled/$shutterAngle/$shutterPhase/$samples');
+  @override
+  BridgeReply addMask(String compId, String layerId, String kind) =>
+      _op('mask:$compId/$layerId=$kind');
+  @override
+  BridgeExportPreset exportPreset(
+          String presetName, String compName, String template) =>
+      BridgeExportPreset.idle;
+  @override
+  BridgeReply startExport(String compId, String specJson, String outPath) =>
+      _op('start_export:$compId->$outPath');
+  @override
+  BridgeExportState exportPoll() => BridgeExportState.idle;
+  @override
+  BridgeReply exportCancel() => _op('export_cancel');
+
   @override
   DecodedFrame? decodeFrame(String itemId, int frame) {
     decoded.add('$itemId@$frame');
@@ -815,6 +869,161 @@ void main() {
         '"path":null}',
       ).snapshot;
       expect(app.transformValueFor('l0', 'opacity'), 73.0);
+    });
+  });
+
+  group('Bridge v0.4 parsing', () {
+    test('a keyframe parses its Bezier tangents per side', () {
+      final k = BridgeKeyframe.fromJson({
+        'frame': 12,
+        'value': 3.0,
+        'interp_in': 'Bezier',
+        'interp_out': 'Linear',
+        'bezier_in': {'speed': 2.0, 'influence': 0.5},
+      });
+      expect(k.interpIn, 'Bezier');
+      expect(k.bezierIn, isNotNull);
+      expect(k.bezierIn!.speed, 2.0);
+      expect(k.bezierIn!.influence, 0.5);
+      expect(k.bezierOut, isNull); // a Linear side carries no tangent
+    });
+
+    test('a layer parses blend mode, matte, parent and retime', () {
+      final layer = BridgeLayer.fromJson({
+        'id': 'l',
+        'index': 0,
+        'name': 'clip',
+        'kind': 'footage',
+        'in_frame': 0,
+        'out_frame': 300,
+        'label': 0,
+        'switches': {},
+        'blend_mode': 'Multiply',
+        'parent': 'p',
+        'matte': {
+          'source': 's',
+          'channel': 'luma',
+          'inverted': true,
+          'source_mode': 'masks',
+        },
+        'retime': {
+          'reverse': false,
+          'interpolation': 'nearest',
+          'boundaries': [
+            {'t_frame': 0, 't_seconds': 0.0, 's_seconds': 0.0, 'smooth': false},
+            {'t_frame': 300, 't_seconds': 5.0, 's_seconds': 2.5, 'smooth': false},
+          ],
+          'segments': [
+            {'kind': 'rate', 'v0': 0.5, 'v1': 0.5, 'ease': 'Linear'},
+          ],
+        },
+      });
+      expect(layer.blendMode, 'Multiply');
+      expect(layer.parent, 'p');
+      expect(layer.matte!.channel, 'luma');
+      expect(layer.matte!.inverted, isTrue);
+      expect(layer.matte!.sourceMode, 'masks');
+      expect(layer.retime!.interpolation, 'nearest');
+      expect(layer.retime!.boundaries.length, 2);
+      expect(layer.retime!.boundaries[1].tFrame, 300);
+      expect(layer.retime!.segments.single.kind, 'rate');
+      expect(layer.retime!.segments.single.v0, 0.5);
+      expect(layer.retime!.segments.single.ease, 'Linear');
+    });
+
+    test('a comp parses its motion-blur master', () {
+      final comp = BridgeComp.fromJson({
+        'width': 1920,
+        'height': 1080,
+        'fps': {'num': 60, 'den': 1},
+        'frame_count': 300,
+        'layers': [],
+        'markers': [],
+        'work_area': null,
+        'motion_blur': {
+          'enabled': true,
+          'shutter_angle': 180.0,
+          'shutter_phase': -90.0,
+          'samples': 16,
+        },
+      });
+      expect(comp.motionBlur!.enabled, isTrue);
+      expect(comp.motionBlur!.angle, 180.0);
+      expect(comp.motionBlur!.phase, -90.0);
+      expect(comp.motionBlur!.samples, 16);
+    });
+
+    test('an export poll reply parses its state and progress', () {
+      final running = BridgeExportState.fromJson({
+        'state': 'running',
+        'frame': 12,
+        'total': 90,
+        'encoder': 'software x264',
+      });
+      expect(running.isRunning, isTrue);
+      expect(running.frame, 12);
+      expect(running.total, 90);
+      expect(running.encoder, 'software x264');
+      final done = BridgeExportState.fromJson({'state': 'done', 'path': 'out.mp4'});
+      expect(done.isDone, isTrue);
+      expect(done.path, 'out.mp4');
+    });
+
+    test('an export preset reply parses its stamped fields', () {
+      final p = BridgeExportPreset.fromJson({
+        'preset': 'youtube_1080p60',
+        'codec': 'h264',
+        'size': [1920, 1080],
+        'bitrate_mbps': '16',
+        'include_audio': true,
+        'default_name': 'youtube-1080p60.mp4',
+      });
+      expect(p.codec, 'h264');
+      expect(p.size, [1920, 1080]);
+      expect(p.bitrateMbps, '16');
+      expect(p.defaultName, 'youtube-1080p60.mp4');
+    });
+  });
+
+  group('AppStateStub v0.4 pass-throughs', () {
+    test('the column and retime ops route to the bridge', () {
+      final fake = _FakeBridge();
+      final app = AppStateStub(bridge: fake);
+      app.setBlendMode('c', 'l', 'Multiply');
+      app.setMatte('c', 'l', 's', 'luma', true);
+      app.setParent('c', 'l', 'p');
+      app.setMotionBlur('c', true, 180.0, -90.0, 16);
+      app.addMask('c', 'l', 'rectangle');
+      app.setRetimeSpeed('c', 'l', 50.0);
+      app.setSegmentPreset('c', 'l', 30, 'Smth');
+      app.setKeyframeInterp('c', 'l', 'opacity', 0, 'Bezier', 'Linear');
+      expect(fake.ops, contains('blend:c/l=Multiply'));
+      expect(fake.ops, contains('matte:c/l=s/luma/true'));
+      expect(fake.ops, contains('parent:c/l=p'));
+      expect(fake.ops, contains('mask:c/l=rectangle'));
+      expect(fake.ops, contains('retime_speed:c/l=50.0'));
+      expect(fake.ops, contains('segment_preset:c/l@30=Smth'));
+      expect(app.errorNotice, isNull);
+    });
+
+    test('export start/poll/cancel route to the bridge, with none-safe defaults',
+        () {
+      final fake = _FakeBridge();
+      final app = AppStateStub(bridge: fake);
+      final reply = app.startExport('c', '{"preset":"custom"}', 'out.mp4');
+      expect(reply.ok, isTrue);
+      expect(fake.ops, contains('start_export:c->out.mp4'));
+      // The poll seam and preset resolver return the fake's idle defaults.
+      expect(app.pollExport().state, 'idle');
+      expect(app.exportPreset('custom', 'Scene', '').preset, 'custom');
+      app.cancelExport();
+      expect(fake.ops, contains('export_cancel'));
+
+      // Without a bridge everything is a quiet, safe no-op.
+      final bare = AppStateStub(bridge: null);
+      expect(bare.startExport('c', '{}', 'o.mp4').ok, isFalse);
+      expect(bare.pollExport().state, 'idle');
+      expect(bare.listBlendModes(), isEmpty);
     });
   });
 }

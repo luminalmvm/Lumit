@@ -58,25 +58,47 @@ pub(crate) fn render_comp_frame(
     // Take a cheap snapshot (an `Arc<Document>` clone) under the document lock,
     // then release it before the slow GPU work under the renderer lock.
     let doc = with_bridge(|b| b.store.snapshot());
+    with_ready(|renderer| {
+        renderer
+            .render_rgba(&doc, comp, frame, scale)
+            .ok()
+            .map(|(rgba, w, h)| (w, h, rgba))
+    })
+    .flatten()
+}
 
+/// Run `f` against the session-lifetime headless renderer, building it lazily on
+/// first use. `None` when the machine has no GPU adapter (the renderer resolves
+/// to `Failed` and stays there — a calm, permanent "no frame"). The renderer's
+/// own lock serialises the call, separate from the document lock, so a slow
+/// render or export prep never blocks an edit. Shared by the Viewer render path
+/// and the export-input builder ([`with_export_inputs`]) so both drive the one
+/// renderer and share its probe cache.
+fn with_ready<R>(f: impl FnOnce(&mut lumit_ui::headless::HeadlessRenderer) -> R) -> Option<R> {
     let mutex = RENDERER.get_or_init(|| Mutex::new(Slot::Uninit));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
-
-    // First render on this session builds (or fails to build) the renderer.
     if matches!(*guard, Slot::Uninit) {
         *guard = match lumit_ui::headless::HeadlessRenderer::new() {
             Ok(renderer) => Slot::Ready(Box::new(renderer)),
             Err(_) => Slot::Failed,
         };
     }
-
     let Slot::Ready(renderer) = &mut *guard else {
-        return None; // Failed (no adapter) — a calm, permanent "no frame".
+        return None;
     };
-    renderer
-        .render_rgba(&doc, comp, frame, scale)
-        .ok()
-        .map(|(rgba, w, h)| (w, h, rgba))
+    Some(f(renderer))
+}
+
+/// Build the footage/audio inputs and a GPU export context for `comp` through
+/// the headless seam (K-175), so the export driver can hand them to the exact
+/// egui exporter (`lumit_ui::export::start`). `None` when the machine has no GPU
+/// adapter or the comp is unknown. Reuses the same renderer instance the Viewer
+/// path uses, so probes are shared and warm.
+pub(crate) fn with_export_inputs(
+    doc: &lumit_core::model::Document,
+    comp: Uuid,
+) -> Option<lumit_ui::headless::ExportInputs> {
+    with_ready(|renderer| renderer.export_inputs(doc, comp)).flatten()
 }
 
 #[cfg(test)]

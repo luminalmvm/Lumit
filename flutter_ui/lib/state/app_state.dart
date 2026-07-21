@@ -523,6 +523,107 @@ class AppStateStub extends ChangeNotifier {
       _bridgeOp((bridge) => bridge.setEffectParamColour(
           compId, layerId, effectId, paramName, r, g, b, a));
 
+  // --- Bridge v0.4 op pass-throughs ---------------------------------------
+
+  /// Set the interpolation of the keyframe nearest [frame] on a transform
+  /// [property] (`Hold`/`Linear`/`Bezier`; the speed/influence pairs apply only
+  /// to a `Bezier` side).
+  void setKeyframeInterp(
+          String compId,
+          String layerId,
+          String property,
+          int frame,
+          String interpIn,
+          String interpOut,
+          {double speedIn = 0,
+          double influenceIn = 1.0 / 3.0,
+          double speedOut = 0,
+          double influenceOut = 1.0 / 3.0}) =>
+      _bridgeOp((b) => b.setKeyframeInterp(compId, layerId, property, frame,
+          interpIn, interpOut, speedIn, influenceIn, speedOut, influenceOut));
+
+  /// Enable or disable a footage layer's Retime (the Time stopwatch).
+  void setRetimeEnabled(String compId, String layerId, bool enabled) =>
+      _bridgeOp((b) => b.setRetimeEnabled(compId, layerId, enabled));
+
+  /// Set a footage layer's constant playback speed (percent; 100 clears it).
+  void setRetimeSpeed(String compId, String layerId, double speedPercent) =>
+      _bridgeOp((b) => b.setRetimeSpeed(compId, layerId, speedPercent));
+
+  /// Set the ease of the Retime segment at [frame].
+  void setSegmentPreset(String compId, String layerId, int frame, String ease) =>
+      _bridgeOp((b) => b.setSegmentPreset(compId, layerId, frame, ease));
+
+  /// Convert the Map segment at [frame] to a Rate segment.
+  void segmentToRate(String compId, String layerId, int frame) =>
+      _bridgeOp((b) => b.segmentToRate(compId, layerId, frame));
+
+  /// Move the value-lens Retime boundary at [index] to comp [frame].
+  void dragBoundary(String compId, String layerId, int index, int frame) =>
+      _bridgeOp((b) => b.dragBoundary(compId, layerId, index, frame));
+
+  /// The blend-mode registry (empty without a bridge).
+  List<BridgeBlendMode> listBlendModes() =>
+      bridge?.listBlendModes() ?? const [];
+
+  /// Set a layer's blend mode (the serde variant name).
+  void setBlendMode(String compId, String layerId, String mode) =>
+      _bridgeOp((b) => b.setBlendMode(compId, layerId, mode));
+
+  /// Point a layer at another as its matte, or clear it when [source] is empty.
+  void setMatte(String compId, String layerId, String source, String channel,
+          bool inverted) =>
+      _bridgeOp((b) => b.setMatte(compId, layerId, source, channel, inverted));
+
+  /// Point a layer at another as its transform parent, or clear it when
+  /// [parent] is empty.
+  void setParent(String compId, String layerId, String parent) =>
+      _bridgeOp((b) => b.setParent(compId, layerId, parent));
+
+  /// Set the comp's motion-blur master.
+  void setMotionBlur(String compId, bool enabled, double shutterAngle,
+          double shutterPhase, int samples) =>
+      _bridgeOp((b) =>
+          b.setMotionBlur(compId, enabled, shutterAngle, shutterPhase, samples));
+
+  /// Add a starter mask shape (`rectangle`/`ellipse`/`star`) to a layer.
+  void addMask(String compId, String layerId, String kind) =>
+      _bridgeOp((b) => b.addMask(compId, layerId, kind));
+
+  // --- Bridge v0.4 export -------------------------------------------------
+
+  /// Resolve a delivery [presetName] into the dialogue fields it stamps plus its
+  /// suggested file name (the default fields without a bridge).
+  BridgeExportPreset exportPreset(
+          String presetName, String compName, String template) =>
+      bridge?.exportPreset(presetName, compName, template) ??
+      BridgeExportPreset.idle;
+
+  /// Start an export of [compId] to [outPath] with the dialogue-shaped
+  /// [specJson]. Returns the reply so the UI can queue on
+  /// "an export is already running"; without a bridge it is a quiet no-op that
+  /// reports failure. Does not refresh the snapshot (an export mutates nothing).
+  BridgeReply startExport(String compId, String specJson, String outPath) {
+    final b = bridge;
+    if (b == null) {
+      return const BridgeReply.err('no engine library');
+    }
+    final reply = b.startExport(compId, specJson, outPath);
+    if (!reply.ok) errorNotice = reply.error;
+    notifyListeners();
+    return reply;
+  }
+
+  /// Poll the running export — the seam a UI timer drives (this state owns no
+  /// timer of its own). Returns the idle state without a bridge.
+  BridgeExportState pollExport() => bridge?.exportPoll() ?? BridgeExportState.idle;
+
+  /// Ask the running export to cancel.
+  void cancelExport() {
+    bridge?.exportCancel();
+    notifyListeners();
+  }
+
   /// Run [op] against the bridge (a quiet no-op without one), applying its
   /// reply the same way [setLayerSwitch] and friends do.
   void _bridgeOp(BridgeReply Function(DocumentBridge b) op) {

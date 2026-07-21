@@ -109,6 +109,50 @@ class _FrameBridge implements DocumentBridge {
   BridgeReply setEffectParamColour(String c, String l, String e, String p,
           double r, double g, double b, double a) =>
       BridgeReply.ok(snap);
+  // Bridge v0.4 stubs.
+  @override
+  BridgeReply setKeyframeInterp(String c, String l, String p, int f, String ii,
+          String io, double si, double fi, double so, double fo) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply setRetimeEnabled(String c, String l, bool e) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply setRetimeSpeed(String c, String l, double s) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply setSegmentPreset(String c, String l, int f, String e) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply segmentToRate(String c, String l, int f) => BridgeReply.ok(snap);
+  @override
+  BridgeReply dragBoundary(String c, String l, int i, int f) =>
+      BridgeReply.ok(snap);
+  @override
+  List<BridgeBlendMode> listBlendModes() => const [];
+  @override
+  BridgeReply setBlendMode(String c, String l, String m) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply setMatte(String c, String l, String s, String ch, bool i) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply setParent(String c, String l, String p) => BridgeReply.ok(snap);
+  @override
+  BridgeReply setMotionBlur(String c, bool e, double a, double p, int s) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeReply addMask(String c, String l, String k) => BridgeReply.ok(snap);
+  @override
+  BridgeExportPreset exportPreset(String p, String c, String t) =>
+      BridgeExportPreset.idle;
+  @override
+  BridgeReply startExport(String c, String s, String o) =>
+      BridgeReply.ok(snap);
+  @override
+  BridgeExportState exportPoll() => BridgeExportState.idle;
+  @override
+  BridgeReply exportCancel() => BridgeReply.ok(snap);
 }
 
 /// A bridge that also offers composited-comp rendering. Extends [_FrameBridge]

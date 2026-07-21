@@ -146,6 +146,59 @@ class _FakeBridge implements DocumentBridge {
           String effectId, String paramName, double r, double g, double b,
           double a) =>
       _snap();
+  // Bridge v0.4 stubs (unused by these tests; return the snapshot).
+  @override
+  BridgeReply setKeyframeInterp(String compId, String layerId, String property,
+          int frame, String interpIn, String interpOut, double speedIn,
+          double influenceIn, double speedOut, double influenceOut) =>
+      _snap();
+  @override
+  BridgeReply setRetimeEnabled(String compId, String layerId, bool enabled) =>
+      _snap();
+  @override
+  BridgeReply setRetimeSpeed(String compId, String layerId, double speed) =>
+      _snap();
+  @override
+  BridgeReply setSegmentPreset(
+          String compId, String layerId, int frame, String ease) =>
+      _snap();
+  @override
+  BridgeReply segmentToRate(String compId, String layerId, int frame) =>
+      _snap();
+  @override
+  BridgeReply dragBoundary(
+          String compId, String layerId, int index, int frame) =>
+      _snap();
+  @override
+  List<BridgeBlendMode> listBlendModes() => const [];
+  @override
+  BridgeReply setBlendMode(String compId, String layerId, String mode) =>
+      _snap();
+  @override
+  BridgeReply setMatte(String compId, String layerId, String source,
+          String channel, bool inverted) =>
+      _snap();
+  @override
+  BridgeReply setParent(String compId, String layerId, String parent) =>
+      _snap();
+  @override
+  BridgeReply setMotionBlur(String compId, bool enabled, double shutterAngle,
+          double shutterPhase, int samples) =>
+      _snap();
+  @override
+  BridgeReply addMask(String compId, String layerId, String kind) => _snap();
+  @override
+  BridgeExportPreset exportPreset(
+          String presetName, String compName, String template) =>
+      BridgeExportPreset.idle;
+  @override
+  BridgeReply startExport(String compId, String specJson, String outPath) =>
+      _snap();
+  @override
+  BridgeExportState exportPoll() => BridgeExportState.idle;
+  @override
+  BridgeReply exportCancel() => _snap();
+
   @override
   DecodedFrame? decodeFrame(String itemId, int frame) => null;
 }

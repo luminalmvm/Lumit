@@ -169,6 +169,43 @@ where the row is logic).
   `scope_maths.dart`
 - ☐ Eyedropper magnifier; transform overlays
 
+## Bridge v0.4 export + Retime + last columns (done, feeds F3/F4)
+
+- ☑ Export over the headless seam (K-175, K-017): `start_export`/`export_poll`/
+  `export_cancel` reuse `lumit_ui::export` on its own thread; the seam
+  (`HeadlessRenderer::export_inputs`) builds the `ItemInfo` map + audio jobs +
+  a shared GPU context. One export at a time; a second start returns
+  `ok:false "an export is already running"` (Dart queues). `BridgeExportState`
+  parses the poll reply
+- ☑ Export preset resolver (`export_preset`, pure + always compiled): stamps the
+  preset (codec/size/bitrate), applies the VBR-peak-preserved-while-unedited
+  rule + 1.5× fallback, and renders the `{comp}`/`{preset}`/`{date}` filename
+  template (Windows-sanitised, `.mp4` forced; blank template = the preset's own
+  default byte-for-byte, K-119). Faithful port of `ExportDialogState::apply`/
+  `spec` + `export_default_file_name`/`render_filename_template`/
+  `sanitise_windows_filename`, with an unconditional round-trip test table.
+  `BridgeExportPreset` parses it
+- ☑ Full-run test: a tiny solid comp exports to a temp `.mp4` (gated behind
+  `LUMIT_BRIDGE_EXPORT_TEST`; the spec/plumbing tests are unconditional). Passes
+  on the dev box (the encoder ladder picks software x264 headless)
+- ☑ Keyframe interpolation: snapshot keys carry `bezier_in`/`bezier_out`
+  (`{speed,influence}`) on a `Bezier` side; `set_keyframe_interp` sets a key's
+  interp via `SetTransformProperty`. `BridgeBezier` parses it
+- ☑ Retime read-back: a footage layer carries `retime`
+  (`{reverse,interpolation,boundaries,segments}`; boundaries as comp frames +
+  seconds, segments tagged `rate`/`map`). Ops (all `SetLayerRetime`):
+  `set_retime_enabled`, `set_retime_speed`, `set_segment_preset` (Lin/Slow/Fast/
+  Smth/Shrp), `segment_to_rate` (→Rate, drift in the reply), `drag_boundary`.
+  `BridgeRetime`/`BridgeRetimeBoundary`/`BridgeRetimeSegment` parse it
+- ☑ Last columns: each layer carries `blend_mode`, `matte`
+  (`{source,channel,inverted,source_mode}`) and `parent`; each comp carries
+  `motion_blur`. Ops: `list_blend_modes`, `set_blend_mode`, `set_matte`,
+  `set_parent`, `set_motion_blur`, `add_mask` (rectangle/ellipse/star).
+  `BridgeMatte`/`BridgeMotionBlur`/`BridgeBlendMode` parse them; `AppStateStub`
+  pass-throughs + an `pollExport` timer seam wired
+- ☑ Session restore: nothing engine-side — open comps + playhead are Dart state,
+  so `SavedSession` stays a frontend concern (confirmed)
+
 ## Phase F3 — Timeline (in progress)
 
 - ☑ Comp-tab strip: one pill per composition in the snapshot (three-state fill,

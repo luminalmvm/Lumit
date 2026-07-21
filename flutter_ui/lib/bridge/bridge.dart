@@ -123,20 +123,40 @@ class BridgeSwitches {
       );
 }
 
+/// One side of a keyframe's Bezier tangent (snapshot v4): its [speed] (the
+/// tangent slope) and [influence] (how far the handle reaches, 0..1). Present on
+/// a keyframe side only when its interpolation is `Bezier`.
+class BridgeBezier {
+  final double speed;
+  final double influence;
+
+  const BridgeBezier({required this.speed, required this.influence});
+
+  factory BridgeBezier.fromJson(Map<String, dynamic> m) => BridgeBezier(
+        speed: _asDouble(m['speed']),
+        influence: _asDouble(m['influence']),
+      );
+}
+
 /// One keyframe of a transform property (snapshot v3). `frame` is the comp frame
 /// it lands on; `interpIn`/`interpOut` are the engine's `SideInterp` variant
-/// names (`Hold`, `Linear`, `Bezier`).
+/// names (`Hold`, `Linear`, `Bezier`). Snapshot v4 adds [bezierIn]/[bezierOut],
+/// present on a side only when its interpolation is `Bezier`.
 class BridgeKeyframe {
   final int frame;
   final double value;
   final String interpIn;
   final String interpOut;
+  final BridgeBezier? bezierIn;
+  final BridgeBezier? bezierOut;
 
   const BridgeKeyframe({
     required this.frame,
     required this.value,
     required this.interpIn,
     required this.interpOut,
+    this.bezierIn,
+    this.bezierOut,
   });
 
   factory BridgeKeyframe.fromJson(Map<String, dynamic> m) => BridgeKeyframe(
@@ -145,6 +165,13 @@ class BridgeKeyframe {
         interpIn: m['interp_in'] is String ? m['interp_in'] as String : 'Linear',
         interpOut:
             m['interp_out'] is String ? m['interp_out'] as String : 'Linear',
+        bezierIn: m['bezier_in'] is Map
+            ? BridgeBezier.fromJson((m['bezier_in'] as Map).cast<String, dynamic>())
+            : null,
+        bezierOut: m['bezier_out'] is Map
+            ? BridgeBezier.fromJson(
+                (m['bezier_out'] as Map).cast<String, dynamic>())
+            : null,
       );
 }
 
@@ -270,10 +297,275 @@ class BridgeEffectInfo {
       );
 }
 
+/// A layer's matte (snapshot v4): the [source] layer id, the [channel]
+/// (`alpha`/`luma`), whether it is [inverted], and the [sourceMode] (how the
+/// matte samples its source: `none`/`masks`/`effects_and_masks`).
+class BridgeMatte {
+  final String source;
+  final String channel;
+  final bool inverted;
+  final String sourceMode;
+
+  const BridgeMatte({
+    required this.source,
+    required this.channel,
+    required this.inverted,
+    required this.sourceMode,
+  });
+
+  factory BridgeMatte.fromJson(Map<String, dynamic> m) => BridgeMatte(
+        source: m['source'] is String ? m['source'] as String : '',
+        channel: m['channel'] is String ? m['channel'] as String : 'alpha',
+        inverted: m['inverted'] == true,
+        sourceMode: m['source_mode'] is String
+            ? m['source_mode'] as String
+            : 'effects_and_masks',
+      );
+}
+
+/// One boundary of a Retime store (snapshot v4): its local time as a comp
+/// [tFrame] (and the durable [tSeconds]), the [sSeconds] source position it
+/// pins, and whether it is [smooth] (edits keep the speed equal across it).
+class BridgeRetimeBoundary {
+  final int tFrame;
+  final double tSeconds;
+  final double sSeconds;
+  final bool smooth;
+
+  const BridgeRetimeBoundary({
+    required this.tFrame,
+    required this.tSeconds,
+    required this.sSeconds,
+    required this.smooth,
+  });
+
+  factory BridgeRetimeBoundary.fromJson(Map<String, dynamic> m) =>
+      BridgeRetimeBoundary(
+        tFrame: _asInt(m['t_frame']),
+        tSeconds: _asDouble(m['t_seconds']),
+        sSeconds: _asDouble(m['s_seconds']),
+        smooth: m['smooth'] == true,
+      );
+}
+
+/// One segment of a Retime store (snapshot v4). [kind] is `rate` or `map`. A
+/// `rate` segment carries [v0]/[v1] (speeds, 1 = 100%) and an [ease] name
+/// (`Linear`/`Slow`/`Fast`/`Smooth`/`Sharp`); a `map` segment carries
+/// [m0]/[m1]/[b0]/[b1] (the cubic handle description). Absent fields are null.
+class BridgeRetimeSegment {
+  final String kind;
+  final double? v0;
+  final double? v1;
+  final String? ease;
+  final double? m0;
+  final double? m1;
+  final double? b0;
+  final double? b1;
+
+  const BridgeRetimeSegment({
+    required this.kind,
+    this.v0,
+    this.v1,
+    this.ease,
+    this.m0,
+    this.m1,
+    this.b0,
+    this.b1,
+  });
+
+  factory BridgeRetimeSegment.fromJson(Map<String, dynamic> m) {
+    double? d(Object? raw) => raw is num ? raw.toDouble() : null;
+    return BridgeRetimeSegment(
+      kind: m['kind'] is String ? m['kind'] as String : 'rate',
+      v0: d(m['v0']),
+      v1: d(m['v1']),
+      ease: m['ease'] is String ? m['ease'] as String : null,
+      m0: d(m['m0']),
+      m1: d(m['m1']),
+      b0: d(m['b0']),
+      b1: d(m['b1']),
+    );
+  }
+}
+
+/// A footage layer's Retime store (snapshot v4): whether reverse is allowed, the
+/// frame [interpolation] policy (`nearest`/`blend`/`flow`), the [boundaries]
+/// (n + 1) and the [segments] (n). Segment `i` spans `boundaries[i]..[i+1]`.
+class BridgeRetime {
+  final bool reverse;
+  final String interpolation;
+  final List<BridgeRetimeBoundary> boundaries;
+  final List<BridgeRetimeSegment> segments;
+
+  const BridgeRetime({
+    required this.reverse,
+    required this.interpolation,
+    required this.boundaries,
+    required this.segments,
+  });
+
+  factory BridgeRetime.fromJson(Map<String, dynamic> m) {
+    final boundaries = <BridgeRetimeBoundary>[];
+    final rawB = m['boundaries'];
+    if (rawB is List) {
+      for (final b in rawB) {
+        if (b is Map) {
+          boundaries
+              .add(BridgeRetimeBoundary.fromJson(b.cast<String, dynamic>()));
+        }
+      }
+    }
+    final segments = <BridgeRetimeSegment>[];
+    final rawS = m['segments'];
+    if (rawS is List) {
+      for (final s in rawS) {
+        if (s is Map) {
+          segments.add(BridgeRetimeSegment.fromJson(s.cast<String, dynamic>()));
+        }
+      }
+    }
+    return BridgeRetime(
+      reverse: m['reverse'] == true,
+      interpolation: m['interpolation'] is String
+          ? m['interpolation'] as String
+          : 'nearest',
+      boundaries: boundaries,
+      segments: segments,
+    );
+  }
+}
+
+/// A composition's motion-blur master (snapshot v4): the [enabled] master, the
+/// shutter [angle] and [phase] in degrees, and the sub-frame [samples] count.
+class BridgeMotionBlur {
+  final bool enabled;
+  final double angle;
+  final double phase;
+  final int samples;
+
+  const BridgeMotionBlur({
+    required this.enabled,
+    required this.angle,
+    required this.phase,
+    required this.samples,
+  });
+
+  factory BridgeMotionBlur.fromJson(Map<String, dynamic> m) => BridgeMotionBlur(
+        enabled: m['enabled'] == true,
+        angle: _asDouble(m['shutter_angle']),
+        phase: _asDouble(m['shutter_phase']),
+        samples: _asInt(m['samples']),
+      );
+}
+
+/// One entry in the blend-mode registry (`listBlendModes`): a stable [name] (the
+/// serde variant name the op takes) and its sentence-case [label].
+class BridgeBlendMode {
+  final String name;
+  final String label;
+
+  const BridgeBlendMode({required this.name, required this.label});
+
+  factory BridgeBlendMode.fromJson(Map<String, dynamic> m) => BridgeBlendMode(
+        name: m['name'] is String ? m['name'] as String : '',
+        label: m['label'] is String ? m['label'] as String : '',
+      );
+}
+
+/// The dialogue fields a delivery preset stamps (`exportPreset`), mirroring
+/// `ExportDialogState::apply`: the [codec] (`h264`/`hevc`), the delivery [size]
+/// (`[w, h]`, or null for the comp's own size), the [bitrateMbps] as typed
+/// (empty for the encoder's default quality), the [includeAudio] default, and
+/// the suggested [defaultName].
+class BridgeExportPreset {
+  final String preset;
+  final String codec;
+  final List<int>? size;
+  final String bitrateMbps;
+  final bool includeAudio;
+  final String defaultName;
+
+  const BridgeExportPreset({
+    required this.preset,
+    required this.codec,
+    required this.size,
+    required this.bitrateMbps,
+    required this.includeAudio,
+    required this.defaultName,
+  });
+
+  factory BridgeExportPreset.fromJson(Map<String, dynamic> m) {
+    List<int>? size;
+    final rawSize = m['size'];
+    if (rawSize is List && rawSize.length == 2) {
+      size = [_asInt(rawSize[0]), _asInt(rawSize[1])];
+    }
+    return BridgeExportPreset(
+      preset: m['preset'] is String ? m['preset'] as String : 'custom',
+      codec: m['codec'] is String ? m['codec'] as String : 'h264',
+      size: size,
+      bitrateMbps: m['bitrate_mbps'] is String ? m['bitrate_mbps'] as String : '',
+      includeAudio: m['include_audio'] != false,
+      defaultName:
+          m['default_name'] is String ? m['default_name'] as String : 'export.mp4',
+    );
+  }
+
+  /// The default fields (no library / a parse failure): custom, comp size.
+  static const idle = BridgeExportPreset(
+    preset: 'custom',
+    codec: 'h264',
+    size: null,
+    bitrateMbps: '',
+    includeAudio: true,
+    defaultName: 'export.mp4',
+  );
+}
+
+/// The state of the one running export (`exportPoll`), mirroring the bridge's
+/// poll reply. [state] is `idle`/`running`/`done`/`failed`; [frame]/[total] are
+/// the progress counters; [encoder] is the encoder the ladder settled on (once
+/// known); [path] is set on `done`; [error] is set on `failed`.
+class BridgeExportState {
+  final String state;
+  final int frame;
+  final int total;
+  final String? encoder;
+  final String? path;
+  final String? error;
+
+  const BridgeExportState({
+    required this.state,
+    this.frame = 0,
+    this.total = 0,
+    this.encoder,
+    this.path,
+    this.error,
+  });
+
+  bool get isRunning => state == 'running';
+  bool get isDone => state == 'done';
+  bool get isFailed => state == 'failed';
+
+  /// The state before anything has run (or with no library).
+  static const idle = BridgeExportState(state: 'idle');
+
+  factory BridgeExportState.fromJson(Map<String, dynamic> m) => BridgeExportState(
+        state: m['state'] is String ? m['state'] as String : 'idle',
+        frame: _asInt(m['frame']),
+        total: _asInt(m['total']),
+        encoder: m['encoder'] is String ? m['encoder'] as String : null,
+        path: m['path'] is String ? m['path'] as String : null,
+        error: m['error'] is String ? m['error'] as String : null,
+      );
+}
+
 /// One composition layer as the Timeline reads it. `inFrame`/`outFrame` are comp
 /// frames derived from the comp's own rate; `index` is the stack position
 /// (0 = top). Snapshot v3 adds the [transform] read-back, the [effects] stack,
-/// and the identity links ([sourceItemId], [sourceCompId], [colour]).
+/// and the identity links ([sourceItemId], [sourceCompId], [colour]). Snapshot
+/// v4 adds the [blendMode], [matte], [parent] columns and a footage layer's
+/// [retime].
 class BridgeLayer {
   final String id;
   final int index;
@@ -299,6 +591,20 @@ class BridgeLayer {
   /// A solid layer's scene-linear RGBA, else null.
   final List<double>? colour;
 
+  /// The blend mode (serde variant name, e.g. `Normal`), or null for an older
+  /// engine.
+  final String? blendMode;
+
+  /// The layer's matte (snapshot v4), or null when it has none.
+  final BridgeMatte? matte;
+
+  /// The transform parent layer id (snapshot v4), or null when unparented.
+  final String? parent;
+
+  /// A footage layer's Retime store (snapshot v4), or null when it plays at
+  /// source rate.
+  final BridgeRetime? retime;
+
   const BridgeLayer({
     required this.id,
     required this.index,
@@ -313,6 +619,10 @@ class BridgeLayer {
     this.sourceItemId,
     this.sourceCompId,
     this.colour,
+    this.blendMode,
+    this.matte,
+    this.parent,
+    this.retime,
   });
 
   factory BridgeLayer.fromJson(Map<String, dynamic> m) {
@@ -361,6 +671,14 @@ class BridgeLayer {
           ? m['source_comp_id'] as String
           : null,
       colour: colour,
+      blendMode: m['blend_mode'] is String ? m['blend_mode'] as String : null,
+      matte: m['matte'] is Map
+          ? BridgeMatte.fromJson((m['matte'] as Map).cast<String, dynamic>())
+          : null,
+      parent: m['parent'] is String ? m['parent'] as String : null,
+      retime: m['retime'] is Map
+          ? BridgeRetime.fromJson((m['retime'] as Map).cast<String, dynamic>())
+          : null,
     );
   }
 }
@@ -379,6 +697,9 @@ class BridgeComp {
   /// comp — the preview/export span the B/N keys set.
   final List<int>? workArea;
 
+  /// The comp motion-blur master (snapshot v4), or null for an older engine.
+  final BridgeMotionBlur? motionBlur;
+
   const BridgeComp({
     required this.width,
     required this.height,
@@ -387,6 +708,7 @@ class BridgeComp {
     required this.layers,
     required this.markers,
     this.workArea,
+    this.motionBlur,
   });
 
   factory BridgeComp.fromJson(Map<String, dynamic> m) {
@@ -421,6 +743,10 @@ class BridgeComp {
       layers: layers,
       markers: markers,
       workArea: workArea,
+      motionBlur: m['motion_blur'] is Map
+          ? BridgeMotionBlur.fromJson(
+              (m['motion_blur'] as Map).cast<String, dynamic>())
+          : null,
     );
   }
 }
@@ -649,6 +975,40 @@ typedef _ColourParamC = Pointer<Char> Function(Pointer<Char>, Pointer<Char>,
 typedef _ColourParamDart = Pointer<Char> Function(Pointer<Char>, Pointer<Char>,
     Pointer<Char>, Pointer<Char>, double, double, double, double);
 
+// Bridge v0.4 op signatures.
+typedef _Str2BoolC = Pointer<Char> Function(Pointer<Char>, Pointer<Char>, Bool);
+typedef _Str2BoolDart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, bool);
+typedef _Str2DoubleC = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, Double);
+typedef _Str2DoubleDart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, double);
+typedef _Str2IntC = Pointer<Char> Function(Pointer<Char>, Pointer<Char>, Int64);
+typedef _Str2IntDart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, int);
+typedef _Str2Int2C = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, Int64, Int64);
+typedef _Str2Int2Dart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, int, int);
+typedef _SegmentPresetC = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, Int64, Pointer<Char>);
+typedef _SegmentPresetDart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, int, Pointer<Char>);
+typedef _MatteC = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, Pointer<Char>, Pointer<Char>, Bool);
+typedef _MatteDart = Pointer<Char> Function(
+    Pointer<Char>, Pointer<Char>, Pointer<Char>, Pointer<Char>, bool);
+typedef _MotionBlurC = Pointer<Char> Function(
+    Pointer<Char>, Bool, Double, Double, Uint32);
+typedef _MotionBlurDart = Pointer<Char> Function(
+    Pointer<Char>, bool, double, double, int);
+typedef _KeyframeInterpC = Pointer<Char> Function(Pointer<Char>, Pointer<Char>,
+    Pointer<Char>, Int64, Pointer<Char>, Pointer<Char>, Double, Double, Double,
+    Double);
+typedef _KeyframeInterpDart = Pointer<Char> Function(Pointer<Char>,
+    Pointer<Char>, Pointer<Char>, int, Pointer<Char>, Pointer<Char>, double,
+    double, double, double);
+
 // Frame decode: a raw RGBA8 buffer with its size written into out-pointers.
 typedef _DecodeC = Pointer<Uint8> Function(
     Pointer<Char>, Uint64, Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
@@ -785,6 +1145,85 @@ abstract class DocumentBridge {
   BridgeReply setEffectParamColour(String compId, String layerId,
       String effectId, String paramName, double r, double g, double b, double a);
 
+  // --- Bridge v0.4: keyframe interpolation ------------------------------
+
+  /// Set the interpolation of the keyframe nearest [frame] on a transform
+  /// [property]. [interpIn]/[interpOut] are `Hold`/`Linear`/`Bezier`; the
+  /// `(speed, influence)` pairs apply only to a `Bezier` side.
+  BridgeReply setKeyframeInterp(
+      String compId,
+      String layerId,
+      String property,
+      int frame,
+      String interpIn,
+      String interpOut,
+      double speedIn,
+      double influenceIn,
+      double speedOut,
+      double influenceOut);
+
+  // --- Bridge v0.4: Retime ----------------------------------------------
+
+  /// Enable or disable a footage layer's Retime (the Time stopwatch).
+  BridgeReply setRetimeEnabled(String compId, String layerId, bool enabled);
+
+  /// Set a footage layer's constant playback speed (percent; 100 clears it).
+  BridgeReply setRetimeSpeed(String compId, String layerId, double speedPercent);
+
+  /// Set the ease of the Retime segment at [frame] (`Lin`/`Slow`/`Fast`/`Smth`/
+  /// `Shrp`).
+  BridgeReply setSegmentPreset(
+      String compId, String layerId, int frame, String ease);
+
+  /// Convert the Map segment at [frame] to a Rate segment (the reply's snapshot
+  /// carries an added `drift` field).
+  BridgeReply segmentToRate(String compId, String layerId, int frame);
+
+  /// Move the value-lens Retime boundary at [index] to comp [frame].
+  BridgeReply dragBoundary(String compId, String layerId, int index, int frame);
+
+  // --- Bridge v0.4: timeline columns ------------------------------------
+
+  /// The blend-mode registry (`[{name, label}]`). Empty on any failure.
+  List<BridgeBlendMode> listBlendModes();
+
+  /// Set a layer's blend mode (the serde variant name, e.g. `Multiply`).
+  BridgeReply setBlendMode(String compId, String layerId, String mode);
+
+  /// Point a layer at another as its matte, or clear it when [source] is empty.
+  /// [channel] is `alpha`/`luma`.
+  BridgeReply setMatte(String compId, String layerId, String source,
+      String channel, bool inverted);
+
+  /// Point a layer at another as its transform parent, or clear it when
+  /// [parent] is empty.
+  BridgeReply setParent(String compId, String layerId, String parent);
+
+  /// Set the comp's motion-blur master (enable, shutter angle/phase, samples).
+  BridgeReply setMotionBlur(String compId, bool enabled, double shutterAngle,
+      double shutterPhase, int samples);
+
+  /// Add a starter mask shape (`rectangle`/`ellipse`/`star`) to a layer.
+  BridgeReply addMask(String compId, String layerId, String kind);
+
+  // --- Bridge v0.4: export ----------------------------------------------
+
+  /// Resolve a delivery [presetName] into the dialogue fields it stamps plus its
+  /// suggested file name. [compName] and [template] drive the filename tokens.
+  BridgeExportPreset exportPreset(
+      String presetName, String compName, String template);
+
+  /// Start an export of [compId] to [outPath] with the dialogue-shaped
+  /// [specJson]. `ok:false` "an export is already running" while one is in
+  /// flight (queue on the Dart side).
+  BridgeReply startExport(String compId, String specJson, String outPath);
+
+  /// Poll the running export, draining its progress channel.
+  BridgeExportState exportPoll();
+
+  /// Ask the running export to cancel (a no-op when none is running).
+  BridgeReply exportCancel();
+
   /// Decode one footage frame to RGBA8 (the F2 CPU path), or null on failure
   /// (missing/unreadable file, no engine library). The pixels are copied out of
   /// the engine buffer, which is freed immediately.
@@ -850,6 +1289,23 @@ class LumitBridge implements DocumentBridge, CompRenderBridge {
   final _Str3BoolDart _setEffectEnabled;
   final _ScalarParamDart _setEffectParamScalar;
   final _ColourParamDart _setEffectParamColour;
+  // Bridge v0.4.
+  final _KeyframeInterpDart _setKeyframeInterp;
+  final _Str2BoolDart _setRetimeEnabled;
+  final _Str2DoubleDart _setRetimeSpeed;
+  final _SegmentPresetDart _setSegmentPreset;
+  final _Str2IntDart _segmentToRate;
+  final _Str2Int2Dart _dragBoundary;
+  final _NoArgDart _listBlendModes;
+  final _Str3Dart _setBlendMode;
+  final _MatteDart _setMatte;
+  final _Str3Dart _setParent;
+  final _MotionBlurDart _setMotionBlur;
+  final _Str3Dart _addMask;
+  final _Str3Dart _exportPreset;
+  final _Str3Dart _startExport;
+  final _NoArgDart _exportPoll;
+  final _NoArgDart _exportCancel;
   final _DecodeDart _decodeFrame;
 
   /// Bound only when the loaded library exports it. An older `.dll` (predating
@@ -960,6 +1416,56 @@ class LumitBridge implements DocumentBridge, CompRenderBridge {
         _setEffectParamColour =
             lib.lookupFunction<_ColourParamC, _ColourParamDart>(
           'lumit_bridge_set_effect_param_colour',
+        ),
+        _setKeyframeInterp =
+            lib.lookupFunction<_KeyframeInterpC, _KeyframeInterpDart>(
+          'lumit_bridge_set_keyframe_interp',
+        ),
+        _setRetimeEnabled = lib.lookupFunction<_Str2BoolC, _Str2BoolDart>(
+          'lumit_bridge_set_retime_enabled',
+        ),
+        _setRetimeSpeed = lib.lookupFunction<_Str2DoubleC, _Str2DoubleDart>(
+          'lumit_bridge_set_retime_speed',
+        ),
+        _setSegmentPreset =
+            lib.lookupFunction<_SegmentPresetC, _SegmentPresetDart>(
+          'lumit_bridge_set_segment_preset',
+        ),
+        _segmentToRate = lib.lookupFunction<_Str2IntC, _Str2IntDart>(
+          'lumit_bridge_segment_to_rate',
+        ),
+        _dragBoundary = lib.lookupFunction<_Str2Int2C, _Str2Int2Dart>(
+          'lumit_bridge_drag_boundary',
+        ),
+        _listBlendModes = lib.lookupFunction<_NoArgC, _NoArgDart>(
+          'lumit_bridge_list_blend_modes',
+        ),
+        _setBlendMode = lib.lookupFunction<_Str3C, _Str3Dart>(
+          'lumit_bridge_set_blend_mode',
+        ),
+        _setMatte = lib.lookupFunction<_MatteC, _MatteDart>(
+          'lumit_bridge_set_matte',
+        ),
+        _setParent = lib.lookupFunction<_Str3C, _Str3Dart>(
+          'lumit_bridge_set_parent',
+        ),
+        _setMotionBlur = lib.lookupFunction<_MotionBlurC, _MotionBlurDart>(
+          'lumit_bridge_set_motion_blur',
+        ),
+        _addMask = lib.lookupFunction<_Str3C, _Str3Dart>(
+          'lumit_bridge_add_mask',
+        ),
+        _exportPreset = lib.lookupFunction<_Str3C, _Str3Dart>(
+          'lumit_bridge_export_preset',
+        ),
+        _startExport = lib.lookupFunction<_Str3C, _Str3Dart>(
+          'lumit_bridge_start_export',
+        ),
+        _exportPoll = lib.lookupFunction<_NoArgC, _NoArgDart>(
+          'lumit_bridge_export_poll',
+        ),
+        _exportCancel = lib.lookupFunction<_NoArgC, _NoArgDart>(
+          'lumit_bridge_export_cancel',
         ),
         _decodeFrame = lib.lookupFunction<_DecodeC, _DecodeDart>(
           'lumit_bridge_decode_frame',
@@ -1363,6 +1869,225 @@ class LumitBridge implements DocumentBridge, CompRenderBridge {
       malloc.free(l);
       malloc.free(e);
       malloc.free(p);
+    }
+  }
+
+  // --- Bridge v0.4 --------------------------------------------------------
+
+  @override
+  BridgeReply setKeyframeInterp(
+      String compId,
+      String layerId,
+      String property,
+      int frame,
+      String interpIn,
+      String interpOut,
+      double speedIn,
+      double influenceIn,
+      double speedOut,
+      double influenceOut) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    final p = property.toNativeUtf8();
+    final ii = interpIn.toNativeUtf8();
+    final io = interpOut.toNativeUtf8();
+    try {
+      return BridgeReply.parse(_readReply(_setKeyframeInterp(c.cast(), l.cast(),
+          p.cast(), frame, ii.cast(), io.cast(), speedIn, influenceIn, speedOut,
+          influenceOut)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+      malloc.free(p);
+      malloc.free(ii);
+      malloc.free(io);
+    }
+  }
+
+  @override
+  BridgeReply setRetimeEnabled(String compId, String layerId, bool enabled) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(_setRetimeEnabled(c.cast(), l.cast(), enabled)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+    }
+  }
+
+  @override
+  BridgeReply setRetimeSpeed(
+      String compId, String layerId, double speedPercent) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(_setRetimeSpeed(c.cast(), l.cast(), speedPercent)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+    }
+  }
+
+  @override
+  BridgeReply setSegmentPreset(
+      String compId, String layerId, int frame, String ease) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    final e = ease.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(_setSegmentPreset(c.cast(), l.cast(), frame, e.cast())));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+      malloc.free(e);
+    }
+  }
+
+  @override
+  BridgeReply segmentToRate(String compId, String layerId, int frame) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(_segmentToRate(c.cast(), l.cast(), frame)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+    }
+  }
+
+  @override
+  BridgeReply dragBoundary(
+      String compId, String layerId, int index, int frame) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(_dragBoundary(c.cast(), l.cast(), index, frame)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+    }
+  }
+
+  @override
+  List<BridgeBlendMode> listBlendModes() {
+    final raw = _readReply(_listBlendModes());
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded['ok'] != true) return const [];
+      final modes = decoded['blend_modes'];
+      if (modes is! List) return const [];
+      return [
+        for (final m in modes)
+          if (m is Map) BridgeBlendMode.fromJson(m.cast<String, dynamic>()),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  BridgeReply setBlendMode(String compId, String layerId, String mode) =>
+      _threeStrOp(_setBlendMode, compId, layerId, mode);
+
+  @override
+  BridgeReply setMatte(String compId, String layerId, String source,
+      String channel, bool inverted) {
+    final c = compId.toNativeUtf8();
+    final l = layerId.toNativeUtf8();
+    final s = source.toNativeUtf8();
+    final ch = channel.toNativeUtf8();
+    try {
+      return BridgeReply.parse(_readReply(
+          _setMatte(c.cast(), l.cast(), s.cast(), ch.cast(), inverted)));
+    } finally {
+      malloc.free(c);
+      malloc.free(l);
+      malloc.free(s);
+      malloc.free(ch);
+    }
+  }
+
+  @override
+  BridgeReply setParent(String compId, String layerId, String parent) =>
+      _threeStrOp(_setParent, compId, layerId, parent);
+
+  @override
+  BridgeReply setMotionBlur(String compId, bool enabled, double shutterAngle,
+      double shutterPhase, int samples) {
+    final c = compId.toNativeUtf8();
+    try {
+      return BridgeReply.parse(_readReply(_setMotionBlur(
+          c.cast(), enabled, shutterAngle, shutterPhase, samples)));
+    } finally {
+      malloc.free(c);
+    }
+  }
+
+  @override
+  BridgeReply addMask(String compId, String layerId, String kind) =>
+      _threeStrOp(_addMask, compId, layerId, kind);
+
+  @override
+  BridgeExportPreset exportPreset(
+      String presetName, String compName, String template) {
+    final p = presetName.toNativeUtf8();
+    final c = compName.toNativeUtf8();
+    final t = template.toNativeUtf8();
+    try {
+      final raw = _readReply(_exportPreset(p.cast(), c.cast(), t.cast()));
+      final decoded = jsonDecode(raw);
+      if (decoded is Map && decoded['ok'] == true) {
+        return BridgeExportPreset.fromJson(decoded.cast<String, dynamic>());
+      }
+      return BridgeExportPreset.idle;
+    } catch (_) {
+      return BridgeExportPreset.idle;
+    } finally {
+      malloc.free(p);
+      malloc.free(c);
+      malloc.free(t);
+    }
+  }
+
+  @override
+  BridgeReply startExport(String compId, String specJson, String outPath) =>
+      _threeStrOp(_startExport, compId, specJson, outPath);
+
+  @override
+  BridgeExportState exportPoll() {
+    final raw = _readReply(_exportPoll());
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map && decoded['ok'] == true) {
+        return BridgeExportState.fromJson(decoded.cast<String, dynamic>());
+      }
+      return BridgeExportState.idle;
+    } catch (_) {
+      return BridgeExportState.idle;
+    }
+  }
+
+  @override
+  BridgeReply exportCancel() => BridgeReply.parse(_callNoArg(_exportCancel));
+
+  /// Call a three-string op, freeing all three arguments afterwards.
+  BridgeReply _threeStrOp(_Str3Dart fn, String a, String b, String c) {
+    final pa = a.toNativeUtf8();
+    final pb = b.toNativeUtf8();
+    final pc = c.toNativeUtf8();
+    try {
+      return BridgeReply.parse(
+          _readReply(fn(pa.cast(), pb.cast(), pc.cast())));
+    } finally {
+      malloc.free(pa);
+      malloc.free(pb);
+      malloc.free(pc);
     }
   }
 

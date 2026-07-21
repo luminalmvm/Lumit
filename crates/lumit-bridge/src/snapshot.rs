@@ -18,8 +18,8 @@ use crate::media::MediaCache;
 use crate::state::Bridge;
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
 use lumit_core::model::{
-    Composition, Document, EffectInstance, EffectValue, Layer, LayerKind, LinearColour,
-    ProjectItem, TransformProp,
+    Composition, Document, EffectInstance, EffectValue, Layer, LayerInputSource, LayerKind,
+    LinearColour, MatteChannel, ProjectItem, TransformProp,
 };
 use lumit_core::time::{CompTime, Rational};
 use serde_json::{json, Value};
@@ -153,6 +153,13 @@ fn comp_value(doc: &Document, c: &Composition) -> Value {
         "layers": layers,
         "markers": markers,
         "work_area": work_area,
+        // v0.4: the comp motion-blur master (read back; set via set_motion_blur).
+        "motion_blur": {
+            "enabled": c.motion_blur.enabled,
+            "shutter_angle": c.motion_blur.shutter_angle,
+            "shutter_phase": c.motion_blur.shutter_phase,
+            "samples": c.motion_blur.samples,
+        },
     })
 }
 
@@ -174,11 +181,19 @@ fn layer_value(doc: &Document, c: &Composition, index: usize, l: &Layer) -> Valu
         "switches": switches,
         "transform": transform_value(c, l),
         "effects": effects_value(l),
+        // v0.4 columns: the blend mode (serde variant name, round-trip stable),
+        // the matte, and the transform parent (a layer id or null).
+        "blend_mode": serde_json::to_value(l.blend).unwrap_or(json!("Normal")),
+        "matte": matte_value(l),
+        "parent": l.parent.map(|p| json!(p.to_string())).unwrap_or(Value::Null),
     });
     // Identity links, mirroring the real `LayerKind` variant fields.
     match &l.kind {
-        LayerKind::Footage { item, .. } => {
+        LayerKind::Footage { item, retime } => {
             obj["source_item_id"] = json!(item.to_string());
+            if let Some(r) = retime {
+                obj["retime"] = retime_value(c, l, r);
+            }
         }
         LayerKind::Precomp { comp } => {
             obj["source_comp_id"] = json!(comp.to_string());
@@ -192,6 +207,95 @@ fn layer_value(doc: &Document, c: &Composition, index: usize, l: &Layer) -> Valu
         _ => {}
     }
     obj
+}
+
+/// A layer's matte as `{source, channel, inverted, source_mode}`, or null when
+/// the layer has none (v0.4). `source` is the matte layer's id; `channel` is
+/// `alpha`/`luma`; `source_mode` is how the matte samples its source
+/// (`none`/`masks`/`effects_and_masks`), mirroring [`MatteRef`].
+fn matte_value(l: &Layer) -> Value {
+    match &l.matte {
+        None => Value::Null,
+        Some(m) => json!({
+            "source": m.layer.to_string(),
+            "channel": match m.channel {
+                MatteChannel::Alpha => "alpha",
+                MatteChannel::Luma => "luma",
+            },
+            "inverted": m.inverted,
+            "source_mode": match m.source {
+                LayerInputSource::None => "none",
+                LayerInputSource::Masks => "masks",
+                LayerInputSource::EffectsAndMasks => "effects_and_masks",
+            },
+        }),
+    }
+}
+
+/// A footage layer's Retime store as the Timeline/graph reads it (v0.4). Chosen
+/// shape: `reverse`, `interpolation` (`nearest`/`blend`/`flow`), the `boundaries`
+/// (each `{t_frame, t_seconds, s_seconds, smooth}` — `t_frame` is the boundary's
+/// local time as a comp frame, the durable seconds kept alongside), and the
+/// `segments` (each tagged `rate` with `{v0, v1, ease}` or `map` with
+/// `{m0, m1, b0, b1}`), mirroring [`lumit_core::retime`]'s own types. Segment `i`
+/// spans `boundaries[i]..boundaries[i+1]`.
+fn retime_value(c: &Composition, l: &Layer, r: &lumit_core::retime::Retime) -> Value {
+    use lumit_core::retime::{Ease, RetimeSegment};
+    let ease_name = |e: Ease| match e {
+        Ease::Linear => "Linear",
+        Ease::Slow => "Slow",
+        Ease::Fast => "Fast",
+        Ease::Smooth => "Smooth",
+        Ease::Sharp => "Sharp",
+    };
+    // A boundary's local time in comp frames: layer-local seconds + the layer's
+    // start offset, then the comp's own rate (the same map keyframes use).
+    let boundaries: Vec<Value> = r
+        .boundaries
+        .iter()
+        .map(|b| {
+            let comp_time =
+                b.t.checked_add(l.start_offset.0)
+                    .map(CompTime)
+                    .unwrap_or(CompTime(b.t));
+            json!({
+                "t_frame": c.frame_rate.frame_at(comp_time),
+                "t_seconds": b.t.to_f64(),
+                "s_seconds": b.s.to_f64(),
+                "smooth": b.smooth,
+            })
+        })
+        .collect();
+    let segments: Vec<Value> = r
+        .segments
+        .iter()
+        .map(|s| match s {
+            RetimeSegment::Rate(seg) => json!({
+                "kind": "rate",
+                "v0": seg.v0.to_f64(),
+                "v1": seg.v1.to_f64(),
+                "ease": ease_name(seg.ease),
+            }),
+            RetimeSegment::Map(seg) => json!({
+                "kind": "map",
+                "m0": seg.m0.to_f64(),
+                "m1": seg.m1.to_f64(),
+                "b0": seg.b0.to_f64(),
+                "b1": seg.b1.to_f64(),
+            }),
+        })
+        .collect();
+    let interp = match &r.interpolation {
+        lumit_core::retime::Interpolation::Nearest => "nearest",
+        lumit_core::retime::Interpolation::Blend => "blend",
+        lumit_core::retime::Interpolation::Flow(_) => "flow",
+    };
+    json!({
+        "reverse": r.allow_reverse,
+        "interpolation": interp,
+        "boundaries": boundaries,
+        "segments": segments,
+    })
 }
 
 /// A layer's whole transform as `{ prop: {value, animated, keys?} }`, one entry
@@ -222,33 +326,51 @@ fn property_value(c: &Composition, l: &Layer, p: &Property) -> Value {
     }
 }
 
-/// One keyframe as `{frame, value, interp_in, interp_out}`. The keyframe time is
-/// layer-local; the reported `frame` is the comp frame it lands on (layer time
-/// plus the layer's start offset, then the comp's own rate), so the Timeline
-/// draws it under the right column. `interp_in`/`interp_out` are the
-/// [`SideInterp`] variant names.
+/// One keyframe as `{frame, value, interp_in, interp_out}`, plus `bezier_in`/
+/// `bezier_out` (`{speed, influence}`) on whichever side carries a Bezier tangent
+/// (v0.4, the graph editor read-back). The keyframe time is layer-local; the
+/// reported `frame` is the comp frame it lands on (layer time plus the layer's
+/// start offset, then the comp's own rate), so the Timeline draws it under the
+/// right column. `interp_in`/`interp_out` are the [`SideInterp`] variant names.
 fn keyframe_value(c: &Composition, l: &Layer, k: &Keyframe) -> Value {
     let comp_time = k
         .time
         .checked_add(l.start_offset.0)
         .map(CompTime)
         .unwrap_or(CompTime(k.time));
-    json!({
+    let mut obj = json!({
         "frame": c.frame_rate.frame_at(comp_time),
         "value": k.value,
         "interp_in": side_interp_name(k.interp_in),
         "interp_out": side_interp_name(k.interp_out),
-    })
+    });
+    if let Some(b) = side_bezier(k.interp_in) {
+        obj["bezier_in"] = b;
+    }
+    if let Some(b) = side_bezier(k.interp_out) {
+        obj["bezier_out"] = b;
+    }
+    obj
 }
 
-/// The [`SideInterp`] variant name (the interp vocabulary the graph editor will
-/// speak). `Bezier`'s speed/influence are not surfaced in v0.3 (no graph editor
-/// yet); the variant name is enough for the Timeline's key glyphs.
+/// The [`SideInterp`] variant name (`Hold`/`Linear`/`Bezier`) — the interp
+/// vocabulary the graph editor speaks and `set_keyframe_interp` accepts.
 fn side_interp_name(s: SideInterp) -> &'static str {
     match s {
         SideInterp::Hold => "Hold",
         SideInterp::Linear => "Linear",
         SideInterp::Bezier { .. } => "Bezier",
+    }
+}
+
+/// A Bezier side's `{speed, influence}` (v0.4), or `None` for a Hold/Linear
+/// side — the tangent the graph editor draws and `set_keyframe_interp` sets.
+fn side_bezier(s: SideInterp) -> Option<Value> {
+    match s {
+        SideInterp::Bezier { speed, influence } => {
+            Some(json!({ "speed": speed, "influence": influence }))
+        }
+        _ => None,
     }
 }
 

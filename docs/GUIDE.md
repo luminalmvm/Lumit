@@ -2421,3 +2421,44 @@ shape-coded diamonds you can select and drag), the work-area band on the ruler w
 draggable edges, a right-click menu on each layer, a search box that filters the
 layers by name, and a scrollbar to slide left and right once you have zoomed in;
 the graph editor is still to come.
+
+**What the bridge carries now (v0.4): export, Retime and the last columns.** The
+biggest addition is **export** — writing the finished comp to an `.mp4`. Rather
+than teach the bridge to encode video from scratch, it borrows the egui
+application's exporter through the same headless seam the Viewer uses (K-175):
+the seam gathers the footage and audio the export needs and lends a graphics
+device, and the exporter does the rest on its **own thread**, exactly as the
+egui app does, so the interface never freezes while a file is written. The
+conversation is a simple loop: Dart calls "start" with the composition, an
+output path, and a small description of the settings; then it calls "poll" on a
+timer to learn how far along the encode is (which frame of how many, which
+encoder the machine settled on) until the reply says *done* (with the file's
+path) or *failed* (with a calm reason); a "cancel" call stops it cleanly. Only
+one export runs at a time — asking to start a second while one is running
+answers "an export is already running", and the interface queues it. Two pieces
+of the export dialogue are worked out on the Rust side so the two frontends
+cannot disagree: **stamping a preset** (choosing "YouTube 1080p60" fills in the
+codec, size and bitrate, keeping the preset's own peak bitrate while its numbers
+stand unedited and falling back to a 1.5× peak once you change them) and
+**naming the file** (a template with `{comp}`, `{preset}` and `{date}` slots,
+cleaned of characters Windows forbids, always ending in `.mp4` — and a blank
+template reproduces each preset's own suggested name exactly). Alongside export,
+v0.4 finishes the read-back and the editing verbs a real timeline needs. A
+keyframe now reports its **Bezier** handle on each side (the tangent's slope and
+reach) and the frontend can set a keyframe's interpolation (hold, linear or
+bezier). A footage layer now reports its **Retime** — the map from the clip's
+own clock to which moment of the source is on screen, told as a chain of
+segments (a constant-or-eased *speed* run, or a value curve) meeting at
+boundaries — and the frontend can set a constant speed, change a segment's ease
+preset, convert a curved segment to a plain speed one (the reply tells you how
+much the fit drifted), and drag a boundary. (The word is *Retime* and the
+quantity is *speed*, never "time remap" or "velocity" — the house glossary.)
+Finally the last timeline **columns** are wired: a layer's blend mode (with the
+full list to choose from), its matte (borrowing another layer's alpha or
+brightness to cut it out), its parent (so moving one layer moves another), the
+composition's motion-blur shutter, and dropping a starter mask shape (rectangle,
+ellipse or star) onto a layer. As always, each of these mirrors exactly what the
+egui frontend commits, one undoable step, and the reply is the whole document as
+text so the panels just re-read it. Nothing engine-side is needed to remember
+which comps are open or where the playhead sits — that is the frontend's own
+state — so restoring a session stays a Dart concern.

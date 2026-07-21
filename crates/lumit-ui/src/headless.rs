@@ -25,8 +25,8 @@
 
 #![cfg(feature = "media")]
 
-use crate::export::{ItemInfo, Renderer};
-use lumit_core::model::{Document, FootageItem, ProjectItem};
+use crate::export::{AudioJob, ItemInfo, Renderer};
+use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectItem};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -72,6 +72,20 @@ pub struct HeadlessRenderer {
     items: HashMap<Uuid, ItemInfo>,
     /// Probe results by footage id, so each file is probed at most once.
     probe_cache: HashMap<Uuid, Probe>,
+    /// Whether each footage item carries an audio stream, cached so building the
+    /// export audio jobs probes each file at most once (export path only).
+    audio_cache: HashMap<Uuid, bool>,
+}
+
+/// The inputs one export needs, built through the headless seam (K-175) so the
+/// bridge can drive the exact egui exporter (`crate::export::start`): the footage
+/// [`ItemInfo`] map, the comp's audio jobs, and a GPU context sharing the
+/// renderer's device. Handed to the exporter, which spawns its own encode thread
+/// (K-017).
+pub struct ExportInputs {
+    pub items: HashMap<Uuid, ItemInfo>,
+    pub audio: Vec<AudioJob>,
+    pub gpu: lumit_gpu::GpuContext,
 }
 
 impl HeadlessRenderer {
@@ -93,7 +107,128 @@ impl HeadlessRenderer {
             parts: Some(parts),
             items: HashMap::new(),
             probe_cache: HashMap::new(),
+            audio_cache: HashMap::new(),
         })
+    }
+
+    /// Build the inputs one export of `comp_id` needs (the bridge's v0.4 export
+    /// path, K-175): the footage [`ItemInfo`] map (probed exactly as a render
+    /// probes, sharing this renderer's cache), the comp's audio jobs, and a GPU
+    /// context sharing this renderer's device. `None` when `comp_id` is unknown.
+    /// The exporter (`crate::export::start`) takes these and spawns its own
+    /// encode thread (K-017), so this call is cheap and holds no GPU work.
+    pub fn export_inputs(&mut self, doc: &Document, comp_id: Uuid) -> Option<ExportInputs> {
+        let comp = doc.comp(comp_id)?;
+        let (cw, ch) = (comp.width, comp.height);
+        self.sync_items(doc, (cw, ch));
+        let items = self.items.clone();
+        let audio = self.collect_audio(doc, comp);
+        // Share the device/queue (wgpu handles are reference-counted); the
+        // exporter builds its own engines on top, exactly as the egui path's
+        // `export_context` lends the display device.
+        let gpu =
+            lumit_gpu::GpuContext::from_parts(self.gpu.device.clone(), self.gpu.queue.clone());
+        Some(ExportInputs { items, audio, gpu })
+    }
+
+    /// Collect `comp`'s audio jobs for export — the headless twin of
+    /// `AppState::comp_audio_jobs` (docs/09 §6): every audible footage layer with
+    /// an audio stream, its span mapped to the comp timeline, plus nested Precomp
+    /// layers' contents scaled by their carrier Volumes. Solo silences non-soloed
+    /// audio per comp, exactly as the video gate does.
+    fn collect_audio(&mut self, doc: &Document, comp: &Composition) -> Vec<AudioJob> {
+        let mut jobs = Vec::new();
+        let mut visited = vec![comp.id];
+        self.collect_audio_jobs(
+            doc,
+            comp,
+            0.0,
+            (f64::NEG_INFINITY, f64::INFINITY),
+            &[],
+            &mut visited,
+            &mut jobs,
+        );
+        jobs
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn collect_audio_jobs(
+        &mut self,
+        doc: &Document,
+        comp: &Composition,
+        base_s: f64,
+        window: (f64, f64),
+        carriers: &[(lumit_core::anim::Property, f64)],
+        visited: &mut Vec<Uuid>,
+        jobs: &mut Vec<AudioJob>,
+    ) {
+        let any_solo = lumit_core::model::any_solo(comp);
+        for layer in &comp.layers {
+            if !layer.switches.audible || (any_solo && !layer.switches.solo) {
+                continue;
+            }
+            let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
+            let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
+            if out_s <= in_s {
+                continue;
+            }
+            let offset_s = layer.start_offset.0.to_f64() + base_s;
+            match &layer.kind {
+                LayerKind::Footage { item, .. } => {
+                    let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
+                        continue;
+                    };
+                    if !self.has_audio(*item, &footage_path(f)) {
+                        continue;
+                    }
+                    jobs.push(AudioJob {
+                        item: *item,
+                        path: footage_path(f),
+                        in_s,
+                        out_s,
+                        offset_s,
+                        volume: layer.volume_db.clone(),
+                        carriers: carriers.to_vec(),
+                    });
+                }
+                LayerKind::Precomp { comp: nested_id } => {
+                    if visited.contains(nested_id) {
+                        continue;
+                    }
+                    let Some(nested) = doc.comp(*nested_id) else {
+                        continue;
+                    };
+                    let mut inner = carriers.to_vec();
+                    inner.push((layer.volume_db.clone(), offset_s));
+                    visited.push(*nested_id);
+                    self.collect_audio_jobs(
+                        doc,
+                        nested,
+                        offset_s,
+                        (in_s, out_s),
+                        &inner,
+                        visited,
+                        jobs,
+                    );
+                    visited.pop();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Whether footage `item` at `path` carries an audio stream, cached so each
+    /// file is probed for audio at most once across an export session.
+    fn has_audio(&mut self, item: Uuid, path: &Path) -> bool {
+        if let Some(&has) = self.audio_cache.get(&item) {
+            return has;
+        }
+        let has = path.is_file()
+            && lumit_media::probe::probe(path)
+                .map(|p| p.audio.is_some())
+                .unwrap_or(false);
+        self.audio_cache.insert(item, has);
+        has
     }
 
     /// Render composition `comp_id` at integer `frame` to tightly-packed RGBA8,

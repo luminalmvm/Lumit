@@ -821,6 +821,369 @@ fn render_to_buffer(_comp_id: &str, _frame: u64, _scale: f32) -> Option<(u32, u3
     None
 }
 
+// ---------------------------------------------------------------------------
+// Bridge v0.4: export, keyframe interpolation, Retime, and the timeline columns.
+// Each guards its body and returns a JSON reply (a refreshed snapshot for the
+// mutating ops, or a small purpose-built object for the reads/export).
+// ---------------------------------------------------------------------------
+
+/// Resolve a delivery `preset_name` into the export-dialogue fields it stamps
+/// plus its suggested file name — `{ok,codec,size,bitrate_mbps,include_audio,
+/// default_name}`. `comp_name` and `template` drive the `{comp}`/`{preset}`/
+/// `{date}` filename substitution (an empty template yields the preset's own
+/// default). Stateless (does not touch the document).
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_export_preset(
+    preset_name: *const c_char,
+    comp_name: *const c_char,
+    template: *const c_char,
+) -> *mut c_char {
+    let preset = c_str_to_string(preset_name).unwrap_or_default();
+    let comp_name = c_str_to_string(comp_name).unwrap_or_default();
+    let template = c_str_to_string(template).unwrap_or_default();
+    guard(move || crate::export::export_preset(&preset, &comp_name, &template))
+}
+
+/// Start an export of `comp_id` to `out_path` with the dialogue-shaped
+/// `spec_json` (`preset`, `codec`, `size`, `bitrate_mbps`, `include_audio`,
+/// `audio_bit_rate`). Returns `{ok:true}` on a clean start, or a calm `ok:false`
+/// — "an export is already running" while one is in flight (the caller queues),
+/// or a resolution/build error. The export runs on its own thread (K-017).
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_start_export(
+    comp_id: *const c_char,
+    spec_json: *const c_char,
+    out_path: *const c_char,
+) -> *mut c_char {
+    let (Some(comp), Some(spec), Some(out)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(spec_json),
+        c_str_to_string(out_path),
+    ) else {
+        return to_c_string(err_json(
+            "start export: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || crate::export::start_export(&comp, &spec, &out))
+}
+
+/// Poll the running export, draining its progress channel. Reply:
+/// `{ok:true,state:"idle|running|done|failed",frame,total,encoder,path/error}`.
+#[no_mangle]
+pub extern "C" fn lumit_bridge_export_poll() -> *mut c_char {
+    guard(crate::export::export_poll)
+}
+
+/// Ask the running export to cancel (a no-op when none is running).
+#[no_mangle]
+pub extern "C" fn lumit_bridge_export_cancel() -> *mut c_char {
+    guard(crate::export::export_cancel)
+}
+
+/// Set the interpolation of the keyframe nearest the playhead `frame` on a
+/// transform `property`. `interp_in`/`interp_out` are `Hold`/`Linear`/`Bezier`;
+/// when a side is `Bezier` its `(speed, influence)` come from the matching pair
+/// (`speed_in`/`influence_in`, `speed_out`/`influence_out`), otherwise ignored.
+///
+/// # Safety
+/// The five string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn lumit_bridge_set_keyframe_interp(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    property: *const c_char,
+    frame: i64,
+    interp_in: *const c_char,
+    interp_out: *const c_char,
+    speed_in: f64,
+    influence_in: f64,
+    speed_out: f64,
+    influence_out: f64,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(property), Some(interp_in), Some(interp_out)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(property),
+        c_str_to_string(interp_in),
+        c_str_to_string(interp_out),
+    ) else {
+        return to_c_string(err_json(
+            "set keyframe interp: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || {
+        with_bridge(|b| {
+            crate::edits::set_keyframe_interp(
+                b,
+                &comp,
+                &layer,
+                &property,
+                frame,
+                &interp_in,
+                &interp_out,
+                speed_in,
+                influence_in,
+                speed_out,
+                influence_out,
+            )
+        })
+    })
+}
+
+/// Enable or disable a footage layer's Retime (the Time stopwatch).
+///
+/// # Safety
+/// The two string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_retime_enabled(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    enabled: bool,
+) -> *mut c_char {
+    let (Some(comp), Some(layer)) = (c_str_to_string(comp_id), c_str_to_string(layer_id)) else {
+        return to_c_string(err_json(
+            "set retime enabled: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::retime::set_retime_enabled(b, &comp, &layer, enabled)))
+}
+
+/// Set a footage layer's constant playback speed (percent; 100 clears the
+/// Retime).
+///
+/// # Safety
+/// The two string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_retime_speed(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    speed_percent: f64,
+) -> *mut c_char {
+    let (Some(comp), Some(layer)) = (c_str_to_string(comp_id), c_str_to_string(layer_id)) else {
+        return to_c_string(err_json(
+            "set retime speed: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::retime::set_retime_speed(b, &comp, &layer, speed_percent)))
+}
+
+/// Set the ease of the Retime segment covering the playhead `frame` — the graph
+/// header's Lin/Slow/Fast/Smth/Shrp row.
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_segment_preset(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    frame: i64,
+    ease: *const c_char,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(ease)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(ease),
+    ) else {
+        return to_c_string(err_json(
+            "set segment preset: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || {
+        with_bridge(|b| crate::retime::set_segment_preset(b, &comp, &layer, frame, &ease))
+    })
+}
+
+/// Convert the Map segment covering the playhead `frame` to a Rate segment — the
+/// graph's →Rate button. The reply is the refreshed snapshot with an added
+/// `drift` field (the fit's source-position error in seconds).
+///
+/// # Safety
+/// The two string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_segment_to_rate(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    frame: i64,
+) -> *mut c_char {
+    let (Some(comp), Some(layer)) = (c_str_to_string(comp_id), c_str_to_string(layer_id)) else {
+        return to_c_string(err_json(
+            "segment to rate: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::retime::segment_to_rate(b, &comp, &layer, frame)))
+}
+
+/// Move the value-lens Retime boundary at `index` to comp `frame`.
+///
+/// # Safety
+/// The two string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_drag_boundary(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    index: i64,
+    frame: i64,
+) -> *mut c_char {
+    let (Some(comp), Some(layer)) = (c_str_to_string(comp_id), c_str_to_string(layer_id)) else {
+        return to_c_string(err_json(
+            "drag boundary: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::retime::drag_boundary(b, &comp, &layer, index, frame)))
+}
+
+/// The blend-mode registry as `{ok:true,blend_modes:[{name,label}]}` — stateless.
+#[no_mangle]
+pub extern "C" fn lumit_bridge_list_blend_modes() -> *mut c_char {
+    guard(crate::columns::list_blend_modes)
+}
+
+/// Set a layer's blend mode (the serde variant name, e.g. `Normal`, `Multiply`).
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_blend_mode(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    mode: *const c_char,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(mode)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(mode),
+    ) else {
+        return to_c_string(err_json(
+            "set blend mode: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::columns::set_blend_mode(b, &comp, &layer, &mode)))
+}
+
+/// Point a layer at another as its matte, or clear it when `source` is empty.
+/// `channel` is `alpha`/`luma`.
+///
+/// # Safety
+/// The four string pointers must each be null or a valid NUL-terminated UTF-8 C
+/// string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_matte(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    source: *const c_char,
+    channel: *const c_char,
+    inverted: bool,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(source), Some(channel)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(source),
+        c_str_to_string(channel),
+    ) else {
+        return to_c_string(err_json(
+            "set matte: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || {
+        with_bridge(|b| crate::columns::set_matte(b, &comp, &layer, &source, &channel, inverted))
+    })
+}
+
+/// Point a layer at another as its transform parent, or clear it when `parent`
+/// is empty.
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_parent(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    parent: *const c_char,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(parent)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(parent),
+    ) else {
+        return to_c_string(err_json(
+            "set parent: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::columns::set_parent(b, &comp, &layer, &parent)))
+}
+
+/// Set the comp's motion-blur master (enable, shutter angle/phase, samples).
+///
+/// # Safety
+/// `comp_id` must be null or a valid NUL-terminated UTF-8 C string alive for the
+/// call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_set_motion_blur(
+    comp_id: *const c_char,
+    enabled: bool,
+    shutter_angle: f64,
+    shutter_phase: f64,
+    samples: u32,
+) -> *mut c_char {
+    let Some(comp) = c_str_to_string(comp_id) else {
+        return to_c_string(err_json(
+            "set motion blur: the comp id was null or not valid UTF-8",
+        ));
+    };
+    guard(move || {
+        with_bridge(|b| {
+            crate::columns::set_motion_blur(
+                b,
+                &comp,
+                enabled,
+                shutter_angle,
+                shutter_phase,
+                samples,
+            )
+        })
+    })
+}
+
+/// Add a starter mask shape (`rectangle`/`ellipse`/`star`) to a layer.
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_add_mask(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    kind: *const c_char,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(kind)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(kind),
+    ) else {
+        return to_c_string(err_json(
+            "add mask: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| crate::columns::add_mask(b, &comp, &layer, &kind)))
+}
+
 /// Free a string returned by any string-returning function above. Passing null
 /// is safe and does nothing; passing the same pointer twice is undefined,
 /// exactly as with C's `free`.
@@ -873,7 +1236,7 @@ mod tests {
         assert!(!ptr.is_null());
         let copied = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap().to_owned();
         assert_eq!(parse(&copied)["ok"], json!(true));
-        assert_eq!(parse(&copied)["abi"], json!(3));
+        assert_eq!(parse(&copied)["abi"], json!(4));
         unsafe { lumit_bridge_free_string(ptr) };
 
         let snap_ptr = lumit_bridge_snapshot();

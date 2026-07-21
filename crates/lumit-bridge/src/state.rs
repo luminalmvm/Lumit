@@ -62,7 +62,7 @@ pub(crate) fn with_bridge<R>(f: impl FnOnce(&mut Bridge) -> R) -> R {
     f(&mut guard)
 }
 
-/// `{"ok":true,"version":"…","abi":3}` — stateless.
+/// `{"ok":true,"version":"…","abi":4}` — stateless.
 pub(crate) fn version() -> String {
     json!({
         "ok": true,
@@ -622,7 +622,7 @@ mod tests {
         let v = parse(&version());
         assert_eq!(v["ok"], json!(true));
         assert_eq!(v["abi"], json!(crate::ABI_VERSION));
-        assert_eq!(v["abi"], json!(3));
+        assert_eq!(v["abi"], json!(4));
     }
 
     #[test]

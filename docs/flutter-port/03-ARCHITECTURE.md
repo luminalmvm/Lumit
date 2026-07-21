@@ -158,6 +158,69 @@ gains the read-back below.
   `SetLayerEffects`. Point/file/layer param kinds are read-back only in v0.3
   (no setter yet).
 
+#### Bridge v0.4 — export, Retime, and the last timeline columns
+
+v0.4 extends v0.3 without breaking it (the ABI number rises 3 → 4; every reply
+keeps the fields it had). Two new modules keep `crate::state`/`crate::edits`
+under length: `crate::columns` (blend/matte/parent/motion-blur/mask ops) and
+`crate::retime` (the Retime read-back helpers live in `crate::snapshot`, the ops
+in `crate::retime`). Export lives in `crate::export`.
+
+- **Export over the headless seam (K-175, K-017).** The bridge reuses
+  `lumit_ui::export` — the *identical* exporter the egui app runs — through the
+  headless seam: `HeadlessRenderer::export_inputs(doc, comp)` builds the footage
+  `ItemInfo` map (reusing the renderer's probe cache), collects the comp's audio
+  jobs (the headless twin of `AppState::comp_audio_jobs` — solo gate, precomp
+  carriers), and lends a GPU context sharing the renderer's device. The bridge
+  hands those to `lumit_ui::export::start`, which spawns its **own encode
+  thread** (K-017) and streams `ExportEvent`s over an mpsc channel. The bridge
+  holds the `ExportHandle` (its receiver) behind a session static and drains it
+  on each poll.
+  - `lumit_bridge_start_export(comp_id, spec_json, out_path)` → `{ok:true}` on a
+    clean start, or `ok:false "an export is already running"` while one is in
+    flight (the Dart side queues). `spec_json` mirrors the export dialogue:
+    `{preset, codec, size, bitrate_mbps, include_audio, audio_bit_rate}`.
+  - `lumit_bridge_export_poll()` → `{ok, state:"idle|running|done|failed",
+    frame, total, encoder, path/error}` — the drained progress.
+  - `lumit_bridge_export_cancel()` asks the running export to stop (checked every
+    frame); poll then reports `failed` with "cancelled".
+  - `lumit_bridge_export_preset(preset, comp_name, template)` is the **pure**
+    preset resolver, a faithful port of `ExportDialogState::apply`/`spec` and the
+    filename helpers: it stamps the preset's codec/size/bitrate, applies the
+    VBR-peak-preserved-while-unedited rule and the 1.5× fallback, and renders the
+    `{comp}`/`{preset}`/`{date}` filename template (Windows-sanitised, `.mp4`
+    forced; a blank template reproduces the preset's own default byte-for-byte,
+    K-119). The pure resolver and filename logic are always compiled and
+    unit-tested; the driving surface is gated behind the `render` feature (a
+    `--no-default-features` build answers "export is unavailable").
+- **Keyframe interpolation.** Snapshot keyframes gain `bezier_in`/`bezier_out`
+  (`{speed, influence}`) on a `Bezier` side; `set_keyframe_interp(comp, layer,
+  property, frame, interp_in, interp_out, +bezier params)` sets the interp of the
+  keyframe nearest the playhead through `SetTransformProperty` (whole animation).
+- **Retime read-back + ops.** A footage layer's `retime` block serialises the
+  store: `{reverse, interpolation, boundaries:[{t_frame, t_seconds, s_seconds,
+  smooth}], segments:[{kind:"rate", v0, v1, ease} | {kind:"map", m0, m1, b0,
+  b1}]}` (boundary local times as comp frames, source positions in seconds,
+  ease/kind names mirroring `lumit_core::retime`). Ops (all `SetLayerRetime`):
+  `set_retime_enabled` (identity store / clear), `set_retime_speed` (constant
+  speed; 100% clears — the simple speed row), `set_segment_preset` (the
+  Lin/Slow/Fast/Smth/Shrp row, `with_segment_ease`), `segment_to_rate` (the
+  →Rate button, `with_segment_as_rate`, with the fit `drift` added to the reply
+  snapshot), `drag_boundary(index, frame)` (move a value-lens boundary,
+  `from_value_keyframes`). Only what the egui speed row / graph header commit
+  today.
+- **The last columns.** Each layer gains `blend_mode` (serde variant name),
+  `matte` (`{source, channel, inverted, source_mode}` or null), and `parent` (a
+  layer id or null); each comp gains `motion_blur` (`{enabled, shutter_angle,
+  shutter_phase, samples}`). Ops: `list_blend_modes` (registry, stateless),
+  `set_blend_mode`, `set_matte` (empty source clears), `set_parent` (empty
+  clears; a cycle is a calm error), `set_motion_blur` (`SetCompMotionBlur`), and
+  `add_mask(comp, layer, kind)` (`rectangle`/`ellipse`/`star`, the "Add mask"
+  menu's centred starter shape).
+- **Session restore.** Nothing engine-side is needed: which comps are open and
+  where the playhead sits are Dart-owned state, so `SavedSession` stays a
+  frontend concern (confirmed for this wave).
+
 ## The Viewer texture path (Phase F2)
 
 Windows first, matching the project's priorities:
