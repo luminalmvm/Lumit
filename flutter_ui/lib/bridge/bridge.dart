@@ -140,15 +140,38 @@ typedef _StrArgDart = Pointer<Char> Function(Pointer<Char>);
 typedef _FreeC = Void Function(Pointer<Char>);
 typedef _FreeDart = void Function(Pointer<Char>);
 
+/// The set of document operations the frontend drives the engine through. The
+/// real implementation is [LumitBridge] (dart:ffi over the shared library); the
+/// interface exists so tests can supply a fake without loading the library or
+/// touching plugin channels — every method is a pure `String → BridgeReply`
+/// call, so a fake is a handful of lines.
+abstract class DocumentBridge {
+  BridgeReply snapshot();
+  BridgeReply newProject();
+  BridgeReply undo();
+  BridgeReply redo();
+  BridgeReply openProject(String path);
+
+  /// Save to [path]; an empty string saves to the loaded path (an error reply
+  /// if the document has never been saved).
+  BridgeReply saveProject(String path);
+  BridgeReply newComposition(String name);
+
+  /// Add a footage item referencing the media file at [path]. No probing yet
+  /// (F2 adds it) — the item just carries the path.
+  BridgeReply importFootage(String path);
+}
+
 /// The loaded `lumit_bridge` library, bound to typed calls. Construct with
 /// [tryLoad]; a null result means the app runs on its placeholders.
-class LumitBridge {
+class LumitBridge implements DocumentBridge {
   final _NoArgDart _version;
   final _NoArgDart _newProject;
   final _StrArgDart _openProject;
   final _StrArgDart _saveProject;
   final _NoArgDart _snapshot;
   final _StrArgDart _newComposition;
+  final _StrArgDart _importFootage;
   final _NoArgDart _undo;
   final _NoArgDart _redo;
   final _FreeDart _freeString;
@@ -171,6 +194,9 @@ class LumitBridge {
         ),
         _newComposition = lib.lookupFunction<_StrArgC, _StrArgDart>(
           'lumit_bridge_new_composition',
+        ),
+        _importFootage = lib.lookupFunction<_StrArgC, _StrArgDart>(
+          'lumit_bridge_import_footage',
         ),
         _undo = lib.lookupFunction<_NoArgC, _NoArgDart>(
           'lumit_bridge_undo',
@@ -229,21 +255,32 @@ class LumitBridge {
     }
   }
 
+  @override
   BridgeReply snapshot() => BridgeReply.parse(_callNoArg(_snapshot));
+  @override
   BridgeReply newProject() => BridgeReply.parse(_callNoArg(_newProject));
+  @override
   BridgeReply undo() => BridgeReply.parse(_callNoArg(_undo));
+  @override
   BridgeReply redo() => BridgeReply.parse(_callNoArg(_redo));
 
+  @override
   BridgeReply openProject(String path) =>
       BridgeReply.parse(_callStrArg(_openProject, path));
 
   /// Save to [path]; an empty string saves to the loaded path (an error reply
   /// if the document has never been saved).
+  @override
   BridgeReply saveProject(String path) =>
       BridgeReply.parse(_callStrArg(_saveProject, path));
 
+  @override
   BridgeReply newComposition(String name) =>
       BridgeReply.parse(_callStrArg(_newComposition, name));
+
+  @override
+  BridgeReply importFootage(String path) =>
+      BridgeReply.parse(_callStrArg(_importFootage, path));
 
   // Call → copy the reply out → free it back to Rust. The copy must happen
   // before the free, so `toDartString` runs inside the try and the free in the

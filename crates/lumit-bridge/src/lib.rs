@@ -26,7 +26,9 @@
 //! Engine crates never depend on this crate, and nothing depends on it — it is
 //! a leaf over `lumit-core` and `lumit-project` (docs/05-ARCHITECTURE.md).
 
-use lumit_core::model::{Composition, Document, Folder, LinearColour, ProjectItem};
+use lumit_core::model::{
+    Composition, Document, Folder, FootageItem, LinearColour, MediaRef, ProjectItem,
+};
 use lumit_core::ops::{AutoFolderKind, Op};
 use lumit_core::store::DocumentStore;
 use lumit_core::time::{Duration, FrameRate, Rational};
@@ -290,6 +292,52 @@ fn new_composition(bridge: &mut Bridge, name: &str) -> String {
     }
 }
 
+/// Add a footage item for `path` as one undo step — the same op `lumit-ui`'s
+/// `import_paths` commits for each picked file. Footage has no auto-folder (only
+/// solids and comps do), so this mirrors the egui frontend exactly: a single
+/// [`Op::AddItem`] appended to the flat item list, and undo removes it.
+///
+/// # In plain terms
+///
+/// This records that a media file belongs to the project. It does not open,
+/// decode, or thumbnail the file — that probing needs FFmpeg and arrives in a
+/// later phase (F2). The item simply carries the file's path (its name, and the
+/// on-disk location for this session), exactly as the egui frontend stores a
+/// media reference the moment you import, before any probe has run.
+fn import_footage(bridge: &mut Bridge, path: &str) -> String {
+    if path.trim().is_empty() {
+        return err_json("import footage: no path given");
+    }
+    let file = PathBuf::from(path);
+    // The item's name is the file's own name, exactly as `import_paths` derives
+    // it (falling back to "footage" for a path with no final component).
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "footage".into());
+    let item = FootageItem {
+        id: Uuid::now_v7(),
+        name: name.clone(),
+        media: MediaRef {
+            // Import stores the bare name as the relative path; Save rebases it
+            // against the project folder (K-173), just as the egui frontend does.
+            relative_path: name,
+            absolute_path: file.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let index = bridge.store.snapshot().items.len();
+    match bridge.store.commit(Op::AddItem {
+        index,
+        item: Box::new(ProjectItem::Footage(item)),
+    }) {
+        Ok(_) => snapshot(bridge),
+        Err(e) => err_json(format!("import footage: {e}")),
+    }
+}
+
 fn undo(bridge: &mut Bridge) -> String {
     match bridge.store.undo() {
         Ok(_) => snapshot(bridge),
@@ -406,6 +454,25 @@ pub extern "C" fn lumit_bridge_snapshot() -> *mut c_char {
 pub unsafe extern "C" fn lumit_bridge_new_composition(name: *const c_char) -> *mut c_char {
     let name = c_str_to_string(name).unwrap_or_default();
     guard(move || with_bridge(|b| new_composition(b, &name)))
+}
+
+/// Add a footage item referencing the media file at `path` (one undo step). No
+/// probing happens here — the item just carries the path (F2 adds probing and
+/// thumbnails). An empty path returns a calm error reply.
+///
+/// # Safety
+/// `path` must be null or a valid NUL-terminated UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_import_footage(path: *const c_char) -> *mut c_char {
+    let path = match c_str_to_string(path) {
+        Some(p) => p,
+        None => {
+            return to_c_string(err_json(
+                "import footage: the path was null or not valid UTF-8",
+            ))
+        }
+    };
+    guard(move || with_bridge(|b| import_footage(b, &path)))
 }
 
 /// Undo the last committed operation. A no-op (nothing to undo) still returns a
@@ -561,6 +628,43 @@ mod tests {
             .starts_with("open project:"));
         // The bridge is still usable afterwards.
         assert_eq!(parse(&snapshot(&b))["ok"], json!(true));
+    }
+
+    #[test]
+    fn import_footage_lists_the_item_as_footage() {
+        let mut b = Bridge::new();
+        let snap = parse(&import_footage(&mut b, "/media/clips/shot.mp4"));
+        assert_eq!(snap["ok"], json!(true));
+        assert_eq!(snap["can_undo"], json!(true));
+        // Footage has no auto-folder: it sits at the root, unnested.
+        let items = snap["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1, "the footage sits at the document root");
+        assert_eq!(items[0]["kind"], json!("footage"));
+        assert_eq!(items[0]["name"], json!("shot.mp4"));
+        assert!(
+            items[0]["children"].as_array().unwrap().is_empty(),
+            "footage has no children"
+        );
+    }
+
+    #[test]
+    fn undo_removes_the_imported_footage() {
+        let mut b = Bridge::new();
+        import_footage(&mut b, "/media/clips/shot.mp4");
+        let after_undo = parse(&undo(&mut b));
+        assert_eq!(after_undo["items"], json!([]), "undo clears the import");
+        assert_eq!(after_undo["can_undo"], json!(false));
+        assert_eq!(after_undo["can_redo"], json!(true));
+    }
+
+    #[test]
+    fn import_footage_with_an_empty_path_is_a_calm_error() {
+        let mut b = Bridge::new();
+        let reply = parse(&import_footage(&mut b, "   "));
+        assert_eq!(reply["ok"], json!(false));
+        assert!(reply["error"].as_str().unwrap().contains("no path"));
+        // The bridge is still usable and unchanged afterwards.
+        assert_eq!(parse(&snapshot(&b))["items"], json!([]));
     }
 
     #[test]

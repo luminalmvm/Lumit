@@ -42,7 +42,7 @@ List<PaletteCommand> paletteCommands({
       PaletteCommand('Redo', app.redo),
       PaletteCommand('New project', app.newProject),
       PaletteCommand('Open project…', app.openProject),
-      PaletteCommand('Import footage…', () => app.engine('Import footage')),
+      PaletteCommand('Import footage…', app.importFootage),
       PaletteCommand('New composition', app.newComposition),
       PaletteCommand('Add solid layer', () => app.engine('Add solid layer')),
       PaletteCommand('Add text layer', () => app.engine('Add text layer')),

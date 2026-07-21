@@ -2237,6 +2237,25 @@ just shows its "arrives with the engine bridge" hint again. `lumit-bridge`
 depends only on the engine crates, and nothing depends on it, so it stays a leaf
 that the rest of the project never has to know about.
 
+**File dialogues, and why importing doesn't watch the video yet.** Choosing a
+file to open, a place to save, or footage to import needs a real "open file"
+window from the operating system. Flutter doesn't draw those itself — it borrows
+the system's own dialogue through a small add-on called a *plugin*
+(`file_selector`), which bundles the Windows piece that pops the familiar file
+browser. The frontend asks the plugin for a path, then hands that path to the
+bridge: opening and saving reuse the existing calls, and importing footage uses
+a new one (`lumit_bridge_import_footage`). Importing only *records* that a media
+file belongs to the project — it stores the path and stops there. It does not
+open the file, read its size, count its frames, or make a thumbnail, because all
+of that needs the video-decoding library (FFmpeg), and wiring that into the
+Flutter build is a later phase (F2). So after an import the Project panel shows
+the file's name straight away, and the picture and details fill in once decoding
+is connected. One more practical note for the tests: a file dialogue can't pop
+open inside an automated test, so every dialogue call goes through a small
+swappable hook — the real app uses the plugin, the tests slot in a pretend path
+— which is why the whole import-and-save flow can be tested without a single
+real window appearing.
+
 **Running it.** Install the Flutter SDK (`git clone -b stable
 https://github.com/flutter/flutter`, put its `bin` on PATH — it fetches its own
 Dart on first run; the Windows build also wants the same VS 2022 C++ tools the

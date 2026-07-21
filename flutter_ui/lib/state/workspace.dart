@@ -25,6 +25,12 @@ class Workspace extends ChangeNotifier {
   InterfaceSettings interface = InterfaceSettings();
   ExportSettings export = ExportSettings();
 
+  /// The project last opened or saved with a path, restored on the next launch
+  /// (the egui frontend reopens the last project the same way). Null until a
+  /// project has been opened or saved to a file. This is only the *file* — the
+  /// per-project session (open comps, playhead, selection) is a later slice.
+  String? lastProjectPath;
+
   LumitTheme _theme = LumitTheme.dark();
   LumitTheme get theme => _theme;
 
@@ -78,6 +84,14 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Remember the file a project was just opened from or saved to, so the next
+  /// launch can reopen it. Persisted immediately; no theme rebuild is needed, so
+  /// this does not notify listeners.
+  void rememberProject(String path) {
+    lastProjectPath = path;
+    save();
+  }
+
   // --- Persistence ---------------------------------------------------------
 
   /// `%APPDATA%\lumit\flutter-workspace.json` on Windows; a dotfolder
@@ -107,6 +121,7 @@ class Workspace extends ChangeNotifier {
         'autosave': autosave.toJson(),
         'interface': interface.toJson(),
         'export': export.toJson(),
+        'last_project_path': lastProjectPath,
       };
 
   void applyJson(Map<String, dynamic> j) {
@@ -137,6 +152,8 @@ class Workspace extends ChangeNotifier {
     if (j['export'] is Map<String, dynamic>) {
       export = ExportSettings.fromJson(j['export']);
     }
+    lastProjectPath =
+        j['last_project_path'] is String ? j['last_project_path'] as String : null;
     // The left group always opens on Project (activate_panel_tab at start-up).
     activatePanelTab(dock, Panel.project);
     recompose();

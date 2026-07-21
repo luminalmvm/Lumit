@@ -63,7 +63,11 @@ class _ShellBody extends StatefulWidget {
 }
 
 class _ShellBodyState extends State<_ShellBody> {
-  late final AppStateStub app = AppStateStub(bridge: widget.bridge);
+  late final AppStateStub app = AppStateStub(
+    bridge: widget.bridge,
+    lastProjectPath: widget.workspace.lastProjectPath,
+    rememberProject: widget.workspace.rememberProject,
+  );
   bool settingsOpen = false;
   bool paletteOpen = false;
   bool splashDone = false;

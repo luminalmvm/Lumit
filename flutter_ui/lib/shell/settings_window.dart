@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/settings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 
 enum SettingsPage { general, appearance, interface, performance, export }
@@ -228,7 +229,7 @@ class _SettingsWindowState extends State<SettingsWindow> {
                     child: const Text('Reset'),
                   ),
                 const SizedBox(width: 6),
-                _AccentSwatches(workspace: ws, onPicked: () => setState(() {})),
+                _AccentButton(workspace: ws, onPicked: () => setState(() {})),
               ]),
             ),
           ]),
@@ -431,51 +432,58 @@ class _SettingsWindowState extends State<SettingsWindow> {
       );
 }
 
-/// Eight accent swatches drawn from the current theme's own roles plus the
-/// default clay — a stand-in for the full colour picker (checklist: the
-/// custom HSV picker) that still exercises the accent override path.
-class _AccentSwatches extends StatelessWidget {
+/// A single current-accent swatch that opens the HSV colour picker seeded
+/// with the live accent. The old eight quick swatches now live inside the
+/// picker as a preset row, so the settings row stays to one control.
+class _AccentButton extends StatelessWidget {
   final Workspace workspace;
   final VoidCallback onPicked;
-  const _AccentSwatches({required this.workspace, required this.onPicked});
+  const _AccentButton({required this.workspace, required this.onPicked});
+
+  /// The theme roles that seeded the old quick swatches, offered as presets.
+  List<Color> _presets(LumitTheme t) => [
+        LumitTheme.defaultAccent,
+        t.success,
+        t.warning,
+        t.error,
+        t.cacheDisk,
+        t.curve[0],
+        t.curve[2],
+        t.curve[3],
+      ];
 
   @override
   Widget build(BuildContext context) {
     final t = workspace.theme;
-    final options = <Color>[
-      LumitTheme.defaultAccent,
-      t.success,
-      t.warning,
-      t.error,
-      t.cacheDisk,
-      t.curve[0],
-      t.curve[2],
-      t.curve[3],
-    ];
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      for (final c in options)
-        GestureDetector(
-          onTap: () {
-            workspace
-                .setAccent(c == LumitTheme.defaultAccent ? null : c);
-            onPicked();
-          },
-          child: Container(
-            width: 16,
-            height: 16,
-            margin: const EdgeInsets.only(left: 4),
-            decoration: BoxDecoration(
-              color: c,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: workspace.theme.accent == c
-                    ? t.textPrimary
-                    : t.hairlineStrong,
-              ),
-            ),
+    return GestureDetector(
+      key: const Key('accent-swatch'),
+      onTap: () async {
+        final box = context.findRenderObject()! as RenderBox;
+        final origin = box.localToGlobal(Offset.zero);
+        final picked = await showColourPicker(
+          context: context,
+          position: origin + Offset(0, box.size.height + 4),
+          initial: t.accent,
+          presets: _presets(t),
+        );
+        if (picked != null) {
+          workspace.setAccent(picked);
+          onPicked();
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          width: 28,
+          height: 18,
+          decoration: BoxDecoration(
+            color: t.accent,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(color: t.hairlineStrong),
           ),
         ),
-    ]);
+      ),
+    );
   }
 }
 

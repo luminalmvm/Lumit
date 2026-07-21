@@ -51,11 +51,13 @@ void main() {
     ws.autosave.intervalMins = 9;
     ws.performance.diskCacheMb = 1234;
     ws.export.defaultPreset = ExportPreset.youtube4k60;
+    ws.lastProjectPath = 'C:/edit/last.lum';
     ws.recompose();
 
     final j = ws.toJson();
     final back = Workspace()..applyJson(Map<String, dynamic>.from(j));
     expect(back.colorScheme, LumitColorScheme.gruvboxDark);
+    expect(back.lastProjectPath, 'C:/edit/last.lum');
     expect(back.themeShape, ThemeShape.round);
     expect(back.animationLevel, AnimationLevel.minimal);
     expect(back.autosave.intervalMins, 9);

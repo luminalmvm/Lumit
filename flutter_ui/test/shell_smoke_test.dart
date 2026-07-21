@@ -225,6 +225,90 @@ void main() {
         reason: 'exactly one pane wears the accent edge after a click');
   });
 
+  testWidgets('the accent picker opens, picks a colour and applies it on OK',
+      (tester) async {
+    final ws = Workspace();
+    await pumpWith(tester, ws);
+    expect(ws.accentOverride, isNull);
+
+    await tester.tap(find.text('Window'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance').first);
+    await tester.pumpAndSettle();
+
+    // Open the picker from the accent swatch.
+    await tester.tap(find.byKey(const Key('accent-swatch')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('colour-picker-square')), findsOneWidget);
+
+    // Type an exact hex, then commit with OK.
+    await tester.enterText(find.byType(EditableText), '3366CC');
+    await tester.pump();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(ws.accentOverride, isNotNull);
+    expect((ws.accentOverride!.r * 255).round(), 0x33);
+    expect((ws.accentOverride!.g * 255).round(), 0x66);
+    expect((ws.accentOverride!.b * 255).round(), 0xcc);
+    // The live theme's accent tracks the override exactly (withAccent).
+    expect(ws.theme.accent, ws.accentOverride);
+  });
+
+  testWidgets('tapping the picker square changes the pick before OK',
+      (tester) async {
+    final ws = Workspace();
+    await pumpWith(tester, ws);
+
+    await tester.tap(find.text('Window'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('accent-swatch')));
+    await tester.pumpAndSettle();
+
+    // Move the hue, then tap the middle of the square: a definite, non-grey
+    // colour that differs from the seeded accent.
+    await tester.tap(find.byKey(const Key('colour-picker-strip')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('colour-picker-square')));
+    await tester.pump();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(ws.accentOverride, isNotNull);
+    expect(ws.theme.accent, ws.accentOverride);
+  });
+
+  testWidgets('dismissing the accent picker leaves the accent untouched',
+      (tester) async {
+    final ws = Workspace();
+    await pumpWith(tester, ws);
+    expect(ws.accentOverride, isNull);
+
+    await tester.tap(find.text('Window'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('accent-swatch')));
+    await tester.pumpAndSettle();
+
+    // Change the pick, then cancel — nothing should apply.
+    await tester.enterText(find.byType(EditableText), '3366CC');
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(ws.accentOverride, isNull);
+    expect(find.byKey(const Key('colour-picker-square')), findsNothing);
+  });
+
   testWidgets('the settings dropdowns open and apply their pick',
       (tester) async {
     // Regression (owner report, 2026-07-21): opening a BareDropdown inside

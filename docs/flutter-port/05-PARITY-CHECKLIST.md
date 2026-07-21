@@ -31,6 +31,8 @@ where the row is logic).
 - ☑ Status line: notices, error tint rule, export-progress slot
 - ☑ Settings window: all five pages, every control, fixed geometry, opens on
   Appearance; scheme/shape/accent/motion apply live
+- ☑ Accent colour picker (HSV square + hue strip + hex), reusable for the
+  future editor-colour submenu
 - ☑ Command palette: modal, fuzzy filter, keyboard selection, the shipped
   command list (incl. the hidden export alias)
 - ☑ Shortcut routing: the §5 inventory table wired to the stub state, with the
@@ -51,15 +53,30 @@ where the row is logic).
   `lumit_bridge_free_string`, single-client `Mutex` state; in-crate tests).
   flutter_rust_bridge codegen ☐ — deferred until the API surface stabilises
   (bridge v0 is hand-rolled JSON over C ABI, see 03-ARCHITECTURE §Bridge v0)
-- ◐ Project open/save/snapshot/ops. Live: new project, open (`.lum`), save (to
-  the loaded path), document snapshot (item tree + can_undo/can_redo + path),
-  new composition through the real op/undo path, undo/redo. Not yet: file
-  dialogues (open/save need the file-dialog plugin), import footage, session
-  restore
+- ☑ Project open/save/snapshot/ops. Live: new project, open (`.lum`), save (to
+  the loaded path, or a save dialogue when the project has no path yet — the
+  egui Save behaviour, no separate Save As), document snapshot (item tree +
+  can_undo/can_redo + path), new composition through the real op/undo path,
+  undo/redo
+- ☑ File dialogues (the `file_selector` plugin): Open project (`.lum` filter),
+  Save (falls through to a save dialogue with `untitled.lum` when unsaved),
+  Import footage (multi-select, filter mirrors the egui import list). Dialogue
+  calls route through injectable seams so widget tests stub paths without
+  plugin channels
+- ☑ Import footage → `lumit_bridge_import_footage`: one footage item per file
+  through the real AddItem/undo path (no auto-folder, mirroring the egui
+  frontend); one calm notice for N imported, failures in the error tint. No
+  media probing yet (probing/thumbnails are F2)
+- ☑ Reopen the last project on launch: the workspace persists `lastProjectPath`
+  (set on open/save-with-path), and a live bridge reopens it when the file is
+  still on disk — a missing or unreadable file degrades to a calm status-line
+  notice, never a crash
 - ◐ Project panel live: item tree + type icons (footage/folder/composition/
   solid) with layer-colour tints and nesting, empty-document hint, hover fill.
   Not yet: thumbnails, relink, missing badge, selection/drag
-- ☐ Session restore per project path
+- ☐ Session restore *within* a project (open comps, playhead, selection) — the
+  per-project session the egui shell restores on open; F1 restores only which
+  project file reopens, not its saved session
 
 ## Phase F2 — Viewer (not started)
 

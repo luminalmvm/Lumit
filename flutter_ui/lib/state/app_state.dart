@@ -5,9 +5,12 @@
 // panel control can be wired now and re-pointed at the bridge in Phase F1
 // (docs/flutter-port/03-ARCHITECTURE.md).
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../bridge/bridge.dart';
+import 'file_dialogs.dart';
 
 /// One entry in the stub's action log — what a real engine call would have
 /// been. The status line surfaces the latest as a notice, so clicking through
@@ -23,13 +26,34 @@ class AppStateStub extends ChangeNotifier {
   /// `main.dart` via `LumitBridge.tryLoad()`). Null means the app runs on its
   /// F0 placeholders exactly as before — every path here degrades to the
   /// notice-only behaviour when this is null.
-  final LumitBridge? bridge;
+  final DocumentBridge? bridge;
 
   /// The latest document snapshot from the bridge, or null when there is no
   /// bridge. The Project panel renders this when present.
   BridgeSnapshot? snapshot;
 
-  AppStateStub({this.bridge}) {
+  /// File-dialogue seams, defaulting to the real file_selector calls. Tests
+  /// inject their own so they never touch a plugin channel (dialogues cannot
+  /// open in a widget test).
+  final Future<String?> Function() openProjectPicker;
+  final Future<String?> Function() saveLocationPicker;
+  final Future<List<String>> Function() footagePicker;
+
+  /// Called with the file a project was opened from or saved to, so the
+  /// workspace can restore it next launch (wired to `Workspace.rememberProject`
+  /// by the shell; null in tests that do not care).
+  final void Function(String path)? rememberProject;
+
+  AppStateStub({
+    this.bridge,
+    Future<String?> Function()? openProjectPicker,
+    Future<String?> Function()? saveLocationPicker,
+    Future<List<String>> Function()? footagePicker,
+    this.rememberProject,
+    String? lastProjectPath,
+  })  : openProjectPicker = openProjectPicker ?? pickProjectToOpen,
+        saveLocationPicker = saveLocationPicker ?? pickProjectSaveLocation,
+        footagePicker = footagePicker ?? pickFootage {
     // A live bridge means a live document from the first frame: pull the
     // initial snapshot so the Project panel is populated immediately.
     if (bridge != null) {
@@ -39,6 +63,22 @@ class AppStateStub extends ChangeNotifier {
       } else {
         errorNotice = reply.error;
       }
+      _restoreLastProject(lastProjectPath);
+    }
+  }
+
+  /// On launch with a live bridge, reopen the last project if its file is still
+  /// on disk. A missing file is not an error (the project simply moved); a
+  /// failed open degrades to a calm status-line notice, never a crash.
+  void _restoreLastProject(String? path) {
+    if (path == null || bridge == null) return;
+    if (!File(path).existsSync()) return;
+    final reply = bridge!.openProject(path);
+    if (reply.ok) {
+      _adoptSnapshot(reply.snapshot);
+      notice = 'Project reopened';
+    } else {
+      notice = 'the last project could not be reopened';
     }
   }
 
@@ -148,26 +188,76 @@ class AppStateStub extends ChangeNotifier {
     _applyReply(bridge!.redo(), 'Redone');
   }
 
-  void save() {
+  Future<void> save() async {
     if (bridge == null) {
       engine('Save');
       return;
     }
-    // Empty path = save to the loaded path; the engine returns a calm error if
-    // the project has never been saved (no file dialogue in bridge v0).
-    _applyReply(bridge!.saveProject(''), 'Project saved');
+    // A known path saves in place; without one, Save falls through to a save
+    // dialogue — that is the egui behaviour (there is no separate Save As).
+    if (snapshot?.path != null) {
+      final reply = bridge!.saveProject('');
+      _applyReply(reply, 'Project saved');
+      if (reply.ok && snapshot?.path != null) rememberProject?.call(snapshot!.path!);
+      return;
+    }
+    final path = await saveLocationPicker();
+    if (path == null) return; // cancelled — leave the status line as-is
+    final reply = bridge!.saveProject(path);
+    _applyReply(reply, 'Project saved');
+    if (reply.ok) rememberProject?.call(snapshot?.path ?? path);
   }
 
-  void openProject() {
+  Future<void> openProject() async {
     if (bridge == null) {
       engine('Open project');
       return;
     }
-    // The library is live, but a file picker needs the file-dialog plugin
-    // (Phase F1 remainder) before a path can be chosen.
-    notice = 'open dialogue arrives with the file-dialog plugin; bridge is live';
-    errorNotice = null;
+    final path = await openProjectPicker();
+    if (path == null) return; // cancelled — leave the status line as-is
+    final reply = bridge!.openProject(path);
+    _applyReply(reply, 'Project opened');
+    if (reply.ok) rememberProject?.call(path);
+  }
+
+  Future<void> importFootage() async {
+    if (bridge == null) {
+      engine('Import footage');
+      return;
+    }
+    final paths = await footagePicker();
+    if (paths.isEmpty) return; // cancelled or nothing chosen
+    var imported = 0;
+    var failed = 0;
+    String? lastError;
+    for (final path in paths) {
+      final reply = bridge!.importFootage(path);
+      if (reply.ok) {
+        _adoptSnapshot(reply.snapshot);
+        imported++;
+      } else {
+        failed++;
+        lastError = reply.error;
+      }
+    }
+    _postImportNotice(imported, failed, lastError);
     notifyListeners();
+  }
+
+  /// One calm line for an import: the count of items brought in as the notice,
+  /// any failures in the error tint (the status line shows the error when both
+  /// are set, so a partial failure is never hidden).
+  void _postImportNotice(int imported, int failed, String? lastError) {
+    notice = imported == 0
+        ? null
+        : imported == 1
+            ? '1 item imported'
+            : '$imported items imported';
+    errorNotice = failed == 0
+        ? null
+        : failed == 1
+            ? (lastError ?? '1 item could not be imported')
+            : '$failed items could not be imported';
   }
 
   /// Adopt a snapshot into the held state (undo/redo flags follow it).

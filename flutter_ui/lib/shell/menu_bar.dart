@@ -36,7 +36,7 @@ class LumitMenuBar extends StatelessWidget {
           _menu(context, 'File', [
             _Item('New project', app.newProject),
             _Item('Open project…', app.openProject),
-            _Item('Import footage…', () => app.engine('Import footage')),
+            _Item('Import footage…', app.importFootage),
             _Item('Save', app.save),
             _Item.divider(),
             _Item('Export comp…',
