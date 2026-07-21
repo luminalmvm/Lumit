@@ -22,6 +22,29 @@ original snapshot; this log is the running record of what has since changed. Per
 (commit, CI/test status, and `👁` where behaviour needs the owner's eye) lives in each table's
 **Resolution / next step** column.
 
+### Third pass (owner's desk, 2026-07-21 — built and tested locally on Windows)
+
+Driven by the first outside tester's notes and the owner's own desk run; full suite green
+locally (fmt, clippy `-D warnings`, 638 + 64 GPU tests). Tracked as TF-1..4 / OD-1..3 in
+`docs/test-feedback-log.md`.
+
+- **Per-layer audio ships (K-172; 09 §3.1/§6, 07 §waveforms, 03 §5.1).** `Layer.volume_db`
+  (0 dB default, +50 ceiling, −100 dB = the −∞ knee) + `Op::SetLayerVolume`; static = constant
+  clip gain, keyframed = ~10 ms `GainEnvelope` applied identically by the live `MixPlan` and
+  the baked mixdown (pinned by test). Timeline outline gains the **Audio** group (Volume row +
+  per-layer **Waveform** twirl, live-offset peaks); the comp-wide waveform strip, its T25
+  toggles and its background peaks bake are removed. Four table rows updated below.
+- **Cached playback pacing (K-171 refinements).** `cached_pace_carry`: the pace timer's
+  restart-at-"now" discarded the per-frame remainder — a fully-cached 60 fps comp replayed at
+  ~half speed on 16 ms ticks while audio ran on the hardware clock and was yanked back for
+  ever (tester report TF-1). And the audio gate is readiness-ahead (`cached_audio_lookahead`),
+  not a warm-up streak, so sound starts with the first frame of a ready run (owner OD-1).
+- **Audio files no longer wedge the comp render (TF-2, also on main).** `probe()` skips
+  attached-picture streams (embedded album art read as a video stream, and the doomed decode
+  job failed the whole comp frame). Regression fixture: FLAC + PNG cover.
+- **Project dialogs offer `.lum`, not the pre-rename `kir`** — the first save landed as
+  `untitled.lum.kir` (10 §1 was right; the UI filter, outside §10's scan, was the straggler).
+
 ### Second pass (autonomous, CI-verified on PR #3)
 
 Engine crates build and test here; `lumit-ui`/`lumit-media`/`lumit-audio` need FFmpeg 7.1 which
@@ -244,7 +267,7 @@ is live in preview and export).
 | K-030 | Cached + Realtime-adaptive preview modes | Partial (unwired) | No `PreviewMode` toggle; `RealtimeController` unwired; resolution picker is manual | ◑ Slice built ec2abe2 · ⚠ UNTESTED — can't build lumit-ui here, CI compiles only; needs your run under a heavy comp. Cost = CPU composite time (partial proxy); render-ahead ring (06 §6.4) still separate · 👁 verify adaptation (owner: on PC later). **Owner clarified the intended default (now K-171): Cached playback renders every frame and never skips — render-gated stepping with audio paused/stretched, realtime replay from cache; the current skip-under-load behaviour belongs to Realtime mode only. To build** · **Cached mode confirmed working by owner.** Realtime mode froze under load: the tick re-requested a render every clock boundary, so each render was superseded before finishing — nothing completed, the controller was never fed a cost, the picture stuck. Fixed by **render-pull** (this branch): one live render in flight, never superseded; it finishes, presents, is timed (feeds `RealtimeController`), then the next clock frame is pulled — cached frames present free and don't gate; a `realtime_inflight` guard + 2 s safety timeout guarantee liveness (`playback.rs` `comp_realtime_tick`, `app_state/mod.rs` field). **Owner: frames now update but choppy + resolution box stuck at Full.** Root cause: the controller was fed only the sub-ms CPU composite-submit time, never the real cost, so it never dropped. Now fed the worker's actual **decode time** (`CompFrame::render_cost`, measured on the decode thread so UI repaint-poll latency can't inflate it) + the composite submit — the tier drops and the box tracks it. Honest caveat: dropping resolution cuts composite/scale cost but **not video decode** (full frame is always decoded then shrunk), so a decode-bound footage comp can still be choppy at low res — true fix is render-ahead (`FrameRing`, built/unwired). ⚠ UNTESTED here (CI compiles only) · 👁 verify on PC: box should now show Half/Third/Quarter under load |
 | K-034 | Perceptual ops in Oklab; params declare domain | Partial | Oklab CPU+WGSL twin exists and is used; no per-parameter domain declaration; colour keyframe interpolation does not route through Oklab | — |
 | K-035 | Universal per-effect strength matte | **Not implemented** | No strength-matte slot on `EffectInstance` (`model.rs:511`); no host mixing plumbing anywhere (also flagged under 08) | — |
-| K-050 | v1 audio sync toolkit | Partial | Beats/markers/waveform/mute real; volume keyframes and audio layers absent (see 09) | — |
+| K-050 | v1 audio sync toolkit | Partial | Beats/markers/waveform/mute real; volume keyframes and audio layers absent (see 09) | ◑ Volume keyframes shipped (K-172): per-layer dB property with envelope-baked fades, playback == export. Dedicated audio layer kind / detach-audio still absent |
 | K-060 | AE import | Not implemented | See 11 | — |
 | K-061 / K-062 / K-066 | OFX host / LFX API / plugin depth rules | Not implemented | See 12; enum variants only | — |
 | K-063 | Expressions on QuickJS-ng | Not implemented | No JS engine dependency; no expression field on `Property` | — |
@@ -282,7 +305,7 @@ outright contradicted.
 | 4 | 16384² hard cap | Not implemented | No enforcement (doc's own open question) | ✅ Doc-synced (03 §4/§6/§7 pass) — code verified; unbuilt bits marked future |
 | 4 | `work_area` mandatory | Partial | Code: `Option<(CompTime, CompTime)>`, `None` = full comp | ✅ Doc-synced (03 §4/§6/§7 pass) — code verified; unbuilt bits marked future |
 | 5.1 | `Layer.stretch` | Not implemented | No field (doc's own open question) | ✅ Doc-synced (03 structural pass) — code verified; unbuilt bits now marked future |
-| 5.1 | `Layer.audio: AudioProps` (animatable level) | Not implemented | Mute is `Switches.audible`; no volume anywhere | ✅ Doc-synced (03 structural pass) — code verified; unbuilt bits now marked future |
+| 5.1 | `Layer.audio: AudioProps` (animatable level) | Not implemented | Mute is `Switches.audible`; no volume anywhere | ✅ **Built** (K-172, desk session 2026-07-21): shipped as the single `Layer.volume_db` animatable dB property + `Op::SetLayerVolume` (the AudioProps grouping proved unnecessary — fades are its keyframes); 03 §5.1 updated |
 | 5.1 | Per-layer `markers` | Not implemented | Markers only on `Composition` (`model.rs:86`) | ✅ Doc-synced (03 structural pass) — code verified; unbuilt bits now marked future |
 | 5.1 | `Switches { shy, quality, adjustment }` | Contradicted | Missing shy/quality/adjustment (adjustment is a `LayerKind`); code adds an undocumented `fx` switch (`model.rs:615`) | ✅ Doc-synced (03 structural pass) — code verified; unbuilt bits now marked future |
 | 5.1 | `source: LayerInputSource` defaults **None**; K-125 migration `false→None` | Contradicted | Default is `EffectsAndMasks` (`model.rs:289`); migration maps `false→Masks`, absent→`EffectsAndMasks` (`model.rs:299`, tests `:1220`) | ✅ Doc-synced (03 structural pass) — code verified; unbuilt bits now marked future |
@@ -446,7 +469,7 @@ whole documented subsystems are absent.
 | 6 | Effect Controls solo/reset/rename/copy-to-layer | Partial | Panel + enable/reorder/eyedropper exist; those extras not evident | — |
 | 7 | Double-click apply; drag-onto-Viewer; favourites; hover descriptions | Partial | Drag-to-row/EC + click-apply presets exist; rest deferred (K-101) or absent | — |
 | 9 | Preview panel/transport: loop modes, fill-cache, mute, quality toggle, Cached/Realtime | Not implemented | No `Preview` panel type (`mod.rs:55-63`); bare play/pause only | — |
-| 10 | Audio panel; beat controls UI; meters; per-layer waveform; `8` tap | Partial | Menu-only beat detect with 2 fixed sensitivities; comp waveform strip only; no meters/tap | — |
+| 10 | Audio panel; beat controls UI; meters; per-layer waveform; `8` tap | Partial | Menu-only beat detect with 2 fixed sensitivities; comp waveform strip only; no meters/tap | ◑ Per-layer waveform shipped (K-172): the Audio group's Waveform twirl draws each layer's own peaks in its lane (and the comp-wide strip is gone). Audio panel, meters and `8` tap remain |
 | 11 | Export queue list UI (reorder/retry/cancel per item), full custom controls | Partial | Background queue + dialog + tokens real; no queue-list UI; some documented controls dead/not built (doc self-notes) | — |
 | 12 | Palette: comps/panels categories, badges, recent-first | Partial | Commands + effects only; unwired on macOS menu (`command_palette.rs:76-77`) | — |
 | 13.1 | First-run screen | Future-by-design | K-006 post-v1 | — |
@@ -494,8 +517,8 @@ missing or hardcoded.
 | § | Claim | Status | Evidence / what's missing | Resolution / next step |
 |---|---|---|---|---|
 | 3.1 | Master limiter: hard safety clip at −0.3 dBFS true peak | Contradicted | Plain ±1.0 sample clamp (`mix.rs:49-51`); no true-peak logic | ◑ Partial · ✅ CI-green (macOS + Windows built lumit-audio and passed the test) · `mix_stereo` now clamps to ±`MASTER_CEILING` (−0.3 dBFS = 0.96605) with a both-polarity regression test; doc 09 §3.1 updated to say sample-peak now, true inter-sample-peak (BS.1770) future · 👁 review by ear |
-| 3.1/6 | Per-layer gain (volume keyframes) | Not implemented | Mix gain hardwired `1.0` (`export.rs:238`); no volume property in the model | — |
-| 6 | Fade-in/out commands | Not implemented | No fade code | — |
+| 3.1/6 | Per-layer gain (volume keyframes) | Not implemented | Mix gain hardwired `1.0` (`export.rs:238`); no volume property in the model | ✅ **Built** (K-172, desk session 2026-07-21): `Layer.volume_db` (0 dB default, +50 ceiling, −100 = −∞ knee) feeds a constant clip gain when static and a ~10 ms `GainEnvelope` when keyframed, applied identically by the live `MixPlan` callback and the baked mixdown (pinned by test); volume joins the audio-jobs signature so edits re-plan instantly |
+| 6 | Fade-in/out commands | Not implemented | No fade code | ◑ Hand-made fades now work (volume keyframes ride the K-172 envelope); the one-click eased-pair commands are still to build |
 | 6 | Audio solo silences non-soloed audio | Partial | Mute works; audio path never consults `solo` — soloing does not silence other audio | ◑ Logic ✅ owner-verified, but testing found the re-mix latency bug: toggling solo re-decoded every file (minutes on a movie) so it seemed not to apply during playback. Fixed properly with the **live mix plan**: the callback sums shared decoded buffers per frame, and solo/mute/move/trim swap the plan mid-playback — heard on the next callback (~10 ms), clock untouched. Plan proven sample-identical to the baked mix in lumit-audio tests; 👁 re-test: edits should now be instant |
 | 6 | Audio layer kind; detach-audio | Not implemented | Audio only via footage layers; no detach command | — |
 | 3.4 | Audio scrubbing (windowed grain, on by default) | Not implemented | Scrubbing pauses audio (`playback.rs:268`) | — |
@@ -503,7 +526,7 @@ missing or hardcoded.
 | 3.1 | Output latency compensation | Partial (deferred in code) | `clock_seconds` raw; comment defers to ring-buffer work (`lib.rs:119-124`) | — |
 | 2/3.1 | 48 kHz session rate, RAM ring, lazy decode, background import pass | Partial/deviates | Playback resamples to device rate; whole-file synchronous decode into RAM (`audio.rs:34`); export does use 48 kHz | ◑ **OOM found by owner** (27 GB on a 1 GB film: unbounded decoded-audio retention + re-decode per audio edit) · fixed: **one application Memory budget** (Settings → Performance, default half of system RAM, owner decision) apportioned across every RAM cache — decoded audio ½, rendered comp frames ¼, decoded video frames ¼ — and the whole-comp baked buffer is GONE: playback mixes live from shared decoded buffers (`MixPlan`), the waveform computes off the plan without materialising a strip. ⚠ CI-compiled, 👁 re-test with the movie (RAM bounded, edits instant). Streaming decode (not whole-file) remains the audio ring box |
 | 4 | Multi-tier sidecar peak files (min/max/RMS at 3 zooms, content-hash keyed) | Not implemented | Live-computed single 2048-bucket strip | — |
-| 4 | Waveforms on layers and inside clips | Not implemented | One comp-wide strip only (`timeline/panel.rs:305-357`) | — |
+| 4 | Waveforms on layers and inside clips | Not implemented | One comp-wide strip only (`timeline/panel.rs:305-357`) | ◑ **Layers done** (K-172): per-layer Waveform twirl, 2048-bucket peak strip through the layer's live offset; the comp-wide strip is removed. Inside Sequence clips + the §4 multi-tier sidecar peak files (scalability past the in-RAM memo) remain |
 | 5 | Sensitivity slider 0–100 | Partial | Two hardcoded presets (1.5 / 1.1) via menu | ◑ Partial · ✅ CI-green (macOS + Windows + coverage gate ran the mapping test) · added `lumit_audio::beat::delta_from_sensitivity(0–100→δ)` (anchored 50→1.5, 70→1.1; unit-tested) and replaced the two-item Detect-beats menu with a 0–100 slider + Detect button (`beat_sensitivity` app-state field, default 50). Owner couldn't find it (it sat in the non-macOS menu bar only) — now surfaced in the timeline's empty-lane right-click menu (slider + Detect + Clear) and the macOS native menu actions honour the slider · 👁 re-check in the lane menu |
 | 5 | BPM confirm/type + phase; grid-fill missed beats | Partial | Auto grid-snap + BPM display only; no UI, no fill | — |
 | 5 | Tap tempo | Not implemented | Nothing | — |

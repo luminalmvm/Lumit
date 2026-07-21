@@ -31,7 +31,7 @@ flowchart TD
     BANNEREYE["👁 Error banner fig tint (15 §10)"]
     SOLOEYE["👁 Audio solo — logic verified; re-test the live<br/>mix plan: edits heard on the next callback"]
     BEATEYE["👁 Beat sensitivity slider — now in the timeline<br/>empty-lane right-click menu; re-check there"]
-    AUDIOMEMEYE["👁 Memory + instant audio — re-test with the movie:<br/>RAM within the ONE Settings budget (half RAM default),<br/>solo/mute/move heard instantly, waveform arrives after"]
+    AUDIOMEMEYE["👁 Memory + instant audio — re-test with the movie:<br/>RAM within the ONE Settings budget (half RAM default),<br/>solo/mute/move/volume heard instantly (the comp waveform strip<br/>is gone, K-172 — per-layer lanes fill as decodes land)"]
   end
 
   subgraph SSPINE["Render and evaluation spine"]
@@ -44,7 +44,7 @@ flowchart TD
     GPUSUB["GPU-submit thread owns the queue (05 §2)"]
     RING["Wire render-ahead ring and pre-roll (06 §6.4)"]
     FRAMEPACE["Frame-pacing budgets B5–B7 (13 §2)"]
-    CACHEDPLAY["✅ Cached playback render-gated stepping — owner-confirmed working (K-171):<br/>every frame shown, advances when cached + at realtime pace,<br/>audio pauses while awaiting a frame. Tested core (cached_step).<br/>Remaining refinement: audio timestretch instead of pause"]
+    CACHEDPLAY["✅ Cached playback render-gated stepping — owner-confirmed working (K-171):<br/>every frame shown, advances when cached + at realtime pace,<br/>audio pauses while awaiting a frame. Tested core (cached_step).<br/>Desk-session refinements: pace timer carries its remainder<br/>(cached_pace_carry — replay ran ~half speed and audio drifted; TF-1)<br/>and audio starts with the first frame of a ready run<br/>(readiness lookahead replaced the warm-up streak; OD-1).<br/>Remaining refinement: audio timestretch instead of pause"]
     SCOPESGPU["GPU compute scopes (06 §8, K-096)"]
     WPOOL --> PIXPASS
     SEAMS --> PIXPASS
@@ -110,14 +110,14 @@ flowchart TD
   TEXPOOL --> VRAMTIER
 
   subgraph SAUDIO["Audio"]
-    GAIN["Per-layer gain / volume keyframes (09 §3.1, §6)"]
+    GAIN["✅ Per-layer gain / volume keyframes (09 §3.1, §6) —<br/>shipped K-172 (desk session): Layer.volume_db, dB with a −∞ knee,<br/>envelope-baked fades identical in playback + export"]
     FADES["Fade-in/out commands (09 §6)"]
     AUDLAYER["Audio layer kind + detach-audio (09 §6)"]
     RINGBUF["Streaming decode + latency compensation (09 §3.1)<br/>(live per-callback mixing now ships via MixPlan;<br/>remaining: decode windows instead of whole files)"]
     SCRUBAUD["Audio scrubbing, windowed grain (09 §3.4)"]
     DEVCHG["Device-change stream rebuild (09 §3.2)"]
     PEAKS["Multi-tier sidecar peak files (09 §4)"]
-    WAVELAYERS["Waveforms on layers and inside clips (09 §4)"]
+    WAVELAYERS["◑ Waveforms on layers (09 §4) — shipped K-172:<br/>per-layer Waveform twirl, live-offset peaks (comp strip removed).<br/>Remaining: inside Sequence clips; sidecar peaks for scale"]
     TAP["Tap tempo (09 §5)"]
     BPMUI["BPM confirm/type + phase + grid-fill (09 §5)"]
     RETMUTE["Retime mutes audio + badge (09 §7)"]
@@ -340,6 +340,6 @@ format, the ROI/DoD protocol, the export compiler and the per-node profiler); **
 wiring (the relink dialogue, collect/keymap/settings surfaces, the Preview/Audio panels, viewer
 chrome, gizmos, workspaces); **GPU** work (VRAM tier, texture pool → governor → degradation
 ladder, device-loss recovery); **media/FFmpeg** (persistent decoders, hardware decode, the
-colour-management pass, proxies) or **audio/ALSA** (gains, fades, streaming windows); or an
+colour-management pass, proxies) or **audio** (fades-as-commands, streaming windows — per-layer gains shipped, K-172); or an
 **owner decision** (razor-on-C, the Adjustment-layer colour, the glossary CI gate). Those are
 picked up in the app crate (built via CI) or once the migration lands.

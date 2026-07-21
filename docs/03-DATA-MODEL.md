@@ -136,11 +136,14 @@ struct Layer {
     transform: TransformGroup,         // §6
     masks: Vec<Mask>,                  // §7
     effects: Vec<EffectInstance>,      // §8, ordered top-to-bottom
+    volume_db: Property,               // K-172: animatable Volume (docs/09 §6); 0 dB unity, −100 = −∞
     switches: Switches,
 }
-// Future (not in v1): `stretch` (uniform rate multiplier), per-layer `markers`,
-// and `audio: AudioProps` (animatable level / mute). v1 mutes via the `audible`
-// switch, and audio comes only from a footage layer's own stream (§5.2, docs/09).
+// Future (not in v1): `stretch` (uniform rate multiplier) and per-layer `markers`.
+// Mute stays the `audible` switch, and audio comes only from a footage layer's own
+// stream (§5.2, docs/09); the once-sketched `audio: AudioProps` grouping collapsed
+// to the single `volume_db` property when it shipped (K-172) — fades are its
+// keyframes, so v1 needed nothing more.
 
 struct Switches {
     visible: bool, audible: bool, locked: bool,
