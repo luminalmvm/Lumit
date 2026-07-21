@@ -2333,6 +2333,41 @@ read against the same neutral whatever colours the chrome wears, and it holds th
 last trace for a beat rather than blinking to blank when a frame is momentarily
 unavailable.
 
+**The Viewer showing the REAL composited comp (K-175).** The single-layer
+preview above was the honest stop-gap; the Viewer now shows the *whole* comp —
+every layer stacked, each one's position and effects applied, blended into the
+finished picture — the same pixels the egui Viewer shows and the same pixels an
+export writes to a file. Here is the trick that made it possible without a big
+rebuild. The compositor lives in the Rust egui crate, but the part that draws a
+comp to an offscreen picture (the one the *exporter* already uses) never needed
+a window or the egui interface — it only needs a graphics device, the video
+decoders and the document. So that path is wrapped in a small reusable object, a
+**headless renderer**: "headless" just means "no window". It holds the graphics
+device (which is slow to set up, so it is created once and kept), the compiled
+drawing programs and the open video decoders, and each time the Viewer asks for
+a frame it composites the comp and hands back the finished pixels. Because it is
+the very same code the exporter runs, the Viewer, the egui preview and the
+exported file cannot disagree about what the comp looks like (K-031). The bridge
+holds one of these renderers for the session and offers a new call,
+`lumit_bridge_render_comp_frame`, that takes a comp and a frame and returns the
+composited pixels with the same borrow-copy-return manners as the single-frame
+decode. On the Dart side the Viewer prefers this whole-comp call whenever the
+engine offers it, and quietly falls back to the old single-layer decode when a
+render can't be produced — for instance on a machine with no suitable graphics
+card, where the renderer reports itself unavailable once and the Viewer simply
+stays on the single-layer path (never a crash). A missing layer inside the comp
+comes back already painted as colour bars *inside* the finished frame, so the
+Viewer needs no separate "missing" card on this path. Two honesties remain: the
+picture still travels as a block of pixels through ordinary memory (the faster
+zero-copy path that shares GPU memory with Flutter is a later optimisation, and
+it renders through this same headless renderer), and asking for a smaller scale
+shrinks the *returned* picture but not the work to draw it, because the export
+path always composites at full size. One deliberate wrinkle worth naming: the
+bridge — normally a leaf that depends only on the engine — here depends on the
+egui UI crate, because that is where the compositor still lives. That edge is
+scaffolding, recorded as K-175, and it comes down when the compositor is lifted
+into an engine crate of its own.
+
 **The editors starting to come alive (F4, first slice).** Three of the editing
 surfaces move off their placeholders. The **Hierarchy** panel draws the active
 composition as an indented outline: the comp at the top, then its layers, each
@@ -2345,16 +2380,20 @@ bridge version will carry the exact link.) The **Effect controls** panel shows
 the picked layer's **Transform** values — its anchor point, position, scale,
 rotation and opacity — as editable number boxes in the same card style as the
 Settings window; typing or dragging a box sends the change straight to the
-engine as one undoable step. The catch, stated plainly in the panel itself, is
-that the bridge can currently *set* a transform value but not *read the current
-one back*, so a box shows a dash until you first edit it (and the value you set
-this session after that); reading the live values arrives with the next bridge
-version. Finally, the **Composition settings** and **New composition** windows
+engine as one undoable step. Those boxes now read the **current** values back
+from the engine (the em-dash placeholder is gone), each row carries a stopwatch
+to start or stop animating that value and a ◄ ◆ ► navigator to step between or
+add and remove its keyframes, and below the transform sits the layer's stack of
+**effects** — one card each, with an on/off tick, a remove button, and editable
+rows for the numeric and colour settings (the other kinds are shown read-only
+until the engine gains a way to set them); a companion **Effects & presets**
+panel lets you search the built-in effects and apply one to the selected layer.
+Finally, the **Composition settings** and **New composition** windows
 are real dialogues now — name, size, frame rate and duration — opened from the
 Composition menu; creating a comp sends its name through the real engine call,
 while the size/rate/duration and the "edit an existing comp's settings" button
 are honestly marked as not-yet-wired, waiting on a bridge call that does not
-exist yet. Effects themselves, keyframes and masks are later waves.
+exist yet. Saving effect presets to a `.lumfx` file, and masks, are later waves.
 
 **The Timeline coming to life (F3).** The Timeline panel — the strip along the
 bottom that shows time running left-to-right and the stack of layers — is now
@@ -2375,5 +2414,10 @@ each row is the layer's *clip bar*, tinted with the layer's colour, showing wher
 in time it starts and ends; you can drag the middle of a bar to slide the whole
 layer earlier or later (its length preserved), or grab either end to trim just
 that edge, and with the magnet on, drags snap to whole seconds and to markers.
-The zoom, magnet and graph-editor buttons live along the bottom. Keyframe lanes,
-the fold-out property rows and the graph editor are still to come.
+The zoom, magnet and graph-editor buttons live along the bottom. A second wave now
+adds the fold-out twirl on each layer (revealing its transform property rows, each
+with a stopwatch, the ◄ ◆ ► keyframe navigator and its keyframes drawn as
+shape-coded diamonds you can select and drag), the work-area band on the ruler with
+draggable edges, a right-click menu on each layer, a search box that filters the
+layers by name, and a scrollbar to slide left and right once you have zoomed in;
+the graph editor is still to come.

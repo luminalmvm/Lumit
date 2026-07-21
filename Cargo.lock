@@ -2698,6 +2698,7 @@ dependencies = [
  "lumit-core",
  "lumit-media",
  "lumit-project",
+ "lumit-ui",
  "serde",
  "serde_json",
  "tempfile",

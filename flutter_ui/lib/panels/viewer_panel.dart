@@ -121,13 +121,21 @@ class _ViewerPanelState extends State<ViewerPanel>
   Widget _buildStage(BuildContext context, LumitTheme t) {
     final target = source.target;
 
-    // Missing footage → the generated colour-bars slate with the item's path.
-    if (target != null && target.item.status == BridgeMediaStatus.missing) {
-      return _MissingSlate(path: target.item.name, textStyle: t.small);
-    }
-    // Present but unreadable → a dark slate with the egui "unreadable" wording.
-    if (target != null && target.item.status == BridgeMediaStatus.failed) {
-      return _FailedSlate(name: target.item.name, theme: t);
+    // On the composited-comp path there is no single-layer [target]: a missing
+    // layer is already slated as colour bars INSIDE the engine-rendered frame
+    // (verified — the compositor draws `slate::colour_bars` for missing footage
+    // and composites it like any source), so the Viewer just blits the image and
+    // shows no separate slate. The slate branches below apply only to the
+    // single-layer fallback, where the whole preview IS one footage layer.
+    if (!source.compActive) {
+      // Missing footage → the generated colour-bars slate with the item's path.
+      if (target != null && target.item.status == BridgeMediaStatus.missing) {
+        return _MissingSlate(path: target.item.name, textStyle: t.small);
+      }
+      // Present but unreadable → a dark slate with the egui "unreadable" wording.
+      if (target != null && target.item.status == BridgeMediaStatus.failed) {
+        return _FailedSlate(name: target.item.name, theme: t);
+      }
     }
 
     final image = source.image;
@@ -135,8 +143,9 @@ class _ViewerPanelState extends State<ViewerPanel>
       return _FittedImage(image: image);
     }
 
-    // Nothing under the playhead (or the frame is still decoding): the quiet
-    // film-icon placeholder.
+    // Nothing to show yet (frame still decoding, or nothing under the playhead):
+    // the quiet film-icon placeholder. The wording drops the "single-layer"
+    // caveat once the composited-comp path is live.
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -144,8 +153,10 @@ class _ViewerPanelState extends State<ViewerPanel>
           lumitIcon(LumitIcon.film, size: 32, color: t.textDisabled),
           const SizedBox(height: 8),
           Text(
-            'Single-layer preview — the composited comp arrives when the '
-            'compositor leaves the egui crate',
+            source.compActive
+                ? 'Rendering the composited comp…'
+                : 'Single-layer preview — the composited comp arrives when the '
+                    'compositor leaves the egui crate',
             style: t.small,
             textAlign: TextAlign.center,
           ),

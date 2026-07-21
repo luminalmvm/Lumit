@@ -179,6 +179,61 @@ already works that way.
 This is the only part of the port with real platform-specific plumbing; it is
 why the Viewer is its own phase.
 
+### The composited-comp seam (implemented, CPU path) — K-175
+
+The Viewer's first working picture decoded ONE footage layer
+(`decode_frame`) — no transforms, blends or effects, because the real
+compositor lived only inside `lumit-ui` (the offscreen render `export.rs`
+drives, the pixels the egui Viewer shows). That was the port's biggest missing
+piece. It is now closed on the CPU path:
+
+- **The seam.** `crate::export`'s `Renderer` (in `lumit-ui`) is already
+  window-free and egui-free — it needs only a `lumit_gpu::GpuContext`,
+  `lumit-media` decoders and `lumit-core`; it composites a comp at time `t` into
+  a linear texture (`render_comp_linear`), which `ColourEngine::display` +
+  `readback8` turn into RGBA. `lumit-ui` gains a small `pub mod headless`
+  (`src/headless.rs`) wrapping that path in a reusable `HeadlessRenderer` that
+  **owns** the GPU context (adapter acquired once), the compiled shader engines,
+  a decoder pool and a probe cache, and lends them to a fresh `Renderer` per
+  call: `render_rgba(&Document, comp, frame, scale) -> (Vec<u8>, w, h)`. It is
+  the same code export runs, so **preview == export == Flutter** (K-031). The
+  only change to `export.rs` is visibility (the `Renderer` and its fields became
+  `pub(crate)`); no behaviour moved.
+- **The bridge.** `lumit-bridge` gains a default-on `render` feature that pulls
+  `lumit-ui` and holds ONE session-lifetime `HeadlessRenderer` behind its own
+  lock (separate from the document lock, so a slow render never blocks an edit).
+  `lumit_bridge_render_comp_frame(comp_id, frame, scale, out_w, out_h, out_len)
+  -> *mut u8` returns a Rust-owned RGBA block with the exact
+  `decode_frame`/`free_buffer` ownership contract (null + zeroed outs on
+  failure, `catch_unwind` at the boundary). A machine with **no GPU adapter**
+  resolves the renderer to a calm terminal `Failed` state on the first call and
+  returns null on that and every later call — never a crash, never a retry storm.
+  Without the `render` feature the symbol is present but always returns null.
+- **The dependency edge.** `lumit-bridge` depending on `lumit-ui` is the
+  deliberate, temporary architecture **K-175**: *the bridge borrows lumit-ui's
+  renderer through the headless seam until the pixel pass moves into an engine
+  crate.* The docs/05 rule (engine crates never depend on a frontend) is
+  unbroken — the bridge is a leaf, not an engine crate.
+- **`scale`.** 1.0 is the comp's own resolution; a smaller positive value
+  downsamples the OUTPUT buffer (a cheaper blit) but not the internal render —
+  the export compositor has no cheap reduced-resolution target, so the GPU cost
+  is unchanged. A future reduced-resolution preview render would change that.
+- **Dart.** `bridge.dart` adds a separate `CompRenderBridge` capability
+  interface (kept off `DocumentBridge` so the many `implements DocumentBridge`
+  fakes need no change) with `supportsCompRender` + `renderCompFrame`. The render
+  symbol is bound *defensively*: an older `.dll` lacking it leaves the capability
+  false rather than failing the whole load. `preview_source.dart` prefers the
+  comp path when the bridge advertises it, rendering the WHOLE comp via
+  `renderCompFrame` and falling back — per frame — to the single-layer decode
+  when a render returns null (no adapter, transient failure). A missing layer
+  inside a comp is slated as colour bars **inside** the engine-rendered frame
+  (the compositor draws `slate::colour_bars` for missing footage and composites
+  it like any source), so the Viewer shows no separate slate on the comp path;
+  its placeholder wording drops the "single-layer" caveat there.
+- **Still CPU.** This is the RGBA-readback path. The shared-texture path above
+  (zero-copy D3D11) remains the future optimisation; the seam it renders through
+  is the same `HeadlessRenderer`.
+
 ## Text, fonts, icons
 
 - Inter Medium ships as a bundled Flutter font family, same OFL licence file.

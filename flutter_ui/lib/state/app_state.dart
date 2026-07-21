@@ -478,6 +478,23 @@ class AppStateStub extends ChangeNotifier {
   void setWorkAreaEdge(String compId, int frame, bool isOut) =>
       _bridgeOp((b) => b.setWorkAreaEdge(compId, frame, isOut));
 
+  /// The B key: set the work-area IN edge to the current playhead on the front
+  /// comp. A convenience over [setWorkAreaEdge] resolving the comp + playhead,
+  /// so the shell's B shortcut drives the real op rather than the F0 notice.
+  void workAreaInAtPlayhead() {
+    final id = frontCompIdResolved;
+    if (id == null) return;
+    setWorkAreaEdge(id, previewFrame, false);
+  }
+
+  /// The N key: set the work-area OUT edge to the current playhead on the front
+  /// comp (the sibling of [workAreaInAtPlayhead]).
+  void workAreaOutAtPlayhead() {
+    final id = frontCompIdResolved;
+    if (id == null) return;
+    setWorkAreaEdge(id, previewFrame, true);
+  }
+
   /// The built-in effect registry (empty without a bridge).
   List<BridgeEffectInfo> listEffects() => bridge?.listEffects() ?? const [];
 

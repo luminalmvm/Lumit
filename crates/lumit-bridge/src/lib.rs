@@ -30,7 +30,13 @@
 //!
 //! Engine crates never depend on this crate, and nothing depends on it — it is
 //! a leaf over `lumit-core`, `lumit-project` and (behind the default-on `media`
-//! feature) `lumit-media` (docs/05-ARCHITECTURE.md).
+//! feature) `lumit-media` (docs/05-ARCHITECTURE.md). Behind the default-on
+//! `render` feature it *also* borrows `lumit-ui`'s headless compositor for the
+//! composited-comp Viewer path — the one deliberate, temporary exception, logged
+//! as K-175: the bridge reaches into the UI crate's renderer through the
+//! `lumit_ui::headless` seam until the pixel pass moves into an engine crate.
+//! The docs/05 rule (engine crates never depend on the UI) is unbroken; this is
+//! the bridge, not an engine crate.
 //!
 //! ## Module map
 //!
@@ -45,12 +51,17 @@
 //!   links, the work area and the effect stack to v2's comps/layers/media).
 //! - [`media`] — probing footage and decoding frames, gated behind the `media`
 //!   feature; plain-data probe results that the snapshot embeds either way.
+//! - `render` — the composited-comp Viewer path, gated behind the `render`
+//!   feature; holds one session-lifetime headless renderer borrowed from
+//!   `lumit-ui` and turns `(comp, frame)` into an RGBA8 buffer (K-175).
 //! - [`ffi`] — the `extern "C"` surface: pointer marshalling, `catch_unwind`
 //!   guards, and the string/buffer ownership contracts.
 
 mod edits;
 mod ffi;
 mod media;
+#[cfg(feature = "render")]
+mod render;
 mod snapshot;
 mod state;
 

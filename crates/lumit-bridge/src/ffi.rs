@@ -736,6 +736,91 @@ fn decode_to_buffer(_id: &str, _frame: u64) -> Option<(u32, u32, Vec<u8>)> {
     None
 }
 
+/// Render composition `comp_id` at `frame` to tightly-packed RGBA8, returning a
+/// Rust-owned buffer and writing its width/height/length into the out-pointers;
+/// null with zeroed outs on any failure. Same ownership contract as
+/// [`lumit_bridge_decode_frame`] (free with [`lumit_bridge_free_buffer`] passing
+/// the exact length). `scale` of 1.0 is the comp's own resolution; a smaller
+/// positive value downsamples the output. Unlike `decode_frame`, this is the
+/// *composited* comp — every layer, transform, blend and effect — so a missing
+/// layer arrives already slated as colour bars inside the frame. Without the
+/// `render` feature (no GPU compositor linked) this always returns null; a
+/// machine with no GPU adapter returns null calmly on the first and every call.
+///
+/// # Safety
+/// `comp_id` must be null or a valid NUL-terminated UTF-8 C string. `out_w`,
+/// `out_h` and `out_len` must each be null or a valid, writable pointer to a
+/// `u32`/`u32`/`usize` respectively.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_render_comp_frame(
+    comp_id: *const c_char,
+    frame: u64,
+    scale: f32,
+    out_w: *mut u32,
+    out_h: *mut u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let write_zero = || {
+        if !out_w.is_null() {
+            *out_w = 0;
+        }
+        if !out_h.is_null() {
+            *out_h = 0;
+        }
+        if !out_len.is_null() {
+            *out_len = 0;
+        }
+    };
+
+    let Some(id) = c_str_to_string(comp_id) else {
+        write_zero();
+        return ptr::null_mut();
+    };
+
+    // The GPU render is slow; the renderer serialises itself behind its own lock
+    // (separate from the document lock), so nothing else here is blocked. A
+    // panic anywhere in the compositor becomes null, never an unwind into Dart.
+    let rendered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        render_to_buffer(&id, frame, scale)
+    }))
+    .ok()
+    .flatten();
+
+    match rendered {
+        Some((w, h, bytes)) => {
+            let len = bytes.len();
+            let raw = Box::into_raw(bytes.into_boxed_slice()) as *mut u8;
+            if !out_w.is_null() {
+                *out_w = w;
+            }
+            if !out_h.is_null() {
+                *out_h = h;
+            }
+            if !out_len.is_null() {
+                *out_len = len;
+            }
+            raw
+        }
+        None => {
+            write_zero();
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Render `comp_id` at `frame` to `(width, height, rgba)`. `None` on any failure.
+/// Without the `render` feature there is no compositor linked, so this is always
+/// `None`.
+#[cfg(feature = "render")]
+fn render_to_buffer(comp_id: &str, frame: u64, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    crate::render::render_comp_frame(comp_id, frame, scale)
+}
+
+#[cfg(not(feature = "render"))]
+fn render_to_buffer(_comp_id: &str, _frame: u64, _scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    None
+}
+
 /// Free a string returned by any string-returning function above. Passing null
 /// is safe and does nothing; passing the same pointer twice is undefined,
 /// exactly as with C's `free`.
@@ -825,6 +910,34 @@ mod tests {
         let mut h: u32 = 7;
         let mut len: usize = 7;
         let ptr = unsafe { lumit_bridge_decode_frame(ptr::null(), 0, &mut w, &mut h, &mut len) };
+        assert!(ptr.is_null());
+        assert_eq!((w, h, len), (0, 0, 0));
+    }
+
+    #[test]
+    fn render_comp_frame_with_a_null_id_returns_null_and_zeroes_outs() {
+        let mut w: u32 = 9;
+        let mut h: u32 = 9;
+        let mut len: usize = 9;
+        let ptr = unsafe {
+            lumit_bridge_render_comp_frame(ptr::null(), 0, 1.0, &mut w, &mut h, &mut len)
+        };
+        assert!(ptr.is_null());
+        assert_eq!((w, h, len), (0, 0, 0));
+    }
+
+    #[test]
+    fn render_comp_frame_of_an_unknown_comp_returns_null_and_zeroes_outs() {
+        // An id that resolves to no composition in the (empty) global document
+        // yields null with the outs zeroed — the null path the Viewer treats as
+        // "no comp frame", whether the machine has a GPU adapter or not.
+        let id = std::ffi::CString::new("018f0e9a-0000-7000-8000-0000000000aa").unwrap();
+        let mut w: u32 = 5;
+        let mut h: u32 = 5;
+        let mut len: usize = 5;
+        let ptr = unsafe {
+            lumit_bridge_render_comp_frame(id.as_ptr(), 0, 1.0, &mut w, &mut h, &mut len)
+        };
         assert!(ptr.is_null());
         assert_eq!((w, h, len), (0, 0, 0));
     }

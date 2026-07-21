@@ -63,6 +63,29 @@ class LaneScale {
     );
   }
 
+  /// Clamp a desired left-edge frame so the view never scrolls past the comp
+  /// ends: 0 at zoom 1 (the whole comp fits), else within `[0, frames - visible]`.
+  /// The horizontal pan (shift-wheel and the scrollbar) commits through this so
+  /// the ruler and lanes stay locked to one view.
+  static double clampViewStart({
+    required double desired,
+    required int frameCount,
+    required double zoom,
+  }) {
+    final z = zoom.clamp(1.0, 400.0);
+    final frames = math.max(frameCount, 1);
+    final visible = frames / z;
+    return desired.clamp(0.0, math.max(0.0, frames - visible)).toDouble();
+  }
+
+  /// Whether the view is zoomed past the fit (so a horizontal pan is possible).
+  bool get canPan => pxPerFrame > 0 && frameCount / math.max(pxPerFrame, 1e-9) > 0
+      ? zoom > 1.0 + 1e-9
+      : false;
+
+  /// The fraction of the comp visible in the lane at this zoom (1 at fit).
+  double get visibleFraction => (1.0 / zoom).clamp(0.0, 1.0);
+
   /// Pixels per comp frame at this zoom.
   double get pxPerFrame => trackWidth * zoom / math.max(frameCount, 1);
 

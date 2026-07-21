@@ -2234,3 +2234,19 @@ tests-with-features rules bind the Dart tree as they bind Rust; engine crates ne
 on either frontend; `main` keeps shipping the egui frontend until the Flutter one reaches
 parity and wins the side-by-side. The Viewer's frame path is the one piece of new systems
 work (wgpu → shared D3D11 texture → Flutter texture registrar, docs/flutter-port/03).
+
+**K-175 · DECIDED · The bridge borrows lumit-ui's renderer through the headless seam until
+the pixel pass moves into an engine crate.** The composited comp frame the Flutter Viewer
+needs (every layer, transform, blend and effect — the pixels the egui Viewer and the
+exporter show, K-031) is produced by the compositor that currently lives in `lumit-ui`
+(`crate::export`'s window-free `Renderer`). To reach it without duplicating the compositor,
+`lumit-ui` gains a small `headless` module (`HeadlessRenderer`, the export path made
+reusable behind a GPU context it owns), and `lumit-bridge` gains a default-on `render`
+feature that depends on `lumit-ui` and drives that seam through
+`lumit_bridge_render_comp_frame`. This is a **deliberate, temporary** arrangement: the
+bridge (a leaf, not an engine crate) depends on the UI crate here and nowhere else. The
+docs/05 rule — *engine crates never depend on a frontend* — is unbroken; the bridge is not
+an engine crate. When the pixel pass is extracted into an engine crate (the shared-compositor
+work docs/flutter-port/03 anticipates), the bridge will depend on that crate instead and the
+`lumit-ui` dependency is dropped. Recorded so the dependency edge is understood as scaffolding,
+not the destination.

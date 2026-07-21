@@ -111,6 +111,34 @@ class _FrameBridge implements DocumentBridge {
       BridgeReply.ok(snap);
 }
 
+/// A bridge that also offers composited-comp rendering. Extends [_FrameBridge]
+/// (inheriting the single-layer `decodeFrame` and every document op) and adds
+/// the [CompRenderBridge] capability, logging its comp render calls so a test
+/// can assert which path the [PreviewSource] chose. [supports] toggles
+/// `supportsCompRender`; [compResult] is what a render returns (null models a
+/// no-adapter / failed render).
+class _CompBridge extends _FrameBridge implements CompRenderBridge {
+  final DecodedFrame? compResult;
+  final bool supports;
+  final List<String> renderedComps = [];
+
+  _CompBridge(
+    BridgeSnapshot snap, {
+    DecodedFrame? decodeResult,
+    this.compResult,
+    this.supports = true,
+  }) : super(snap, decodeResult);
+
+  @override
+  bool get supportsCompRender => supports;
+
+  @override
+  DecodedFrame? renderCompFrame(String compId, int frame, double scale) {
+    renderedComps.add('$compId@$frame');
+    return compResult;
+  }
+}
+
 // --- Builders --------------------------------------------------------------
 
 BridgeSwitches _switches({bool visible = true}) => BridgeSwitches(
@@ -387,6 +415,100 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
       expect(app.playing, isTrue);
       expect(app.previewFrame, greaterThan(0));
+    });
+  });
+
+  group('PreviewSource comp-vs-single-layer selection', () {
+    final snap = _snapshot(
+      _comp([_layer(name: 'clip.mp4', inFrame: 0, outFrame: 48)]),
+      [_footage('clip.mp4')],
+    );
+
+    testWidgets('renders the whole comp when the bridge supports it',
+        (tester) async {
+      final bridge = _CompBridge(
+        snap,
+        decodeResult: _solid(4, 4, 1, 2, 3),
+        compResult: _solid(8, 8, 20, 120, 200),
+      );
+      final app = AppStateStub(bridge: bridge);
+      late PreviewSource source;
+      await tester.runAsync(() async {
+        source = PreviewSource(app);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+
+      expect(source.compActive, isTrue, reason: 'the comp path is active');
+      expect(bridge.renderedComps, contains('c1@0'),
+          reason: 'it rendered the front comp at the playhead frame');
+      expect(bridge.decoded, isEmpty,
+          reason: 'the comp path never falls back to single-layer decode');
+      expect(source.image, isNotNull, reason: 'the comp frame became an image');
+      expect(source.displayedFrame, isNotNull,
+          reason: 'the Scopes read the composited pixels');
+      source.dispose();
+    });
+
+    testWidgets('falls back to single-layer when the comp render returns null',
+        (tester) async {
+      // compResult null models a machine with no GPU adapter (or a transient
+      // failure): the render is attempted, then the single-layer path takes over.
+      final bridge = _CompBridge(
+        snap,
+        decodeResult: _solid(4, 4, 5, 6, 7),
+        compResult: null,
+      );
+      final app = AppStateStub(bridge: bridge);
+      late PreviewSource source;
+      await tester.runAsync(() async {
+        source = PreviewSource(app);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+
+      expect(bridge.renderedComps, contains('c1@0'),
+          reason: 'the comp path was tried first');
+      expect(source.compActive, isFalse, reason: 'it fell back to single-layer');
+      expect(bridge.decoded, contains('item-clip.mp4@0'),
+          reason: 'the single-layer decode ran for the covered footage layer');
+      expect(source.image, isNotNull);
+      source.dispose();
+    });
+
+    testWidgets('stays single-layer when the bridge does not support comp render',
+        (tester) async {
+      final bridge = _CompBridge(
+        snap,
+        decodeResult: _solid(4, 4, 9, 9, 9),
+        compResult: _solid(8, 8, 1, 1, 1),
+        supports: false,
+      );
+      final app = AppStateStub(bridge: bridge);
+      late PreviewSource source;
+      await tester.runAsync(() async {
+        source = PreviewSource(app);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+
+      expect(source.compActive, isFalse);
+      expect(bridge.renderedComps, isEmpty,
+          reason: 'an unsupported bridge is never asked to render a comp');
+      expect(bridge.decoded, contains('item-clip.mp4@0'));
+      source.dispose();
+    });
+
+    testWidgets('a plain DocumentBridge (no comp capability) stays single-layer',
+        (tester) async {
+      final bridge = _FrameBridge(snap, _solid(4, 4, 3, 3, 3));
+      final app = AppStateStub(bridge: bridge);
+      late PreviewSource source;
+      await tester.runAsync(() async {
+        source = PreviewSource(app);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+
+      expect(source.compActive, isFalse);
+      expect(bridge.decoded, contains('item-clip.mp4@0'));
+      source.dispose();
     });
   });
 }

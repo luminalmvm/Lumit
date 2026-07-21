@@ -1,13 +1,19 @@
-// The Effect controls panel (phase F4, first slice): the Transform property
-// rows for the selected layer of the front composition, in the settings-card
-// style. Effects stacks, keyframes and stopwatches are later waves — this slice
-// is transform only.
+// The Effect controls panel (phase F4): the Transform property rows and the
+// effect stack for the selected layer of the front composition, in the
+// settings-card style.
 //
-// Honesty note (K-007): snapshot v2 carries no current transform *values* (only
-// the setter op exists), so a value box shows the value the user set this
-// session — an em-dash before any edit — and the group opens with a one-line
-// hint saying so. Real current values arrive with snapshot v3. Each commit
-// routes through `app.setTransform` and is one undo step (the op's nature).
+// Snapshot v3 now carries current transform *values* (read-back), so the value
+// boxes seed from `app.transformValueFor` (read-back first, session-edit
+// fallback) rather than the old em-dash placeholder. Each transform row also
+// carries the stopwatch (accent when animated) and the ◄ ◆ ► keyframe
+// navigator, ported from the egui `keyframe_nav.rs` note-2.4 behaviour: ◄/►
+// jump the playhead to the previous/next key, and ◆ adds a key at the playhead
+// (or removes the one already there). Below Transform, one card per effect on
+// the layer, with its parameter rows edited by kind.
+//
+// Every commit routes through the matching `app` op (setTransform,
+// togglePropertyAnimated, addKeyframe/removeKeyframe, setEffectEnabled,
+// removeEffect, setEffectParamScalar/_colour); each is one undo step.
 
 import 'package:flutter/widgets.dart';
 
@@ -15,10 +21,20 @@ import '../bridge/bridge.dart';
 import '../icons/icons.dart';
 import '../state/app_state.dart';
 import '../theme/theme.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 
 /// Fixed width of a value cell so the axis boxes line up down the group.
 const double _cellWidth = 60.0;
+
+/// The stable ids of the three-colour channel picker (K-143): an effect that
+/// declares these three Colour params shows one grouped swatch row rather than
+/// three separate colour rows.
+const List<String> _channelColourIds = [
+  'channel_colour_1',
+  'channel_colour_2',
+  'channel_colour_3',
+];
 
 class EffectControlsPanel extends StatelessWidget {
   final AppStateStub app;
@@ -60,6 +76,8 @@ class EffectControlsPanel extends StatelessWidget {
             _LayerTitle(layer: layer),
             const SizedBox(height: 6),
             _TransformGroup(app: app, compId: compId, layer: layer),
+            const SizedBox(height: 10),
+            _EffectStack(app: app, compId: compId, layer: layer),
           ],
         );
       },
@@ -88,6 +106,45 @@ class _LayerTitle extends StatelessWidget {
   }
 }
 
+/// A titled surface holding a column of rows (Transform group; effect cards).
+class _Card extends StatelessWidget {
+  final String? title;
+  final List<Widget> rows;
+  const _Card({this.title, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final round = t.shape == ThemeShape.round;
+    final surface = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: t.surface2,
+        borderRadius: round ? BorderRadius.circular(t.tokens.cardRadius) : null,
+        border: round ? null : Border.all(color: t.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) Container(height: 1, color: t.hairline),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+    if (title == null) return surface;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(title!, style: t.small),
+        const SizedBox(height: 4),
+        surface,
+      ],
+    );
+  }
+}
+
 /// The Transform group card: a titled surface holding the property rows.
 class _TransformGroup extends StatelessWidget {
   final AppStateStub app;
@@ -101,134 +158,251 @@ class _TransformGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final round = t.shape == ThemeShape.round;
     final threeD = layer.switches.threeD || layer.kind == BridgeLayerKind.camera;
 
     final rows = <Widget>[
-      _HintRow(
-        text: 'Values shown after first edit — current values arrive with '
-            'snapshot v3.',
-      ),
-      _PairRow(
+      _TransformRow(
         app: app,
         compId: compId,
-        layerId: layer.id,
+        layer: layer,
         label: 'Anchor point',
-        propX: 'anchor_x',
-        propY: 'anchor_y',
-        seed: 0,
+        axes: const [_AxisSpec('anchor_x'), _AxisSpec('anchor_y')],
       ),
-      _PositionRow(
+      _TransformRow(
         app: app,
         compId: compId,
-        layerId: layer.id,
-        threeD: threeD,
+        layer: layer,
+        label: 'Position',
+        axes: [
+          const _AxisSpec('position_x'),
+          const _AxisSpec('position_y'),
+          if (threeD) const _AxisSpec('position_z'),
+        ],
       ),
-      _ScaleRow(app: app, compId: compId, layerId: layer.id),
-      _SingleRow(
+      _TransformRow(
         app: app,
         compId: compId,
-        layerId: layer.id,
+        layer: layer,
+        label: 'Scale',
+        linkable: true,
+        axes: const [
+          _AxisSpec('scale_x', seed: 100, suffix: '%'),
+          _AxisSpec('scale_y', seed: 100, suffix: '%'),
+        ],
+      ),
+      _TransformRow(
+        app: app,
+        compId: compId,
+        layer: layer,
         label: 'Rotation',
-        prop: 'rotation',
-        seed: 0,
-        suffix: '°',
-        speed: 0.5,
+        axes: const [_AxisSpec('rotation', suffix: '°', speed: 0.5)],
       ),
-      _SingleRow(
+      _TransformRow(
         app: app,
         compId: compId,
-        layerId: layer.id,
+        layer: layer,
         label: 'Opacity',
-        prop: 'opacity',
-        seed: 100,
-        suffix: '%',
-        min: 0,
-        max: 100,
-        decimals: 0,
-        speed: 0.5,
+        axes: const [
+          _AxisSpec('opacity',
+              seed: 100, suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ],
       ),
       if (threeD) ...[
-        _SingleRow(
+        _TransformRow(
           app: app,
           compId: compId,
-          layerId: layer.id,
+          layer: layer,
           label: 'Rotation x',
-          prop: 'rotation_x',
-          seed: 0,
-          suffix: '°',
-          speed: 0.5,
+          axes: const [_AxisSpec('rotation_x', suffix: '°', speed: 0.5)],
         ),
-        _SingleRow(
+        _TransformRow(
           app: app,
           compId: compId,
-          layerId: layer.id,
+          layer: layer,
           label: 'Rotation y',
-          prop: 'rotation_y',
-          seed: 0,
-          suffix: '°',
-          speed: 0.5,
+          axes: const [_AxisSpec('rotation_y', suffix: '°', speed: 0.5)],
         ),
       ],
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Transform', style: t.small),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: t.surface2,
-            borderRadius:
-                round ? BorderRadius.circular(t.tokens.cardRadius) : null,
-            border: round ? null : Border.all(color: t.hairline),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < rows.length; i++) ...[
-                if (i > 0) Container(height: 1, color: t.hairline),
-                rows[i],
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
+    return _Card(title: 'Transform', rows: rows);
   }
 }
 
-class _HintRow extends StatelessWidget {
-  final String text;
-  const _HintRow({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text(text, style: t.small.copyWith(color: t.textDisabled)),
-    );
-  }
+/// One transform property's axis: its snake_case name, plus display hints.
+class _AxisSpec {
+  final String prop;
+  final num seed;
+  final String? suffix;
+  final num min;
+  final num max;
+  final int decimals;
+  final double speed;
+  const _AxisSpec(
+    this.prop, {
+    this.seed = 0,
+    this.suffix,
+    this.min = -100000,
+    this.max = 100000,
+    this.decimals = 1,
+    this.speed = 1,
+  });
 }
 
-/// A property row: a left label and one or more value cells on the right.
-class _RowShell extends StatelessWidget {
+/// A transform property row: the stopwatch and (when animated) the ◄ ◆ ►
+/// navigator on the left, the label, then one value cell per axis. Reads
+/// current values from `app.transformValueFor` (read-back first, session-edit
+/// fallback). Multi-axis rows (Anchor, Position, Scale) drive their stopwatch
+/// and navigator across every axis at once; because the bridge keyframe ops are
+/// per-property (there is no batch op), a linked add/remove issues one op per
+/// axis (so it is more than one undo step — noted).
+class _TransformRow extends StatefulWidget {
+  final AppStateStub app;
+  final String compId;
+  final BridgeLayer layer;
   final String label;
-  final List<Widget> cells;
-  const _RowShell({required this.label, required this.cells});
+  final List<_AxisSpec> axes;
+  final bool linkable;
+  const _TransformRow({
+    required this.app,
+    required this.compId,
+    required this.layer,
+    required this.label,
+    required this.axes,
+    this.linkable = false,
+  });
+
+  @override
+  State<_TransformRow> createState() => _TransformRowState();
+}
+
+class _TransformRowState extends State<_TransformRow> {
+  bool _linked = true;
+
+  AppStateStub get _app => widget.app;
+  String get _layerId => widget.layer.id;
+
+  BridgeTransformProperty? _propInfo(String prop) =>
+      widget.layer.transform?[prop];
+
+  double _valueOf(_AxisSpec a) =>
+      _app.transformValueFor(_layerId, a.prop) ?? a.seed.toDouble();
+
+  /// The union of all this row's axes' keyframe frames, sorted.
+  List<int> _keyFrames() {
+    final frames = <int>{};
+    for (final a in widget.axes) {
+      final info = _propInfo(a.prop);
+      if (info != null) {
+        for (final k in info.keys) {
+          frames.add(k.frame);
+        }
+      }
+    }
+    final list = frames.toList()..sort();
+    return list;
+  }
+
+  bool get _animated =>
+      widget.axes.any((a) => _propInfo(a.prop)?.animated ?? false);
+
+  void _toggleStopwatch() {
+    final frame = _app.previewFrame;
+    for (final a in widget.axes) {
+      _app.togglePropertyAnimated(widget.compId, _layerId, a.prop, frame);
+    }
+  }
+
+  void _toggleKeyframe(bool onKey) {
+    final frame = _app.previewFrame;
+    for (final a in widget.axes) {
+      if (onKey) {
+        _app.removeKeyframe(widget.compId, _layerId, a.prop, frame);
+      } else {
+        _app.addKeyframe(widget.compId, _layerId, a.prop, frame, _valueOf(a));
+      }
+    }
+  }
+
+  /// Commit an edit to [a]. When the row is a linked Scale, editing one axis
+  /// preserves the x:y ratio across the pair (now that current values read
+  /// back); a zero base falls back to setting both axes equal.
+  void _commit(_AxisSpec a, double value) {
+    if (widget.linkable && _linked && widget.axes.length == 2) {
+      final other = widget.axes.firstWhere((x) => x.prop != a.prop);
+      final base = _valueOf(a);
+      final otherBase = _valueOf(other);
+      double otherValue;
+      if (base.abs() < 1e-9) {
+        otherValue = value; // no ratio to preserve — match the edited axis
+      } else {
+        otherValue = otherBase * (value / base);
+      }
+      _app.setTransform(widget.compId, _layerId, a.prop, value);
+      _app.setTransform(widget.compId, _layerId, other.prop, otherValue);
+      return;
+    }
+    _app.setTransform(widget.compId, _layerId, a.prop, value);
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final animated = _animated;
+    final frames = _keyFrames();
+    final frame = _app.previewFrame;
+    final prev = frames.where((f) => f < frame).fold<int?>(null, (m, f) => f);
+    final onKey = frames.contains(frame);
+    final next = frames.where((f) => f > frame).fold<int?>(
+        null, (m, f) => m ?? f);
+
+    final cells = <Widget>[];
+    for (var i = 0; i < widget.axes.length; i++) {
+      final a = widget.axes[i];
+      if (i > 0) cells.add(const SizedBox(width: 4));
+      if (widget.linkable && i == 1) {
+        cells.add(_LinkToggle(
+          linked: _linked,
+          onTap: () => setState(() => _linked = !_linked),
+        ));
+        cells.add(const SizedBox(width: 4));
+      }
+      cells.add(SizedBox(
+        width: _cellWidth,
+        child: DragValueField(
+          key: ValueKey<String>('axis-${a.prop}'),
+          value: _valueOf(a),
+          min: a.min,
+          max: a.max,
+          speed: a.speed,
+          decimals: a.decimals,
+          suffix: a.suffix,
+          onChanged: (v) => _commit(a, v.toDouble()),
+        ),
+      ));
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: t.bodyPrimary)),
+          _StopwatchButton(
+            key: ValueKey<String>('stopwatch-${widget.label}'),
+            animated: animated,
+            onTap: _toggleStopwatch,
+          ),
+          const SizedBox(width: 4),
+          if (animated)
+            _KeyframeNavigator(
+              onKey: onKey,
+              onPrev: prev == null ? null : () => _app.goToFrame(prev),
+              onToggle: () => _toggleKeyframe(onKey),
+              onNext: next == null ? null : () => _app.goToFrame(next),
+            )
+          else
+            const SizedBox(width: 4),
+          const SizedBox(width: 6),
+          Expanded(child: Text(widget.label, style: t.bodyPrimary)),
           const SizedBox(width: 12),
           ...cells,
         ],
@@ -237,319 +411,496 @@ class _RowShell extends StatelessWidget {
   }
 }
 
-/// A linked-by-nothing x/y pair (Anchor point): two independent value cells.
-class _PairRow extends StatelessWidget {
-  final AppStateStub app;
-  final String compId;
-  final String layerId;
-  final String label;
-  final String propX;
-  final String propY;
-  final num seed;
-  const _PairRow({
-    required this.app,
-    required this.compId,
-    required this.layerId,
-    required this.label,
-    required this.propX,
-    required this.propY,
-    required this.seed,
+/// The scale link toggle: accent link when linked, muted broken link when not.
+class _LinkToggle extends StatelessWidget {
+  final bool linked;
+  final VoidCallback onTap;
+  const _LinkToggle({required this.linked, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: linked
+          ? 'Unlink scale (edit x and y separately)'
+          : 'Link scale (edit both axes together)',
+      child: HouseButton(
+        frameless: true,
+        small: true,
+        onPressed: onTap,
+        child: lumitIcon(
+          linked ? LumitIcon.link : LumitIcon.unlink,
+          size: 13,
+          color: linked ? t.accent : t.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+/// The stopwatch: accent when the property is animated, muted otherwise.
+/// Clicking toggles animation at the playhead (`togglePropertyAnimated`).
+class _StopwatchButton extends StatelessWidget {
+  final bool animated;
+  final VoidCallback onTap;
+  const _StopwatchButton({super.key, required this.animated, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: animated
+          ? 'Remove animation (freeze the current value)'
+          : 'Animate: keyframe at the playhead',
+      child: HouseButton(
+        frameless: true,
+        small: true,
+        onPressed: onTap,
+        child: lumitIcon(
+          LumitIcon.stopwatch,
+          size: 13,
+          color: animated ? t.accent : t.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+/// The shared ◄ ◆ ► keyframe navigator (egui `keyframe_navigator`, note 2.4):
+/// ◄ jumps to the previous key, the diamond adds a key at the playhead (a
+/// filled ◆ when one is already there — clicking then removes it), ► jumps to
+/// the next. Prev/next dim when there is no key to jump to.
+class _KeyframeNavigator extends StatelessWidget {
+  final bool onKey;
+  final VoidCallback? onPrev;
+  final VoidCallback onToggle;
+  final VoidCallback? onNext;
+  const _KeyframeNavigator({
+    required this.onKey,
+    required this.onPrev,
+    required this.onToggle,
+    required this.onNext,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _RowShell(
-      label: label,
-      cells: [
-        _AxisField(
-          app: app,
-          compId: compId,
-          layerId: layerId,
-          prop: propX,
-          seed: seed,
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LumitTooltip(
+          message: 'Previous keyframe',
+          child: HouseButton(
+            frameless: true,
+            small: true,
+            onPressed: onPrev,
+            child: lumitIcon(
+              LumitIcon.prevKeyframe,
+              size: 11,
+              color: onPrev == null ? t.textDisabled : t.textSecondary,
+            ),
+          ),
         ),
-        const SizedBox(width: 4),
-        _AxisField(
-          app: app,
-          compId: compId,
-          layerId: layerId,
-          prop: propY,
-          seed: seed,
+        LumitTooltip(
+          message: onKey ? 'Remove keyframe here' : 'Add keyframe here',
+          child: HouseButton(
+            key: const ValueKey('kf-diamond'),
+            frameless: true,
+            small: true,
+            onPressed: onToggle,
+            child: lumitIcon(
+              onKey ? LumitIcon.keyframeFilled : LumitIcon.keyframe,
+              size: 11,
+              color: onKey ? t.accent : t.textSecondary,
+            ),
+          ),
+        ),
+        LumitTooltip(
+          message: 'Next keyframe',
+          child: HouseButton(
+            frameless: true,
+            small: true,
+            onPressed: onNext,
+            child: lumitIcon(
+              LumitIcon.nextKeyframe,
+              size: 11,
+              color: onNext == null ? t.textDisabled : t.textSecondary,
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-/// Position: x and y always, plus z when the layer is 3D.
-class _PositionRow extends StatelessWidget {
+/// The effect stack: one card per effect on the layer, in stack order.
+class _EffectStack extends StatelessWidget {
   final AppStateStub app;
   final String compId;
-  final String layerId;
-  final bool threeD;
-  const _PositionRow({
+  final BridgeLayer layer;
+  const _EffectStack({
     required this.app,
     required this.compId,
-    required this.layerId,
-    required this.threeD,
+    required this.layer,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _RowShell(
-      label: 'Position',
-      cells: [
-        _AxisField(
-          app: app,
-          compId: compId,
-          layerId: layerId,
-          prop: 'position_x',
-          seed: 0,
-        ),
-        const SizedBox(width: 4),
-        _AxisField(
-          app: app,
-          compId: compId,
-          layerId: layerId,
-          prop: 'position_y',
-          seed: 0,
-        ),
-        if (threeD) ...[
-          const SizedBox(width: 4),
-          _AxisField(
-            app: app,
-            compId: compId,
-            layerId: layerId,
-            prop: 'position_z',
-            seed: 0,
+    final t = ThemeScope.of(context).theme;
+    if (layer.effects.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Effects', style: t.small),
+          const SizedBox(height: 4),
+          Text(
+            'No effects on this layer. Add one from the Effects & presets panel.',
+            style: t.small.copyWith(color: t.textMuted),
           ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Effects', style: t.small),
+        const SizedBox(height: 4),
+        for (final e in layer.effects) ...[
+          _EffectCard(app: app, compId: compId, layer: layer, effect: e),
+          const SizedBox(height: 8),
         ],
       ],
     );
   }
 }
 
-/// Scale: x and y with a link toggle. When linked (default) editing either axis
-/// sets both to that value; unlinked, each edits independently.
-///
-/// Note: with no current values to read back (snapshot v3), the link sets both
-/// axes to the same value rather than preserving an x:y ratio — the honest
-/// degenerate until value read-back lands.
-class _ScaleRow extends StatefulWidget {
+/// One effect: a title bar (enabled checkbox, label, remove) over its parameter
+/// rows.
+class _EffectCard extends StatelessWidget {
   final AppStateStub app;
   final String compId;
-  final String layerId;
-  const _ScaleRow({
+  final BridgeLayer layer;
+  final BridgeEffect effect;
+  const _EffectCard({
     required this.app,
     required this.compId,
-    required this.layerId,
+    required this.layer,
+    required this.effect,
   });
 
   @override
-  State<_ScaleRow> createState() => _ScaleRowState();
+  Widget build(BuildContext context) {
+    final rows = <Widget>[
+      _EffectTitleRow(app: app, compId: compId, layer: layer, effect: effect),
+    ];
+    // Fold the three-colour channel picker into one row when the effect
+    // declares the channel_colour_1..3 Colour params (K-143); otherwise render
+    // each parameter by its kind.
+    final hasChannelPicker = effect.params.any((p) =>
+        p.name == _channelColourIds[0] && p.kind == 'colour');
+    for (final p in effect.params) {
+      if (hasChannelPicker &&
+          (p.name == _channelColourIds[1] || p.name == _channelColourIds[2])) {
+        continue; // folded into the channel-picker row
+      }
+      if (hasChannelPicker && p.name == _channelColourIds[0]) {
+        rows.add(_ChannelPickerRow(
+            app: app, compId: compId, layer: layer, effect: effect));
+        continue;
+      }
+      rows.add(_EffectParamRow(
+          app: app, compId: compId, layer: layer, effect: effect, param: p));
+    }
+    return _Card(rows: rows);
+  }
 }
 
-class _ScaleRowState extends State<_ScaleRow> {
-  bool _linked = true;
-
-  void _commitBoth(double v) {
-    widget.app.setTransform(widget.compId, widget.layerId, 'scale_x', v);
-    widget.app.setTransform(widget.compId, widget.layerId, 'scale_y', v);
-  }
+class _EffectTitleRow extends StatelessWidget {
+  final AppStateStub app;
+  final String compId;
+  final BridgeLayer layer;
+  final BridgeEffect effect;
+  const _EffectTitleRow({
+    required this.app,
+    required this.compId,
+    required this.layer,
+    required this.effect,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return _RowShell(
-      label: 'Scale',
-      cells: [
-        _AxisField(
-          app: widget.app,
-          compId: widget.compId,
-          layerId: widget.layerId,
-          prop: 'scale_x',
-          seed: 100,
-          suffix: '%',
-          decimals: 1,
-          speed: 0.5,
-          onCommit: _linked ? _commitBoth : null,
-        ),
-        const SizedBox(width: 4),
-        LumitTooltip(
-          message: _linked
-              ? 'Unlink scale (edit x and y separately)'
-              : 'Link scale (edit both axes together)',
-          child: HouseButton(
-            frameless: true,
-            small: true,
-            onPressed: () => setState(() => _linked = !_linked),
-            child: lumitIcon(
-              _linked ? LumitIcon.link : LumitIcon.unlink,
-              size: 13,
-              color: _linked ? t.accent : t.textMuted,
+    final label = _effectLabel(app, effect);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          LumitTooltip(
+            message: effect.enabled ? 'Bypass this effect' : 'Enable this effect',
+            child: HouseCheckbox(
+              value: effect.enabled,
+              onChanged: (v) =>
+                  app.setEffectEnabled(compId, layer.id, effect.id, v),
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        _AxisField(
-          app: widget.app,
-          compId: widget.compId,
-          layerId: widget.layerId,
-          prop: 'scale_y',
-          seed: 100,
-          suffix: '%',
-          decimals: 1,
-          speed: 0.5,
-          onCommit: _linked ? _commitBoth : null,
-        ),
-      ],
-    );
-  }
-}
-
-/// A single-axis property row (Rotation, Opacity, Rotation x/y).
-class _SingleRow extends StatelessWidget {
-  final AppStateStub app;
-  final String compId;
-  final String layerId;
-  final String label;
-  final String prop;
-  final num seed;
-  final String? suffix;
-  final num min;
-  final num max;
-  final int decimals;
-  final double speed;
-  const _SingleRow({
-    required this.app,
-    required this.compId,
-    required this.layerId,
-    required this.label,
-    required this.prop,
-    required this.seed,
-    this.suffix,
-    this.min = -100000,
-    this.max = 100000,
-    this.decimals = 1,
-    this.speed = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _RowShell(
-      label: label,
-      cells: [
-        _AxisField(
-          app: app,
-          compId: compId,
-          layerId: layerId,
-          prop: prop,
-          seed: seed,
-          suffix: suffix,
-          min: min,
-          max: max,
-          decimals: decimals,
-          speed: speed,
-        ),
-      ],
-    );
-  }
-}
-
-/// One transform value cell. Before the property is edited this session it
-/// shows an em-dash placeholder; tapping it reveals a [DragValueField] seeded
-/// with [seed] (no premature commit). Once a session value exists — or the user
-/// has begun — it is a [DragValueField] that commits through `app.setTransform`.
-class _AxisField extends StatefulWidget {
-  final AppStateStub app;
-  final String compId;
-  final String layerId;
-  final String prop;
-  final num seed;
-  final String? suffix;
-  final num min;
-  final num max;
-  final int decimals;
-  final double speed;
-
-  /// When set, commit routes here instead of the plain per-property setter
-  /// (the linked Scale row commits both axes together).
-  final void Function(double value)? onCommit;
-
-  const _AxisField({
-    required this.app,
-    required this.compId,
-    required this.layerId,
-    required this.prop,
-    required this.seed,
-    this.suffix,
-    this.min = -100000,
-    this.max = 100000,
-    this.decimals = 1,
-    this.speed = 1,
-    this.onCommit,
-  });
-
-  @override
-  State<_AxisField> createState() => _AxisFieldState();
-}
-
-class _AxisFieldState extends State<_AxisField> {
-  bool _started = false;
-
-  void _commit(num v) {
-    final value = v.toDouble();
-    final on = widget.onCommit;
-    if (on != null) {
-      on(value);
-    } else {
-      widget.app.setTransform(widget.compId, widget.layerId, widget.prop, value);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final session = widget.app.transformEditAt(widget.layerId, widget.prop);
-    final key = ValueKey<String>('axis-${widget.prop}');
-    if (session == null && !_started) {
-      // The un-edited placeholder: a dash that begins editing on tap.
-      return LumitTooltip(
-        key: key,
-        message: 'Not set this session — click to edit (snapshot v3 reads the '
-            'current value)',
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _started = true),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Container(
-              width: _cellWidth,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: t.surface3,
-                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: t.bodyPrimary.copyWith(
+                color: effect.enabled ? t.textPrimary : t.textDisabled,
               ),
-              child: Text('—', style: t.body.copyWith(color: t.textDisabled)),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        ),
-      );
-    }
-    return SizedBox(
-      key: key,
-      width: _cellWidth,
-      child: DragValueField(
-        value: session ?? widget.seed,
-        min: widget.min,
-        max: widget.max,
-        speed: widget.speed,
-        decimals: widget.decimals,
-        suffix: widget.suffix,
-        onChanged: _commit,
+          const SizedBox(width: 8),
+          LumitTooltip(
+            message: 'Remove this effect',
+            child: HouseButton(
+              frameless: true,
+              small: true,
+              onPressed: () => app.removeEffect(compId, layer.id, effect.id),
+              child: Text(
+                '×',
+                style: t.bodyPrimary.copyWith(color: t.textMuted),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+/// One effect parameter, rendered by kind. Scalar and colour edit live; every
+/// other kind (enum/bool/seed/point/…) shows its value read-only with a muted
+/// tooltip, since the matching edit op is not in the bridge yet.
+class _EffectParamRow extends StatelessWidget {
+  final AppStateStub app;
+  final String compId;
+  final BridgeLayer layer;
+  final BridgeEffect effect;
+  final BridgeEffectParam param;
+  const _EffectParamRow({
+    required this.app,
+    required this.compId,
+    required this.layer,
+    required this.effect,
+    required this.param,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(_paramLabel(param.name), style: t.bodyPrimary)),
+          const SizedBox(width: 12),
+          _paramControl(context, t),
+        ],
+      ),
+    );
+  }
+
+  Widget _paramControl(BuildContext context, LumitTheme t) {
+    switch (param.kind) {
+      case 'scalar':
+        // Ranges are not in the snapshot, so this is an unclamped drag with a
+        // gentle speed; the engine clamps on its side.
+        final v = param.value is num ? (param.value as num).toDouble() : 0.0;
+        return SizedBox(
+          width: _cellWidth,
+          child: DragValueField(
+            key: ValueKey<String>('fxparam-${effect.id}-${param.name}'),
+            value: v,
+            min: -1000000,
+            max: 1000000,
+            speed: 0.5,
+            decimals: 2,
+            onChanged: (nv) => app.setEffectParamScalar(
+                compId, layer.id, effect.id, param.name, nv.toDouble()),
+          ),
+        );
+      case 'colour':
+        return _ColourSwatch(
+          key: ValueKey<String>('fxcolour-${effect.id}-${param.name}'),
+          rgba: _rgbaOf(param.value),
+          onPicked: (r, g, b, a) => app.setEffectParamColour(
+              compId, layer.id, effect.id, param.name, r, g, b, a),
+        );
+      default:
+        // enum / bool / seed / point / file / layer: read-only until the
+        // matching bridge op lands. Show the value honestly, do not fake edits.
+        return LumitTooltip(
+          message: 'Edits arrive with the matching bridge op',
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: t.surface3,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            ),
+            child: Text(
+              _displayValue(param.value),
+              style: t.body.copyWith(color: t.textSecondary),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+    }
+  }
+}
+
+/// The three-colour channel picker (K-143): three swatches, each opening the
+/// colour picker and committing its channel through `setEffectParamColour`.
+class _ChannelPickerRow extends StatelessWidget {
+  final AppStateStub app;
+  final String compId;
+  final BridgeLayer layer;
+  final BridgeEffect effect;
+  const _ChannelPickerRow({
+    required this.app,
+    required this.compId,
+    required this.layer,
+    required this.effect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final swatches = <Widget>[];
+    for (var i = 0; i < _channelColourIds.length; i++) {
+      final id = _channelColourIds[i];
+      BridgeEffectParam? param;
+      for (final p in effect.params) {
+        if (p.name == id) {
+          param = p;
+          break;
+        }
+      }
+      if (param == null) continue;
+      if (swatches.isNotEmpty) swatches.add(const SizedBox(width: 4));
+      swatches.add(Text('${i + 1}', style: t.small.copyWith(color: t.textSecondary)));
+      swatches.add(const SizedBox(width: 2));
+      swatches.add(_ColourSwatch(
+        key: ValueKey<String>('fxchannel-${effect.id}-$id'),
+        rgba: _rgbaOf(param.value),
+        onPicked: (r, g, b, a) => app.setEffectParamColour(
+            compId, layer.id, effect.id, id, r, g, b, a),
+      ));
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text('Channels', style: t.bodyPrimary)),
+          const SizedBox(width: 12),
+          ...swatches,
+        ],
+      ),
+    );
+  }
+}
+
+/// A colour swatch that opens the house colour picker and hands the chosen
+/// scene-linear RGBA back to [onPicked]. The parameter's channels are
+/// scene-linear 0..1; the picker edits them straight through, the same
+/// convention the egui colour rows use (gamma is not re-applied).
+class _ColourSwatch extends StatelessWidget {
+  final List<double> rgba;
+  final void Function(double r, double g, double b, double a) onPicked;
+  const _ColourSwatch({super.key, required this.rgba, required this.onPicked});
+
+  Color get _asColour {
+    int ch(double f) => (f.clamp(0.0, 1.0) * 255).round();
+    return documentColour(ch(rgba[0]), ch(rgba[1]), ch(rgba[2]), 255);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        final box = context.findRenderObject()! as RenderBox;
+        final origin = box.localToGlobal(Offset(0, box.size.height + 4));
+        final picked = await showColourPicker(
+          context: context,
+          position: origin,
+          initial: _asColour,
+        );
+        if (picked != null) {
+          final a = rgba.length > 3 ? rgba[3] : 1.0;
+          onPicked(picked.r, picked.g, picked.b, a);
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          width: 28,
+          height: 18,
+          decoration: BoxDecoration(
+            color: _asColour,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(color: t.hairlineStrong),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A parameter value's scene-linear RGBA, tolerant of `[r,g,b]` or `[r,g,b,a]`.
+List<double> _rgbaOf(Object? value) {
+  if (value is List) {
+    final out = [for (final e in value) e is num ? e.toDouble() : 0.0];
+    while (out.length < 4) {
+      out.add(out.length == 3 ? 1.0 : 0.0);
+    }
+    return out;
+  }
+  return const [0, 0, 0, 1];
+}
+
+/// A read-only display string for a non-editable parameter value.
+String _displayValue(Object? value) {
+  if (value == null) return '—';
+  if (value is bool) return value ? 'On' : 'Off';
+  if (value is List) {
+    return value
+        .map((e) => e is num ? _trim(e.toDouble()) : e.toString())
+        .join(', ');
+  }
+  if (value is num) return _trim(value.toDouble());
+  return value.toString();
+}
+
+String _trim(double v) {
+  final s = v.toStringAsFixed(2);
+  return s.endsWith('.00') ? v.round().toString() : s;
+}
+
+/// A parameter's display label from its stable name: `blur_radius` → "Blur
+/// radius" (the registry does not carry per-param labels).
+String _paramLabel(String name) {
+  final words = name.split('_').where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return name;
+  final first = words.first;
+  final head = first.isEmpty
+      ? first
+      : '${first[0].toUpperCase()}${first.substring(1)}';
+  return [head, ...words.skip(1)].join(' ');
+}
+
+/// An effect's display label: its registry label when known, else its match
+/// name (the snapshot carries the match name in `effect.name`).
+String _effectLabel(AppStateStub app, BridgeEffect effect) {
+  for (final info in app.listEffects()) {
+    if (info.name == effect.name) return info.label;
+  }
+  return _paramLabel(effect.name);
 }
 
 /// The icon and tint for a layer kind, mirroring the egui `layer_type_style`.

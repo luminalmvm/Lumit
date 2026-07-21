@@ -8,6 +8,7 @@ import '../icons/icons.dart';
 import '../state/app_state.dart';
 import '../state/dock.dart';
 import 'effect_controls_panel.dart';
+import 'effects_presets_panel.dart';
 import 'hierarchy_panel.dart';
 import 'placeholder.dart';
 import 'project_panel.dart';
@@ -41,12 +42,18 @@ Widget buildPanelBody(BuildContext context, Panel panel, AppStateStub app) =>
               hint:
                   'Transform and effect property rows arrive in phase F4; select a layer to edit it here.',
             ),
-      Panel.effectsAndPresets => const PlaceholderPanel(
-          icon: LumitIcon.star,
-          title: 'Effects & presets',
-          hint:
-              'The searchable effect list and .lumfx presets arrive in phase F4.',
-        ),
+      // The Effects & presets panel goes live with a bridge: the searchable
+      // built-in effect registry, applied to the selected layer (phase F4).
+      // Without a bridge the placeholder stays. The .lumfx presets wait on the
+      // file + preset bridge ops (a placeholder row names that inside).
+      Panel.effectsAndPresets => app.bridge != null
+          ? EffectsPresetsPanel(app: app)
+          : const PlaceholderPanel(
+              icon: LumitIcon.star,
+              title: 'Effects & presets',
+              hint:
+                  'The searchable effect list and .lumfx presets arrive in phase F4.',
+            ),
       Panel.scopes => ScopesPanel(app: app),
       // The Hierarchy panel goes live with a comp in the snapshot: the front
       // comp's layer tree, precomps expandable (phase F4). Without a

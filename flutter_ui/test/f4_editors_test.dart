@@ -246,11 +246,9 @@ void main() {
       await tester.pumpWidget(_host(EffectControlsPanel(app: app)));
       await tester.pump();
 
-      // The value shows an em-dash before any edit; tapping begins editing.
-      expect(find.text('—'), findsWidgets);
-      await tester.tap(find.byKey(const ValueKey('axis-position_x')));
-      await tester.pump();
-      // Now a DragValueField: tap to type, enter a value, commit.
+      // The value box seeds from read-back (or the property seed when the fake
+      // snapshot carries no transform), and edits in place — no em-dash step:
+      // tap to type, enter a value, commit.
       await tester.tap(find.byKey(const ValueKey('axis-position_x')));
       await tester.pump();
       await tester.enterText(find.byType(EditableText), '250');
@@ -258,8 +256,8 @@ void main() {
       await tester.pump();
 
       expect(fake.ops, contains('transform:c1/l0/position_x=250.0'));
-      // The commit is remembered so the box now shows the value.
-      expect(app.transformEditAt('l0', 'position_x'), 250.0);
+      // The commit is remembered so the box now reads the value back.
+      expect(app.transformValueFor('l0', 'position_x'), 250.0);
     });
   });
 

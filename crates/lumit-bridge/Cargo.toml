@@ -13,14 +13,27 @@ crate-type = ["cdylib", "rlib"]
 # footage and decode frames for the F2 CPU path. `--no-default-features` drops
 # it entirely, so the crate still builds and tests without FFmpeg (CI parity,
 # exactly as lumit-ui gates its own media wiring).
+#
+# The `render` feature (default on, implies `media`) pulls lumit-ui so the
+# bridge can borrow its headless compositor (`lumit_ui::headless`) for the
+# composited-comp Viewer path. This is the deliberate, temporary architecture
+# recorded as K-175: the bridge (a leaf) depends on the UI crate through the
+# headless seam until the pixel pass moves into an engine crate. Engine crates
+# still never depend on the bridge; the docs/05 arrow is unchanged.
+# `--no-default-features` drops both, and the crate still builds and tests
+# without FFmpeg or a GPU (CI parity) — render calls then return null.
 [features]
-default = ["media"]
+default = ["media", "render"]
 media = ["dep:lumit-media"]
+render = ["media", "dep:lumit-ui"]
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
 lumit-project = { path = "../lumit-project" }
 lumit-media = { path = "../lumit-media", optional = true }
+# Borrowed for its headless compositor only (K-175); its media feature carries
+# the GPU/decoder wiring the renderer needs.
+lumit-ui = { path = "../lumit-ui", optional = true, default-features = false, features = ["media"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v7", "serde"] }

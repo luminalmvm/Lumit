@@ -80,22 +80,34 @@ where the row is logic).
 
 ## Phase F2 — Viewer (in progress)
 
-- ☐ Shared-texture path (D3D11 interop) + `Texture` widget. BLOCKED on the same
-  compositor extraction as the composited-comp preview below — the frame to
-  share does not exist outside the egui crate yet
-- ☐ Composited-comp preview (all layers, transforms, effects). BLOCKED: the
-  compositor still lives in `crates/lumit-ui`; until it is extracted into a
-  shared crate, Flutter can only decode single footage frames, not composite
-  them. The Viewer's preview is honestly labelled single-layer everywhere
-- ☑ CPU RGBA fallback — **single-layer footage preview** (honest wording). The
-  Viewer resolves the front comp's topmost visible footage layer whose span
-  covers the playhead, maps comp-frame → source-frame by straight offset
-  (Retime is not in the snapshot yet — noted in code), decodes one frame via
-  `decodeFrame` through a shared `PreviewSource` (throttled to one decode per
-  painted frame, an 8-entry `ui.Image` LRU), and blits it fit-to-panel on the
-  neutral surround. NB the snapshot layer carries no source-item id, so the
-  layer is matched to its footage item by name (documented limitation). Unit-
-  and widget-tested. `preview_source.dart`, `viewer_panel.dart`
+- ☑ Composited-comp preview (all layers, transforms, effects), CPU path — K-175.
+  The compositor is reached WITHOUT extracting it from `crates/lumit-ui` first:
+  `export.rs`'s window-free `Renderer` is wrapped in a new `lumit_ui::headless`
+  seam (`HeadlessRenderer`), and `lumit-bridge` (default-on `render` feature)
+  holds one session-lifetime renderer and exposes
+  `lumit_bridge_render_comp_frame`. Dart's `preview_source.dart` renders the
+  WHOLE comp via `renderCompFrame` (a separate `CompRenderBridge` capability,
+  probed once) and falls back per frame to the single-layer decode when a render
+  returns null. Same compositor as export ⇒ preview == export == Flutter (K-031).
+  A missing layer is slated as colour bars INSIDE the composited frame (engine
+  side), so no separate Viewer slate on the comp path. `scale` downsamples the
+  output only (full-res internal render — noted). Rust headless + bridge tests
+  and Dart fake-bridge selection tests. `headless.rs`, `render.rs`, `ffi.rs`,
+  `bridge.dart`, `preview_source.dart`, `viewer_panel.dart`
+- ☐ Shared-texture path (D3D11 interop) remains: the CPU path above reads RGBA
+  back; the zero-copy `Texture`-widget path renders through the same
+  `HeadlessRenderer` and is the future optimisation
+- ☑ CPU RGBA fallback — **single-layer footage preview** (the fallback when comp
+  render is unavailable: an old library, or no GPU adapter). The Viewer resolves
+  the front comp's topmost visible footage layer whose span covers the playhead,
+  maps comp-frame → source-frame by straight offset (Retime is not in the
+  snapshot yet — noted in code), decodes one frame via `decodeFrame` through a
+  shared `PreviewSource` (throttled to one decode per painted frame, an 8-entry
+  `ui.Image` LRU), and blits it fit-to-panel on the neutral surround. NB the
+  snapshot layer carries no source-item id, so the layer is matched to its
+  footage item by name (documented limitation — the comp path has neither, the
+  engine resolves everything). Unit- and widget-tested. `preview_source.dart`,
+  `viewer_panel.dart`
 - ◐ Transport: play/pause on a Ticker at the comp's rational fps, looping the
   composition (mirrors the egui transport, which loops the work area); frame +
   SMPTE timecode readout; `Full` resolution label as-is. Remaining: the
@@ -182,12 +194,38 @@ where the row is logic).
   snapping rounds drags to whole seconds and marker frames — widget-tested
 - ☑ Bottom bar: zoom − / + / Fit + percentage readout, magnet snap toggle, graph
   lens toggle (kept from the F0 skeleton, zoom readout corrected to `zoom×100`)
-- ☐ Remainder (still open): keyframe lanes (glyphs, drag, copy/paste), outline
-  twirls + Transform/Effects property rows, the graph lens, matte/blend/parent
-  columns, layer context menu + rename/duplicate/delete, layer search + hide
-  toggle, the top-row MB-master toggle, beat markers/cache bar, sequence sub-bars
-  and the overrun HOLD hatch, work area (the snapshot carries none yet),
-  horizontal scroll/pan + scrollbar when zoomed, resizable outline column
+- ☑ Outline twirls + Transform property rows (wave 2): each layer row gains a
+  disclosure twirl; open reveals a Transform group header and one 22 px row per
+  transform property (Anchor point, Position, Scale, Rotation, Opacity — x/y
+  pairs on one row with two readouts, plus the 3D rows when 3D). Each property
+  row carries the drawn stopwatch (accent when animated, toggling through
+  `togglePropertyAnimated` at the playhead), the read-back value(s) via
+  `transformValueFor` (display-only; editing lives in Effect controls), and the
+  shared ◄ ◆ ► navigator (prev/next jump the playhead, ◆ adds a key when between
+  keys and removes when on one — egui note 2.4) — widget-tested
+- ☑ Keyframe lanes (wave 2): an open property row draws its keys as
+  interpolation-coded glyphs (diamond = Linear, square = a Hold side, circle = a
+  Bezier side — ported from `graph.rs::key_shape`); click selects (Ctrl/Shift
+  additive), drag slides the selected keys and commits **one** `shift_keyframes`
+  per channel on release (live preview while dragging), right-click removes a key
+  — unit-tested (glyph table, selection, grouping) + widget-tested
+- ☑ Work area (wave 2): `comp.work_area` renders as the egui success strip on
+  the ruler (dimmed outside, edge brackets); dragging an edge moves it through
+  `setWorkAreaEdge`. B/N gain additive `workAreaInAtPlayhead`/`workAreaOutAtPlayhead`
+  helpers on `AppStateStub` (the shell's B/N handlers still need repointing to
+  these — see the deviation note) — geometry unit-tested + edge-drag widget-tested
+- ☑ Layer context menu (wave 2): right-click a layer row → Duplicate (Ctrl+D),
+  Delete and the Solo/Enabled/Motion-blur switch toggles wired to the real ops;
+  the entries the Flutter frontend hasn't grown yet (Rename, Add effect/mask,
+  Convert) route to `app.engine(...)` honestly — widget-tested
+- ☑ Layer search (wave 2): a search box in the outline header filters rows by
+  case-insensitive name substring — unit-tested + widget-tested
+- ☑ Horizontal pan (wave 2): shift-wheel + a scrollbar when zoomed past fit,
+  ruler and lanes locked through a session-persisted `viewStartFrame` on the
+  `LaneScale` — clamp unit-tested
+- ☐ Remainder (still open): the graph lens, matte/blend/parent columns, the
+  top-row MB-master toggle, beat markers/cache bar, sequence sub-bars and the
+  overrun HOLD hatch, resizable outline column, keyframe copy/paste
 
 ## Phase F4 — editors (in progress)
 
@@ -206,17 +244,40 @@ First slice (2026-07-21):
   `source_comp_id` (and `source_item_id`/`colour`), so the panel can match by id
   and comp-scoped selection becomes possible — a panel adoption still to land.
   The full project flowchart / node graph is later.
-- ◐ Effect controls: the selected layer's **Transform** rows in the settings-card
-  style — Anchor point (x,y), Position (x,y[,z when 3D]), Scale (x,y with a link
-  toggle), Rotation, Opacity (and Rotation x/y when 3D), each committing through
-  `app.setTransform` (one undo step). `effect_controls_panel.dart`, widget-
-  tested. **Value read-back now available (v0.3), panel adoption pending**: the
-  snapshot carries each property's current value, and `AppStateStub.
-  transformValueFor(layerId, property)` returns it (falling back to the session
-  edit map). The panel still shows the session map + em-dash until it adopts
-  `transformValueFor`. Open: effects stacks, keyframes/stopwatches (the
-  `toggle_property_animated`/`add_keyframe`/… ops now exist), the linked-scale
-  ratio, and commit-on-release for the drag.
+- ◐ Effect controls: the selected layer's **Transform** rows and its **effect
+  stack**, in the settings-card style. `effect_controls_panel.dart`, widget-
+  tested (`f4_effects_test.dart`).
+  - **Transform values now live**: each row seeds its value boxes from
+    `AppStateStub.transformValueFor(layerId, property)` (snapshot v3 read-back
+    first, session-edit fallback) — the em-dash placeholder and its hint are
+    gone. Commits still route through `app.setTransform` (one undo step). Linked
+    Scale is now ratio-preserving (a zero base falls back to matching the edited
+    axis).
+  - **Stopwatch + keyframe navigator** on every transform row: the stopwatch
+    (accent when animated) toggles animation at `previewFrame` through
+    `togglePropertyAnimated`; the shared ◄ ◆ ► navigator (ported from egui
+    `keyframe_nav.rs` note 2.4) shows once a row is animated — ◄/► jump the
+    playhead to the previous/next key via `app.goToFrame`, and ◆ adds a key at
+    the playhead (`addKeyframe`) or removes the one already there
+    (`removeKeyframe`). Multi-axis rows (Anchor/Position/Scale) drive their
+    stopwatch and navigator across every axis; because the bridge keyframe ops
+    are per-property (no batch op), a linked add/remove issues one op per axis
+    (so it is more than one undo step — a named remainder until a batch op
+    lands).
+  - **Effect stack**: one card per effect in stack order — an enabled checkbox
+    (`setEffectEnabled`), the registry label, and a quiet remove ×
+    (`removeEffect`); parameter rows by kind — scalar as a `DragValueField`
+    (`setEffectParamScalar`, unclamped drag since ranges are not in the
+    snapshot), colour as a swatch opening `showColourPicker`
+    (`setEffectParamColour`), and the three `channel_colour_1..3` params folded
+    into one channel-picker row (K-143). enum/bool/seed/point/file/layer show
+    their value read-only with an "edits arrive with the matching bridge op"
+    tooltip — no faked edits.
+  - Named remainder: enum/bool/seed/point/file/layer parameter *edits* (the
+    bridge exposes only scalar + colour setters), per-parameter keyframe
+    stopwatch/navigator on effect params, parameter *ranges* (unclamped drag
+    until the snapshot carries them), the eyedropper, effect reorder, and the
+    per-linked-pair single-undo batch.
 - ◐ Comp settings: the composition-settings / new-composition dialogue in the
   Settings-window visual style (name, size, frame-rate preset dropdown,
   duration), shown through the app Overlay. `dialogs.dart`, wired from the
@@ -225,6 +286,18 @@ First slice (2026-07-21):
   Composition-settings apply can now route to `app.setCompSettings(comp, name, w,
   h, fps_num, fps_den, duration_frames)` (one undo step) — a panel adoption still
   to land, replacing the stubbed `app.engine(…)`.
+- ◐ Effects & presets: a search field over the built-in effect registry
+  (`app.listEffects()`, label substring, case-insensitive) and the matching
+  effects listed, applied to the selected layer of the front comp
+  (`app.addEffect`) by double-clicking a row or the Add button that appears on
+  a hovered row; no selected layer shows a quiet hint. `effects_presets_panel.
+  dart`, widget-tested (`f4_effects_test.dart`). The egui `effects_panel` groups
+  the built-ins by `FxCategory` and lists user presets above them; the Dart
+  registry (`BridgeEffectInfo {name, label}`) carries no category, so the list
+  here is **flat** — the honest mirror of what the bridge exposes. Named
+  remainder: the `.lumfx` **preset save/load** (needs the file + preset bridge
+  ops — a placeholder row at the bottom says exactly that), category grouping,
+  and drag-onto-a-layer application.
 - ☐ Add mask ▸ Rectangle/Ellipse/Star: still routes to `app.engine` (mask ops
   are not in the bridge); the submenu reads correctly.
 

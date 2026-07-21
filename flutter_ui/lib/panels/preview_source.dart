@@ -7,19 +7,22 @@
 // Scopes panel reads the very same decoded pixels from here, so the trace always
 // matches the picture on screen.
 //
-// HONEST LIMITATION (single-layer preview): the real compositor still lives in
-// the egui crate (crates/lumit-ui) — the layered, transformed, effected comp
-// frame is NOT available to Flutter yet. So this previews only the *topmost
-// visible footage layer* whose span covers the playhead, decoded straight, with
-// no transform, no blending, no effects. The composited-comp preview arrives
-// when the compositor is extracted from egui into a shared crate (a later wave);
-// until then this is labelled as single-layer everywhere it shows.
+// TWO PATHS. When the engine bridge offers composited-comp rendering
+// (`CompRenderBridge`, backed by lumit-bridge's headless renderer), this asks
+// the engine for the WHOLE composited comp frame — every layer, transform,
+// blend and effect, the same pixels the egui Viewer and the exporter produce
+// (K-031, K-175). A missing layer inside the comp arrives already slated as
+// colour bars within that frame, so the Viewer needs no separate slate on the
+// comp path. When the render fails (no GPU adapter, an old library, or a
+// transient error) this falls back, per frame, to the single-layer path below.
 //
-// A further limitation until the snapshot carries it: a footage layer in the
-// snapshot does NOT carry its source item's id (only its own name), so the layer
-// is matched to a footage item by name. Retime is also not in the snapshot, so
-// the comp-frame → source-frame mapping is a straight offset (subtract in_frame),
-// not the real Retime curve. Both are noted where they bite.
+// SINGLE-LAYER FALLBACK. Without comp rendering, this previews only the
+// *topmost visible footage layer* whose span covers the playhead, decoded
+// straight, with no transform, blending or effects. A footage layer in the
+// snapshot is matched to a footage item by name (the snapshot carries no source
+// id here), and Retime is not in the snapshot, so the comp-frame → source-frame
+// mapping is a straight offset (subtract in_frame). Both are noted where they
+// bite; the comp path has neither limitation (the engine resolves everything).
 
 import 'dart:collection';
 import 'dart:ui' as ui;
@@ -123,14 +126,22 @@ class PreviewSource extends ChangeNotifier {
   int _generation = 0;
   String? _pendingKey;
   bool _disposed = false;
+  bool _compActive = false;
 
   PreviewSource(this.app) {
     app.addListener(_onAppChanged);
     _resolveAndDecode();
   }
 
-  /// What the Viewer resolved this frame (null = no footage under the playhead).
+  /// What the Viewer resolved this frame (null = no single-layer footage under
+  /// the playhead, OR the composited-comp path is active — see [compActive]).
   PreviewTarget? get target => _target;
+
+  /// True when the shown image is the WHOLE composited comp (the engine's
+  /// headless render), not a single decoded footage layer. The Viewer drops the
+  /// "single-layer" caveat from its placeholder wording on this path, and treats
+  /// the frame as self-contained (any missing layer is slated inside it).
+  bool get compActive => _compActive;
 
   /// The blit-ready image for the current frame, or null when there is nothing
   /// decoded to show (slate, placeholder, or an in-flight decode).
@@ -151,6 +162,66 @@ class PreviewSource extends ChangeNotifier {
   }
 
   void _resolveAndDecode() {
+    // Prefer the composited-comp path; only when it declines this frame (engine
+    // can't render it) do we fall back to the single-layer decode below.
+    if (_resolveAndDecodeComp()) return;
+    _resolveAndDecodeSingleLayer();
+  }
+
+  /// Ask the engine for the whole composited comp frame. Returns true when this
+  /// path owns the frame (a cache hit, a decode kicked off, or a decode already
+  /// in flight); false when the engine cannot render it, so the caller falls
+  /// back to the single-layer path. When it owns the frame there is no
+  /// single-layer [target] (the comp frame carries any missing-layer slate
+  /// itself) and [compActive] is set.
+  bool _resolveAndDecodeComp() {
+    final bridge = app.bridge;
+    final compId = app.frontCompIdResolved;
+    // A bridge without the comp-render capability, or no front comp: decline.
+    // (CompRenderBridge is a separate interface, not a subtype of DocumentBridge,
+    // so bind it through an explicit cast the `is!` guard has already made safe.)
+    if (compId == null || bridge is! CompRenderBridge) return false;
+    final render = bridge as CompRenderBridge;
+    if (!render.supportsCompRender) return false;
+    final frame = app.previewFrame;
+    final key = 'comp:$compId@$frame';
+
+    final cached = _cache[key];
+    if (cached != null) {
+      final wasComp = _compActive;
+      _enterComp();
+      _touch(key, cached);
+      final changed = !identical(_image, cached.image);
+      _image = cached.image;
+      _displayedFrame = cached.frame;
+      if (changed) _generation++;
+      // Notify on a new picture, or when we have just switched into comp mode
+      // (so the Viewer drops any single-layer slate it was showing).
+      if (changed || !wasComp) notifyListeners();
+      return true;
+    }
+
+    // A decode already in flight for this comp frame: this path still owns it.
+    if (_pendingKey == key) return true;
+
+    final rendered = render.renderCompFrame(compId, frame, 1.0);
+    if (rendered == null || rendered.width == 0 || rendered.height == 0) {
+      // The engine could not composite this frame (no adapter, or a transient
+      // failure): let the single-layer path try, holding the last picture.
+      return false;
+    }
+    _enterComp();
+    _startImageDecode(key, rendered);
+    // The last picture stays on screen until the comp image lands; notify so the
+    // Viewer reflects the mode change (target cleared) immediately.
+    notifyListeners();
+    return true;
+  }
+
+  /// The single-layer fallback: the topmost visible footage layer under the
+  /// playhead, decoded straight. Unchanged behaviour from before the comp path.
+  void _resolveAndDecodeSingleLayer() {
+    _compActive = false;
     final comp = app.frontComp;
     final target =
         resolvePreview(comp, app.previewFrame, app.snapshot?.items ?? const []);
@@ -195,6 +266,20 @@ class PreviewSource extends ChangeNotifier {
     }
     if (decoded.width == 0 || decoded.height == 0) return;
 
+    _startImageDecode(key, decoded);
+  }
+
+  /// Enter composited-comp mode: no single-layer target (the comp frame is
+  /// self-contained), and the "single-layer" wording is dropped in the Viewer.
+  void _enterComp() {
+    _target = null;
+    _compActive = true;
+  }
+
+  /// Turn a decoded RGBA buffer into a blit-ready image asynchronously, cache it
+  /// under [key], and show it when it lands. Shared by both paths, so their
+  /// caching, LRU and in-flight guard behave identically.
+  void _startImageDecode(String key, DecodedFrame decoded) {
     _pendingKey = key;
     ui.decodeImageFromPixels(
       decoded.rgba,

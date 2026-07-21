@@ -141,9 +141,9 @@ class _ShellBodyState extends State<_ShellBody> {
     } else if (key == LogicalKeyboardKey.end) {
       app.goToFrame(app.previewFrameCount);
     } else if (key == LogicalKeyboardKey.keyB) {
-      app.engine('Work area in at playhead');
+      app.workAreaInAtPlayhead();
     } else if (key == LogicalKeyboardKey.keyN) {
-      app.engine('Work area out at playhead');
+      app.workAreaOutAtPlayhead();
     } else if (key == LogicalKeyboardKey.delete ||
         key == LogicalKeyboardKey.backspace) {
       app.engine('Delete selected keyframes or layer');

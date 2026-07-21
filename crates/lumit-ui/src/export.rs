@@ -343,26 +343,31 @@ pub fn audio_samples_through(frame_count: usize, fps: f64, rate: u32) -> usize {
 }
 
 /// Renderer state carried down the precomp recursion.
-struct Renderer<'a> {
-    doc: &'a Document,
-    items: &'a HashMap<Uuid, ItemInfo>,
-    gpu: &'a lumit_gpu::GpuContext,
-    colour: lumit_gpu::ColourEngine,
-    compositor: lumit_gpu::Compositor,
-    decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
+///
+/// The fields are `pub(crate)` so the headless seam ([`crate::headless`]) can
+/// build a `Renderer` from persistent GPU engines it owns and read them back
+/// afterwards — the one place other than [`run`] that drives this compositor,
+/// so the Flutter Viewer renders through the exact export path (K-031, K-175).
+pub(crate) struct Renderer<'a> {
+    pub(crate) doc: &'a Document,
+    pub(crate) items: &'a HashMap<Uuid, ItemInfo>,
+    pub(crate) gpu: &'a lumit_gpu::GpuContext,
+    pub(crate) colour: lumit_gpu::ColourEngine,
+    pub(crate) compositor: lumit_gpu::Compositor,
+    pub(crate) decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
     /// Flow interpolation backend, sharing the export device; falls back to
     /// the CPU oracle by itself (export MUST honour the Flow policy, K-019).
-    flow: lumit_flow::FlowEngine,
+    pub(crate) flow: lumit_flow::FlowEngine,
     /// Effect kernels, sharing the export device (docs/08; the same passes
     /// the preview runs, so effects export pixel-identically).
-    fx: lumit_gpu::fx::FxEngine,
+    pub(crate) fx: lumit_gpu::fx::FxEngine,
     /// Parsed-and-uploaded `.cube` LUTs keyed by path (docs/08 §3.11,
     /// docs/impl/lut.md §4), living across the whole export so each distinct
     /// file is parsed and uploaded once, not per frame. `RefCell` because
     /// `apply_fx` takes `&self`. The same load the preview's GpuViewer runs, so
     /// LUTs export pixel-identically (K-031). Path-only key (mtime invalidation
     /// is a documented follow-up).
-    lut_cache: std::cell::RefCell<HashMap<String, crate::fxops::LoadedLut>>,
+    pub(crate) lut_cache: std::cell::RefCell<HashMap<String, crate::fxops::LoadedLut>>,
 }
 
 /// A layer's source, prepared for compositing: a linear texture plus the
@@ -1211,7 +1216,7 @@ impl Renderer<'_> {
         )
     }
 
-    fn render_comp_linear(
+    pub(crate) fn render_comp_linear(
         &mut self,
         comp: &Composition,
         t: f64,

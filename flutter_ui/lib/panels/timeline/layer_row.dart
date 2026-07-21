@@ -12,6 +12,7 @@ import '../../icons/icons.dart';
 import '../../state/app_state.dart';
 import '../../widgets/controls.dart';
 import 'lane_scale.dart';
+import 'layer_menu.dart';
 import 'layer_style.dart';
 import 'outline_layout.dart';
 
@@ -29,6 +30,12 @@ class LayerRow extends StatefulWidget {
   final double fps;
   final List<int> markers;
 
+  /// Whether this layer's outline twirl is open (its property rows show below).
+  final bool open;
+
+  /// Toggle the outline twirl (the body owns the open set).
+  final VoidCallback onToggleOpen;
+
   const LayerRow({
     super.key,
     required this.app,
@@ -39,6 +46,8 @@ class LayerRow extends StatefulWidget {
     required this.scale,
     required this.fps,
     required this.markers,
+    required this.open,
+    required this.onToggleOpen,
   });
 
   @override
@@ -164,6 +173,8 @@ class _LayerRowState extends State<LayerRow> {
               style: style,
               selected: selected,
               width: widget.outlineWidth,
+              open: widget.open,
+              onToggleOpen: widget.onToggleOpen,
             ),
           ),
           Expanded(
@@ -216,6 +227,8 @@ class _OutlineCell extends StatelessWidget {
   final ({LumitIcon icon, Color colour}) style;
   final bool selected;
   final double width;
+  final bool open;
+  final VoidCallback onToggleOpen;
 
   const _OutlineCell({
     required this.app,
@@ -225,6 +238,8 @@ class _OutlineCell extends StatelessWidget {
     required this.style,
     required this.selected,
     required this.width,
+    required this.open,
+    required this.onToggleOpen,
   });
 
   @override
@@ -281,13 +296,37 @@ class _OutlineCell extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => app.selectLayer(layer.id),
+      onSecondaryTapDown: (d) => showLayerContextMenu(
+        context: context,
+        app: app,
+        compId: compId,
+        layer: layer,
+        position: d.globalPosition,
+      ),
       child: Container(
         color: selected ? t.surface2 : null,
         child: Row(
           children: [
             // 3 px left-edge colour tab in the layer-type colour.
             Container(width: 3, color: style.colour),
-            const SizedBox(width: 4),
+            // The disclosure twirl: open reveals the layer's property rows.
+            GestureDetector(
+              key: ValueKey('twirl:${layer.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleOpen,
+              child: SizedBox(
+                width: 15,
+                height: kRowHeight,
+                child: Center(
+                  child: lumitIcon(
+                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                    size: 11,
+                    color: t.textMuted,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 1),
             if (cols.index)
               Padding(
                 padding: const EdgeInsets.only(right: 4),

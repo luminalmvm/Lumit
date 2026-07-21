@@ -657,6 +657,14 @@ typedef _DecodeDart = Pointer<Uint8> Function(
 typedef _FreeBufferC = Void Function(Pointer<Uint8>, Size);
 typedef _FreeBufferDart = void Function(Pointer<Uint8>, int);
 
+// Composited-comp render: like decode, but keyed by comp id with a scale, and
+// returning the whole composited frame (every layer/transform/effect) rather
+// than one raw footage layer.
+typedef _RenderC = Pointer<Uint8> Function(Pointer<Char>, Uint64, Float,
+    Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
+typedef _RenderDart = Pointer<Uint8> Function(
+    Pointer<Char>, int, double, Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
+
 /// The set of document operations the frontend drives the engine through. The
 /// real implementation is [LumitBridge] (dart:ffi over the shared library); the
 /// interface exists so tests can supply a fake without loading the library or
@@ -783,9 +791,33 @@ abstract class DocumentBridge {
   DecodedFrame? decodeFrame(String itemId, int frame);
 }
 
+/// The composited-comp render capability, kept as its own interface (not part of
+/// [DocumentBridge]) so the many `implements DocumentBridge` fakes across the
+/// suite need no change: a bridge either offers this capability or it does not.
+/// The real [LumitBridge] implements it; [PreviewSource] probes with an
+/// `is CompRenderBridge` check and reads [supportsCompRender] to tell a new
+/// engine (with or without a GPU adapter) from an old library that lacks the
+/// symbol entirely.
+abstract class CompRenderBridge {
+  /// True when the loaded library exports the composited-comp render symbol.
+  /// False for an older library — the discriminator that keeps such a build on
+  /// the single-layer path. It stays true even on a machine with no GPU adapter
+  /// (the symbol is present); there, [renderCompFrame] simply returns null.
+  bool get supportsCompRender;
+
+  /// Render the WHOLE composited comp [compId] at [frame] to RGBA8 — every
+  /// layer, transform, blend and effect, the same pixels the egui Viewer and
+  /// the exporter produce. [scale] of 1.0 is the comp's own resolution; a
+  /// smaller positive value downsamples the output. Null on failure (unknown
+  /// comp, no GPU adapter, a render error); a missing layer inside the comp
+  /// arrives already slated as colour bars within the returned frame. The
+  /// pixels are copied out of the engine buffer, which is freed immediately.
+  DecodedFrame? renderCompFrame(String compId, int frame, double scale);
+}
+
 /// The loaded `lumit_bridge` library, bound to typed calls. Construct with
 /// [tryLoad]; a null result means the app runs on its placeholders.
-class LumitBridge implements DocumentBridge {
+class LumitBridge implements DocumentBridge, CompRenderBridge {
   final _NoArgDart _version;
   final _NoArgDart _newProject;
   final _StrArgDart _openProject;
@@ -819,6 +851,13 @@ class LumitBridge implements DocumentBridge {
   final _ScalarParamDart _setEffectParamScalar;
   final _ColourParamDart _setEffectParamColour;
   final _DecodeDart _decodeFrame;
+
+  /// Bound only when the loaded library exports it. An older `.dll` (predating
+  /// the composited-comp path) lacks the symbol; rather than failing the whole
+  /// load, this stays null and [renderCompFrame] returns null, so the Viewer
+  /// keeps its single-layer path. Non-final because it is looked up defensively
+  /// in the constructor body, not the initializer list.
+  _RenderDart? _renderCompFrame;
   final _FreeDart _freeString;
   final _FreeBufferDart _freeBuffer;
 
@@ -930,7 +969,19 @@ class LumitBridge implements DocumentBridge {
         ),
         _freeBuffer = lib.lookupFunction<_FreeBufferC, _FreeBufferDart>(
           'lumit_bridge_free_buffer',
-        );
+        ) {
+    // The composited-comp render symbol is optional: an older library omits it,
+    // and the frontend must still load and run on its single-layer path. Bind it
+    // defensively so a missing symbol leaves [_renderCompFrame] null rather than
+    // throwing out of [tryLoad].
+    try {
+      _renderCompFrame = lib.lookupFunction<_RenderC, _RenderDart>(
+        'lumit_bridge_render_comp_frame',
+      );
+    } catch (_) {
+      _renderCompFrame = null;
+    }
+  }
 
   /// Load the library and bind it, or return null if it cannot be found or a
   /// symbol is missing. Never throws — a failure is just "run on placeholders".
@@ -1327,6 +1378,41 @@ class LumitBridge implements DocumentBridge {
       final len = outLen.value;
       try {
         // Copy the pixels out before the buffer is freed back to Rust.
+        final rgba = Uint8List.fromList(ptr.asTypedList(len));
+        return DecodedFrame(
+          width: outW.value,
+          height: outH.value,
+          rgba: rgba,
+        );
+      } finally {
+        _freeBuffer(ptr, len);
+      }
+    } finally {
+      malloc.free(id);
+      malloc.free(outW);
+      malloc.free(outH);
+      malloc.free(outLen);
+    }
+  }
+
+  @override
+  bool get supportsCompRender => _renderCompFrame != null;
+
+  @override
+  DecodedFrame? renderCompFrame(String compId, int frame, double scale) {
+    final render = _renderCompFrame;
+    if (render == null) return null; // old library without the symbol
+    final id = compId.toNativeUtf8();
+    final outW = malloc<Uint32>();
+    final outH = malloc<Uint32>();
+    final outLen = malloc<Size>();
+    try {
+      final ptr = render(id.cast(), frame, scale, outW, outH, outLen);
+      if (ptr == nullptr) return null;
+      final len = outLen.value;
+      try {
+        // Copy the pixels out before the buffer is freed back to Rust — the same
+        // contract as decodeFrame (one boxed slice, freed as a whole).
         final rgba = Uint8List.fromList(ptr.asTypedList(len));
         return DecodedFrame(
           width: outW.value,

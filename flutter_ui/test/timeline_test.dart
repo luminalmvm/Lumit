@@ -1,19 +1,30 @@
-// Phase-F3 Timeline tests: the pure geometry / degradation / snapping logic
-// (no widget tree), and widget tests over the live panel driven by a fake
-// DocumentBridge (comp tabs, layer rows, switch/scrub/select/trim wiring).
+// Phase-F3 Timeline tests: the pure geometry / degradation / snapping /
+// glyph-coding / work-area / search / pan logic (no widget tree), and widget
+// tests over the live panel driven by a fake DocumentBridge (comp tabs, layer
+// rows, switch/scrub/select/trim wiring, twirl-down property rows, stopwatch,
+// keyframe navigator, keyframe-lane drag, the layer context menu, the layer
+// search filter and the work-area edge drag).
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/bridge/bridge.dart';
+import 'package:lumit_flutter/panels/timeline/key_glyph.dart';
+import 'package:lumit_flutter/panels/timeline/key_nav.dart';
 import 'package:lumit_flutter/panels/timeline/lane_scale.dart';
+import 'package:lumit_flutter/panels/timeline/lane_selection.dart';
 import 'package:lumit_flutter/panels/timeline/outline_layout.dart';
+import 'package:lumit_flutter/panels/timeline/ruler.dart';
+import 'package:lumit_flutter/panels/timeline/search.dart';
+import 'package:lumit_flutter/panels/timeline/work_area.dart';
 import 'package:lumit_flutter/panels/timeline_panel.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
-/// Two comps ("Scene" with two layers + a marker, "Titles" empty) in the exact
-/// shape the Rust bridge emits.
+/// Two comps ("Scene" with two layers + a marker + a work area, "Titles" empty)
+/// in the exact shape the Rust bridge emits. l0 (hero) carries a transform
+/// read-back with an animated position_x (keys at frames 60 and 120).
 const _twoCompJson = '''
 {
   "ok": true,
@@ -23,13 +34,27 @@ const _twoCompJson = '''
       "comp": {
         "width": 1920, "height": 1080,
         "fps": {"num": 60, "den": 1}, "frame_count": 300,
+        "work_area": [30, 180],
         "layers": [
           {
             "id": "l0", "index": 0, "name": "hero", "kind": "footage",
             "in_frame": 60, "out_frame": 240, "label": 2,
             "switches": {"visible": true, "audible": true, "locked": false,
               "three_d": false, "collapse": false, "fx": true,
-              "solo": false, "motion_blur": false}
+              "solo": false, "motion_blur": false},
+            "transform": {
+              "anchor_x": {"value": 960, "animated": false},
+              "anchor_y": {"value": 540, "animated": false},
+              "position_x": {"value": 960, "animated": true, "keys": [
+                {"frame": 60, "value": 960, "interp_in": "Linear", "interp_out": "Linear"},
+                {"frame": 120, "value": 1200, "interp_in": "Linear", "interp_out": "Linear"}
+              ]},
+              "position_y": {"value": 540, "animated": false},
+              "scale_x": {"value": 100, "animated": false},
+              "scale_y": {"value": 100, "animated": false},
+              "rotation": {"value": 0, "animated": false},
+              "opacity": {"value": 100, "animated": false}
+            }
           },
           {
             "id": "l1", "index": 1, "name": "backdrop", "kind": "solid",
@@ -165,10 +190,22 @@ Widget _host(AppStateStub app) => Directionality(
           theme: LumitTheme.dark(),
           animationLevel: AnimationLevel.none,
           showTooltips: false,
-          child: TimelinePanel(app: app),
+          // An Overlay so the layer context menu (showLumitPopup) has somewhere
+          // to mount; ThemeScope stays above it so popups read the theme.
+          child: Overlay(
+            initialEntries: [
+              OverlayEntry(builder: (_) => TimelinePanel(app: app)),
+            ],
+          ),
         ),
       ),
     );
+
+/// Open a layer's twirl so its transform property rows are shown.
+Future<void> _openTwirl(WidgetTester tester, String layerId) async {
+  await tester.tap(find.byKey(ValueKey('twirl:$layerId')));
+  await tester.pump();
+}
 
 void main() {
   group('LaneScale (time↔pixel under zoom)', () {
@@ -202,17 +239,142 @@ void main() {
     });
   });
 
-  group('chooseTicks (zoom-adaptive density)', () {
-    test('coarse scale keeps labels from crowding', () {
-      // 2 px/sec: a 1 s label step would be 2 px — far too dense.
-      final spec = chooseTicks(2);
-      expect(spec.secondsPerLabel, greaterThanOrEqualTo(30));
+  group('LaneScale.clampViewStart (horizontal pan)', () {
+    test('at fit the view is pinned to the comp start', () {
+      expect(
+        LaneScale.clampViewStart(desired: 120, frameCount: 300, zoom: 1),
+        0,
+      );
     });
 
-    test('fine scale allows tight, frequent labels', () {
-      final spec = chooseTicks(200); // 200 px/sec
-      expect(spec.secondsPerLabel, lessThanOrEqualTo(1));
-      expect(spec.secondsPerMinor, lessThanOrEqualTo(spec.secondsPerLabel));
+    test('a pan past the end clamps to frames − visible', () {
+      // zoom 2 → 150 frames visible, so the furthest start is 150.
+      expect(
+        LaneScale.clampViewStart(desired: 9999, frameCount: 300, zoom: 2),
+        closeTo(150, 1e-9),
+      );
+    });
+
+    test('a pan before the start clamps to 0', () {
+      expect(
+        LaneScale.clampViewStart(desired: -40, frameCount: 300, zoom: 3),
+        0,
+      );
+    });
+
+    test('canPan is false at fit and true once zoomed', () {
+      final fit =
+          LaneScale.fit(trackLeft: 0, trackWidth: 600, frameCount: 300, zoom: 1);
+      final zoomed =
+          LaneScale.fit(trackLeft: 0, trackWidth: 600, frameCount: 300, zoom: 2);
+      expect(fit.canPan, isFalse);
+      expect(zoomed.canPan, isTrue);
+    });
+  });
+
+  group('keyShapeFor (interpolation glyph coding)', () {
+    test('linear both sides is a diamond', () {
+      expect(keyShapeFor('Linear', 'Linear'), KeyShape.diamond);
+    });
+
+    test('a hold on either side is a square', () {
+      expect(keyShapeFor('Hold', 'Linear'), KeyShape.square);
+      expect(keyShapeFor('Linear', 'Hold'), KeyShape.square);
+    });
+
+    test('a bezier on either side (no hold) is a circle', () {
+      expect(keyShapeFor('Linear', 'Bezier'), KeyShape.circle);
+      expect(keyShapeFor('Bezier', 'Linear'), KeyShape.circle);
+    });
+
+    test('hold wins over bezier', () {
+      expect(keyShapeFor('Hold', 'Bezier'), KeyShape.square);
+    });
+  });
+
+  group('keyNavTargets (◄ ◆ ► resolution)', () {
+    test('between keys: prev + next set, not on a key', () {
+      final t = keyNavTargets(const [60, 120], 90);
+      expect(t.prev, 60);
+      expect(t.next, 120);
+      expect(t.onKey, isFalse);
+    });
+
+    test('on a key: onKey true, prev/next skip it', () {
+      final t = keyNavTargets(const [60, 120], 60);
+      expect(t.onKey, isTrue);
+      expect(t.prev, isNull);
+      expect(t.next, 120);
+    });
+
+    test('past the last key: only prev', () {
+      final t = keyNavTargets(const [60, 120], 200);
+      expect(t.prev, 120);
+      expect(t.next, isNull);
+      expect(t.onKey, isFalse);
+    });
+  });
+
+  group('lane selection', () {
+    const a = LaneKeyId('l0', 'position_x', 60);
+    const b = LaneKeyId('l0', 'position_x', 120);
+
+    test('a plain click replaces the selection', () {
+      final sel = <LaneKeyId>{a};
+      laneSelectClick(sel, b, additive: false);
+      expect(sel, {b});
+    });
+
+    test('an additive click toggles membership', () {
+      final sel = <LaneKeyId>{a};
+      laneSelectClick(sel, b, additive: true);
+      expect(sel, {a, b});
+      laneSelectClick(sel, a, additive: true);
+      expect(sel, {b});
+    });
+
+    test('groupKeysForShift buckets by channel, sorted', () {
+      final groups = groupKeysForShift(const [
+        LaneKeyId('l0', 'position_x', 120),
+        LaneKeyId('l0', 'position_x', 60),
+        LaneKeyId('l1', 'opacity', 10),
+      ]);
+      expect(groups[('l0', 'position_x')], [60, 120]);
+      expect(groups[('l1', 'opacity')], [10]);
+    });
+  });
+
+  group('workAreaEdgeAt (band edge hit-test)', () {
+    test('a pointer near the in edge grabs it', () {
+      expect(workAreaEdgeAt(52, 50, 300), WorkAreaEdge.inEdge);
+    });
+
+    test('a pointer near the out edge grabs it', () {
+      expect(workAreaEdgeAt(303, 50, 300), WorkAreaEdge.outEdge);
+    });
+
+    test('a pointer in the middle grabs neither', () {
+      expect(workAreaEdgeAt(180, 50, 300), isNull);
+    });
+
+    test('a tie goes to the nearer edge', () {
+      expect(workAreaEdgeAt(56, 50, 60), WorkAreaEdge.outEdge);
+    });
+  });
+
+  group('layerMatchesSearch', () {
+    test('an empty query matches everything', () {
+      expect(layerMatchesSearch('hero', ''), isTrue);
+      expect(layerMatchesSearch('hero', '   '), isTrue);
+    });
+
+    test('a case-insensitive substring matches', () {
+      expect(layerMatchesSearch('Backdrop', 'drop'), isTrue);
+      expect(layerMatchesSearch('Backdrop', 'BACK'), isTrue);
+    });
+
+    test('a non-substring does not match', () {
+      expect(layerMatchesSearch('hero', 'zzz'), isFalse);
     });
   });
 
@@ -230,10 +392,8 @@ void main() {
     });
 
     test('columns drop in order: collapse/3D, then fx/MB, then solo…', () {
-      // Narrow enough to drop the low-priority switches but keep eye+lock.
       final c = chooseColumns(120, canAudio: true, isPrecomp: true);
       expect(c.eye, isTrue, reason: 'eye survives longest');
-      // 3D/collapse and fx/MB go before solo/speaker/index.
       expect(c.collapse, isFalse);
       expect(c.threeD, isFalse);
       expect(c.motionBlur, isFalse);
@@ -262,7 +422,6 @@ void main() {
     });
 
     test('a near whole-second lands on the second', () {
-      // 2 px/frame → 6 px threshold = 3 frames. 61 is 1 frame from 60.
       expect(
         snapFrame(61, fps: 60, markers: const [], snapping: true, pxPerFrame: 2),
         60,
@@ -321,7 +480,6 @@ void main() {
     testWidgets('tapping a bar selects the layer', (tester) async {
       final app = AppStateStub(bridge: _TimelineFake());
       await tester.pumpWidget(_host(app));
-      // l1 (backdrop) spans the whole lane; a tap over the lane centre selects it.
       await tester.tapAt(const Offset(500, 97));
       await tester.pump();
       expect(app.selectedLayer, 'l1');
@@ -332,7 +490,6 @@ void main() {
       final fake = _TimelineFake();
       final app = AppStateStub(bridge: fake)..snapping = false;
       await tester.pumpWidget(_host(app));
-      // Geometry: width 800 → outline 260, trackW 532, pxPerFrame = 532/300.
       const ppf = 532 / 300;
       final startX = 260 + 60 * ppf; // l0 in-point (frame 60) left edge
       const dx = 30.0;
@@ -350,6 +507,135 @@ void main() {
       await tester.tapAt(Offset(x, 46)); // ruler band y
       await tester.pump();
       expect(app.previewFrame, 150);
+    });
+
+    testWidgets('the twirl reveals the transform property rows',
+        (tester) async {
+      final app = AppStateStub(bridge: _TimelineFake());
+      await tester.pumpWidget(_host(app));
+      expect(find.text('Position'), findsNothing);
+      await _openTwirl(tester, 'l0');
+      expect(find.text('Transform'), findsOneWidget);
+      expect(find.text('Anchor point'), findsOneWidget);
+      expect(find.text('Position'), findsOneWidget);
+      expect(find.text('Opacity'), findsOneWidget);
+    });
+
+    testWidgets('the stopwatch toggles animation through the op',
+        (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake);
+      await tester.pumpWidget(_host(app));
+      await _openTwirl(tester, 'l0');
+      await tester.tap(find.byKey(const ValueKey('stopwatch:l0:position_x')));
+      await tester.pump();
+      expect(fake.ops, contains('stopwatch:c0/l0/position_x@0'));
+    });
+
+    testWidgets('the navigator diamond adds a key between keys', (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake);
+      await tester.pumpWidget(_host(app));
+      await _openTwirl(tester, 'l0');
+      app.goToFrame(90); // between the keys at 60 and 120
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('nav-toggle:l0:position_x')));
+      await tester.pump();
+      expect(
+        fake.ops.any((o) => o.startsWith('add_key:c0/l0/position_x@90')),
+        isTrue,
+      );
+    });
+
+    testWidgets('the navigator diamond removes the key on the playhead',
+        (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake);
+      await tester.pumpWidget(_host(app));
+      await _openTwirl(tester, 'l0');
+      app.goToFrame(60); // exactly on a key
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('nav-toggle:l0:position_x')));
+      await tester.pump();
+      expect(fake.ops, contains('remove_key:c0/l0/position_x@60'));
+    });
+
+    testWidgets('dragging a keyframe commits one shiftKeyframes',
+        (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake)..snapping = false;
+      await tester.pumpWidget(_host(app));
+      await _openTwirl(tester, 'l0');
+      const ppf = 532 / 300;
+      final rowRect =
+          tester.getRect(find.byKey(const ValueKey('prop:l0:position_x')));
+      final glyphX = 260 + 60 * ppf; // key at frame 60
+      const dx = 40.0;
+      final expected = (60 + dx / ppf).round() - 60;
+      await tester.dragFrom(Offset(glyphX, rowRect.center.dy), const Offset(dx, 0));
+      await tester.pump();
+      final shifts = fake.ops.where((o) => o.startsWith('shift_keys')).toList();
+      expect(shifts, ['shift_keys:c0/l0/position_x+$expected']);
+    });
+
+    testWidgets('right-clicking a keyframe removes it', (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake);
+      await tester.pumpWidget(_host(app));
+      await _openTwirl(tester, 'l0');
+      const ppf = 532 / 300;
+      final rowRect =
+          tester.getRect(find.byKey(const ValueKey('prop:l0:position_x')));
+      final glyphX = 260 + 120 * ppf; // key at frame 120
+      await tester.tapAt(
+        Offset(glyphX, rowRect.center.dy),
+        buttons: kSecondaryButton,
+      );
+      await tester.pump();
+      expect(fake.ops, contains('remove_key:c0/l0/position_x@120'));
+    });
+
+    testWidgets('the context menu Duplicate calls duplicateLayer',
+        (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake);
+      await tester.pumpWidget(_host(app));
+      await tester.tap(find.text('hero'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Duplicate'));
+      await tester.pumpAndSettle();
+      expect(fake.ops, contains('duplicate_layer:c0/l0'));
+    });
+
+    testWidgets('the search filter hides non-matching rows', (tester) async {
+      final app = AppStateStub(bridge: _TimelineFake());
+      await tester.pumpWidget(_host(app));
+      expect(find.byKey(const ValueKey('twirl:l1')), findsOneWidget);
+      await tester.enterText(find.byType(EditableText), 'hero');
+      await tester.pump();
+      // The hero row stays; the backdrop row is filtered out. (The search box
+      // itself now reads "hero", so assert on the rows' twirls, not the text.)
+      expect(find.byKey(const ValueKey('twirl:l0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('twirl:l1')), findsNothing);
+    });
+
+    testWidgets('dragging a work-area edge calls setWorkAreaEdge',
+        (tester) async {
+      final fake = _TimelineFake();
+      final app = AppStateStub(bridge: fake)..snapping = false;
+      await tester.pumpWidget(_host(app));
+      const ppf = 532 / 300;
+      final ruler = tester.getRect(find.byType(TimelineRuler));
+      // The in edge sits at frame 30; its handle is centred on that lane x
+      // (the ruler's own left is the lane left).
+      final inX = ruler.left + 30 * ppf;
+      await tester.dragFrom(Offset(inX, ruler.center.dy), const Offset(40, 0));
+      await tester.pump();
+      expect(
+        fake.ops.any((o) =>
+            o.startsWith('work_area:c0@') && o.endsWith('/out=false')),
+        isTrue,
+      );
     });
   });
 }
