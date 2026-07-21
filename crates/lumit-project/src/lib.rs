@@ -1,7 +1,7 @@
 //! The `.lum` project container, autosave, and the crash-recovery journal —
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
-use lumit_core::model::Fingerprint;
+use lumit_core::model::{Fingerprint, MediaRef};
 use lumit_core::ops::Op;
 use lumit_core::Document;
 use serde::{Deserialize, Serialize};
@@ -249,6 +249,127 @@ pub fn fingerprint_path(path: &Path) -> std::io::Result<Fingerprint> {
     })
 }
 
+/// Which step of the relink resolver found a media file (docs/10 §2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolveStep {
+    /// The project-relative path still points at the file (step 1, preferred).
+    RelativePath,
+    /// The last-known absolute path still points at the file (step 2).
+    AbsolutePath,
+    /// A content search by fingerprint found it at a new location (step 3).
+    FingerprintSearch,
+}
+
+/// The outcome of resolving a [`MediaRef`] to a file on disk (docs/10 §2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Resolved {
+    /// Found on disk: `path` is where, `how` is which step succeeded.
+    Found { path: PathBuf, how: ResolveStep },
+    /// No automatic step found it — the relink dialogue takes over. Never a
+    /// blocking error (docs/10 §2 step 4).
+    Missing,
+}
+
+/// Resolve a media reference to a file on disk (docs/10 §2): try the
+/// project-relative path, then the last absolute path, then — if a fingerprint
+/// is stored — a content search across `search_roots` and the project tree;
+/// otherwise report [`Resolved::Missing`] for the relink dialogue to handle.
+///
+/// Steps 1 and 2 trust the path (a file being there is enough); step 3 matches
+/// by content, so it recognises a file that was moved or renamed.
+pub fn resolve_media(media: &MediaRef, project_dir: &Path, search_roots: &[PathBuf]) -> Resolved {
+    let rel = project_dir.join(&media.relative_path);
+    if rel.is_file() {
+        return Resolved::Found {
+            path: rel,
+            how: ResolveStep::RelativePath,
+        };
+    }
+    let abs = Path::new(&media.absolute_path);
+    if abs.is_file() {
+        return Resolved::Found {
+            path: abs.to_path_buf(),
+            how: ResolveStep::AbsolutePath,
+        };
+    }
+    if let Some(fp) = &media.fingerprint {
+        for root in search_roots
+            .iter()
+            .map(PathBuf::as_path)
+            .chain([project_dir])
+        {
+            if let Some(hit) = search_by_fingerprint(root, fp) {
+                return Resolved::Found {
+                    path: hit,
+                    how: ResolveStep::FingerprintSearch,
+                };
+            }
+        }
+    }
+    Resolved::Missing
+}
+
+/// Walk `root` (files only, symlinks not followed, so no cycles) for a file
+/// whose content fingerprint matches `fp`. Size is checked from cheap metadata
+/// before any file is hashed. Returns the first match, or None.
+fn search_by_fingerprint(root: &Path, fp: &Fingerprint) -> Option<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                // Cheap size filter before the hash.
+                if entry.metadata().map(|m| m.len()).ok() != Some(fp.size) {
+                    continue;
+                }
+                let path = entry.path();
+                if fingerprint_path(&path)
+                    .map(|c| c.likely_same_content(fp))
+                    .unwrap_or(false)
+                {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The directory remapping implied by one file moving from `old` to `new`,
+/// used to relink siblings that moved the same way (docs/10 §2). Defined only
+/// for a pure relocation — same file name, different directory; None for a
+/// rename (a changed name cannot generalise to siblings) or a non-move.
+#[must_use]
+pub fn path_mapping(old: &Path, new: &Path) -> Option<(PathBuf, PathBuf)> {
+    if old.file_name()? != new.file_name()? {
+        return None;
+    }
+    let (old_dir, new_dir) = (old.parent()?, new.parent()?);
+    if old_dir == new_dir {
+        return None;
+    }
+    Some((old_dir.to_path_buf(), new_dir.to_path_buf()))
+}
+
+/// Apply a [`path_mapping`] to a sibling's old path: if it lived under the
+/// mapping's old directory, return where it now lives under the new one. None
+/// when the sibling was elsewhere (the mapping does not apply to it).
+#[must_use]
+pub fn apply_mapping(mapping: &(PathBuf, PathBuf), sibling_old: &Path) -> Option<PathBuf> {
+    let (from, to) = mapping;
+    sibling_old
+        .strip_prefix(from)
+        .ok()
+        .map(|rest| to.join(rest))
+}
+
 /// Append-only op log between saves; truncated on successful save.
 pub struct JournalFile {
     path: PathBuf,
@@ -399,6 +520,126 @@ mod tests {
         let diff = dir.path().join("tiny3.bin");
         fs::write(&diff, b"world").unwrap();
         assert!(!f.likely_same_content(&fingerprint_path(&diff).unwrap()));
+    }
+
+    fn media_ref(rel: &str, abs: &str, fp: Option<Fingerprint>) -> lumit_core::model::MediaRef {
+        lumit_core::model::MediaRef {
+            relative_path: rel.into(),
+            absolute_path: abs.into(),
+            fingerprint: fp,
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// docs/10 §2 step 1: the project-relative path wins when it still resolves.
+    #[test]
+    fn resolve_prefers_the_relative_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("proj");
+        fs::create_dir_all(project.join("footage")).unwrap();
+        let file = project.join("footage/clip.bin");
+        fs::write(&file, b"data").unwrap();
+        let m = media_ref("footage/clip.bin", "/nope/clip.bin", None);
+        assert_eq!(
+            resolve_media(&m, &project, &[]),
+            Resolved::Found {
+                path: file,
+                how: ResolveStep::RelativePath
+            }
+        );
+    }
+
+    /// docs/10 §2 step 2: fall back to the last absolute path.
+    #[test]
+    fn resolve_falls_back_to_the_absolute_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("proj");
+        fs::create_dir_all(&project).unwrap();
+        let file = dir.path().join("kept.bin");
+        fs::write(&file, b"data").unwrap();
+        let m = media_ref("footage/missing.bin", file.to_str().unwrap(), None);
+        assert_eq!(
+            resolve_media(&m, &project, &[]),
+            Resolved::Found {
+                path: file,
+                how: ResolveStep::AbsolutePath
+            }
+        );
+    }
+
+    /// docs/10 §2 step 3: neither path resolves, but a fingerprint search finds
+    /// the file — moved and renamed — under a search root.
+    #[test]
+    fn resolve_finds_a_moved_file_by_fingerprint() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("proj");
+        fs::create_dir_all(&project).unwrap();
+        let elsewhere = dir.path().join("elsewhere/deep");
+        fs::create_dir_all(&elsewhere).unwrap();
+        let data: Vec<u8> = (0..300_000u32).map(|i| i as u8).collect();
+        let moved = elsewhere.join("renamed.bin");
+        fs::write(&moved, &data).unwrap();
+        let fp = fingerprint_path(&moved).unwrap();
+        let m = media_ref("footage/clip.bin", "/nope/clip.bin", Some(fp));
+        assert_eq!(
+            resolve_media(&m, &project, &[dir.path().join("elsewhere")]),
+            Resolved::Found {
+                path: moved,
+                how: ResolveStep::FingerprintSearch
+            }
+        );
+    }
+
+    /// docs/10 §2 step 4: nothing matches → Missing (never an error).
+    #[test]
+    fn resolve_reports_missing_when_nothing_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("proj");
+        fs::create_dir_all(&project).unwrap();
+        // Fingerprint of some content, but no matching file anywhere searched.
+        let orphan = dir.path().join("orphan.bin");
+        fs::write(&orphan, b"only here, not under a search root").unwrap();
+        let fp = fingerprint_path(&orphan).unwrap();
+        fs::remove_file(&orphan).unwrap();
+        let m = media_ref("footage/x.bin", "/nope/x.bin", Some(fp));
+        assert_eq!(
+            resolve_media(&m, &project, std::slice::from_ref(&project)),
+            Resolved::Missing
+        );
+    }
+
+    /// docs/10 §2 sibling relink: a pure directory move yields a mapping that
+    /// relocates siblings; a rename or non-move yields none.
+    #[test]
+    fn path_mapping_relinks_siblings_under_the_same_move() {
+        let old = Path::new("/a/b/clip.mp4");
+        let new = Path::new("/x/y/clip.mp4");
+        let mapping = path_mapping(old, new).expect("a pure move maps");
+        assert_eq!(
+            apply_mapping(&mapping, Path::new("/a/b/other.wav")),
+            Some(PathBuf::from("/x/y/other.wav")),
+            "a sibling in the same folder relinks"
+        );
+        assert_eq!(
+            apply_mapping(&mapping, Path::new("/a/b/sub/deep.mov")),
+            Some(PathBuf::from("/x/y/sub/deep.mov")),
+            "a sibling in a subfolder relinks under the mapping"
+        );
+        assert_eq!(
+            apply_mapping(&mapping, Path::new("/z/elsewhere.mp4")),
+            None,
+            "a sibling outside the moved folder does not relink"
+        );
+        // A rename (different file name) does not generalise to siblings.
+        assert_eq!(
+            path_mapping(Path::new("/a/b/clip.mp4"), Path::new("/x/y/renamed.mp4")),
+            None
+        );
+        // No move (same directory) yields no mapping.
+        assert_eq!(
+            path_mapping(Path::new("/a/b/clip.mp4"), Path::new("/a/b/clip.mp4")),
+            None
+        );
     }
 
     /// A MediaRef with no fingerprint serialises without the field, so projects
