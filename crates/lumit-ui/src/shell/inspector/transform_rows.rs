@@ -141,7 +141,11 @@ pub(crate) fn group_header_row(
     default_open: bool,
     viewport: egui::Rect,
 ) -> bool {
-    let mut open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(default_open);
+    // Persisted (not temp): twirl state survives restarts, part of the
+    // restored session (owner) — ids carry uuids, so entries never collide.
+    let mut open = ui
+        .data_mut(|d| d.get_persisted::<bool>(id))
+        .unwrap_or(default_open);
     // The header lives in the outline, but the ui's clip is the lanes and egui
     // hit-tests against rect ∩ clip — so widen the clip or the twirl won't click.
     let (rect, resp) = {
@@ -174,7 +178,7 @@ pub(crate) fn group_header_row(
     );
     if resp.clicked() {
         open = !open;
-        ui.data_mut(|d| d.insert_temp(id, open));
+        ui.data_mut(|d| d.insert_persisted(id, open));
     }
     let cy = rect.center().y;
     let tx = rect.left() + 22.0;

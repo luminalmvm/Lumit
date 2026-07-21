@@ -830,48 +830,152 @@ impl AppState {
         }
     }
 
-    /// Every audible footage layer with an audio stream, as mixdown jobs:
-    /// the one list playback, beat detection, and export all mix from, so
-    /// they always hear the same comp.
+    /// Every audible footage layer with an audio stream, as mixdown jobs —
+    /// including the ones inside Precomp layers, walked recursively with
+    /// their times mapped onto the outer comp and their carriers' Volumes
+    /// chained (owner: a precomp holding music was silent). The one list
+    /// playback, beat detection, and export all mix from, so they always
+    /// hear the same comp.
     #[cfg(feature = "media")]
     pub fn comp_audio_jobs(
         &self,
         doc: &lumit_core::model::Document,
         comp: &lumit_core::model::Composition,
     ) -> Vec<crate::export::AudioJob> {
+        let mut jobs = Vec::new();
+        let mut visited = vec![comp.id];
+        self.collect_audio_jobs(
+            doc,
+            comp,
+            0.0,
+            (f64::NEG_INFINITY, f64::INFINITY),
+            &[],
+            &mut visited,
+            &mut jobs,
+        );
+        jobs
+    }
+
+    /// Whether a comp holds any audio — its own footage layers' streams, or
+    /// (recursively) a nested Precomp's. Gates the Audio group on Precomp
+    /// layers in the outline. `visited` must already contain the comp ids on
+    /// the walk so a comp cycle terminates.
+    #[cfg(feature = "media")]
+    pub fn comp_has_audio(
+        &self,
+        doc: &lumit_core::model::Document,
+        comp_id: Uuid,
+        visited: &mut Vec<Uuid>,
+    ) -> bool {
+        use lumit_core::model::LayerKind;
+        let Some(comp) = doc.comp(comp_id) else {
+            return false;
+        };
+        for layer in &comp.layers {
+            match &layer.kind {
+                LayerKind::Footage { item, .. } => {
+                    if matches!(
+                        self.media.map.get(item),
+                        Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
+                    ) {
+                        return true;
+                    }
+                }
+                LayerKind::Precomp { comp: nested } if !visited.contains(nested) => {
+                    visited.push(*nested);
+                    if self.comp_has_audio(doc, *nested, visited) {
+                        return true;
+                    }
+                    visited.pop();
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// The recursive walk behind [`Self::comp_audio_jobs`]. `base_s` is where
+    /// this comp's time 0 sits on the OUTER timeline; `window` is the span the
+    /// carrier chain leaves audible (each Precomp layer's own in/out clips its
+    /// contents); `carriers` are the enclosing Precomp layers' Volumes with
+    /// their outer-time offsets, applied on top of each job's own.
+    #[cfg(feature = "media")]
+    #[allow(clippy::too_many_arguments)]
+    fn collect_audio_jobs(
+        &self,
+        doc: &lumit_core::model::Document,
+        comp: &lumit_core::model::Composition,
+        base_s: f64,
+        window: (f64, f64),
+        carriers: &[(lumit_core::anim::Property, f64)],
+        visited: &mut Vec<Uuid>,
+        jobs: &mut Vec<crate::export::AudioJob>,
+    ) {
         use lumit_core::model::LayerKind;
         // Solo silences non-soloed audio exactly as it hides non-soloed video
-        // (docs/09 §6): if any layer is soloed, only soloed layers contribute
-        // sound. Mirrors the video gate in draws.rs / export.rs.
+        // (docs/09 §6), scoped per comp: a solo inside a precomp isolates
+        // within that precomp. Mirrors the video gate in draws.rs / export.rs.
         let any_solo = lumit_core::model::any_solo(comp);
-        let mut jobs = Vec::new();
         for layer in &comp.layers {
             if !layer.switches.audible || (any_solo && !layer.switches.solo) {
                 continue;
             }
-            let LayerKind::Footage { item, .. } = &layer.kind else {
-                continue;
-            };
-            let has_audio = matches!(
-                self.media.map.get(item),
-                Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
-            );
-            if !has_audio {
+            // This layer's span mapped to the outer timeline, clipped to what
+            // the carrier chain leaves audible.
+            let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
+            let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
+            if out_s <= in_s {
                 continue;
             }
-            let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
-                continue;
-            };
-            jobs.push(crate::export::AudioJob {
-                item: *item,
-                path: PathBuf::from(&f.media.absolute_path),
-                in_s: layer.in_point.0.to_f64(),
-                out_s: layer.out_point.0.to_f64(),
-                offset_s: layer.start_offset.0.to_f64(),
-                volume: layer.volume_db.clone(),
-            });
+            let offset_s = layer.start_offset.0.to_f64() + base_s;
+            match &layer.kind {
+                LayerKind::Footage { item, .. } => {
+                    let has_audio = matches!(
+                        self.media.map.get(item),
+                        Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
+                    );
+                    if !has_audio {
+                        continue;
+                    }
+                    let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
+                        continue;
+                    };
+                    jobs.push(crate::export::AudioJob {
+                        item: *item,
+                        path: PathBuf::from(&f.media.absolute_path),
+                        in_s,
+                        out_s,
+                        offset_s,
+                        volume: layer.volume_db.clone(),
+                        carriers: carriers.to_vec(),
+                    });
+                }
+                LayerKind::Precomp { comp: nested_id } => {
+                    if visited.contains(nested_id) {
+                        continue; // cycle guard
+                    }
+                    let Some(nested) = doc.comp(*nested_id) else {
+                        continue;
+                    };
+                    // The precomp layer's own Volume joins the carrier chain,
+                    // evaluated in its own layer time (outer t − offset).
+                    let mut chain = carriers.to_vec();
+                    chain.push((layer.volume_db.clone(), offset_s));
+                    visited.push(*nested_id);
+                    self.collect_audio_jobs(
+                        doc,
+                        nested,
+                        offset_s,
+                        (in_s, out_s),
+                        &chain,
+                        visited,
+                        jobs,
+                    );
+                    visited.pop();
+                }
+                _ => {}
+            }
         }
-        jobs
     }
 
     /// Kick off background decode + mix of a comp's audio layers into one
@@ -932,13 +1036,8 @@ impl AppState {
                         // Volume (docs/09 §6): static → a constant gain;
                         // keyframed → a control-rate envelope. Same bake the
                         // export mixdown uses, so playback == export.
-                        let (gain, envelope) = crate::export::volume_bake(
-                            &job.volume,
-                            start_frame,
-                            len,
-                            job.offset_s,
-                            rate,
-                        );
+                        let (gain, envelope) =
+                            crate::export::volume_bake(job, start_frame, len, rate);
                         clips.push(lumit_audio::mix::PlacedClip {
                             buffer,
                             start_frame,

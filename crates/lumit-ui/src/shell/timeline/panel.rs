@@ -621,8 +621,12 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     );
                 }
                 // Disclosure twirl: layer options hide until opened (AE behaviour).
-                let twirl_id = ui.id().with(("twirl", layer.id));
-                let mut expanded = ui.data(|d| d.get_temp::<bool>(twirl_id).unwrap_or(false));
+                // Stable id (uuid-keyed, not ui-derived) + persisted state:
+                // which layers sit open survives restarts (owner session).
+                let twirl_id = egui::Id::new(("layer-twirl", layer.id));
+                let mut expanded = ui
+                    .data_mut(|d| d.get_persisted::<bool>(twirl_id))
+                    .unwrap_or(false);
                 let tri = egui::Rect::from_min_size(
                     egui::pos2(row_rect.left() + 2.0, row_rect.top()),
                     egui::vec2(16.0, row_rect.height()),
@@ -639,7 +643,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                 };
                 if tri_resp.clicked() {
                     expanded = !expanded;
-                    ui.data_mut(|d| d.insert_temp(twirl_id, expanded));
+                    ui.data_mut(|d| d.insert_persisted(twirl_id, expanded));
                 }
                 // Secondary (not muted) so the twirl reads as a control against
                 // the dark outline; brightens under the cursor like other glyphs.
@@ -699,9 +703,26 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                         add(&mut child);
                     };
                 let mut select_this = false;
-                place(ui, eye_r, &mut |ui| {
-                    visible_control(ui, theme, comp_id, layer, &mut pending)
-                });
+                // An audio-only source (a music file — no video stream) has no
+                // picture to show or hide, so its row carries no eye at all
+                // (owner): visibility is meaningless for it, and the switch
+                // cluster leads with the speaker instead.
+                #[cfg(feature = "media")]
+                let audio_only = match &layer.kind {
+                    lumit_core::model::LayerKind::Footage { item, .. } => matches!(
+                        app.media.map.get(item),
+                        Some(crate::app_state::media::MediaStatus::Ready { probe, .. })
+                            if probe.video.is_none() && probe.audio.is_some()
+                    ),
+                    _ => false,
+                };
+                #[cfg(not(feature = "media"))]
+                let audio_only = false;
+                if !audio_only {
+                    place(ui, eye_r, &mut |ui| {
+                        visible_control(ui, theme, comp_id, layer, &mut pending)
+                    });
+                }
                 // Layer name (Mack): a non-selectable, click-and-drag button — a
                 // click selects, a double-click renames inline, a drag reorders the
                 // stack, a right-click opens the layer menu. While renaming, the
@@ -1545,7 +1566,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     // timeline row — stopwatch/name/value in the left column, that
                     // property's keyframes on the track to the right; click a row to
                     // graph it (K-072).
-                    let tf_id = ui.id().with(("transform-group", layer.id));
+                    let tf_id = egui::Id::new(("transform-group", layer.id));
                     if group_header_row(ui, theme, "Transform", tf_id, false, viewport) {
                         transform_property_rows(
                             ui,
@@ -1569,7 +1590,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                     // header only shows once the layer has effects (owner):
                     // an empty stack has nothing to twirl open, and effects
                     // arrive by drag / right-click / palette, not from here.
-                    let fx_id = ui.id().with(("effects-group", layer.id));
+                    let fx_id = egui::Id::new(("effects-group", layer.id));
                     if !layer.effects.is_empty()
                         && group_header_row(ui, theme, "Effects", fx_id, false, viewport)
                     {
@@ -1614,7 +1635,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                         lumit_core::model::LayerKind::Footage { retime: Some(rt), .. }
                             if matches!(rt.interpolation, lumit_core::retime::Interpolation::Flow(_))
                     ) {
-                        let flow_id = ui.id().with(("flow-group", layer.id));
+                        let flow_id = egui::Id::new(("flow-group", layer.id));
                         if group_header_row(ui, theme, "Flow", flow_id, true, viewport) {
                             let fps3 = comp.frame_rate.fps().max(1.0);
                             let flow_ctx = RowCtx {
@@ -1646,31 +1667,43 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             }
                         }
                     }
-                    // Audio group (docs/09 §6, K-172): only for footage whose
-                    // source carries an audio stream — Volume (dB, animatable)
-                    // and a Waveform twirl drawing this layer's own sound in
-                    // its lane. Unlike the old comp-wide strip (which only
-                    // refreshed when the mix re-planned), the lane reads the
-                    // layer's live offset every paint, so dragging the bar
-                    // drags the transients with it in realtime.
+                    // Audio group (docs/09 §6, K-172): for footage whose source
+                    // carries an audio stream — Volume (dB, animatable) and a
+                    // Waveform twirl drawing this layer's own sound in its lane
+                    // (reading the layer's live offset every paint, so a drag
+                    // carries the transients in realtime) — and for Precomp
+                    // layers whose nested comp holds audio anywhere (owner):
+                    // their Volume scales everything inside, so they get the
+                    // Volume row; a mixed nested waveform is a follow-up.
                     #[cfg(feature = "media")]
-                    if let lumit_core::model::LayerKind::Footage { item, .. } = &layer.kind {
-                        let audio_path = match (
-                            app.media.map.get(item),
-                            doc.item(*item),
-                        ) {
-                            (
-                                Some(crate::app_state::media::MediaStatus::Ready {
-                                    probe, ..
-                                }),
-                                Some(lumit_core::model::ProjectItem::Footage(f)),
-                            ) if probe.audio.is_some() => {
-                                Some(std::path::PathBuf::from(&f.media.absolute_path))
+                    {
+                        // Some(path) = footage with sound (waveform too);
+                        // None inside the group = precomp carrier (Volume only).
+                        let audio_source = match &layer.kind {
+                            lumit_core::model::LayerKind::Footage { item, .. } => match (
+                                app.media.map.get(item),
+                                doc.item(*item),
+                            ) {
+                                (
+                                    Some(crate::app_state::media::MediaStatus::Ready {
+                                        probe, ..
+                                    }),
+                                    Some(lumit_core::model::ProjectItem::Footage(f)),
+                                ) if probe.audio.is_some() => Some(Some((
+                                    *item,
+                                    std::path::PathBuf::from(&f.media.absolute_path),
+                                ))),
+                                _ => None,
+                            },
+                            lumit_core::model::LayerKind::Precomp { comp: nested } => {
+                                let mut visited = vec![comp_id, *nested];
+                                app.comp_has_audio(&doc, *nested, &mut visited)
+                                    .then_some(None)
                             }
                             _ => None,
                         };
-                        if let Some(path) = audio_path {
-                            let au_id = ui.id().with(("audio-group", layer.id));
+                        if let Some(waveform_src) = audio_source {
+                            let au_id = egui::Id::new(("audio-group", layer.id));
                             if group_header_row(ui, theme, "Audio", au_id, false, viewport) {
                                 let fps4 = comp.frame_rate.fps().max(1.0);
                                 let au_ctx = RowCtx {
@@ -1699,13 +1732,16 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                         ((kt + au_ctx.off) * au_ctx.fps).round().max(0.0) as usize;
                                     app.refresh_preview();
                                 }
-                                let wf_id = ui.id().with(("waveform-twirl", layer.id));
-                                if group_header_row(ui, theme, "Waveform", wf_id, false, viewport)
-                                {
-                                    waveform_lane_row(
-                                        ui, app, theme, layer, *item, &path, track_left, track_w,
-                                        px_per_sec, view_start,
-                                    );
+                                if let Some((item, path)) = &waveform_src {
+                                    let wf_id = egui::Id::new(("waveform-twirl", layer.id));
+                                    if group_header_row(
+                                        ui, theme, "Waveform", wf_id, false, viewport,
+                                    ) {
+                                        waveform_lane_row(
+                                            ui, app, theme, layer, *item, path, track_left,
+                                            track_w, px_per_sec, view_start,
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -2088,9 +2124,16 @@ fn waveform_lane_row(
     if src_dur <= 0.0 || peaks.is_empty() {
         return;
     }
-    let in_s = layer.in_point.0.to_f64();
-    let out_s = layer.out_point.0.to_f64();
-    let off = layer.start_offset.0.to_f64();
+    // A live body-drag previews the bar at `move_edit`'s raw in point before
+    // the op commits on release — shift the waveform by the same delta so
+    // the transients ride the drag (owner: they lagged until drop).
+    let drag_dx = match app.move_edit {
+        Some((id, raw_in)) if id == layer.id => raw_in - layer.in_point.0.to_f64(),
+        _ => 0.0,
+    };
+    let in_s = layer.in_point.0.to_f64() + drag_dx;
+    let out_s = layer.out_point.0.to_f64() + drag_dx;
+    let off = layer.start_offset.0.to_f64() + drag_dx;
     // A faint bed across the layer's active span, so silence still reads as
     // "this is where the audio lives".
     let x_at = |t: f64| track_left + ((t - view_start) * px_per_sec) as f32;

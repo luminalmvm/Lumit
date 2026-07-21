@@ -130,6 +130,68 @@ impl Shell {
         if !dropped.is_empty() {
             self.app.import_paths(dropped);
         }
+        // Project session (owner): restore the saved working state right after
+        // a project opens — open comp tabs, fronted comp, playhead, selection —
+        // and keep saving it while one is open, keyed by project path (the
+        // timeline-name-w pattern; twirl states persist through their own
+        // uuid-keyed egui ids). Even without a saved session the first comp
+        // fronts, so the Viewer renders immediately instead of parking on the
+        // placeholder until the playhead moves.
+        {
+            let session_key =
+                |p: &std::path::Path| egui::Id::new(("project-session", p.display().to_string()));
+            if self.app.session_restore_pending {
+                self.app.session_restore_pending = false;
+                let saved = self.app.path.as_ref().and_then(|p| {
+                    ctx.data_mut(|d| {
+                        d.get_persisted::<crate::app_state::SavedSession>(session_key(p))
+                    })
+                });
+                let doc = self.app.store.snapshot();
+                let layer_exists = |lid: uuid::Uuid| {
+                    doc.items.iter().any(|i| {
+                        matches!(i, lumit_core::model::ProjectItem::Composition(c)
+                            if c.layers.iter().any(|l| l.id == lid))
+                    })
+                };
+                let mut frame = 0usize;
+                let mut active = None;
+                if let Some(s) = saved {
+                    let open: Vec<uuid::Uuid> = s
+                        .open_comps
+                        .iter()
+                        .copied()
+                        .filter(|id| doc.comp(*id).is_some())
+                        .collect();
+                    if !open.is_empty() {
+                        self.app.open_comps = open;
+                    }
+                    active = s.active_comp.filter(|id| self.app.open_comps.contains(id));
+                    frame = s.frame;
+                    self.app.selected_layer = s.selected_layer.filter(|l| layer_exists(*l));
+                }
+                // Front a comp either way (restored active, else the first
+                // tab); open_comp parks the playhead at 0, so the saved frame
+                // is put back after, then the shown frame re-renders.
+                if let Some(id) = active.or_else(|| self.app.open_comps.first().copied()) {
+                    self.app.open_comp(id);
+                    let total = self.app.preview_frame_count();
+                    if frame > 0 && total > 0 {
+                        self.app.preview_frame = frame.min(total - 1);
+                        #[cfg(feature = "media")]
+                        self.app.refresh_preview();
+                    }
+                }
+            } else if let Some(path) = self.app.path.clone() {
+                let session = crate::app_state::SavedSession {
+                    open_comps: self.app.open_comps.clone(),
+                    active_comp: self.app.preview_comp,
+                    frame: self.app.preview_frame,
+                    selected_layer: self.app.selected_layer,
+                };
+                ctx.data_mut(|d| d.insert_persisted(session_key(&path), session));
+            }
+        }
         #[cfg(feature = "media")]
         {
             self.app.poll_audio();

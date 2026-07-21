@@ -225,20 +225,35 @@ pub(crate) fn audio_jobs_signature(jobs: &[crate::export::AudioJob], duration_s:
         j.out_s.to_bits().hash(&mut h);
         j.offset_s.to_bits().hash(&mut h);
         // Volume is mix content too: a level nudge or a fade keyframe must
-        // re-plan (docs/09 §6). Static is the overwhelmingly common case and
-        // hashes as one f64; keyframed volumes hash every key.
-        match &j.volume.animation {
-            lumit_core::anim::Animation::Static(v) => v.to_bits().hash(&mut h),
-            lumit_core::anim::Animation::Keyframed(keys) => {
-                keys.len().hash(&mut h);
-                for k in keys {
-                    k.time.to_f64().to_bits().hash(&mut h);
-                    k.value.to_bits().hash(&mut h);
-                }
-            }
+        // re-plan (docs/09 §6) — the job's own and every carrier precomp's.
+        hash_animation(&mut h, &j.volume.animation);
+        j.carriers.len().hash(&mut h);
+        for (prop, off) in &j.carriers {
+            off.to_bits().hash(&mut h);
+            hash_animation(&mut h, &prop.animation);
         }
     }
     h.finish()
+}
+
+/// Fold one Volume animation into the jobs signature: static hashes as one
+/// f64, keyframed hashes every key (session-only change detection).
+#[cfg(feature = "media")]
+fn hash_animation(
+    h: &mut std::collections::hash_map::DefaultHasher,
+    a: &lumit_core::anim::Animation,
+) {
+    use std::hash::Hash;
+    match a {
+        lumit_core::anim::Animation::Static(v) => v.to_bits().hash(h),
+        lumit_core::anim::Animation::Keyframed(keys) => {
+            keys.len().hash(h);
+            for k in keys {
+                k.time.to_f64().to_bits().hash(h);
+                k.value.to_bits().hash(h);
+            }
+        }
+    }
 }
 
 /// What keeping the loaded comp-audio mix in step with the document needs this
@@ -517,6 +532,22 @@ impl CompPlayback {
 #[cfg(feature = "media")]
 pub type ItemWaveform = std::sync::Arc<(f64, Vec<(f32, f32)>)>;
 
+/// A project's restored working state (owner): which comp tabs were open,
+/// which comp fronted the Viewer, where the playhead sat, and the selected
+/// layer. Persisted in egui's storage keyed by project path (the
+/// `timeline-name-w` pattern) and applied right after open — so a loaded
+/// project renders immediately instead of parking on the Viewer placeholder
+/// until the playhead moves. Twirl states persist separately (their
+/// uuid-keyed egui ids). Ids are validated against the document on restore;
+/// stale ones fall back to the defaults.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedSession {
+    pub open_comps: Vec<Uuid>,
+    pub active_comp: Option<Uuid>,
+    pub frame: usize,
+    pub selected_layer: Option<Uuid>,
+}
+
 pub(crate) enum CompAudioMsg {
     /// A whole baked mix — the legacy path for sources the byte-budgeted
     /// cache cannot hold (decode failed, or larger than the entire budget).
@@ -787,6 +818,10 @@ pub struct AppState {
     /// timing — so it survives edits and re-mixes untouched.
     #[cfg(feature = "media")]
     pub item_waveforms: std::collections::HashMap<Uuid, ItemWaveform>,
+    /// Set by `install` when a project (re)opens: the shell restores the
+    /// saved [`SavedSession`] for this path on its next frame (it owns the
+    /// egui context the session lives in), then clears this.
+    pub session_restore_pending: bool,
     /// The timeline's layer-search filter (TL4): layers whose name doesn't
     /// contain this (case-insensitive) are hidden from the outline. Empty shows
     /// all. A view preference.
@@ -1154,6 +1189,7 @@ impl Default for AppState {
             #[cfg(feature = "media")]
             #[cfg(feature = "media")]
             item_waveforms: std::collections::HashMap::new(),
+            session_restore_pending: false,
             #[cfg(feature = "media")]
             detected_bpm: None,
             #[cfg(feature = "media")]

@@ -67,28 +67,40 @@ pub struct AudioJob {
     /// The layer's Volume property (dB, docs/09 §6): static values become a
     /// constant gain; keyframed ones bake to a control-rate envelope.
     pub volume: lumit_core::anim::Property,
+    /// Enclosing Precomp layers' Volumes (outermost first), each with the
+    /// outer-comp time where its layer time 0 sits — a precomp's Volume
+    /// scales everything inside it, so the gains multiply through the chain.
+    pub carriers: Vec<(lumit_core::anim::Property, f64)>,
 }
 
-/// Bake one job's Volume for its placed span: `(constant gain, envelope)`.
-/// A static Volume is exactly its constant gain (envelope None); an animated
-/// one becomes a ~10 ms control-rate curve sampled in layer time — the same
-/// clock every other property reads (`lt = comp time − start offset`).
+/// Bake one job's Volume — its own dB property times every carrier's — for
+/// its placed span: `(constant gain, envelope)`. All-static chains are
+/// exactly their constant product (envelope None); any animated link bakes
+/// the whole chain to a ~10 ms control-rate curve, each property sampled in
+/// its own layer time (`lt = comp time − its offset`).
 pub fn volume_bake(
-    volume: &lumit_core::anim::Property,
+    job: &AudioJob,
     start_frame: i64,
     len: usize,
-    offset_s: f64,
     rate: u32,
 ) -> (f32, Option<lumit_audio::mix::GainEnvelope>) {
-    if !volume.is_animated() {
-        return (lumit_audio::mix::db_to_gain(volume.value_at(0.0)), None);
+    let gain_at = |t: f64| {
+        let mut g = lumit_audio::mix::db_to_gain(job.volume.value_at(t - job.offset_s));
+        for (prop, off) in &job.carriers {
+            g *= lumit_audio::mix::db_to_gain(prop.value_at(t - off));
+        }
+        g
+    };
+    let animated = job.volume.is_animated() || job.carriers.iter().any(|(p, _)| p.is_animated());
+    if !animated {
+        return (gain_at(0.0), None);
     }
     let stride = (rate / 100).max(1);
     let n = len / stride as usize + 2;
     let points = (0..n)
         .map(|p| {
             let t = (start_frame + p as i64 * i64::from(stride)) as f64 / f64::from(rate);
-            lumit_audio::mix::db_to_gain(volume.value_at(t - offset_s))
+            gain_at(t)
         })
         .collect();
     (1.0, Some(lumit_audio::mix::GainEnvelope { stride, points }))
@@ -299,7 +311,7 @@ fn mix_decoded(
                 buf.samples.len() / 2,
                 rate,
             )?;
-            let (gain, envelope) = volume_bake(&job.volume, start_frame, len, job.offset_s, rate);
+            let (gain, envelope) = volume_bake(job, start_frame, len, rate);
             Some(lumit_audio::mix::PlacedAudio {
                 start_frame,
                 samples: &buf.samples[src_start * 2..(src_start + len) * 2],
@@ -1953,8 +1965,16 @@ mod tests {
     fn volume_bake_static_gain_and_animated_envelope() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
         use lumit_core::Rational;
-        let stat = Property::fixed(-6.0);
-        let (g, env) = volume_bake(&stat, 0, 48_000, 0.0, 48_000);
+        let job = |volume: Property, offset_s: f64| AudioJob {
+            item: uuid::Uuid::nil(),
+            path: PathBuf::new(),
+            in_s: 0.0,
+            out_s: 10.0,
+            offset_s,
+            volume,
+            carriers: Vec::new(),
+        };
+        let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
         assert!((g - 0.501_19).abs() < 1e-3);
 
@@ -1970,7 +1990,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         // Placed at comp 1 s (start_frame 48000), offset 1 s: layer time 0..1.
-        let (g, env) = volume_bake(&fade, 48_000, 48_000, 1.0, 48_000);
+        let (g, env) = volume_bake(&job(fade.clone(), 1.0), 48_000, 48_000, 48_000);
         assert_eq!(g, 1.0);
         let env = env.unwrap();
         assert!((env.gain_at(0) - 1.0).abs() < 1e-6, "fade starts at unity");
@@ -1979,6 +1999,22 @@ mod tests {
             "the fade descends"
         );
         assert_eq!(env.gain_at(48_000), 0.0, "the −inf knee lands at silence");
+
+        // Carrier chain (precomp audio): the precomp layer's −6 dB multiplies
+        // the inner layer's −6 dB — two static links stay a constant product.
+        let mut carried = job(Property::fixed(-6.0), 0.0);
+        carried.carriers = vec![(Property::fixed(-6.0), 0.0)];
+        let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
+        assert!(env.is_none());
+        assert!(
+            (g - 0.251_19).abs() < 1e-3,
+            "gains multiply through the chain"
+        );
+        // An animated carrier envelopes the whole chain.
+        let mut fading_carrier = job(Property::fixed(0.0), 0.0);
+        fading_carrier.carriers = vec![(fade, 0.0)];
+        let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
+        assert!(env.is_some(), "an animated carrier forces the envelope");
     }
 
     /// The delivery-preset table is spec (docs/06 §7.5): frame, codec, and

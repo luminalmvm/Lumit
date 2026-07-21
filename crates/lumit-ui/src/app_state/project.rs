@@ -93,6 +93,11 @@ impl AppState {
         self.path = path;
         self.dirty = dirty;
         self.comp_counter = 0;
+        // The shell restores this project's saved session (open tabs,
+        // playhead, selection) on its next frame — and even without one it
+        // fronts the first comp, so the Viewer renders immediately instead
+        // of parking on the placeholder until the playhead moves (owner).
+        self.session_restore_pending = true;
     }
 
     pub fn new_project(&mut self) {

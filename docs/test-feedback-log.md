@@ -390,3 +390,26 @@ Four notes relayed by the owner; the tester started on main, then switched to th
   removed. **Deferred, documented**: lane keyframe diamonds / graph editing for Volume await
   the shared PropRow widening (same note as UI-11's flow input rate); fade-in/out commands
   and detach-audio remain docs/09 §6 future work.
+
+## Owner desk-testing, round 2 — 2026-07-21 (pre-merge)
+
+- [x] OD-4 **Loaded project sat on the Viewer placeholder until the playhead moved** — and the
+  owner asked for full session restore. `SavedSession` (open comp tabs, fronted comp, playhead
+  frame, selected layer) persists per project path in egui storage (the timeline-name-w
+  pattern) and is applied by the shell on the first frame after open — with id validation
+  against the document, and a plain first-comp front + render even when no session exists.
+  Twirl states (layer, Transform/Effects/Flow/Audio groups, effect param groups) switched from
+  temp to persisted egui data on stable uuid-keyed ids, so what was open stays open.
+- [x] OD-5 **Precomps were silent** even when the nested comp held audio. `comp_audio_jobs` now
+  walks Precomp layers recursively (cycle-guarded): nested spans map onto the outer timeline
+  and clip to each carrier's own in/out; audible/solo gate per comp scope; and every carrier
+  precomp's Volume joins the job's gain chain (`AudioJob.carriers`), multiplied through
+  `volume_bake` — static chains stay a constant product, any animated link bakes the whole
+  chain to the envelope. Playback, beat detection and export all share the walk. Precomp
+  layers whose nested comp holds audio (recursively) get the Audio group's Volume row; a
+  mixed nested waveform lane is a follow-up.
+- [x] OD-6 **Audio-only layers lose the eye**: a source with no video stream has nothing to
+  show or hide, so its outline row draws no visibility toggle (the speaker leads).
+- [x] OD-7 **Waveform lane now rides a live bar drag**: it reads `move_edit`'s raw in-point
+  during the drag (the same preview the bar itself draws from), so the transients move with
+  the mouse instead of jumping at drop.

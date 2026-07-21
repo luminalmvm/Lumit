@@ -1161,7 +1161,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   about *which* layer a spike belonged to. When a volume is keyframed, the fade is baked into a
   little list of loudness levels every ten milliseconds (a "gain envelope") that both the live
   player and the export mixer read — the same numbers, so what you hear is what you export;
-  changing a volume re-plans the mix instantly, like every other audio edit above.
+  changing a volume re-plans the mix instantly, like every other audio edit above. Precomps
+  carry their sound out with them: a nested comp's audio layers are walked recursively into
+  the same mix (spans mapped onto the outer timeline, mutes and solos respected per comp),
+  and a precomp layer's own Volume scales everything inside it — the gains multiply down the
+  chain, so it has the Volume row too. And a purely-audio layer (a music file) shows no eye
+  in the outline at all: there is no picture to hide.
+- **Your project remembers where you were** — reopening a saved project no longer lands on a
+  blank Viewer waiting for a playhead nudge. Which comp tabs were open, which one was in
+  front, where the playhead sat, which layer was selected, and which twirls were unfurled all
+  come back, and the first frame renders immediately. The mechanism is the same one that
+  remembers the timeline column width: small notes in the app's own settings store, keyed by
+  the project's file path — nothing is written into the project file itself, so sharing a
+  `.lum` never leaks your window arrangement.
 - **Beat detection** (`lumit-audio::beat`) — the groundwork for cutting to the music. It
   slides a short window along the track and, at each step, measures how much *new* energy
   appeared since the last step (the "spectral flux"); a kick or snare makes that number
