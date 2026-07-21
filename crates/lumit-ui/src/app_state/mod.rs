@@ -835,6 +835,11 @@ pub struct AppState {
     /// contain this (case-insensitive) are hidden from the outline. Empty shows
     /// all. A view preference.
     pub timeline_layer_search: String,
+    /// Project panel: show only footage whose file is missing (docs/07 §3.3's
+    /// *Find missing footage*). Reached from the toolbar toggle or a row's
+    /// right-click menu; combines with the search box rather than replacing
+    /// it. A view preference, not project data.
+    pub project_missing_only: bool,
     /// Hide switched-off (invisible) layers from the outline (TL4): the top
     /// row's hide toggle declutters the list to just the live layers. The layers
     /// still render/exist — this is a view filter. Off by default.
@@ -1292,6 +1297,7 @@ impl Default for AppState {
             selected_item: None,
             selected_items: Vec::new(),
             timeline_layer_search: String::new(),
+            project_missing_only: false,
             timeline_hide_invisible: false,
             mask_drag: None,
             tool: ToolMode::default(),

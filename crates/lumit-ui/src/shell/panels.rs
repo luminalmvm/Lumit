@@ -125,6 +125,8 @@ pub(crate) enum PanelAction {
     CompSettings(uuid::Uuid),
     /// Point a missing footage item at its new location (docs/07 §3.3).
     Relink(uuid::Uuid),
+    /// Show only footage whose file is missing (docs/07 §3.3).
+    FindMissing,
     Delete(uuid::Uuid),
 }
 
@@ -157,6 +159,56 @@ pub(crate) fn project_panel(
         ui.data_mut(|d| d.insert_temp(search_id, query.clone()));
     }
     let needle = query.trim().to_lowercase();
+
+    // Which items are missing right now (docs/07 §3.3). Resolved once per
+    // frame so the tree recursion never touches the media registry.
+    #[cfg(feature = "media")]
+    let missing: std::collections::HashSet<uuid::Uuid> = app
+        .media
+        .map
+        .iter()
+        .filter(|(_, s)| matches!(s, crate::app_state::media::MediaStatus::Missing))
+        .map(|(id, _)| *id)
+        .collect();
+    #[cfg(not(feature = "media"))]
+    let missing: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
+
+    // The missing-only toggle sits beside the search box, and only appears
+    // when something IS missing — a healthy project never shows a control
+    // whose whole job is to list problems it does not have.
+    if !missing.is_empty() || app.project_missing_only {
+        ui.horizontal(|ui| {
+            let on = app.project_missing_only;
+            if icon_button(ui, theme, Icon::Unlink, on)
+                .on_hover_text(if on {
+                    "Showing only missing footage — click to show everything"
+                } else {
+                    "Show only missing footage"
+                })
+                .clicked()
+            {
+                app.project_missing_only = !on;
+            }
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} missing file{}",
+                    missing.len(),
+                    if missing.len() == 1 { "" } else { "s" }
+                ))
+                .small()
+                .color(if missing.is_empty() {
+                    theme.text_muted
+                } else {
+                    theme.warning
+                }),
+            );
+        });
+    }
+    let filter = ProjectFilter {
+        needle: &needle,
+        missing_only: app.project_missing_only,
+        missing: &missing,
+    };
 
     project_header(ui, theme, app, &doc, &mut actions, thumb);
     ui.separator();
@@ -233,24 +285,32 @@ pub(crate) fn project_panel(
                     0,
                     &mut actions,
                     &mut visited,
-                    &needle,
+                    &filter,
                 );
             }
-            // A search that hides everything gets a calm note rather than a bare
-            // panel, so it never looks broken (UI-3).
-            if !needle.is_empty() {
+            // A filter that hides everything gets a calm note rather than a
+            // bare panel, so it never looks broken (UI-3). With the
+            // missing-only filter on, an empty result is good news, and says
+            // so — no punishment UI (docs/07 §13).
+            if filter.active() {
                 let mut v = Vec::new();
                 let any = doc
                     .root_items()
                     .into_iter()
-                    .any(|id| subtree_matches(&doc, id, &needle, &mut v));
+                    .any(|id| subtree_matches(&doc, id, &filter, &mut v));
                 if !any {
                     ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new("No items match your search")
-                            .small()
-                            .color(theme.text_muted),
-                    );
+                    let (text, colour) = if app.project_missing_only && needle.is_empty() {
+                        (
+                            "Every file is where the project expects it",
+                            theme.text_muted,
+                        )
+                    } else if app.project_missing_only {
+                        ("No missing files match your search", theme.text_muted)
+                    } else {
+                        ("No items match your search", theme.text_muted)
+                    };
+                    ui.label(egui::RichText::new(text).small().color(colour));
                 }
             }
             // Trailing space so there is always a root drop area.
@@ -291,6 +351,7 @@ pub(crate) fn project_panel(
             PanelAction::MoveTo { item, target } => app.move_item_to_folder(item, target),
             PanelAction::CompSettings(id) => app.open_comp_settings(id),
             PanelAction::Relink(id) => app.relink_item_dialog(id),
+            PanelAction::FindMissing => app.project_missing_only = true,
             PanelAction::Delete(id) => {
                 app.commit(lumit_core::Op::RemoveItem { id });
                 // A deleted comp also loses its Timeline tab (neighbour takes
@@ -676,6 +737,41 @@ pub(crate) fn layer_type_style(
     }
 }
 
+/// What the Project panel is currently showing (docs/07 §3.1 search, §3.3
+/// *Find missing footage*). The two narrow together: with both on, a row must
+/// match the text **and** be missing, which is how you find "that missing clip
+/// with `beach` in its name" in a large project.
+#[derive(Clone, Copy)]
+pub(crate) struct ProjectFilter<'a> {
+    /// Lowercased search text; empty means no text filter.
+    pub needle: &'a str,
+    /// Restrict to footage whose file could not be found.
+    pub missing_only: bool,
+    /// The missing items, resolved once per frame so the tree recursion never
+    /// touches the media registry.
+    pub missing: &'a std::collections::HashSet<uuid::Uuid>,
+}
+
+impl ProjectFilter<'_> {
+    /// Is any filter active? (Nothing on = show the whole tree.)
+    fn active(&self) -> bool {
+        !self.needle.is_empty() || self.missing_only
+    }
+
+    /// Does this item itself pass — ignoring its children?
+    pub(crate) fn matches(&self, item: &lumit_core::model::ProjectItem) -> bool {
+        if !self.needle.is_empty() && !item.name().to_lowercase().contains(self.needle) {
+            return false;
+        }
+        // A folder is never "missing" itself; it earns its place through a
+        // descendant (see `subtree_matches`).
+        if self.missing_only && !self.missing.contains(&item.id()) {
+            return false;
+        }
+        true
+    }
+}
+
 /// Whether `id`'s subtree carries a name matching `needle` (already lowercased
 /// and non-empty). A folder matches when its own name matches or any descendant
 /// does, so the path down to a hit stays visible under the search (UI-3). Cheap:
@@ -683,7 +779,7 @@ pub(crate) fn layer_type_style(
 pub(crate) fn subtree_matches(
     doc: &lumit_core::model::Document,
     id: uuid::Uuid,
-    needle: &str,
+    filter: &ProjectFilter,
     visited: &mut Vec<uuid::Uuid>,
 ) -> bool {
     if visited.contains(&id) {
@@ -692,7 +788,7 @@ pub(crate) fn subtree_matches(
     let Some(item) = doc.item(id) else {
         return false;
     };
-    if item.name().to_lowercase().contains(needle) {
+    if filter.matches(item) {
         return true;
     }
     if let Some(f) = doc.folder(id) {
@@ -701,7 +797,7 @@ pub(crate) fn subtree_matches(
             .children
             .clone()
             .into_iter()
-            .any(|c| subtree_matches(doc, c, needle, visited));
+            .any(|c| subtree_matches(doc, c, filter, visited));
         visited.pop();
         return hit;
     }
@@ -721,7 +817,7 @@ pub(crate) fn item_rows(
     depth: usize,
     actions: &mut Vec<PanelAction>,
     visited: &mut Vec<uuid::Uuid>,
-    needle: &str,
+    filter: &ProjectFilter,
 ) {
     if visited.contains(&id) {
         return; // defensive: malformed folder cycles never hang the panel
@@ -729,12 +825,13 @@ pub(crate) fn item_rows(
     let Some(item) = doc.item(id) else {
         return; // stale child id (deleted item): just don't draw it
     };
-    // Search filter (UI-3): a non-matching subtree is skipped entirely.
-    let searching = !needle.is_empty();
-    let name_match = item.name().to_lowercase().contains(needle);
+    // Filters (UI-3 search, §3.3 missing-only): a subtree with nothing to
+    // show is skipped entirely.
+    let searching = filter.active();
+    let self_match = filter.matches(item);
     if searching {
         let mut v = Vec::new();
-        if !subtree_matches(doc, id, needle, &mut v) {
+        if !subtree_matches(doc, id, filter, &mut v) {
             return;
         }
     }
@@ -816,6 +913,18 @@ pub(crate) fn item_rows(
                 ui.close_menu();
             }
         }
+        if let ProjectItem::Footage(_) = item {
+            if missing && ui.button("Relink…").clicked() {
+                actions.push(PanelAction::Relink(id));
+                ui.close_menu();
+            }
+            // Offered on any footage row, not just a broken one: it is how you
+            // ask "what else is broken?" (docs/07 §3.3).
+            if ui.button("Find missing footage").clicked() {
+                actions.push(PanelAction::FindMissing);
+                ui.close_menu();
+            }
+        }
         if ui.button("Move to root").clicked() {
             actions.push(PanelAction::MoveTo {
                 item: id,
@@ -851,7 +960,12 @@ pub(crate) fn item_rows(
                 visited.push(id);
                 // A folder whose own name matched reveals its whole contents;
                 // otherwise keep filtering, so only the path to a hit shows.
-                let child_needle = if name_match { "" } else { needle };
+                // The missing-only filter is NOT relaxed that way — the point
+                // of it is that every visible row is something to fix.
+                let child_filter = ProjectFilter {
+                    needle: if self_match { "" } else { filter.needle },
+                    ..*filter
+                };
                 for child in f.children.clone() {
                     item_rows(
                         ui,
@@ -862,7 +976,7 @@ pub(crate) fn item_rows(
                         depth + 1,
                         actions,
                         visited,
-                        child_needle,
+                        &child_filter,
                     );
                 }
                 visited.pop();

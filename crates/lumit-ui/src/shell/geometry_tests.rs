@@ -435,3 +435,99 @@ fn civil_from_days_matches_known_calendar_dates() {
     // 1970 is not a leap year (365 days): day 365 rolls into 1971.
     assert_eq!(civil_from_days(365), (1971, 1, 1));
 }
+
+/// docs/07 §3.3 *Find missing footage*: the missing-only filter shows exactly
+/// the broken items and the folders leading to them, narrows further with the
+/// search text, and — unlike the plain search — is never relaxed by a folder
+/// whose own name happens to match.
+#[test]
+fn missing_only_filter_keeps_the_path_to_broken_items() {
+    use crate::shell::panels::{subtree_matches, ProjectFilter};
+    use lumit_core::model::{Folder, FootageItem, MediaRef, ProjectItem};
+    use std::collections::HashSet;
+
+    let footage = |name: &str| {
+        ProjectItem::Footage(FootageItem {
+            id: uuid::Uuid::now_v7(),
+            name: name.into(),
+            extra: serde_json::Map::new(),
+            media: MediaRef {
+                relative_path: name.into(),
+                absolute_path: String::new(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+        })
+    };
+    let mut doc = Document::new();
+    let (gone, here) = (footage("beach gone.mp4"), footage("beach here.mp4"));
+    let (gone_id, here_id) = (gone.id(), here.id());
+    let folder_id = uuid::Uuid::now_v7();
+    doc.items.push(gone);
+    doc.items.push(here);
+    doc.items.push(ProjectItem::Folder(Folder {
+        id: folder_id,
+        name: "Rushes".into(),
+        children: vec![gone_id, here_id],
+        extra: serde_json::Map::new(),
+    }));
+
+    let missing: HashSet<uuid::Uuid> = [gone_id].into_iter().collect();
+    let none: HashSet<uuid::Uuid> = HashSet::new();
+    let shows = |f: &ProjectFilter, id| subtree_matches(&doc, id, f, &mut Vec::new());
+
+    // Missing-only: the broken clip and the folder that leads to it; not the
+    // healthy sibling.
+    let f = ProjectFilter {
+        needle: "",
+        missing_only: true,
+        missing: &missing,
+    };
+    assert!(shows(&f, gone_id), "the missing clip shows");
+    assert!(!shows(&f, here_id), "a healthy clip is filtered out");
+    assert!(shows(&f, folder_id), "its folder shows, as the path to it");
+
+    // The folder's own name matching must NOT reveal healthy children — every
+    // visible row under this filter is something to fix.
+    let f = ProjectFilter {
+        needle: "rushes",
+        missing_only: true,
+        missing: &missing,
+    };
+    assert!(
+        !f.matches(doc.item(here_id).unwrap()),
+        "healthy stays hidden"
+    );
+
+    // The two filters narrow together.
+    let f = ProjectFilter {
+        needle: "gone",
+        missing_only: true,
+        missing: &missing,
+    };
+    assert!(shows(&f, gone_id));
+    let f = ProjectFilter {
+        needle: "nothing-like-this",
+        missing_only: true,
+        missing: &missing,
+    };
+    assert!(!shows(&f, folder_id), "text and missing must BOTH match");
+
+    // Nothing missing: the filter empties the panel (the calm note's case),
+    // while the plain search is unaffected by it.
+    let f = ProjectFilter {
+        needle: "",
+        missing_only: true,
+        missing: &none,
+    };
+    assert!(!shows(&f, folder_id));
+    let f = ProjectFilter {
+        needle: "beach",
+        missing_only: false,
+        missing: &none,
+    };
+    assert!(
+        shows(&f, gone_id) && shows(&f, here_id),
+        "search unaffected"
+    );
+}

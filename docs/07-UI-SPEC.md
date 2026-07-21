@@ -251,9 +251,14 @@ touching the file (K-024):
   (`lumit_media::slate`, drawn at comp size, never a bundled image) in preview *and* export,
   so the mistake cannot hide in a delivered file (K-031). Relinking one item batch-relinks
   every other missing item whose name is found beside the chosen file, in a single undo step,
-  each rebased relative and re-fingerprinted (K-173). Still to build: the *Find missing
-  footage* filter, and a dedicated slate for a file that is present but **unreadable** —
-  that state currently shows the row's "unreadable" note and no picture.
+  each rebased relative and re-fingerprinted (K-173). **Find missing footage** is a toggle
+  beside the search box — shown only while something *is* missing, with a count — and a
+  right-click entry on any footage row; it narrows *with* the search text rather than
+  replacing it, and unlike the plain search it is never widened by a folder whose own name
+  matches, so every visible row is something to fix. An empty result reads "Every file is
+  where the project expects it" rather than an error (§13's no-punishment rule). Still to
+  build: a dedicated slate for a file that is present but **unreadable** — that state shows
+  the row's "unreadable" note and no picture.
 
 ---
 

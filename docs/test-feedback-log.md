@@ -552,4 +552,12 @@ hotkeys, and their absence makes testing feel clunky).
   rebased relative and re-fingerprinted (K-173). Slate frames stay cacheable and keyed on
   the missing state, so a relink retires them. New `Op::SetMediaRef`. Tests: slate geometry
   (4), op undo symmetry, plus the existing suite. Remaining: the *Find missing footage*
-  filter, and an unreadable-file slate (that state shows the row note but no picture).
+  and an unreadable-file slate (that state shows the row note but no picture).
+- [x] TF-38 **Find missing footage** (owner): a toggle beside the Project search — visible
+  only while files *are* missing, with a count — plus a right-click entry on any footage
+  row. Filters the tree to missing items and the folders leading to them; combines with the
+  search text (both must match) and is deliberately NOT relaxed by a matching folder name,
+  since every visible row under it should be something to fix. Empty result reads "Every
+  file is where the project expects it". Threaded as a `ProjectFilter` rather than more
+  loose parameters. Test:
+  `missing_only_filter_keeps_the_path_to_broken_items`.

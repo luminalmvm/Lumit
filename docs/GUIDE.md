@@ -1196,7 +1196,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   same folder, in one undo step — losing a folder of footage is then one dialogue rather
   than twenty. The pattern itself is drawn by arithmetic at whatever size is needed, not
   loaded from a bundled image, so it is crisp at any resolution and adds nothing to the
-  download.
+  download. When something *is* missing, a toggle appears beside the Project panel's search
+  box (and on any footage row's right-click menu) that filters the panel down to just the
+  broken files and the folders leading to them — the "what else is broken?" view. It works
+  alongside the search box rather than replacing it, so you can hunt for one missing clip by
+  name; and when nothing is missing it tells you so plainly instead of showing an empty
+  panel that looks like a fault.
 - **Beat detection** (`lumit-audio::beat`) — the groundwork for cutting to the music. It
   slides a short window along the track and, at each step, measures how much *new* energy
   appeared since the last step (the "spectral flux"); a kick or snare makes that number
