@@ -249,20 +249,36 @@ impl AppState {
             Some(key) => self.comp_frame_cache.contains_key(&key),
             None => true,
         };
+        let elapsed = pb.started.elapsed().as_secs_f64();
+        let frame_dur = 1.0 / fps;
         let step = cached_step(
             next_ready,
-            pb.started.elapsed().as_secs_f64(),
-            1.0 / fps,
+            elapsed,
+            frame_dur,
             pb.smooth,
             cached_audio_streak(fps),
         );
+        let mut audio_playing = step.audio_playing;
 
         if step.advance {
+            // Fixed-timestep pace (tester report): carry the overshoot into
+            // the next frame's window instead of restarting the timer at
+            // "now", which lost up to a UI tick per frame — replay ran slower
+            // than realtime, the audio clock pulled ahead, and the >2-frame
+            // resync yanked it back for ever. A hitch re-anchors (and pauses
+            // audio to rebuild the streak) rather than fast-forwarding.
+            let (carry, continuous) = lumit_eval::schedule::cached_pace_carry(elapsed, frame_dur);
+            let started = Instant::now()
+                .checked_sub(std::time::Duration::from_secs_f64(carry))
+                .unwrap_or_else(Instant::now);
+            if !continuous {
+                audio_playing = false;
+            }
             self.preview_frame = next;
             self.comp_playback = Some(CompPlayback {
-                started: Instant::now(),
+                started,
                 start_frame: next,
-                smooth: step.smooth,
+                smooth: if continuous { step.smooth } else { 0 },
             });
             self.refresh_preview();
         } else {
@@ -282,11 +298,11 @@ impl AppState {
         // Audio follows the picture: play during smooth replay, pause while a
         // frame is awaited, and keep it seeked to the shown frame so a resumed
         // stretch starts in sync.
-        self.sync_cached_audio(comp_id, step.audio_playing, fps);
+        self.sync_cached_audio(comp_id, audio_playing, fps);
 
         // Warm ahead only once we are replaying smoothly (audio playing), so a
         // prefetch never competes with the render we are gated on.
-        if step.audio_playing && self.fill_in_flight.is_none() {
+        if audio_playing && self.fill_in_flight.is_none() {
             if let Some(prefetch) = self.next_playback_prefetch(comp_id, self.preview_frame, wa_end)
             {
                 self.request_fill_frame(comp_id, prefetch);

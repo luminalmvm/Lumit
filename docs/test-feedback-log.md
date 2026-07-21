@@ -325,3 +325,41 @@ Autonomous scope choices this pass: the K-166 kind-implied reach model; per-chan
 normalisation as the reading of "only affect the parts that aren't aligned"; lock's
 enforcement boundary; the four TL2 switches deferred; graph-mode dividers staying
 outline-only so curves stay clean.
+
+# Tester feedback (owner's friend) — 2026-07-21, implementation-audit branch
+
+Four notes relayed by the owner; the tester started on main, then switched to this branch.
+
+- [x] TF-1 **Cached-mode audio lag** (branch-specific: K-171 landed here). Even with every
+  frame cached, audio stuttered; caching in Cached mode then watching in Realtime worked.
+  Root cause: the pace timer restarted at "now" on every advance, discarding the per-frame
+  overshoot (up to one UI tick) — a fully-cached 60 fps comp replayed at ~half speed on 16 ms
+  ticks while the audio engine ran on its own hardware clock; the >2-frame resync then yanked
+  the sound back, for ever. Fix: `lumit_eval::schedule::cached_pace_carry` — the fixed-timestep
+  remainder is carried into the next frame's window (long-run replay pace is exactly realtime);
+  a hitch beyond ~50 ms re-anchors and rebuilds the audio streak instead of fast-forwarding.
+  The redundant "late advance resets the streak" rule in `cached_step` (which punished ordinary
+  tick jitter) is gone — stalls already reset the streak in the not-ready branch. Regression
+  tests: `cached_replay_long_run_pace_is_exactly_realtime` (the old pacing manages ~312 of 600
+  frames in the simulation), `cached_pace_carry_repays_jitter_but_reanchors_on_a_hitch`.
+- [x] TF-2 **An audio track wedges the comp render** (also affects main). An audio file with
+  embedded cover art (mp3/flac/m4a album artwork) exposes the artwork as a video stream with
+  the attached-picture disposition; the probe took it as real video, the preview chased motion
+  frames that do not exist, and the one failed decode job failed the whole comp frame —
+  blocking everything until the layer was hidden. Fix: `probe()` skips attached-picture
+  streams, so such files probe audio-only and take the existing no-index, no-decode path (the
+  audio still plays). Regression test: `probe_audio_with_cover_art_is_audio_only` on a
+  generated FLAC+PNG fixture. **Known boundary left open**: a genuinely corrupt *video* file
+  still fails its comp's frame (deliberately — compositing without the layer and caching that
+  under the frame's content key would poison the cache); surfacing that error visibly instead
+  of retrying is future UI work.
+- [ ] TF-3 **Linux builds + flatpak in CI** — tracked, not started: needs owner decisions
+  (app id, runtime, whether CI minutes are worth it pre-1.0) and a Linux FFmpeg wiring pass.
+- [ ] TF-4 **Decode speed hunch (GOP walk)** — half true, half already done. The decoder
+  already keeps per-item persistent decoders with a sequential fast path (`next_sequential`:
+  playing frame N+1 after N decodes exactly one frame — no re-walk from the keyframe), so
+  ordered playback/cache-fill is not paying the cost the tester suspected. The real gap is
+  random access (scrubbing): walking from the keyframe to frame N decodes the in-between
+  frames and throws them away. The tester's suggestion — cache the walk's byproducts (a "cache
+  frames 10-20" shape) — is sound and tracked as a decode-cache improvement; it trades a
+  little conversion CPU during the walk for free nearby frames afterwards.

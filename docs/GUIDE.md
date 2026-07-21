@@ -1605,7 +1605,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   slower than real time, playback simply slows down to match — you see every frame, just not at
   full speed — and once a stretch is rendered it plays back at true speed from the cache. Sound
   pauses while a frame is being waited for (so it never runs ahead of a frozen picture) and
-  plays during smooth realtime replay. In **Realtime** mode, the opposite trade: the clock never
+  plays during smooth realtime replay. One subtlety a tester caught: the app only gets to move
+  the playhead when the screen refreshes, and refreshes never land exactly on a frame boundary —
+  if the pace timer restarted "from now" at each step, the few spare milliseconds were thrown
+  away every frame, the picture crept along slower than true speed, and the sound (which runs on
+  the audio hardware's own clock) drifted ahead and kept getting yanked back. The fix is the
+  metronome trick (`cached_pace_carry`): the leftover is *carried into the next frame's window*,
+  so over any stretch the picture holds exactly true speed and stays with the sound. A genuine
+  freeze (dragging the window, say) is not "repaid" — the timer re-anchors and sound rejoins
+  after a quarter-second of smooth replay. In **Realtime** mode, the opposite trade: the clock never
   waits, and when frames can't keep up Lumit drops the preview *resolution* to stay in time
   rather than slowing down. The stepping decision — advance, or hold and render, and whether
   sound should be playing — is a plain tested function; the messy wiring (the audio clock, the

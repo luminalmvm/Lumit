@@ -70,6 +70,17 @@ pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
         let par = stream.codecpar();
         match par.codec_type {
             t if t == ffi::AVMEDIA_TYPE_VIDEO && video.is_none() => {
+                // Album artwork embedded in an audio file (mp3 / flac / m4a)
+                // arrives as a video stream carrying the attached-picture
+                // disposition — a single still, not footage. Treating it as
+                // video sent the preview chasing motion frames that do not
+                // exist: the failed decode job failed the whole comp frame,
+                // wedging every comp holding the audio layer (tester report).
+                // Skip it, and the file probes audio-only — the path that
+                // needs no frame index and decodes nothing.
+                if stream.disposition & ffi::AV_DISPOSITION_ATTACHED_PIC as i32 != 0 {
+                    continue;
+                }
                 let rate = stream.avg_frame_rate;
                 video = Some(VideoInfo {
                     width: u32::try_from(par.width).unwrap_or(0),
@@ -105,7 +116,26 @@ pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::index::tests_support::{fixture, garbage_file, truncated_copy, zero_byte_file};
+    use crate::index::tests_support::{
+        audio_with_cover, fixture, garbage_file, truncated_copy, zero_byte_file,
+    };
+
+    /// Regression (tester report): an audio file with embedded cover art
+    /// exposes the artwork as a video stream (attached-picture disposition).
+    /// It must probe as **audio-only** — treating the still as footage made
+    /// the preview chase motion frames that do not exist, and the failed
+    /// decode wedged every comp holding the audio layer.
+    #[test]
+    fn probe_audio_with_cover_art_is_audio_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = audio_with_cover(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        let p = probe(&file).unwrap();
+        assert!(p.audio.is_some(), "the audio stream must survive");
+        assert!(p.video.is_none(), "cover art must not probe as video");
+    }
 
     /// Regression: probing a zero-byte file must return a typed error and
     /// never panic (docs/14-ENGINEERING-RULES.md §4).

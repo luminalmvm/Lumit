@@ -442,16 +442,47 @@ pub fn cached_step(
             audio_playing: smooth >= audio_streak,
         };
     }
-    // Ready and it is time: advance. "On pace" (not a recovered stall) means we
-    // did not wait much beyond one frame — that grows the smooth streak; a late
-    // advance (we had been waiting on a render) resets it.
-    let on_pace = elapsed <= frame_dur * 1.5;
-    let smooth = if on_pace { smooth.saturating_add(1) } else { 0 };
+    // Ready and it is time: advance, and the streak grows. A render stall
+    // resets the streak in the `!next_ready` branch above; how late this tick
+    // happens to land is pace bookkeeping ([`cached_pace_carry`], the
+    // caller's business), not a smoothness verdict — judging it here punished
+    // ordinary UI-tick jitter and kept re-arming the audio gate.
+    let smooth = smooth.saturating_add(1);
     CachedStep {
         advance: true,
         request_next: false,
         smooth,
         audio_playing: smooth >= audio_streak,
+    }
+}
+
+/// The fixed-timestep remainder for Cached-mode pacing: how much of the time
+/// beyond one frame the caller should carry into the next frame's pace
+/// window, and whether the replay is still continuous (`false` = a UI hitch;
+/// re-anchor the timer and rebuild the audio streak instead of
+/// fast-forwarding through the owed frames).
+///
+/// In plain terms: the UI only gets to advance the playhead when a repaint
+/// tick happens, and ticks never land exactly on a frame boundary. If the
+/// pace timer restarts at "now" on every advance, the few milliseconds of
+/// overshoot are thrown away each frame — a fully-cached 60 fps comp on
+/// ~16 ms ticks replayed at roughly HALF speed — while the audio engine kept
+/// its own hardware clock. Sound pulled ahead, the >2-frame resync yanked it
+/// back, over and over: the reported "audio lags even when everything is
+/// cached". Carrying the remainder makes the long-run replay pace exactly
+/// realtime, so picture and sound agree.
+#[must_use]
+pub fn cached_pace_carry(elapsed: f64, frame_dur: f64) -> (f64, bool) {
+    // Tolerate up to 50 ms of overshoot (or one frame, for comps slower than
+    // 20 fps) — a few UI ticks' worth of jitter, briefly repaid by catch-up.
+    // More than that is a hitch — the window was dragged, the app stalled —
+    // and repaying it would fast-forward the picture; re-anchor instead.
+    let slack = frame_dur.max(0.05);
+    let over = (elapsed - frame_dur).max(0.0);
+    if over <= slack {
+        (over, true)
+    } else {
+        (0.0, false)
     }
 }
 
@@ -485,15 +516,66 @@ mod tests {
         let waiting = cached_step(false, fd * 5.0, fd, 50, streak);
         assert!(!waiting.advance && waiting.request_next);
         assert!(!waiting.audio_playing && waiting.smooth == 0);
-        // It arrives (now ready) after a long wait: advance immediately, but as
-        // a recovered stall — the streak stays low, so audio stays paused.
+        // It arrives (now ready) after a long wait: advance immediately. The
+        // stall already reset the streak (above), so this first recovered
+        // advance only starts rebuilding it — audio stays paused until the
+        // streak is earned again.
         let arrived = cached_step(true, fd * 5.0, fd, 0, streak);
         assert!(arrived.advance && !arrived.request_next);
-        assert_eq!(
-            arrived.smooth, 0,
-            "a late advance does not build smoothness"
-        );
+        assert_eq!(arrived.smooth, 1, "recovery starts rebuilding the streak");
         assert!(!arrived.audio_playing);
+    }
+
+    /// Regression (tester report): with every frame cached, replay must hold
+    /// realtime pace long-run. Restarting the pace timer at "now" on each
+    /// advance discarded the per-frame overshoot; on 16 ms ticks a 60 fps
+    /// comp advanced every OTHER tick (~half speed), audio ran ahead on its
+    /// own clock, and the >2-frame resync yanked it back for ever. The carry
+    /// keeps the remainder, so the drift never accumulates.
+    #[test]
+    fn cached_replay_long_run_pace_is_exactly_realtime() {
+        let fd = 1.0 / 60.0;
+        let tick = 0.016; // the UI repaint cadence
+        let streak = cached_audio_streak(60.0);
+        let mut baseline = 0.0; // when the shown frame's pace window opened
+        let mut now = 0.0;
+        let mut smooth = 0;
+        let mut advances = 0u32;
+        for _ in 0..625 {
+            // 10 s of ticks
+            now += tick;
+            let s = cached_step(true, now - baseline, fd, smooth, streak);
+            smooth = s.smooth;
+            if s.advance {
+                let (carry, continuous) = cached_pace_carry(now - baseline, fd);
+                baseline = now - carry; // == baseline + fd while continuous
+                if !continuous {
+                    smooth = 0;
+                }
+                advances += 1;
+            }
+        }
+        // 10 s at 60 fps = 600 frames. The old restart-at-now pacing managed
+        // ~312 here — half speed. Allow one frame of edge slack.
+        assert!((599..=601).contains(&advances), "advances = {advances}");
+    }
+
+    /// The carry itself: ordinary tick jitter is repaid, a hitch is not.
+    #[test]
+    fn cached_pace_carry_repays_jitter_but_reanchors_on_a_hitch() {
+        let fd = 1.0 / 60.0;
+        // Landed 5 ms past the boundary: carry the 5 ms, still continuous.
+        let (carry, cont) = cached_pace_carry(fd + 0.005, fd);
+        assert!(cont && (carry - 0.005).abs() < 1e-9);
+        // Landed exactly on it: nothing to carry.
+        assert_eq!(cached_pace_carry(fd, fd), (0.0, true));
+        // Landed 200 ms late (window drag, app stall): re-anchor, streak over.
+        assert_eq!(cached_pace_carry(0.2, fd), (0.0, false));
+        // A 120 fps comp on 16 ms ticks overshoots by more than a frame every
+        // time — that is the tick cadence, not a hitch (the 50 ms floor).
+        let fd120 = 1.0 / 120.0;
+        let (_, cont) = cached_pace_carry(fd120 + 0.016, fd120);
+        assert!(cont, "sub-tick frame durations must not read as hitches");
     }
 
     #[test]
