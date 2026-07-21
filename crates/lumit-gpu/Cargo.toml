@@ -15,6 +15,11 @@ wgpu = "24"
 [dev-dependencies]
 # The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
 lumit-core = { path = "../lumit-core" }
+# The walking-skeleton proof that the eval executor drives these kernels
+# through the 05 §1.1 trait seams (tests/exec_skeleton.rs). Dev-only: the
+# production dependency direction stays eval-independent-of-gpu.
+lumit-eval = { path = "../lumit-eval" }
+uuid = { version = "1", features = ["v7"] }
 
 [lints]
 workspace = true

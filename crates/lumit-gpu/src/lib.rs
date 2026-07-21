@@ -26,13 +26,27 @@ pub enum GpuError {
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    /// True when the adapter is a CPU rasteriser (Mesa's lavapipe in CI, WARP
+    /// on Windows) rather than real hardware. Only tests read it, and only to
+    /// choose how strict a *bit-exactness* claim may be: two mathematically
+    /// identical shader paths agree to the bit on a given GPU, but fp16
+    /// rounding differs between implementations, so a software rasteriser can
+    /// land a least-significant bit away from hardware. The pixels are still
+    /// checked — within one 8-bit step instead of exactly (see
+    /// `accumulation_still_scene_is_identity_and_moving_scene_smears`).
+    pub software: bool,
 }
 
 impl GpuContext {
     /// Wrap an existing device/queue (eframe's render state — wgpu handles
     /// are internally reference-counted, so cloning shares the one device).
+    /// This is the running application's real display adapter.
     pub fn from_parts(device: wgpu::Device, queue: wgpu::Queue) -> Self {
-        Self { device, queue }
+        Self {
+            device,
+            queue,
+            software: false,
+        }
     }
 
     /// Headless context (tests, future CLI export).
@@ -43,10 +57,18 @@ impl GpuContext {
             ..Default::default()
         }))
         .ok_or(GpuError::NoAdapter)?;
+        let software = matches!(
+            adapter.get_info().device_type,
+            wgpu::DeviceType::Cpu | wgpu::DeviceType::Other
+        );
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
                 .map_err(|e| GpuError::Device(e.to_string()))?;
-        Ok(Self { device, queue })
+        Ok(Self {
+            device,
+            queue,
+            software,
+        })
     }
 }
 

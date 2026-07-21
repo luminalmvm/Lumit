@@ -262,8 +262,22 @@ pub fn snap_to_grid(onsets: &[f64], bpm: f64, tolerance: f64) -> Vec<f64> {
         .collect()
 }
 
+/// Map a user-facing sensitivity percentage (0–100, higher = more beats) to
+/// the peak-picking δ the detector wants (higher δ = fewer beats, so the two
+/// run opposite ways). docs/09-AUDIO.md §5 asks for a 0–100 slider rather than
+/// fixed presets. Anchored so the familiar presets fall on round numbers:
+/// **50 % → δ 1.5** (the old "Standard") and **70 % → δ 1.1** (the old "More
+/// markers"). Linear in between, clamped to the useful δ band [0.5, 2.5].
+#[must_use]
+pub fn delta_from_sensitivity(percent: u8) -> f32 {
+    // δ(p) = 2.5 − 0.02·p : p=0 → 2.5 (sparse), p=50 → 1.5, p=100 → 0.5 (dense).
+    let p = f32::from(percent.min(100));
+    (2.5 - 0.02 * p).clamp(0.5, 2.5)
+}
+
 /// Analyse a mono buffer at `rate` Hz for onsets and tempo. `sensitivity` is
-/// the peak-picking δ (1.5 is a sensible default).
+/// the peak-picking δ (1.5 is a sensible default; see [`delta_from_sensitivity`]
+/// to derive it from a 0–100 slider).
 pub fn analyse_mono(mono: &[f32], rate: u32, sensitivity: f32) -> BeatAnalysis {
     let (window, hop) = window_hop(rate);
     let env_fps = f64::from(rate) / hop as f64;
@@ -286,6 +300,25 @@ pub fn analyse_stereo(interleaved: &[f32], rate: u32, sensitivity: f32) -> BeatA
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sensitivity_maps_to_delta_on_the_familiar_anchors() {
+        // The two old presets land on round slider positions, and higher
+        // sensitivity means a lower δ (more onsets pass the picker).
+        assert!(
+            (delta_from_sensitivity(50) - 1.5).abs() < 1e-6,
+            "50% is Standard"
+        );
+        assert!(
+            (delta_from_sensitivity(70) - 1.1).abs() < 1e-6,
+            "70% is More markers"
+        );
+        assert!(delta_from_sensitivity(100) < delta_from_sensitivity(0));
+        // Clamped to the useful band, and monotonic non-increasing.
+        assert!((delta_from_sensitivity(0) - 2.5).abs() < 1e-6);
+        assert!((delta_from_sensitivity(100) - 0.5).abs() < 1e-6);
+        assert!(delta_from_sensitivity(200) >= 0.5); // over-range is clamped, not panicking
+    }
 
     /// A mono buffer of short percussive clicks at the given beat times, over
     /// faint noise (deterministic pseudo-random so tests are reproducible).

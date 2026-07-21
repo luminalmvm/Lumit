@@ -54,7 +54,14 @@ Preview (`Realiser::accumulate_below`) and export both render the N sub-frames t
 `render_below_at`, average at `1/N`, then blend the average against the frame-time below by
 `mix` (a second `accumulate` of two weighted layers `1 − mix` and `mix` — a linear interpolation
 the additive pass gives exactly). Still-scene bit-identity holds because `1/N` is exact in fp16
-for a power-of-two N and the N copies sum back exactly; a moving scene smears. `sample_temporally`
+for a power-of-two N and the N copies sum back exactly; a moving scene smears. **On real
+hardware**, which is the qualification the identity needs: Linux CI runs the pixel tests
+against Mesa's lavapipe, a CPU rasteriser, and there the sum-and-divide path lands up to one
+8-bit step from the single composite — an implementation may round fp16 intermediates
+differently from a GPU, and nothing in the spec forbids it. The test keeps the exact
+assertion on hardware adapters and checks "within one step" on software ones
+(`GpuContext::software`); a genuinely broken accumulation — wrong weights, dropped samples —
+fails both. `sample_temporally`
 (K-132) is honoured through the shared `below_draws_at`/`build_comp_draws_at` threading. It takes
 precedence over Posterize when an adjustment somehow carries both (one temporal re-render per
 adjustment in v1).

@@ -70,6 +70,28 @@ impl AppState {
         (dur * comp.frame_rate.fps()).round().max(1.0) as usize
     }
 
+    /// Total frame count of whatever the Viewer is previewing — the active comp
+    /// or a footage item — or 0 when nothing is. Mirrors the transport bar's
+    /// own length lookup so the `End` key and the scrubber agree.
+    pub fn preview_frame_count(&self) -> usize {
+        if let Some(comp_id) = self.preview_comp {
+            return self
+                .store
+                .snapshot()
+                .comp(comp_id)
+                .map(|c| self.comp_frame_count(c))
+                .unwrap_or(0);
+        }
+        #[cfg(feature = "media")]
+        if let Some(id) = self.preview_item {
+            use crate::app_state::media::MediaStatus;
+            if let Some(MediaStatus::Ready { frames, .. }) = self.media.map.get(&id) {
+                return *frames;
+            }
+        }
+        0
+    }
+
     /// Build and send the batch request rendering `preview_comp` at the
     /// current frame (evaluator v0: footage layers, no retime yet).
     #[cfg(feature = "media")]
@@ -170,7 +192,7 @@ impl AppState {
         }
     }
 
-    /// Which of a comp's frames are in Kura's RAM tier — the timeline cache
+    /// Which of a comp's frames are in Nebula's RAM tier — the timeline cache
     /// bar (docs/07-UI-SPEC.md: cache bars). Memoised per (document, cache
     /// state, quality); comps beyond 2 400 frames skip the bar for now (the
     /// evaluator's incremental bar replaces this scan — S-budget debt).
@@ -310,7 +332,7 @@ impl AppState {
         // A real request supersedes any background fill in flight.
         self.fill_in_flight = None;
 
-        // Kura warm path: a cached frame presents without decoding anything —
+        // Nebula warm path: a cached frame presents without decoding anything —
         // but a live value edit needs this frame's decoded per-layer pixels
         // (`last_comp`) to re-composite, and a cache hit never populates them, so
         // skip the shortcut and decode while one is active (owner bug — see
@@ -379,13 +401,38 @@ impl AppState {
     }
 
     pub fn target_width_for(&self, natural_w: u32) -> Option<u32> {
+        // Realtime mode (K-030, docs/06 §6.5): the adaptive controller's tier
+        // drives the divisor and overrides the manual/Auto picker. Draft (scrub)
+        // still caps on top for instant feedback.
+        #[cfg(feature = "media")]
+        let (auto_res, divisor) = if self.preview_realtime {
+            (false, self.realtime_ctrl.tier())
+        } else {
+            (self.preview_auto_res, self.preview_divisor)
+        };
+        #[cfg(not(feature = "media"))]
+        let (auto_res, divisor) = (self.preview_auto_res, self.preview_divisor);
         decode_target_width(
             natural_w,
             self.preview_draft,
-            self.preview_auto_res,
+            auto_res,
             self.last_display_scale,
-            self.preview_divisor,
+            divisor,
         )
+    }
+
+    /// The preview divisor Realtime mode is currently applying — the adaptive
+    /// controller's tier (1 = Full … 4 = Quarter). 1 when built without media.
+    /// Surfaced in the viewer bar so the adaptation is visible.
+    pub fn realtime_tier(&self) -> u32 {
+        #[cfg(feature = "media")]
+        {
+            self.realtime_ctrl.tier()
+        }
+        #[cfg(not(feature = "media"))]
+        {
+            1
+        }
     }
 
     /// Recursively collect decode jobs for a comp at time `t`
@@ -663,9 +710,6 @@ impl AppState {
     #[cfg(feature = "media")]
     pub fn request_preview_audio(&mut self) {
         let Some(id) = self.preview_item else { return };
-        if self.audio_cache.contains_key(&id) {
-            return;
-        }
         let has_audio = matches!(
             self.media.map.get(&id),
             Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
@@ -678,15 +722,72 @@ impl AppState {
             return;
         };
         let path = PathBuf::from(&f.media.absolute_path);
+        self.request_footage_audio(id, path);
+    }
+
+    /// Decode one footage item's whole audio into the byte-budgeted cache on
+    /// a background thread — the single decode both the footage preview and
+    /// the comp mix draw from. Idempotent: cached, in-flight and failed items
+    /// are not re-spawned (the failed set is cleared when a project is
+    /// opened, so a fixed path gets retried after a relink-and-reopen).
+    #[cfg(feature = "media")]
+    pub fn request_footage_audio(&mut self, id: Uuid, path: PathBuf) {
+        if self.audio_cache.contains_key(&id)
+            || self.audio_decode_pending.contains(&id)
+            || self.audio_decode_failed.contains(&id)
+        {
+            return;
+        }
         let rate = self
             .ensure_audio_engine()
             .map(|e| e.device_rate())
             .unwrap_or(48_000);
+        self.audio_decode_pending.insert(id);
         let tx = self.audio_tx.clone();
         std::thread::spawn(move || {
             let result = lumit_media::audio::decode_all(&path, rate).map_err(|e| e.to_string());
             let _ = tx.send((id, result));
         });
+    }
+
+    /// Resize the decoded-audio budget (Settings → Performance).
+    #[cfg(feature = "media")]
+    pub fn set_audio_cache_budget(&mut self, bytes: usize) {
+        self.audio_cache.set_budget(bytes);
+    }
+
+    /// The `(source duration s, peaks)` strip of one item's decoded audio
+    /// for the per-layer Waveform lane (K-172): 2048 (min,max) buckets over
+    /// the whole source, computed once from the shared decoded buffer and
+    /// memoised. `None` until the decode lands — this kicks it off, so the
+    /// lane fills in on a later frame.
+    #[cfg(feature = "media")]
+    pub fn item_waveform(
+        &mut self,
+        item: Uuid,
+        path: &std::path::Path,
+    ) -> Option<super::ItemWaveform> {
+        if let Some(w) = self.item_waveforms.get(&item) {
+            return Some(w.clone());
+        }
+        let hit = self
+            .audio_cache
+            .get(&item)
+            .map(|c| std::sync::Arc::clone(&c.0));
+        match hit {
+            Some(buf) => {
+                let frames = buf.samples.len() / 2;
+                let dur = frames as f64 / f64::from(buf.rate.max(1));
+                let peaks = lumit_audio::mix::waveform_peaks(&buf.samples, 2048);
+                let strip = std::sync::Arc::new((dur, peaks));
+                self.item_waveforms.insert(item, strip.clone());
+                Some(strip)
+            }
+            None => {
+                self.request_footage_audio(item, path.to_owned());
+                None
+            }
+        }
     }
 
     #[cfg(feature = "media")]
@@ -707,55 +808,178 @@ impl AppState {
     #[cfg(feature = "media")]
     pub fn poll_audio(&mut self) {
         while let Ok((id, result)) = self.audio_rx.try_recv() {
+            self.audio_decode_pending.remove(&id);
             match result {
                 Ok(buffer) => {
-                    self.audio_cache.insert(id, std::sync::Arc::new(buffer));
+                    let cached = super::CachedAudio(std::sync::Arc::new(buffer));
+                    if !self.audio_cache.insert(id, cached) {
+                        // Larger than the whole audio budget: don't retry every
+                        // frame; the comp mix falls back to decode-per-bake.
+                        self.audio_decode_failed.insert(id);
+                        self.error = Some(
+                            "audio is larger than the audio cache budget (Settings → Performance)"
+                                .into(),
+                        );
+                    }
                 }
-                Err(e) => self.error = Some(format!("audio decode: {e}")),
+                Err(e) => {
+                    self.audio_decode_failed.insert(id);
+                    self.error = Some(format!("audio decode: {e}"));
+                }
             }
         }
     }
 
-    /// Every audible footage layer with an audio stream, as mixdown jobs:
-    /// the one list playback, beat detection, and export all mix from, so
-    /// they always hear the same comp.
+    /// Every audible footage layer with an audio stream, as mixdown jobs —
+    /// including the ones inside Precomp layers, walked recursively with
+    /// their times mapped onto the outer comp and their carriers' Volumes
+    /// chained (owner: a precomp holding music was silent). The one list
+    /// playback, beat detection, and export all mix from, so they always
+    /// hear the same comp.
     #[cfg(feature = "media")]
     pub fn comp_audio_jobs(
         &self,
         doc: &lumit_core::model::Document,
         comp: &lumit_core::model::Composition,
     ) -> Vec<crate::export::AudioJob> {
-        use lumit_core::model::LayerKind;
         let mut jobs = Vec::new();
-        for layer in &comp.layers {
-            if !layer.switches.audible {
-                continue;
-            }
-            let LayerKind::Footage { item, .. } = &layer.kind else {
-                continue;
-            };
-            let has_audio = matches!(
-                self.media.map.get(item),
-                Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
-            );
-            if !has_audio {
-                continue;
-            }
-            let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
-                continue;
-            };
-            jobs.push(crate::export::AudioJob {
-                path: PathBuf::from(&f.media.absolute_path),
-                in_s: layer.in_point.0.to_f64(),
-                out_s: layer.out_point.0.to_f64(),
-                offset_s: layer.start_offset.0.to_f64(),
-            });
-        }
+        let mut visited = vec![comp.id];
+        self.collect_audio_jobs(
+            doc,
+            comp,
+            0.0,
+            (f64::NEG_INFINITY, f64::INFINITY),
+            &[],
+            &mut visited,
+            &mut jobs,
+        );
         jobs
     }
 
+    /// Whether a comp holds any audio — its own footage layers' streams, or
+    /// (recursively) a nested Precomp's. Gates the Audio group on Precomp
+    /// layers in the outline. `visited` must already contain the comp ids on
+    /// the walk so a comp cycle terminates.
+    #[cfg(feature = "media")]
+    pub fn comp_has_audio(
+        &self,
+        doc: &lumit_core::model::Document,
+        comp_id: Uuid,
+        visited: &mut Vec<Uuid>,
+    ) -> bool {
+        use lumit_core::model::LayerKind;
+        let Some(comp) = doc.comp(comp_id) else {
+            return false;
+        };
+        for layer in &comp.layers {
+            match &layer.kind {
+                LayerKind::Footage { item, .. } => {
+                    if matches!(
+                        self.media.map.get(item),
+                        Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
+                    ) {
+                        return true;
+                    }
+                }
+                LayerKind::Precomp { comp: nested } if !visited.contains(nested) => {
+                    visited.push(*nested);
+                    if self.comp_has_audio(doc, *nested, visited) {
+                        return true;
+                    }
+                    visited.pop();
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// The recursive walk behind [`Self::comp_audio_jobs`]. `base_s` is where
+    /// this comp's time 0 sits on the OUTER timeline; `window` is the span the
+    /// carrier chain leaves audible (each Precomp layer's own in/out clips its
+    /// contents); `carriers` are the enclosing Precomp layers' Volumes with
+    /// their outer-time offsets, applied on top of each job's own.
+    #[cfg(feature = "media")]
+    #[allow(clippy::too_many_arguments)]
+    fn collect_audio_jobs(
+        &self,
+        doc: &lumit_core::model::Document,
+        comp: &lumit_core::model::Composition,
+        base_s: f64,
+        window: (f64, f64),
+        carriers: &[(lumit_core::anim::Property, f64)],
+        visited: &mut Vec<Uuid>,
+        jobs: &mut Vec<crate::export::AudioJob>,
+    ) {
+        use lumit_core::model::LayerKind;
+        // Solo silences non-soloed audio exactly as it hides non-soloed video
+        // (docs/09 §6), scoped per comp: a solo inside a precomp isolates
+        // within that precomp. Mirrors the video gate in draws.rs / export.rs.
+        let any_solo = lumit_core::model::any_solo(comp);
+        for layer in &comp.layers {
+            if !layer.switches.audible || (any_solo && !layer.switches.solo) {
+                continue;
+            }
+            // This layer's span mapped to the outer timeline, clipped to what
+            // the carrier chain leaves audible.
+            let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
+            let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
+            if out_s <= in_s {
+                continue;
+            }
+            let offset_s = layer.start_offset.0.to_f64() + base_s;
+            match &layer.kind {
+                LayerKind::Footage { item, .. } => {
+                    let has_audio = matches!(
+                        self.media.map.get(item),
+                        Some(media::MediaStatus::Ready { probe, .. }) if probe.audio.is_some()
+                    );
+                    if !has_audio {
+                        continue;
+                    }
+                    let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
+                        continue;
+                    };
+                    jobs.push(crate::export::AudioJob {
+                        item: *item,
+                        path: PathBuf::from(&f.media.absolute_path),
+                        in_s,
+                        out_s,
+                        offset_s,
+                        volume: layer.volume_db.clone(),
+                        carriers: carriers.to_vec(),
+                    });
+                }
+                LayerKind::Precomp { comp: nested_id } => {
+                    if visited.contains(nested_id) {
+                        continue; // cycle guard
+                    }
+                    let Some(nested) = doc.comp(*nested_id) else {
+                        continue;
+                    };
+                    // The precomp layer's own Volume joins the carrier chain,
+                    // evaluated in its own layer time (outer t − offset).
+                    let mut chain = carriers.to_vec();
+                    chain.push((layer.volume_db.clone(), offset_s));
+                    visited.push(*nested_id);
+                    self.collect_audio_jobs(
+                        doc,
+                        nested,
+                        offset_s,
+                        (in_s, out_s),
+                        &chain,
+                        visited,
+                        jobs,
+                    );
+                    visited.pop();
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Kick off background decode + mix of a comp's audio layers into one
-    /// buffer (Hibiki mix): the layers' sound laid on the comp timeline at
+    /// buffer (Pulsar mix): the layers' sound laid on the comp timeline at
     /// their offsets and trims. The result arrives via [`Self::poll_comp_audio`].
     /// A comp with no audio layers prepares nothing (it plays on the fallback
     /// wall clock).
@@ -775,62 +999,93 @@ impl AppState {
         }
         let duration_s = comp.duration.0.to_f64();
         let sig = super::audio_jobs_signature(&jobs, duration_s);
-        // Remember the bake we are about to spawn so [`Self::sync_comp_audio`]
-        // does not re-spawn the same one every frame while it decodes.
-        self.audio_preparing = Some((comp_id, sig));
-        let tx = self.comp_audio_tx.clone();
-        std::thread::spawn(move || {
-            let samples = crate::export::mixdown(&jobs, rate, duration_s);
-            let _ = tx.send((comp_id, sig, lumit_media::AudioBuffer { rate, samples }));
-        });
-    }
-
-    /// Drain any finished comp-audio mix; load it into the engine and, if the
-    /// comp is playing, start its clock at the current playhead. A delivery that
-    /// no longer matches the current comp (a newer edit changed it, or it fell
-    /// silent) is dropped — [`Self::sync_comp_audio`] handles the current state.
-    #[cfg(feature = "media")]
-    pub fn poll_comp_audio(&mut self) {
-        let mut newest = None;
-        while let Ok(msg) = self.comp_audio_rx.try_recv() {
-            newest = Some(msg);
-        }
-        let Some((comp_id, sig, buffer)) = newest else {
-            return;
-        };
         if self.audio_preparing == Some((comp_id, sig)) {
-            self.audio_preparing = None;
+            return; // this exact mix is already on its way
         }
-        if self.preview_comp != Some(comp_id) {
-            return; // the user moved on before the mix finished
+        // Live-mix path: build a MixPlan over the byte-budgeted decoded-audio
+        // cache and hand it to the engine *now* — a solo/mute/move/trim edit
+        // is heard on the next audio callback, no re-bake. Missing items kick
+        // off their one shared decode and the plan waits (sync_comp_audio
+        // retries every frame); items the cache cannot hold (decode failed,
+        // or larger than the whole budget) drop to the legacy bake thread.
+        let mut clips: Vec<lumit_audio::mix::PlacedClip> = Vec::with_capacity(jobs.len());
+        let mut fallback = false;
+        let mut waiting = false;
+        let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
+        for job in &jobs {
+            if self.audio_decode_failed.contains(&job.item) {
+                fallback = true;
+                break;
+            }
+            // Clone the Arc out first so the cache borrow ends before the
+            // &mut self decode request below.
+            let hit = self
+                .audio_cache
+                .get(&job.item)
+                .filter(|c| c.0.rate == rate)
+                .map(|c| std::sync::Arc::clone(&c.0));
+            match hit {
+                Some(buffer) => {
+                    if let Some((start_frame, src_start, len)) = lumit_audio::mix::place_on_timeline(
+                        job.in_s,
+                        job.out_s,
+                        job.offset_s,
+                        buffer.samples.len() / 2,
+                        rate,
+                    ) {
+                        // Volume (docs/09 §6): static → a constant gain;
+                        // keyframed → a control-rate envelope. Same bake the
+                        // export mixdown uses, so playback == export.
+                        let (gain, envelope) =
+                            crate::export::volume_bake(job, start_frame, len, rate);
+                        clips.push(lumit_audio::mix::PlacedClip {
+                            buffer,
+                            start_frame,
+                            src_start,
+                            len,
+                            gain,
+                            envelope: envelope.map(std::sync::Arc::new),
+                        });
+                    }
+                }
+                None => {
+                    waiting = true;
+                    self.request_footage_audio(job.item, job.path.clone());
+                }
+            }
         }
-        let doc = self.store.snapshot();
-        let Some(comp) = doc.comp(comp_id) else {
+        let tx = self.comp_audio_tx.clone();
+        if fallback {
+            self.audio_preparing = Some((comp_id, sig));
+            std::thread::spawn(move || {
+                let samples = crate::export::mixdown(&jobs, rate, duration_s);
+                let _ = tx.send(super::CompAudioMsg::Baked(
+                    comp_id,
+                    sig,
+                    lumit_media::AudioBuffer { rate, samples },
+                ));
+            });
+            return;
+        }
+        if waiting {
+            return; // decodes in flight; retried next frame with the cache warmer
+        }
+        // Apply the plan immediately, preserving the clock and play state when
+        // this comp's audio is already running (the instant-edit contract).
+        let plan = std::sync::Arc::new(lumit_audio::mix::MixPlan {
+            clips,
+            total_frames,
+        });
+        let start_s = self.preview_frame as f64 / comp.frame_rate.fps().max(1.0);
+        let playing = self.comp_playback.is_some();
+        let already = self.audio_loaded_comp == Some(comp_id);
+        let Some(engine) = self.ensure_audio_engine() else {
             return;
         };
-        let fps = comp.frame_rate.fps().max(1.0);
-        // Only present a mix that still matches the document: an edit made while
-        // it decoded (mute, move, trim, delete) supersedes it, and `sync` will
-        // have queued the right one. Dropping it here avoids a stale blip.
-        let current = self.comp_audio_jobs(&doc, comp);
-        if current.is_empty()
-            || super::audio_jobs_signature(&current, comp.duration.0.to_f64()) != sig
-        {
-            return;
-        }
-        if self.ensure_audio_engine().is_none() {
-            return;
-        }
-        let playing = self.comp_playback.is_some();
-        let start_s = self.preview_frame as f64 / fps;
-        // Waveform peaks for the timeline (computed before the buffer moves
-        // into the engine); ~2 buckets per horizontal pixel is plenty.
-        self.comp_waveform = Some((
-            comp_id,
-            lumit_audio::mix::waveform_peaks(&buffer.samples, 2048),
-        ));
-        if let Some(engine) = &self.audio_engine {
-            engine.load(std::sync::Arc::new(buffer));
+        if already {
+            engine.swap_plan(std::sync::Arc::clone(&plan));
+        } else {
+            engine.load_plan(std::sync::Arc::clone(&plan));
             engine.seek_seconds(start_s);
             if playing {
                 engine.play();
@@ -838,7 +1093,58 @@ impl AppState {
         }
         self.audio_loaded_comp = Some(comp_id);
         self.audio_loaded_sig = Some(sig);
-        self.audio_loaded = None; // the footage buffer is no longer loaded
+        self.audio_loaded = None;
+        // (The comp-wide waveform strip once computed off the plan here is
+        // gone, K-172: each audio layer's Waveform twirl draws its own item's
+        // peaks instead.)
+    }
+
+    /// Drain background comp-audio deliveries. Waveform peaks (the live-mix
+    /// path — the plan itself was applied instantly by
+    /// [`Self::prepare_comp_audio`]) just update the strip; a legacy baked
+    /// mix loads into the engine. Deliveries that no longer match the
+    /// document are dropped — [`Self::sync_comp_audio`] keeps state current.
+    #[cfg(feature = "media")]
+    pub fn poll_comp_audio(&mut self) {
+        while let Ok(msg) = self.comp_audio_rx.try_recv() {
+            match msg {
+                super::CompAudioMsg::Baked(comp_id, sig, buffer) => {
+                    if self.audio_preparing == Some((comp_id, sig)) {
+                        self.audio_preparing = None;
+                    }
+                    if self.preview_comp != Some(comp_id) {
+                        continue; // the user moved on before the bake finished
+                    }
+                    let doc = self.store.snapshot();
+                    let Some(comp) = doc.comp(comp_id) else {
+                        continue;
+                    };
+                    let fps = comp.frame_rate.fps().max(1.0);
+                    // Only present a bake that still matches the document.
+                    let current = self.comp_audio_jobs(&doc, comp);
+                    if current.is_empty()
+                        || super::audio_jobs_signature(&current, comp.duration.0.to_f64()) != sig
+                    {
+                        continue;
+                    }
+                    if self.ensure_audio_engine().is_none() {
+                        continue;
+                    }
+                    let playing = self.comp_playback.is_some();
+                    let start_s = self.preview_frame as f64 / fps;
+                    if let Some(engine) = &self.audio_engine {
+                        engine.load(std::sync::Arc::new(buffer));
+                        engine.seek_seconds(start_s);
+                        if playing {
+                            engine.play();
+                        }
+                    }
+                    self.audio_loaded_comp = Some(comp_id);
+                    self.audio_loaded_sig = Some(sig);
+                    self.audio_loaded = None;
+                }
+            }
+        }
     }
 
     /// Keep the loaded comp mix in step with the document. Runs each UI frame:
@@ -847,20 +1153,38 @@ impl AppState {
     /// comp that has fallen silent (every audio layer muted or deleted) is
     /// unloaded so it stops sounding. This is what makes muting, moving,
     /// trimming and deleting an audio layer take effect on playback (GEN-4).
+    ///
+    /// Two comps can need managing: the fronted one, and the one whose mix is
+    /// actually sitting in the engine when they differ — editing inside a
+    /// fronted precomp stales the PARENT's loaded mix (its jobs walk the
+    /// nesting), and gating on the fronted tab alone left that mix playing
+    /// stale (owner: a mute inside the precomp changed nothing).
     #[cfg(feature = "media")]
     pub fn sync_comp_audio(&mut self) {
-        let Some(comp_id) = self.preview_comp else {
-            return;
-        };
-        // Only manage audio we are already responsible for: a mix loaded for
-        // this comp, a bake in flight for it, or active playback of it. This
-        // keeps a comp with audio from decoding just because it is on screen.
-        let managing = self.comp_playback.is_some()
-            || self.audio_loaded_comp == Some(comp_id)
-            || self.audio_preparing.map(|(c, _)| c) == Some(comp_id);
-        if !managing {
-            return;
+        if let Some(comp_id) = self.preview_comp {
+            // Only manage audio we are already responsible for: a mix loaded
+            // for this comp, a bake in flight for it, or active playback of
+            // it. This keeps a comp with audio from decoding just because it
+            // is on screen.
+            let managing = self.comp_playback.is_some()
+                || self.audio_loaded_comp == Some(comp_id)
+                || self.audio_preparing.map(|(c, _)| c) == Some(comp_id);
+            if managing {
+                self.sync_one_comp_audio(comp_id);
+            }
         }
+        // The engine's mix is always managed, fronted or not.
+        if let Some(loaded) = self.audio_loaded_comp {
+            if self.preview_comp != Some(loaded) {
+                self.sync_one_comp_audio(loaded);
+            }
+        }
+    }
+
+    /// Reconcile one comp's audio against the document (the body of
+    /// [`Self::sync_comp_audio`], per comp).
+    #[cfg(feature = "media")]
+    fn sync_one_comp_audio(&mut self, comp_id: Uuid) {
         let doc = self.store.snapshot();
         let Some(comp) = doc.comp(comp_id) else {
             return;
@@ -882,11 +1206,10 @@ impl AppState {
                 self.audio_loaded_comp = None;
                 self.audio_loaded_sig = None;
                 self.audio_preparing = None;
-                self.comp_waveform = None;
                 // Keep any in-progress playback going on the wall clock, from
                 // the current playhead (the audio clock has just gone away).
                 if self.comp_playback.is_some() {
-                    self.comp_playback = Some((Instant::now(), self.preview_frame));
+                    self.comp_playback = Some(CompPlayback::start(self.preview_frame));
                 }
             }
             super::AudioSync::Rebake(_) => {

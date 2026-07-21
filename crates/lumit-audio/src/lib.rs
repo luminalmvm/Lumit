@@ -26,11 +26,30 @@ pub enum AudioError {
 }
 
 struct Shared {
-    /// Swapped rarely (on load); the callback try-reads and plays silence on miss.
-    buffer: RwLock<Option<Arc<AudioBuffer>>>,
+    /// The live mix plan (a plain buffer loads as a one-clip plan). Swapped on
+    /// load and on audio edits; the callback try-reads and plays silence on a
+    /// miss. Swapping the plan — not re-baking a buffer — is what makes
+    /// solo/mute/move audible on the next callback (docs/09 §6).
+    plan: RwLock<Option<Arc<mix::MixPlan>>>,
     /// Frames consumed since load/seek — the clock.
     playhead: AtomicUsize,
     playing: AtomicBool,
+}
+
+/// A whole buffer as a trivial plan: one clip covering the strip 1:1.
+fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
+    let frames = buffer.frames();
+    Arc::new(mix::MixPlan {
+        clips: vec![mix::PlacedClip {
+            buffer,
+            start_frame: 0,
+            src_start: 0,
+            len: frames,
+            gain: 1.0,
+            envelope: None,
+        }],
+        total_frames: frames,
+    })
 }
 
 pub struct AudioEngine {
@@ -51,7 +70,7 @@ impl AudioEngine {
         let channels = usize::from(config.channels());
 
         let shared = Arc::new(Shared {
-            buffer: RwLock::new(None),
+            plan: RwLock::new(None),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
         });
@@ -88,14 +107,26 @@ impl AudioEngine {
 
     /// Install a buffer (decoded at `device_rate`) and rewind.
     pub fn load(&self, buffer: Arc<AudioBuffer>) {
+        self.load_plan(plan_of(buffer));
+    }
+
+    /// Install a live mix plan (clips decoded at `device_rate`) and rewind.
+    pub fn load_plan(&self, plan: Arc<mix::MixPlan>) {
         self.shared.playing.store(false, Ordering::Relaxed);
-        *self.shared.buffer.write() = Some(buffer);
+        *self.shared.plan.write() = Some(plan);
         self.shared.playhead.store(0, Ordering::Relaxed);
+    }
+
+    /// Replace the plan **without touching the clock or play state** — the
+    /// instant-edit path: solo, mute, move and trim swap the plan mid-playback
+    /// and are heard on the next callback (~10 ms), no re-bake, no seek.
+    pub fn swap_plan(&self, plan: Arc<mix::MixPlan>) {
+        *self.shared.plan.write() = Some(plan);
     }
 
     pub fn unload(&self) {
         self.shared.playing.store(false, Ordering::Relaxed);
-        *self.shared.buffer.write() = None;
+        *self.shared.plan.write() = None;
         self.shared.playhead.store(0, Ordering::Relaxed);
     }
 
@@ -125,26 +156,28 @@ impl AudioEngine {
 }
 
 /// The realtime callback: lock-free reads, no allocation, silence on any miss.
+/// Each frame is summed live from the plan's covering clips
+/// ([`mix::MixPlan::frame_at`] — a handful of multiply-adds per frame), which
+/// is what lets an edit swap the plan and be heard immediately.
 fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
     out.fill(0.0);
     if !shared.playing.load(Ordering::Relaxed) {
         return;
     }
-    let Some(guard) = shared.buffer.try_read() else {
-        return; // buffer being swapped: one quiet buffer beats a glitch
+    let Some(guard) = shared.plan.try_read() else {
+        return; // plan being swapped: one quiet buffer beats a glitch
     };
-    let Some(buffer) = guard.as_ref() else {
+    let Some(plan) = guard.as_ref() else {
         return;
     };
-    let total = buffer.frames();
+    let total = plan.total_frames;
     let mut playhead = shared.playhead.load(Ordering::Relaxed);
     for frame in out.chunks_exact_mut(channels) {
         if playhead >= total {
             shared.playing.store(false, Ordering::Relaxed);
             break;
         }
-        let l = buffer.samples[playhead * 2];
-        let r = buffer.samples[playhead * 2 + 1];
+        let (l, r) = plan.frame_at(playhead);
         frame[0] = l;
         if channels > 1 {
             frame[1] = r;
@@ -178,7 +211,7 @@ mod tests {
     #[test]
     fn callback_plays_advances_clock_and_stops_at_end() {
         let shared = Shared {
-            buffer: RwLock::new(Some(tone(1000))),
+            plan: RwLock::new(Some(plan_of(tone(1000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
         };
@@ -209,12 +242,44 @@ mod tests {
     #[test]
     fn callback_handles_mono_output() {
         let shared = Shared {
-            buffer: RwLock::new(Some(tone(100))),
+            plan: RwLock::new(Some(plan_of(tone(100)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
         };
         let mut out = vec![0.0f32; 64];
         fill(&shared, &mut out, 1);
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 64);
+    }
+
+    /// The instant-edit path: swapping the plan mid-play keeps the clock and
+    /// the play state, and the very next callback reads the new plan's
+    /// samples — this is what makes solo/mute/move audible immediately.
+    #[test]
+    fn swapping_the_plan_keeps_the_clock_and_changes_the_sound() {
+        let shared = Shared {
+            plan: RwLock::new(Some(plan_of(tone(1000)))),
+            playhead: AtomicUsize::new(0),
+            playing: AtomicBool::new(true),
+        };
+        let mut out = vec![0.0f32; 128 * 2];
+        fill(&shared, &mut out, 2);
+        assert_eq!(shared.playhead.load(Ordering::Relaxed), 128);
+
+        // "Mute": swap in a silent plan (no clips) of the same length.
+        *shared.plan.write() = Some(Arc::new(mix::MixPlan {
+            clips: Vec::new(),
+            total_frames: 1000,
+        }));
+        fill(&shared, &mut out, 2);
+        assert_eq!(
+            shared.playhead.load(Ordering::Relaxed),
+            256,
+            "the clock kept running across the swap"
+        );
+        assert!(shared.playing.load(Ordering::Relaxed));
+        assert!(
+            out.iter().all(|s| *s == 0.0),
+            "the new plan is heard immediately"
+        );
     }
 }

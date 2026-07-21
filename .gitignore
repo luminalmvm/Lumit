@@ -3,3 +3,5 @@ autosaves/
 *.kir-cache/
 target/
 .claude/
+# Generated from Cargo.lock by CI for the offline Flatpak build (packaging/flatpak).
+packaging/flatpak/cargo-sources.json

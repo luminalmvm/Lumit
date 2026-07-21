@@ -719,8 +719,16 @@ impl Theme {
         // egui turns its own developer overlays on in debug builds — the
         // orange "unaligned" lines on sub-pixel widget edges are the visible
         // one. Lumit's debug build is what the owner runs day to day, so the
-        // dev overlay is just noise here; switch it off.
-        style.debug.show_unaligned = false;
+        // dev overlay is just noise here; switch it off. `Style::debug` is
+        // itself `#[cfg(debug_assertions)]` in egui (it does not exist in
+        // release builds), so this line must be gated to match — otherwise a
+        // release build fails to compile (the field is gone). CI builds debug
+        // only, which is why this slipped through; the release-check job added
+        // alongside this fix guards against it recurring.
+        #[cfg(debug_assertions)]
+        {
+            style.debug.show_unaligned = false;
+        }
 
         ctx.set_style(style);
     }

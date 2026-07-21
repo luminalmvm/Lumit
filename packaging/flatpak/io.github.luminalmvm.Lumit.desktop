@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Lumit
+GenericName=Motion Graphics Editor
+Comment=Motion graphics and compositing, built for speed
+Exec=lumit %f
+Icon=io.github.luminalmvm.Lumit
+Terminal=false
+Categories=AudioVideo;AudioVideoEditing;Video;Graphics;
+Keywords=motion;graphics;compositing;video;editor;animation;
+StartupNotify=true
+StartupWMClass=lumit

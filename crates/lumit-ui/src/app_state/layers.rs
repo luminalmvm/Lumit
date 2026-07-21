@@ -33,6 +33,7 @@ impl AppState {
                 media: MediaRef {
                     relative_path: name,
                     absolute_path: file.to_string_lossy().into_owned(),
+                    fingerprint: None,
                     extra: serde_json::Map::new(),
                 },
             };
@@ -120,6 +121,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -173,6 +175,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -261,6 +264,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -309,6 +313,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -358,6 +363,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -416,6 +422,46 @@ impl AppState {
         self.preview_comp = Some(comp_id);
         #[cfg(feature = "media")]
         self.refresh_preview();
+    }
+
+    /// Move or trim the selected layer's span relative to the playhead — the
+    /// `[` / `]` / `Alt+[` / `Alt+]` keys (docs/07-UI-SPEC §4.7). The span maths
+    /// live in `lumit_core::ops::edit_layer_span` (tested there); this resolves
+    /// the selection and playhead and commits the resulting `SetLayerSpan`. A
+    /// degenerate trim (one that would invert the span) is silently ignored.
+    pub fn edit_selected_layer_span(&mut self, edit: lumit_core::ops::SpanEdit) {
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            return;
+        };
+        let Some(layer_id) = self.selected_layer else {
+            return;
+        };
+        let doc = self.store.snapshot();
+        let Some(comp) = doc.comp(comp_id) else {
+            return;
+        };
+        let Ok(playhead) = comp.frame_rate.time_of_frame(self.preview_frame as i64) else {
+            return;
+        };
+        let Some(layer) = comp.layers.iter().find(|l| l.id == layer_id) else {
+            return;
+        };
+        let Some((in_point, out_point, start_offset)) = lumit_core::ops::edit_layer_span(
+            layer.in_point,
+            layer.out_point,
+            layer.start_offset,
+            playhead,
+            edit,
+        ) else {
+            return;
+        };
+        self.commit(Op::SetLayerSpan {
+            comp: comp_id,
+            layer: layer_id,
+            in_point,
+            out_point,
+            start_offset,
+        });
     }
 
     /// Delete the selected layer from its composition (one undoable step).
@@ -987,6 +1033,7 @@ impl AppState {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),

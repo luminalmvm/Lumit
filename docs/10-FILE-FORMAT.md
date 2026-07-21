@@ -38,7 +38,10 @@ Rules:
 - Times: rational pairs `[num, den]` — never floats ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)).
 - Colours: linear-light float arrays `[r, g, b, a]`.
 - Ids: UUIDv7 strings; every cross-reference is an id.
-- Enums: lower-kebab strings (`"blend-mode": "screen"`).
+- Enums: serialised by serde's default — a unit variant is its PascalCase name
+  (`"channel": "Alpha"`, `"blend": "Screen"`); a data-carrying variant is externally tagged
+  (`{ "Footage": { … } }`). Variants are additive, so old readers keep unknown ones via the
+  preservation rule below.
 - **Unknown-field preservation is mandatory**: a reader keeps any keys it does not
   understand and writes them back out. This is what lets shared projects and newer/older
   Lumit versions coexist (K-065) and lets Placeholder effects round-trip
@@ -98,7 +101,7 @@ Rules, binding:
 
 ## 5. Presets and templates
 
-- **Preset** (`.kfxpreset`): a JSON document containing an effect stack (or single effect,
+- **Preset** (`.lumfx`): a JSON document containing an effect stack (or single effect,
   or animation) parameter tree — same conventions as project.json, shareable, importable by
   drag onto a layer.
 - **Template**: an ordinary `.lum` file opened in "new from template" mode (copy, not

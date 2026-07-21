@@ -72,6 +72,14 @@ impl AppState {
                     .spawn_probe(f.id, PathBuf::from(&f.media.absolute_path));
             }
         }
+        // A different project means different footage: drop the decoded-audio
+        // cache and let failed decodes retry against the new paths.
+        #[cfg(feature = "media")]
+        {
+            self.audio_cache.clear();
+            self.audio_decode_pending.clear();
+            self.audio_decode_failed.clear();
+        }
         self.journal = JournalFile::for_document(doc.id);
         self.selected_comp = doc.items.iter().find_map(|i| match i {
             ProjectItem::Composition(c) => Some(c.id),
@@ -85,6 +93,11 @@ impl AppState {
         self.path = path;
         self.dirty = dirty;
         self.comp_counter = 0;
+        // The shell restores this project's saved session (open tabs,
+        // playhead, selection) on its next frame — and even without one it
+        // fronts the first comp, so the Viewer renders immediately instead
+        // of parking on the placeholder until the playhead moves (owner).
+        self.session_restore_pending = true;
     }
 
     pub fn new_project(&mut self) {
@@ -95,8 +108,12 @@ impl AppState {
     }
 
     pub fn open_dialog(&mut self) {
+        // `.lum` is the project extension (docs/10 §1). `kir` is the
+        // pre-rename leftover (K-083): saves made while the save dialog
+        // still carried it landed as `<name>.lum.kir`, so the open filter
+        // keeps showing those until none remain in the wild.
         let picked = rfd::FileDialog::new()
-            .add_filter("Lumit project", &["kir"])
+            .add_filter("Lumit project", &["lum", "kir"])
             .pick_file();
         if let Some(path) = picked {
             self.open_path(&path);
@@ -152,11 +169,34 @@ impl AppState {
         }
     }
 
+    /// The recovery dialogue's third option (docs/10-FILE-FORMAT.md §4): open an
+    /// autosave instead of replaying the interrupted journal or taking the last
+    /// save. Choosing the autosave abandons the interrupted session's journal, so
+    /// it is cleared; the loaded state is marked dirty (it differs from the last
+    /// on-disk save) and keeps the project's own path, so the next Save writes
+    /// back to the project rather than the autosave file.
+    pub fn recover_from_autosave(&mut self, autosave_path: PathBuf) {
+        let Some(pending) = self.pending_recovery.take() else {
+            return;
+        };
+        if let Some(journal) = JournalFile::for_document(pending.doc.id) {
+            let _ = journal.clear();
+        }
+        match lumit_project::open(&autosave_path) {
+            Ok((doc, _manifest)) => self.install(doc, Some(pending.path), true),
+            Err(e) => self.error = Some(e.to_string()),
+        }
+    }
+
     pub fn save(&mut self) {
         let path = match &self.path {
             Some(p) => Some(p.clone()),
+            // Save writes `.lum` only (docs/10 §1). The filter used to say
+            // `kir` (the pre-rename extension, K-083), and Windows appends
+            // the filter's extension to a name that lacks it — which turned
+            // the default into `untitled.lum.kir`.
             None => rfd::FileDialog::new()
-                .add_filter("Lumit project", &["kir"])
+                .add_filter("Lumit project", &["lum"])
                 .set_file_name("untitled.lum")
                 .save_file(),
         };

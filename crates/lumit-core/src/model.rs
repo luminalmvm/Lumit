@@ -17,11 +17,48 @@ impl LinearColour {
     pub const BLACK: Self = Self([0.0, 0.0, 0.0, 1.0]);
 }
 
-/// Media reference (docs/03-DATA-MODEL.md §3). Fingerprint lands in slice 4.
+/// A content fingerprint for a media file (docs/10-FILE-FORMAT.md §2): file
+/// size, last-modified time, and a hash of the head and tail bytes. Used by the
+/// relink resolver's step 3 to recognise a moved or renamed file by its content
+/// rather than its path. This is the stored *data*; lumit-project computes it
+/// from a file on disk (`fingerprint_path`).
+///
+/// The hash samples the head and tail rather than the whole file — cheap even
+/// for multi-gigabyte footage, and enough to tell distinct captures apart. It
+/// is a relink *heuristic*, not a cryptographic identity: two files that differ
+/// only deep in the middle can collide, which is why relink stays advisory
+/// (path first, and the resolver confirms candidates before adopting them).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fingerprint {
+    /// File length in bytes.
+    pub size: u64,
+    /// Last-modified time, whole seconds since the Unix epoch (advisory: a copy
+    /// keeps the content but may not keep the mtime, so matching ignores it).
+    pub mtime_secs: i64,
+    /// Lowercase hex blake3 of `size ++ head ++ tail` (see the type note).
+    pub head_tail_hash: String,
+}
+
+impl Fingerprint {
+    /// Whether two fingerprints likely denote the same file *content*. Size and
+    /// the head/tail hash must agree; mtime is ignored, so a file copied or
+    /// moved to a new location (fresh mtime) still matches its original.
+    #[must_use]
+    pub fn likely_same_content(&self, other: &Fingerprint) -> bool {
+        self.size == other.size && self.head_tail_hash == other.head_tail_hash
+    }
+}
+
+/// Media reference (docs/03-DATA-MODEL.md §3).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaRef {
     pub relative_path: String,
     pub absolute_path: String,
+    /// Content fingerprint for path-independent relink (docs/10 §2). Optional:
+    /// absent in projects saved before fingerprints, and skipped on save when
+    /// unset, so those files round-trip byte-for-byte unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<Fingerprint>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -951,6 +988,13 @@ pub struct Layer {
     /// organisational — never rendered into the picture.
     #[serde(default)]
     pub label: u8,
+    /// Per-layer audio volume in dB (docs/09 §6): 0 = unity, boostable to
+    /// +50; −100 and below reads as −∞ (exact silence). Animatable like any
+    /// property — fades are volume keyframes. Only heard on layers whose
+    /// source carries an audio stream; harmless everywhere else. Never feeds
+    /// the frame cache key (sound, not pixels).
+    #[serde(default = "Property::zero")]
+    pub volume_db: Property,
     #[serde(default)]
     pub blend: BlendMode,
     /// Masks gate the layer's alpha before effects/transform
@@ -1481,6 +1525,7 @@ mod tests {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: crate::anim::Property::zero(),
             blend: BlendMode::Normal,
             masks: Vec::new(),
             effects: Vec::new(),

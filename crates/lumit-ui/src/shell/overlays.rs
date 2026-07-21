@@ -601,7 +601,10 @@ pub(crate) fn viewer_footage(
                         app.toggle_play();
                     }
                     let labels = ["Full", "Half", "Third", "Quarter"];
-                    let current = if app.preview_auto_res {
+                    let current = if app.preview_realtime {
+                        // Realtime: the adaptive tier is what's actually decoding.
+                        labels[(app.realtime_tier() as usize - 1).min(3)]
+                    } else if app.preview_auto_res {
                         "Auto"
                     } else {
                         labels[(app.preview_divisor as usize - 1).min(3)]
@@ -627,6 +630,21 @@ pub(crate) fn viewer_footage(
                             }
                         }
                     });
+                    // Cached vs Realtime preview mode (K-030, docs/06 §6.5): in
+                    // Realtime, playback resolution adapts to load (dropping under
+                    // strain, recovering slowly) and overrides the picker above;
+                    // Cached decodes at the chosen resolution.
+                    if ui
+                        .selectable_label(app.preview_realtime, "Realtime")
+                        .on_hover_text(
+                            "Adapt resolution to playback load — drops under strain, \
+                             recovers slowly (overrides the resolution picker)",
+                        )
+                        .clicked()
+                    {
+                        app.preview_realtime = !app.preview_realtime;
+                        app.refresh_preview();
+                    }
                     ui.label(
                         egui::RichText::new(format!("{:.0}%", app.last_display_scale * 100.0))
                             .monospace()

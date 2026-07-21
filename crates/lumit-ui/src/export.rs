@@ -53,14 +53,57 @@ pub struct ItemInfo {
 }
 
 /// One audio-bearing layer, as the export thread needs it: where its file
-/// is, its comp-timeline span, and its start offset (the same trio the
-/// preview mix uses, so export audio matches playback).
+/// is, its comp-timeline span, its start offset, and its Volume (the same
+/// set the preview mix uses, so export audio matches playback).
 #[derive(Clone, PartialEq)]
 pub struct AudioJob {
+    /// The footage item the audio comes from — the key the preview path uses
+    /// to reuse an already-decoded buffer instead of re-decoding the file.
+    pub item: uuid::Uuid,
     pub path: PathBuf,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
+    /// The layer's Volume property (dB, docs/09 §6): static values become a
+    /// constant gain; keyframed ones bake to a control-rate envelope.
+    pub volume: lumit_core::anim::Property,
+    /// Enclosing Precomp layers' Volumes (outermost first), each with the
+    /// outer-comp time where its layer time 0 sits — a precomp's Volume
+    /// scales everything inside it, so the gains multiply through the chain.
+    pub carriers: Vec<(lumit_core::anim::Property, f64)>,
+}
+
+/// Bake one job's Volume — its own dB property times every carrier's — for
+/// its placed span: `(constant gain, envelope)`. All-static chains are
+/// exactly their constant product (envelope None); any animated link bakes
+/// the whole chain to a ~10 ms control-rate curve, each property sampled in
+/// its own layer time (`lt = comp time − its offset`).
+pub fn volume_bake(
+    job: &AudioJob,
+    start_frame: i64,
+    len: usize,
+    rate: u32,
+) -> (f32, Option<lumit_audio::mix::GainEnvelope>) {
+    let gain_at = |t: f64| {
+        let mut g = lumit_audio::mix::db_to_gain(job.volume.value_at(t - job.offset_s));
+        for (prop, off) in &job.carriers {
+            g *= lumit_audio::mix::db_to_gain(prop.value_at(t - off));
+        }
+        g
+    };
+    let animated = job.volume.is_animated() || job.carriers.iter().any(|(p, _)| p.is_animated());
+    if !animated {
+        return (gain_at(0.0), None);
+    }
+    let stride = (rate / 100).max(1);
+    let n = len / stride as usize + 2;
+    let points = (0..n)
+        .map(|p| {
+            let t = (start_frame + p as i64 * i64::from(stride)) as f64 / f64::from(rate);
+            gain_at(t)
+        })
+        .collect();
+    (1.0, Some(lumit_audio::mix::GainEnvelope { stride, points }))
 }
 
 /// Delivery presets (docs/06-RENDER-PIPELINE.md §7.5): frame, codec, and
@@ -73,6 +116,7 @@ pub enum ExportPreset {
     #[default]
     Custom,
     Youtube1080p60,
+    Youtube1440p60,
     Youtube4k60,
     Vertical1080p60,
 }
@@ -94,9 +138,10 @@ pub const PRESET_AUDIO_BPS: i64 = 320_000;
 pub const EXPORT_AUDIO_RATE: u32 = 48_000;
 
 impl ExportPreset {
-    pub const ALL: [ExportPreset; 4] = [
+    pub const ALL: [ExportPreset; 5] = [
         ExportPreset::Custom,
         ExportPreset::Youtube1080p60,
+        ExportPreset::Youtube1440p60,
         ExportPreset::Youtube4k60,
         ExportPreset::Vertical1080p60,
     ];
@@ -105,6 +150,7 @@ impl ExportPreset {
         match self {
             ExportPreset::Custom => "Custom (comp size)",
             ExportPreset::Youtube1080p60 => "YouTube 1080p60",
+            ExportPreset::Youtube1440p60 => "YouTube 1440p60",
             ExportPreset::Youtube4k60 => "YouTube 4K60",
             ExportPreset::Vertical1080p60 => "Vertical 1080×1920p60",
         }
@@ -122,6 +168,14 @@ impl ExportPreset {
                 codec: VideoCodec::H264,
                 target_bps: 16_000_000,
                 peak_bps: 24_000_000,
+            }),
+            // HEVC (H.264 fallback), VBR 25 target / 35 peak — YouTube's
+            // 1440p60 band (docs/06 §7.5).
+            ExportPreset::Youtube1440p60 => Some(PresetParams {
+                size: (2560, 1440),
+                codec: VideoCodec::Hevc,
+                target_bps: 25_000_000,
+                peak_bps: 35_000_000,
             }),
             // HEVC (the ladder falls back to x265 when no hardware offers
             // it), VBR 45 target / 60 peak — YouTube's 2160p60 band.
@@ -146,6 +200,7 @@ impl ExportPreset {
         match self {
             ExportPreset::Custom => "export.mp4",
             ExportPreset::Youtube1080p60 => "youtube-1080p60.mp4",
+            ExportPreset::Youtube1440p60 => "youtube-1440p60.mp4",
             ExportPreset::Youtube4k60 => "youtube-4k60.mp4",
             ExportPreset::Vertical1080p60 => "vertical-1080x1920.mp4",
         }
@@ -221,6 +276,30 @@ pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
                 .map(|buf| (buf, job))
         })
         .collect();
+    let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
+        decoded.iter().map(|(b, j)| (b, *j)).collect();
+    mix_decoded(&borrowed, rate, duration_s)
+}
+
+/// As [`mixdown`], but over already-decoded buffers — the preview path's
+/// fast re-mix (docs/09 §2 lazy-decode direction): a solo/mute/trim edit
+/// re-sums cached buffers in seconds instead of re-decoding whole files.
+pub fn mixdown_prepared(
+    decoded: &[(std::sync::Arc<lumit_media::AudioBuffer>, AudioJob)],
+    rate: u32,
+    duration_s: f64,
+) -> Vec<f32> {
+    let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
+        decoded.iter().map(|(b, j)| (b.as_ref(), j)).collect();
+    mix_decoded(&borrowed, rate, duration_s)
+}
+
+/// The shared placement + sum over decoded buffers (each already at `rate`).
+fn mix_decoded(
+    decoded: &[(&lumit_media::AudioBuffer, &AudioJob)],
+    rate: u32,
+    duration_s: f64,
+) -> Vec<f32> {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
     let placements: Vec<lumit_audio::mix::PlacedAudio> = decoded
         .iter()
@@ -232,10 +311,12 @@ pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
                 buf.samples.len() / 2,
                 rate,
             )?;
+            let (gain, envelope) = volume_bake(job, start_frame, len, rate);
             Some(lumit_audio::mix::PlacedAudio {
                 start_frame,
                 samples: &buf.samples[src_start * 2..(src_start + len) * 2],
-                gain: 1.0,
+                gain,
+                envelope,
             })
         })
         .collect();
@@ -1875,6 +1956,66 @@ pub fn item_infos(
 mod tests {
     use super::*;
     use lumit_media::encode::VideoCodec;
+
+    /// Volume baking (docs/09 §6): a static Volume is exactly its constant
+    /// gain; a keyframed fade becomes a control-rate envelope sampled in
+    /// layer time (comp time − start offset), falling to true zero at the
+    /// −inf knee.
+    #[test]
+    fn volume_bake_static_gain_and_animated_envelope() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::Rational;
+        let job = |volume: Property, offset_s: f64| AudioJob {
+            item: uuid::Uuid::nil(),
+            path: PathBuf::new(),
+            in_s: 0.0,
+            out_s: 10.0,
+            offset_s,
+            volume,
+            carriers: Vec::new(),
+        };
+        let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
+        assert!(env.is_none(), "static volume needs no envelope");
+        assert!((g - 0.501_19).abs() < 1e-3);
+
+        // A 1 s fade 0 dB → −inf, on a layer whose time 0 sits at comp 1 s.
+        let key = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let fade = Property {
+            animation: Animation::Keyframed(vec![key(0, 0.0), key(1, -100.0)]),
+            extra: serde_json::Map::new(),
+        };
+        // Placed at comp 1 s (start_frame 48000), offset 1 s: layer time 0..1.
+        let (g, env) = volume_bake(&job(fade.clone(), 1.0), 48_000, 48_000, 48_000);
+        assert_eq!(g, 1.0);
+        let env = env.unwrap();
+        assert!((env.gain_at(0) - 1.0).abs() < 1e-6, "fade starts at unity");
+        assert!(
+            env.gain_at(0) > env.gain_at(24_000) && env.gain_at(24_000) > env.gain_at(47_500),
+            "the fade descends"
+        );
+        assert_eq!(env.gain_at(48_000), 0.0, "the −inf knee lands at silence");
+
+        // Carrier chain (precomp audio): the precomp layer's −6 dB multiplies
+        // the inner layer's −6 dB — two static links stay a constant product.
+        let mut carried = job(Property::fixed(-6.0), 0.0);
+        carried.carriers = vec![(Property::fixed(-6.0), 0.0)];
+        let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
+        assert!(env.is_none());
+        assert!(
+            (g - 0.251_19).abs() < 1e-3,
+            "gains multiply through the chain"
+        );
+        // An animated carrier envelopes the whole chain.
+        let mut fading_carrier = job(Property::fixed(0.0), 0.0);
+        fading_carrier.carriers = vec![(fade, 0.0)];
+        let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
+        assert!(env.is_some(), "an animated carrier forces the envelope");
+    }
 
     /// The delivery-preset table is spec (docs/06 §7.5): frame, codec, and
     /// bitrates are pinned here so a stray edit can't silently change what

@@ -19,6 +19,23 @@ pub struct JournalEntry {
     pub inverse: Op,
 }
 
+/// The most undo steps kept in memory (docs/14 §5 compaction story, below).
+/// Generous enough that no real editing session reaches it, small enough that
+/// the history can never grow without bound. Editing software the owner knows
+/// keeps far fewer (After Effects defaults to 32); 500 is a comfortable margin.
+pub const MAX_UNDO_DEPTH: usize = 500;
+
+/// The in-memory undo/redo history.
+///
+/// **Compaction story (docs/14 §5, mandatory for long-lived collections):**
+/// `undo` is bounded to [`MAX_UNDO_DEPTH`] entries. Each [`DocumentStore::commit`]
+/// that pushes past the cap drops the *oldest* entries — you can no longer undo
+/// past that point, but the current document is untouched (dropping history
+/// never changes state). `redo` needs no separate bound: it only ever holds
+/// entries moved off `undo` by [`DocumentStore::undo`], so it can never exceed
+/// the undo depth, and any [`DocumentStore::commit`] clears it outright.
+/// Crash recovery does not rely on this history — lumit-project appends every
+/// op to an on-disk journal as it is committed, independently of the cap.
 #[derive(Default)]
 struct Journal {
     undo: Vec<JournalEntry>,
@@ -50,6 +67,13 @@ impl DocumentStore {
         let inverse = apply(&mut doc, &op)?;
         journal.undo.push(JournalEntry { op, inverse });
         journal.redo.clear();
+        // Compaction (docs/14 §5): keep the history bounded by dropping the
+        // oldest steps once it exceeds the cap. Dropping history never changes
+        // the document — only how far back an undo can reach.
+        if journal.undo.len() > MAX_UNDO_DEPTH {
+            let overflow = journal.undo.len() - MAX_UNDO_DEPTH;
+            journal.undo.drain(..overflow);
+        }
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
         Ok(arc)
@@ -90,8 +114,10 @@ impl DocumentStore {
         Ok(Some(arc))
     }
 
-    /// Ops applied since the store was created (or last save), oldest first —
-    /// the crash-recovery log persisted by lumit-project (slice 3).
+    /// The retained undo ops, oldest first (at most [`MAX_UNDO_DEPTH`] after
+    /// compaction). Crash recovery does not read this — lumit-project appends
+    /// each op to an on-disk journal as it is committed — so the cap dropping
+    /// old entries here never loses a recoverable edit.
     pub fn journal_ops(&self) -> Vec<Op> {
         self.journal
             .lock()
@@ -152,6 +178,7 @@ mod tests {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: crate::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
@@ -175,6 +202,7 @@ mod tests {
             media: MediaRef {
                 relative_path: "footage/capture.mp4".into(),
                 absolute_path: "/tmp/capture.mp4".into(),
+                fingerprint: None,
                 extra: serde_json::Map::new(),
             },
         };
@@ -233,6 +261,63 @@ mod tests {
 
         while store.redo().unwrap().is_some() {}
         assert_eq!(json(&store.snapshot()), final_json, "redo-all == final");
+    }
+
+    /// docs/14 §5: the undo history is compacted to [`MAX_UNDO_DEPTH`], and
+    /// compaction never changes the document — it only limits how far back an
+    /// undo can reach. Fails without the cap (the history would grow to every
+    /// committed op).
+    #[test]
+    fn undo_history_is_capped_without_changing_the_document() {
+        // Store and oracle must share one initial document (Document::new()
+        // mints a fresh id each call, so two of them never compare equal).
+        let initial = Document::new();
+        let mut oracle = initial.clone();
+        let store = DocumentStore::new(initial);
+        let comp = test_comp();
+        let comp_id = comp.id;
+        // One AddItem, then well over the cap of cheap renames.
+        let ops: Vec<Op> = std::iter::once(Op::AddItem {
+            index: 0,
+            item: Box::new(ProjectItem::Composition(comp)),
+        })
+        .chain((0..(MAX_UNDO_DEPTH + 50)).map(|i| Op::RenameItem {
+            id: comp_id,
+            name: format!("edit {i}"),
+        }))
+        .collect();
+
+        // Oracle: apply every op straight through, no store, no cap.
+        for op in &ops {
+            apply(&mut oracle, op).unwrap();
+        }
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+
+        // Compaction dropped old history but not state: the store matches the
+        // full replay exactly.
+        assert_eq!(json(&store.snapshot()), json(&oracle));
+        // The history is bounded, not the full run of commits.
+        assert_eq!(store.journal_ops().len(), MAX_UNDO_DEPTH);
+
+        // Every retained step undoes cleanly and no more (no underflow/panic).
+        let mut undos = 0;
+        while store.undo().unwrap().is_some() {
+            undos += 1;
+        }
+        assert_eq!(undos, MAX_UNDO_DEPTH, "exactly the retained steps undo");
+        // Redo is transitively bounded — all of it redoes back to the full state.
+        let mut redos = 0;
+        while store.redo().unwrap().is_some() {
+            redos += 1;
+        }
+        assert_eq!(redos, MAX_UNDO_DEPTH);
+        assert_eq!(
+            json(&store.snapshot()),
+            json(&oracle),
+            "redo-all returns to the full state"
+        );
     }
 
     #[test]
@@ -430,6 +515,7 @@ mod tests {
                     matte: None,
                     parent: None,
                     label: 0,
+                    volume_db: crate::anim::Property::zero(),
                     blend: Default::default(),
                     masks: Vec::new(),
                     effects: Vec::new(),
@@ -560,6 +646,7 @@ mod tests {
                     matte: None,
                     parent: None,
                     label: 0,
+                    volume_db: crate::anim::Property::zero(),
                     blend: Default::default(),
                     masks: Vec::new(),
                     effects: Vec::new(),
@@ -758,6 +845,29 @@ mod tests {
         assert_eq!(lock_label(&store), (true, 0));
         store.undo().unwrap();
         assert_eq!(lock_label(&store), (false, 0));
+
+        // Volume (docs/09 §6) round-trips like the transform properties.
+        let vol = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .volume_db
+                .value_at(0.0)
+        };
+        store
+            .commit(Op::SetLayerVolume {
+                comp: comp_id,
+                layer: layer_id,
+                animation: Animation::Static(-12.0),
+            })
+            .unwrap();
+        assert_eq!(vol(&store), -12.0);
+        store.undo().unwrap();
+        assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
 
         store.undo().unwrap();
         store.undo().unwrap();

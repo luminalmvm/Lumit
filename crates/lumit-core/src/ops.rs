@@ -206,6 +206,15 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Replace a layer's audio Volume animation (docs/09 §6; same
+    /// coarse-grained shape as SetTransformProperty, for the same
+    /// invertibility reason). Valid on any layer; only heard where the
+    /// source has an audio stream.
+    SetLayerVolume {
+        comp: Uuid,
+        layer: Uuid,
+        animation: Animation,
+    },
     /// Replace a Footage layer's Retime map (None = play at source rate).
     SetLayerRetime {
         comp: Uuid,
@@ -715,6 +724,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 animation: previous,
             })
         }
+        Op::SetLayerVolume {
+            comp,
+            layer,
+            animation,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.volume_db.animation, animation.clone());
+            Ok(Op::SetLayerVolume {
+                comp: *comp,
+                layer: *layer,
+                animation: previous,
+            })
+        }
         Op::SetLayerRetime {
             comp,
             layer,
@@ -831,5 +858,98 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 name: previous,
             })
         }
+    }
+}
+
+/// The four playhead-relative span edits behind the `[` / `]` / `Alt+[` / `Alt+]`
+/// keys (docs/07-UI-SPEC.md §4.7), the After Effects convention:
+/// - `MoveIn`/`MoveOut` **move** the whole layer so its in/out point lands on the
+///   playhead, keeping its duration and the source content shown at that edge
+///   (in, out and `start_offset` all shift by the same delta);
+/// - `TrimIn`/`TrimOut` **trim** one edge to the playhead, leaving `start_offset`
+///   (so the same source frames still play at the same comp times).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpanEdit {
+    MoveIn,
+    MoveOut,
+    TrimIn,
+    TrimOut,
+}
+
+/// Compute the new `(in_point, out_point, start_offset)` for a [`SpanEdit`] at
+/// `playhead`, all in comp time. Returns `None` when the edit would be
+/// degenerate (a trim that would leave `out_point <= in_point`) or overflow.
+#[must_use]
+pub fn edit_layer_span(
+    in_point: CompTime,
+    out_point: CompTime,
+    start_offset: CompTime,
+    playhead: CompTime,
+    edit: SpanEdit,
+) -> Option<(CompTime, CompTime, CompTime)> {
+    match edit {
+        SpanEdit::MoveIn => {
+            let d = playhead.delta(in_point).ok()?; // playhead − in
+            Some((
+                playhead,
+                out_point.add_dur(d).ok()?,
+                start_offset.add_dur(d).ok()?,
+            ))
+        }
+        SpanEdit::MoveOut => {
+            let d = playhead.delta(out_point).ok()?; // playhead − out
+            Some((
+                in_point.add_dur(d).ok()?,
+                playhead,
+                start_offset.add_dur(d).ok()?,
+            ))
+        }
+        SpanEdit::TrimIn => (playhead < out_point).then_some((playhead, out_point, start_offset)),
+        SpanEdit::TrimOut => (playhead > in_point).then_some((in_point, playhead, start_offset)),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod span_edit_tests {
+    use super::*;
+    use crate::time::Rational;
+
+    fn ct(secs: i64) -> CompTime {
+        CompTime(Rational::new(secs, 1).unwrap())
+    }
+
+    #[test]
+    fn move_in_shifts_the_whole_layer_to_the_playhead() {
+        // Layer visible [2,5), source-0 at comp 1; move its in point to 10.
+        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveIn).unwrap();
+        // In lands on the playhead; duration (3s) and the source-at-in are kept.
+        assert_eq!((i, o, off), (ct(10), ct(13), ct(9)));
+    }
+
+    #[test]
+    fn move_out_puts_the_out_point_on_the_playhead() {
+        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveOut).unwrap();
+        // Out lands on 10; duration 3s kept, so in = 7, offset shifts by +5.
+        assert_eq!((i, o, off), (ct(7), ct(10), ct(6)));
+    }
+
+    #[test]
+    fn trim_moves_one_edge_and_keeps_the_offset() {
+        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(3), SpanEdit::TrimIn).unwrap();
+        assert_eq!((i, o, off), (ct(3), ct(5), ct(1)));
+        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(4), SpanEdit::TrimOut).unwrap();
+        assert_eq!((i, o, off), (ct(2), ct(4), ct(1)));
+    }
+
+    #[test]
+    fn a_degenerate_trim_is_rejected() {
+        // Trimming the in point to or past the out point would invert the span.
+        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(5), SpanEdit::TrimIn).is_none());
+        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(6), SpanEdit::TrimIn).is_none());
+        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(2), SpanEdit::TrimOut).is_none());
+        // A move never inverts (duration is preserved), even past comp 0.
+        let (i, o, _) = edit_layer_span(ct(2), ct(5), ct(1), ct(0), SpanEdit::MoveOut).unwrap();
+        assert!(i < o);
     }
 }

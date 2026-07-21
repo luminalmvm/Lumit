@@ -55,15 +55,24 @@ impl Shell {
                 MenuAction::AddMarker => self.app.add_marker_at_playhead(),
                 MenuAction::ClearBeatMarkers => self.app.clear_beat_markers(),
                 MenuAction::DetectBeats => {
+                    // Honours the 0–100 sensitivity slider (docs/09 §5; the
+                    // slider itself lives in the timeline's context menu —
+                    // native menus can't host one).
                     #[cfg(feature = "media")]
                     if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                        self.app.detect_beats(id, 1.5);
+                        let delta =
+                            lumit_audio::beat::delta_from_sensitivity(self.app.beat_sensitivity);
+                        self.app.detect_beats(id, delta);
                     }
                 }
                 MenuAction::DetectBeatsMore => {
+                    // "More markers": the slider's setting nudged 20 points up.
                     #[cfg(feature = "media")]
                     if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                        self.app.detect_beats(id, 1.1);
+                        let delta = lumit_audio::beat::delta_from_sensitivity(
+                            self.app.beat_sensitivity.saturating_add(20).min(100),
+                        );
+                        self.app.detect_beats(id, delta);
                     }
                 }
                 MenuAction::AddMaskRectangle => self.add_mask_to_selected(ShapeKind::Rectangle),
@@ -75,6 +84,7 @@ impl Shell {
                     }
                 }
                 MenuAction::ResetWorkspace => self.dock = default_layout(),
+                MenuAction::OpenSettings => self.settings_open = true,
             }
         }
     }
@@ -96,6 +106,74 @@ impl Shell {
         }
         if paste {
             self.app.paste_keyframes();
+        }
+    }
+
+    /// Cross-platform global shortcuts (both platforms, unlike the non-macOS
+    /// menu accelerators in [`Self::shortcuts`] / the macOS native menu):
+    /// Shift+F3 graph editor (§5), Cmd/Ctrl+D duplicate (§4.7), `=`/`-`/`\`
+    /// timeline zoom (§4.6), and `[`/`]`/Alt+`[`/`]` layer span edits (§4.7).
+    /// Skipped while a text field holds focus so typing is never stolen.
+    pub(super) fn global_shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, KeyboardShortcut, Modifiers};
+        if ctx.memory(|m| m.focused()).is_some() {
+            return;
+        }
+        const GRAPH: KeyboardShortcut = KeyboardShortcut::new(Modifiers::SHIFT, Key::F3);
+        if ctx.input_mut(|i| i.consume_shortcut(&GRAPH)) {
+            self.app.timeline_graph_mode = !self.app.timeline_graph_mode;
+        }
+        // Cmd/Ctrl+D duplicates the selected layer (docs/07-UI-SPEC §4.7, the AE
+        // convention). Only consumed when a layer is selected, so it is a clean
+        // no-op otherwise rather than flashing an error. Razor is Ctrl+Shift+D,
+        // a different chord.
+        const DUPLICATE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
+        if self.app.selected_layer.is_some() && ctx.input_mut(|i| i.consume_shortcut(&DUPLICATE)) {
+            self.app.duplicate_layer();
+        }
+        // Timeline zoom (docs/07-UI-SPEC §4.6): `=`/`Shift+=` zoom in, `-` zooms
+        // out, `\` fits. Same 1.4× steps and 1..400% clamp as the bottom bar's
+        // zoom buttons. Read (not consumed) — no other reader claims these keys.
+        let (zoom_in, zoom_out, zoom_fit) = ctx.input(|i| {
+            (
+                i.key_pressed(Key::Equals) || i.key_pressed(Key::Plus),
+                i.key_pressed(Key::Minus),
+                i.key_pressed(Key::Backslash),
+            )
+        });
+        if zoom_in {
+            self.app.timeline_zoom = (self.app.timeline_zoom * 1.4).min(400.0);
+        }
+        if zoom_out {
+            self.app.timeline_zoom = (self.app.timeline_zoom / 1.4).max(1.0);
+        }
+        if zoom_fit {
+            self.app.timeline_zoom = 1.0;
+        }
+        // Layer span edits (docs/07-UI-SPEC §4.7): `[`/`]` move the selected
+        // layer's in/out to the playhead; Alt+`[`/`]` trim that edge. Only when a
+        // layer is selected. The Alt (trim) chord is checked before the plain
+        // (move) one so the more-specific binding wins.
+        if self.app.selected_layer.is_some() {
+            use lumit_core::ops::SpanEdit;
+            const MOVE_IN: KeyboardShortcut =
+                KeyboardShortcut::new(Modifiers::NONE, Key::OpenBracket);
+            const MOVE_OUT: KeyboardShortcut =
+                KeyboardShortcut::new(Modifiers::NONE, Key::CloseBracket);
+            const TRIM_IN: KeyboardShortcut =
+                KeyboardShortcut::new(Modifiers::ALT, Key::OpenBracket);
+            const TRIM_OUT: KeyboardShortcut =
+                KeyboardShortcut::new(Modifiers::ALT, Key::CloseBracket);
+            if ctx.input_mut(|i| i.consume_shortcut(&TRIM_IN)) {
+                self.app.edit_selected_layer_span(SpanEdit::TrimIn);
+            } else if ctx.input_mut(|i| i.consume_shortcut(&MOVE_IN)) {
+                self.app.edit_selected_layer_span(SpanEdit::MoveIn);
+            }
+            if ctx.input_mut(|i| i.consume_shortcut(&TRIM_OUT)) {
+                self.app.edit_selected_layer_span(SpanEdit::TrimOut);
+            } else if ctx.input_mut(|i| i.consume_shortcut(&MOVE_OUT)) {
+                self.app.edit_selected_layer_span(SpanEdit::MoveOut);
+            }
         }
     }
 

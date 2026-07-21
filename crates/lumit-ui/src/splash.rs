@@ -110,12 +110,22 @@ pub fn paint_mark(painter: &egui::Painter, rect: egui::Rect, theme: &Theme) {
     painter.line_segment([mid, egui::pos2(c.x + 0.357 * r, c.y + 0.571 * r)], k);
 }
 
+/// The splash card's own size. The card is drawn centred at exactly this
+/// size whatever the window measures, so the boot screen looks the same
+/// whether the window *is* the card (Windows, macOS — a small frameless
+/// window that grows into the app) or merely contains it (Linux, where the
+/// window opens at working size because Wayland does not let a client resize
+/// itself; see `lumit-app`'s `main`).
+pub const CARD: egui::Vec2 = egui::vec2(460.0, 300.0);
+
 /// Render the splash card; returns true when boot display has finished.
 pub fn show(ctx: &egui::Context, theme: &Theme, splash: &Splash) -> bool {
     egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(theme.surface_0))
         .show(ctx, |ui| {
-            let full = ui.max_rect();
+            // Centred card, not the whole window (K-008 asks for a *small
+            // centred* splash): on a card-sized window this is the window.
+            let full = egui::Rect::from_center_size(ui.max_rect().center(), CARD);
 
             // the mark
             let mark = egui::Rect::from_center_size(

@@ -1,0 +1,95 @@
+# Flatpak manifest — one build that runs on any Linux distribution.
+#
+# In plain terms: a Flatpak bundles the application together with the exact
+# libraries it was built against, so it does not care whether the user runs
+# Ubuntu, Fedora or Arch, or which FFmpeg their distribution ships. That last
+# point is why this exists: Lumit links FFmpeg 7.1 (the `ffmpeg7_1` feature),
+# and distributions ship anything from 6.x to 8.x.
+#
+# `cargo-sources.json` is generated from Cargo.lock by CI before the build
+# (flatpak-builder-tools' flatpak-cargo-generator.py) — a Flatpak build has no
+# network, so every crate has to be declared as a source up front. It is not
+# committed: it is a mechanical function of the lockfile.
+id: io.github.luminalmvm.Lumit
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: lumit
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # GPU access: the whole compositor is wgpu (docs/06), so this is not optional.
+  - --device=dri
+  # Covers PipeWire as well as PulseAudio.
+  - --socket=pulseaudio
+  # A video editor reads footage from wherever the user keeps it — external
+  # drives included — so the narrower --filesystem=home would break ordinary
+  # projects. Revisit if Lumit is ever submitted to Flathub, where host access
+  # needs justifying to reviewers.
+  - --filesystem=host
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    # bindgen (via rusty_ffmpeg) needs libclang, and is fussy about which:
+    # very new libclang makes it emit opaque FFI structs and rsmpeg stops
+    # compiling (seen with LLVM 22). Windows and Linux CI pin 18; the oldest
+    # extension this runtime offers is 20, so that is pinned explicitly rather
+    # than taking whatever the SDK happens to ship.
+    LIBCLANG_PATH: /usr/lib/sdk/llvm20/lib
+    CARGO_HOME: /run/build/lumit/cargo
+
+# 25.08, not 24.08: that runtime's rust-stable is 1.89, and the dependency
+# tree needs 1.92 or newer.
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.llvm20
+
+modules:
+  # FFmpeg 7.1 built here rather than taken from the runtime, so the version is
+  # ours to pin: the crate's `ffmpeg7_1` feature accepts 7.1 and nothing else,
+  # and a runtime's FFmpeg moves with the runtime. Shared libraries, GPL
+  # (Lumit is GPLv3 — see LICENSE), no CLI programs or docs, since the app links
+  # the libraries directly and only the test fixtures ever shell out to ffmpeg.
+  - name: ffmpeg
+    config-opts:
+      - --disable-static
+      - --enable-shared
+      - --enable-gpl
+      - --disable-programs
+      - --disable-doc
+      - --enable-avdevice
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz
+        sha256: de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
+    cleanup:
+      - /share/ffmpeg
+
+  - name: lumit
+    buildsystem: simple
+    build-options:
+      env:
+        # rusty_ffmpeg resolves the libraries we just built, not the runtime's.
+        FFMPEG_PKG_CONFIG_PATH: /app/lib/pkgconfig
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      # bindgen needs clang's *own* builtin headers — stddef.h and friends —
+      # which sit in a resource directory beside libclang, under a
+      # version-named subdirectory that moves with each LLVM release. Resolve
+      # it with a glob at build time rather than hard-coding "20".
+      - export BINDGEN_EXTRA_CLANG_ARGS="-I$(echo /usr/lib/sdk/llvm20/lib/clang/*/include)"
+        && cargo --offline build --release --verbose -p lumit-app
+      - install -Dm755 target/release/lumit /app/bin/lumit
+      - install -Dm644 assets/brand/lumit-icon.svg
+        /app/share/icons/hicolor/scalable/apps/io.github.luminalmvm.Lumit.svg
+      - install -Dm644 packaging/flatpak/io.github.luminalmvm.Lumit.desktop
+        /app/share/applications/io.github.luminalmvm.Lumit.desktop
+      - install -Dm644 packaging/flatpak/io.github.luminalmvm.Lumit.metainfo.xml
+        /app/share/metainfo/io.github.luminalmvm.Lumit.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+      - cargo-sources.json

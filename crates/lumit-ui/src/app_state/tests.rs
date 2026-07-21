@@ -877,6 +877,7 @@ fn app_with_audio_layer() -> (AppState, Uuid, Uuid) {
             media: MediaRef {
                 relative_path: "clip.wav".into(),
                 absolute_path: "/tmp/clip.wav".into(),
+                fingerprint: None,
                 extra: serde_json::Map::new(),
             },
         })),
@@ -979,7 +980,7 @@ fn muting_an_audio_layer_drops_it_from_the_mix() {
 fn sync_unloads_a_comp_silenced_by_muting() {
     let (mut app, comp_id, layer_id) = app_with_audio_layer();
     mark_mix_loaded(&mut app, comp_id);
-    app.comp_playback = Some((Instant::now(), 0));
+    app.comp_playback = Some(super::CompPlayback::start(0));
 
     app.commit(Op::SetLayerAudible {
         comp: comp_id,
@@ -993,6 +994,81 @@ fn sync_unloads_a_comp_silenced_by_muting() {
     assert!(
         app.comp_playback.is_some(),
         "playback keeps going on the wall clock"
+    );
+}
+
+/// Precomp audio (OD-5, owner follow-up): a parent comp nests the audio comp.
+/// The parent's jobs walk the nesting (carrier chain included); muting the
+/// nested layer — or the precomp carrier itself — silences the parent. And
+/// the staling must be seen even when the edit lands while the PRECOMP tab
+/// is fronted and the PARENT's mix is the one loaded: the owner's repro was
+/// exactly that (mute inside the precomp, parent kept playing) because the
+/// sync only managed the fronted comp.
+#[cfg(feature = "media")]
+#[test]
+fn precomp_audio_follows_nested_and_carrier_mutes() {
+    let (mut app, precomp_id, layer_id) = app_with_audio_layer();
+    app.new_composition();
+    app.confirm_comp_dialog();
+    let parent_id = app.selected_comp.unwrap();
+    assert_ne!(parent_id, precomp_id);
+    app.preview_comp = Some(parent_id);
+    app.add_precomp_to_comp(precomp_id);
+    let carrier_id = app.store.snapshot().comp(parent_id).unwrap().layers[0].id;
+
+    let job = only_audio_job(&app, parent_id).expect("nested audio reaches the parent's mix");
+    assert_eq!(
+        job.carriers.len(),
+        1,
+        "the precomp carrier's Volume joins the gain chain"
+    );
+
+    // Mute INSIDE the precomp: the parent goes silent.
+    app.commit(Op::SetLayerAudible {
+        comp: precomp_id,
+        layer: layer_id,
+        audible: false,
+    });
+    assert!(
+        only_audio_job(&app, parent_id).is_none(),
+        "a nested mute silences the parent"
+    );
+    app.commit(Op::SetLayerAudible {
+        comp: precomp_id,
+        layer: layer_id,
+        audible: true,
+    });
+
+    // Mute the precomp's own row in the parent: silent again.
+    app.commit(Op::SetLayerAudible {
+        comp: parent_id,
+        layer: carrier_id,
+        audible: false,
+    });
+    assert!(
+        only_audio_job(&app, parent_id).is_none(),
+        "muting the precomp row silences everything inside it"
+    );
+    app.commit(Op::SetLayerAudible {
+        comp: parent_id,
+        layer: carrier_id,
+        audible: true,
+    });
+
+    // The owner's repro: the parent's mix is loaded, the PRECOMP tab is
+    // fronted, and the mute happens there. The sync must reconcile the
+    // loaded mix too, not just the fronted comp.
+    mark_mix_loaded(&mut app, parent_id);
+    app.preview_comp = Some(precomp_id);
+    app.commit(Op::SetLayerAudible {
+        comp: precomp_id,
+        layer: layer_id,
+        audible: false,
+    });
+    app.sync_comp_audio();
+    assert_eq!(
+        app.audio_loaded_comp, None,
+        "the silenced parent mix unloads even while the precomp tab is fronted"
     );
 }
 
@@ -1096,7 +1172,7 @@ fn scrubbing_pause_stops_the_whole_transport() {
     let mut app = AppState::default();
     app.new_composition();
     app.confirm_comp_dialog();
-    app.comp_playback = Some((std::time::Instant::now(), 3));
+    app.comp_playback = Some(super::CompPlayback::start(3));
     assert!(
         app.is_playing(),
         "the comp playback clock counts as playing"
@@ -1139,6 +1215,7 @@ fn a_long_import_keeps_its_full_media_duration() {
             media: MediaRef {
                 relative_path: "long.mp4".into(),
                 absolute_path: "/tmp/long.mp4".into(),
+                fingerprint: None,
                 extra: serde_json::Map::new(),
             },
         })),

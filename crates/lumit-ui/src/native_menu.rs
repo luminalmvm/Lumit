@@ -41,6 +41,7 @@ pub enum MenuAction {
     AddMaskStar,
     CompSettings,
     ResetWorkspace,
+    OpenSettings,
 }
 
 pub struct NativeMenu {
@@ -79,6 +80,11 @@ impl NativeMenu {
         let app = Submenu::new("Lumit", true);
         app.append_items(&[
             &PredefinedMenuItem::about(None, Some(about)),
+            &PredefinedMenuItem::separator(),
+            // macOS convention: Settings/Preferences lives in the app menu at
+            // Cmd+, (the in-window bar on Windows keeps it under Window). This
+            // is where Mac users reflexively look for it.
+            &item("app.settings", "Settings…", cmd(Code::Comma)),
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::hide(None),
             &PredefinedMenuItem::hide_others(None),
@@ -189,6 +195,7 @@ impl NativeMenu {
                 "comp.mask.ellipse" => Some(MenuAction::AddMaskEllipse),
                 "comp.mask.star" => Some(MenuAction::AddMaskStar),
                 "comp.settings" => Some(MenuAction::CompSettings),
+                "app.settings" => Some(MenuAction::OpenSettings),
                 "window.reset" => Some(MenuAction::ResetWorkspace),
                 _ => None,
             };

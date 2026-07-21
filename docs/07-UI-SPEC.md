@@ -550,6 +550,11 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
 - **Waveforms in the Timeline**: every audible layer MAY show its waveform inside its row
   (twirl the Audio group, or a per-layer waveform toggle); the Audio workspace defaults
   them on. Waveform rendering MUST stay responsive at any zoom (mip-mapped peaks).
+  **Shipped (K-172):** the Audio group (Volume + Waveform twirl) in the layer outline; the
+  lane draws the item's 2048-bucket peak strip through the layer's live offset each paint.
+  The earlier comp-wide strip under the ruler is gone — it was one mixed-down waveform for
+  the whole comp, went stale during a drag, and stopped earning its row once every layer
+  could carry its own.
 - **Beat-marker generation**: pick a source audio layer; controls for **sensitivity**,
   detection **range** (whole layer or work area), and minimum beat spacing; *Generate*
   writes beat markers to the comp's markers ribbon; *Clear beat markers* removes only

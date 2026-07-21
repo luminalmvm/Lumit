@@ -1136,6 +1136,44 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   had no effect on what you heard (the GEN-4 audio fixes). The fingerprint is a plain,
   tested function, so "a muted layer is silent" and "a moved layer's sound moves with it"
   are checked without needing a sound card.
+- **The live mix plan (`lumit-audio::mix::MixPlan`)** — how audio edits became instant, and
+  how a feature film stopped eating all the memory. Originally, playing a comp *baked* one
+  giant pre-mixed track the length of the whole comp — for a two-hour film that single
+  track is gigabytes, and every solo/mute/move re-decoded and re-baked the lot (minutes of
+  waiting, and the out-of-memory the owner hit). Now each footage file is decoded **once**
+  into a shared, byte-budgeted store (it stays within the one Memory budget in Settings →
+  Performance, half your machine's RAM by default), and the comp's audio is just a *plan*:
+  "this file's samples play here, that file's there". The sound card's callback adds up the
+  few numbers it needs for each moment as it goes — a handful of multiplications, nothing a
+  sound card notices. Soloing, muting, moving or trimming a layer swaps in a new plan and is
+  heard on the very next callback, about ten milliseconds later, with the clock untouched.
+  A test proves the plan sounds *sample-for-sample identical* to the old baked mix, another
+  proves a mid-play swap keeps the clock running.
+- **Per-layer Volume and the waveform in the layer's own row (K-172)** — every audio-carrying
+  layer now has an **Audio** group in its timeline twirl, next to Transform and Effects. Inside:
+  a **Volume** value in dB — 0 is the file's own loudness, positive boosts (up to +50), and
+  −100 or below reads "−inf", true silence. It keyframes like any other property (stopwatch,
+  the ◄ ◆ ► arrows), which is how fades work: two keyframes, loud to silent. Under the volume
+  sits a **Waveform** twirl that draws *that layer's* sound in its own lane — and because the
+  drawing reads the layer's position fresh every screen refresh, dragging the layer slides its
+  transients along with it, live. The old single waveform strip under the ruler is gone: it
+  showed the whole comp's mixed sound in one place, went stale mid-drag, and told you nothing
+  about *which* layer a spike belonged to. When a volume is keyframed, the fade is baked into a
+  little list of loudness levels every ten milliseconds (a "gain envelope") that both the live
+  player and the export mixer read — the same numbers, so what you hear is what you export;
+  changing a volume re-plans the mix instantly, like every other audio edit above. Precomps
+  carry their sound out with them: a nested comp's audio layers are walked recursively into
+  the same mix (spans mapped onto the outer timeline, mutes and solos respected per comp),
+  and a precomp layer's own Volume scales everything inside it — the gains multiply down the
+  chain, so it has the Volume row too. And a purely-audio layer (a music file) shows no eye
+  in the outline at all: there is no picture to hide.
+- **Your project remembers where you were** — reopening a saved project no longer lands on a
+  blank Viewer waiting for a playhead nudge. Which comp tabs were open, which one was in
+  front, where the playhead sat, which layer was selected, and which twirls were unfurled all
+  come back, and the first frame renders immediately. The mechanism is the same one that
+  remembers the timeline column width: small notes in the app's own settings store, keyed by
+  the project's file path — nothing is written into the project file itself, so sharing a
+  `.lum` never leaks your window arrangement.
 - **Beat detection** (`lumit-audio::beat`) — the groundwork for cutting to the music. It
   slides a short window along the track and, at each step, measures how much *new* energy
   appeared since the last step (the "spectral flux"); a kick or snare makes that number
@@ -1554,6 +1592,82 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   workers glance at the wall between small steps and quietly stop if their ticket is
   stale. Nothing is ever force-killed. A test proves a deliberately slow job stops
   within 15 milliseconds of the number changing.
+- **The worker pool (`lumit-eval::pool`)** — the crew of threads that will do the
+  rendering, so the interface thread never has to. Picture a small workshop with two
+  in-trays: an *urgent* tray (the frame under your cursor, a scrub) and an *everything
+  else* tray (warming the cache, thumbnails). Whenever a worker finishes a job it always
+  takes from the urgent tray first, so scrubbing never queues behind housekeeping. Both
+  trays have a fixed size on purpose: if one fills up, new work is refused on the spot
+  and the caller decides what to drop — work can never silently pile up behind a stall.
+  The pool never kills a running job; jobs stop *themselves* by glancing at the epoch
+  wall (previous bullet). The crew size is your machine's core count minus three — one
+  core each left free for the interface, the GPU feeder, and the operating system.
+  Tests prove the urgent-first rule, the fixed tray sizes, and that a misbehaving job
+  can't take a worker down with it.
+- **The pixel-pass walker and its plug sockets (`lumit-eval::exec`)** — the piece that
+  walks the wiring diagram (two bullets up) and turns it into an ordered list of actual
+  work. It starts at the final "comp output" box and works backwards: to blend a layer
+  you first need its placed pixels, to place them you first need the source frame. Each
+  box is done exactly once — two layers sharing a clip share the one fetched frame — and
+  the real pixel work is done through three *sockets* it doesn't look inside: "fetch me
+  this source's frame", "run this one step", and "have we rendered this exact frame
+  before?" (the cache, checked before doing anything and filled afterwards). Because the
+  sockets are plug-shaped, the tests plug in cardboard fakes — no GPU, no codecs — and
+  prove the order, the sharing, the cache behaviour, and that a scrub landing mid-walk
+  abandons it cleanly. A second proof goes further: a *walking skeleton* test in
+  `lumit-gpu` plugs the **real GPU compositor** into the sockets, renders solid-colour
+  layers through the walker, reads the pixels back, and checks the colours are exactly
+  right — including that two layers blend in linear light and that a cache hit does zero
+  GPU work. So the sockets are proven to fit the real machinery; what remains is teaching
+  the adapters the full layer vocabulary (transforms, masks, retimes, effects) and then
+  switching preview and export over. Until then the shipped renderer in `lumit-ui` keeps
+  drawing the picture.
+- **Two ways to play back (`lumit-eval::schedule::cached_step`, K-171)** — the important
+  distinction between the two preview modes. In **Cached** mode (the default), Lumit shows you
+  *every* frame and never skips: the playhead only moves on to the next frame once that frame
+  has finished rendering, and no faster than real time. So if a comp is heavy and rendering is
+  slower than real time, playback simply slows down to match — you see every frame, just not at
+  full speed — and once a stretch is rendered it plays back at true speed from the cache. Sound
+  pauses while a frame is being waited for (so it never runs ahead of a frozen picture) and
+  plays during smooth realtime replay. One subtlety a tester caught: the app only gets to move
+  the playhead when the screen refreshes, and refreshes never land exactly on a frame boundary —
+  if the pace timer restarted "from now" at each step, the few spare milliseconds were thrown
+  away every frame, the picture crept along slower than true speed, and the sound (which runs on
+  the audio hardware's own clock) drifted ahead and kept getting yanked back. The fix is the
+  metronome trick (`cached_pace_carry`): the leftover is *carried into the next frame's window*,
+  so over any stretch the picture holds exactly true speed and stays with the sound. A genuine
+  freeze (dragging the window, say) is not "repaid" — the timer re-anchors rather than
+  fast-forwarding. And the rule for *when sound runs* is readiness, not history (the owner's
+  second report — audio used to sit out a quarter-second "warm-up" even on a fully cached run):
+  sound plays exactly when the coming quarter-second of frames is already cached, so a ready
+  run has audio from its very first frame, a still-rendering stretch stays silent rather than
+  flapping on and off at the render's crawling edge, and after a stall it rejoins the moment
+  the road ahead is paved. In **Realtime** mode, the opposite trade: the clock never
+  waits, and when frames can't keep up Lumit drops the preview *resolution* to stay in time
+  rather than slowing down. The stepping decision — advance, or hold and render, and whether
+  sound should be playing — is a plain tested function; the messy wiring (the audio clock, the
+  render requests) lives in the UI and just asks it what to do each screen refresh.
+  The way realtime keeps from freezing is a small but important rule: it renders **one frame
+  at a time and never throws that render away just because the clock moved on**. It asks for a
+  frame, lets it finish however long it takes, shows it, times it — and only *then* asks for
+  the next one, at wherever the clock has reached by that point (skipping the frames in
+  between). The timing of each finished frame is what tells the resolution controller to drop a
+  notch when things are slow. The earlier version re-asked for a new frame every screen refresh,
+  so under load each render was abandoned before it finished: nothing ever completed, the
+  controller was never told how slow things were, and the picture sat frozen. Rendering one
+  un-abandoned frame at a time fixes both — the picture always moves forward, and the
+  resolution actually adapts. (A cached frame still shows instantly and for free, without
+  waiting on any render.) The "how slow was that frame" measurement is taken on the worker
+  thread as the actual decode time, *not* as the time from asking to seeing — the latter
+  would fold in how often the screen happens to refresh (~16 ms), making even a cheap comp
+  look exactly one refresh slow and walking the resolution down for no reason. One honest
+  limit worth knowing: dropping the preview resolution makes the *compositing and effects*
+  cheaper, but video *decoding* costs about the same whatever size you view it at (the whole
+  frame is decoded, then shrunk). So on a comp whose cost is mostly raw footage decoding,
+  realtime can still look a little choppy even at a low resolution — the smooth path there is
+  Cached mode, which renders ahead and then replays from memory. Truly smoothing realtime for
+  decode-heavy comps needs *rendering ahead* (a shelf of frames prepared before their time
+  comes), which is the `FrameRing` machinery that is built and tested but not yet wired in.
 - **The frame scheduler's brain (`lumit-eval::schedule`)** — the decision rules for
   smooth playback, written as plain arithmetic so tests can prove them. During playback
   Lumit renders frames ahead of the playhead onto a small shelf; each screen refresh
@@ -1782,6 +1896,68 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the comp" rules from the drag and the import. One rough edge for now: the timeline can't
   scroll to show negative time, so a layer that starts before zero is drawn tucked under the
   left edge (you can still grab the part that's on screen).
+- **Finding footage that moved (`lumit-project` fingerprint + relink)** — a project doesn't
+  hold the video and audio files inside it; it *points* at them on disc. Move or rename a
+  file and the pointer goes stale. Lumit now records, next to each pointer, a small
+  **fingerprint** of the file: its size and a quick hash of the first and last chunk (never
+  the whole thing, so it stays instant even on a feature-length movie). When a project opens,
+  each pointer is resolved in order — first the path relative to the project, then the last
+  full path it was seen at, then, if both miss, a **search by fingerprint** through folders
+  you've told Lumit to look in — so a clip that was simply moved is found again by its
+  *content*, not its name. Relink one file and its neighbours that moved the same way are
+  offered automatically (the "it all went into a new folder" case). Nothing is a blocking
+  error: a file that can't be found shows a placeholder and waits for you to relink it.
+- **Collect for sharing (`lumit-project::collect_for_sharing`)** — one command copies the
+  project and every file it uses into a single folder, rewriting the pointers to sit next to
+  the copies. Nothing machine-specific is written (no "C:\Users\me\…" paths), so the folder
+  opens cleanly on someone else's computer — the mechanism behind sharing a project with the
+  community. Two clips that happen to share a name are copied under distinct names so neither
+  overwrites the other, and anything that can't be found is listed rather than silently
+  dropped.
+- **Opening older projects (`lumit-project` schema migrations)** — the file format will
+  change over time. So a saved project carries a version number, and when a newer Lumit opens
+  an older file it walks it up through a chain of small **migration** steps — each one nudging
+  the raw saved data from one version to the next — before the program ever tries to
+  understand it as a real project. Today the chain is empty (this is the first format), but
+  the machinery is in place, so future changes have a home and old files keep opening. A
+  current-version file skips all of it and loads directly, so ordinary saves are untouched.
+- **The frame cupboard decides what to drop (`lumit-cache`, docs 06 §5.3)** — the store of
+  rendered frames has a strict size limit (a budget in megabytes, not a count — one big frame
+  costs as much as many small ones). When it's full and a new frame arrives, it throws out the
+  frame that's the *best bargain to lose*: one you haven't looked at in a while, that's large
+  (frees the most room), and that's cheap to recreate — the "stale × big × cheap" rule. Two
+  frames it will **never** throw out are ones that have been **pinned**: the picture on screen
+  and the handful of frames either side of the playhead, so playback can't accidentally bin
+  the very frame it's about to show. If the whole cupboard is pinned it simply runs a touch
+  over budget for a moment rather than dropping something you need — the pins clear on their
+  own as the playhead moves on.
+- **Undo doesn't remember forever (`lumit-core::store`)** — every edit is remembered so you
+  can undo it, but that memory can't be allowed to grow without end over a long session. So
+  the undo history keeps at most a few hundred steps; once it's full, the *oldest* step falls
+  off the back. You can't undo past that point any more, but nothing about your current
+  project changes — dropping old history only limits how far back you can rewind. (Crash
+  recovery is separate and unaffected: every edit is also written to a journal on disc as it
+  happens, independently of this in-memory limit.)
+- **The stress project and speed benchmarks (`lumit-project::fixtures`, docs 13)** — the
+  promise that Lumit stays responsive on huge projects needs something huge to test against.
+  There's now a builder that makes a deliberately enormous project on demand — hundreds of
+  compositions, thousands of layers, a quarter of a million keyframes — always *identical*
+  down to the last byte, so a speed measurement means the same thing every time. Alongside it,
+  a set of **benchmarks** time the everyday operations on that project (open it, save it, make
+  one edit, undo). They run when a developer asks (`cargo bench`), and they'll later become
+  pass/fail speed budgets in the automated checks.
+- **Remappable keyboard shortcuts (`lumit-keymap`)** — the rules behind "every shortcut can be
+  changed" live in their own small, self-contained piece with no screen or window in sight, so
+  they can be proven correct on their own. A **chord** is a key plus its held modifiers
+  (`Shift+F3`, `Ctrl/Cmd+D`); a **context** is where you are (the whole app, the timeline, the
+  viewer…); a **binding** ties a chord in a context to an action. The interesting part is
+  spotting **clashes** — the same chord that would trigger two different things at once — with
+  the twist that an app-wide (Global) shortcut is live everywhere, so it clashes with a
+  same-chord shortcut in *any* panel, while two different panels may reuse a key harmlessly.
+  The default set (the whole documented table) and an "After Effects" preset both ship
+  clash-free, the map can be saved to a shareable file, and Ctrl/Cmd is stored as one
+  neutral "primary" key so a keymap works on both Windows and Mac. Still to come: wiring the
+  live key presses and the Settings → Keymap screen to this core.
 
 ## 5. Making a change safely (the recipe)
 
@@ -1906,11 +2082,50 @@ One honest caveat: the build needs FFmpeg **7**, and some distributions still sh
 FFmpeg 6 — Ubuntu 24.04 LTS is the big one. On those, `cargo build` will complain about
 "ffmpeg stuff" (a version the binding doesn't accept, or missing headers). The fix is a
 newer distribution release, or building FFmpeg 7.1 from source and letting `pkg-config`
-find it. There is no Linux machine in CI yet, so treat Linux as "documented and expected
-to work" rather than "verified on every push".
+find it.
+
+### Not building it at all: the Flatpak
+
+If you just want to *run* Lumit on Linux, there is now a **Flatpak** — the one artifact
+that sidesteps the whole FFmpeg-version problem. A Flatpak is an application packaged
+together with the exact libraries it was built against, run in a light sandbox. Because
+Lumit's bundle carries its own FFmpeg 7.1, it does not care what the distribution ships:
+the same file installs on Ubuntu, Fedora, Arch or anything else.
+
+Every CI run builds one and attaches it to the run as `lumit-x86_64.flatpak` (about 15 MB —
+the app plus its own FFmpeg). Download it, then:
+
+```
+flatpak install --user lumit-x86_64.flatpak
+flatpak run io.github.luminalmvm.Lumit
+```
+
+The recipe lives in `packaging/flatpak/`. Two parts of it are worth understanding, because
+they look strange otherwise. First, the manifest **builds FFmpeg 7.1 itself** rather than
+using the one in the Flatpak runtime — the runtime's is 6.x, the same version problem as
+above, just moved indoors. Second, a Flatpak build has **no network access** on purpose (so
+a build is reproducible and can't fetch surprises), which means every Rust crate Lumit
+depends on has to be listed in advance; CI generates that list mechanically from
+`Cargo.lock` before building, which is why you won't find it committed.
+
+The sandbox is granted the GPU (the whole compositor is GPU work), audio out, and access to
+your files — a video editor has to read footage from wherever you keep it, external drives
+included.
+
+One Linux-only difference worth knowing, because it looks like a bug otherwise: on Windows
+and macOS Lumit *starts as* the little splash card — that small frameless window you see
+during boot is the real window, and it grows into the editor when loading finishes. On Linux
+it can't. Under Wayland an application isn't allowed to resize its own window (the desktop
+decides), so the "now grow to full size" instruction was simply ignored and the editor stayed
+trapped at splash size, unable to be dragged bigger. So on Linux the window opens at working
+size straight away and the splash card is drawn in the middle of it.
 
 ### What the robots check
 
-Every push, CI rebuilds and retests everything on both macOS and Windows, media included, so
-"it builds on my machine" can never quietly drift from "it builds for real". The Windows
-recipe above is exactly what CI does, written out by hand in `.github/workflows/ci.yml`.
+Every push, CI rebuilds and retests everything on **macOS, Windows and Linux**, media
+included, so "it builds on my machine" can never quietly drift from "it builds for real".
+The platform recipes above are exactly what CI does, written out by hand in
+`.github/workflows/ci.yml`. The Linux job goes a little further than the others: it installs
+Mesa's *lavapipe*, a Vulkan driver that renders on the CPU, so the GPU tests actually run on
+a machine with no graphics card in it. And a sixth job builds the Flatpak, which is how we
+know the packaging works and not just the code.

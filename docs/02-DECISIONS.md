@@ -2139,3 +2139,70 @@ theme's existing roles via `Theme::label_colour` (no new hex, docs/15 §4). Neit
 built yet, each blocked on machinery it would misrepresent without: **shy** (needs an outline
 filter row), **quality** (needs a bicubic sampler choice), **preserve underlying transparency**
 (needs compositor support), and the **pick-whip** parent drag (the dropdown stands in, K-103).
+
+**K-169 · DECIDED · The optical-flow engine is dense inverse search (DIS); resolves 08 Open
+Question 1.** The flow field that feeds Retime's flow interpolation and Fast motion blur is
+computed by **Dense Inverse Search** (Kroeger et al., ECCV 2016), not the "variational /
+patch-match hybrid" the 08 §3.1 sketch first floated. DIS is the studied sweet spot: fast,
+GPLv3-clean (no trained model to redistribute), and cheap enough to run per preview frame. The
+exact structure — 8×8 patches on a stride-4 grid, a few Newton steps per patch, forward-backward
+occlusion, box-blurred confidence — is pinned in `docs/impl/optical-flow.md` and implemented in
+`lumit-flow` as a CPU oracle plus WGSL twin (K-019). A learned RAFT-class backend stays a
+possible future FlowField producer behind the unchanged API (dense vectors + occlusion +
+confidence); motion blur would keep using DIS vectors. This records a choice the impl note and
+shipped code already made but the spec's open question still listed as pending.
+
+**K-170 · DECIDED · The UI's worker-result channels are unbounded `std::sync::mpsc` by
+deliberate choice; 14-ENGINEERING-RULES §5's "no unbounded queue without a decision entry" is
+satisfied here.** The `lumit-ui` shell talks to its background threads over plain unbounded
+`mpsc` channels — pre-mixed audio and comp-audio buffers, beat-detection results
+(`app_state/mod.rs`), disk-cache load commands and their loaded frames (`app_state/diskio.rs`),
+preview-render results (`app_state/preview.rs`), export-progress events (`export.rs`), and media
+decode results (`app_state/media.rs`). None of these grows without bound in practice, for two
+distinct reasons, and that — not oversight — is why they are unbounded:
+
+- **Latest-wins mailboxes** (audio / comp-audio / beats / preview results): the UI drains the
+  whole channel every frame and keeps only the newest message, so the standing depth is at most
+  the handful of items a producer can emit inside one ~16 ms frame. A bounded channel would add
+  `try_send`-and-drop plumbing to achieve the same effect the drain already gives for free.
+- **Self-throttling work queues** (disk IO commands, media decode, export events): the UI issues
+  at most one outstanding request per cache slot / per active job, so the number of in-flight
+  messages is capped by the caller's own concurrency, not by the channel.
+
+v1 therefore keeps the simpler unbounded type. The escape hatch: if profiling ever shows a
+channel accumulating (a producer outrunning a stalled UI thread), the fix is a bounded
+`sync_channel` with explicit latest-wins drop on the latest-wins ones, logged as a follow-up
+decision — not a silent swap. The realtime audio callback stays lock-free ring-buffer reads only
+and is unaffected by this entry.
+
+**K-171 · DECIDED · Cached preview playback renders every frame and never skips; skipping is
+Realtime mode's job alone.** The intended behaviour, stated by the owner (it predates this log
+but was never written down): in the default **Cached** mode, playback advances to the next frame
+only when that frame has rendered. When rendering is slower than realtime the playhead slows
+down with it — audio pauses (v1) or timestretches to match (later) — and every frame lands in
+the cache; once the span is cached, playback replays it at full speed from cache. The shipped
+behaviour to date — a realtime clock that drops any frame not ready in time — is *not* Cached
+mode; that clock-chasing, frame-dropping discipline belongs exclusively to **Realtime** mode
+(K-030), where responsiveness is the point and resolution degrades instead. Consequences: the
+playback tick gains a render-gated stepping path as the default; the audio clock is master only
+while playback is actually realtime (cached replay, or Realtime mode); during slower-than-
+realtime cached rendering the *frame counter* leads and audio follows or waits. 06 §6 and the
+playback-scheduler impl note describe the ring/pre-roll machinery this stepping feeds.
+
+**K-172 · DECIDED · Per-layer audio: the Volume property ships (−∞..+50 dB) and per-layer
+waveform lanes replace the comp-wide strip (owner, 2026-07-21).** Three linked calls from
+the owner's desk testing. (1) `Layer.volume_db` lands as the docs/09 §6 animatable dB
+property — `Op::SetLayerVolume` (coarse-grained like SetTransformProperty), default 0 dB,
+ceiling raised from the spec's +12 to +50, and −100 dB is the −∞ knee (gain exactly 0 at or
+below; the value box reads "−inf"). A static volume is a constant gain on the placed clip;
+a keyframed one bakes to a ~10 ms control-rate `GainEnvelope` read identically by the live
+`MixPlan` callback and the baked export mixdown — playback == export, pinned by test.
+(2) The timeline outline gains an **Audio** group (footage with an audio stream only):
+the Volume row with the standard stopwatch / ◄ ◆ ► furniture, and a **Waveform** twirl
+whose lane draws the layer's own decoded peaks mapped through its live in/out/offset every
+paint — so dragging the layer carries its transients in realtime, the owner's report
+against the comp strip (which only refreshed when the mix re-planned). (3) The comp-wide
+waveform strip under the ruler is removed outright, along with its T25 toggles and the
+background peaks bake (its `CompAudioMsg::Peaks` delivery). Lane keyframe diamonds for
+Volume await the shared PropRow widening (the UI-11 note); fade commands and detach-audio
+remain future §6 work.

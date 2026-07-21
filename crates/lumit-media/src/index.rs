@@ -230,6 +230,45 @@ pub mod tests_support {
 
     /// A zero-byte file — the simplest malformed input a footage import can
     /// be pointed at.
+    /// An audio file with embedded cover art: one second of tone in a FLAC,
+    /// plus a single still image written as an attached-picture stream — the
+    /// shape of a music file with album artwork (native flac + png encoders,
+    /// so any ffmpeg build makes it).
+    pub fn audio_with_cover(dir: &Path) -> Option<PathBuf> {
+        let bin = ffmpeg_bin()?;
+        let out = dir.join("cover.flac");
+        let status = Command::new(bin)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:size=64x64:duration=1",
+                "-map",
+                "0:a",
+                "-map",
+                "1:v",
+                "-frames:v",
+                "1",
+                "-c:a",
+                "flac",
+                "-c:v",
+                "png",
+                "-disposition:v",
+                "attached_pic",
+            ])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
     pub fn zero_byte_file(dir: &Path) -> PathBuf {
         let path = dir.join("empty.bin");
         std::fs::write(&path, []).expect("write zero-byte fixture");

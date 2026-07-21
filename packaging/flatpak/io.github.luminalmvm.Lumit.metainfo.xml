@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what a Linux software centre shows about Lumit.
+     Validated by flatpak-builder during the CI bundle build. -->
+<component type="desktop-application">
+  <id>io.github.luminalmvm.Lumit</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <name>Lumit</name>
+  <summary>Motion graphics and compositing, built for speed</summary>
+
+  <description>
+    <p>
+      Lumit is a native motion-graphics and compositing editor: layers,
+      keyframes, effects and a GPU compositor, with a timeline built for
+      fast, rhythmic editing.
+    </p>
+    <p>
+      What the preview shows is what the export writes — the same render path
+      runs both, so a look never changes on the way to a file.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.luminalmvm.Lumit.desktop</launchable>
+
+  <url type="homepage">https://github.com/luminalmvm/Lumit</url>
+  <url type="bugtracker">https://github.com/luminalmvm/Lumit/issues</url>
+
+  <developer_name>luminalmvm</developer_name>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-07-21">
+      <description>
+        <p>Pre-release build for testing.</p>
+      </description>
+    </release>
+  </releases>
+</component>

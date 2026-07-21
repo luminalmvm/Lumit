@@ -11,6 +11,11 @@ license = "GPL-3.0-only"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+# 14-ENGINEERING-RULES §4: an unfinished branch must not ship. (The broader
+# indexing_slicing / arithmetic_side_effects denies from §4 are not on yet —
+# they need a sweep of the existing hot paths first.)
+todo = "deny"
+unimplemented = "deny"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

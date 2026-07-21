@@ -325,3 +325,138 @@ Autonomous scope choices this pass: the K-166 kind-implied reach model; per-chan
 normalisation as the reading of "only affect the parts that aren't aligned"; lock's
 enforcement boundary; the four TL2 switches deferred; graph-mode dividers staying
 outline-only so curves stay clean.
+
+# Tester feedback (owner's friend) — 2026-07-21, implementation-audit branch
+
+Four notes relayed by the owner; the tester started on main, then switched to this branch.
+
+- [x] TF-1 **Cached-mode audio lag** (branch-specific: K-171 landed here). Even with every
+  frame cached, audio stuttered; caching in Cached mode then watching in Realtime worked.
+  Root cause: the pace timer restarted at "now" on every advance, discarding the per-frame
+  overshoot (up to one UI tick) — a fully-cached 60 fps comp replayed at ~half speed on 16 ms
+  ticks while the audio engine ran on its own hardware clock; the >2-frame resync then yanked
+  the sound back, for ever. Fix: `lumit_eval::schedule::cached_pace_carry` — the fixed-timestep
+  remainder is carried into the next frame's window (long-run replay pace is exactly realtime);
+  a hitch beyond ~50 ms re-anchors and rebuilds the audio streak instead of fast-forwarding.
+  The redundant "late advance resets the streak" rule in `cached_step` (which punished ordinary
+  tick jitter) is gone — stalls already reset the streak in the not-ready branch. Regression
+  tests: `cached_replay_long_run_pace_is_exactly_realtime` (the old pacing manages ~312 of 600
+  frames in the simulation), `cached_pace_carry_repays_jitter_but_reanchors_on_a_hitch`.
+- [x] TF-2 **An audio track wedges the comp render** (also affects main). An audio file with
+  embedded cover art (mp3/flac/m4a album artwork) exposes the artwork as a video stream with
+  the attached-picture disposition; the probe took it as real video, the preview chased motion
+  frames that do not exist, and the one failed decode job failed the whole comp frame —
+  blocking everything until the layer was hidden. Fix: `probe()` skips attached-picture
+  streams, so such files probe audio-only and take the existing no-index, no-decode path (the
+  audio still plays). Regression test: `probe_audio_with_cover_art_is_audio_only` on a
+  generated FLAC+PNG fixture. **Known boundary left open**: a genuinely corrupt *video* file
+  still fails its comp's frame (deliberately — compositing without the layer and caching that
+  under the frame's content key would poison the cache); surfacing that error visibly instead
+  of retrying is future UI work.
+- [x] TF-3 **Linux builds + flatpak in CI** — Linux is a first-class CI target now: a
+  `tests (Linux, with media)` job on ubuntu-latest installs the desktop stack's system libs
+  (ALSA, GL/EGL, X11/Wayland/xkb) plus Mesa's lavapipe, takes the same BtbN n7.1 FFmpeg the
+  Windows job uses (the distro's 6.x does not match the crate's `ffmpeg7_1` feature; the
+  tarball's .pc prefixes are rewritten so pkg-config resolves), pins LLVM 18 for bindgen, and
+  runs clippy `-D warnings`, the workspace tests, the GPU oracles single-threaded under
+  lavapipe, and a release-mode compile check. **Flatpak** shipped alongside it: a manifest
+  (`packaging/flatpak/`, app id `io.github.luminalmvm.Lumit`) that builds FFmpeg 7.1 into the
+  bundle — the runtime's is 6.x — plus a desktop entry, AppStream metainfo and the brand icon;
+  a CI job generates the offline cargo sources from Cargo.lock (a Flatpak build has no
+  network) and publishes `lumit.flatpak` as a run artifact, which is what a Linux tester
+  installs on any distribution. **Both jobs are CI-green**: the Linux tests (clippy, the
+  workspace suite, the GPU oracles under lavapipe, a release compile check) and the Flatpak
+  bundle, which publishes `lumit-x86_64.flatpak` (~15 MB) per run. Both were the tester's own
+  suggestion, verbatim.
+- [x] TF-5 **Flatpak window could not be resized — the editor was stuck tiny** (first run of
+  the bundle, on Wayland). The window was created as the splash card itself: 460×300,
+  frameless, `resizable(false)`, becoming the application window through runtime viewport
+  commands once boot finished. Wayland ignores those — a client cannot resize itself there,
+  and toggling resizability after creation is unreliable — so the app was left in a frame
+  nothing could stretch. On Linux the window now opens decorated, resizable and at working
+  size (1440×900, min 720×480), and the splash draws its card centred inside it; Windows and
+  macOS keep the grow-from-splash behaviour. The Linux `app_id` also becomes
+  `io.github.luminalmvm.Lumit` so a compositor can pair the window with its desktop file
+  (icon and name in the dock). Regression test on the viewport builder.
+  Two things Linux CI caught on its first runs, both now fixed: the upstream LLVM 18 tarball
+  links `libtinfo.so.5` (an ncurses ABI Ubuntu 24.04 dropped) so bindgen could not load it —
+  the distro's own clang 18 is used instead; and the accumulation still-scene bit-identity
+  test fails under lavapipe, where fp16 intermediates round differently — it now asserts
+  exactly on hardware adapters and within one 8-bit step on software ones
+  (`GpuContext::software`).
+- [ ] TF-4 **Decode speed hunch (GOP walk)** — half true, half already done. The decoder
+  already keeps per-item persistent decoders with a sequential fast path (`next_sequential`:
+  playing frame N+1 after N decodes exactly one frame — no re-walk from the keyframe), so
+  ordered playback/cache-fill is not paying the cost the tester suspected. The real gap is
+  random access (scrubbing): walking from the keyframe to frame N decodes the in-between
+  frames and throws them away. The tester's suggestion — cache the walk's byproducts (a "cache
+  frames 10-20" shape) — is sound and tracked as a decode-cache improvement; it trades a
+  little conversion CPU during the walk for free nearby frames afterwards.
+
+# Owner desk-testing — 2026-07-21 (implementation-audit branch)
+
+- [x] OD-1 **Audio still late at playback start.** The quarter-second smooth-streak warm-up
+  meant even a fully cached run began with ~15 silent frames. The gate is readiness *ahead*
+  now (`cached_audio_lookahead` + `run_ready` in `cached_step`): sound plays exactly when the
+  coming quarter-second of frames is already cached — a ready run has audio from its very
+  first frame (even while frame 0 holds for pace), a still-rendering stretch stays silent (no
+  flapping at the crawl edge), and recovery after a stall is immediate once the road ahead is
+  paved. Rides the memoised cache bar, so steady playback adds no hashing; >2400-frame comps
+  key just the window per tick (bounded; noted). `CompPlayback.smooth` retired.
+- [x] OD-2 **Dragged audio layer's waveform didn't follow in realtime** — resolved by design
+  via OD-3: the per-layer waveform lane reads the layer's live in/out/offset every paint, so
+  a drag carries the transients with it. (The stale comp-wide strip is gone entirely.)
+- [x] OD-3 **Per-layer Audio group replaces the comp-wide waveform (K-172).** Audio group in
+  the layer twirl (footage with an audio stream only): **Volume dB** — animatable property
+  (`Layer.volume_db`, `Op::SetLayerVolume`), 0 dB default, +50 ceiling, −100 = −inf knee
+  (exact zero gain; the box reads "−inf" and parses it back) — with stopwatch + ◄ ◆ ►
+  furniture; and a **Waveform** twirl drawing the item's 2048-bucket peak strip through the
+  layer's live placement. Static volume = constant clip gain; keyframed = ~10 ms control-rate
+  GainEnvelope applied identically by the live MixPlan callback and the baked export mixdown
+  (pinned by test: `an_enveloped_fade_rides_through_both_mixers_identically`). Volume joins
+  the audio-jobs signature so a nudge re-plans instantly. Comp-wide strip, its T25 toggles
+  (Window menu, lane right-click, strip right-click) and the background peaks bake all
+  removed. **Deferred, documented**: lane keyframe diamonds / graph editing for Volume await
+  the shared PropRow widening (same note as UI-11's flow input rate); fade-in/out commands
+  and detach-audio remain docs/09 §6 future work.
+
+## Owner desk-testing, round 2 — 2026-07-21 (pre-merge)
+
+- [x] OD-4 **Loaded project sat on the Viewer placeholder until the playhead moved** — and the
+  owner asked for full session restore. `SavedSession` (open comp tabs, fronted comp, playhead
+  frame, selected layer) persists per project path in egui storage (the timeline-name-w
+  pattern) and is applied by the shell on the first frame after open — with id validation
+  against the document, and a plain first-comp front + render even when no session exists.
+  Twirl states (layer, Transform/Effects/Flow/Audio groups, effect param groups) switched from
+  temp to persisted egui data on stable uuid-keyed ids, so what was open stays open.
+- [x] OD-5 **Precomps were silent** even when the nested comp held audio. `comp_audio_jobs` now
+  walks Precomp layers recursively (cycle-guarded): nested spans map onto the outer timeline
+  and clip to each carrier's own in/out; audible/solo gate per comp scope; and every carrier
+  precomp's Volume joins the job's gain chain (`AudioJob.carriers`), multiplied through
+  `volume_bake` — static chains stay a constant product, any animated link bakes the whole
+  chain to the envelope. Playback, beat detection and export all share the walk. Precomp
+  layers whose nested comp holds audio (recursively) get the Audio group's Volume row; a
+  mixed nested waveform lane is a follow-up.
+- [x] OD-6 **Audio-only layers lose the eye**: a source with no video stream has nothing to
+  show or hide, so its outline row draws no visibility toggle (the speaker leads).
+- [x] OD-7 **Waveform lane now rides a live bar drag**: it reads `move_edit`'s raw in-point
+  during the drag (the same preview the bar itself draws from), so the transients move with
+  the mouse instead of jumping at drop.
+
+## Owner desk-testing, round 3 — 2026-07-21
+
+- [x] OD-8 **Precomp rows had no speaker, and a mute inside the precomp kept playing in the
+  parent.** Two bugs: (a) the speaker was drawn only for footage rows — a precomp whose
+  nested comp holds audio anywhere now carries it (its mute silences everything inside,
+  `comp_has_audio` gate); (b) the real silencer bug was scoping, not the jobs walk (the walk
+  was already correct — regression-proven): `sync_comp_audio` managed only the FRONTED comp,
+  so editing inside a fronted precomp stale-played the parent's loaded mix for ever. The sync
+  now also reconciles whichever comp's mix actually sits in the engine
+  (`sync_one_comp_audio`), so a nested mute is heard immediately, mid-play, from any tab.
+  Regression: `precomp_audio_follows_nested_and_carrier_mutes` (nested mute, carrier mute,
+  and the fronted-precomp/loaded-parent staling).
+- [x] OD-9 **Restored project's Viewer stayed blank until a frame change.** The restore's
+  first render ran before the media probes finished (unprobed layers contribute nothing) and
+  nothing re-rendered when they landed. `MediaRegistry::poll` now reports when results
+  arrive, and the shell re-renders the shown frame — the first frame fills in as probes
+  complete, no playhead nudge needed.

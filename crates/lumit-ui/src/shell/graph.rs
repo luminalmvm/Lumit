@@ -149,6 +149,9 @@ pub(crate) fn graph_plot_retime(
     // ramp-preset shelf that eases the segment under the playhead. The
     // Source/Speed lens toggle lives in the timeline's bottom bar.
     let mut preset_ease: Option<lumit_core::retime::Ease> = None;
+    // "Convert to rate" (docs/04-RETIMING.md §5.2): fit the Map segment under the
+    // playhead to a constant-ease Rate, surfacing any fit drift as a notice.
+    let mut convert_to_rate = false;
     let header = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), rect.top() + 22.0));
     {
         use lumit_core::retime::Ease;
@@ -177,6 +180,14 @@ pub(crate) fn graph_plot_retime(
                 {
                     preset_ease = Some(ease);
                 }
+            }
+            h.separator();
+            if h
+                .small_button("→Rate")
+                .on_hover_text("Convert the mapped segment under the playhead to a constant-ease rate (docs/04 §5.2)")
+                .clicked()
+            {
+                convert_to_rate = true;
             }
         }
     }
@@ -321,6 +332,33 @@ pub(crate) fn graph_plot_retime(
                 layer: layer.id,
                 retime: Some(new_rt),
             });
+        }
+    }
+
+    // Convert the mapped segment under the playhead to a rate (§5.2). The fit is
+    // exact in source advance; a non-zero drift means the ease shape can't follow
+    // the map perfectly, which we report rather than draw a badge for (yet).
+    if convert_to_rate {
+        let lt = app.preview_frame as f64 / comp.frame_rate.fps().max(1.0)
+            - layer.start_offset.0.to_f64();
+        match retime.with_segment_as_rate(rational_at(lt.max(0.0))) {
+            Some((new_rt, drift)) => {
+                pending = Some(lumit_core::Op::SetLayerRetime {
+                    comp: comp.id,
+                    layer: layer.id,
+                    retime: Some(new_rt),
+                });
+                app.notice = Some(if drift.abs() > 5e-4 {
+                    format!("Converted to rate — fitted, {:.0} ms drift", drift * 1000.0)
+                } else {
+                    "Converted to rate".into()
+                });
+            }
+            None => {
+                app.notice = Some(
+                    "Can't convert here — already a rate, or the map can't fit one ease".into(),
+                );
+            }
         }
     }
 

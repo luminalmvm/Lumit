@@ -211,7 +211,12 @@ fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
         let m = textureSample(matte, samp, comp_uv);
         var strength = m.a;
         if (layer.params.z > 0.5) {
-            strength = dot(m.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+            // Luma matte: Rec.709 Y of the sRGB-ENCODED signal (perceptual luma,
+            // matching After Effects), not of linear light (docs/06 §3.5a).
+            strength = dot(
+                srgb_encode_c(clamp(m.rgb, vec3<f32>(0.0), vec3<f32>(1.0))),
+                vec3<f32>(0.2126, 0.7152, 0.0722),
+            );
         }
         if (layer.params.w > 0.5) {
             strength = 1.0 - strength;
@@ -248,8 +253,12 @@ fn fs_layer(in: VsOut) -> @location(0) vec4<f32> {
         let m = textureSample(matte, samp, comp_uv);
         var strength = m.a;
         if (layer.params.z > 0.5) {
-            // Luma matte (v0: luma of the premultiplied composite).
-            strength = dot(m.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+            // Luma matte: Rec.709 Y of the sRGB-ENCODED signal (perceptual luma,
+            // matching After Effects), not of linear light (docs/06 §3.5a).
+            strength = dot(
+                srgb_encode_c(clamp(m.rgb, vec3<f32>(0.0), vec3<f32>(1.0))),
+                vec3<f32>(0.2126, 0.7152, 0.0722),
+            );
         }
         if (layer.params.w > 0.5) {
             strength = 1.0 - strength;
@@ -259,14 +268,37 @@ fn fs_layer(in: VsOut) -> @location(0) vec4<f32> {
     return vec4<f32>(texel.rgb * a, a);
 }
 
-// Accumulation motion blur (docs/08 §3.26, docs/impl/temporal-rerender.md §3).
-// The inputs are already-PREMULTIPLIED comp composites (the below-stack rendered
-// at each sub-frame time), so — unlike fs_layer, which premultiplies a
-// straight-alpha source — this must NOT re-multiply by alpha. It scales the
-// premultiplied texel (colour AND alpha) by the per-sample weight params.x and
-// lets the pure-additive blend sum them, so N frames at weight 1/N give the
-// premultiplied arithmetic mean. Drawn 1:1 at comp size (identity placement).
+// fp32 accumulation (docs/06 §4). The combine sums its weighted premultiplied
+// sub-frames in an Rgba32Float target, so a still scene averages back to itself
+// bit-for-bit (an fp16 target rounds the 0.75·v partial sum and drifts a LSB on
+// fractional coverage). Each pass reads the running sum (accum_prev, an
+// unfilterable float read by textureLoad — never sampled) and adds this
+// sub-frame's weighted premultiplied texel; the host ping-pongs two fp32 targets.
+@group(0) @binding(6) var accum_prev: texture_2d<f32>;
+
 @fragment
-fn fs_accumulate(in: VsOut) -> @location(0) vec4<f32> {
-    return textureSample(src, samp, in.uv) * layer.params.x;
+fn fs_accumulate_f32(in: VsOut) -> @location(0) vec4<f32> {
+    let prev = textureLoad(accum_prev, vec2<i32>(in.pos.xy), 0);
+    return prev + textureSample(src, samp, in.uv) * layer.params.x;
+}
+
+// Resolve the fp32 running sum back into the working (fp16) format — the single,
+// final rounding, for downstream compositing and display.
+@fragment
+fn fs_copy_f32(in: VsOut) -> @location(0) vec4<f32> {
+    return textureLoad(accum_prev, vec2<i32>(in.pos.xy), 0);
+}
+
+// Per-layer motion blur (docs/06 §4) sums its sub-frame placements the same way,
+// but each placement is a TRANSFORMED quad, not a full-frame one — so it can't
+// carry the running sum through pixels it doesn't cover. Instead each placement
+// is rendered at FULL alpha into a cleared fp16 temp (this pass's `src`, 0
+// outside the quad) and this full-frame pass adds `weight · temp` to the fp32
+// running sum. The 1/N weight is applied HERE, in f32 — baking it into the fp16
+// temp first would round each contribution and lose the bit-exact still-scene
+// identity. `weight` rides in params.x.
+@fragment
+fn fs_add_f32(in: VsOut) -> @location(0) vec4<f32> {
+    let coord = vec2<i32>(in.pos.xy);
+    return textureLoad(accum_prev, coord, 0) + layer.params.x * textureLoad(src, coord, 0);
 }

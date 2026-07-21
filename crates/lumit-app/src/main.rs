@@ -63,19 +63,47 @@ fn default_backends() -> eframe::wgpu::Backends {
     }
 }
 
-fn main() -> eframe::Result<()> {
-    // Boot begins as the splash card (K-008): small, frameless, centred; the
-    // same window expands into the application when the boot log completes.
-    let mut options = eframe::NativeOptions {
-        centered: true,
-        persist_window: false,
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Lumit")
-            .with_inner_size([460.0, 300.0])
+/// The window Lumit opens with.
+///
+/// On Windows and macOS boot begins as the splash card itself (K-008): a small
+/// frameless window, centred, which grows into the application when the boot
+/// log completes.
+///
+/// Wayland will not have that. A client there cannot resize itself — size is
+/// the compositor's to decide — and toggling resizability after the window
+/// exists is unreliable, so the runtime "now become 1440×900 and resizable"
+/// commands were simply ignored and the editor was stuck in a 460×300 frame
+/// nothing could stretch (reported from the Flatpak). So on Linux the window
+/// opens decorated, resizable and at working size from the start, and the
+/// splash draws its card centred inside it — still the small centred splash
+/// K-008 asks for, just not its own window.
+fn splash_viewport() -> egui::ViewportBuilder {
+    let base = egui::ViewportBuilder::default()
+        .with_title("Lumit")
+        // Must match the Flatpak's desktop file, or a Wayland compositor
+        // cannot pair the window with its .desktop entry — no icon, and the
+        // wrong name in the dock.
+        .with_app_id(if cfg!(target_os = "linux") {
+            "io.github.luminalmvm.Lumit"
+        } else {
+            "lumit"
+        });
+    if cfg!(target_os = "linux") {
+        base.with_inner_size([1440.0, 900.0])
+            .with_min_inner_size([720.0, 480.0])
+    } else {
+        base.with_inner_size([460.0, 300.0])
             .with_min_inner_size([460.0, 300.0])
             .with_decorations(false)
             .with_resizable(false)
-            .with_app_id("lumit"),
+    }
+}
+
+fn main() -> eframe::Result<()> {
+    let mut options = eframe::NativeOptions {
+        centered: true,
+        persist_window: false,
+        viewport: splash_viewport(),
         ..Default::default()
     };
 
@@ -98,8 +126,30 @@ fn main() -> eframe::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::default_backends;
+    use super::{default_backends, splash_viewport};
     use eframe::wgpu::Backends;
+
+    /// Regression (reported from the Flatpak): the editor opened in a 460×300
+    /// frame that could not be stretched. The window was created as a
+    /// non-resizable splash and only became resizable through runtime viewport
+    /// commands — which Wayland ignores, a client there not being allowed to
+    /// resize itself. Linux must therefore open ready to work, and carry the
+    /// app id its desktop file uses so the compositor can pair the two.
+    #[test]
+    fn linux_opens_resizable_at_working_size_with_the_flatpak_app_id() {
+        let v = splash_viewport();
+        if cfg!(target_os = "linux") {
+            assert_ne!(v.resizable, Some(false), "Wayland cannot unset this later");
+            assert_ne!(v.decorations, Some(false));
+            assert_eq!(v.inner_size, Some(egui::vec2(1440.0, 900.0)));
+            assert_eq!(v.app_id.as_deref(), Some("io.github.luminalmvm.Lumit"));
+        } else {
+            // Elsewhere the window *is* the splash card and grows into the app.
+            assert_eq!(v.resizable, Some(false));
+            assert_eq!(v.decorations, Some(false));
+            assert_eq!(v.inner_size, Some(egui::vec2(460.0, 300.0)));
+        }
+    }
 
     // Guards K-011: on Windows the launch backend is DX12 alone. Enumerating
     // Vulkan/GL alongside it caused intermittent device-loss on the first frame,

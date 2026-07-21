@@ -38,6 +38,14 @@ pub mod media;
 /// moment they stop). Chosen to keep even 4K sources instant to draft.
 const DRAFT_MAX_WIDTH: u32 = 640;
 
+/// Safety net for realtime playback's render-pull: if the one live render is
+/// lost (an unrelated request superseded it), the tick retries after this long
+/// rather than waiting on a result that will never arrive. Generous — a heavy
+/// full-resolution frame stays well under it, so it never fires in normal play;
+/// it exists only so a lost render cannot wedge playback permanently.
+#[cfg(feature = "media")]
+pub const REALTIME_RENDER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Infallible constructor for small literal rationals.
 /// One decode-width policy for requests AND cache keys — if these ever
 /// disagreed, a cached frame could present at the wrong resolution. `draft`
@@ -216,8 +224,36 @@ pub(crate) fn audio_jobs_signature(jobs: &[crate::export::AudioJob], duration_s:
         j.in_s.to_bits().hash(&mut h);
         j.out_s.to_bits().hash(&mut h);
         j.offset_s.to_bits().hash(&mut h);
+        // Volume is mix content too: a level nudge or a fade keyframe must
+        // re-plan (docs/09 §6) — the job's own and every carrier precomp's.
+        hash_animation(&mut h, &j.volume.animation);
+        j.carriers.len().hash(&mut h);
+        for (prop, off) in &j.carriers {
+            off.to_bits().hash(&mut h);
+            hash_animation(&mut h, &prop.animation);
+        }
     }
     h.finish()
+}
+
+/// Fold one Volume animation into the jobs signature: static hashes as one
+/// f64, keyframed hashes every key (session-only change detection).
+#[cfg(feature = "media")]
+fn hash_animation(
+    h: &mut std::collections::hash_map::DefaultHasher,
+    a: &lumit_core::anim::Animation,
+) {
+    use std::hash::Hash;
+    match a {
+        lumit_core::anim::Animation::Static(v) => v.to_bits().hash(h),
+        lumit_core::anim::Animation::Keyframed(keys) => {
+            keys.len().hash(h);
+            for k in keys {
+                k.time.to_f64().to_bits().hash(h);
+                k.value.to_bits().hash(h);
+            }
+        }
+    }
 }
 
 /// What keeping the loaded comp-audio mix in step with the document needs this
@@ -434,7 +470,7 @@ pub enum CacheTier {
 #[cfg(feature = "media")]
 pub mod diskio;
 
-/// One display-ready comp frame in Kura's RAM tier (sRGB bytes as shown and
+/// One display-ready comp frame in Nebula's RAM tier (sRGB bytes as shown and
 /// as exported — the same pixels, K-031).
 #[cfg(feature = "media")]
 pub struct CachedCompFrame {
@@ -448,6 +484,76 @@ impl lumit_cache::ByteSized for CachedCompFrame {
     fn byte_size(&self) -> usize {
         self.rgba.len() + 16
     }
+}
+
+/// A whole-file decoded audio buffer in the byte-budgeted audio cache — the
+/// shared copy playback mixes from and the footage preview plays. Wrapped so
+/// the cache can size it (a movie's decoded audio runs to gigabytes; the
+/// budget in Settings → Performance keeps the total bounded, which is what
+/// stops a long film eating all of RAM).
+#[cfg(feature = "media")]
+#[derive(Clone)]
+pub struct CachedAudio(pub std::sync::Arc<lumit_media::AudioBuffer>);
+
+#[cfg(feature = "media")]
+impl lumit_cache::ByteSized for CachedAudio {
+    fn byte_size(&self) -> usize {
+        self.0.samples.len() * std::mem::size_of::<f32>() + 32
+    }
+}
+
+/// Comp playback state (see [`AppState::comp_playback`]).
+#[derive(Debug, Clone, Copy)]
+pub struct CompPlayback {
+    /// Realtime: the wall-clock origin. Cached: when the current frame was
+    /// shown (the realtime-pace timer for the next advance, carried by
+    /// `cached_pace_carry` so replay holds exact realtime).
+    pub started: Instant,
+    /// Realtime: the frame the clock is measured from. Cached: unused
+    /// (`current` leads).
+    pub start_frame: usize,
+}
+
+impl CompPlayback {
+    /// Begin playing from `frame` now.
+    pub fn start(frame: usize) -> Self {
+        Self {
+            started: Instant::now(),
+            start_frame: frame,
+        }
+    }
+}
+
+/// A background comp-audio delivery (see the `comp_audio_rx` field).
+#[cfg(feature = "media")]
+/// One item's waveform strip for the per-layer Waveform lane (K-172):
+/// `(source duration s, 2048 (min,max) peak buckets)` over the item's whole
+/// decoded audio, shared between the memo and the painters.
+#[cfg(feature = "media")]
+pub type ItemWaveform = std::sync::Arc<(f64, Vec<(f32, f32)>)>;
+
+/// A project's restored working state (owner): which comp tabs were open,
+/// which comp fronted the Viewer, where the playhead sat, and the selected
+/// layer. Persisted in egui's storage keyed by project path (the
+/// `timeline-name-w` pattern) and applied right after open — so a loaded
+/// project renders immediately instead of parking on the Viewer placeholder
+/// until the playhead moves. Twirl states persist separately (their
+/// uuid-keyed egui ids). Ids are validated against the document on restore;
+/// stale ones fall back to the defaults.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedSession {
+    pub open_comps: Vec<Uuid>,
+    pub active_comp: Option<Uuid>,
+    pub frame: usize,
+    pub selected_layer: Option<Uuid>,
+}
+
+pub(crate) enum CompAudioMsg {
+    /// A whole baked mix — the legacy path for sources the byte-budgeted
+    /// cache cannot hold (decode failed, or larger than the entire budget).
+    /// (The Peaks variant that fed the comp-wide waveform strip left with
+    /// it, K-172 — waveforms are per layer now.)
+    Baked(Uuid, u64, lumit_media::AudioBuffer),
 }
 
 /// See [`AppState::stamper`].
@@ -639,15 +745,38 @@ pub struct AppState {
     /// Open composition-settings dialogue, if any.
     pub comp_dialog: Option<CompDialog>,
     pub pending_recovery: Option<PendingRecovery>,
+    /// A one-line error banner (fig-tinted, docs/15 §10): decode / export /
+    /// journal failures and the like. Dismissible; session-only.
     pub error: Option<String>,
+    /// A quiet neutral notice (e.g. a completed export) kept apart from `error`
+    /// so a success never wears the fig error tint (docs/15 §10). Session-only.
+    pub notice: Option<String>,
     #[cfg(feature = "media")]
     pub media: media::MediaRegistry,
     #[cfg(feature = "media")]
     pub preview_engine: preview::PreviewEngine,
+    /// Adaptive realtime-resolution controller (K-030): fed each live playback
+    /// frame's GPU-composite cost, it returns the preview divisor to use next
+    /// (drop fast, rise slow, anti-flap). Only consulted while
+    /// [`Self::preview_realtime`] is on. Pure logic, tested in `lumit_eval`.
+    #[cfg(feature = "media")]
+    pub realtime_ctrl: lumit_eval::schedule::RealtimeController,
     #[cfg(feature = "media")]
     audio_engine: Option<lumit_audio::AudioEngine>,
+    /// Byte-budgeted whole-file decoded audio, keyed by footage item — shared
+    /// by the footage preview and the comp-mix path so a file is decoded once,
+    /// and bounded so long films cannot eat all of RAM (Settings →
+    /// Performance → Audio decode budget).
     #[cfg(feature = "media")]
-    audio_cache: std::collections::HashMap<Uuid, std::sync::Arc<lumit_media::AudioBuffer>>,
+    audio_cache: lumit_cache::ByteLru<Uuid, CachedAudio>,
+    /// Items whose decode is in flight (spawn guard).
+    #[cfg(feature = "media")]
+    audio_decode_pending: std::collections::HashSet<Uuid>,
+    /// Items whose decode failed or whose buffer exceeds the cache budget —
+    /// the comp mix falls back to the legacy decode-per-bake path for these
+    /// instead of retrying every frame.
+    #[cfg(feature = "media")]
+    audio_decode_failed: std::collections::HashSet<Uuid>,
     #[cfg(feature = "media")]
     audio_loaded: Option<Uuid>,
     #[cfg(feature = "media")]
@@ -667,12 +796,14 @@ pub struct AppState {
     /// bake being re-spawned every frame while it decodes.
     #[cfg(feature = "media")]
     audio_preparing: Option<(Uuid, u64)>,
-    /// Background-mixed comp audio arriving from the prepare thread, tagged with
-    /// the signature it was baked from so a superseded mix can be dropped.
+    /// Background comp-audio results, tagged with the signature they were
+    /// built from so a superseded delivery can be dropped. The live-mix path
+    /// only ships waveform peaks (the plan itself applies instantly on the UI
+    /// thread); the legacy path ships a whole baked buffer.
     #[cfg(feature = "media")]
-    comp_audio_rx: std::sync::mpsc::Receiver<(Uuid, u64, lumit_media::AudioBuffer)>,
+    comp_audio_rx: std::sync::mpsc::Receiver<CompAudioMsg>,
     #[cfg(feature = "media")]
-    comp_audio_tx: std::sync::mpsc::Sender<(Uuid, u64, lumit_media::AudioBuffer)>,
+    comp_audio_tx: std::sync::mpsc::Sender<CompAudioMsg>,
     /// Detected beats (comp id, bpm, (time_s, confidence)…) from the analysis
     /// thread.
     #[cfg(feature = "media")]
@@ -682,14 +813,15 @@ pub struct AppState {
     /// (comp id, estimated BPM) from the last beat detection, shown by the ruler.
     #[cfg(feature = "media")]
     pub detected_bpm: Option<(Uuid, f64)>,
-    /// (comp id, (min,max) peaks) for the timeline waveform, computed when the
-    /// comp's audio is mixed. Drawn under the ruler.
+    /// Per-item waveform peaks for the per-layer Waveform twirl (K-172):
+    /// memoised on first request. View data only — amplitude shape, no
+    /// timing — so it survives edits and re-mixes untouched.
     #[cfg(feature = "media")]
-    pub comp_waveform: Option<(Uuid, Vec<(f32, f32)>)>,
-    /// Whether the audio-preview waveform strip under the ruler is shown (T25):
-    /// right-clicking the strip hides it; it defaults on. A view preference, not
-    /// project data.
-    pub show_audio_bar: bool,
+    pub item_waveforms: std::collections::HashMap<Uuid, ItemWaveform>,
+    /// Set by `install` when a project (re)opens: the shell restores the
+    /// saved [`SavedSession`] for this path on its next frame (it owns the
+    /// egui context the session lives in), then clears this.
+    pub session_restore_pending: bool,
     /// The timeline's layer-search filter (TL4): layers whose name doesn't
     /// contain this (case-insensitive) are hidden from the outline. Empty shows
     /// all. A view preference.
@@ -879,9 +1011,12 @@ pub struct AppState {
     pub graph_retime_edit: Option<(usize, f64)>,
     /// Comp shown in the Viewer (takes precedence over preview_item).
     pub preview_comp: Option<Uuid>,
-    /// Wall-clock comp playback v0 (the frame scheduler replaces this):
-    /// (started, frame at start).
-    pub comp_playback: Option<(Instant, usize)>,
+    /// Comp playback state, or None when stopped. `started`/`start_frame` are
+    /// the wall-clock origin **Realtime** mode chases; in **Cached** mode
+    /// (K-171) `started` doubles as the pace timer for the current frame and
+    /// `smooth` is the on-pace streak that gates audio (see
+    /// [`lumit_eval::schedule::cached_step`]).
+    pub comp_playback: Option<CompPlayback>,
     /// Footage item currently shown in the Viewer, and the scrub position.
     pub preview_item: Option<Uuid>,
     pub preview_frame: usize,
@@ -895,6 +1030,16 @@ pub struct AppState {
     /// decodes a coarse draft for instant feedback, then reloads at the
     /// specified resolution once scrubbing stops (Mack's "force realtime").
     pub preview_draft: bool,
+    /// Realtime preview mode (K-030, docs/06 §6.5): when on, playback resolution
+    /// is driven by [`Self::realtime_ctrl`] rather than the manual divisor / Auto
+    /// — the divisor drops under load and recovers slowly, trading resolution
+    /// for smooth motion. Off = Cached mode (the manual/Auto picker applies).
+    pub preview_realtime: bool,
+    /// Beat-detection sensitivity as a 0–100 slider (docs/09-AUDIO.md §5;
+    /// higher = more beats). Mapped to the detector's δ by
+    /// `lumit_audio::beat::delta_from_sensitivity`. 50 reproduces the old
+    /// "Standard" preset.
+    pub beat_sensitivity: u8,
     /// View zoom (1.0 = fit) and pan, in screen pixels. View controls only —
     /// never part of any render (07-UI-SPEC: Viewer).
     pub view_zoom: f32,
@@ -921,7 +1066,7 @@ pub struct AppState {
     /// Timeline right area shows the graph editor (curves) instead of the
     /// layer bars — a mode of the Timeline, not a separate panel (K-070).
     pub timeline_graph_mode: bool,
-    /// Kura's RAM tier for final comp frames (K-016): display-ready sRGB
+    /// Nebula's RAM tier for final comp frames (K-016): display-ready sRGB
     /// bytes keyed by content hash. Hash mismatch is the only invalidation.
     #[cfg(feature = "media")]
     pub comp_frame_cache: lumit_cache::ByteLru<u128, CachedCompFrame>,
@@ -934,6 +1079,16 @@ pub struct AppState {
     /// The (comp, frame) currently rendering for the background cache fill.
     #[cfg(feature = "media")]
     pub fill_in_flight: Option<(Uuid, usize)>,
+    /// Realtime playback's one outstanding live render: the frame we asked for
+    /// and the instant we asked. Realtime is render-*pull*ed — exactly one live
+    /// render is in flight and it is never superseded by the clock moving on, so
+    /// a slow frame completes and feeds the adaptive controller instead of being
+    /// abandoned every tick (which used to leave the picture frozen with the
+    /// controller starved of measurements). The instant is a safety net: a live
+    /// render lost to an unrelated supersede is retried after
+    /// [`REALTIME_RENDER_TIMEOUT`], so playback can never wedge for good.
+    #[cfg(feature = "media")]
+    pub realtime_inflight: Option<(usize, Instant)>,
     /// The disk tier's IO worker (docs/06 §5.4), started lazily once the
     /// project has a path (unsaved projects have no sidecar to cache into).
     pub disk_io: Option<diskio::DiskIo>,
@@ -1000,14 +1155,21 @@ impl Default for AppState {
             selected_comp: None,
             pending_recovery: None,
             error: None,
+            notice: None,
             #[cfg(feature = "media")]
             media: media::MediaRegistry::default(),
             #[cfg(feature = "media")]
             preview_engine: preview::PreviewEngine::default(),
             #[cfg(feature = "media")]
+            realtime_ctrl: lumit_eval::schedule::RealtimeController::new(),
+            #[cfg(feature = "media")]
             audio_engine: None,
             #[cfg(feature = "media")]
-            audio_cache: std::collections::HashMap::new(),
+            // Conservative fallback budget; Settings → Performance resizes
+            // this at startup to its half-of-system-RAM default (K-100).
+            audio_cache: lumit_cache::ByteLru::new(2 * 1024 * 1024 * 1024),
+            audio_decode_pending: std::collections::HashSet::new(),
+            audio_decode_failed: std::collections::HashSet::new(),
             #[cfg(feature = "media")]
             audio_loaded: None,
             #[cfg(feature = "media")]
@@ -1025,7 +1187,9 @@ impl Default for AppState {
             #[cfg(feature = "media")]
             beats_tx,
             #[cfg(feature = "media")]
-            comp_waveform: None,
+            #[cfg(feature = "media")]
+            item_waveforms: std::collections::HashMap::new(),
+            session_restore_pending: false,
             #[cfg(feature = "media")]
             detected_bpm: None,
             #[cfg(feature = "media")]
@@ -1073,12 +1237,14 @@ impl Default for AppState {
             timeline_grid: TimelineGrid::Off,
             graph_retime_edit: None,
             preview_comp: None,
-            comp_playback: None,
+            comp_playback: None, // set on play
             preview_item: None,
             preview_frame: 0,
             preview_divisor: 1,
             preview_auto_res: false,
             preview_draft: false,
+            preview_realtime: false,
+            beat_sensitivity: 50,
             view_zoom: 1.0,
             view_pan: egui::Vec2::ZERO,
             last_display_scale: 1.0,
@@ -1098,6 +1264,8 @@ impl Default for AppState {
             cached_present: None,
             #[cfg(feature = "media")]
             fill_in_flight: None,
+            #[cfg(feature = "media")]
+            realtime_inflight: None,
             disk_io: None,
             disk_root: None,
             disk_load_pending: std::collections::HashSet::new(),
@@ -1114,7 +1282,6 @@ impl Default for AppState {
             layer_reorder: None,
             selected_item: None,
             selected_items: Vec::new(),
-            show_audio_bar: true,
             timeline_layer_search: String::new(),
             timeline_hide_invisible: false,
             mask_drag: None,

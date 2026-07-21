@@ -711,6 +711,157 @@ pub(crate) fn flow_group_rows(
     }
 }
 
+/// The Audio group's Volume row (docs/09 §6, K-172): stopwatch, ◄ ◆ ►
+/// navigator, name, then the dB value box — 0 dB unity, boostable to +50,
+/// and the box reads "−inf" at the −100 knee (true silence). Each edit
+/// commits one `SetLayerVolume`. Rendered with the same furniture as every
+/// other animatable row; lane keyframe diamonds await the shared PropRow
+/// widening (the same note as the Flow input rate, UI-11).
+pub(crate) fn volume_row(
+    ui: &mut egui::Ui,
+    ctx: &RowCtx,
+    pending: &mut Option<lumit_core::Op>,
+    nav_jump: &mut Option<f64>,
+) {
+    use lumit_core::anim::Animation;
+    let (_row, mut c) = row_frame(ui, ctx, false);
+    let prop = &ctx.layer.volume_db;
+
+    if let Some(animation) = stopwatch(&mut c, ctx.theme, prop, ctx.lt) {
+        *pending = Some(lumit_core::Op::SetLayerVolume {
+            comp: ctx.comp_id,
+            layer: ctx.layer.id,
+            animation,
+        });
+    }
+    volume_nav(&mut c, ctx, prop, pending, nav_jump);
+
+    c.label(
+        egui::RichText::new("Volume dB")
+            .small()
+            .color(ctx.theme.text_muted),
+    )
+    .on_hover_text(
+        "This layer's loudness: 0 is the file's own level, positive boosts (up to +50), \
+         and −100 or below is silence (−inf). Keyframe it for fades",
+    );
+
+    let committed = prop.value_at(ctx.lt);
+    let id = egui::Id::new(("volume-db", ctx.layer.id));
+    let mut v = c.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+    let floor = lumit_audio::mix::VOLUME_FLOOR_DB;
+    let resp = c.add(
+        egui::DragValue::new(&mut v)
+            .speed(0.25)
+            .range(floor..=50.0)
+            .custom_formatter(move |v, _| {
+                if v <= floor {
+                    "-inf".into()
+                } else {
+                    format!("{v:.1}")
+                }
+            })
+            .custom_parser(move |s| {
+                let s = s.trim();
+                if s.eq_ignore_ascii_case("-inf") {
+                    Some(floor)
+                } else {
+                    s.parse().ok()
+                }
+            }),
+    );
+    if resp.dragged() || resp.has_focus() {
+        c.data_mut(|d| d.insert_temp(id, v));
+    }
+    if resp.drag_stopped() || resp.lost_focus() {
+        if (v - committed).abs() > 1e-9 {
+            let animation = if prop.is_animated() {
+                Animation::Keyframed(upsert_key(prop, ctx.lt, v))
+            } else {
+                Animation::Static(v)
+            };
+            *pending = Some(lumit_core::Op::SetLayerVolume {
+                comp: ctx.comp_id,
+                layer: ctx.layer.id,
+                animation,
+            });
+        }
+        c.data_mut(|d| d.remove::<f64>(id));
+    }
+}
+
+/// The ◄ ◆ ► navigator for an animated Volume — the volume twin of
+/// `flow_input_rate_nav`, committing `SetLayerVolume`.
+fn volume_nav(
+    c: &mut egui::Ui,
+    ctx: &RowCtx,
+    prop: &lumit_core::anim::Property,
+    pending: &mut Option<lumit_core::Op>,
+    nav_jump: &mut Option<f64>,
+) {
+    use lumit_core::anim::Animation;
+    let Animation::Keyframed(keys) = &prop.animation else {
+        return;
+    };
+    let tol = 0.5 / ctx.fps.max(1.0);
+    let small = |i: Icon| egui::Button::new(crate::icons::text(i, 11.0)).frame(false);
+
+    let has_prev = keys.iter().any(|k| k.time.to_f64() < ctx.lt - tol);
+    if c.add_enabled(has_prev, small(Icon::PrevKeyframe))
+        .on_hover_text("Previous keyframe")
+        .clicked()
+    {
+        *nav_jump = keys
+            .iter()
+            .rev()
+            .find(|k| k.time.to_f64() < ctx.lt - tol)
+            .map(|k| k.time.to_f64());
+    }
+    let on_key = keys.iter().any(|k| (k.time.to_f64() - ctx.lt).abs() < tol);
+    if c.add(small(if on_key {
+        Icon::KeyframeFilled
+    } else {
+        Icon::Keyframe
+    }))
+    .on_hover_text(if on_key {
+        "Remove keyframe here"
+    } else {
+        "Add keyframe here"
+    })
+    .clicked()
+    {
+        let animation = if on_key {
+            let kept: Vec<_> = keys
+                .iter()
+                .filter(|k| (k.time.to_f64() - ctx.lt).abs() >= tol)
+                .cloned()
+                .collect();
+            if kept.is_empty() {
+                Animation::Static(prop.value_at(ctx.lt))
+            } else {
+                Animation::Keyframed(kept)
+            }
+        } else {
+            Animation::Keyframed(upsert_key(prop, ctx.lt, prop.value_at(ctx.lt)))
+        };
+        *pending = Some(lumit_core::Op::SetLayerVolume {
+            comp: ctx.comp_id,
+            layer: ctx.layer.id,
+            animation,
+        });
+    }
+    let has_next = keys.iter().any(|k| k.time.to_f64() > ctx.lt + tol);
+    if c.add_enabled(has_next, small(Icon::NextKeyframe))
+        .on_hover_text("Next keyframe")
+        .clicked()
+    {
+        *nav_jump = keys
+            .iter()
+            .find(|k| k.time.to_f64() > ctx.lt + tol)
+            .map(|k| k.time.to_f64());
+    }
+}
+
 /// Write a new input-rate animation onto a Flow retime as one undoable
 /// `SetLayerRetime` (K-160). Clones the retime, swaps in the property carrying
 /// `animation`, and leaves every other Flow parameter untouched.

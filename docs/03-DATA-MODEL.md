@@ -41,48 +41,51 @@ Baking exists only inside the export pipeline and produces no model mutations.
 
 ## 2. Project
 
+v1 ships this as lumit-core's `Document` — a flat item store. The richer
+`Project`/`ProjectSettings` shape is the intended direction; the settings it
+would hold (a display-transform default, an expression-engine version) arrive
+with those features (colour management, expressions), so v1 has no
+`ProjectSettings` yet.
+
 ```rust
-struct Project {
+struct Document {
     id: Uuid,
-    settings: ProjectSettings,      // display transform default, expression engine version
-    assets: Vec<Asset>,             // tree via Folder
-    compositions: Vec<Uuid>,        // comps are assets too; this orders the Project panel
+    items: Vec<ProjectItem>,   // flat storage; Project-panel order = Vec order; folders hold children by id
+    auto_folders: AutoFolders, // where new solids / comps are auto-filed (K-068)
 }
 ```
 
-An **Asset** is one of:
+A `ProjectItem` (the intended **Asset**) is one of the following. **v1 ships
+`Footage`, `Folder`, `Composition`, `Solid`**; the audio/still/sequence kinds
+are future (audio is currently only a footage layer's stream, §5.2):
 
-| Asset | Contents |
-|---|---|
-| `FootageItem` | Media reference (§3), interpretation, proxy state |
-| `AudioItem` | Audio-only media reference |
-| `StillItem` | Single image |
-| `SequenceItem` | Image sequence (pattern, fps) |
-| `Composition` | §4 |
-| `Folder` | Ordered children ids |
-| `SolidDef` | Shared solid definition (colour, size) — solids are assets so they dedupe |
+| Asset | v1? | Contents |
+|---|---|---|
+| `Footage` (`FootageItem`) | yes | Media reference (§3); interpretation and proxy state are future |
+| `AudioItem` | future | Audio-only media reference |
+| `StillItem` | future | Single image |
+| `SequenceItem` | future | Image sequence (pattern, fps) |
+| `Composition` | yes | §4 |
+| `Folder` | yes | Ordered children ids |
+| `Solid` (`SolidDef`) | yes | Shared solid definition (colour, size) — solids are items so they dedupe |
 
 ### 3. Media references and interpretation
 
 ```rust
+// v1 stores only the path pair.
 struct MediaRef {
     relative_path: String,     // relative to project file where possible
     absolute_path: String,     // last known absolute location
-    fingerprint: Fingerprint,  // size + mtime + head/tail content hash, for relinking
-}
-
-struct FootageInterpretation {
-    frame_rate_override: Option<FrameRate>,
-    alpha: AlphaMode,               // straight | premultiplied(colour) | ignore | guess
-    colour_space: ColourSpaceTag,   // default: Rec.709/sRGB assumption for game captures
-    loop_count: u32,
-    start_timecode_policy: TcPolicy,
 }
 ```
 
-A footage item whose file cannot be found enters a **missing** state: it keeps all metadata,
-renders as a labelled placeholder slate, and never blocks project open. Relink flow in
-[07-UI-SPEC.md](07-UI-SPEC.md).
+**Future** — none of this is in v1 yet:
+
+- a `fingerprint` (size + mtime + head/tail content hash) for reliable relinking (a
+  `Fingerprint` type exists in `lumit-media` but is not stored on the reference);
+- a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
+  timecode policy) — v1 treats every source as sRGB with no per-item overrides;
+- the **missing**-footage state (placeholder slate + relink flow, [07-UI-SPEC.md](07-UI-SPEC.md)).
 
 ---
 
@@ -92,17 +95,19 @@ renders as a labelled placeholder slate, and never blocks project open. Relink f
 struct Composition {
     id: Uuid,
     name: String,
-    width: u32, height: u32,            // hard cap 16384×16384 in v1
-    pixel_aspect: Rational,             // 1:1 default
+    width: u32, height: u32,            // no hard cap enforced yet (16384² is the intended limit)
     frame_rate: FrameRate,
     duration: CompTime,
     background: LinearColour,
-    depth: CompDepth,                   // Fp16 (default) | Fp32   (K-026, per-comp)
-    motion_blur: MotionBlurSettings,    // shutter_angle (deg), shutter_phase, max_samples
-    work_area: (CompTime, CompTime),
+    motion_blur: MotionBlur,            // shutter_angle (deg), shutter_phase, samples; off by default
+    work_area: Option<(CompTime, CompTime)>,  // None = full comp
     markers: Vec<Marker>,
     layers: Vec<Layer>,                 // index 0 = top of the stack
 }
+// Future: `pixel_aspect` (v1 is square-pixel only), and working depth — K-069
+// made bit depth a project-wide switch (not the per-comp `CompDepth` of the
+// superseded K-026), and v1 renders fp16 only regardless. The 16384² dimension
+// cap is intended but not yet enforced.
 ```
 
 Comp frame rate is presentational (it defines frame boundaries for snapping and export);
@@ -124,26 +129,33 @@ struct Layer {
     in_point: CompTime,                // may be negative — the layer may start before comp 0 (K-153)
     out_point: CompTime,               // exclusive; out > in; may exceed the comp duration (K-153)
     start_offset: CompTime,            // where layer time 0 sits on the comp timeline; may be negative
-    stretch: Rational,                 // uniform rate multiplier; rescales this layer's keyframes
-    parent: Option<Uuid>,              // transform parenting; cycles are invalid states
-    switches: Switches,
-    blend_mode: BlendMode,
+    parent: Option<Uuid>,              // transform parenting (K-103); a missing/cyclic parent degrades to none
+    label: u8,                         // index into the theme label palette (TL2); organisational, never rendered
+    blend: BlendMode,
     matte: Option<MatteRef>,           // { layer, channel: Alpha|Luma, inverted, source } (K-142)
     transform: TransformGroup,         // §6
     masks: Vec<Mask>,                  // §7
     effects: Vec<EffectInstance>,      // §8, ordered top-to-bottom
-    markers: Vec<Marker>,
-    audio: Option<AudioProps>,         // level (animatable), mute — when the source has audio
+    volume_db: Property,               // K-172: animatable Volume (docs/09 §6); 0 dB unity, −100 = −∞
+    switches: Switches,
 }
+// Future (not in v1): `stretch` (uniform rate multiplier) and per-layer `markers`.
+// Mute stays the `audible` switch, and audio comes only from a footage layer's own
+// stream (§5.2, docs/09); the once-sketched `audio: AudioProps` grouping collapsed
+// to the single `volume_db` property when it shipped (K-172) — fades are its
+// keyframes, so v1 needed nothing more.
 
 struct Switches {
-    visible: bool, audible: bool, solo: bool, locked: bool, shy: bool,
-    quality: Quality,                  // Draft | Full
-    motion_blur: bool,
-    adjustment: bool,
-    three_d: bool,
-    collapse: bool,                    // Precomp layers: transform concatenation
+    visible: bool, audible: bool, locked: bool,
+    solo: bool,                        // K-105: while any layer is soloed, only soloed layers render
+    fx: bool,                          // docs/08 §1.5: off bypasses the layer's whole effect stack (default on)
+    motion_blur: bool,                 // K-120: per-layer shutter smear (needs the comp master on)
+    three_d: bool,                     // 2.5D: position in z, honour the active camera
+    collapse: bool,                    // Precomp layers: transform concatenation (docs/06 §1.4)
 }
+// Future switches (K-168, deferred): `shy` (needs an outline filter row) and
+// `quality` (Draft|Full — needs a bicubic sampler choice). `adjustment` is not a
+// switch — an adjustment layer is a LayerKind (§5.2).
 ```
 
 Invariants:
@@ -157,28 +169,31 @@ Invariants:
 - A matte reference to a missing/deleted layer degrades to "no matte" with a badge, never an error.
 - Any layer can serve as a matte for any number of consumers; the engine evaluates it once
   ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)).
-- `source: LayerInputSource` (default `None`, K-142, revising K-125's `after_effects` bool):
+- `source: LayerInputSource` (default `EffectsAndMasks`, K-142, revising K-125's `after_effects`
+  bool — the most complete source is the sensible default for a new matte/depth input):
   **None** gates by the matte layer's **raw** pixels (no masks, no effects); **Masks** gates
   by the source plus its own masks; **EffectsAndMasks** runs the matte layer's effect stack
   into the matte first (a keyed or blurred matte). v1 skips the source's *temporal* effects
   through a matte (echo/flow degrade to a still — [docs/impl/layer-input.md](impl/layer-input.md)).
   A project saved with K-125's `after_effects` bool migrates on load (`true` →
-  `EffectsAndMasks`, `false`/absent → `None`).
+  `EffectsAndMasks`, `false` → `Masks` so no masks are dropped, absent → the default
+  `EffectsAndMasks`).
 
 ### 5.2 Layer kinds
 
-| Kind | Source payload | Notes |
-|---|---|---|
-| `Footage { item: Uuid, retime: Retime }` | One footage/still/sequence item | The AE-style default. Retime per [04-RETIMING.md](04-RETIMING.md). |
-| `Sequence { clips: Vec<Clip> }` | Its clips | §5.3. |
-| `Precomp { comp: Uuid, retime: Retime }` | Another composition | `collapse` switch defers rasterisation. Cycles invalid. Retime supported (a non-identity Retime forces an intermediate, disabling collapse). |
-| `Solid { def: Uuid }` | A SolidDef | |
-| `Text { document: TextDocument }` | §9.1 | |
-| `Shape { contents: Vec<ShapeElement> }` | §9.2 | |
-| `Null` | — | Transform-only, invisible. |
-| `Adjustment` | — | `adjustment` switch implied; effect stack applies to composite below. |
-| `Audio { item: Uuid }` | An audio item | No visual payload. |
-| `Camera { cam: CameraProps }` | §9.3 | 3D only. |
+| Kind | v1? | Source payload | Notes |
+|---|---|---|---|
+| `Footage { item: Uuid, retime: Option<Retime> }` | yes | One footage item | The AE-style default. `None` = source rate. Retime per [04-RETIMING.md](04-RETIMING.md). |
+| `Sequence { clips: Vec<Clip> }` | yes | Its clips | §5.3. |
+| `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. **Precomp-level retime is future** — the `retime` field is not on the kind yet; nest through a Sequence clip to retime a comp for now. |
+| `Solid { def: Uuid }` | yes | A SolidDef | |
+| `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
+| `Camera { zoom: Property }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. |
+| `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
+| `Shape { contents: Vec<ShapeElement> }` | future | §9.2 | |
+| `Null` | future | — | Transform-only, invisible. |
+| `Audio { item: Uuid }` | future | An audio item | v1 audio is only a footage layer's own stream (§5.2, docs/09). |
+| `Light` | future | — | Paired with Camera; not in v1. |
 | `Light { light: LightProps }` | §9.3 | 3D only. |
 
 ### 5.3 Clips (Sequence layers only)
@@ -186,14 +201,15 @@ Invariants:
 ```rust
 struct Clip {
     id: Uuid,
-    source: ClipSource,            // FootageItem | Composition
+    source: ClipSource,            // Footage(Uuid) | Comp(Uuid)
     source_in: SourceTime,         // trim into the source
     source_out: SourceTime,        // exclusive
-    place: ClipTimeSpan,           // start + duration in layer time; derived from edits, stored explicitly
+    place_start: Rational,         // clip start on the layer timeline (the doc's ClipTimeSpan,
+    place_duration: Rational,      //   stored as start + duration)
     retime: Retime,                // exact rational boundaries — see 04-RETIMING.md
-    interpolation: FrameInterp,    // Nearest | Blend | Flow  (render policy, not part of the map)
-    label: LabelColour,
+    interpolation: Interpolation,  // Nearest | Blend | Flow  (render policy, not part of the map)
 }
+// Future: a per-clip `label` (LabelColour).
 ```
 
 Invariants (binding, per K-020/K-022):
@@ -216,41 +232,41 @@ A **property** is an animatable slot. Properties live in **property groups** for
 tree (transform group, each effect's parameters, each mask's geometry, retime).
 
 ```rust
-struct Property<T: PropValue> {
-    id: Uuid,
-    animation: Animation<T>,
-    expression: Option<Expression>,   // §6.4 — applied after keyframe evaluation
+// v1: a Property is a scalar f64.
+struct Property {
+    animation: Animation,            // Static(f64) | Keyframed(Vec<Keyframe>)
 }
 
-enum Animation<T> {
-    Static(T),
-    Keyframed(Vec<Keyframe<T>>),      // sorted by time, unique times
+enum Animation {
+    Static(f64),
+    Keyframed(Vec<Keyframe>),        // sorted by time, unique times
 }
 ```
 
-`PropValue` types: `f64`, `Vec2`, `Vec3`, `LinearColour`, `bool`, `enum` (hold-only
-interpolation for the last two), `BezierPath` (mask/shape geometry), `TextDocument`.
-
-Property addressing is by stable path of ids (not display names), so expressions and the AE
-Bridge survive renames: `layer(id).effect(id).param(id)`.
+A multi-dimensional value (a Vec2 position, a Vec3 scale, a colour) is stored in v1 as
+**separate per-dimension scalar properties** (`position_x`/`position_y`, …), not a generic
+`Property<T>`. The generic `Property<T: PropValue>` over `Vec2`/`Vec3`/`LinearColour`/`bool`/
+`enum`/`BezierPath`/`TextDocument`, the stable-`id` addressing, and the `expression` slot are
+**future** — they arrive with the expression engine (§6.4, [12-PLUGINS.md](12-PLUGINS.md)),
+which v1 does not have. There is no `PropValue` trait in v1.
 
 ### 6.2 Keyframes — AE-compatible maths (K-025)
 
 ```rust
-struct Keyframe<T> {
+// v1: value is f64 (see §6.1).
+struct Keyframe {
     time: OwnerTime,                  // timebase of the owning object
-    value: T,
+    value: f64,
     interp_in:  SideInterp,           // approaching this key
     interp_out: SideInterp,           // leaving this key
-    spatial: Option<SpatialTangents>, // Vec2/Vec3 positional properties only
-    roving: bool,                     // spatial properties only
-    label: Option<LabelColour>,
 }
+// Future: `spatial: SpatialTangents` and `roving` (Vec2/Vec3 motion paths) and a
+// per-keyframe `label` — they arrive with the motion-path unit.
 
 enum SideInterp {
     Hold,
     Linear,
-    Bezier { speed: f64, influence: f64 },   // speed: units/sec; influence: 0.1..=100.0 (%)
+    Bezier { speed: f64, influence: f64 },   // speed: value-units/sec; influence: a fraction in (0, 1]
 }
 ```
 
@@ -263,23 +279,28 @@ P2 = (t2 − influence_in·Δt,  v2 − speed_in·influence_in·Δt)      where 
 ```
 
 — exactly AE's model, so Bridge import ([11-AE-IMPORT.md](11-AE-IMPORT.md)) is lossless and
-the speed graph in the graph editor is the true derivative. Easy-ease presets are speed 0,
-influence 33.33%.
+the speed graph in the graph editor is the true derivative. `influence` is stored as a
+fraction in `(0, 1]` (AE's percentage ÷ 100); the easy-ease preset is speed 0, influence `1/3`
+(AE's 33.3%).
 
-Spatial properties additionally carry in/out tangents in value space defining the motion
-path; **roving** keyframes surrender their time and are repositioned to equalise speed along
-the path (recomputed whenever neighbours change).
+Spatial properties would additionally carry in/out tangents in value space defining the motion
+path, and **roving** keyframes would surrender their time to equalise speed along the path.
+Both are **future** (the motion-path unit); v1 animates scalar dimensions independently.
 
 ### 6.3 Evaluation order of one property
 
 ```
-keyframe/static evaluation → expression (may read the pre-expression value) → clamp/validate
+keyframe/static evaluation → [expression — FUTURE] → clamp/validate
 ```
 
-A property's evaluated value at a time is pure: same project, same time, same value —
-no wall clock, no external state ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)).
+The **expression** stage is future (§6.4); v1 evaluates keyframes/static only. A property's
+evaluated value at a time is pure regardless: same project, same time, same value — no wall
+clock, no external state ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)).
 
-### 6.4 Expressions
+### 6.4 Expressions (future — no engine in v1)
+
+The expression engine (JavaScript on QuickJS, K-063 / [12-PLUGINS.md](12-PLUGINS.md)) is not in
+v1: `Property` has no expression slot yet. The intended shape:
 
 ```rust
 struct Expression {
@@ -297,19 +318,20 @@ pre-expression value. It never fails the render.
 ## 7. Masks
 
 ```rust
+// v1: a static, Add-mode mask.
 struct Mask {
     id: Uuid,
-    path: Property<BezierPath>,       // closed or open; animatable
-    mode: MaskMode,                   // None|Add|Subtract|Intersect|Lighten|Darken|Difference
+    name: String,
+    path: BezierPath,                 // closed; static (not yet animatable)
     inverted: bool,
-    opacity: Property<f64>,           // 0..100
-    feather: Property<Vec2>,          // px at layer scale
-    expansion: Property<f64>,         // px, signed
+    opacity: f64,                     // 0..100, static
 }
 ```
 
 Masks apply in order before the effect stack ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)).
-Variable-width feather is post-v1; the model reserves per-vertex feather data.
+**Future:** an animatable `path`/`opacity` (`Property<…>`), the full `mode` set
+(`None|Add|Subtract|Intersect|Lighten|Darken|Difference` — v1 is **Add only**), and `feather` /
+`expansion`. Variable-width feather is post-v1; the model will reserve per-vertex feather data.
 
 ## 8. Effects
 
@@ -337,15 +359,18 @@ Effects and masks, K-142), the same three-way source a matte carries in §5.1.
 
 ### 9.1 Text
 
-v1 `TextDocument`: styled runs (font family/weight, size, fill, stroke, tracking, leading),
-point vs paragraph text, alignment. Per-character animators are post-v1; the document model
-keeps text as structured runs (never rasterised into the project) so animators bolt on later.
+v1 `TextDocument` is a **single run**: `{ text, size, fill }` — one font (embedded Inter), one
+size, one fill, single line. The styled-runs model — font family/weight, stroke, tracking,
+leading, point vs paragraph text, alignment, and per-character animators — is **future**; the
+document stays structured (never rasterised into the project) so runs and animators bolt on
+later.
 
-### 9.2 Shape
+### 9.2 Shape (future — no Shape layer in v1)
 
-v1 `ShapeElement` tree: groups; parametric rectangle/ellipse/polystar; bezier path; fill
-(solid, linear/radial gradient); stroke (width, caps, joins, dashes); trim paths. Repeater,
-offset, wiggle-path are tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
+There is no `LayerKind::Shape` yet. The intended `ShapeElement` tree: groups; parametric
+rectangle/ellipse/polystar; bezier path; fill (solid, linear/radial gradient); stroke (width,
+caps, joins, dashes); trim paths. Repeater, offset, wiggle-path are tier 2
+([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
 
 ### 9.3 2.5D (K-023)
 
@@ -376,9 +401,9 @@ struct Marker {
     time: OwnerTime,
     duration: Option<RationalTime>,
     label: String,
-    colour: LabelColour,
     kind: MarkerKind,        // User | Beat { confidence: f32 } | Chapter
 }
+// Future: a marker `colour` (LabelColour).
 ```
 
 Beat markers are ordinary markers with provenance; regenerating beats replaces only
@@ -386,11 +411,17 @@ Beat markers are ordinary markers with provenance; regenerating beats replaces o
 
 ## 12. Schema evolution
 
-The model is versioned (`schema_version` in the project file). Rules, binding:
+The model is versioned (`schema_version` + a `min_reader` gate in the manifest — a file too new
+for the reader is refused with a clear message, docs/10 §1). Rules, binding:
 - Additive changes only where possible; unknown fields MUST be preserved on load/save
   (forward compatibility for shared projects, K-065).
-- Any breaking change ships with a migration and a decision-log entry.
-- Pre-1.0, migrations may be dropped after six months; post-1.0, never.
+- Post-1.0, any breaking change ships with a migration and a decision-log entry.
+
+v1 reality (pre-1.0): there is **no migration framework** yet — compatibility rests on
+additive fields with serde defaults, pervasive unknown-field preservation, and a few ad-hoc
+`serde(from = …)` shims (e.g. the K-142 matte-source and K-147 scanline migrations). Under the
+standing **pre-release no-migration policy**, breaking reshapes so far have simply not owed a
+migration (they are logged in 02-DECISIONS instead). A registry lands as 1.0 nears.
 
 ## Open questions
 

@@ -255,9 +255,11 @@ bidirectional warping with occlusion-aware blending. This is what makes extreme 
 **Algorithm sketch.**
 1. Build image pyramids of frames A and B (luminance + gradient channels), typically 5–7
    levels down to ~1/64 area.
-2. Coarse-to-fine variational/patch-match hybrid flow: initialise each level from the
-   upsampled coarser level, refine with local patch search + smoothness regularisation.
-   Compute A→B and B→A fields.
+2. Coarse-to-fine **dense inverse search** (DIS, Kroeger et al. ECCV 2016): initialise each
+   level from the upsampled coarser level, refine by inverse-search patch matching (8×8
+   patches on a stride-4 grid, a few Newton steps each) then densify. Compute A→B and B→A
+   fields. The exact structure — patch size, grid, occlusion and confidence — is pinned in
+   [docs/impl/optical-flow.md](impl/optical-flow.md); DIS is the shipped v1 engine (K-169).
 3. **Occlusion detection** by forward-backward consistency: where `flow_AB` followed by
    `flow_BA` fails to return within a threshold, the pixel is occluded in one frame.
 4. Synthesis at fraction t: splat/warp A forward by `t·flow_AB` and B backward by
@@ -617,13 +619,15 @@ and run in linear light on unpremultiplied colour (§2.2).
   (0–1, suppresses noise amplification), and a luminance-only option (avoids chroma fringing on
   compressed game capture). Algorithm: `input + amount · (input − gaussian(input, radius))`
   gated by threshold — a radius-controlled detail lift.
-- **Sharpen** (match_name `sharpen_simple`, K-138): the plain, radius-free sibling — a fixed
-  3×3 high-pass convolution scaled by **Amount** (default 1 = the classic 5/−1 kernel, slider
-  0–5, hard-clamped ≥ 0). `out = u + amount · (4·u − up − down − left − right)` per RGB channel,
-  with the four axis neighbours clamp-addressed (so a border never invents dark detail); the
-  result clamps ≥ 0, re-premultiplies by the centre alpha, and keeps alpha. Amount 0 (whatever
-  the Mix) and Mix 0 are the bit-exact passthrough. Cheap, one pixel of reach; the honest "just
-  sharpen it" control beside the Unsharp mask's knobs.
+- **Sharpen** (match_name `sharpen_simple`, K-138): the plain sibling — a high-pass
+  convolution scaled by **Amount** (default 1 = the classic 5/−1 kernel, slider 0–5,
+  hard-clamped ≥ 0) with an adjustable **Radius** (T15; the neighbour distance in pixels,
+  default 1 = a 3×3 kernel, slider 1–8, host-rounded to a whole pixel). `out = u + amount ·
+  (4·u − up − down − left − right)` per RGB channel, the four axis neighbours taken `radius`
+  pixels out and clamp-addressed (so a border never invents dark detail); the result clamps
+  ≥ 0, re-premultiplies by the centre alpha, and keeps alpha. Amount 0 (whatever the Mix) and
+  Mix 0 are the bit-exact passthrough. Cheap; the honest "just sharpen it" control beside the
+  Unsharp mask's knobs.
 
 ### 3.10 The colour effects — Colour balance, Saturation, and the preset browser (Magic Bullet-class)
 
@@ -1421,9 +1425,10 @@ suite stays small.
 - **Per-effect presets**: a named parameter snapshot (keyframes and expressions included
   when marked "animated preset"). **Per-stack presets**: an ordered list of effect
   instances with their parameters — the unit the scene calls an editing/CC pack.
-- Serialised as a single shareable file (`.kpreset`, JSON payload zipped with any embedded
-  small assets such as LUTs), machine-independent per K-065. Import by drag onto a layer,
-  the Effect Controls panel, or the preset browser.
+- Serialised as a single shareable file (`.lumfx`), a machine-independent JSON payload per
+  K-065. (v1 writes plain JSON; bundling embedded assets such as LUTs into a zipped pack is a
+  later extension — see §3.11.) Import by drag onto a layer, the Effect Controls panel, or the
+  preset browser.
 - Lumit ships a first-party library (grade presets §3.10, shake styles, zoom eases, glitch
   looks). Ship-with presets are data files, not code, and use only built-in effects.
 - **Community packs**: preset import MUST tolerate unknown effects (imported as inert
@@ -1455,11 +1460,12 @@ mask parameters, "composite on original", effect-only precomps).
 
 ## Open questions
 
-1. **Flow algorithm choice.** Variational/patch-match hybrid is specced; a learned flow
-   model (RAFT-class) beats it on quality but complicates the GPLv3 story, model
-   distribution size, and the CPU reference oracle. Decide before flow-engine
-   implementation starts; the API (dense vectors + occlusion + confidence) is stable
-   either way.
+1. **Flow algorithm choice — resolved (K-169).** v1 ships **dense inverse search** (DIS,
+   Kroeger et al. 2016), pinned in [docs/impl/optical-flow.md](impl/optical-flow.md) and
+   implemented in `lumit-flow`. A learned model (RAFT-class) beats it on quality but
+   complicates the GPLv3 story, model distribution size, and the CPU reference oracle, so it
+   stays an optional future producer behind the same API (dense vectors + occlusion +
+   confidence), which is stable either way.
 2. **Gamma stage in Colour balance.** Applying gamma on a display-referred intermediate feels
    familiar but is impure; a strictly scene-linear grade with a viewing-transform-aware UI
    is cleaner. Needs a side-by-side with real CC packs before locking.

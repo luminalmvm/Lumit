@@ -20,6 +20,8 @@ lumit-media = { path = "../lumit-media", optional = true }
 lumit-text = { path = "../lumit-text" }
 lumit-project = { path = "../lumit-project" }
 rfd = "0.15"
+# Total system memory, for the decoded-audio budget's half-of-RAM default.
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 uuid = { version = "1", features = ["v7"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

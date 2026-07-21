@@ -835,7 +835,7 @@ impl Realiser<'_> {
 
 #[cfg(feature = "media")]
 impl GpuViewer {
-    /// Realise a comp frame straight to display-ready sRGB bytes (Kura's
+    /// Realise a comp frame straight to display-ready sRGB bytes (Nebula's
     /// cache-fill path — nothing is registered for painting).
     pub(crate) fn realise_to_bytes(
         &self,

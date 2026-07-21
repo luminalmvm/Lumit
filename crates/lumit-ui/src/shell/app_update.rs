@@ -68,19 +68,19 @@ impl Shell {
             Some(rs) => {
                 shell.gpu = Some(GpuViewer::new(rs));
                 lines.push(BootLine::ok(
-                    "Togi render pipeline: GPU (sRGB → linear fp16 → display)",
+                    "Nova render pipeline: GPU (sRGB → linear fp16 → display)",
                 ));
             }
             None => lines.push(BootLine {
-                text: "Togi render pipeline: CPU fallback (no wgpu render state)".into(),
+                text: "Nova render pipeline: CPU fallback (no wgpu render state)".into(),
                 failed: true,
             }),
         }
         #[cfg(feature = "media")]
-        lines.push(BootLine::ok("Kura cache: RAM tier ready (512 MB)"));
+        lines.push(BootLine::ok("Nebula cache: RAM tier ready (512 MB)"));
         #[cfg(feature = "media")]
         lines.push(BootLine::ok(
-            "Hibiki audio: cpal (clock starts with playback)",
+            "Pulsar audio: cpal (clock starts with playback)",
         ));
         lines.push(BootLine::ok(format!(
             "Effects: {} built-in registered",
@@ -108,10 +108,20 @@ impl Shell {
     pub fn ui(&mut self, ctx: &egui::Context) {
         if let Some(splash) = &self.splash {
             if crate::splash::show(ctx, &self.theme, splash) {
-                // Boot finished: the splash window becomes the application window.
-                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Resizable(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1440.0, 900.0)));
+                // Boot finished: the splash window becomes the application
+                // window — on the platforms where it *was* a splash-sized
+                // window. Linux already opened at working size, decorated and
+                // resizable, because Wayland ignores these commands (a client
+                // cannot resize itself there); re-sending them would at best
+                // do nothing and at worst shrink a window the user has since
+                // arranged. See `lumit-app`'s `splash_viewport`.
+                if !cfg!(target_os = "linux") {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Resizable(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                        1440.0, 900.0,
+                    )));
+                }
                 self.splash = None;
             }
             return;
@@ -130,6 +140,68 @@ impl Shell {
         if !dropped.is_empty() {
             self.app.import_paths(dropped);
         }
+        // Project session (owner): restore the saved working state right after
+        // a project opens — open comp tabs, fronted comp, playhead, selection —
+        // and keep saving it while one is open, keyed by project path (the
+        // timeline-name-w pattern; twirl states persist through their own
+        // uuid-keyed egui ids). Even without a saved session the first comp
+        // fronts, so the Viewer renders immediately instead of parking on the
+        // placeholder until the playhead moves.
+        {
+            let session_key =
+                |p: &std::path::Path| egui::Id::new(("project-session", p.display().to_string()));
+            if self.app.session_restore_pending {
+                self.app.session_restore_pending = false;
+                let saved = self.app.path.as_ref().and_then(|p| {
+                    ctx.data_mut(|d| {
+                        d.get_persisted::<crate::app_state::SavedSession>(session_key(p))
+                    })
+                });
+                let doc = self.app.store.snapshot();
+                let layer_exists = |lid: uuid::Uuid| {
+                    doc.items.iter().any(|i| {
+                        matches!(i, lumit_core::model::ProjectItem::Composition(c)
+                            if c.layers.iter().any(|l| l.id == lid))
+                    })
+                };
+                let mut frame = 0usize;
+                let mut active = None;
+                if let Some(s) = saved {
+                    let open: Vec<uuid::Uuid> = s
+                        .open_comps
+                        .iter()
+                        .copied()
+                        .filter(|id| doc.comp(*id).is_some())
+                        .collect();
+                    if !open.is_empty() {
+                        self.app.open_comps = open;
+                    }
+                    active = s.active_comp.filter(|id| self.app.open_comps.contains(id));
+                    frame = s.frame;
+                    self.app.selected_layer = s.selected_layer.filter(|l| layer_exists(*l));
+                }
+                // Front a comp either way (restored active, else the first
+                // tab); open_comp parks the playhead at 0, so the saved frame
+                // is put back after, then the shown frame re-renders.
+                if let Some(id) = active.or_else(|| self.app.open_comps.first().copied()) {
+                    self.app.open_comp(id);
+                    let total = self.app.preview_frame_count();
+                    if frame > 0 && total > 0 {
+                        self.app.preview_frame = frame.min(total - 1);
+                        #[cfg(feature = "media")]
+                        self.app.refresh_preview();
+                    }
+                }
+            } else if let Some(path) = self.app.path.clone() {
+                let session = crate::app_state::SavedSession {
+                    open_comps: self.app.open_comps.clone(),
+                    active_comp: self.app.preview_comp,
+                    frame: self.app.preview_frame,
+                    selected_layer: self.app.selected_layer,
+                };
+                ctx.data_mut(|d| d.insert_persisted(session_key(&path), session));
+            }
+        }
         #[cfg(feature = "media")]
         {
             self.app.poll_audio();
@@ -143,7 +215,7 @@ impl Shell {
             if (self.app.preview_item.is_some() || self.app.preview_comp.is_some())
                 && !ctx.wants_keyboard_input()
             {
-                let (space, k, l, left, right, j, home) = ctx.input(|i| {
+                let (space, k, l, left, right, j, home, end) = ctx.input(|i| {
                     (
                         i.key_pressed(egui::Key::Space),
                         i.key_pressed(egui::Key::K),
@@ -152,6 +224,7 @@ impl Shell {
                         i.key_pressed(egui::Key::ArrowRight),
                         i.key_pressed(egui::Key::J),
                         i.key_pressed(egui::Key::Home),
+                        i.key_pressed(egui::Key::End),
                     )
                 });
                 if space {
@@ -172,12 +245,15 @@ impl Shell {
                     self.app.set_work_area_edge(true);
                 }
                 let step: i64 = i64::from(right) - i64::from(left || j);
-                if step != 0 || home {
+                if step != 0 || home || end {
                     if self.app.is_playing() {
                         self.app.toggle_play(); // stepping implies pause
                     }
                     let frame = if home {
                         0
+                    } else if end {
+                        // Last frame of the current preview (comp or footage).
+                        self.app.preview_frame_count().saturating_sub(1)
                     } else {
                         self.app.preview_frame.saturating_add_signed(step as isize)
                     };
@@ -213,7 +289,9 @@ impl Shell {
                             .export_encoder
                             .map(|l| format!(" — encoded with {l}"))
                             .unwrap_or_default();
-                        self.app.error = Some(format!("exported {}{with}", path.display()));
+                        // A completed export is a quiet notice, not an error
+                        // (docs/15 §10 — completion is quiet, never fig-tinted).
+                        self.app.notice = Some(format!("exported {}{with}", path.display()));
                         self.export = None;
                         self.export_progress = None;
                         self.export_encoder = None;
@@ -250,7 +328,15 @@ impl Shell {
                 }
                 ctx.request_repaint_after(std::time::Duration::from_millis(16));
             }
-            self.app.media.poll();
+            if self.app.media.poll()
+                && (self.app.preview_comp.is_some() || self.app.preview_item.is_some())
+            {
+                // A probe just finished: the shown frame was rendered without
+                // that footage (unprobed layers contribute nothing), so
+                // re-render it — a restored project's first frame fills in as
+                // probes land instead of waiting for a playhead move (owner).
+                self.app.refresh_preview();
+            }
             if self.app.media.any_probing() {
                 ctx.request_repaint_after(std::time::Duration::from_millis(150));
             }
@@ -267,7 +353,7 @@ impl Shell {
             if self.app.drain_disk_loads() {
                 ctx.request_repaint();
             }
-            // Kura warm path: a cached frame presents as a plain upload.
+            // Nebula warm path: a cached frame presents as a plain upload.
             if let Some(key) = self.app.cached_present.take() {
                 if let Some(gpu) = &mut self.gpu {
                     // VRAM first (docs/06 §5): a still-resident display texture
@@ -373,6 +459,24 @@ impl Shell {
                                 }
                                 self.app.fill_in_flight = None;
                             } else {
+                                // Realtime mode (K-030, docs/06 §6.5): feed the
+                                // adaptive controller the *true* end-to-end cost of
+                                // this frame so the next frames' resolution tracks
+                                // the load. Only uncached frames reach here (cached
+                                // ones present earlier, for free), so the tier only
+                                // moves when we're actually rendering live.
+                                //
+                                // Cost = the worker's decode time (cf.render_cost,
+                                // the dominant and measurable part) plus this CPU
+                                // composite submit. Both are real work, and neither
+                                // includes the UI's repaint-poll interval — the
+                                // earlier signal timed only the sub-millisecond
+                                // submit, so the controller never saw the real load,
+                                // never dropped resolution, and the picture stayed at
+                                // Full and choppy. (Async GPU execution is still not
+                                // awaited, so a purely GPU-bound comp can under-drop —
+                                // audit 06 §6.5, needs a GPU timestamp later.)
+                                let started = std::time::Instant::now();
                                 self.preview_display = Some(gpu.present_comp(
                                     pose,
                                     comp.width,
@@ -380,6 +484,16 @@ impl Shell {
                                     background,
                                     &draws,
                                 ));
+                                if self.app.preview_realtime && self.app.is_playing() {
+                                    let fps = comp.frame_rate.fps().max(1.0);
+                                    let cost = cf.render_cost.as_secs_f64()
+                                        + started.elapsed().as_secs_f64();
+                                    self.app.realtime_ctrl.record(cost, fps);
+                                }
+                                // The live render we were gated on has landed and
+                                // been shown+measured; release the pull so the
+                                // next tick can ask for the clock's current frame.
+                                self.app.realtime_inflight = None;
                                 // Paused: bank the frame while it's hot (playback
                                 // misses skip the readback to protect the frame
                                 // budget; draft frames are never banked — the
@@ -439,7 +553,13 @@ impl Shell {
                         self.preview_tex = Some(tex);
                     }
                 }
-                Some(Err(e)) => self.app.error = Some(format!("preview: {e}")),
+                Some(Err(e)) => {
+                    // A failed live render still releases the realtime pull, so
+                    // playback retries the next frame at once rather than sitting
+                    // frozen until the safety timeout.
+                    self.app.realtime_inflight = None;
+                    self.app.error = Some(format!("preview: {e}"));
+                }
                 _ => {}
             }
             // Edits (commits/undo) re-render the comp preview automatically.
@@ -560,6 +680,7 @@ impl Shell {
         #[cfg(not(target_os = "macos"))]
         self.shortcuts(ctx);
         self.keyframe_clipboard_shortcuts(ctx);
+        self.global_shortcuts(ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.app.project_title()));
 
         #[cfg(not(target_os = "macos"))]
@@ -595,6 +716,7 @@ impl Shell {
                     ui.menu_button("Export preset", |ui| {
                         for preset in [
                             crate::export::ExportPreset::Youtube1080p60,
+                            crate::export::ExportPreset::Youtube1440p60,
                             crate::export::ExportPreset::Youtube4k60,
                             crate::export::ExportPreset::Vertical1080p60,
                         ] {
@@ -692,15 +814,19 @@ impl Shell {
                     }
                     #[cfg(feature = "media")]
                     ui.menu_button("Detect beats", |ui| {
-                        if ui.button("Standard").clicked() {
+                        // Sensitivity slider (docs/09 §5): 0–100, higher = more
+                        // beats. 50 is the old "Standard"; the δ the detector
+                        // wants is derived from this.
+                        ui.add(
+                            egui::Slider::new(&mut self.app.beat_sensitivity, 0..=100)
+                                .text("Sensitivity"),
+                        );
+                        if ui.button("Detect").clicked() {
                             if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                                self.app.detect_beats(id, 1.5);
-                            }
-                            ui.close_menu();
-                        }
-                        if ui.button("More markers").clicked() {
-                            if let Some(id) = self.app.preview_comp.or(self.app.selected_comp) {
-                                self.app.detect_beats(id, 1.1);
+                                let delta = lumit_audio::beat::delta_from_sensitivity(
+                                    self.app.beat_sensitivity,
+                                );
+                                self.app.detect_beats(id, delta);
                             }
                             ui.close_menu();
                         }
@@ -729,18 +855,6 @@ impl Shell {
                     }
                     if ui.button("Reset workspace").clicked() {
                         self.dock = default_layout();
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    // T25: the waveform bar can be hidden from its own close
-                    // button, so it needs a durable way back on — here and in
-                    // the Timeline lane right-click menu.
-                    if ui
-                        .selectable_label(self.app.show_audio_bar, "Audio waveform")
-                        .on_hover_text("Show the audio waveform bar under the Timeline lanes")
-                        .clicked()
-                    {
-                        self.app.show_audio_bar = !self.app.show_audio_bar;
                         ui.close_menu();
                     }
                     ui.separator();
@@ -921,9 +1035,21 @@ impl Shell {
                 }
                 if let Some(err) = self.app.error.clone() {
                     ui.separator();
-                    ui.label(egui::RichText::new(&err).small().color(self.theme.warning));
+                    // Errors are fig-tinted banners (docs/15 §10), set apart from
+                    // the quiet neutral notice.
+                    ui.label(egui::RichText::new(&err).small().color(self.theme.error));
                     if ui.small_button("Dismiss").clicked() {
                         self.app.error = None;
+                    }
+                } else if let Some(notice) = self.app.notice.clone() {
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(&notice)
+                            .small()
+                            .color(self.theme.text_secondary),
+                    );
+                    if ui.small_button("Dismiss").clicked() {
+                        self.app.notice = None;
                     }
                 }
             });

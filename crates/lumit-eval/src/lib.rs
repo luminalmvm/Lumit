@@ -1,4 +1,4 @@
-//! The seed of **Togi**'s evaluator (K-067): pure content-hash frame keys
+//! The seed of **Nova**'s evaluator (K-067): pure content-hash frame keys
 //! per docs/06-RENDER-PIPELINE.md §5.2.
 //!
 //! In plain terms: before rendering a frame, Lumit writes down everything
@@ -25,7 +25,9 @@ use lumit_core::model::{Composition, Document, LayerKind, MatteChannel};
 use uuid::Uuid;
 
 pub mod epoch;
+pub mod exec;
 pub mod graph;
+pub mod pool;
 pub mod schedule;
 
 /// Bump when any rendering algorithm's output changes: every cached frame
@@ -829,6 +831,7 @@ mod tests {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),

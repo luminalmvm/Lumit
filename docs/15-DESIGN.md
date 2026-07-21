@@ -225,6 +225,18 @@ pub struct Theme {
 }
 ```
 
+**v1 status of this struct.** The struct above is the target shape. The shipped `Theme`
+(`lumit-ui/src/theme.rs`) carries the structural roles — the surfaces, text, hairlines,
+`accent`/`accent_hover`, `success`/`warning`/`error`, the `curve[4]` ramp, `layer`
+(`LayerColours`, §6.1) — plus two the code has split out that this listing does not yet name:
+`scope` (`ScopeColours`, the four scope-chrome accents) and `cache_disk` (the disk tier of the
+cache bar, §6.3). Not yet split into their own tokens, and derived ad-hoc from existing roles in
+v1: `disabled` and `fill_tonal` (the `cloud`/`oat` mappings below are reserved, not present);
+the `keyframe`, `marker`, `overrun_hatch`, `waveform` and `selection` groupings (widgets reach
+for `text_secondary`, `accent`, `warning`, etc. directly); and `shadow_float`. Splitting each
+into a named token — so no widget derives a semantic colour itself — is the standing direction,
+done as each area is next touched; the no-hex rule already holds regardless.
+
 Binding rules:
 
 - **All colours in widget code come from `&Theme`.** `Color32::from_rgb`,
@@ -298,18 +310,30 @@ read as *muted siblings* — desaturated, mid-lightness, clearly quieter than `a
 full Timeline looks organised, not carnival. Selection (accent) must visibly beat every one
 of them.
 
+v1 ships an identity colour token for each of the six layer kinds that exist today. The
+`LayerColours` struct (`lumit-ui/src/theme.rs`) carries exactly these six; `panels.rs` maps
+each `LayerKind` to its token and glyph.
+
+| Layer type | Token | Value | v1 |
+|---|---|---|---|
+| Footage layer | `layer.footage` | `#56707f` (steel) | ✓ |
+| Sequence layer | `layer.sequence` | `#5a6a8c` (indigo — the flagship type carries the household's own colour) | ✓ |
+| Precomp layer | `layer.precomp` | `#7a5a74` (plum) | ✓ |
+| Solid layer | `layer.solid` | `#5c6165` (neutral) | ✓ |
+| Text layer | `layer.text` | `#8c8468` (parchment) | ✓ |
+| Camera layer | `layer.camera` | `#806f4a` (dry gold) | ✓ |
+
+The seventh kind that exists today, the **Adjustment layer**, has no token of its own in v1:
+it borrows `layer.solid` (neutral) and the Solid glyph, since it renders no source of its own.
+When it earns a distinct identity the natural value is `#8c6b58` (kraft-brown).
+
+Reserved for the layer kinds v1 does not yet model (no `LayerKind` variant, no token):
+
 | Layer type | Token | Value |
 |---|---|---|
-| Footage layer | `layer.footage` | `#56707f` (steel) |
-| Sequence layer | `layer.sequence` | `#5a6a8c` (indigo — the flagship type carries the household's own colour) |
-| Precomp layer | `layer.precomp` | `#7a5a74` (plum) |
-| Solid layer | `layer.solid` | `#5c6165` (neutral) |
-| Text layer | `layer.text` | `#8c8468` (parchment) |
 | Shape layer | `layer.shape` | `#558a95` (cyan-steel) |
 | Null layer | `layer.null` | outline only, `hairline_strong` — nulls render nothing, so their bar is hollow |
-| Adjustment layer | `layer.adjustment` | `#8c6b58` (kraft-brown) |
 | Audio layer | `layer.audio` | `#46786d` (mint-teal) |
-| Camera layer | `layer.camera` | `#806f4a` (dry gold) |
 | Light layer | `layer.light` | `#96854f` (pale gold) |
 
 Colour is never the only encoding: each type also has a distinct glyph, and clips inside a
@@ -331,20 +355,25 @@ Sequence layer show thumbnails/waveforms.
 
 ### 6.3 Cache bar
 
-The cache bar is a 4px stripe under the time ruler showing cached frames per tier. All three
-tiers are the `success` (olive/mint) family — cached is *good news*, quiet and cool:
+The cache bar is a thin stripe under the time ruler showing which frames are cached, per
+tier. Cached is *good news* — quiet and cool, never alarming.
 
-| Tier | Token | Value | Fill height |
+Two of Nebula's tiers ship today (the VRAM tier is future, docs/06 §5.6). Both runs draw as a
+2px band beneath the ruler:
+
+| Tier | Token | Value | Meaning |
 |---|---|---|---|
-| VRAM cache | `cache.vram` | `#5fcfae` | 4px (full) |
-| RAM cache | `cache.ram` | `#3f9077` | 3px |
-| Disk cache | `cache.disk` | `#2c6353` | 2px |
-| Uncached | `cache.uncached` | `surface_3` | 4px, neutral |
+| RAM cache | `success` | `#5fcfae` (mint) | in memory, plays right now |
+| Disk cache | `cache_disk` | `#5f93b8` (steel blue) | parked on disk, promotable |
+| Uncached | — | (no bar) | neutral — the normal starting state |
 
-Tiers therefore differ in *both* brightness and fill height, so the bar reads without colour
-vision. Per the household no-punishment rule, **uncached is neutral, never alarming** — no
-amber, no red, no pulsing. An uncached timeline is the normal starting state of every project,
-not a failure.
+Mint reads as hot (playable now); the disk tier's cooler blue marks frames that are one
+promotion away (docs/06 §5.6). The fuller design — a VRAM tier and tiers differing in *both*
+brightness and fill height, so the bar reads without colour vision — lands with the VRAM cache
+tier and its dedicated tonal ramp; until then the mint/blue hue split carries the distinction.
+Per the household no-punishment rule, **uncached is neutral, never alarming** — no amber, no
+red, no pulsing. An uncached timeline is the normal starting state of every project, not a
+failure.
 
 ### 6.4 Overrun, markers, waveforms
 

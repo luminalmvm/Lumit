@@ -263,7 +263,15 @@ impl Shell {
             return;
         };
         let n = pending.ops.len();
-        let mut choice: Option<bool> = None;
+        // The doc's third recovery option (10 §4): open an autosave, offered
+        // only when one exists beside the project.
+        let autosave_path = lumit_project::latest_autosave(&pending.path);
+        enum Pick {
+            Restore,
+            LastSave,
+            Autosave(std::path::PathBuf),
+        }
+        let mut pick: Option<Pick> = None;
         egui::Window::new("Recover changes")
             .collapsible(false)
             .resizable(false)
@@ -282,15 +290,23 @@ impl Shell {
                         ))
                         .clicked()
                     {
-                        choice = Some(true);
+                        pick = Some(Pick::Restore);
                     }
                     if ui.button("Open last save").clicked() {
-                        choice = Some(false);
+                        pick = Some(Pick::LastSave);
+                    }
+                    if let Some(path) = &autosave_path {
+                        if ui.button("Open autosave").clicked() {
+                            pick = Some(Pick::Autosave(path.clone()));
+                        }
                     }
                 });
             });
-        if let Some(recover) = choice {
-            self.app.resolve_recovery(recover);
+        match pick {
+            Some(Pick::Restore) => self.app.resolve_recovery(true),
+            Some(Pick::LastSave) => self.app.resolve_recovery(false),
+            Some(Pick::Autosave(path)) => self.app.recover_from_autosave(path),
+            None => {}
         }
     }
 }

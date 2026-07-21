@@ -283,7 +283,19 @@ pub fn active_clip(clips: &[Clip], lt: f64) -> Option<&Clip> {
 /// Resolve layer-local time `lt` to `(active clip id, source, source time)`,
 /// or None in a gap. The one query the renderer needs.
 pub fn resolve(clips: &[Clip], lt: f64) -> Option<(Uuid, ClipSource, f64)> {
-    active_clip(clips, lt).map(|c| (c.id, c.source, c.source_time(lt)))
+    active_clip(clips, lt).map(|c| {
+        // Render and cache key sample the TRIMMED extent: on overrun the mapped
+        // source position holds at the clip's [source_in, source_out] boundary
+        // rather than running on into media past the trim (docs/04 §7.2). The
+        // raw (unclamped) map stays available via `Clip::source_time` for
+        // overrun detection. `.max().min()` avoids `f64::clamp`'s panics on a
+        // degenerate window or a NaN map (engine crates never panic).
+        let s = c
+            .source_time(lt)
+            .max(c.source_in.to_f64())
+            .min(c.source_out.to_f64());
+        (c.id, c.source, s)
+    })
 }
 
 /// The single source shared by all clips, if they share one — a sequenced
@@ -401,6 +413,31 @@ mod tests {
         assert!((c.source_time(2.0) - 10.0).abs() < 1e-9); // clip start
         assert!((c.source_time(4.0) - 11.0).abs() < 1e-9); // half speed
         assert!((c.source_time(6.0) - 12.0).abs() < 1e-9); // clip end
+    }
+
+    #[test]
+    fn resolve_holds_at_the_trimmed_end_on_overrun() {
+        // A clip on layer [2,6) trimmed to source [10,12) whose identity retime
+        // maps the whole 4s span to source [10,14): once the map passes
+        // source_out=12, the render/key sample must HOLD at 12 (the boundary
+        // frame of the trimmed extent, docs/04 §7.2), never run on to 13/14 —
+        // media past the trim. The raw source_time stays unclamped so overrun
+        // detection still sees past the boundary.
+        let src = Uuid::now_v7();
+        let clips = [Clip::new(
+            ClipSource::Footage(src),
+            rat(10, 1),
+            rat(12, 1),
+            rat(2, 1),
+            rat(4, 1),
+        )];
+        let st = |lt: f64| resolve(&clips, lt).unwrap().2;
+        assert!((st(2.0) - 10.0).abs() < 1e-9); // clip start → source_in
+        assert!((st(4.0) - 12.0).abs() < 1e-9); // reaches source_out
+        assert!((st(5.0) - 12.0).abs() < 1e-9); // overrun holds at the trim
+        assert!((st(5.9) - 12.0).abs() < 1e-9); // still held, not ~13.9
+                                                // The raw map is unclamped (overrun detection still sees past the trim).
+        assert!((clips[0].source_time(5.0) - 13.0).abs() < 1e-9);
     }
 
     #[test]

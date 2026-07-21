@@ -82,9 +82,13 @@ impl EvalGraph {
         self.nodes.len() - 1
     }
 
-    /// The node at `id`.
-    pub fn node(&self, id: NodeId) -> &Node {
-        &self.nodes[id]
+    /// The node at `id`, or `None` if `id` is out of range. Node ids are only
+    /// ever minted by [`EvalGraph::push`], so a valid id is always in range;
+    /// the fallible signature keeps this off the panicking-index path that
+    /// [14-ENGINEERING-RULES.md](../../../docs/14-ENGINEERING-RULES.md) §4 bans
+    /// in engine crates.
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.get(id)
     }
 
     /// Number of nodes in the graph.
@@ -239,6 +243,7 @@ mod tests {
             matte: None,
             parent: None,
             label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
             effects: Vec::new(),
             blend: BlendMode::Normal,
             masks,
@@ -287,7 +292,10 @@ mod tests {
         assert!(matches!(kinds[0], NodeKind::Source { .. }));
         assert!(matches!(kinds[1], NodeKind::Transform { .. }));
         assert!(matches!(kinds[2], NodeKind::Composite { .. }));
-        assert!(matches!(g.node(g.output).kind, NodeKind::CompOutput { .. }));
+        assert!(matches!(
+            g.node(g.output).unwrap().kind,
+            NodeKind::CompOutput { .. }
+        ));
         // No retime and no masks nodes for a plain layer.
         assert!(!g.kinds().any(|k| matches!(k, NodeKind::Retime)));
         assert!(!g.kinds().any(|k| matches!(k, NodeKind::Masks { .. })));
@@ -327,11 +335,11 @@ mod tests {
             })
             .collect();
         assert_eq!(composites, vec![(bottom_id, 1), (top_id, 2)]);
-        let out = g.node(g.output);
+        let out = g.node(g.output).unwrap();
         assert_eq!(out.inputs.len(), 1);
         // The output's input is the last (top) composite.
         assert!(matches!(
-            g.node(out.inputs[0]).kind,
+            g.node(out.inputs[0]).unwrap().kind,
             NodeKind::Composite { layer, .. } if layer == top_id
         ));
     }
@@ -364,8 +372,11 @@ mod tests {
     fn an_empty_comp_is_just_a_comp_output() {
         let g = compile(&comp_with(Vec::new()));
         assert_eq!(g.len(), 1);
-        assert!(matches!(g.node(g.output).kind, NodeKind::CompOutput { .. }));
-        assert!(g.node(g.output).inputs.is_empty());
+        assert!(matches!(
+            g.node(g.output).unwrap().kind,
+            NodeKind::CompOutput { .. }
+        ));
+        assert!(g.node(g.output).unwrap().inputs.is_empty());
     }
 
     #[test]
@@ -382,12 +393,12 @@ mod tests {
         // output now pulls from the Adjust (it replaced the accumulator).
         assert_eq!(adjust.inputs.len(), 1);
         assert!(matches!(
-            g.node(adjust.inputs[0]).kind,
+            g.node(adjust.inputs[0]).unwrap().kind,
             NodeKind::Composite { .. }
         ));
-        let out = g.node(g.output);
+        let out = g.node(g.output).unwrap();
         assert!(matches!(
-            g.node(out.inputs[0]).kind,
+            g.node(out.inputs[0]).unwrap().kind,
             NodeKind::Adjust { .. }
         ));
     }
@@ -406,7 +417,7 @@ mod tests {
             .find(|n| matches!(n.kind, NodeKind::Adjust { .. }))
             .unwrap();
         assert!(matches!(
-            g.node(adjust.inputs[0]).kind,
+            g.node(adjust.inputs[0]).unwrap().kind,
             NodeKind::Masks { count: 1 }
         ));
         // An adjustment with nothing beneath it has nothing to process.

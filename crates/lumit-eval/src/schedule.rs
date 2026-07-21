@@ -375,11 +375,197 @@ pub fn next_frame_to_schedule<T>(
     (clock_frame..=target_frame).find(|&n| !ring.contains(n) && !already_scheduled(n))
 }
 
+/// How many upcoming frames must already be renderable before Cached-mode
+/// audio plays — a quarter-second at any frame rate (rounded up, min 1). The
+/// gate is *readiness ahead*, not replay history (owner): a fully-cached run
+/// gets sound from its very first frame, a still-rendering stretch stays
+/// silent (no start-stop flapping at the render's crawling edge), and after a
+/// stall the sound rejoins the instant the next quarter-second is there.
+#[must_use]
+pub fn cached_audio_lookahead(fps: f64) -> usize {
+    ((fps / 4.0).ceil() as usize).max(1)
+}
+
+/// What Cached-mode playback (K-171, docs/06 §6.5) should do this UI tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CachedStep {
+    /// Move the playhead on to the next frame this tick.
+    pub advance: bool,
+    /// Kick off a render of the next frame now — it is not ready, so playback
+    /// is render-gated (waits for it) rather than skipping it.
+    pub request_next: bool,
+    /// Whether comp audio should be running this tick. Audio plays exactly
+    /// when the coming stretch is already renderable ([`cached_audio_lookahead`]),
+    /// so it starts with the first shown frame of a ready run and pauses
+    /// whenever a frame is being awaited — sound never runs ahead of a
+    /// stalled picture.
+    pub audio_playing: bool,
+}
+
+/// Decide the Cached-mode step: render every frame, never skip, paced to at
+/// most realtime (K-171). The playhead advances to `next` only once `next` is
+/// ready (cached) *and* a frame's worth of real time has passed since the last
+/// advance — so a fully-cached span replays at true speed, and a span still
+/// rendering advances exactly as fast as frames complete (slower than
+/// realtime), never dropping one.
+///
+/// - `next_ready` — is the next frame already in the cache?
+/// - `elapsed` / `frame_dur` — seconds since the last advance, and one frame's
+///   duration (`1/fps`); their ratio is the realtime pace cap.
+/// - `run_ready` — are the next [`cached_audio_lookahead`] frames all ready?
+///   The audio gate: sound plays from the first frame of a ready run (owner)
+///   instead of waiting out a warm-up streak.
+#[must_use]
+pub fn cached_step(next_ready: bool, elapsed: f64, frame_dur: f64, run_ready: bool) -> CachedStep {
+    if !next_ready {
+        // Render-gate: hold the picture, render the frame, and pause audio so
+        // it never runs ahead of the stalled picture.
+        return CachedStep {
+            advance: false,
+            request_next: true,
+            audio_playing: false,
+        };
+    }
+    // Ready: advance once a frame's worth of real time has passed (the
+    // realtime pace cap), otherwise hold this frame for smooth replay. Either
+    // way sound runs exactly when the stretch ahead is ready.
+    CachedStep {
+        advance: elapsed >= frame_dur,
+        request_next: false,
+        audio_playing: run_ready,
+    }
+}
+
+/// The fixed-timestep remainder for Cached-mode pacing: how much of the time
+/// beyond one frame the caller should carry into the next frame's pace
+/// window, and whether the replay is still continuous (`false` = a UI hitch;
+/// re-anchor the timer and rebuild the audio streak instead of
+/// fast-forwarding through the owed frames).
+///
+/// In plain terms: the UI only gets to advance the playhead when a repaint
+/// tick happens, and ticks never land exactly on a frame boundary. If the
+/// pace timer restarts at "now" on every advance, the few milliseconds of
+/// overshoot are thrown away each frame — a fully-cached 60 fps comp on
+/// ~16 ms ticks replayed at roughly HALF speed — while the audio engine kept
+/// its own hardware clock. Sound pulled ahead, the >2-frame resync yanked it
+/// back, over and over: the reported "audio lags even when everything is
+/// cached". Carrying the remainder makes the long-run replay pace exactly
+/// realtime, so picture and sound agree.
+#[must_use]
+pub fn cached_pace_carry(elapsed: f64, frame_dur: f64) -> (f64, bool) {
+    // Tolerate up to 50 ms of overshoot (or one frame, for comps slower than
+    // 20 fps) — a few UI ticks' worth of jitter, briefly repaid by catch-up.
+    // More than that is a hitch — the window was dragged, the app stalled —
+    // and repaying it would fast-forward the picture; re-anchor instead.
+    let slack = frame_dur.max(0.05);
+    let over = (elapsed - frame_dur).max(0.0);
+    if over <= slack {
+        (over, true)
+    } else {
+        (0.0, false)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    // ---- Cached-mode render-gated stepping (K-171) ----
+
+    #[test]
+    fn cached_replay_advances_at_realtime_pace_with_audio() {
+        let fd = 1.0 / 60.0;
+        // Frames all cached (ready, run ready). Before a frame's worth of
+        // time: hold — with sound running (the stretch ahead is ready).
+        let early = cached_step(true, fd * 0.5, fd, true);
+        assert!(!early.advance && !early.request_next && early.audio_playing);
+        // Once a frame's time has passed: advance, audio on.
+        let s = cached_step(true, fd, fd, true);
+        assert!(s.advance && !s.request_next && s.audio_playing);
+    }
+
+    #[test]
+    fn cached_building_render_gates_and_mutes_until_ready() {
+        let fd = 1.0 / 30.0;
+        // Next frame not ready: hold, request it, audio paused — however long
+        // we have been waiting.
+        let waiting = cached_step(false, fd * 5.0, fd, false);
+        assert!(!waiting.advance && waiting.request_next && !waiting.audio_playing);
+        // It arrives (now ready) after a long wait: advance immediately, but
+        // the stretch ahead is still rendering — sound stays paused (no
+        // start-stop flapping at the render's crawling edge).
+        let arrived = cached_step(true, fd * 5.0, fd, false);
+        assert!(arrived.advance && !arrived.request_next && !arrived.audio_playing);
+    }
+
+    /// Regression (tester report): with every frame cached, replay must hold
+    /// realtime pace long-run. Restarting the pace timer at "now" on each
+    /// advance discarded the per-frame overshoot; on 16 ms ticks a 60 fps
+    /// comp advanced every OTHER tick (~half speed), audio ran ahead on its
+    /// own clock, and the >2-frame resync yanked it back for ever. The carry
+    /// keeps the remainder, so the drift never accumulates.
+    #[test]
+    fn cached_replay_long_run_pace_is_exactly_realtime() {
+        let fd = 1.0 / 60.0;
+        let tick = 0.016; // the UI repaint cadence
+        let mut baseline = 0.0; // when the shown frame's pace window opened
+        let mut now = 0.0;
+        let mut advances = 0u32;
+        for _ in 0..625 {
+            // 10 s of ticks
+            now += tick;
+            let s = cached_step(true, now - baseline, fd, true);
+            if s.advance {
+                let (carry, _continuous) = cached_pace_carry(now - baseline, fd);
+                baseline = now - carry; // == baseline + fd while continuous
+                advances += 1;
+            }
+        }
+        // 10 s at 60 fps = 600 frames. The old restart-at-now pacing managed
+        // ~312 here — half speed. Allow one frame of edge slack.
+        assert!((599..=601).contains(&advances), "advances = {advances}");
+    }
+
+    /// The carry itself: ordinary tick jitter is repaid, a hitch is not.
+    #[test]
+    fn cached_pace_carry_repays_jitter_but_reanchors_on_a_hitch() {
+        let fd = 1.0 / 60.0;
+        // Landed 5 ms past the boundary: carry the 5 ms, still continuous.
+        let (carry, cont) = cached_pace_carry(fd + 0.005, fd);
+        assert!(cont && (carry - 0.005).abs() < 1e-9);
+        // Landed exactly on it: nothing to carry.
+        assert_eq!(cached_pace_carry(fd, fd), (0.0, true));
+        // Landed 200 ms late (window drag, app stall): re-anchor, streak over.
+        assert_eq!(cached_pace_carry(0.2, fd), (0.0, false));
+        // A 120 fps comp on 16 ms ticks overshoots by more than a frame every
+        // time — that is the tick cadence, not a hitch (the 50 ms floor).
+        let fd120 = 1.0 / 120.0;
+        let (_, cont) = cached_pace_carry(fd120 + 0.016, fd120);
+        assert!(cont, "sub-tick frame durations must not read as hitches");
+    }
+
+    /// Regression (owner report): audio used to wait out a quarter-second
+    /// warm-up streak even when every frame was already cached, so each run
+    /// began with a few silent frames. The gate is readiness *ahead* now: a
+    /// ready run gets sound from its very first frame; a still-rendering one
+    /// gets none until the coming quarter-second is cached.
+    #[test]
+    fn cached_audio_starts_with_the_first_frame_of_a_ready_run() {
+        let fd = 1.0 / 60.0;
+        // The very first tick of playback, everything cached: sound at once —
+        // even while holding frame 0 for pace, before any advance.
+        let first = cached_step(true, 0.0, fd, true);
+        assert!(first.audio_playing, "no warm-up silence on a cached run");
+        // The same first tick with the run still rendering: silent.
+        let building = cached_step(true, 0.0, fd, false);
+        assert!(!building.audio_playing);
+        // The lookahead is a quarter-second of frames at any rate.
+        assert_eq!(cached_audio_lookahead(60.0), 15);
+        assert_eq!(cached_audio_lookahead(24.0), 6);
+        assert_eq!(cached_audio_lookahead(1.0), 1);
+    }
 
     // ---- FrameRing ----
 

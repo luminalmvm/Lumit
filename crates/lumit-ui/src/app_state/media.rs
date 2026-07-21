@@ -35,10 +35,17 @@ impl Default for MediaRegistry {
 
 impl MediaRegistry {
     /// Drain background results into the map. Called once per UI frame.
-    pub fn poll(&mut self) {
+    /// Returns true when any result landed — the caller re-renders the shown
+    /// frame, because the previous render skipped still-probing footage
+    /// (owner: a restored project's Viewer stayed blank until the playhead
+    /// moved; the first render happened before the probes finished).
+    pub fn poll(&mut self) -> bool {
+        let mut any = false;
         while let Ok((id, status)) = self.rx.try_recv() {
             self.map.insert(id, status);
+            any = true;
         }
+        any
     }
 
     pub fn any_probing(&self) -> bool {
