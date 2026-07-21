@@ -2641,6 +2641,7 @@ dependencies = [
 name = "lumit-project"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "directories",
  "lumit-core",
  "serde",
