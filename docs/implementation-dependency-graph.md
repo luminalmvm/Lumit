@@ -129,7 +129,7 @@ flowchart TD
   end
 
   subgraph SKEYS["Keymap and input"]
-    KEYMAP["Remappable keymap system +<br/>conflict detection (07 §15)"]
+    KEYMAP["✅ Keymap core built (07 §15) — new lumit-keymap crate: Chord<br/>(parse/display, order+case-insensitive, Ctrl/Cmd/Mod primary), KeyContext,<br/>ActionId, Keymap with context-precedence lookup, conflict detection<br/>(Global-overlap rule), bind/unbind/search, shareable serde file, default +<br/>AE presets. Pure logic, 96% covered (added to the coverage gate).<br/>Remaining: wire the UI to it + fill the full binding table"]
     KEYS30["Remaining ~30 bindings incl. J/K/L shuttle,<br/>I/O, comma/dot, P-S-R-T-A reveals, U/UU"]
     AEKEYS["AE keymap preset + keymap settings page (07 §15)"]
     TOOLTIPKEYS["Tooltip shortcut text (07 §13.2)"]

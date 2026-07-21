@@ -106,7 +106,7 @@ jobs:
       - run: >
           cargo llvm-cov
           -p lumit-core -p lumit-project -p lumit-eval
-          -p lumit-cache -p lumit-flow -p lumit-text
+          -p lumit-cache -p lumit-flow -p lumit-text -p lumit-keymap
           --fail-under-lines 80
 
   no-hex-outside-theme:
