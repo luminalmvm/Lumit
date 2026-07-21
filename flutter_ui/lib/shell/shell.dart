@@ -13,12 +13,14 @@ import 'package:flutter/widgets.dart';
 
 import '../panels/panels.dart';
 import '../state/app_state.dart';
+import '../state/dock.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
 import 'command_palette.dart';
 import 'dock_widget.dart';
 import 'menu_bar.dart';
 import 'settings_window.dart';
+import 'splash.dart';
 
 class LumitShell extends StatelessWidget {
   final Workspace workspace;
@@ -56,12 +58,15 @@ class _ShellBodyState extends State<_ShellBody> {
   final AppStateStub app = AppStateStub();
   bool settingsOpen = false;
   bool paletteOpen = false;
+  bool splashDone = false;
+  final ValueNotifier<Panel?> activePanel = ValueNotifier(null);
   final FocusNode _rootFocus = FocusNode(debugLabel: 'lumit-shell');
 
   Workspace get ws => widget.workspace;
 
   @override
   void dispose() {
+    activePanel.dispose();
     _rootFocus.dispose();
     super.dispose();
   }
@@ -182,6 +187,9 @@ class _ShellBodyState extends State<_ShellBody> {
                   buildPanel: (context, panel) =>
                       buildPanelBody(context, panel, app),
                   onLayoutChanged: ws.save,
+                  activePanel: activePanel,
+                  onPopOut: (panel) => app.setNotice(
+                      '${panel.title}: pop out arrives with multi-window support'),
                 ),
               ),
               _StatusLine(app: app),
@@ -204,6 +212,10 @@ class _ShellBodyState extends State<_ShellBody> {
                 }),
               ),
               onClose: () => setState(() => paletteOpen = false),
+            ),
+          if (!splashDone)
+            SplashOverlay(
+              onDone: () => setState(() => splashDone = true),
             ),
         ],
       ),

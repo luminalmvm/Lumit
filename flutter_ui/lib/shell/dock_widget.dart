@@ -17,11 +17,20 @@ class DockWidget extends StatefulWidget {
   final PanelBuilder buildPanel;
   final VoidCallback onLayoutChanged;
 
+  /// The panel that last took a click — it wears the accent boundary so the
+  /// keyboard's home is always visible (Shell::active_panel).
+  final ValueNotifier<Panel?> activePanel;
+
+  /// Called when a pane's context menu asks to pop out into its own window.
+  final void Function(Panel) onPopOut;
+
   const DockWidget({
     super.key,
     required this.root,
     required this.buildPanel,
     required this.onLayoutChanged,
+    required this.activePanel,
+    required this.onPopOut,
   });
 
   @override
@@ -42,11 +51,16 @@ class _DockWidgetState extends State<DockWidget> {
   Widget _buildNode(BuildContext context, DockNode node) => switch (node) {
         DockPane(:final panel) => _PaneChrome(
             bare: true,
+            panel: panel,
+            activePanel: widget.activePanel,
+            onPopOut: widget.onPopOut,
             child: widget.buildPanel(context, panel),
           ),
         DockTabs() => _TabGroup(
             tabs: node,
             buildPanel: widget.buildPanel,
+            activePanel: widget.activePanel,
+            onPopOut: widget.onPopOut,
             onChanged: () {
               setState(() {});
               widget.onLayoutChanged();
@@ -170,11 +184,15 @@ class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
+  final ValueNotifier<Panel?> activePanel;
+  final void Function(Panel) onPopOut;
 
   const _TabGroup({
     required this.tabs,
     required this.buildPanel,
     required this.onChanged,
+    required this.activePanel,
+    required this.onPopOut,
   });
 
   @override
@@ -215,9 +233,9 @@ class _TabGroup extends StatelessWidget {
                 child: HouseButton(
                   frameless: true,
                   small: true,
-                  onPressed: null, // multi-window is a checklist item
+                  onPressed: () => onPopOut(tabs.activePane.panel),
                   child: lumitIcon(LumitIcon.popOut,
-                      size: 12, color: t.textDisabled),
+                      size: 12, color: t.textMuted),
                 ),
               ),
               const SizedBox(width: 4),
@@ -227,6 +245,9 @@ class _TabGroup extends StatelessWidget {
         Expanded(
           child: _PaneChrome(
             bare: false,
+            panel: tabs.activePane.panel,
+            activePanel: activePanel,
+            onPopOut: onPopOut,
             child: buildPanel(context, tabs.activePane.panel),
           ),
         ),
@@ -294,27 +315,78 @@ class _TabPillState extends State<_TabPill> {
 }
 
 /// The pane body chrome: Sharp draws edge-to-edge on `surface1`; Round wraps
-/// the content in a rounded, shadowed, padded card (dock.rs::pane_ui).
+/// the content in a rounded, shadowed, padded card (dock.rs::pane_ui). Any
+/// click inside makes this the active panel, which wears the accent boundary
+/// (Shell::active_panel); a right-click on a bare pane offers "pop out"
+/// (bare_pane_ui — tabbed panes get it from the tab bar's own button).
 class _PaneChrome extends StatelessWidget {
   final bool bare;
+  final Panel panel;
+  final ValueNotifier<Panel?> activePanel;
+  final void Function(Panel) onPopOut;
   final Widget child;
-  const _PaneChrome({required this.bare, required this.child});
+
+  const _PaneChrome({
+    required this.bare,
+    required this.panel,
+    required this.activePanel,
+    required this.onPopOut,
+    required this.child,
+  });
+
+  void _contextMenu(BuildContext context, Offset globalPos) {
+    showLumitPopup<void>(
+      context: context,
+      position: globalPos,
+      builder: (close) => FloatSurface(
+        child: MenuRow(
+          onPressed: () {
+            close(null);
+            onPopOut(panel);
+          },
+          child: const Text('Pop out into its own window'),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    if (t.shape == ThemeShape.sharp) {
-      return Container(color: t.surface1, child: child);
-    }
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surface1,
-        borderRadius: BorderRadius.circular(t.tokens.cardRadius),
-        boxShadow: t.tokens.cardShadow,
+    final round = t.shape == ThemeShape.round;
+    return ValueListenableBuilder<Panel?>(
+      valueListenable: activePanel,
+      builder: (context, active, _) => Listener(
+        // Any press claims focus for this panel, before the content handles
+        // the event (the egui edge follows the last click the same way).
+        onPointerDown: (_) => activePanel.value = panel,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapDown:
+              bare ? (d) => _contextMenu(context, d.globalPosition) : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: t.surface1,
+              borderRadius:
+                  round ? BorderRadius.circular(t.tokens.cardRadius) : null,
+              boxShadow: round ? t.tokens.cardShadow : null,
+            ),
+            // The accent boundary paints over the content's edge, like the
+            // egui overlay stroke at Order::Middle.
+            foregroundDecoration: active == panel
+                ? BoxDecoration(
+                    border: Border.all(color: t.accent, width: 1),
+                    borderRadius: round
+                        ? BorderRadius.circular(t.tokens.cardRadius)
+                        : null,
+                  )
+                : null,
+            padding: round ? EdgeInsets.all(t.tokens.cardPadding) : null,
+            clipBehavior: round ? Clip.antiAlias : Clip.none,
+            child: child,
+          ),
+        ),
       ),
-      padding: EdgeInsets.all(t.tokens.cardPadding),
-      clipBehavior: Clip.antiAlias,
-      child: child,
     );
   }
 }

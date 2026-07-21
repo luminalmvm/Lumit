@@ -21,8 +21,9 @@ where the row is logic).
   the three-state styling; solo panes bare
 - ☐ Dock: drag a tab / bare-pane grip to re-dock (the tree is serialisable;
   the move ops and the drag interaction arrive together)
-- ☐ Bare-pane affordances: right-click "Pop out into its own window" and the
-  corner drag grip
+- ◐ Bare-pane affordances: right-click "Pop out into its own window" ☑
+  (surfaces the multi-window notice for now); the corner drag grip waits on
+  the re-dock work above
 - ☐ Pop out a panel into its own OS window (multi-window; deferred, see 04)
 - ☑ Menu bar: File / Edit / Composition / Window with the full shipped item set
   (engine-backed items dispatch to the stub state and surface a notice)
@@ -35,8 +36,10 @@ where the row is logic).
   text-field focus gate
 - ☑ Panel stubs: all seven panels with real chrome (Viewer surround, scope
   graticule placeholder, timeline strip skeleton) so the workspace reads right
-- ☐ Splash boot card
-- ☐ Active-panel accent edge
+- ☑ Splash boot card (K-008: centred card, boot lines, click to skip; the
+  engine's real boot log streams in at F1) — widget-tested
+- ☑ Active-panel accent edge (last click wins, one pane at a time) —
+  widget-tested
 - ☐ Sharp/Round: Round cards ☑ (fill, radius, padding, gap, shadow); window
   inset ☑; resize-gap hover/drag tinting ☑
 
@@ -70,9 +73,33 @@ dialogue + queue · Comp settings · Add mask · Recovery modal
 
 ## Post-parity fixes (owner's known rough edges — do NOT fix during the port)
 
-Collected here as they come up so parity stays honest. Currently: (owner to
-dictate; nothing recorded yet — the port reproduces today's behaviour including
-anything that "isn't quite the way I want".)
+Collected here as they come up so parity stays honest. Behavioural changes wait
+until parity; the pure *defects* in this list (marked "defect") are different —
+the port should simply not have them, and their absence must not be read as a
+deviation when the two frontends are compared side by side.
+
+Recorded 2026-07-21, from the owner:
+
+1. **Settings dialogue z-order (defect).** In the egui Settings window (and
+   similar surfaces), text can get stuck rendering behind input boxes. The
+   Flutter port must keep labels and controls in one layout flow so nothing
+   can overlap; do not reproduce.
+2. **Timeline ruler height (design change, post-parity or at F3 build time).**
+   The time ruler above the lane area should span the full two-row band —
+   the egui frontend draws it one row tall even though the mouse-interaction
+   region already covers both rows. Decide at F3: build the Flutter ruler
+   two rows tall from the start (the owner's stated intent) and note the
+   deliberate deviation here when done.
+3. **Layer-area overcrowding (design change, F3).** The timeline's layer
+   outline handles small panel sizes badly — switches, buttons and labels
+   start overlapping as the column shrinks. The Flutter layer area needs a
+   real degradation order (truncate/hide columns before anything overlaps).
+   Design it during F3 rather than copying the egui behaviour.
+4. **Value boxes clip their row (defect).** DragValue-style value boxes
+   across most of the egui UI clip at the bottom of the row they sit on.
+   The Flutter `DragValueField` must size rows to fit their controls; do
+   not reproduce. Owner notes there are probably more of this kind — add
+   them here as they surface.
 
 ## Known deliberate deviations
 
