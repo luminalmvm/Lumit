@@ -67,8 +67,13 @@ locally (fmt, clippy `-D warnings`, 638 + 64 GPU tests). Tracked as TF-1..4 / OD
   than asserted. Notable side effect: **the GPU oracles now run in CI at all** — 64 tests that
   previously only ever ran on the owner's machine (macOS's job runs them too, but lavapipe
   proves they hold on a machine with no graphics card). **Flatpak packaging**
-  (`packaging/flatpak/`, bundling its own FFmpeg 7.1) is committed and its CI job is still
-  being brought up — not yet green, so no `lumit.flatpak` artifact is published yet. **A finding it produced immediately:** the
+  (`packaging/flatpak/`, bundling its own FFmpeg 7.1) is green too: each run publishes an
+  installable `lumit-x86_64.flatpak` (~15 MB). Bringing it up took four real fixes, each
+  worth knowing if the runtime is ever bumped — the 24.08 SDK's Rust (1.89) is below what the
+  tree needs; the upstream LLVM tarball's libclang wants an ncurses ABI modern distributions
+  dropped; that runtime has no llvm18 extension, so libclang is pinned at llvm20; and bindgen
+  needs clang's *own* builtin headers pointed at explicitly (`BINDGEN_EXTRA_CLANG_ARGS`),
+  since the resource directory does not travel with `LIBCLANG_PATH`. **A finding it produced immediately:** the
   accumulation motion-blur *still-scene bit-identity* (docs/08 §3.26, impl/temporal-rerender
   §3) holds on GPUs but not on lavapipe, where the sum-and-divide rounds one 8-bit step away
   from the single composite. Not a Lumit bug — two mathematically identical paths, and fp16

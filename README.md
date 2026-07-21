@@ -66,9 +66,10 @@ binding generator.
   or a self-built FFmpeg before Lumit will build.
 
 **Linux, without building it yourself:** every CI run publishes a **Flatpak bundle**
-(`lumit.flatpak`, under the run's Artifacts). It carries its own FFmpeg 7.1, so it installs
-and runs on any distribution regardless of what that distribution ships:
-`flatpak install --user lumit.flatpak`, then `flatpak run io.github.luminalmvm.Lumit`.
+(`lumit-x86_64.flatpak`, under the run's Artifacts — about 15 MB). It carries its own
+FFmpeg 7.1, so it installs and runs on any distribution regardless of what that distribution
+ships: `flatpak install --user lumit-x86_64.flatpak`, then
+`flatpak run io.github.luminalmvm.Lumit`.
 The manifest lives in [packaging/flatpak/](packaging/flatpak/).
 
 Full step-by-step, in plain English: [docs/GUIDE.md](docs/GUIDE.md) §8.

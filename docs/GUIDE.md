@@ -2092,10 +2092,11 @@ together with the exact libraries it was built against, run in a light sandbox. 
 Lumit's bundle carries its own FFmpeg 7.1, it does not care what the distribution ships:
 the same file installs on Ubuntu, Fedora, Arch or anything else.
 
-Every CI run builds one and attaches it to the run as `lumit.flatpak`. Download it, then:
+Every CI run builds one and attaches it to the run as `lumit-x86_64.flatpak` (about 15 MB —
+the app plus its own FFmpeg). Download it, then:
 
 ```
-flatpak install --user lumit.flatpak
+flatpak install --user lumit-x86_64.flatpak
 flatpak run io.github.luminalmvm.Lumit
 ```
 
