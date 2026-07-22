@@ -40,7 +40,11 @@ where the row is logic).
   with an external-edit `resync`, `PopoutHost`, the window-opener seam +
   `desktop_multi_window` impl, the sub-window entrypoint), wired at
   `shell/shell.dart onPopOut` + `dock_widget.dart`, `main.dart` dispatch, and the
-  Windows runner sub-window plugin callback. Offered only for the read-mostly
+  Windows AND Linux runner sub-window plugin callbacks (the Linux runner
+  `linux/runner/my_application.cc` gains the equivalent
+  `desktop_multi_window_plugin_set_window_created_callback` — the plugin ships a
+  first-class Linux/GTK implementation, so pop-out is NOT gated off Linux).
+  Offered only for the read-mostly
   panels a second engine can host honestly — Project, Hierarchy, Effect controls,
   Effects & presets, Scopes; the Viewer and Timeline stay in-window (texture
   registrar + playhead/transport are main-window concerns). Caveats: the popout
@@ -1007,14 +1011,30 @@ Recorded 2026-07-21, from the owner:
    the status line are the first things to read. Recorded as the top open
    defect; the placeholder text should also name the failure reason rather
    than a stale promise.
-2. **The Scopes are "super laggy".** They compute traces on the CPU from a
-   throttled readback — parity with egui's shipped scopes, but the owner has
-   now explicitly requested the GPU scope pass (the K-096 v1 future-work note)
-   ON THIS BRANCH, overriding the earlier "belongs on main" scoping. Promoted
-   from post-parity enhancement to scheduled work (after the Linux build).
-3. **The Linux build is now a priority**: the owner's Linux-based collaborator
-   will work on the UI, so `flutter_ui` must build and run on Linux. New
-   scheduled work, first in line.
+2. **The Scopes are "super laggy" — FIXED (2026-07-22, K-096 v1, the GPU scope
+   pass).** The trace binning moved off the CPU onto the graphics card: a WGSL
+   pass in lumit-gpu (`scope.rs` + `scope.wgsl`) bins the displayed frame with
+   `atomic<u32>` storage buffers, reduces the peak, and colourises the 256×256
+   trace into an `rgba8unorm` storage texture — all core WGSL, so the CI lavapipe
+   oracles run it. `lumit_bridge_render_scope` rides the existing rendered-frame
+   cache (the scope traces the exact frame the Viewer shows, no comp re-render);
+   `scopes_panel.dart` prefers the engine trace (`ScopeTraceBridge`) with the CPU
+   `buildTraceRgba` as the old-dll / no-adapter fallback, and the ~10 Hz throttle
+   is gone — every displayed frame traces. Delivery is a tiny 256×256 RGBA
+   readback (not a second shared texture — the trace is too small to be worth
+   zero-copy, and the buffer degrades on Linux via the same CPU fallback as the
+   Viewer). GPU oracle tests pin the bin counts to the CPU maths exactly and the
+   trace pixels within ±1. See 06 scheduled-work item 2 and *Platform passes and
+   engine enhancements*.
+3. **The Linux build** — DONE pending CI (2026-07-22): `flutter_ui` now
+   scaffolds a `linux/` runner (with the multi-window sub-window callback), the
+   bridge loader branches its base name to `liblumit_bridge.so` on Linux, the
+   Windows-only surfaces degrade cleanly (shared texture → CPU; pop-out keeps
+   its Linux plugin), and a `flutter-linux` CI job builds the bridge `.so` +
+   `flutter build linux --release` and runs analyze/test. Local gates green on
+   Windows (analyze, 411 tests, `cargo check -p lumit-bridge`); the Linux build
+   itself is **unverified until the branch's next CI run** (this Windows box
+   cannot build Flutter-for-Linux). See 06 scheduled-work item 1.
 4. **Build-tooling note:** on the owner's interactive shell, `flutter run`'s
    implicit pub phase correlates with kernel-compile failures resolving a
    relative pub-cache path; every explicit-pub invocation succeeds. Standing

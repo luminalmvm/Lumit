@@ -67,6 +67,11 @@ pub struct HeadlessRenderer {
     /// unwinds (never expected — engine crates forbid panics) leaves this `None`,
     /// and further calls answer a calm error rather than crashing.
     parts: Option<Parts>,
+    /// The GPU scope pass (K-096 v1). Held directly rather than in [`Parts`]
+    /// because a scope trace runs *from a finished frame*, not during a
+    /// composite, so it is never lent to the `Renderer` — it borrows `&self.gpu`
+    /// on its own. Compiled once with the other engines.
+    scope: lumit_gpu::scope::ScopeEngine,
     /// The `ItemInfo` map the renderer reads, rebuilt each call (cheap — it only
     /// reads `probe_cache`) so a missing item's slate matches the current comp.
     items: HashMap<Uuid, ItemInfo>,
@@ -124,9 +129,11 @@ impl HeadlessRenderer {
             lut_cache: std::cell::RefCell::new(HashMap::new()),
             decoders: HashMap::new(),
         };
+        let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         Ok(Self {
             gpu,
             parts: Some(parts),
+            scope,
             items: HashMap::new(),
             probe_cache: HashMap::new(),
             audio_cache: HashMap::new(),
@@ -325,6 +332,46 @@ impl HeadlessRenderer {
             decoders: renderer.decoders,
         });
         out
+    }
+
+    /// Compute a scope trace (waveform/vectorscope/histogram, K-096 v1) from an
+    /// already-rendered comp frame's display bytes, returning the `GRID × GRID`
+    /// RGBA8 trace. `rgba` is the exact frame the Viewer shows (served from the
+    /// bridge's rendered-frame cache, so the scope traces the same frame at no
+    /// re-render cost); the binning runs on the GPU and only the tiny trace is
+    /// read back.
+    ///
+    /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
+    /// (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
+    /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
+    /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback
+    /// fails.
+    pub fn render_scope(
+        &self,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        kind: u32,
+        colours: [[u8; 3]; 5],
+    ) -> Result<Vec<u8>, String> {
+        let kind = match kind {
+            0 => lumit_gpu::scope::ScopeKind::WaveformLuma,
+            1 => lumit_gpu::scope::ScopeKind::WaveformRgb,
+            2 => lumit_gpu::scope::ScopeKind::Vectorscope,
+            3 => lumit_gpu::scope::ScopeKind::Histogram,
+            other => return Err(format!("headless scope: unknown kind {other}")),
+        };
+        let colours = lumit_gpu::scope::ScopeColours {
+            bg: colours[0],
+            trace: colours[1],
+            red: colours[2],
+            green: colours[3],
+            blue: colours[4],
+        };
+        self.scope
+            .trace_rgba8(&self.gpu, kind, colours, rgba, width, height)
+            .map_err(|e| e.to_string())
     }
 
     /// Render composition `comp_id` at integer `frame` into the Windows shared

@@ -13,6 +13,18 @@
 // The trace is built as a small 256×256 image off the build path (only when the
 // shown frame or the chosen scope changes) and painted stretched, so build() and
 // paint() never recompute over the frame's pixels.
+//
+// TWO PATHS (K-096 v1). When the loaded engine offers the GPU scope pass
+// (`ScopeTraceBridge`), the trace is computed on the graphics card — the engine
+// bins the SAME comp frame the Viewer shows (same comp+frame+scale key, served
+// from the rendered-frame cache so the comp is not re-rendered) and returns the
+// finished 256×256 trace. That is the "scopes are super laggy" fix: no
+// quarter-million-pixel CPU walk per frame, so every displayed frame traces at
+// negligible cost (the old throttle is gone). When the engine lacks the symbol
+// (an older library) or has no comp active, this falls back per rebuild to the
+// CPU trace over the decoded frame the Viewer is showing — the F2 behaviour,
+// unchanged. Either way the last trace is held across a momentarily-unavailable
+// frame (K-130).
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -73,15 +85,16 @@ class _ScopesPanelState extends State<ScopesPanel> {
   void _onSourceChanged() => _maybeRebuild();
 
   /// Rebuild the trace when the shown frame or the chosen scope changed. Runs
-  /// off the build path; the async image decode notifies via setState.
+  /// off the build path; the async image decode notifies via setState. Prefers
+  /// the engine GPU trace (K-096 v1) and falls back to the CPU trace over the
+  /// shown frame; a null from both holds the last trace (K-130).
   void _maybeRebuild() {
-    final frame = _source.displayedFrame;
-    if (frame == null) return;
     final gen = _source.generation;
     if (gen == _builtGeneration && _kind == _builtKind) return;
     if (_building) return;
 
-    final rgba = buildTraceRgba(frame, _kind);
+    final rgba = _engineTrace() ?? _cpuTrace();
+    if (rgba == null) return; // nothing to trace yet — keep the held trace
     _building = true;
     ui.decodeImageFromPixels(
       rgba,
@@ -102,6 +115,44 @@ class _ScopesPanelState extends State<ScopesPanel> {
         });
       },
     );
+  }
+
+  /// The engine GPU trace for the frame the Viewer shows, or null when the
+  /// loaded library lacks the scope pass, no comp is active, or the render
+  /// declined. Traces comp+frame+scale — the SAME key the Viewer's preview
+  /// renders — so the scope always matches the picture and the comp is served
+  /// from the rendered-frame cache without a re-render.
+  Uint8List? _engineTrace() {
+    final app = widget.app;
+    final b = app.bridge;
+    if (b is! ScopeTraceBridge || !(b as ScopeTraceBridge).supportsScopeTrace) {
+      return null;
+    }
+    final compId = app.frontCompIdResolved;
+    if (compId == null) return null;
+    final sc = ScopeColours.standard;
+    int pack(Color c) => (_r8(c) << 16) | (_g8(c) << 8) | _b8(c);
+    final bytes = (b as ScopeTraceBridge).renderScope(
+      _kind.index, // enum order matches the engine's kind tags (0..3)
+      compId,
+      app.previewFrame,
+      app.effectivePreviewScale,
+      pack(sc.bg),
+      pack(sc.trace),
+      pack(sc.red),
+      pack(sc.green),
+      pack(sc.blue),
+    );
+    if (bytes == null || bytes.length != scopeGrid * scopeGrid * 4) return null;
+    return bytes;
+  }
+
+  /// The CPU fallback trace over the decoded frame the Viewer is showing (the F2
+  /// path), or null when no frame is available to trace.
+  Uint8List? _cpuTrace() {
+    final frame = _source.displayedFrame;
+    if (frame == null) return null;
+    return buildTraceRgba(frame, _kind);
   }
 
   void _pickKind(ScopeKind k) {

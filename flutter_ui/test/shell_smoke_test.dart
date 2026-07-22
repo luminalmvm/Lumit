@@ -217,7 +217,7 @@ void main() {
     // Click inside the Viewer pane (its single-layer-preview placeholder, shown
     // with no bridge/footage under the playhead).
     await tester.tap(
-      find.textContaining('Single-layer preview'),
+      find.textContaining('No engine library loaded'),
       warnIfMissed: false,
     );
     await tester.pump();

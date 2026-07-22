@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/bridge/bridge.dart';
 import 'package:lumit_flutter/panels/preview_source.dart';
 import 'package:lumit_flutter/panels/scope_maths.dart';
+import 'package:lumit_flutter/panels/scopes_panel.dart';
 import 'package:lumit_flutter/panels/viewer_panel.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/state/app_state.dart';
@@ -185,6 +186,34 @@ class _CompBridge extends _FrameBridge implements CompRenderBridge {
   DecodedFrame? renderCompFrame(String compId, int frame, double scale) {
     renderedComps.add('$compId@$frame');
     return compResult;
+  }
+}
+
+/// A bridge that offers the GPU scope pass (K-096 v1) on top of comp rendering.
+/// Records its `renderScope` calls (kind + comp@frame) so a test can assert the
+/// panel chose the engine path, and returns [traceBytes] (null models a declined
+/// render → the panel's CPU fallback). [supportsScope] toggles the capability.
+class _ScopeBridge extends _CompBridge implements ScopeTraceBridge {
+  final bool supportsScope;
+  final Uint8List? traceBytes;
+  final List<String> scopeCalls = [];
+
+  _ScopeBridge(
+    super.snap, {
+    super.decodeResult,
+    super.compResult,
+    this.supportsScope = true,
+    this.traceBytes,
+  });
+
+  @override
+  bool get supportsScopeTrace => supportsScope;
+
+  @override
+  Uint8List? renderScope(int kind, String compId, int frame, double scale,
+      int bg, int trace, int red, int green, int blue) {
+    scopeCalls.add('$kind:$compId@$frame');
+    return traceBytes;
   }
 }
 
@@ -899,6 +928,70 @@ void main() {
       expect(source.compActive, isFalse);
       expect(source.image, isNotNull);
       source.dispose();
+    });
+  });
+
+  // The GPU scope pass (K-096 v1): the ScopesPanel prefers the engine trace when
+  // the loaded library offers `render_scope`, and falls back to the CPU trace
+  // when it does not. These drive the panel widget against a fake bridge.
+  group('ScopesPanel GPU trace (K-096 v1)', () {
+    final snap = _snapshot(
+      _comp([_layer(name: 'clip.mp4', inFrame: 0, outFrame: 48)]),
+      [_footage('clip.mp4')],
+    );
+
+    /// A valid opaque 256×256 RGBA trace the fake engine returns.
+    Uint8List traceImage() {
+      final b = Uint8List(scopeGrid * scopeGrid * 4);
+      for (var i = 3; i < b.length; i += 4) {
+        b[i] = 255;
+      }
+      return b;
+    }
+
+    testWidgets('asks the engine for the trace when the pass is offered',
+        (tester) async {
+      final bridge = _ScopeBridge(
+        snap,
+        decodeResult: _solid(4, 4, 1, 1, 1),
+        compResult: _solid(8, 8, 20, 120, 200),
+        traceBytes: traceImage(),
+      );
+      final app = AppStateStub(bridge: bridge);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_wrap(ScopesPanel(app: app)));
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pump();
+
+      expect(bridge.scopeCalls, isNotEmpty,
+          reason: 'the panel asked the engine to trace');
+      expect(bridge.scopeCalls.first, startsWith('0:c1@'),
+          reason: 'the luma kind (index 0) of the front comp');
+      // No CPU single-layer decode was needed to trace.
+      expect(find.byType(CustomPaint), findsWidgets);
+    });
+
+    testWidgets('falls back to the CPU trace when the pass is unsupported',
+        (tester) async {
+      final bridge = _ScopeBridge(
+        snap,
+        decodeResult: _solid(4, 4, 5, 6, 7),
+        compResult: _solid(8, 8, 9, 9, 9),
+        supportsScope: false,
+        traceBytes: traceImage(),
+      );
+      final app = AppStateStub(bridge: bridge);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_wrap(ScopesPanel(app: app)));
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pump();
+
+      expect(bridge.scopeCalls, isEmpty,
+          reason: 'an unsupported engine is never asked to trace');
+      // The panel still renders (the CPU trace over the shown comp frame).
+      expect(find.byType(CustomPaint), findsWidgets);
     });
   });
 }

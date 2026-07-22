@@ -40,8 +40,9 @@ class PerformanceSettings {
 
   /// Half the machine's memory in MiB, floored at 2 GiB — the same default
   /// the Rust side computes with sysinfo. Dart has no portable total-memory
-  /// query without a plugin; on Windows we ask WMIC's successor via
-  /// PowerShell once, and fall back to the floor if that fails.
+  /// query without a plugin, so each desktop OS gets a cheap native probe:
+  /// on Windows we ask WMIC's successor via PowerShell once; on Linux we read
+  /// `/proc/meminfo`. Either falls back to the floor if it fails.
   static int? _totalMbCache;
   static int defaultRamBudgetMb() {
     _totalMbCache ??= _queryTotalMb();
@@ -59,6 +60,17 @@ class PerformanceSettings {
         ]);
         final bytes = int.tryParse((r.stdout as String).trim());
         if (bytes != null) return bytes ~/ (1024 * 1024);
+      } else if (Platform.isLinux) {
+        // `MemTotal:  <kB> kB` is the first line of /proc/meminfo. No plugin
+        // and no process spawn — a single small file read.
+        final line = File('/proc/meminfo')
+            .readAsLinesSync()
+            .firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+        final match = RegExp(r'(\d+)').firstMatch(line);
+        if (match != null) {
+          final kb = int.tryParse(match.group(1)!);
+          if (kb != null) return kb ~/ 1024;
+        }
       }
     } catch (_) {}
     return 4096; // floor fallback: yields the 2048 MiB minimum budget

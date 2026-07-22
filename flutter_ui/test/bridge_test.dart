@@ -1258,4 +1258,35 @@ void main() {
       expect(bare.listBlendModes(), isEmpty);
     });
   });
+
+  group('Loader candidate library paths (platform portability)', () {
+    // The base name the loader searches for is the OS's cdylib name:
+    // `lumit_bridge.dll` on Windows, `liblumit_bridge.so` elsewhere. This runs
+    // green on the Windows host gate AND the Linux CI gate, asserting each side.
+    final expectedName =
+        Platform.isWindows ? 'lumit_bridge.dll' : 'liblumit_bridge.so';
+
+    test('every candidate ends in the platform library name', () {
+      final paths = LumitBridge.candidateLibraryPaths();
+      expect(paths, isNotEmpty);
+      for (final p in paths) {
+        expect(p.endsWith(expectedName), isTrue,
+            reason: 'candidate "$p" should end in $expectedName');
+      }
+    });
+
+    test('the bare OS-loader name is the last candidate', () {
+      final paths = LumitBridge.candidateLibraryPaths();
+      expect(paths.last, expectedName);
+    });
+
+    test('the release target dir is searched before the debug one', () {
+      final paths = LumitBridge.candidateLibraryPaths();
+      final firstRelease =
+          paths.indexWhere((p) => p.contains('release'));
+      final firstDebug = paths.indexWhere((p) => p.contains('debug'));
+      expect(firstRelease, greaterThanOrEqualTo(0));
+      expect(firstDebug, greaterThan(firstRelease));
+    });
+  });
 }

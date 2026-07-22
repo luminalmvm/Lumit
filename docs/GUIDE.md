@@ -1563,9 +1563,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   you sit paused), and the scope traces whichever one is on screen. If a frame hasn't been
   kept in memory yet — Lumit skips saving some frames during playback to stay fast — the scope
   simply holds the last frame it had rather than going blank, and snaps back to live the
-  instant the current frame is ready. The one honest limit that remains (from K-096): tracing
-  *every* frame no matter what, even on a brand-new composition nothing has warmed yet, needs
-  the graphics card to do the counting, which is still a later addition. The scope's
+  instant the current frame is ready. The counting itself now runs on the graphics card (the
+  GPU scope pass, K-096 v1 — `crates/lumit-gpu/src/scope.rs`), so tracing every frame costs
+  almost nothing; the CPU counting in `shell/scopes.rs` remains as the fallback for a machine
+  with no adapter. See GUIDE §9 for the plain-English tour of the GPU pass. The scope's
   own colours (the near-black background, the green trace, the red/green/blue channel
   colours) are fixed and the same in light or dark mode, for the same reason the Viewer's
   surround is a fixed neutral grey — you cannot judge an image against a background that
@@ -2226,6 +2227,29 @@ still need the actual numbers, and the fast path deliberately keeps the picture
 *off* ordinary memory, so the engine also does a slow copy a few times a second
 just to feed the Scopes, while the fast texture drives the Viewer itself.
 
+**The Scopes are computed on the graphics card now (the GPU scope pass, K-096
+v1).** A scope reads the picture's brightness and colour — a waveform, a
+histogram, a vectorscope. Both frontends used to work those out on the ordinary
+processor, walking a quarter-million pixels of the frame every time the scope
+redrew; with a scope open while scrubbing, that is what made it feel laggy (the
+owner's report). The engine now does that walk on the graphics card instead. It
+is three tiny GPU programs: one drops each sampled pixel into a counting bin
+(many threads counting into the same bin safely, an "atomic add"), one finds the
+tallest bin, and one paints the little 256×256 trace picture from the bins in the
+scope's fixed colours. Only that tiny trace picture — a quarter of a megabyte —
+comes back to ordinary memory; the frame it read stays on the card. We
+deliberately did *not* give the scope its own fast shared texture like the Viewer
+has: the trace is so small that the fast hand-off would save nothing, while
+costing a second registered texture and its memory — the honest win here is the
+counting, not the delivery. The scope traces the very same comp frame the Viewer
+shows (same composition, frame and preview size), served from the frame cache
+below, so the numbers and the picture never disagree, and the comp is not
+re-drawn just to scope it. When the loaded engine is an older build without this
+pass — or on a machine with no suitable graphics card — the Scopes quietly fall
+back to counting on the processor, exactly as before. This lives in the engine
+(`crates/lumit-gpu/src/scope.rs` + `scope.wgsl`), so both the Flutter and the
+egui frontend can use it.
+
 **Re-scrubbing a frame is now free (the frame cache, K-176).** Drawing one
 composited comp frame — every layer, transform, blend and effect — is the most
 expensive thing the Viewer does, and until now the Flutter app re-did it *every*
@@ -2314,6 +2338,32 @@ Rust build uses). Then, from `flutter_ui/`: `flutter run -d windows` to launch,
 `flutter test` for the tests, `flutter analyze` for the lint pass. The bridge
 library builds separately with `cargo build -p lumit-bridge`, which drops
 `lumit_bridge.dll` in `target/debug/` where the Flutter app looks for it.
+
+**Running it on Linux (for the Linux collaborator).** The Flutter frontend now
+builds and runs on Linux, not only Windows. You need three things installed
+once: the FFmpeg 7.1 "shared" build the engine links (see §8's Linux notes — the
+BtbN `n7.1 ... linux64-gpl-shared` tarball, with `FFMPEG_PKG_CONFIG_PATH`,
+`LD_LIBRARY_PATH` and `LIBCLANG_PATH` pointed at it and LLVM 18); the Flutter
+desktop toolchain (`sudo apt-get install clang cmake ninja-build pkg-config
+libgtk-3-dev`); and the same X11/Wayland/ALSA/GL dev libraries the engine's own
+Linux build wants (the `libasound2-dev libgl-dev libegl-dev libxkbcommon-dev …`
+list in §8). Then, from `flutter_ui/`: build the engine bridge with `cargo build
+-p lumit-bridge` — on Linux this produces `liblumit_bridge.so` in `target/debug/`
+(the loader looks there, then `target/release/`, then beside the executable, then
+the system library path; the `lib` prefix and `.so` suffix are Cargo's Unix name
+for the same crate that becomes `lumit_bridge.dll` on Windows). Run the app with
+`flutter run -d linux`, the tests with `flutter test`, the lint pass with
+`flutter analyze`. If a run or test complains it cannot fetch packages offline,
+add `--no-pub` after a successful `flutter pub get` to reuse the resolved
+packages. Two things behave differently on Linux by design, both degrading
+cleanly rather than failing: the Viewer uses the **CPU frame path** (the
+copy-the-bytes way) because the zero-copy shared-texture path is Windows/D3D12
+only — DMA-BUF is the future Linux equivalent, not built yet — so scrubbing is a
+little heavier but everything draws; and **popping a panel out into its own OS
+window works** — the `desktop_multi_window` plugin ships a first-class Linux
+(GTK) implementation, so pop-out is *not* gated off Linux. Because this box
+cannot build Flutter-for-Linux, the Linux build is proven by the CI
+`flutter-linux` job, not locally — treat a green run of that job as the gate.
 
 **What the bridge carries now (v0.2).** The first bridge only described the
 project as a tree of item names. It now also carries the *inside* of things, so

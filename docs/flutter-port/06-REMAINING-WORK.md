@@ -349,31 +349,88 @@ annotated honestly rather than faked.
   Linux/macOS Flutter passes happen, the texture path needs DMA-BUF (Linux) and
   IOSurface/Metal (macOS) implementations — both already named in
   03-ARCHITECTURE. The CPU path is the portable fallback by design.
-- **GPU-side scope pass.** The reviewer is right that the Scopes could be
-  computed on the GPU and delivered zero-copy. Parity note: the egui frontend's
-  shipped scopes are ALSO CPU-computed (from the RAM-banked frame), and Lumit's
-  own spec records the GPU scope pass as future work (the K-096 v1 note:
-  "guaranteed every-frame tracing still waits on a GPU-side scope pass"). It is
-  an ENGINE enhancement (a new WGSL pass in lumit-gpu) benefiting both
-  frontends, so it belongs on main, not the port branch.
+- **GPU-side scope pass — BUILT (2026-07-22, K-096 v1).** The Scopes are now
+  computed on the GPU: a new WGSL pass in lumit-gpu (`crates/lumit-gpu/src/
+  scope.rs` + `scope.wgsl`) bins the displayed frame into per-scope counters
+  (three compute passes — `bin` via `atomic<u32>` storage buffers, `peak_reduce`,
+  and `colourise` into an `rgba8unorm` storage texture), all core WGSL so the CI
+  lavapipe oracles run it unchanged. GPU oracle tests assert the bin counts
+  against the CPU maths exactly (atomics never round) and the trace pixels within
+  the ±1 the fp `sqrt` allows across adapters. Bridge: `lumit_bridge_render_scope`
+  (render.rs `render_scope`) rides the existing rendered-frame cache — a frame
+  already banked for the Viewer serves the scope without re-rendering the comp,
+  and the scope traces the exact bytes the Viewer shows (preview == the traced
+  frame). Dart: `ScopeTraceBridge` on the `LumitBridge`, and `scopes_panel.dart`
+  prefers the engine trace with the CPU `buildTraceRgba` as the old-dll / no-adapter
+  fallback (the throttle is gone — every displayed frame traces). *Delivery
+  decision (texture vs tiny buffer, recorded honestly):* the trace ships as a tiny
+  256×256 RGBA readback (~256 KiB), **not** a second shared texture. The win is
+  moving the binning off the CPU; the trace is so small a zero-copy hand-off would
+  save nothing while costing a second registered texture (VRAM the frame cache
+  does not model — framecache.rs already documents the shared path holds exactly
+  one texture) and a second Dart texture id + C++ registrar path that compiles
+  only on the owner's machine. The tiny buffer is also portable — it degrades on
+  Linux via the same CPU fallback as the Viewer, where a second shared texture
+  would be Windows/D3D12-only. It is an ENGINE enhancement benefiting both
+  frontends, so it belongs on main.
 - **Thumbnails stay CPU-decoded on purpose**: the egui frontend also decodes
   thumbnails on the CPU; they are tiny one-off images, not per-frame streams —
   parity holds and zero-copy would buy nothing.
 
 ## Scheduled work (owner priorities, 2026-07-22 round 3)
 
-1. **Linux build of the Flutter frontend** (top priority — the Linux
-   collaborator's UI work depends on it): linux/ runner scaffolding, a
-   platform-portable bridge loader (liblumit_bridge.so search paths), the
-   Windows-only surfaces degrading cleanly (shared texture → CPU path;
-   texture plugin absent), and a CI job on the existing Linux runner proving
-   the build — this Windows box cannot build Flutter-for-Linux locally, so CI
-   is the gate.
-2. **GPU scope pass** (owner override of the earlier main-branch scoping): a
-   WGSL scope pass in lumit-gpu rendering waveform/vectorscope/histogram
-   traces engine-side, delivered to the Scopes panel over the same
-   shared-texture pipeline as the Viewer (CPU fallback retained). Closes the
-   round-3 "scopes super laggy" report and the K-096 v1 note.
+1. **Linux build of the Flutter frontend** — DONE pending CI (2026-07-22).
+   *Unverified until the branch's next CI run:* this Windows box cannot build
+   Flutter-for-Linux, so the `flutter build linux` half is proven only by the
+   new CI job, not locally. What landed:
+   - **linux/ runner scaffolded** (`flutter create --platforms linux`),
+     `.metadata` restored to list *both* windows and linux (flutter create had
+     replaced the windows entry). The generated `my_application.cc` gains the
+     `desktop_multi_window` sub-window plugin-registration callback (mirroring
+     `windows/runner/flutter_window.cpp`); the Windows-only viewer-texture
+     bridge is deliberately *not* ported (Linux uses the CPU path).
+   - **Platform-portable bridge loader** (`lib/bridge/bridge.dart`
+     `_candidatePaths`): the base name branches on `Platform` —
+     `lumit_bridge.dll` on Windows (byte-identical to before),
+     `liblumit_bridge.so` elsewhere — with the identical search order. The
+     render isolate and popout inherit it through `candidateLibraryPaths()`.
+     Covered by a new group in `test/bridge_test.dart` that runs green on both
+     the Windows host and the Linux CI.
+   - **Windows-only surfaces degrade cleanly.** Shared texture → CPU path
+     (the bridge's D3D interop is `cfg(all(windows, feature = "shared-texture"))`
+     and off by default, so default features carry nothing Windows-only). The
+     settings RAM probe gains a Linux `/proc/meminfo` branch. **Pop-out is NOT
+     gated off Linux** — `desktop_multi_window` 0.3.0 has a first-class Linux
+     (GTK) implementation.
+   - **CI:** a `flutter-linux` job in `.github/workflows/ci.yml` (existing jobs
+     untouched) copies the `linux` job's apt + FFmpeg + libclang steps, adds the
+     GTK/clang/cmake/ninja Flutter toolchain, pins Flutter 3.44.7, and runs
+     `flutter pub get` / `analyze` / `test`, `cargo build -p lumit-bridge`, and
+     `flutter build linux --release`.
+   - **Local gates (green here):** `flutter analyze` clean, full `flutter test`
+     (411 tests) green on Windows, `cargo check -p lumit-bridge` clean.
+2. **GPU scope pass** — DONE (2026-07-22, K-096 v1). A WGSL scope pass in
+   lumit-gpu (`scope.rs` + `scope.wgsl`) renders the waveform/RGB-waveform/
+   vectorscope/histogram traces engine-side (three compute passes — atomic
+   binning, peak reduction, colourise — all core WGSL, lavapipe-clean); the
+   bridge's `lumit_bridge_render_scope` rides the rendered-frame cache so the
+   scope traces the exact frame the Viewer shows without re-rendering the comp;
+   `scopes_panel.dart` prefers the engine trace (`ScopeTraceBridge`) and keeps the
+   CPU `buildTraceRgba` as the old-dll / no-adapter fallback, and the throttle is
+   gone (every displayed frame traces). **Delivery was a tiny 256×256 RGBA
+   readback (~256 KiB), not a second shared texture** — the win is moving the
+   binning off the CPU, the trace is too small for a zero-copy hand-off to matter,
+   and the tiny buffer degrades on Linux via the same CPU fallback as the Viewer
+   (a second shared texture would be Windows-only and cost VRAM the frame cache
+   does not model). See the full record in *Platform passes and engine
+   enhancements* above. Closes the round-3 "scopes super laggy" report and the
+   K-096 v1 note. Gates green on this machine: lumit-gpu + lumit-bridge fmt /
+   clippy (`-D warnings` on default, `--no-default-features`, `--features
+   shared-texture`) / tests (incl. the GPU oracles on the real adapter);
+   `lumit-ui` tests untouched-green; `flutter analyze` clean and the scope panel
+   tests green. *Compiles only on the owner's machine:* nothing new — the pass and
+   its FFI are portable; only the pre-existing `shared-texture`/D3D interop stays
+   Windows-gated, and the scope path does not use it.
 3. **Viewer comp-preview placeholder defect** (round 3, top open defect):
    diagnose live why the built app showed the stale placeholder; make the
    placeholder name its reason (library too old / no adapter / render error)

@@ -1405,6 +1405,13 @@ typedef _RenderSharedC = Bool Function(Pointer<Char>, Uint64, Pointer<Uint64>,
 typedef _RenderSharedDart = bool Function(
     Pointer<Char>, int, Pointer<Uint64>, Pointer<Uint32>, Pointer<Uint32>);
 
+// GPU scope pass (K-096 v1): like the comp render, but keyed by a scope kind
+// and five packed 0x00RRGGBB colours, returning the fixed 256×256 RGBA8 trace.
+typedef _RenderScopeC = Pointer<Uint8> Function(Uint32, Pointer<Char>, Uint64,
+    Float, Uint32, Uint32, Uint32, Uint32, Uint32, Pointer<Size>);
+typedef _RenderScopeDart = Pointer<Uint8> Function(int, Pointer<Char>, int,
+    double, int, int, int, int, int, Pointer<Size>);
+
 // Bridge v0.8 (ABI 8): cache controls, render cancellation, thumbnails. The
 // cache controls and render_cancel_stale take/return JSON like the other ops;
 // set_cache_budget and render_cancel_stale take a single u64. thumbnail mirrors
@@ -1751,6 +1758,30 @@ abstract class SharedTextureBridge {
   SharedFrame? renderToShared(String compId, int frame);
 }
 
+/// The GPU scope-pass capability (K-096 v1), kept as its own interface for the
+/// same reason as [CompRenderBridge]: a bridge either offers it or it does not,
+/// and the many `implements DocumentBridge` fakes need no change. The real
+/// [LumitBridge] implements it; the Scopes panel probes with an
+/// `is ScopeTraceBridge` check and reads [supportsScopeTrace] to prefer the
+/// engine trace over its CPU fallback.
+abstract class ScopeTraceBridge {
+  /// True when the loaded library exports `render_scope` (the engine computes
+  /// the trace on the GPU). False for an older library — the Scopes panel then
+  /// keeps computing the trace on the CPU from the shown frame.
+  bool get supportsScopeTrace;
+
+  /// Compute a scope trace for the frame the Viewer shows — comp [compId] at
+  /// [frame], at the same [scale] — returning the 256×256 RGBA8 trace bytes, or
+  /// null on failure (unknown comp, no adapter, an older library). [kind] is
+  /// `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram; [bg],
+  /// [trace], [red], [green], [blue] are the fixed scope colours packed
+  /// `0x00RRGGBB`. The heavy binning runs on the GPU; only the tiny trace
+  /// crosses the boundary. The pixels are copied out before the engine buffer is
+  /// freed, so the returned bytes are owned.
+  Uint8List? renderScope(int kind, String compId, int frame, double scale,
+      int bg, int trace, int red, int green, int blue);
+}
+
 /// The rendered-frame cache's live stats (ABI 8, `cacheStats`): the bytes
 /// [usedBytes] of the [budgetBytes] cap, the number of cached frames [entries],
 /// and the lifetime [hits]/[misses]. The default (no library / a parse failure)
@@ -1935,6 +1966,7 @@ class LumitBridge
         CacheControlBridge,
         RenderCancelBridge,
         ThumbnailBridge,
+        ScopeTraceBridge,
         EditOpsBridge,
         PresetJsonBridge {
   final _NoArgDart _version;
@@ -2041,6 +2073,11 @@ class LumitBridge
   /// [supportsSharedTexture] is false and the Viewer keeps the read-back path.
   _SharedSupportedDart? _sharedSupported;
   _RenderSharedDart? _renderToShared;
+
+  /// The GPU scope-pass symbol (K-096 v1). Bound defensively like
+  /// [_renderCompFrame]: an older `.dll` lacks it, so it stays null and
+  /// [supportsScopeTrace] is false, keeping the Scopes panel on its CPU path.
+  _RenderScopeDart? _renderScope;
 
   /// The ABI-8 cache-control, render-cancellation and thumbnail symbols. Bound
   /// defensively: an older `.dll` lacks them, so each capability reports itself
@@ -2357,6 +2394,15 @@ class LumitBridge
     } catch (_) {
       _thumbnail = null;
     }
+    // The GPU scope-pass symbol (K-096 v1) is optional: an older library omits
+    // it, so bind defensively and keep the Scopes panel on its CPU trace then.
+    try {
+      _renderScope = lib.lookupFunction<_RenderScopeC, _RenderScopeDart>(
+        'lumit_bridge_render_scope',
+      );
+    } catch (_) {
+      _renderScope = null;
+    }
     // The ABI-9 symbols (mask geometry, effect-param keyframes, presets, the
     // realtime tier readout) are optional: an older library omits them, so bind
     // each group defensively and leave the method degrading to an unsupported
@@ -2453,7 +2499,14 @@ class LumitBridge
   /// output relative to the working directory (the developer layout), then the
   /// bare name so the OS loader's own search path gets a turn.
   static List<String> _candidatePaths() {
-    const name = 'lumit_bridge.dll';
+    // The shared library's platform base name: `lumit_bridge.dll` on Windows
+    // (cdylib), `liblumit_bridge.so` on Linux (the `lib` prefix Cargo gives a
+    // cdylib on Unix). macOS would be `liblumit_bridge.dylib` — added when that
+    // pass happens. The search ORDER below is identical on every platform, so
+    // Windows behaviour is byte-for-byte what it was.
+    final name = Platform.isWindows
+        ? 'lumit_bridge.dll'
+        : 'liblumit_bridge.so';
     final paths = <String>[];
     try {
       final exeDir = File(Platform.resolvedExecutable).parent.path;
@@ -3154,6 +3207,34 @@ class LumitBridge
       malloc.free(outHandle);
       malloc.free(outW);
       malloc.free(outH);
+    }
+  }
+
+  @override
+  bool get supportsScopeTrace => _renderScope != null;
+
+  @override
+  Uint8List? renderScope(int kind, String compId, int frame, double scale,
+      int bg, int trace, int red, int green, int blue) {
+    final fn = _renderScope;
+    if (fn == null) return null; // old library without the symbol
+    final id = compId.toNativeUtf8();
+    final outLen = malloc<Size>();
+    try {
+      final ptr =
+          fn(kind, id.cast(), frame, scale, bg, trace, red, green, blue, outLen);
+      if (ptr == nullptr) return null;
+      final len = outLen.value;
+      try {
+        // Copy the trace out before the buffer is freed back to Rust — the same
+        // contract as renderCompFrame (one boxed slice, freed as a whole).
+        return Uint8List.fromList(ptr.asTypedList(len));
+      } finally {
+        _freeBuffer(ptr, len);
+      }
+    } finally {
+      malloc.free(id);
+      malloc.free(outLen);
     }
   }
 

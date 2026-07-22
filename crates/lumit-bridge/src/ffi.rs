@@ -951,6 +951,110 @@ fn render_to_shared_buffer(_comp_id: &str, _frame: u64) -> Option<(u64, u32, u32
     None
 }
 
+/// Compute a scope trace (K-096 v1) for the frame the Viewer shows and return
+/// the 256×256 RGBA8 trace bytes through `out_len` (256×256×4 = 262144 bytes),
+/// or null with a zeroed length on any failure. `kind` selects the scope: `0`
+/// luma waveform, `1` RGB waveform, `2` vectorscope, `3` histogram. `scale` must
+/// match the Viewer's preview scale so the scope reads the very frame on screen
+/// (the same rendered-frame cache key). The five trace colours are packed
+/// `0x00RRGGBB` (the frontend's fixed `ScopeColours`, kept out of the engine so
+/// no colour literal lives here).
+///
+/// The heavy binning runs on the GPU; only the tiny trace crosses the boundary.
+/// The comp frame is served from the rendered-frame cache, so a frame already
+/// banked for the Viewer traces without re-rendering the comp. The buffer is a
+/// boxed slice — free it with [`lumit_bridge_free_buffer`] passing the exact
+/// `out_len`. Without the `render` feature (no compositor linked) this is always
+/// null. A panic anywhere becomes null, never an unwind into Dart.
+///
+/// # Safety
+/// `comp_id` must be null or a valid NUL-terminated UTF-8 C string. `out_len`
+/// must be null or a valid, writable pointer to a `usize`.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn lumit_bridge_render_scope(
+    kind: u32,
+    comp_id: *const c_char,
+    frame: u64,
+    scale: f32,
+    bg: u32,
+    trace: u32,
+    red: u32,
+    green: u32,
+    blue: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let write_zero = || {
+        if !out_len.is_null() {
+            *out_len = 0;
+        }
+    };
+    let Some(id) = c_str_to_string(comp_id) else {
+        write_zero();
+        return ptr::null_mut();
+    };
+    let colours = [
+        unpack_rgb(bg),
+        unpack_rgb(trace),
+        unpack_rgb(red),
+        unpack_rgb(green),
+        unpack_rgb(blue),
+    ];
+    let traced = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        render_scope_buffer(kind, &id, frame, scale, colours)
+    }))
+    .ok()
+    .flatten();
+    match traced {
+        Some(bytes) => {
+            let len = bytes.len();
+            let raw = Box::into_raw(bytes.into_boxed_slice()) as *mut u8;
+            if !out_len.is_null() {
+                *out_len = len;
+            }
+            raw
+        }
+        None => {
+            write_zero();
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Unpack a `0x00RRGGBB` colour into an `[r, g, b]` byte triple.
+fn unpack_rgb(packed: u32) -> [u8; 3] {
+    [
+        ((packed >> 16) & 0xff) as u8,
+        ((packed >> 8) & 0xff) as u8,
+        (packed & 0xff) as u8,
+    ]
+}
+
+/// Trace `comp_id` at `frame`/`scale` for scope `kind`. `None` on any failure.
+/// Without the `render` feature there is no compositor linked, so this is always
+/// `None`.
+#[cfg(feature = "render")]
+fn render_scope_buffer(
+    kind: u32,
+    comp_id: &str,
+    frame: u64,
+    scale: f32,
+    colours: [[u8; 3]; 5],
+) -> Option<Vec<u8>> {
+    crate::render::render_scope(kind, comp_id, frame, scale, colours)
+}
+
+#[cfg(not(feature = "render"))]
+fn render_scope_buffer(
+    _kind: u32,
+    _comp_id: &str,
+    _frame: u64,
+    _scale: f32,
+    _colours: [[u8; 3]; 5],
+) -> Option<Vec<u8>> {
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Bridge v0.8 (ABI 8): the rendered-frame cache (K-176) and its controls,
 // engine-side render cancellation, and the Project-panel thumbnail path.
@@ -2471,6 +2575,59 @@ mod tests {
         };
         assert!(ptr.is_null());
         assert_eq!((w, h, len), (0, 0, 0));
+    }
+
+    #[test]
+    fn render_scope_with_a_null_id_returns_null_and_zeroes_len() {
+        let mut len: usize = 9;
+        let ptr = unsafe {
+            lumit_bridge_render_scope(
+                0,
+                ptr::null(),
+                0,
+                1.0,
+                0x0a0b0c,
+                0x86dd9a,
+                0xe2555f,
+                0x54cf6b,
+                0x5387e0,
+                &mut len,
+            )
+        };
+        assert!(ptr.is_null());
+        assert_eq!(len, 0);
+    }
+
+    #[test]
+    fn render_scope_of_an_unknown_comp_is_null() {
+        // A well-formed but unknown comp id: null (the document is empty here),
+        // never a panic. On a GPU-less machine it is null via the renderer's
+        // Failed state; either way the length is zeroed.
+        let unknown = std::ffi::CString::new(uuid::Uuid::now_v7().to_string()).unwrap();
+        let mut len: usize = 9;
+        let ptr = unsafe {
+            lumit_bridge_render_scope(
+                0,
+                unknown.as_ptr(),
+                0,
+                1.0,
+                0x0a0b0c,
+                0x86dd9a,
+                0xe2555f,
+                0x54cf6b,
+                0x5387e0,
+                &mut len,
+            )
+        };
+        assert!(ptr.is_null());
+        assert_eq!(len, 0);
+    }
+
+    #[test]
+    fn unpack_rgb_splits_the_channels() {
+        assert_eq!(unpack_rgb(0x0a0b0c), [0x0a, 0x0b, 0x0c]);
+        assert_eq!(unpack_rgb(0xffffff), [0xff, 0xff, 0xff]);
+        assert_eq!(unpack_rgb(0x000000), [0, 0, 0]);
     }
 
     #[test]

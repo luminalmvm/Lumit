@@ -152,6 +152,31 @@ pub(crate) fn render_to_shared(comp_id: &str, frame: u64) -> Option<(u64, u32, u
     .flatten()
 }
 
+/// Compute a scope trace (waveform/vectorscope/histogram, K-096 v1) for the
+/// frame the Viewer shows — `comp_id` at `frame`, at the same `scale` — and
+/// return the `256×256` RGBA8 trace bytes. `kind` is `0` luma / `1` RGB waveform
+/// / `2` vectorscope / `3` histogram; `colours` is `[bg, trace, red, green,
+/// blue]` RGB byte triples (the frontend's fixed `ScopeColours`).
+///
+/// It rides the rendered-frame cache: the comp frame is fetched through
+/// [`render_comp_frame`], so a frame already banked for the Viewer serves the
+/// scope *without re-rendering the comp*, and the scope always traces the exact
+/// bytes the Viewer shows (preview == the traced frame). Only the tiny trace is
+/// read back — the heavy binning runs on the GPU. `None` on any failure (bad
+/// comp id, unknown kind, no adapter, a render error).
+pub(crate) fn render_scope(
+    kind: u32,
+    comp_id: &str,
+    frame: u64,
+    scale: f32,
+    colours: [[u8; 3]; 5],
+) -> Option<Vec<u8>> {
+    // Serve the comp frame from the cache (or render it once) — the same key the
+    // Viewer uses, so the scope and the picture never disagree.
+    let (w, h, rgba) = render_comp_frame(comp_id, frame, scale)?;
+    with_ready(|renderer| renderer.render_scope(&rgba, w, h, kind, colours).ok()).flatten()
+}
+
 /// Build the footage/audio inputs and a GPU export context for `comp` through
 /// the headless seam (K-175), so the export driver can hand them to the exact
 /// egui exporter (`lumit_ui::export::start`). `None` when the machine has no GPU
