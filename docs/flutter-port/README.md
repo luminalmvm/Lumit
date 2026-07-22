@@ -17,6 +17,8 @@ to compare against.
 | [03-ARCHITECTURE.md](03-ARCHITECTURE.md) | How Flutter talks to the Rust engine: the bridge, the Viewer texture path, threading |
 | [04-WIDGET-MAP.md](04-WIDGET-MAP.md) | egui concept → Flutter equivalent, one table row per mechanism |
 | [05-PARITY-CHECKLIST.md](05-PARITY-CHECKLIST.md) | The living tick-list tracking the one-for-one port, updated every session |
+| [06-REMAINING-WORK.md](06-REMAINING-WORK.md) | The delete-on-done ledger: blocked and deferred rows, each with its evidence |
+| [07-AUDIT-2026-07-22.md](07-AUDIT-2026-07-22.md) | The round-5 audit: the three desk-test fixes, the navigation guide, open items |
 
 The Flutter application itself lives in `flutter_ui/` at the repository root
 (a Dart package named `lumit_flutter`). The Rust crates are untouched by this
