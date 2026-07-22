@@ -11,9 +11,9 @@
 // Grounding: the egui overlays (crates/lumit-ui/src/shell/overlays.rs) draw the
 // anchor crosshair (`anchor_overlay`) and the shape rubber-band (`shape_overlay`
 // → `SetLayerMasks` with real geometry), and the eyedropper magnifier lives in
-// `eyedropper.rs`. Two honest gaps carry over the bridge seam:
-//   * `addMask` takes only a kind — no rectangle/ellipse/star geometry crosses —
-//     so a Shape drag commits the DEFAULT-sized shape, not the dragged one.
+// `eyedropper.rs`. The Shape drag now maps its rect into comp pixels and commits
+// real geometry through the bridge's `add_mask_geometry` (v0.9), so the drawn
+// size/position is honoured. One honest gap carries over the bridge seam:
 //   * the transform read-back gives Position (comp space); the full pan-behind
 //     anchor maths and scale handles await the LayerMap port, so this moves the
 //     layer by its Position and draws the anchor cross there.
@@ -192,10 +192,17 @@ class _ViewerInteractionLayerState extends State<ViewerInteractionLayer> {
             _shapeStart = null;
             _shapeNow = null;
           });
-          // Only a real drag draws (the egui > 2px gate); the geometry cannot
-          // cross the bridge, so this adds the default-sized shape.
+          // Only a real drag draws (the egui > 2px gate). The dragged rect is
+          // mapped into comp pixels and committed as real geometry (bridge v0.9
+          // `add_mask_geometry`), so the drawn size/position is honoured.
           if (start != null && now != null && (start - now).distance > 2) {
-            app.drawShapeMask();
+            final a = _compOf(start);
+            final b = _compOf(now);
+            final x = math.min(a.dx, b.dx);
+            final y = math.min(a.dy, b.dy);
+            final w = (a.dx - b.dx).abs();
+            final h = (a.dy - b.dy).abs();
+            app.drawShapeMask(x, y, w, h);
           }
         },
         child: MouseRegion(

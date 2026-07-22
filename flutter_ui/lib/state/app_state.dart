@@ -206,6 +206,14 @@ class AppStateStub extends ChangeNotifier {
   /// own so the export dialogue and share exports never touch a plugin channel.
   final Future<String?> Function(String suggestedName) exportSaveLocationPicker;
 
+  /// The `.lumfx` preset open seam (chosen path, or null when cancelled),
+  /// defaulting to the real file_selector call. Tests inject their own.
+  final Future<String?> Function() presetOpenPicker;
+
+  /// The `.lumfx` preset save-location seam (suggested name → chosen path, or
+  /// null when cancelled), defaulting to the real file_selector call.
+  final Future<String?> Function(String suggestedName) presetSaveLocationPicker;
+
   /// Called with the file a project was opened from or saved to, so the
   /// workspace can restore it next launch (wired to `Workspace.rememberProject`
   /// by the shell; null in tests that do not care).
@@ -243,6 +251,8 @@ class AppStateStub extends ChangeNotifier {
     Future<String?> Function()? saveLocationPicker,
     Future<List<String>> Function()? footagePicker,
     Future<String?> Function(String suggestedName)? exportSaveLocationPicker,
+    Future<String?> Function()? presetOpenPicker,
+    Future<String?> Function(String suggestedName)? presetSaveLocationPicker,
     this.rememberProject,
     this.rememberSession,
     this.sessionFor,
@@ -253,7 +263,10 @@ class AppStateStub extends ChangeNotifier {
         saveLocationPicker = saveLocationPicker ?? pickProjectSaveLocation,
         footagePicker = footagePicker ?? pickFootage,
         exportSaveLocationPicker =
-            exportSaveLocationPicker ?? pickExportSaveLocation {
+            exportSaveLocationPicker ?? pickExportSaveLocation,
+        presetOpenPicker = presetOpenPicker ?? pickPresetToOpen,
+        presetSaveLocationPicker =
+            presetSaveLocationPicker ?? pickPresetSaveLocation {
     // A live bridge means a live document from the first frame: pull the
     // initial snapshot so the Project panel is populated immediately.
     if (bridge != null) {
@@ -1158,8 +1171,70 @@ class AppStateStub extends ChangeNotifier {
   /// writes it to a file). Null with no bridge or an older library.
   String? saveEffectPresetJson(String compId, String layerId, String name) {
     final b = bridge;
-    if (b is LumitBridge) return b.saveEffectPresetJson(compId, layerId, name);
+    if (b is PresetJsonBridge) {
+      return (b as PresetJsonBridge).saveEffectPresetJson(compId, layerId, name);
+    }
     return null;
+  }
+
+  /// Save the selected layer's effect stack as a `.lumfx` preset: serialise it
+  /// through the bridge (byte-compatible with `lumit-ui`'s `preset.rs`), ask
+  /// where to save, and write the file — the Effects & presets panel's Save
+  /// preset action. A calm notice reports the outcome; a quiet error when there
+  /// is no selected layer or the library predates presets.
+  Future<void> saveSelectedEffectPreset() async {
+    final compId = frontCompIdResolved;
+    final layerId = selectedLayer;
+    if (compId == null || layerId == null) {
+      errorNotice = 'select a layer to save its effects';
+      notifyListeners();
+      return;
+    }
+    // Name the preset after the layer (the egui default), stripped of a
+    // path-hostile character or two.
+    final layerName = _findLayer(snapshot!, layerId)?.name ?? 'preset';
+    final json = saveEffectPresetJson(compId, layerId, layerName);
+    if (json == null) {
+      errorNotice = 'this engine build cannot save effect presets';
+      notifyListeners();
+      return;
+    }
+    final suggested = '$layerName.lumfx';
+    final path = await presetSaveLocationPicker(suggested);
+    if (path == null) return; // cancelled — leave the status line as-is
+    try {
+      await File(path).writeAsString(json);
+      notice = 'preset saved';
+      errorNotice = null;
+    } catch (e) {
+      errorNotice = 'could not write the preset';
+    }
+    notifyListeners();
+  }
+
+  /// Load a `.lumfx` preset onto the selected layer: ask for a file, read it,
+  /// and append its effects with fresh ids as one undo step — the Effects &
+  /// presets panel's Load preset action. A quiet error when there is no selected
+  /// layer or the file cannot be read.
+  Future<void> loadPresetOntoSelected() async {
+    final compId = frontCompIdResolved;
+    final layerId = selectedLayer;
+    if (compId == null || layerId == null) {
+      errorNotice = 'select a layer to load a preset onto';
+      notifyListeners();
+      return;
+    }
+    final path = await presetOpenPicker();
+    if (path == null) return; // cancelled — leave the status line as-is
+    final String text;
+    try {
+      text = await File(path).readAsString();
+    } catch (e) {
+      errorNotice = 'could not read the preset';
+      notifyListeners();
+      return;
+    }
+    loadEffectPreset(compId, layerId, text);
   }
 
   /// The realtime preview tier currently in force (Full/Half/Third/Quarter and
@@ -1237,24 +1312,56 @@ class AppStateStub extends ChangeNotifier {
   /// Camera-layer zoom the user has committed this session, keyed by layer id.
   final Map<String, double> cameraZoomEdits = {};
 
-  /// The text content the editor shows for [layerId]: this session's edit, else
-  /// the unedited default (empty, 72 pt, white).
-  TextContent textContentFor(String layerId) =>
-      textEdits[layerId] ?? TextContent.initial;
+  /// The text content the editor shows for [layerId]: the snapshot read-back
+  /// (`layer.text`, bridge v0.9) when it is present, else this session's edit,
+  /// else the unedited default (empty, 72 pt, white).
+  TextContent textContentFor(String layerId) {
+    final snap = snapshot;
+    if (snap != null) {
+      final doc = _findLayer(snap, layerId)?.text;
+      if (doc != null) {
+        final fill = doc.fill.length >= 4
+            ? [doc.fill[0], doc.fill[1], doc.fill[2], doc.fill[3]]
+            : [
+                doc.fill.isNotEmpty ? doc.fill[0] : 1.0,
+                doc.fill.length > 1 ? doc.fill[1] : 1.0,
+                doc.fill.length > 2 ? doc.fill[2] : 1.0,
+                1.0,
+              ];
+        return TextContent(doc.content, doc.size, fill);
+      }
+    }
+    return textEdits[layerId] ?? TextContent.initial;
+  }
 
-  /// The solid size the editor shows for [layerId]: this session's edit, else a
-  /// sensible default (the front comp's size, or 1920×1080).
+  /// The solid size the editor shows for [layerId]: the snapshot read-back
+  /// (`layer.solidSize`, bridge v0.9) when present, else this session's edit,
+  /// else a sensible default (the front comp's size, or 1920×1080).
   SolidSize solidSizeFor(String layerId) {
+    final snap = snapshot;
+    if (snap != null) {
+      final size = _findLayer(snap, layerId)?.solidSize;
+      if (size != null && size.length == 2) {
+        return SolidSize(size[0], size[1]);
+      }
+    }
     final held = solidSizeEdits[layerId];
     if (held != null) return held;
     final comp = frontComp;
     return SolidSize(comp?.width ?? 1920, comp?.height ?? 1080);
   }
 
-  /// The camera zoom the editor shows for [layerId]: this session's edit, else a
-  /// sensible default (the front comp width, a common AE default).
-  double cameraZoomFor(String layerId) =>
-      cameraZoomEdits[layerId] ?? (frontComp?.width ?? 1920).toDouble();
+  /// The camera zoom the editor shows for [layerId]: the snapshot read-back
+  /// (`layer.cameraZoom`, bridge v0.9) when present, else this session's edit,
+  /// else a sensible default (the front comp width, a common AE default).
+  double cameraZoomFor(String layerId) {
+    final snap = snapshot;
+    if (snap != null) {
+      final zoom = _findLayer(snap, layerId)?.cameraZoom;
+      if (zoom != null) return zoom.value;
+    }
+    return cameraZoomEdits[layerId] ?? (frontComp?.width ?? 1920).toDouble();
+  }
 
   /// Commit a text layer's content (content, size, scene-linear fill), through
   /// `setTextContent`, remembering it so the editor reads it back.
@@ -1313,24 +1420,70 @@ class AppStateStub extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Draw the current shape as a mask on the selected layer, on a Viewer
-  /// drag-release. The bridge's `addMask` op takes only a kind (no geometry can
-  /// cross yet — the egui path commits real rect/ellipse/star geometry, so the
-  /// drawn size/position is not honoured; annotated on the ledger). A quiet
-  /// notice when there is no selected layer.
-  void drawShapeMask() => addMaskToSelected(viewerShape.opName);
+  /// Draw the current shape as a mask on the selected layer from a Viewer
+  /// drag rect `(x, y)` sized `w`×`h` in comp pixels (bridge v0.9
+  /// `add_mask_geometry`, mirroring egui's Shape tool → real rect/ellipse/star
+  /// geometry). A quiet notice when there is no selected layer (or front comp).
+  void drawShapeMask(double x, double y, double w, double h) {
+    final compId = frontCompIdResolved;
+    final layerId = selectedLayer;
+    if (compId == null || layerId == null) {
+      errorNotice = 'select a layer to add a mask';
+      notifyListeners();
+      return;
+    }
+    addMaskGeometry(compId, layerId, viewerShape.opName, x, y, w, h);
+  }
 
   // Preview render scale (the resolution picker in the transport).
 
   PreviewScale previewScale = PreviewScale.full;
 
-  /// Set the preview render scale. The `PreviewSource` render path (owned by the
-  /// perf pass) must adopt [previewScale] for it to downsample; until it does,
-  /// this is honest state the picker reflects (annotated on the ledger).
+  /// Auto resolution mode (the picker's "Auto" option, egui `preview_auto_res`):
+  /// the preview renders at the realtime controller's live tier scale during
+  /// playback, capped at Full. A manual pick clears it (overrides).
+  bool previewAutoRes = false;
+
+  /// The live realtime tier under Auto (bridge `playback_tier`): polled on the
+  /// playhead cadence during playback, so the transport readout shows Full/Half/
+  /// Third/Quarter as the engine adapts. Full when idle or on an older library.
+  BridgePlaybackTier autoTier = BridgePlaybackTier.full;
+
+  /// The scale the `PreviewSource` renders at: the live Auto tier's scale under
+  /// Auto, else the manual picker's factor. Half/Third/Quarter downsample; Auto
+  /// follows the realtime controller (K-171).
+  double get effectivePreviewScale =>
+      previewAutoRes ? autoTier.scale : previewScale.factor;
+
+  /// Switch to Auto resolution: reset the realtime tier controller so the next
+  /// playback re-measures from Full, and show Full until the first poll.
+  void setPreviewAuto() {
+    if (previewAutoRes) return;
+    previewAutoRes = true;
+    autoTier = resetRealtime();
+    notifyListeners();
+  }
+
+  /// Set the preview render scale to a manual tier — this overrides Auto (the
+  /// egui picker: any explicit Full/Half/Third/Quarter clears `preview_auto_res`).
   void setPreviewScale(PreviewScale scale) {
-    if (previewScale == scale) return;
+    if (!previewAutoRes && previewScale == scale) return;
+    previewAutoRes = false;
     previewScale = scale;
     notifyListeners();
+  }
+
+  /// Poll the live realtime tier under Auto — the Viewer's playback ticker calls
+  /// this on the playhead cadence WHILE PLAYING. Off Auto, or stopped, it holds
+  /// the tier at Full so the readout reads "Auto" at rest. Fires the notifier
+  /// only when the tier actually changes, so it never rebuilds per frame idly.
+  void pollPlaybackTier() {
+    if (!previewAutoRes) return;
+    final next = playing ? playbackTier() : BridgePlaybackTier.full;
+    if (next.tier != autoTier.tier) {
+      autoTier = next;
+      notifyListeners();
+    }
   }
 
   // Eyedropper (the effect-controls colour dropper → Viewer sample).
@@ -1766,6 +1919,21 @@ class AppStateStub extends ChangeNotifier {
       if (prop != null) return prop.value;
     }
     return transformEdits['$layerId/$property'];
+  }
+
+  /// A footage [layer]'s source media duration in seconds, from the probed
+  /// project item (`media.durationFrames / media.fps`), or null when the source
+  /// is unprobed / has no video / is not footage. The Timeline overrun HOLD
+  /// hatch reads this alongside the layer's Retime store.
+  double? sourceDurationSecsFor(BridgeLayer layer) {
+    final id = layer.sourceItemId;
+    final snap = snapshot;
+    if (id == null || snap == null) return null;
+    final media = _findItem(snap, id)?.media;
+    if (media == null) return null;
+    final fps = media.fps.fps;
+    if (fps <= 0) return null;
+    return media.durationFrames / fps;
   }
 
   /// Find a layer by its id across every composition in [snap], or null.

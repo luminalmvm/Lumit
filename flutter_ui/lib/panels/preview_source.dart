@@ -390,7 +390,8 @@ class PreviewSource extends ChangeNotifier {
     // The resolution picker's downsample factor: the render (and the engine
     // frame cache, which keys on scale) both honour it, so Half/Third/Quarter
     // actually render fewer pixels and warm their own per-scale cache entries.
-    final scale = app.previewScale.factor;
+    // Under Auto it is the realtime controller's live tier scale (K-171).
+    final scale = app.effectivePreviewScale;
     final key = 'comp:$compId@$frame@$scale';
 
     final cached = _cache[key];

@@ -2,9 +2,12 @@
 
 Every partially finished (◐/◑) or not-started (☐) item extracted from
 05-PARITY-CHECKLIST.md on 2026-07-22 (owner request). **Rows are deleted as they
-land** — the burn-down is complete: sections A–E landed together and the final
-integration sweep (2026-07-22) closed the last cross-agent seams and thin
-remainders. **What survives below is only genuinely blocked work, each row
+land** — the burn-down is complete: sections A–E landed together, the final
+integration sweep (2026-07-22) closed the last cross-agent seams, and the final
+UI wave (2026-07-22) built the Dart-side UI the v0.9 engine surface unblocked
+(beat markers, sequence sub-bars, the overrun HOLD hatch, asset read-back,
+effect-param animation, `.lumfx` presets, mask geometry, the Auto tier). **What
+survives below is only genuinely blocked or honestly-deferred work, each row
 carrying the evidence for why it cannot land yet.** 05 stays the permanent
 record.
 
@@ -100,6 +103,53 @@ lumit-eval's `RealtimeController` was built and tested, only unwired):
   each parameter's `Property` animation. Dart:
   `AppStateStub.toggleEffectParamAnimated` and kin.
 
+Closed in the final UI wave (2026-07-22) — the Dart-side UI the v0.9 surface
+unblocked, each built against its egui source and covered by
+`test/final_ui_wave_test.dart` (plus the existing `edit_ops_test.dart` v0.9
+pass-throughs):
+
+- **Timeline beat markers drawn distinctly** — the ruler now takes
+  `BridgeComp.markerDetails`; a beat draws as a faint accent tick fading by
+  confidence (`0.25 + 0.55·confidence`) from a quarter down the band, a
+  user/chapter marker full-height with its flag — mirroring egui `panel.rs:252`.
+  Falls back to the bare `markers` frames (all user) on an older library
+  (`panels/timeline/ruler.dart`).
+- **Sequence sub-bars** — a Sequence layer's clip bar draws its `BridgeClip`
+  boundaries as interior hairline dividers (the razor's cut points),
+  `panels/timeline/layer_row.dart` `_LaneBarPainter`.
+- **Overrun HOLD hatch** — a retimed footage layer that outruns its probed
+  source washes + 45° hatches the held span in warning kraft with the exhaustion
+  tick and a HOLD tag (panel.rs:994-1076). The `overrun_span_secs`/
+  `overrun_local_time`/`evaluate` maths (speed_rows.rs:68, retime.rs:533/1124)
+  are ported into `graph_maths.dart` and unit-tested; the span shifts by the
+  live move delta like egui's `move_dx`.
+- **Asset editors adopt read-back** — the Text/Solid/Camera groups seed from the
+  snapshot (`layer.text`/`solidSize`/`cameraZoom`), dropping the session-map
+  fallback where read-back exists (`effect_controls_panel.dart`,
+  `AppStateStub.textContentFor`/`solidSizeFor`/`cameraZoomFor`).
+- **Effect-param animation** — every animatable effect-param row (scalar +
+  per-channel for point/colour) carries the stopwatch + ◄◆► navigator, driving
+  the v0.9 keyframe ops (`effect_controls_panel.dart` `_FxKeyframeControls`).
+- **.lumfx preset UI** — Effects & presets gains Save/Load preset, serialising
+  through `save_effect_preset` (byte-compatible with `preset.rs`) to a file the
+  user picks and appending a chosen `.lumfx` via `load_effect_preset`; the
+  placeholder is gone (`effects_presets_panel.dart`, `file_dialogs.dart` preset
+  seams). *Named remainder:* egui also LISTS saved presets above the categories
+  (scanning `lumit_project::presets_dir()`); the bridge exposes save/load but no
+  listing, so the browser row awaits a `list_presets`/`presets_dir` op.
+- **Mask drawing with real geometry** — the Shape-tool drag maps its rect into
+  comp pixels and commits `add_mask_geometry`, so the drawn size/position is
+  honoured; the default-mask fallback is gone (`viewer_overlays.dart`).
+- **Auto resolution tier** — the resolution picker gains Auto (egui's option
+  set, overlays.rs:603); under Auto the preview renders at the realtime
+  controller's live tier (`effectivePreviewScale`) and the transport reads the
+  tier back, polled on the playback cadence (`viewer_panel.dart`,
+  `AppStateStub.setPreviewAuto`/`pollPlaybackTier`).
+- **Comp-strip popout wording** — the "pop out timeline" entry now explains the
+  Timeline stays docked (it owns the transport + preview cache the panel split
+  keeps in-window, 06 §E) rather than promising a future popout
+  (`panels/timeline/comp_tabs.dart`).
+
 ## Blocked — awaiting engine/bridge capability, with evidence
 
 Each row states the specific missing capability. None can land Dart-side without
@@ -136,19 +186,35 @@ annotated honestly rather than faked.
 
 **Section C — timeline and graph:**
 
-- **Graph editor — the transform value/speed graph and the Retime Time
+- **Graph editor — the transform value graph and the Retime Time
   (source-position) lens** (`graph.rs:86-94`, K-078). The Flutter graph editor
-  ports the Retime *speed* lens; the value/speed graph for an animated property
-  and the Time lens are a substantial unbuilt graph-editor build beyond this
-  seam-level sweep. Its dependents ride that same build — the **Vegas
-  default-lens preference** (`graph.rs:164`, inert until the Time lens exists),
-  **boundary beat/frame snapping** on graph drags (`graph.rs:1616-1628`), and
-  **value-key bezier/speed handles**.
+  ports the Retime *speed* lens; the value graph for an animated transform
+  property (curves from keys with draggable bezier value handles) and the Time
+  (source-position) lens for Map segments remain a substantial unbuilt
+  graph-editor build — deliberately NOT half-built in this wave, since a
+  low-fidelity value curve (bezier segments drawn as straight lines) would drift
+  from `graph.rs`'s real shapes. Its dependents ride that same build — the
+  **lens picker in the header**, the **Vegas default-lens preference**
+  (`graph.rs:164`, an `egui::Checkbox` the shell persists — verified it persists
+  one, so it lands with the value lens), **boundary beat/frame snapping** on
+  graph drags (`graph.rs:1616-1628`), and the **graph-key right-click interp
+  menu** applying to value keys. The `evaluate`/`overrun_local_time` retime maths
+  this build shares were ported to `graph_maths.dart` in the final UI wave (for
+  the HOLD hatch), so the value-lens build inherits them.
   *egui-gap verdicts (04-RETIMING spec-only — egui never built them, verified in
   graph.rs and excluded from parity):* RATE/MAP **type chips** + ease-name labels
   (§9.4); **kink badges** (§6.1); **numeric % and t·s entry fields** (§9.3); the
   graph's **own overrun hatching** (§7.2 — egui hatches overrun only on the clip
-  bar, `panel.rs:992`).
+  bar, `panel.rs:992`, which the clip-bar HOLD hatch now draws).
+
+- **Effect-param keyframe lanes in the Timeline outline** — egui shows each
+  layer's effect stack as an "Effects" group in the timeline outline with
+  per-parameter rows and their keyframe lanes (`panel.rs:1602`, `effects_rows`).
+  The Flutter timeline outline shows only the Transform group; effect keyframing
+  currently lives in the Effect controls panel (stopwatch + navigator, landed
+  this wave). Porting the effect group + parameter rows + lanes into the timeline
+  outline is a larger outline build (the `PropertyRow`/lane machinery is
+  transform-shaped) — a named remainder, not faked.
 
 **Section D — editors, viewer and panels:**
 

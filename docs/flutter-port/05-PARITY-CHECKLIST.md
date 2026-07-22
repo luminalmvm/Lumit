@@ -223,14 +223,16 @@ where the row is logic).
   `ThumbnailBridge` capability). Probing still **synchronous**, not off-thread —
   a named, deferred follow-up (coupled to the synchronous probe consumers; see
   06 §B)
-- ◐ Transport ☑ (play/pause, frame + timecode); resolution picker ☑ (Full/Half/
+- ☑ Transport (play/pause, frame + timecode); resolution picker (Auto/Full/Half/
   Third/Quarter `BareDropdown` driving `AppStateStub.previewScale`, honest
-  tooltip that it is a preview downsample). Downsample ☑ (2026-07-22): the
-  perf-pass `PreviewSource` now threads `app.previewScale.factor` through the
-  primary comp render and keys its Dart LRU on the scale, so the picker actually
-  renders fewer pixels and warms a per-scale cache entry. Named remainder: the
-  realtime-tier readout is engine `RealtimeController` machinery the bridge does
-  not run (a later phase). `viewer_panel.dart`, `preview_source.dart`
+  tooltip that it is a preview downsample). Downsample (2026-07-22): the perf-pass
+  `PreviewSource` threads `app.effectivePreviewScale` through the primary comp
+  render and keys its Dart LRU on the scale, so the picker actually renders fewer
+  pixels and warms a per-scale cache entry. Auto (final UI wave): the picker's
+  Auto option renders at lumit-eval's live realtime tier (`playback_tier`), the
+  transport reads the tier back on the playback cadence (`pollPlaybackTier`), and
+  a manual pick overrides — exactly egui's `preview_auto_res` + tier interaction
+  (overlays.rs:603). `viewer_panel.dart`, `preview_source.dart`
 - ☑ Missing-footage slate: generated colour bars (band-for-band from
   `lumit-media/src/slate.rs`, drawn from `documentColour`, never a bundled
   asset) with the item path overlaid; a present-but-unreadable file shows a
@@ -243,11 +245,12 @@ where the row is logic).
   held when a frame is momentarily unavailable (K-130). Scope maths ported
   one-for-one from `scopes.rs` and unit-tested. `scopes_panel.dart`,
   `scope_maths.dart`
-- ◐ Viewer toolbar ☑ (Select/Hand/Shape/Pen tool row above the stage, the Shape
+- ☑ Viewer toolbar (Select/Hand/Shape/Pen tool row above the stage, the Shape
   button's right-click Rectangle/Ellipse/Star picker, `AppStateStub.viewerTool`/
-  `viewerShape` mirroring the egui `ToolMode`/`ShapeKind`); a Shape drag commits
-  a default mask via `addMask` (geometry cannot cross — named remainder).
-  `viewer_toolbar.dart`
+  `viewerShape` mirroring the egui `ToolMode`/`ShapeKind`); a Shape drag now maps
+  its rect into comp pixels and commits real geometry via `add_mask_geometry`
+  (v0.9), so the drawn size/position is honoured. `viewer_toolbar.dart`,
+  `viewer_overlays.dart`
 - ◐ Viewer overlays ☑: the selected 2D layer's anchor crosshair, draggable to
   move its Position (`setTransform`); the eyedropper magnifier (armed from a
   colour param's dropper button, sampling the shown `PreviewSource` frame — or a
@@ -335,10 +338,20 @@ and tested (K-171), only unwired.
   `reset_realtime` expose the tier + scale. `BridgePlaybackTier`,
   `AppStateStub.playbackTier`/`resetRealtime`. Manual `previewScale` overrides
   Auto exactly as egui's picker + auto mode interact (Dart-side choice)
-- ◐ **Overrun HOLD hatch drawing** and the async-beats / off-thread-probe
-  threading refactors remain (06 §A/§B) — the first is Dart Timeline work now
-  that the data crosses; the latter two function synchronously today and are
-  threading refactors, not missing capabilities
+- ☑ **The v0.9 Dart-side UI landed (final UI wave, 2026-07-22)**: beat markers
+  drawn distinctly on the ruler; sequence sub-bar dividers on the clip bar; the
+  overrun HOLD hatch on the clip bar (the `overrun_span_secs`/`overrun_local_time`
+  /`evaluate` retime maths ported to `graph_maths.dart` + unit-tested); asset
+  read-back seeding the Text/Solid/Camera editors; the effect-param stopwatch +
+  ◄◆► navigator (scalar + per-channel point/colour); `.lumfx` Save/Load preset
+  actions; the Shape-tool `add_mask_geometry` commit; and the Auto resolution
+  tier (`effectivePreviewScale` + `pollPlaybackTier`). Tests:
+  `test/final_ui_wave_test.dart`
+- ◐ Threading refactors remain (06 §A/§B): async beats (`detect_beats` runs
+  synchronously) and off-thread footage probing function synchronously today and
+  are threading refactors, not missing capabilities. Preset-file LISTING in the
+  Effects browser awaits a `list_presets`/`presets_dir` bridge op (save/load
+  landed)
 
 ## Phase F3 — Timeline (in progress)
 
@@ -457,11 +470,18 @@ and tested (K-171), only unwired.
   band over the ruler (theme.success, 15-DESIGN §6.3), polling on the
   `cacheBarRevision` cadence (never per-paint) — pure `warmFrameRanges` +
   fake-stats widget-tested
-- ☐ Remainder (blocked, verified 2026-07-22): matte/blend/parent columns;
-  **beat markers drawn distinctly** and **sequence sub-bars** and the **overrun
-  HOLD hatch** — all blocked on the snapshot (markers carry no kind
-  `snapshot.rs:137`; `BridgeLayer` has no `clips`; no `start_offset`/local in-out
-  for `overrun_span_secs`)
+- ☑ Timeline visuals (final UI wave, 2026-07-22, once v0.9 crossed the data):
+  **beat markers drawn distinctly** on the ruler (faint accent tick fading by
+  confidence vs full-height user/chapter, panel.rs:252, `ruler.dart`); **sequence
+  sub-bars** (clip-boundary dividers from `BridgeClip`, `layer_row.dart`); the
+  **overrun HOLD hatch** on the clip bar (wash + 45° hatch + exhaustion tick +
+  HOLD tag, panel.rs:994; the `overrun_span_secs`/`overrun_local_time`/`evaluate`
+  retime maths ported to `graph_maths.dart`, unit-tested)
+- ☐ Remainder (blocked): matte/blend/parent columns; **effect-param keyframe
+  lanes in the outline** (egui's "Effects" group + parameter rows + lanes,
+  panel.rs:1602 `effects_rows`) — effect keyframing landed in the Effect controls
+  panel this wave; porting the lanes into the timeline outline is a larger
+  outline build (06 §C)
 
 ## Phase F4 — editors (in progress)
 
@@ -513,11 +533,15 @@ First slice (2026-07-21):
     sensitivity by the slider span (`BridgeParamRange`). A colour param carries an
     **eyedropper** dropper button (arms the Viewer sample). file/layer stay
     read-only. `effect_controls_panel.dart`, widget-tested (`section_d_test.dart`).
+  - **Per-parameter stopwatch + navigator** (final UI wave, v0.9): every
+    animatable effect-param row (scalar + per-channel for point/colour) now
+    carries the stopwatch + ◄◆► navigator, driving the v0.9 effect-param keyframe
+    ops (`toggleEffectParamAnimated`/`add`/`remove`/`shift`/`setInterp` with a
+    channel selector) — `_FxKeyframeControls`, widget-tested. A multi-channel
+    param keys every channel at once (one op per channel).
   - Named remainders: drag-to-reorder (`reorder_effect`) and the linked-pair
     keyframe batch on Anchor/Position/Scale (`apply_keyframe_batch`) are still to
-    wire; no bridge surface for file/layer parameter edits or per-parameter
-    keyframe stopwatch/navigator (only value setters exist — no effect-param
-    keyframe ops).
+    wire; no bridge surface for file/layer parameter edits.
 - ☑ Comp settings: the composition-settings / new-composition dialogue in the
   Settings-window visual style (name, size, frame-rate preset dropdown,
   duration), shown through the app Overlay. `dialogs.dart`, wired from the
@@ -540,11 +564,14 @@ First slice (2026-07-21):
   row is **Draggable** and both the Effect controls panel **and each Timeline
   layer row** are `DragTarget`s that apply a dropped effect to their layer
   (`addEffect`) — the Timeline-row drop landed in the 2026-07-22 final sweep
-  (`layer_row.dart`, widget-tested). Named remainder: the `.lumfx` **preset
-  save/load** cannot round-trip byte-compatibly from the snapshot (it flattens
-  each effect's `EffectKey` — namespace/version dropped — and each parameter's
-  animation), so it awaits a preset bridge op (serialising the engine
-  `EffectInstance`) or an `EffectInstance` read-back.
+  (`layer_row.dart`, widget-tested). **`.lumfx` Save/Load preset** landed (final
+  UI wave, v0.9): Save serialises the selected layer's stack through
+  `save_effect_preset` (byte-compatible with `preset.rs`) to a file the user
+  picks; Load reads a chosen `.lumfx` and appends via `load_effect_preset`
+  (`_PresetActions`, `file_dialogs.dart` preset seams, widget-tested). Named
+  remainder: egui also LISTS saved presets above the categories (scanning
+  `lumit_project::presets_dir()`); the bridge exposes save/load but no listing,
+  so the browser row awaits a `list_presets`/`presets_dir` op.
 - ☑ Add mask ▸ Rectangle/Ellipse/Star: wired from the **layer context menu**
   (`addMask`, wave 3) and from the **Composition ▸ Add mask** menu bar
   (`shell/menu_bar.dart:90-94` → `addMaskToSelected`, corrected 2026-07-22 audit —
@@ -843,10 +870,11 @@ is a genuine miss (fires even with a live bridge) unless marked otherwise.
   `setTextContent`), a **Solid** group (colour swatch seeding from the snapshot's
   `layer.colour`, width×height → `setSolid`), and a **Camera** group (zoom →
   `setCameraZoom`). `effect_controls_panel.dart`, widget-tested
-  (`section_d_test.dart`). Named remainder — read-back: text content, solid size
-  and camera zoom are held in an `AppStateStub` session-edit map because the
-  snapshot does not carry them back (only the solid colour reads back); true
-  read-back awaits those snapshot fields.
+  (`section_d_test.dart`, `final_ui_wave_test.dart`). **Read-back landed (final UI
+  wave, v0.9):** the Text/Solid/Camera groups now seed from the snapshot
+  (`layer.text`/`solidSize`/`cameraZoom`) via `AppStateStub.textContentFor`/
+  `solidSizeFor`/`cameraZoomFor`, dropping the session-edit fallback where
+  read-back exists (an older library still falls back to the session default).
 - ◐ **Retime reverse toggle and interpolation switch — bridge setters landed
   (v0.7).** `set_retime_reverse` and `set_retime_interpolation`
   (`nearest`/`blend`/`flow`) edit the store fields (seed identity when the layer

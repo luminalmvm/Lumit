@@ -12,6 +12,7 @@ import '../../icons/icons.dart';
 import '../../state/app_state.dart';
 import '../../theme/theme.dart';
 import '../../widgets/controls.dart';
+import 'graph_maths.dart';
 import 'lane_scale.dart';
 import 'layer_menu.dart';
 import 'layer_style.dart';
@@ -135,6 +136,33 @@ class _LayerRowState extends State<LayerRow> {
         snapping: app.snapping,
         pxPerFrame: scale.pxPerFrame,
       );
+
+  /// The overrun (source-exhaustion) span for a retimed footage layer as comp
+  /// frames `(start, end)`, or null when there is no overrun (or no probed
+  /// source). Ported from egui's per-clip HOLD drawing (panel.rs:994-1076 with
+  /// speed_rows.rs `overrun_span_secs`): the span is shifted by the live move
+  /// delta so it tracks a bar being dragged, exactly as egui applies `move_dx`.
+  (double, double)? _overrunFrames() {
+    final fps = widget.fps;
+    final retime = layer.retime;
+    if (layer.kind != BridgeLayerKind.footage || retime == null || fps <= 0) {
+      return null;
+    }
+    final srcDur = app.sourceDurationSecsFor(layer);
+    if (srcDur == null) return null;
+    final span = overrunSpanSecs(
+      retime,
+      srcDur,
+      layer.startOffsetSecs,
+      layer.inSecs,
+      layer.outSecs,
+    );
+    if (span == null) return null;
+    final drag = _drag;
+    final moveDelta =
+        (drag != null && drag.mode == _Mode.move) ? drag.inFrame - drag.origIn : 0;
+    return (span.$1 * fps + moveDelta, span.$2 * fps + moveDelta);
+  }
 
   void _onDragStart() {
     if (layer.switches.locked) return;
@@ -278,7 +306,12 @@ class _LayerRowState extends State<LayerRow> {
                     fill: t.surface3,
                     edge: t.hairlineStrong,
                     accent: t.accent,
+                    warning: t.warning,
                     selected: selected,
+                    clips: layer.kind == BridgeLayerKind.sequence
+                        ? layer.clips
+                        : const [],
+                    overrun: _overrunFrames(),
                   ),
                   child: const SizedBox.expand(),
                 ),
@@ -555,13 +588,23 @@ class _SoloButton extends StatelessWidget {
 }
 
 /// The clip bar: a tonal wash of the layer-type colour over the neutral fill,
-/// a 3 px type tab on the left edge, a hairline edge (accent when selected).
+/// a 3 px type tab on the left edge, a hairline edge (accent when selected). A
+/// Sequence layer draws its clip boundaries as interior dividers (from the v0.9
+/// [BridgeClip] placement); a retimed footage layer that outruns its source
+/// draws the warning HOLD hatch over the held span (K-022).
 class _LaneBarPainter extends CustomPainter {
   final int inFrame;
   final int outFrame;
   final LaneScale scale;
-  final Color typeColour, fill, edge, accent;
+  final Color typeColour, fill, edge, accent, warning;
   final bool selected;
+
+  /// A Sequence layer's clips (empty for other kinds) — their comp-frame edges
+  /// draw as interior dividers so the sub-clips read inside the one bar.
+  final List<BridgeClip> clips;
+
+  /// The overrun HOLD span as comp frames `(start, end)`, or null when none.
+  final (double, double)? overrun;
 
   _LaneBarPainter({
     required this.inFrame,
@@ -571,7 +614,10 @@ class _LaneBarPainter extends CustomPainter {
     required this.fill,
     required this.edge,
     required this.accent,
+    required this.warning,
     required this.selected,
+    required this.clips,
+    required this.overrun,
   });
 
   double _lx(num frame) => scale.xOfFrame(frame) - scale.trackLeft;
@@ -595,6 +641,75 @@ class _LaneBarPainter extends CustomPainter {
       rrect,
       Paint()..color = typeColour.withValues(alpha: 0.13),
     );
+    // Sequence sub-clip dividers: a hairline at each interior clip edge inside
+    // the bar (the clip boundaries the razor cuts on).
+    if (clips.isNotEmpty) {
+      final divider = Paint()
+        ..color = edge
+        ..strokeWidth = 1;
+      final edges = <int>{};
+      for (final c in clips) {
+        edges.add(c.placeStartFrame);
+        edges.add(c.placeEndFrame);
+      }
+      for (final f in edges) {
+        final x = _lx(f);
+        // Skip the bar's own two ends; draw only interior joins.
+        if (x <= rect.left + 0.5 || x >= rect.right - 0.5) continue;
+        canvas.drawLine(
+            Offset(x, rect.top), Offset(x, rect.bottom), divider);
+      }
+    }
+    // Overrun (K-022): wash + 45° hatch the held span in warning kraft, with a
+    // hairline tick at the exhaustion point and a HOLD tag when there is room
+    // (15-DESIGN §6.4 — calm, never a red alarm). Indication only.
+    final ov = overrun;
+    if (ov != null) {
+      final sx = _lx(ov.$1).clamp(rect.left, rect.right);
+      final ex = _lx(ov.$2).clamp(rect.left, rect.right);
+      if (ex - sx > 0.5) {
+        final span = Rect.fromLTRB(sx, rect.top, ex, rect.bottom);
+        canvas.save();
+        canvas.clipRect(span);
+        // Low-alpha wash so the held region reads as one piece.
+        canvas.drawRect(span, Paint()..color = warning.withValues(alpha: 0.14));
+        // 45° hatching, 1 px lines on a 4·√2 px horizontal pitch.
+        final stroke = Paint()
+          ..color = warning.withValues(alpha: 0.6)
+          ..strokeWidth = 1;
+        final rise = span.height;
+        final step = 4.0 * 1.41421356;
+        var hx = span.left - rise;
+        while (hx < span.right) {
+          canvas.drawLine(
+              Offset(hx, span.bottom), Offset(hx + rise, span.top), stroke);
+          hx += step;
+        }
+        canvas.restore();
+        // The exhaustion tick — only when the crossing is on the bar.
+        if (sx > rect.left + 0.5) {
+          canvas.drawLine(Offset(sx, rect.top), Offset(sx, rect.bottom),
+              Paint()..color = warning..strokeWidth = 1);
+        }
+        if (span.width > 40.0) {
+          final tp = TextPainter(
+            text: TextSpan(
+              text: 'HOLD',
+              style: TextStyle(
+                color: warning,
+                fontSize: 8,
+                fontFamily: 'monospace',
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(
+              canvas,
+              Offset(span.center.dx - tp.width / 2,
+                  span.center.dy - tp.height / 2));
+        }
+      }
+    }
     // 3 px type tab on the left edge.
     canvas.drawRect(
       Rect.fromLTRB(rect.left, rect.top, rect.left + 3, rect.bottom),
@@ -615,6 +730,8 @@ class _LaneBarPainter extends CustomPainter {
       old.inFrame != inFrame ||
       old.outFrame != outFrame ||
       old.selected != selected ||
+      old.clips != clips ||
+      old.overrun != overrun ||
       old.scale.pxPerFrame != scale.pxPerFrame ||
       old.scale.viewStartFrame != scale.viewStartFrame;
 }

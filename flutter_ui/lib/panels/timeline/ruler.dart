@@ -6,6 +6,7 @@
 
 import 'package:flutter/widgets.dart';
 
+import '../../bridge/bridge.dart';
 import '../../state/app_state.dart';
 import '../../widgets/controls.dart';
 import 'lane_scale.dart';
@@ -17,6 +18,11 @@ class TimelineRuler extends StatelessWidget {
   final LaneScale scale;
   final double fps;
   final List<int> markers;
+
+  /// The markers with their kind (bridge v0.9). When present, beats are drawn
+  /// distinctly from user/chapter markers (mirroring egui panel.rs:252-290);
+  /// empty falls back to drawing every [markers] frame as a user marker.
+  final List<BridgeMarker> markerDetails;
   final double height;
 
   const TimelineRuler({
@@ -25,6 +31,7 @@ class TimelineRuler extends StatelessWidget {
     required this.scale,
     required this.fps,
     required this.markers,
+    this.markerDetails = const [],
     this.height = 36,
   });
 
@@ -54,6 +61,7 @@ class TimelineRuler extends StatelessWidget {
           scale: scale,
           fps: fps,
           markers: markers,
+          markerDetails: markerDetails,
           surface: t.surface2,
           tick: t.hairlineStrong,
           label: t.textMuted,
@@ -69,12 +77,14 @@ class _RulerPainter extends CustomPainter {
   final LaneScale scale;
   final double fps;
   final List<int> markers;
+  final List<BridgeMarker> markerDetails;
   final Color surface, tick, label, marker, hairline;
 
   _RulerPainter({
     required this.scale,
     required this.fps,
     required this.markers,
+    required this.markerDetails,
     required this.surface,
     required this.tick,
     required this.label,
@@ -141,11 +151,13 @@ class _RulerPainter extends CustomPainter {
       ls += spec.secondsPerLabel;
     }
 
-    // Markers: small downward flags reaching the full band.
+    // Markers (mirroring egui panel.rs:252-290): a beat is a faint clay tick
+    // fading by confidence, starting lower in the band; a user/chapter marker is
+    // a full-height solid line with a small downward flag. When the kinded
+    // read-back is absent (an older library), every bare [markers] frame draws
+    // as a user marker.
     final flag = Paint()..color = marker;
-    for (final m in markers) {
-      final x = _lx(m);
-      if (x < -2 || x > size.width + 2) continue;
+    void drawUser(double x) {
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, bottom),
@@ -159,6 +171,37 @@ class _RulerPainter extends CustomPainter {
         ..lineTo(x, 5)
         ..close();
       canvas.drawPath(path, flag);
+    }
+
+    void drawBeat(double x, double confidence) {
+      // The egui beat tint: accent faded by 0.25 + 0.55·confidence, from a tick
+      // that begins ~a quarter down the band (never a full-height alarm).
+      final c = confidence.clamp(0.0, 1.0);
+      canvas.drawLine(
+        Offset(x, bottom * 0.25),
+        Offset(x, bottom),
+        Paint()
+          ..color = marker.withValues(alpha: 0.25 + 0.55 * c)
+          ..strokeWidth = 1,
+      );
+    }
+
+    if (markerDetails.isNotEmpty) {
+      for (final m in markerDetails) {
+        final x = _lx(m.frame);
+        if (x < -2 || x > size.width + 2) continue;
+        if (m.isBeat) {
+          drawBeat(x, m.confidence ?? 0.0);
+        } else {
+          drawUser(x);
+        }
+      }
+    } else {
+      for (final m in markers) {
+        final x = _lx(m);
+        if (x < -2 || x > size.width + 2) continue;
+        drawUser(x);
+      }
     }
   }
 
@@ -176,5 +219,6 @@ class _RulerPainter extends CustomPainter {
       old.scale.viewStartFrame != scale.viewStartFrame ||
       old.scale.trackWidth != scale.trackWidth ||
       old.markers != markers ||
+      old.markerDetails != markerDetails ||
       old.fps != fps;
 }

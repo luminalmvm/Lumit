@@ -67,3 +67,24 @@ Future<String?> pickExportSaveLocation(String suggestedName) async {
   );
   return location?.path;
 }
+
+/// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's
+/// preset filter (`crates/lumit-ui`'s `preset.rs`).
+XTypeGroup _presetGroup() =>
+    const XTypeGroup(label: 'Lumit effect preset', extensions: ['lumfx']);
+
+/// Pick one `.lumfx` preset file to load, or null when cancelled.
+Future<String?> pickPresetToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_presetGroup()]);
+  return file?.path;
+}
+
+/// Choose where to save a `.lumfx` preset, defaulting the name to
+/// [suggestedName], or null when cancelled.
+Future<String?> pickPresetSaveLocation(String suggestedName) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_presetGroup()],
+    suggestedName: suggestedName,
+  );
+  return location?.path;
+}

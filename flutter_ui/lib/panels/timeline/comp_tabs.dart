@@ -24,9 +24,11 @@ class CompTabStrip extends StatelessWidget {
     final fps = comp?.fps.fps ?? 0;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      // Right-click the comp-tab strip: pop the Timeline out into its own window
-      // (routed to the multi-window notice until the shell pop-out lands, exactly
-      // as the dock's own pop-out seam does).
+      // Right-click the comp-tab strip: the popout panel split keeps the
+      // Timeline in-window by design (it owns the playhead/transport and the
+      // cache-bar warm set tied to the main preview — a second engine would fork
+      // that state, 06 §E), so the menu explains that rather than offering a
+      // popout that cannot honestly work.
       onSecondaryTapDown: (d) => _showStripMenu(context, d.globalPosition),
       child: Container(
       height: 28,
@@ -77,15 +79,16 @@ class CompTabStrip extends StatelessWidget {
     );
   }
 
-  /// The comp-strip context menu: a single "Pop out timeline" entry that routes
-  /// to the multi-window notice (the shell pop-out lands separately). Mirrors the
-  /// dock's own pop-out wording so a later real seam reads identically.
+  /// The comp-strip context menu: a single entry explaining that the Timeline
+  /// stays docked. The popout panel split (06 §E) hosts the read-mostly panels
+  /// in a second engine but keeps the Timeline in-window — it owns the
+  /// playhead/transport and the cache-bar warm set a second engine would fork.
   void _showStripMenu(BuildContext context, Offset position) {
     showLumitPopup<void>(
       context: context,
       position: position,
       builder: (close) => FloatSurface(
-        width: 180,
+        width: 200,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -94,9 +97,10 @@ class CompTabStrip extends StatelessWidget {
               onPressed: () {
                 close(null);
                 app.setNotice(
-                    'Timeline: pop out arrives with multi-window support');
+                    'The Timeline stays docked — it owns the transport and '
+                    'preview cache (pop out Project, Effects or Scopes instead)');
               },
-              child: const Text('Pop out timeline'),
+              child: const Text('Why can’t the Timeline pop out?'),
             ),
           ],
         ),

@@ -448,6 +448,7 @@ class _TimelineBodyState extends State<_TimelineBody>
                               scale: scale,
                               fps: fps,
                               markers: markers,
+                              markerDetails: widget.comp.markerDetails,
                               height: _kRulerHeight,
                             ),
                             // The warm-frame cache bar (RAM tier) along the

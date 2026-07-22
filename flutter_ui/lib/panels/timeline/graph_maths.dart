@@ -62,6 +62,26 @@ double smallE(GraphEase ease, double u) {
   }
 }
 
+/// E(u), the integral of e(u) (0 at the segment start) — `retime.rs::big_e`,
+/// ported line-for-line. Used to map local time → source position (`evaluate`).
+double bigE(GraphEase ease, double u) {
+  switch (ease) {
+    case GraphEase.linear:
+      return u * u / 2.0;
+    case GraphEase.slow:
+      return u * u * u / 3.0;
+    case GraphEase.fast:
+      return u * u - u * u * u / 3.0;
+    case GraphEase.smooth:
+      if (u <= 0.5) return 2.0 * u * u * u / 3.0;
+      final w = 1.0 - u;
+      return u + 2.0 * w * w * w / 3.0 - 0.5;
+    case GraphEase.sharp:
+      if (u <= 0.5) return u * u - 2.0 * u * u * u / 3.0;
+      return 2.0 * u * u * u / 3.0 - u * u + u - 1.0 / 6.0;
+  }
+}
+
 /// The speed endpoints of a rate segment with the reverse gate applied: while
 /// reverse is off, a negative speed evaluates as zero (§6.2). Every ease is
 /// monotone, so clamping the endpoints clamps the whole profile.
@@ -294,6 +314,83 @@ BridgeRetime withBoundaryFrame(BridgeRetime retime, int index, int frame) {
     boundaries: bs,
     segments: retime.segments,
   );
+}
+
+/// The source position (seconds) at local comp time [tSecs] — a port of
+/// `retime.rs::Retime::evaluate`: a Rate segment maps `s_i + d·[v0·u +
+/// (v1−v0)·E(u)]`, a Map segment `bezier(y, u(t))`. `tSecs` is clamped into the
+/// store's local domain. Holds the first boundary's source position for a
+/// structurally unusable store (never throws).
+double sourceSecsAtLocal(BridgeRetime retime, double tSecs) {
+  final bs = retime.boundaries;
+  final segs = retime.segments;
+  if (bs.length < 2 || segs.length != bs.length - 1) {
+    return bs.isEmpty ? 0.0 : bs.first.sSeconds;
+  }
+  final t = tSecs.clamp(bs.first.tSeconds, bs.last.tSeconds);
+  // Largest segment whose start boundary is <= t.
+  var idx = 0;
+  for (var i = 0; i < bs.length; i++) {
+    if (bs[i].tSeconds <= t) idx = i;
+  }
+  final i = idx.clamp(0, segs.length - 1);
+  final lo = bs[i], hi = bs[i + 1];
+  final d = hi.tSeconds - lo.tSeconds;
+  if (d <= 0) return lo.sSeconds;
+  final seg = segs[i];
+  if (seg.kind == 'map') {
+    final (x, y) = _mapControlPoints(seg, lo, hi);
+    return _bezier(y, _mapParamAt(seg, x, t));
+  }
+  final u = ((t - lo.tSeconds) / d).clamp(0.0, 1.0);
+  final (v0, v1) = clampedSpeeds(seg.v0 ?? 1, seg.v1 ?? 1, retime.reverse);
+  return lo.sSeconds + d * (v0 * u + (v1 - v0) * bigE(easeFromName(seg.ease), u));
+}
+
+/// The local comp time (seconds) at which the source is exhausted — a port of
+/// `retime.rs::Retime::overrun_local_time`: the first boundary whose source
+/// position reaches [sourceDurationSecs], then a bisection back to the exact
+/// crossing. `0` when the clip starts already past the source end; null when the
+/// source lasts to the out point (no overrun).
+double? overrunLocalTime(BridgeRetime retime, double sourceDurationSecs) {
+  final bs = retime.boundaries;
+  final segs = retime.segments;
+  if (bs.length < 2 || segs.length != bs.length - 1) return null;
+  final dur = sourceDurationSecs;
+  for (var i = 0; i < bs.length; i++) {
+    if (bs[i].sSeconds < dur) continue;
+    if (i == 0) return 0.0; // starts already past the source end
+    var lo = bs[i - 1].tSeconds;
+    var hi = bs[i].tSeconds;
+    for (var k = 0; k < 40; k++) {
+      final mid = 0.5 * (lo + hi);
+      if (sourceSecsAtLocal(retime, mid) >= dur) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    return hi;
+  }
+  return null;
+}
+
+/// Where a retimed footage layer runs out of source, as a comp-time span in
+/// seconds `(start, out)` — a port of `speed_rows.rs::overrun_span_secs`: from
+/// the exhaustion point (clamped to the in point) to the out point, or null when
+/// the source lasts to the out point (or runs out only past it). Indication
+/// only — the hatch never moves a boundary (K-022).
+(double, double)? overrunSpanSecs(
+  BridgeRetime retime,
+  double sourceDurationSecs,
+  double startOffsetSecs,
+  double inPointSecs,
+  double outPointSecs,
+) {
+  final local = overrunLocalTime(retime, sourceDurationSecs);
+  if (local == null) return null;
+  final start = math.max(startOffsetSecs + local, inPointSecs);
+  return start < outPointSecs ? (start, outPointSecs) : null;
 }
 
 /// The auto-fit y-range (speed %) for a sampled curve: always framing the 0%

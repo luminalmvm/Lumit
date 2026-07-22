@@ -165,12 +165,18 @@ class _Card extends StatelessWidget {
 
 /// The kind-specific asset property group for the selected layer: a Text group
 /// for text layers, a Solid group for solids, a Camera group for cameras.
-/// Empty for every other kind. Values seed from the snapshot where it carries
-/// them (a solid's colour) and from the session-edit maps otherwise (text
-/// content, solid size, camera zoom — the snapshot does not carry these back).
+/// Empty for every other kind. Values seed from the snapshot read-back (bridge
+/// v0.9 carries text content/size/fill, a solid's size and a camera's zoom;
+/// `app.textContentFor`/`solidSizeFor`/`cameraZoomFor` prefer it), falling back
+/// to the session-edit maps only on an older library. Each group carries a
+/// layer-keyed [ValueKey] so switching the selected layer re-seeds its editors.
 List<Widget> _assetGroup(AppStateStub app, String compId, BridgeLayer layer) {
   final Widget? group = switch (layer.kind) {
-    BridgeLayerKind.text => _TextGroup(app: app, compId: compId, layer: layer),
+    BridgeLayerKind.text => _TextGroup(
+        key: ValueKey<String>('text-group-${layer.id}'),
+        app: app,
+        compId: compId,
+        layer: layer),
     BridgeLayerKind.solid =>
       _SolidGroup(app: app, compId: compId, layer: layer),
     BridgeLayerKind.camera =>
@@ -182,13 +188,15 @@ List<Widget> _assetGroup(AppStateStub app, String compId, BridgeLayer layer) {
 }
 
 /// The Text group: a multi-line content editor, a size box and a fill swatch,
-/// committed together through `setTextContent`. The content reads from the
-/// session-edit map (snapshot v5 carries no text read-back — annotated).
+/// committed together through `setTextContent`. The content seeds from the
+/// snapshot read-back (`layer.text`, bridge v0.9), or the session edit / default
+/// on an older library.
 class _TextGroup extends StatefulWidget {
   final AppStateStub app;
   final String compId;
   final BridgeLayer layer;
   const _TextGroup({
+    super.key,
     required this.app,
     required this.compId,
     required this.layer,
@@ -312,8 +320,8 @@ class _TextGroupState extends State<_TextGroup> {
 
 /// The Solid group: a colour swatch (seeding from the snapshot's `layer.colour`)
 /// and a width×height size, committed together through `setSolid`. The size
-/// reads from the session-edit map (the snapshot carries no solid size —
-/// annotated).
+/// seeds from the snapshot read-back (`layer.solidSize`, bridge v0.9), or the
+/// session edit / comp size on an older library.
 class _SolidGroup extends StatelessWidget {
   final AppStateStub app;
   final String compId;
@@ -390,8 +398,8 @@ class _SolidGroup extends StatelessWidget {
 }
 
 /// The Camera group: a zoom box, committed through `setCameraZoom`. The zoom
-/// reads from the session-edit map (the snapshot carries no camera zoom —
-/// annotated).
+/// seeds from the snapshot read-back (`layer.cameraZoom`, bridge v0.9), or the
+/// session edit / comp width on an older library.
 class _CameraGroup extends StatelessWidget {
   final AppStateStub app;
   final String compId;
@@ -838,6 +846,102 @@ class _KeyframeNavigator extends StatelessWidget {
   }
 }
 
+/// The stopwatch + ◄ ◆ ► navigator for one animatable effect parameter, driving
+/// the bridge v0.9 effect-param keyframe ops. [channels] is the param's channel
+/// list (scalar → `[0]`, point → `[0,1]`, colour → `[0..3]`), each with a getter
+/// for the value a new key takes; every op is issued per channel, so a
+/// multi-channel key is more than one undo step (mirrors the linked transform
+/// rows — noted).
+class _FxKeyframeControls extends StatelessWidget {
+  final AppStateStub app;
+  final String compId;
+  final String layerId;
+  final String effectId;
+  final BridgeEffectParam param;
+  final List<(int, double Function())> channels;
+  const _FxKeyframeControls({
+    super.key,
+    required this.app,
+    required this.compId,
+    required this.layerId,
+    required this.effectId,
+    required this.param,
+    required this.channels,
+  });
+
+  /// The union of this param's key frames across every channel, sorted.
+  List<int> _frames() {
+    final frames = <int>{};
+    for (final k in param.keys) {
+      frames.add(k.frame);
+    }
+    for (final list in param.channelKeys.values) {
+      for (final k in list) {
+        frames.add(k.frame);
+      }
+    }
+    final list = frames.toList()..sort();
+    return list;
+  }
+
+  void _toggleStopwatch() {
+    final frame = app.previewFrame;
+    for (final (ch, _) in channels) {
+      app.toggleEffectParamAnimated(
+          compId, layerId, effectId, param.name, ch, frame);
+    }
+  }
+
+  void _toggleKeyframe(bool onKey) {
+    final frame = app.previewFrame;
+    for (final (ch, valueOf) in channels) {
+      if (onKey) {
+        app.removeEffectParamKeyframe(
+            compId, layerId, effectId, param.name, ch, frame);
+      } else {
+        app.addEffectParamKeyframe(
+            compId, layerId, effectId, param.name, ch, frame, valueOf());
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final animated = param.animated;
+    final frames = _frames();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _StopwatchButton(
+          key: ValueKey<String>('fxstopwatch-$effectId-${param.name}'),
+          animated: animated,
+          onTap: _toggleStopwatch,
+        ),
+        if (animated)
+          ValueListenableBuilder<int>(
+            valueListenable: app.playheadFrame,
+            builder: (context, frame, _) {
+              final prev =
+                  frames.where((f) => f < frame).fold<int?>(null, (m, f) => f);
+              final onKey = frames.contains(frame);
+              final next = frames
+                  .where((f) => f > frame)
+                  .fold<int?>(null, (m, f) => m ?? f);
+              return _KeyframeNavigator(
+                onKey: onKey,
+                onPrev: prev == null ? null : () => app.goToFrame(prev),
+                onToggle: () => _toggleKeyframe(onKey),
+                onNext: next == null ? null : () => app.goToFrame(next),
+              );
+            },
+          )
+        else
+          const SizedBox(width: 4),
+      ],
+    );
+  }
+}
+
 /// The effect stack: one card per effect on the layer, in stack order.
 class _EffectStack extends StatelessWidget {
   final AppStateStub app;
@@ -980,6 +1084,13 @@ class _EffectTitleRow extends StatelessWidget {
 /// One effect parameter, rendered by kind. Scalar and colour edit live; every
 /// other kind (enum/bool/seed/point/…) shows its value read-only with a muted
 /// tooltip, since the matching edit op is not in the bridge yet.
+///
+/// An animatable kind (scalar, colour, point) carries the same stopwatch + ◄ ◆ ►
+/// navigator the transform rows do (bridge v0.9 effect-param keyframe ops): the
+/// stopwatch toggles animation at the playhead, the diamond adds/removes a key,
+/// ◄/► jump to the previous/next key. A multi-channel param (a point's x/y, a
+/// colour's r/g/b/a) keys every channel at once (one op per channel), so the
+/// navigator reads the union of the channels' key frames.
 class _EffectParamRow extends StatelessWidget {
   final AppStateStub app;
   final String compId;
@@ -994,13 +1105,46 @@ class _EffectParamRow extends StatelessWidget {
     required this.param,
   });
 
+  /// The keyframe channels for this param's kind, each with a getter for the
+  /// value a new key takes at the playhead — null for a non-animatable kind
+  /// (enum/bool/seed/file/layer), which shows no stopwatch.
+  List<(int, double Function())>? _channels() {
+    switch (param.kind) {
+      case 'scalar':
+        return [
+          (0, () => param.value is num ? (param.value as num).toDouble() : 0.0),
+        ];
+      case 'point':
+        final xy = _rgbaOf(param.value);
+        return [(0, () => xy[0]), (1, () => xy[1])];
+      case 'colour':
+        final c = _rgbaOf(param.value);
+        return [(0, () => c[0]), (1, () => c[1]), (2, () => c[2]), (3, () => c[3])];
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final channels = _channels();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
+          if (channels != null) ...[
+            _FxKeyframeControls(
+              key: ValueKey<String>('fxkf-${effect.id}-${param.name}'),
+              app: app,
+              compId: compId,
+              layerId: layer.id,
+              effectId: effect.id,
+              param: param,
+              channels: channels,
+            ),
+            const SizedBox(width: 4),
+          ],
           Expanded(child: Text(_paramLabel(param.name), style: t.bodyPrimary)),
           const SizedBox(width: 12),
           _paramControl(context, t),

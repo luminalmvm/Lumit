@@ -445,18 +445,20 @@ void main() {
   });
 
   group('comp-strip pop out (row 3)', () {
-    testWidgets('right-click the strip offers Pop out timeline → notice',
+    testWidgets('right-click the strip explains the Timeline stays docked',
         (tester) async {
       final app = AppStateStub(bridge: _RecordFake())..frontCompSelect('c0');
       await tester.pumpWidget(_host(TimelinePanel(app: app)));
       await tester.pump();
-      // Right-click the comp pill; the strip's context menu opens.
+      // Right-click the comp pill; the strip's context menu opens. The popout
+      // panel split keeps the Timeline in-window (it owns the transport +
+      // preview cache), so the menu explains that rather than promising a popout.
       await tester.tap(find.text('Scene'), buttons: kSecondaryButton);
       await tester.pump();
-      expect(find.text('Pop out timeline'), findsOneWidget);
-      await tester.tap(find.text('Pop out timeline'));
+      expect(find.text('Why can’t the Timeline pop out?'), findsOneWidget);
+      await tester.tap(find.text('Why can’t the Timeline pop out?'));
       await tester.pump();
-      expect(app.notice, contains('pop out arrives with multi-window'));
+      expect(app.notice, contains('stays docked'));
     });
   });
 }

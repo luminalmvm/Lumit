@@ -8,12 +8,12 @@
 //
 // Grounding: the egui `effects_panel` (crates/lumit-ui/src/shell/panels.rs)
 // groups the built-ins by `FxCategory` and lists user `.lumfx` presets above
-// them. The category grouping is now mirrored. The `.lumfx` preset save/load is
-// annotated below: it cannot round-trip byte-compatibly from the snapshot, which
-// flattens each effect's `EffectKey` (its namespace and version are dropped, only
-// the match name survives) and each parameter's animation — so a faithful preset
-// awaits a preset bridge op (which serialises the engine `EffectInstance`) or an
-// `EffectInstance` read-back in the snapshot.
+// them. The category grouping is mirrored, and Save/Load preset (below) drive
+// the bridge v0.9 `save_effect_preset`/`load_effect_preset` ops — byte-compatible
+// with `lumit-ui`'s `preset.rs`, so a file round-trips into the egui app. The one
+// gap: egui also LISTS the saved preset files above the categories (scanning
+// `lumit_project::presets_dir()`); the bridge exposes save/load but no listing,
+// so that browser row awaits a `list_presets`/`presets_dir` bridge op (ledger).
 
 import 'package:flutter/widgets.dart';
 
@@ -104,7 +104,7 @@ class _EffectsPresetsPanelState extends State<EffectsPresetsPanel> {
                       ],
                     ),
             ),
-            _PresetPlaceholder(),
+            _PresetActions(app: app, canApply: canApply),
           ],
         );
       },
@@ -321,24 +321,61 @@ class _EffectDragFeedback extends StatelessWidget {
   }
 }
 
-/// The .lumfx preset row: honestly disabled until a preset bridge op exists.
-/// The snapshot flattens each effect's EffectKey (namespace/version dropped) and
-/// its parameter animation, so a byte-compatible `.lumfx` cannot be produced
-/// Dart-side — the file would not round-trip into the egui app.
-class _PresetPlaceholder extends StatelessWidget {
+/// The `.lumfx` preset actions (bridge v0.9): Save preset serialises the
+/// selected layer's effect stack through `save_effect_preset` (byte-compatible
+/// with `lumit-ui`'s `preset.rs`) into a file the user picks; Load preset reads
+/// a chosen `.lumfx` and appends its effects with fresh ids. Save is offered
+/// only with a selected layer; Load only needs a selected target.
+///
+/// Honest gap: egui's browser also LISTS the user's saved presets above the
+/// built-in categories, scanning `lumit_project::presets_dir()` each paint. The
+/// bridge exposes only save/load — not the presets folder or a listing — so the
+/// browser listing awaits a `list_presets`/`presets_dir` bridge op (ledger).
+class _PresetActions extends StatelessWidget {
+  final AppStateStub app;
+  final bool canApply;
+  const _PresetActions({required this.app, required this.canApply});
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: t.hairline)),
       ),
-      child: Text(
-        'Saving and loading .lumfx presets arrives with a preset bridge op — the '
-        'snapshot does not carry enough of an effect to write an interoperable '
-        'file.',
-        style: t.small.copyWith(color: t.textMuted),
+      // A Wrap so the two actions flow to a second line rather than overflowing
+      // when the panel is narrow (the leading label rides the first line).
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('Presets', style: t.small.copyWith(color: t.textMuted)),
+          LumitTooltip(
+            message: canApply
+                ? "Save the selected layer's effects as a .lumfx preset"
+                : 'Select a layer to save its effects',
+            child: HouseButton(
+              key: const ValueKey('preset-save'),
+              small: true,
+              onPressed: canApply ? () => app.saveSelectedEffectPreset() : null,
+              child: Text('Save preset', style: t.small),
+            ),
+          ),
+          LumitTooltip(
+            message: canApply
+                ? 'Load a .lumfx preset onto the selected layer'
+                : 'Select a layer to load a preset onto',
+            child: HouseButton(
+              key: const ValueKey('preset-load'),
+              small: true,
+              onPressed: canApply ? () => app.loadPresetOntoSelected() : null,
+              child: Text('Load preset', style: t.small),
+            ),
+          ),
+        ],
       ),
     );
   }

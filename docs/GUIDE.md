@@ -2702,3 +2702,40 @@ Flutter side could not yet *see* or *ask for*. This wave closed those.
   bridge "what resolution are we at?" to show a readout, and in *Auto* mode it
   renders the next frame at whatever the controller chose. Picking a fixed
   resolution by hand simply overrides it.
+
+**The "final UI wave", in plain terms.** The wave above taught the engine to
+*tell* the Flutter side more; this one is the Flutter side actually *drawing and
+using* those new facts, so the windows now look and behave like the older egui
+app in these places:
+
+- **Beat markers look different from your own markers.** The music beats the app
+  detects show up as faint ticks that fade with how sure the app is about each
+  one, sitting low on the ruler; the markers you drop by hand stay full-height
+  and solid. (Before, everything looked the same.)
+- **A sequence row shows its cut lines.** When one timeline row holds several
+  clips end-to-end, thin dividers now mark where one clip stops and the next
+  begins — the same lines the razor tool cuts on.
+- **The "held frame" hatch.** If you slow a clip down so much that it runs out of
+  its own footage before the row ends, the leftover stretch is washed and
+  striped in a calm amber with a small "HOLD" tag — a quiet warning that the clip
+  is repeating its last frame there, never a red alarm. Working out *where* that
+  stretch begins meant copying a piece of the engine's time-mapping maths into
+  the Flutter side (in `graph_maths.dart`), which is covered by its own tests.
+- **The Text, Solid and Camera editors now read the truth.** They fill their
+  boxes from what the engine actually holds (a text layer's words/size/colour, a
+  solid's dimensions, a camera's zoom) instead of only remembering what you typed
+  this session.
+- **The `.lumfx` preset buttons.** "Save preset" and "Load preset" now sit under
+  the effects list and open a normal file picker; the effect dials' stopwatches
+  (from the wave above) also make animating effects match animating a transform.
+- **"Auto" is now in the resolution menu.** Alongside Full/Half/Third/Quarter you
+  can pick Auto; a small readout beside the menu shows which resolution the
+  realtime controller has settled on while you play.
+
+One big piece is deliberately *not* in this wave: the **value graph editor** —
+the curve-with-handles view for animating an ordinary property, and the
+source-position ("Time") lens for retimed clips. The Flutter graph editor draws
+the *speed* curve for retimed clips today; the value curve is a large, separate
+build, and drawing it at low fidelity (straight lines where real curves belong)
+would look wrong, so it is left as an honest, named remainder rather than
+half-built (see `docs/flutter-port/06-REMAINING-WORK.md` §C).

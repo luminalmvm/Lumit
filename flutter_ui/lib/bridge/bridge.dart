@@ -1915,6 +1915,16 @@ abstract class EditOpsBridge {
   BridgePlaybackTier resetRealtime();
 }
 
+/// The `.lumfx` preset serialiser (bridge v0.9): `save_effect_preset` returns
+/// the stack as `.lumfx` JSON (not a snapshot), so it is its own capability
+/// interface — the real [LumitBridge] implements it, and a fake can supply the
+/// JSON so the Dart-side save-to-file flow is testable without the library.
+abstract class PresetJsonBridge {
+  /// The `.lumfx` JSON for a layer's effect stack, or null on failure / an older
+  /// library. The Dart side writes it to a file it picked.
+  String? saveEffectPresetJson(String compId, String layerId, String name);
+}
+
 /// The loaded `lumit_bridge` library, bound to typed calls. Construct with
 /// [tryLoad]; a null result means the app runs on its placeholders.
 class LumitBridge
@@ -1925,7 +1935,8 @@ class LumitBridge
         CacheControlBridge,
         RenderCancelBridge,
         ThumbnailBridge,
-        EditOpsBridge {
+        EditOpsBridge,
+        PresetJsonBridge {
   final _NoArgDart _version;
   final _NoArgDart _newProject;
   final _StrArgDart _openProject;
@@ -3611,6 +3622,7 @@ class LumitBridge
   /// The `.lumfx` JSON text from a save-preset reply, or null on failure — the
   /// Dart side writes it to a file it picked. Separate from [saveEffectPreset]
   /// because the preset text is not a snapshot.
+  @override
   String? saveEffectPresetJson(String compId, String layerId, String name) {
     final fn = _saveEffectPreset;
     if (fn == null) return null;

@@ -125,6 +125,9 @@ class _ViewerPanelState extends State<ViewerPanel>
       frameCount: frameCount,
       workArea: comp.workArea,
     ));
+    // Under Auto resolution, refresh the realtime tier readout on the playback
+    // cadence (a quiet no-op off Auto, and it only notifies on a tier change).
+    app.pollPlaybackTier();
   }
 
   @override
@@ -290,20 +293,35 @@ class _ViewerPanelState extends State<ViewerPanel>
             ),
           ),
           const Spacer(),
-          // The resolution (preview scale) picker — Full / Half / Third /
-          // Quarter. The bridge render call takes a scale; the tooltip is honest
-          // that this is a preview downsample, not a lower-quality export.
+          // The resolution (preview scale) picker — Auto / Full / Half / Third /
+          // Quarter (egui's option set, overlays.rs). Under Auto the preview
+          // renders at the realtime controller's live tier; a manual pick
+          // overrides. The tooltip is honest that this is a preview downsample,
+          // not a lower-quality export.
           LumitTooltip(
             message: 'Preview resolution (downsamples the preview render; the '
-                'export is always full quality)',
-            child: BareDropdown<PreviewScale>(
+                'export is always full quality). Auto adapts to playback load',
+            child: BareDropdown<PreviewScale?>(
               key: const ValueKey('resolution-picker'),
-              value: app.previewScale,
-              options: PreviewScale.values,
-              label: (s) => s.label,
-              onChanged: app.setPreviewScale,
+              value: app.previewAutoRes ? null : app.previewScale,
+              options: const [null, ...PreviewScale.values],
+              label: (s) => s == null ? 'Auto' : s.label,
+              onChanged: (s) =>
+                  s == null ? app.setPreviewAuto() : app.setPreviewScale(s),
             ),
           ),
+          // Under Auto, the live tier the realtime controller settled on (egui's
+          // trailing `%` readout) — polled on the playback cadence, so it reads
+          // "Auto: Half" as the engine drops under strain, and just "Auto" at
+          // rest.
+          if (app.previewAutoRes)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text(
+                app.playing ? 'Auto: ${app.autoTier.label}' : 'Auto',
+                style: t.small.copyWith(color: t.textMuted),
+              ),
+            ),
         ],
       ),
     );
