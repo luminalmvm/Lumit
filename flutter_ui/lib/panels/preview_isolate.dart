@@ -14,8 +14,10 @@
 // duration of one call and never across a re-entrant call, so it cannot
 // deadlock). That mutex is exactly what makes a render on the worker isolate
 // safe while the UI isolate keeps driving document ops — the two serialise
-// through the lock rather than racing. Only the read-only render/decode calls
-// ride the worker; document mutations stay on the UI isolate's bridge handle.
+// through the lock rather than racing. Only the read-only calls ride the worker
+// — comp renders, footage decodes, scope traces and thumbnails (TF round 5:
+// the latter two used to run on the UI isolate and froze the interface waiting
+// on the render lock); document mutations stay on the UI isolate's handle.
 //
 // LATEST-WINS. Requests carry a monotonic `generation`. The worker answers each
 // in order; a reply the [PreviewSource] no longer wants is simply dropped there
@@ -53,6 +55,23 @@ typedef _DecodeDart = Pointer<Uint8> Function(
     Pointer<Char>, int, Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
 typedef _FreeBufferC = Void Function(Pointer<Uint8>, Size);
 typedef _FreeBufferDart = void Function(Pointer<Uint8>, int);
+// The cached-thumbnail decode (ABI 8): like decode, but a u32 max-edge instead
+// of a u64 frame. Served on the worker so a cold video thumbnail never blocks
+// the UI isolate (TF round 5).
+typedef _ThumbC = Pointer<Uint8> Function(
+    Pointer<Char>, Uint32, Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
+typedef _ThumbDart = Pointer<Uint8> Function(
+    Pointer<Char>, int, Pointer<Uint32>, Pointer<Uint32>, Pointer<Size>);
+// The GPU scope pass (K-096 v1): kind + comp + frame/scale + five packed
+// 0x00RRGGBB colours → the fixed 256×256 RGBA trace. Served on the worker for
+// the same reason (even a cache-served trace waits on the render lock).
+typedef _RenderScopeC = Pointer<Uint8> Function(Uint32, Pointer<Char>, Uint64,
+    Float, Uint32, Uint32, Uint32, Uint32, Uint32, Pointer<Size>);
+typedef _RenderScopeDart = Pointer<Uint8> Function(int, Pointer<Char>, int,
+    double, int, int, int, int, int, Pointer<Size>);
+
+/// The engine's fixed scope-trace side (256×256, matching `scopeGrid`).
+const int _scopeSide = 256;
 // Zero-copy shared-texture render (K-177): no buffer returned — the frame stays
 // on the GPU; the reply carries only the NT handle and dimensions.
 typedef _RenderSharedC = Bool Function(
@@ -242,12 +261,34 @@ class IsolateFrameRenderer implements FrameRenderer {
   }
 
   void _runFallback(List<Object?> wire, void Function(DecodedFrame?) onFrame) {
-    if (wire[0] == 'comp') {
-      _fallback.requestComp(wire[1] as String, wire[2] as int, wire[3] as double,
-          wire[4] as int, onFrame);
-    } else {
-      _fallback.requestDecode(
-          wire[1] as String, wire[2] as int, wire[4] as int, onFrame);
+    switch (wire[0]) {
+      case 'comp':
+        _fallback.requestComp(wire[1] as String, wire[2] as int,
+            wire[3] as double, wire[4] as int, onFrame);
+      case 'thumb':
+        _fallback.requestThumbnail(
+            wire[1] as String, wire[2] as int, wire[4] as int, onFrame);
+      case 'scope':
+        // The trace bytes ride the shared DecodedFrame reply shape (the
+        // requestScopeTrace adapter unwraps them again).
+        _fallback.requestScopeTrace(
+            wire[5] as int,
+            wire[1] as String,
+            wire[2] as int,
+            wire[3] as double,
+            wire[6] as int,
+            wire[7] as int,
+            wire[8] as int,
+            wire[9] as int,
+            wire[10] as int,
+            wire[4] as int,
+            (bytes) => onFrame(bytes == null
+                ? null
+                : DecodedFrame(
+                    width: _scopeSide, height: _scopeSide, rgba: bytes)));
+      default:
+        _fallback.requestDecode(
+            wire[1] as String, wire[2] as int, wire[4] as int, onFrame);
     }
   }
 
@@ -292,6 +333,24 @@ class IsolateFrameRenderer implements FrameRenderer {
   }
 
   @override
+  void requestScopeTrace(int kind, String compId, int frame, double scale,
+      int bg, int trace, int red, int green, int blue, int generation,
+      void Function(Uint8List?) onTrace) {
+    // The trace rides the shared RGBA reply (generation-keyed), so the plumbing
+    // — startup queue, fallback, latest-wins drop — is the comp render's.
+    _dispatch(
+        generation,
+        ['scope', compId, frame, scale, generation, kind, bg, trace, red, green, blue],
+        (frame) => onTrace(frame?.rgba));
+  }
+
+  @override
+  void requestThumbnail(String itemId, int maxEdge, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    _dispatch(generation, ['thumb', itemId, maxEdge, 1.0, generation], onFrame);
+  }
+
+  @override
   void dispose() {
     _disposed = true;
     _awaiting.clear();
@@ -327,8 +386,10 @@ void _workerMain(_WorkerInit init) {
   if (lib == null) {
     // No library in the worker: answer null to everything so the UI isolate's
     // renderer keeps its last picture rather than hanging on a lost request.
+    // Every wire shape (5-tuple, and the 11-entry scope one) carries its
+    // generation at index 4.
     recv.listen((message) {
-      if (message is! List || message.length != 5) return;
+      if (message is! List || message.length < 5) return;
       final generation = message[4] as int;
       if (message[0] == 'shared') {
         init.mainPort.send(_emptySharedReply(generation));
@@ -382,23 +443,53 @@ void _workerMain(_WorkerInit init) {
   } catch (_) {
     freeBuffer = null;
   }
+  // The ABI-8 thumbnail and the K-096 scope pass are optional symbols (an older
+  // library omits them); a missing one simply answers null, and the UI isolate
+  // falls back (glyph / CPU trace).
+  _ThumbDart? thumbnail;
+  try {
+    thumbnail =
+        lib.lookupFunction<_ThumbC, _ThumbDart>('lumit_bridge_thumbnail');
+  } catch (_) {
+    thumbnail = null;
+  }
+  _RenderScopeDart? renderScope;
+  try {
+    renderScope = lib.lookupFunction<_RenderScopeC, _RenderScopeDart>(
+        'lumit_bridge_render_scope');
+  } catch (_) {
+    renderScope = null;
+  }
 
   recv.listen((message) {
-    if (message is! List || message.length != 5) return;
+    if (message is! List || message.length < 5) return;
     final kind = message[0] as String;
     final id = message[1] as String;
     final frame = message[2] as int;
     final scale = message[3] as double;
     final generation = message[4] as int;
 
+    if (kind == 'scope') {
+      if (message.length != 11) return;
+      final reply = _scopeOne(renderScope, freeBuffer, id, frame, scale,
+          message[5] as int, message[6] as int, message[7] as int,
+          message[8] as int, message[9] as int, message[10] as int);
+      init.mainPort.send([generation, reply.$1, reply.$2, reply.$3]);
+      return;
+    }
+    if (message.length != 5) return;
     if (kind == 'shared') {
       init.mainPort
           .send(_renderShared(renderShared, renderSharedDmabuf, id, frame, generation));
       return;
     }
-    final reply = (kind == 'comp')
-        ? _renderOne(render, renderGen, freeBuffer, id, frame, scale, generation)
-        : _decodeOne(decode, freeBuffer, id, frame);
+    final reply = switch (kind) {
+      'comp' =>
+        _renderOne(render, renderGen, freeBuffer, id, frame, scale, generation),
+      // On the thumb wire the `frame` slot carries the max edge.
+      'thumb' => _thumbOne(thumbnail, freeBuffer, id, frame),
+      _ => _decodeOne(decode, freeBuffer, id, frame),
+    };
     init.mainPort.send([generation, reply.$1, reply.$2, reply.$3]);
   });
 }
@@ -521,6 +612,67 @@ List<Object?> _renderShared(_RenderSharedDart? renderShared,
     malloc.free(id);
     malloc.free(outW);
     malloc.free(outH);
+    malloc.free(outLen);
+  }
+}
+
+/// Decode one cached thumbnail on the worker; returns `(width, height, ttd?)`.
+/// Mirrors [_decodeOne] with the ABI-8 max-edge argument in the frame slot.
+(int, int, TransferableTypedData?) _thumbOne(_ThumbDart? thumbnail,
+    _FreeBufferDart? freeBuffer, String itemId, int maxEdge) {
+  if (thumbnail == null || freeBuffer == null) return (0, 0, null);
+  final id = itemId.toNativeUtf8();
+  final outW = malloc<Uint32>();
+  final outH = malloc<Uint32>();
+  final outLen = malloc<Size>();
+  try {
+    final ptr = thumbnail(id.cast(), maxEdge, outW, outH, outLen);
+    if (ptr == nullptr) return (0, 0, null);
+    final len = outLen.value;
+    try {
+      final bytes = Uint8List.fromList(ptr.asTypedList(len));
+      return (outW.value, outH.value, TransferableTypedData.fromList([bytes]));
+    } finally {
+      freeBuffer(ptr, len);
+    }
+  } finally {
+    malloc.free(id);
+    malloc.free(outW);
+    malloc.free(outH);
+    malloc.free(outLen);
+  }
+}
+
+/// Compute one scope trace on the worker (the K-096 GPU pass); returns
+/// `(side, side, ttd?)` — the trace is the engine's fixed 256×256.
+(int, int, TransferableTypedData?) _scopeOne(
+    _RenderScopeDart? renderScope,
+    _FreeBufferDart? freeBuffer,
+    String compId,
+    int frame,
+    double scale,
+    int kind,
+    int bg,
+    int trace,
+    int red,
+    int green,
+    int blue) {
+  if (renderScope == null || freeBuffer == null) return (0, 0, null);
+  final id = compId.toNativeUtf8();
+  final outLen = malloc<Size>();
+  try {
+    final ptr = renderScope(
+        kind, id.cast(), frame, scale, bg, trace, red, green, blue, outLen);
+    if (ptr == nullptr) return (0, 0, null);
+    final len = outLen.value;
+    try {
+      final bytes = Uint8List.fromList(ptr.asTypedList(len));
+      return (_scopeSide, _scopeSide, TransferableTypedData.fromList([bytes]));
+    } finally {
+      freeBuffer(ptr, len);
+    }
+  } finally {
+    malloc.free(id);
     malloc.free(outLen);
   }
 }

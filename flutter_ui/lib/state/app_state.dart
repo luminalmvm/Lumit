@@ -9,9 +9,11 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
+import '../bridge/beats_worker.dart';
 import '../bridge/bridge.dart';
 import '../panels/preview_source.dart';
 import 'file_dialogs.dart';
@@ -1052,14 +1054,56 @@ class AppStateStub extends ChangeNotifier {
 
   // Beats — on the front comp.
 
+  /// True while beat detection runs in its worker isolate (one at a time).
+  bool _beatsDetecting = false;
+
   /// Detect beat markers for the front comp ([sensitivity] 0..100).
-  void detectBeats(int sensitivity) {
+  ///
+  /// The engine mixes down the comp's whole audio and analyses it — seconds of
+  /// blocking work on long audio, behind the same render lock the Viewer's
+  /// worker holds mid-render. With the real FFI [LumitBridge] loaded the call
+  /// therefore runs in its own short-lived isolate (which opens its own handle
+  /// to the same library — the process-wide engine state is shared, so the
+  /// detected markers commit exactly as if called here), and only the reply
+  /// JSON crosses back to be adopted on the UI isolate. A fake/test bridge
+  /// keeps the synchronous path so widget tests stay deterministic.
+  Future<void> detectBeats(int sensitivity) async {
     final compId = frontCompIdResolved;
     if (compId == null) {
       setNotice('Open a composition to detect beats');
       return;
     }
-    _editOp((e) => e.detectBeats(compId, sensitivity));
+    final b = bridge;
+    if (b is! LumitBridge) {
+      _editOp((e) => e.detectBeats(compId, sensitivity));
+      return;
+    }
+    if (_beatsDetecting) return; // one detection at a time
+    _beatsDetecting = true;
+    setNotice('Detecting beats…');
+    final paths = <String>[
+      if (b.loadedPath != null) b.loadedPath!,
+      ...LumitBridge.candidateLibraryPaths(),
+    ];
+    String raw;
+    try {
+      raw = await Isolate.run(
+          () => detectBeatsWithLibrary(paths, compId, sensitivity));
+    } catch (_) {
+      raw = '{"ok":false,"error":"beat detection could not start its worker"}';
+    }
+    _beatsDetecting = false;
+    if (_disposed) return;
+    adoptDetectBeatsReply(raw);
+  }
+
+  /// Adopt a beat-detection reply JSON on the UI isolate: drop the busy notice,
+  /// then apply it through the [_applyOp] path, so the snapshot, undo flags and
+  /// any error surface exactly as the synchronous op would. Public so the
+  /// reply-adoption behaviour is unit-testable without spawning an isolate.
+  void adoptDetectBeatsReply(String raw) {
+    notice = null; // the markers themselves (or the error tint) say the rest
+    _applyOp(BridgeReply.parse(raw));
   }
 
   /// Remove the detected Beat markers from the front comp.
@@ -1590,17 +1634,6 @@ class AppStateStub extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Render the front comp's current frame to CPU pixels for a one-off sample
-  /// (the eyedropper's readback), or null when the composited-comp render is not
-  /// available (no bridge, an older library, no GPU adapter). Full scale so the
-  /// sampled pixel is the true colour, not a downsample.
-  DecodedFrame? sampleCompFrame() {
-    final b = bridge;
-    final compId = frontCompIdResolved;
-    if (b is! CompRenderBridge || compId == null) return null;
-    return (b as CompRenderBridge).renderCompFrame(compId, previewFrame, 1.0);
-  }
-
   // --- Bridge v0.8: rendered-frame cache + thumbnails ---------------------
 
   /// A hook the [PreviewSource] registers so "Clear cache" also empties the
@@ -1629,9 +1662,25 @@ class AppStateStub extends ChangeNotifier {
 
   /// A cached thumbnail of footage [itemId] whose longer edge is at most
   /// [maxEdge], or null without the capability. Decoded and cached engine-side,
-  /// so repeated calls are cheap.
+  /// so repeated calls are cheap. Synchronous — the Project panel goes through
+  /// [requestThumbnail] instead so a COLD decode never runs on the UI isolate;
+  /// this remains as the inline fallback the [SynchronousFrameRenderer] uses.
   DecodedFrame? thumbnail(String itemId, int maxEdge) =>
       thumbnails?.thumbnail(itemId, maxEdge);
+
+  /// Request a footage thumbnail through the shared [previewSource]'s renderer
+  /// seam — on the render worker isolate when one is running, so a cold video
+  /// thumbnail decode (a synchronous FFI call under the bridge lock) never
+  /// janks the UI (TF round 5). [onFrame] receives the decoded frame, or null
+  /// without the capability / on failure.
+  void requestThumbnail(
+      String itemId, int maxEdge, void Function(DecodedFrame?) onFrame) {
+    if (thumbnails == null) {
+      onFrame(null);
+      return;
+    }
+    previewSource.requestThumbnail(itemId, maxEdge, onFrame);
+  }
 
   /// The rendered-frame cache's live stats, or the empty default without the
   /// capability. The Timeline cache bar polls this on the app cadence (never
@@ -2237,8 +2286,13 @@ class AppStateStub extends ChangeNotifier {
     return false;
   }
 
+  /// Set on [dispose]; guards the late resumption of an awaited worker (beat
+  /// detection) against notifying a disposed ChangeNotifier.
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     // Flush any pending session write, then tear down the timers/notifiers.
     flushPendingSession();
     _autosaveTimer?.cancel();

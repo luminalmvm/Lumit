@@ -79,6 +79,13 @@ class _GizmoFake implements DocumentBridge {
       _op('key:$c/$l/$property@$frame=${value.toStringAsFixed(1)}');
 
   @override
+  BridgeReply setEffectParamColour(String c, String l, String e, String p,
+          double r, double g, double b, double a) =>
+      _op('fxcolour:$c/$l/$e/$p=${r.toStringAsFixed(2)},'
+          '${g.toStringAsFixed(2)},${b.toStringAsFixed(2)},'
+          '${a.toStringAsFixed(2)}');
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => _snap();
 }
 
@@ -102,7 +109,31 @@ class _NullRenderer implements FrameRenderer {
           void Function(DecodedFrame?) onFrame) =>
       onFrame(null);
   @override
+  void requestScopeTrace(int kind, String compId, int frame, double scale,
+          int bg, int trace, int red, int green, int blue, int generation,
+          void Function(Uint8List?) onTrace) =>
+      onTrace(null);
+  @override
+  void requestThumbnail(String itemId, int maxEdge, int generation,
+          void Function(DecodedFrame?) onFrame) =>
+      onFrame(null);
+  @override
   void dispose() {}
+}
+
+/// A [_NullRenderer] whose comp render answers a solid red 2×2 frame, so the
+/// eyedropper has known pixels to sample from the read-back path.
+class _RedRenderer extends _NullRenderer {
+  @override
+  void requestComp(String compId, int frame, double scale, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    final px = Uint8List(2 * 2 * 4);
+    for (var i = 0; i < px.length; i += 4) {
+      px[i] = 255; // red
+      px[i + 3] = 255; // opaque
+    }
+    onFrame(DecodedFrame(width: 2, height: 2, rgba: px));
+  }
 }
 
 Widget _host(Widget child) => Directionality(
@@ -209,5 +240,50 @@ void main() {
     await tester.dragFrom(const Offset(600, 250), const Offset(100, 0));
     await tester.pump();
     expect(fake.ops, contains('key:c1/ls/scale_x@0=200.0'));
+  });
+
+  testWidgets(
+      'the eyedropper samples the read-back frame and commits through the op '
+      '(TF round 5: no synchronous render)', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 500));
+    final fake = _GizmoFake();
+    final app = AppStateStub(bridge: fake)..selectLayer('ls');
+    // Arm BEFORE pumping so the build takes the eyedropper branch (the shell
+    // normally rebuilds the stage on the app notifier).
+    app.armEyedropper(const EyedropperArm(
+      compId: 'c1',
+      layerId: 'ls',
+      effectId: 'e1',
+      paramName: 'tint',
+    ));
+    late PreviewSource source;
+    await tester.runAsync(() async {
+      source = PreviewSource(app, renderer: _RedRenderer());
+      await tester.pumpWidget(_host(
+        SizedBox(
+          width: 1000,
+          height: 500,
+          child: ViewerInteractionLayer(
+            app: app,
+            source: source,
+            imageRect: const Rect.fromLTWH(0, 0, 1000, 500),
+            compWidth: 1000,
+            compHeight: 500,
+          ),
+        ),
+      ));
+      // Let the read-back frame's image decode land (displayedFrame set).
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    });
+    await tester.pump();
+    expect(source.displayedFrame, isNotNull,
+        reason: 'the sample reads the frame already read back — no render');
+
+    await tester.tapAt(const Offset(500, 250));
+    await tester.pump();
+    expect(fake.ops, contains('fxcolour:c1/ls/e1/tint=1.00,0.00,0.00,1.00'),
+        reason: 'the sampled red committed through setEffectParamColour');
+    expect(app.eyedropperArmed, isFalse, reason: 'the commit disarms');
+    source.dispose();
   });
 }

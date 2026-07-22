@@ -135,10 +135,12 @@ class _Fake
   dynamic noSuchMethod(Invocation invocation) => _snap();
 }
 
-/// A [FrameRenderer] that records the comp-render scale and answers a tiny frame
-/// synchronously — so the scale threading is observable without a real engine.
+/// A [FrameRenderer] that records the comp-render scale and the thumbnail
+/// requests, answering a tiny frame synchronously — so the scale threading and
+/// the thumbnail seam are observable without a real engine.
 class _RecordingRenderer implements FrameRenderer {
   final List<double> scales = [];
+  final List<String> thumbRequests = [];
 
   @override
   bool get supportsCompRender => true;
@@ -160,6 +162,19 @@ class _RecordingRenderer implements FrameRenderer {
   void requestDecode(String itemId, int frame, int generation,
           void Function(DecodedFrame?) onFrame) =>
       onFrame(null);
+  @override
+  void requestScopeTrace(int kind, String compId, int frame, double scale,
+          int bg, int trace, int red, int green, int blue, int generation,
+          void Function(Uint8List?) onTrace) =>
+      onTrace(null);
+  @override
+  void requestThumbnail(String itemId, int maxEdge, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    thumbRequests.add('$itemId@$maxEdge');
+    onFrame(DecodedFrame(
+        width: 2, height: 2, rgba: Uint8List(2 * 2 * 4)..fillRange(0, 16, 180)));
+  }
+
   @override
   void dispose() {}
 }
@@ -398,6 +413,35 @@ void main() {
       });
       await tester.pump();
       expect(find.byType(RawImage), findsWidgets);
+    });
+
+    testWidgets(
+        'the decode rides the renderer seam and re-decodes on an epoch bump '
+        '(TF round 5)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 500));
+      final renderer = _RecordingRenderer();
+      final app = AppStateStub(
+        bridge: _Fake(),
+        previewRendererFactory: (_) => renderer,
+      );
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_host(ProjectPanel(app: app)));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      expect(renderer.thumbRequests, contains('f1@56'),
+          reason: 'the thumbnail decode went through the off-thread seam, '
+              'never a synchronous FFI call on the UI isolate');
+
+      final before = renderer.thumbRequests.length;
+      await tester.runAsync(() async {
+        app.undo(); // adopts a fresh snapshot → the document epoch bumps
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      expect(renderer.thumbRequests.length, greaterThan(before),
+          reason: 'the epoch bump re-decodes the row thumbnail');
     });
   });
 }

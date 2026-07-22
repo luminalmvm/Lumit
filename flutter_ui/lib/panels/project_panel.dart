@@ -10,11 +10,11 @@
 // missing. An empty document shows a quiet hint.
 //
 // Thumbnails (docs/06 §5): a footage row shows a small decoded thumbnail of the
-// item (`app.thumbnail`, the `ThumbnailBridge` binding) in place of its type
-// glyph, decoded asynchronously off the build and cached until the document
-// epoch advances (a relink re-decodes). A placeholder glyph shows until the
-// picture lands, and the glyph stays for a missing file or a build without the
-// capability.
+// item (`app.requestThumbnail`, the `ThumbnailBridge` binding via the render
+// worker isolate) in place of its type glyph, decoded off the UI isolate and
+// cached until the document epoch advances (a relink re-decodes). A placeholder
+// glyph shows until the picture lands, and the glyph stays for a missing file
+// or a build without the capability.
 
 import 'dart:ui' as ui;
 
@@ -405,8 +405,9 @@ class _ProjectRowState extends State<_ProjectRow> {
       };
 }
 
-/// A footage row's thumbnail: decoded asynchronously through `app.thumbnail`
-/// (once, cached engine-side) and held as a `ui.Image` until the document epoch
+/// A footage row's thumbnail: decoded asynchronously through
+/// `app.requestThumbnail` (on the render worker isolate; once, cached
+/// engine-side) and held as a `ui.Image` until the document epoch
 /// advances. Shows [placeholder] until the picture lands, and holds the last
 /// picture across an epoch bump rather than flashing the glyph. Its longer edge
 /// is capped at ~28 logical px (2× for crispness), fit into a small 30×17 box.
@@ -457,37 +458,41 @@ class _FootageThumbnailState extends State<_FootageThumbnail> {
     _loading = true;
     final epoch = widget.epoch;
     final itemId = widget.itemId;
-    // Defer the (synchronous FFI) decode off the build with a microtask, then
-    // turn the pixels into an image asynchronously — the build never blocks.
-    Future<void>(() async {
-      final frame = widget.app.thumbnail(itemId, _maxEdge);
-      if (!mounted || widget.epoch != epoch || widget.itemId != itemId) {
-        _loading = false;
-        return;
-      }
-      if (frame == null || frame.width == 0 || frame.height == 0) {
-        _loading = false;
-        _loadedEpoch = epoch; // don't hammer a footage item with no thumbnail
-        return;
-      }
-      ui.decodeImageFromPixels(
-        frame.rgba,
-        frame.width,
-        frame.height,
-        ui.PixelFormat.rgba8888,
-        (img) {
+    // The decode rides the render worker isolate (TF round 5): a cold video
+    // thumbnail is a whole FFI decode under the bridge lock, and a microtask
+    // alone never leaves the UI isolate — the per-row jank the tester felt.
+    // The microtask remains only to keep the request itself off the build; the
+    // no-worker fallback then decodes inline exactly as before.
+    Future<void>(() {
+      widget.app.requestThumbnail(itemId, _maxEdge, (frame) {
+        if (!mounted || widget.epoch != epoch || widget.itemId != itemId) {
           _loading = false;
-          _loadedEpoch = epoch;
-          if (!mounted || widget.epoch != epoch || widget.itemId != itemId) {
-            img.dispose();
-            return;
-          }
-          setState(() {
-            _image?.dispose();
-            _image = img;
-          });
-        },
-      );
+          return;
+        }
+        if (frame == null || frame.width == 0 || frame.height == 0) {
+          _loading = false;
+          _loadedEpoch = epoch; // don't hammer a footage item with no thumbnail
+          return;
+        }
+        ui.decodeImageFromPixels(
+          frame.rgba,
+          frame.width,
+          frame.height,
+          ui.PixelFormat.rgba8888,
+          (img) {
+            _loading = false;
+            _loadedEpoch = epoch;
+            if (!mounted || widget.epoch != epoch || widget.itemId != itemId) {
+              img.dispose();
+              return;
+            }
+            setState(() {
+              _image?.dispose();
+              _image = img;
+            });
+          },
+        );
+      });
     });
   }
 

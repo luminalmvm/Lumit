@@ -2709,6 +2709,24 @@ rate; and remembering the session (which project, playhead, selection) now waits
 for a half-second lull instead of writing to disk on every single frame of a
 scrub.
 
+A later testing round found the same freeze sneaking back in through side
+doors: a few smaller engine calls were still made on the interface thread, and
+each of them has to wait its turn behind the engine's render lock — so if the
+worker was mid-render on an uncached frame, the whole window stopped until that
+render finished. The worker now serves those too: the Scopes panel's trace
+(which reads the engine every time a new frame lands, so with the panel open
+every uncached frame used to freeze the window for the length of its render)
+and the Project panel's little footage thumbnails both ride the same background
+worker, ask-and-carry-on style with the same "only the newest request matters"
+manner. Beat detection — which listens through the whole composition's audio
+and can take seconds — now runs in its own short-lived background worker: a
+quiet "Detecting beats…" note shows while it listens, and the markers appear
+when it is done, with the window live the whole time. And the colour
+eyedropper, which used to render a whole full-size frame on the interface
+thread the moment you moved the pointer over the picture, now simply reads the
+pixels the Viewer has already copied back — sampling is free — only asking the
+worker for a frame in the rare case where none has arrived yet.
+
 **Filling in the edit commands (bridge v0.7).** By this point the bridge could
 show the whole document and do the common edits, but a scatter of menu items and
 editors still had nowhere to send their instruction — the engine simply had no

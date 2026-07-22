@@ -638,3 +638,25 @@ hotkeys, and their absence makes testing feel clunky).
   notification; it now rechecks when the build completes. Regressions in
   `viewer_scopes_test.dart` (edit re-renders the same frame, playhead motion re-uses the
   cache, a post-edit reply is dropped not banked), verified to fail without the fix.
+
+- [x] **The UI froze for the length of every uncached render.** The comp render itself was
+  already on the worker isolate (K-176), but four synchronous FFI calls still ran ON the UI
+  isolate and queued behind the engine's session renderer lock (`render.rs`'s `RENDERER`
+  mutex, held for the whole GPU render + readback) while the worker rendered an uncached
+  frame — so the interface stopped exactly as long as the render. (1) The Scopes panel's
+  engine trace (`renderScope`) fired on every landed frame; with the panel open, every
+  uncached frame froze the window — the systematic one. (2) A Project-panel thumbnail decode
+  ran inside a `Future(...)`, which is a microtask and never leaves the UI isolate — per-row
+  jank on cold video thumbnails. (3) `detectBeats` mixed down and analysed the comp's whole
+  audio synchronously (its own Rust comment claimed the Dart side awaits off the UI isolate —
+  it did not, until now). (4) The eyedropper rendered a full-scale comp frame per pointer
+  move when no CPU frame was held. Fixed by widening the render-worker protocol with `scope`
+  and `thumb` request kinds (latest-wins, own guards, never the Viewer's in-flight key),
+  running beat detection via `Isolate.run` in a short-lived worker that opens its own library
+  handle (busy notice "Detecting beats…", reply adopted on the UI isolate through the normal
+  op path), and sampling the eyedropper from the already-read-back `displayedFrame` with an
+  async worker readback as the only fallback. Regressions in `viewer_scopes_test.dart`
+  (trace rides the seam, superseded trace dropped, K-130 hold, sample render on its own
+  guard), `final_sweep_test.dart` (thumbnail seam + epoch re-decode), `edit_ops_test.dart`
+  (sync fake path, reply adoption, worker error shape) and `viewer_gizmo_test.dart`
+  (eyedropper commits through the existing op).

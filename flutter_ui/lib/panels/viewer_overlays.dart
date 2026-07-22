@@ -69,6 +69,13 @@ class _ViewerInteractionLayerState extends State<ViewerInteractionLayer> {
   /// the egui `eyedropper` sample-radius behaviour).
   int _sampleRadius = 0;
 
+  /// The one-off comp readback for the eyedropper on the shared-texture path
+  /// (no CPU pixels to sample), fetched asynchronously through the render
+  /// worker. One request per arm session ([_sampleFrameRequested]); the
+  /// magnifier shows no swatch until it lands.
+  DecodedFrame? _sampleFrame;
+  bool _sampleFrameRequested = false;
+
   AppStateStub get app => widget.app;
   Rect get rect => widget.imageRect;
 
@@ -82,11 +89,20 @@ class _ViewerInteractionLayerState extends State<ViewerInteractionLayer> {
   // --- Eyedropper --------------------------------------------------------
 
   /// Sample the shown frame at [local], averaging a (2r+1)² box of source
-  /// pixels. Prefers the CPU frame the PreviewSource holds; on the shared path
-  /// (no CPU pixels) it falls back to a one-off comp readback.
+  /// pixels. Prefers the CPU frame the PreviewSource holds — pixels ALREADY
+  /// read back, so sampling is free; only when none exists (the shared-texture
+  /// path before its first throttled readback) does it kick off ONE async comp
+  /// readback through the render worker and sample nothing until it lands.
+  /// The choice over an always-async render: honest and simple — the shown
+  /// frame IS what the user is picking from, and a synchronous full-scale
+  /// render here froze the UI for the render's whole length (TF round 5).
   List<double>? _sampleAt(Offset local) {
-    final frame = widget.source.displayedFrame ?? app.sampleCompFrame();
-    if (frame == null || frame.width <= 0 || frame.height <= 0) return null;
+    final frame = widget.source.displayedFrame ?? _sampleFrame;
+    if (frame == null) {
+      _requestSampleFrame(local);
+      return null;
+    }
+    if (frame.width <= 0 || frame.height <= 0) return null;
     final fx = ((local.dx - rect.left) / rect.width).clamp(0.0, 1.0);
     final fy = ((local.dy - rect.top) / rect.height).clamp(0.0, 1.0);
     final cx = (fx * (frame.width - 1)).round();
@@ -110,6 +126,23 @@ class _ViewerInteractionLayerState extends State<ViewerInteractionLayer> {
     return [r / n / 255.0, g / n / 255.0, b / n / 255.0];
   }
 
+  /// Kick off the one-off async readback that backs [_sampleAt] on the
+  /// shared-texture path. At most one per arm session, whatever it returns —
+  /// pointer moves must never queue up renders.
+  void _requestSampleFrame(Offset local) {
+    if (_sampleFrameRequested) return;
+    _sampleFrameRequested = true;
+    widget.source.requestSampleFrame((frame) {
+      if (!mounted || frame == null) return;
+      setState(() {
+        _sampleFrame = frame;
+        // Refresh the magnifier swatch where the cursor last was.
+        final pos = _dropperPos;
+        if (pos != null) _dropperRgba = _sampleAt(pos);
+      });
+    });
+  }
+
   void _dropperMove(Offset local) {
     setState(() {
       _dropperPos = local;
@@ -127,6 +160,9 @@ class _ViewerInteractionLayerState extends State<ViewerInteractionLayer> {
     setState(() {
       _dropperPos = null;
       _dropperRgba = null;
+      // The arm session is over; the next arm re-fetches its own readback.
+      _sampleFrame = null;
+      _sampleFrameRequested = false;
     });
   }
 

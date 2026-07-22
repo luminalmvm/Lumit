@@ -5,6 +5,7 @@
 // dedicated op (no path re-pointing) rather than saveProject.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/bridge/beats_worker.dart';
 import 'package:lumit_flutter/bridge/bridge.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 
@@ -186,6 +187,33 @@ class _DocOnlyFake implements DocumentBridge {
   dynamic noSuchMethod(Invocation invocation) => BridgeReply.ok(_snap());
 }
 
+/// An [_EditFake] whose snapshot carries one composition, so the front-comp
+/// resolution (`frontCompIdResolved`) finds `c1` — the beats ops need one.
+class _CompEditFake extends _EditFake {
+  @override
+  BridgeSnapshot _snap() => BridgeSnapshot(
+        items: [
+          BridgeItem(
+            id: 'c1',
+            name: 'Scene',
+            kind: BridgeItemKind.composition,
+            children: const [],
+            comp: BridgeComp(
+              width: 4,
+              height: 4,
+              fps: const BridgeFps(24, 1),
+              frameCount: 48,
+              layers: const [],
+              markers: const [],
+            ),
+          ),
+        ],
+        canUndo: true,
+        canRedo: false,
+        path: path,
+      );
+}
+
 void main() {
   group('EditOps pass-throughs route to the capability', () {
     test('raw ops record their call and apply the snapshot', () {
@@ -321,6 +349,61 @@ void main() {
       expect(bare.playbackTier().label, 'Full');
       bare.addMaskGeometry('c', 'l', 'ellipse', 0, 0, 10, 10);
       expect(bare.errorNotice, isNull);
+    });
+  });
+
+  // Beat detection off the UI isolate (TF round 5): with the real FFI bridge
+  // the blocking mixdown+analysis runs in a short-lived isolate; a fake bridge
+  // keeps the synchronous path so these stay deterministic, and the
+  // reply-adoption half (what the isolate's answer does on the UI isolate) is
+  // unit-tested directly.
+  group('detectBeats (TF round 5)', () {
+    test('a fake bridge keeps the synchronous path and commits the op',
+        () async {
+      final fake = _CompEditFake();
+      final app = AppStateStub(bridge: fake);
+      await app.detectBeats(60);
+      expect(fake.ops, contains('beats:c1:60'));
+      expect(app.errorNotice, isNull);
+    });
+
+    test('no front comp is one calm notice, no op', () async {
+      final fake = _EditFake();
+      final app = AppStateStub(bridge: fake);
+      await app.detectBeats(50);
+      expect(fake.ops, isEmpty);
+      expect(app.notice, contains('Open a composition'));
+    });
+
+    test('adoptDetectBeatsReply applies an ok reply and drops the busy notice',
+        () {
+      final app = AppStateStub(bridge: _EditFake());
+      app.setNotice('Detecting beats…');
+      final epochBefore = app.documentEpoch;
+      app.adoptDetectBeatsReply(
+          '{"ok":true,"items":[],"can_undo":true,"can_redo":false,"path":null}');
+      expect(app.notice, isNull, reason: 'the busy notice is dropped');
+      expect(app.errorNotice, isNull);
+      expect(app.canUndo, isTrue, reason: 'the undo flag follows the snapshot');
+      expect(app.documentEpoch, epochBefore + 1,
+          reason: 'the adopted snapshot bumps the epoch like any edit');
+    });
+
+    test('adoptDetectBeatsReply surfaces an error reply in the error tint', () {
+      final app = AppStateStub(bridge: _EditFake());
+      app.setNotice('Detecting beats…');
+      app.adoptDetectBeatsReply('{"ok":false,"error":"no audio to analyse"}');
+      expect(app.notice, isNull);
+      expect(app.errorNotice, 'no audio to analyse');
+    });
+
+    test('detectBeatsWithLibrary answers a bridge-shaped error when no library '
+        'opens', () {
+      final raw = detectBeatsWithLibrary(
+          ['definitely-not-a-library-anywhere.dll'], 'c1', 50);
+      final reply = BridgeReply.parse(raw);
+      expect(reply.ok, isFalse);
+      expect(reply.error, contains('could not be opened'));
     });
   });
 }

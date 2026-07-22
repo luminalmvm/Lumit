@@ -2,6 +2,8 @@
 // widget (a fake bridge decodes a synthetic frame → an image; a missing item
 // shows the slate; play advances the playhead over pumped ticks).
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1161,6 +1163,156 @@ void main() {
       expect(find.byType(CustomPaint), findsWidgets);
     });
   });
+
+  // The off-thread scope trace (TF round 5): the panel's engine trace rides the
+  // render worker seam — never a synchronous renderScope on the UI isolate,
+  // which blocked behind the engine's render lock for the length of an uncached
+  // comp render. Request→callback, latest-wins, the K-130 hold.
+  group('ScopesPanel off-thread trace (TF round 5)', () {
+    final snap = _snapshot(
+      _comp([_layer(name: 'clip.mp4', inFrame: 0, outFrame: 48)]),
+      [_footage('clip.mp4')],
+    );
+
+    /// A valid opaque 256×256 RGBA trace the fake worker returns.
+    Uint8List traceImage() {
+      final b = Uint8List(scopeGrid * scopeGrid * 4);
+      for (var i = 3; i < b.length; i += 4) {
+        b[i] = 255;
+      }
+      return b;
+    }
+
+    /// The trace image the panel's scope painter currently holds, or null.
+    /// Reaches the private painter dynamically by its public `trace` field.
+    ui.Image? paintedTrace(WidgetTester tester) {
+      for (final p
+          in tester.widgetList<CustomPaint>(find.byType(CustomPaint))) {
+        final painter = p.painter;
+        if (painter != null &&
+            painter.runtimeType.toString() == '_ScopePainter') {
+          return (painter as dynamic).trace as ui.Image?;
+        }
+      }
+      return null;
+    }
+
+    testWidgets('the trace request rides the renderer seam, not the UI-isolate '
+        'bridge', (tester) async {
+      final bridge = _ScopeBridge(
+        snap,
+        decodeResult: _solid(4, 4, 1, 1, 1),
+        compResult: _solid(8, 8, 20, 120, 200),
+        traceBytes: traceImage(),
+      );
+      final renderer = _QueuedRenderer()
+        ..compResult = _solid(8, 8, 20, 120, 200)
+        ..scopeResult = traceImage();
+      final app =
+          AppStateStub(bridge: bridge, previewRendererFactory: (_) => renderer);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_wrap(ScopesPanel(app: app)));
+        expect(renderer.scopeRequests.first, '0:c1@0',
+            reason: 'the luma trace request went to the renderer seam');
+        expect(bridge.scopeCalls, isEmpty,
+            reason: 'renderScope is never called synchronously any more');
+        renderer.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pump();
+      expect(paintedTrace(tester), isNotNull, reason: 'the trace was built');
+      expect(bridge.scopeCalls, isEmpty);
+    });
+
+    testWidgets(
+        'latest-wins drops a superseded trace, and the held trace survives a '
+        'pending one (K-130)', (tester) async {
+      final bridge = _ScopeBridge(
+        snap,
+        decodeResult: _solid(4, 4, 1, 1, 1),
+        compResult: null, // the comp render declines → single-layer feeds it
+        traceBytes: null,
+      );
+      final renderer = _QueuedRenderer()
+        ..compResult = null
+        ..decodeResult = _solid(4, 4, 9, 9, 9)
+        ..scopeResult = traceImage();
+      final app =
+          AppStateStub(bridge: bridge, previewRendererFactory: (_) => renderer);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_wrap(ScopesPanel(app: app)));
+        expect(renderer.scopeRequests.length, 1);
+
+        // The comp render declines, then the single-layer decode lands → the
+        // shown generation advances while the gen-0 trace is still in flight.
+        renderer.flush('comp');
+        renderer.flush('decode');
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(renderer.scopeRequests.length, 1,
+            reason: 'at most one trace in flight — no second request queued');
+
+        // The stale reply lands: dropped (never shown), and the newest wanted
+        // trace is fetched instead.
+        renderer.flush('scope');
+        expect(renderer.scopeRequests.length, 2,
+            reason: 'the superseded trace was dropped, the newest fetched');
+        expect(paintedTrace(tester), isNull,
+            reason: 'the dropped trace never became the picture');
+
+        renderer.flush('scope');
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pump();
+      expect(paintedTrace(tester), isNotNull,
+          reason: 'the newest trace was built');
+
+      // A new frame lands; while its trace is pending the last one holds.
+      await tester.runAsync(() async {
+        app.advancePlayback(5);
+        renderer.flush('comp');
+        renderer.flush('decode');
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(renderer.scopeRequests.length, 3,
+            reason: 'the new frame requested its trace');
+      });
+      await tester.pump();
+      expect(paintedTrace(tester), isNotNull,
+          reason: 'the last trace holds while the new one is pending (K-130)');
+    });
+  });
+
+  // The eyedropper's async readback fallback (TF round 5): its one-off
+  // full-scale render rides the worker on its OWN guard, so it neither runs on
+  // the UI isolate nor delays the Viewer's own in-flight render.
+  group('PreviewSource.requestSampleFrame (eyedropper fallback)', () {
+    final snap = _snapshot(
+      _comp([_layer(name: 'clip.mp4', inFrame: 0, outFrame: 48)]),
+      [_footage('clip.mp4')],
+    );
+
+    testWidgets('renders full-scale on its own guard, not the Viewer one',
+        (tester) async {
+      final app = AppStateStub(bridge: _FrameBridge(snap, null));
+      final renderer = _QueuedRenderer()..compResult = _solid(8, 8, 1, 2, 3);
+      late PreviewSource source;
+      DecodedFrame? sampled;
+      await tester.runAsync(() async {
+        source = PreviewSource(app, renderer: renderer);
+        expect(renderer.compRequests, ['c1@0'],
+            reason: 'the Viewer render is in flight');
+        source.requestSampleFrame((f) => sampled = f);
+        expect(renderer.compRequests.length, 2,
+            reason: 'the sample renders even while the Viewer request is in '
+                'flight — its own guard, never _pendingKey');
+        renderer.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      expect(sampled, isNotNull);
+      expect(source.image, isNotNull,
+          reason: 'the Viewer picture still landed');
+      source.dispose();
+    });
+  });
 }
 
 /// A [FrameRenderer] that defers every reply until [flush], so a test can drive
@@ -1174,34 +1326,57 @@ class _QueuedRenderer implements FrameRenderer {
 
   final List<String> compRequests = [];
   final List<String> decodeRequests = [];
-  final List<void Function()> _pending = [];
+  final List<String> scopeRequests = [];
+  final List<String> thumbRequests = [];
+  final List<(String, void Function())> _pending = [];
   DecodedFrame? compResult;
   DecodedFrame? decodeResult;
+  Uint8List? scopeResult;
+  DecodedFrame? thumbResult;
 
   @override
   void requestComp(String compId, int frame, double scale, int generation,
       void Function(DecodedFrame?) onFrame) {
     compRequests.add('$compId@$frame');
-    _pending.add(() => onFrame(compResult));
+    _pending.add(('comp', () => onFrame(compResult)));
   }
 
   @override
   void requestShared(String compId, int frame, int generation,
       void Function(SharedFrame?) onFrame) {
-    _pending.add(() => onFrame(null));
+    _pending.add(('shared', () => onFrame(null)));
   }
 
   @override
   void requestDecode(String itemId, int frame, int generation,
       void Function(DecodedFrame?) onFrame) {
     decodeRequests.add('$itemId@$frame');
-    _pending.add(() => onFrame(decodeResult));
+    _pending.add(('decode', () => onFrame(decodeResult)));
   }
 
-  void flush() {
-    final pending = List<void Function()>.from(_pending);
-    _pending.clear();
-    for (final run in pending) {
+  @override
+  void requestScopeTrace(int kind, String compId, int frame, double scale,
+      int bg, int trace, int red, int green, int blue, int generation,
+      void Function(Uint8List?) onTrace) {
+    scopeRequests.add('$kind:$compId@$frame');
+    _pending.add(('scope', () => onTrace(scopeResult)));
+  }
+
+  @override
+  void requestThumbnail(String itemId, int maxEdge, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    thumbRequests.add('$itemId@$maxEdge');
+    _pending.add(('thumb', () => onFrame(thumbResult)));
+  }
+
+  /// Answer the queued requests — all of them, or (with [only]) just the ones
+  /// of that kind, so a test can land replies in a chosen order.
+  void flush([String? only]) {
+    final pending = List<(String, void Function())>.from(
+        only == null ? _pending : _pending.where((p) => p.$1 == only));
+    _pending.removeWhere(
+        (p) => only == null || p.$1 == only);
+    for (final (_, run) in pending) {
       run();
     }
   }

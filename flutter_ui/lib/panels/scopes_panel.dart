@@ -20,11 +20,16 @@
 // from the rendered-frame cache so the comp is not re-rendered) and returns the
 // finished 256×256 trace. That is the "scopes are super laggy" fix: no
 // quarter-million-pixel CPU walk per frame, so every displayed frame traces at
-// negligible cost (the old throttle is gone). When the engine lacks the symbol
-// (an older library) or has no comp active, this falls back per rebuild to the
-// CPU trace over the decoded frame the Viewer is showing — the F2 behaviour,
-// unchanged. Either way the last trace is held across a momentarily-unavailable
-// frame (K-130).
+// negligible cost (the old throttle is gone). The request rides the render
+// worker isolate (TF round 5): even a cache-served trace waits on the engine's
+// render lock, which the worker may hold for the length of an uncached comp
+// render, so calling it on the UI isolate froze the interface exactly that
+// long. It is request→callback now, latest-wins — at most one trace in flight,
+// a superseded reply dropped for the newest wanted one. When the engine lacks
+// the symbol (an older library) or has no comp active, this falls back per
+// rebuild to the CPU trace over the decoded frame the Viewer is showing — the
+// F2 behaviour, unchanged. Either way the last trace is held across a
+// momentarily-unavailable frame (K-130).
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -64,6 +69,10 @@ class _ScopesPanelState extends State<ScopesPanel> {
   ui.Image? _trace;
   int _builtGeneration = -1;
   ScopeKind? _builtKind;
+
+  /// True while an engine trace request or its image decode is in flight — the
+  /// latest-wins guard: at most one in flight, and a generation arriving
+  /// meanwhile is picked up by the recheck when this one settles.
   bool _building = false;
 
   PreviewSource get _source => widget.app.previewSource;
@@ -86,15 +95,80 @@ class _ScopesPanelState extends State<ScopesPanel> {
 
   /// Rebuild the trace when the shown frame or the chosen scope changed. Runs
   /// off the build path; the async image decode notifies via setState. Prefers
-  /// the engine GPU trace (K-096 v1) and falls back to the CPU trace over the
+  /// the engine GPU trace (K-096 v1) — requested through the render worker, so
+  /// the UI isolate never waits on the engine's render lock (TF round 5: an
+  /// uncached comp render used to freeze the interface for its whole length
+  /// whenever this panel was open) — and falls back to the CPU trace over the
   /// shown frame; a null from both holds the last trace (K-130).
   void _maybeRebuild() {
     final gen = _source.generation;
     if (gen == _builtGeneration && _kind == _builtKind) return;
-    if (_building) return;
+    if (_building) return; // latest-wins: rechecked when the in-flight settles
 
-    final rgba = _engineTrace() ?? _cpuTrace();
+    if (_requestEngineTrace(gen)) return; // async — the reply carries on
+    final rgba = _cpuTrace();
     if (rgba == null) return; // nothing to trace yet — keep the held trace
+    _decodeTrace(rgba, gen, _kind);
+  }
+
+  /// Ask the engine (via the shared [PreviewSource]'s off-thread renderer seam)
+  /// for the GPU trace of the frame the Viewer shows. Returns false when the
+  /// loaded library lacks the scope pass or no comp is active — the caller then
+  /// takes the CPU path inline. Traces comp+frame+scale — the SAME key the
+  /// Viewer's preview renders — so the scope always matches the picture and the
+  /// comp is served from the rendered-frame cache without a re-render.
+  /// Latest-wins: at most one request in flight ([_building]); a reply that is
+  /// already superseded is dropped and the newest wanted trace is fetched
+  /// instead; the last trace holds on screen the whole time (K-130).
+  bool _requestEngineTrace(int gen) {
+    final app = widget.app;
+    final b = app.bridge;
+    if (b is! ScopeTraceBridge || !(b as ScopeTraceBridge).supportsScopeTrace) {
+      return false;
+    }
+    final compId = app.frontCompIdResolved;
+    if (compId == null) return false;
+    final sc = ScopeColours.standard;
+    int pack(Color c) => (_r8(c) << 16) | (_g8(c) << 8) | _b8(c);
+    final kind = _kind;
+    _building = true;
+    _source.requestScopeTrace(
+      kind.index, // enum order matches the engine's kind tags (0..3)
+      compId,
+      app.previewFrame,
+      app.effectivePreviewScale,
+      pack(sc.bg),
+      pack(sc.trace),
+      pack(sc.red),
+      pack(sc.green),
+      pack(sc.blue),
+      (bytes) {
+        if (!mounted) return;
+        _building = false;
+        if (gen != _source.generation || kind != _kind) {
+          // Superseded while in flight: drop this trace, fetch the newest.
+          _maybeRebuild();
+          return;
+        }
+        if (bytes == null || bytes.length != scopeGrid * scopeGrid * 4) {
+          // The engine declined (no adapter, a transient error): the CPU trace
+          // over the shown frame; a null there too holds the last trace.
+          final rgba = _cpuTrace();
+          if (rgba == null) return;
+          _decodeTrace(rgba, gen, kind);
+          return;
+        }
+        _decodeTrace(bytes, gen, kind);
+      },
+    );
+    return true;
+  }
+
+  /// Turn trace pixels into the held image, recording what was built, then
+  /// recheck: a newer generation (or a scope change) may have arrived while
+  /// this decoded — `_maybeRebuild` returns early while `_building`, so
+  /// without the recheck that frame would only show on the NEXT notification.
+  void _decodeTrace(Uint8List rgba, int gen, ScopeKind kind) {
     _building = true;
     ui.decodeImageFromPixels(
       rgba,
@@ -111,47 +185,13 @@ class _ScopesPanelState extends State<ScopesPanel> {
         setState(() {
           _trace = img;
           _builtGeneration = gen;
-          _builtKind = _kind;
+          _builtKind = kind;
         });
-        // A newer generation (or a scope change) may have arrived while this
-        // trace was decoding — `_maybeRebuild` returns early while `_building`,
-        // so without this recheck that frame would only show on the NEXT
-        // notification. Rebuild now if what we just built is already stale.
         if (_source.generation != _builtGeneration || _kind != _builtKind) {
           _maybeRebuild();
         }
       },
     );
-  }
-
-  /// The engine GPU trace for the frame the Viewer shows, or null when the
-  /// loaded library lacks the scope pass, no comp is active, or the render
-  /// declined. Traces comp+frame+scale — the SAME key the Viewer's preview
-  /// renders — so the scope always matches the picture and the comp is served
-  /// from the rendered-frame cache without a re-render.
-  Uint8List? _engineTrace() {
-    final app = widget.app;
-    final b = app.bridge;
-    if (b is! ScopeTraceBridge || !(b as ScopeTraceBridge).supportsScopeTrace) {
-      return null;
-    }
-    final compId = app.frontCompIdResolved;
-    if (compId == null) return null;
-    final sc = ScopeColours.standard;
-    int pack(Color c) => (_r8(c) << 16) | (_g8(c) << 8) | _b8(c);
-    final bytes = (b as ScopeTraceBridge).renderScope(
-      _kind.index, // enum order matches the engine's kind tags (0..3)
-      compId,
-      app.previewFrame,
-      app.effectivePreviewScale,
-      pack(sc.bg),
-      pack(sc.trace),
-      pack(sc.red),
-      pack(sc.green),
-      pack(sc.blue),
-    );
-    if (bytes == null || bytes.length != scopeGrid * scopeGrid * 4) return null;
-    return bytes;
   }
 
   /// The CPU fallback trace over the decoded frame the Viewer is showing (the F2
