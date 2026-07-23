@@ -646,6 +646,52 @@ class _TransformRowState extends State<_TransformRow> {
     _app.setTransform(widget.compId, _layerId, a.prop, value);
   }
 
+  /// The linked-Scale ratio [_commit] preserves, applied to a live preview
+  /// tick instead of a commit. Two [AppStateStub.previewTransform] calls per
+  /// tick when linked (matching [_commit]'s two [AppStateStub.setTransform]
+  /// calls), one otherwise.
+  void _previewLive(_AxisSpec a, double value) {
+    if (widget.linkable && _linked && widget.axes.length == 2) {
+      final other = widget.axes.firstWhere((x) => x.prop != a.prop);
+      final base = _valueOf(a);
+      final otherBase = _valueOf(other);
+      final otherValue =
+          base.abs() < 1e-9 ? value : otherBase * (value / base);
+      _app.previewTransform(widget.compId, _layerId, a.prop, value);
+      _app.previewTransform(widget.compId, _layerId, other.prop, otherValue);
+      return;
+    }
+    _app.previewTransform(widget.compId, _layerId, a.prop, value);
+  }
+
+  /// Drag-release: commit the same linked-ratio pair for real, exactly as
+  /// [_commit] does — two undo steps when linked, matching today's behaviour.
+  void _previewEnd(_AxisSpec a, double value) {
+    if (widget.linkable && _linked && widget.axes.length == 2) {
+      final other = widget.axes.firstWhere((x) => x.prop != a.prop);
+      final base = _valueOf(a);
+      final otherBase = _valueOf(other);
+      final otherValue =
+          base.abs() < 1e-9 ? value : otherBase * (value / base);
+      _app.commitTransform(widget.compId, _layerId, a.prop, value);
+      _app.commitTransform(widget.compId, _layerId, other.prop, otherValue);
+      return;
+    }
+    _app.commitTransform(widget.compId, _layerId, a.prop, value);
+  }
+
+  /// Drag-cancel (Escape / gesture-cancel): drop the preview for both linked
+  /// axes (or just [a] when not linked), never committing.
+  void _previewCancel(_AxisSpec a) {
+    if (widget.linkable && _linked && widget.axes.length == 2) {
+      final other = widget.axes.firstWhere((x) => x.prop != a.prop);
+      _app.cancelTransformPreview(_layerId, a.prop);
+      _app.cancelTransformPreview(_layerId, other.prop);
+      return;
+    }
+    _app.cancelTransformPreview(_layerId, a.prop);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -665,18 +711,37 @@ class _TransformRowState extends State<_TransformRow> {
       }
       cells.add(SizedBox(
         width: _cellWidth,
-        child: DragValueField(
-          key: ValueKey<String>('axis-${a.prop}'),
-          value: _valueOf(a),
-          min: a.min,
-          max: a.max,
-          speed: a.speed,
-          decimals: a.decimals,
-          suffix: a.suffix,
-          // The property's model default (0 for anchor/position/rotation, 100
-          // for scale/opacity) — the right-click Reset target.
-          resetTo: a.seed,
-          onChanged: (v) => _commit(a, v.toDouble()),
+        // A live drag bumps transformPreviewRevision, not the big app
+        // notifier (the perf pass) — this field alone rebuilds per tick, the
+        // same scoping the playhead notifier gets above.
+        child: ValueListenableBuilder<int>(
+          valueListenable: _app.transformPreviewRevision,
+          builder: (context, _, child) => DragValueField(
+            key: ValueKey<String>('axis-${a.prop}'),
+            value: _valueOf(a),
+            min: a.min,
+            max: a.max,
+            speed: a.speed,
+            decimals: a.decimals,
+            suffix: a.suffix,
+            // The property's model default (0 for anchor/position/rotation,
+            // 100 for scale/opacity) — the right-click Reset target.
+            resetTo: a.seed,
+            onChanged: (v) => _commit(a, v.toDouble()),
+            // The live-preview fast path (F4 perf fix): a drag tick stages an
+            // in-memory preview instead of a full commit; only drag-release
+            // commits for real. Falls back to plain onChanged (every tick a
+            // full commit, today's behaviour) on a library predating it.
+            onChangeLive: _app.supportsPreviewTransform
+                ? (v) => _previewLive(a, v.toDouble())
+                : null,
+            onChangeEnd: _app.supportsPreviewTransform
+                ? (v) => _previewEnd(a, v.toDouble())
+                : null,
+            onDragCancel: _app.supportsPreviewTransform
+                ? () => _previewCancel(a)
+                : null,
+          ),
         ),
       ));
     }

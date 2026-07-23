@@ -110,6 +110,32 @@ pub(crate) fn render_comp_frame_gen(
     })
 }
 
+/// Render `comp_id` at `frame` under the ACTIVE transform preview (if any) —
+/// the drag-preview sibling of [`render_comp_frame`]. Deliberately bypasses
+/// [`crate::framecache`] entirely: the cache pins to the real document's
+/// `Arc` identity, and a throwaway preview `Document` must never be pinned
+/// there — doing so would clear the WHOLE cache every drag tick, exactly the
+/// defect this fast path removes. Every call renders fresh; the caller
+/// (Dart's `_pendingKey` latest-wins guard) is responsible for not calling
+/// this more than once per outstanding frame. `None` on any failure (an
+/// unknown/invalid comp id, no GPU adapter, or a render error) — the same
+/// calm-null contract as `render_comp_frame`.
+pub(crate) fn render_preview_frame(
+    comp_id: &str,
+    frame: u64,
+    scale: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    let comp = Uuid::parse_str(comp_id).ok()?;
+    let doc = with_bridge(|b| crate::state::snapshot_with_preview(b));
+    with_ready(|renderer| {
+        renderer
+            .render_rgba(&doc, comp, frame, scale)
+            .ok()
+            .map(|(rgba, w, h)| (w, h, rgba))
+    })
+    .flatten()
+}
+
 /// Run `f` against the session-lifetime headless renderer, building it lazily on
 /// first use. `None` when the machine has no GPU adapter (the renderer resolves
 /// to `Failed` and stays there — a calm, permanent "no frame"). The renderer's
@@ -259,5 +285,15 @@ mod tests {
     fn an_unknown_comp_is_none() {
         let unknown = Uuid::now_v7().to_string();
         assert!(render_comp_frame(&unknown, 0, 1.0).is_none());
+    }
+
+    /// The preview render's null contract mirrors `render_comp_frame` exactly:
+    /// a bad or unknown comp id is `None` before/without any GPU work needed,
+    /// never a panic.
+    #[test]
+    fn preview_render_of_a_bad_or_unknown_comp_is_none() {
+        assert!(render_preview_frame("not-a-uuid", 0, 1.0).is_none());
+        let unknown = Uuid::now_v7().to_string();
+        assert!(render_preview_frame(&unknown, 0, 1.0).is_none());
     }
 }

@@ -138,10 +138,30 @@ use serde_json::json;
 /// with no output device answers calmly (`loaded` false) and playback simply
 /// has no sound. Present but answering "no audio" unless the library was built
 /// with the `media` + `render` features (the default set).
-pub(crate) const ABI_VERSION: u32 = 10;
+/// v11 (this build) adds the transform-preview fast path (the drag-a-numeric-
+/// field lag report: every drag tick was running the full commit — undo push,
+/// journal fsync, whole-document JSON serialise — once per pixel of mouse
+/// movement). `preview_transform` stages an in-memory-only edit (no undo entry,
+/// no journal write, no snapshot); `render_comp_frame_preview` renders a frame
+/// under it, deliberately bypassing the rendered-frame cache so a throwaway
+/// preview document can never evict real cached frames; `cancel_transform_preview`
+/// drops the overlay without committing (Escape / drag-cancel); the existing
+/// `set_transform` commits it for real, once, on drag-release, exactly as
+/// before this fix. `preview_transform_supported` is the stateless capability
+/// flag. Purely additive — an older Dart client that never calls the new
+/// symbols behaves exactly as before — but the ABI rises so a client that
+/// needs the fast path can insist on it.
+pub(crate) const ABI_VERSION: u32 = 11;
 
 /// `{"ok":false,"error":"…"}`. serde escapes any control character, so the
 /// resulting string never carries an interior NUL and always makes a `CString`.
 pub(crate) fn err_json(message: impl AsRef<str>) -> String {
     json!({ "ok": false, "error": message.as_ref() }).to_string()
+}
+
+/// `{"ok":true}` — the tiny stateless ack for calls that succeed without a
+/// document change to report. `preview_transform`/`cancel_transform_preview`
+/// callers must not treat this as a snapshot.
+pub(crate) fn ok_json() -> String {
+    json!({ "ok": true }).to_string()
 }

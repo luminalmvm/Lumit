@@ -412,6 +412,31 @@ class AppStateStub extends ChangeNotifier {
   double? transformEditAt(String layerId, String property) =>
       transformEdits['$layerId/$property'];
 
+  /// Bumped on every accepted transform-preview tick (a drag update, or a
+  /// cancel-revert). Mirrors [playheadFrame]: a plain ValueNotifier a narrow
+  /// set of widgets listen to directly (the dragged field's own cell,
+  /// PreviewSource), so a fast drag never rebuilds the whole app, never bumps
+  /// [documentEpoch], and never touches the frame cache. Named "revision" (not
+  /// "nonce" — a nonce is a one-time unpredictable token; this is a plain
+  /// monotonic counter, same family as [documentEpoch]/[cacheBarRevision]).
+  final ValueNotifier<int> transformPreviewRevision = ValueNotifier<int>(0);
+
+  /// `"$layerId/$property"` keys with a live, uncommitted preview staged this
+  /// drag. [transformValueFor] prefers [transformEdits] over the (frozen)
+  /// snapshot read-back for exactly these keys, so the field's displayed
+  /// number does not appear to freeze mid-drag. Cleared on commit or cancel.
+  final Set<String> _activePreviewKeys = {};
+
+  /// Whether the loaded bridge offers the transform-preview fast path (ABI
+  /// 11). False for an older `.dll`, in which case [previewTransform]/
+  /// [cancelTransformPreview] no-op and callers should keep using the plain,
+  /// per-tick [setTransform] path instead.
+  bool get supportsPreviewTransform {
+    final b = bridge;
+    return b is PreviewTransformBridge &&
+        (b as PreviewTransformBridge).supportsPreviewTransform;
+  }
+
   final List<String> openComps = [];
   int beatSensitivity = 50;
   bool canUndo = false;
@@ -821,6 +846,48 @@ class AppStateStub extends ChangeNotifier {
       return;
     }
     _applyOp(b.setTransform(compId, layerId, property, value));
+  }
+
+  /// Stage an in-memory preview of one transform property WITHOUT committing —
+  /// no undo entry, no journal write, no snapshot round-trip, no
+  /// [documentEpoch] bump. Updates the session-edit map so the field's number
+  /// tracks the live value, then bumps [transformPreviewRevision] so
+  /// [PreviewSource] re-renders just the current frame. A no-op when the
+  /// loaded bridge lacks the capability — the caller should be gating its
+  /// drag wiring on [supportsPreviewTransform] and falling back to
+  /// [setTransform] instead.
+  void previewTransform(
+      String compId, String layerId, String property, double value) {
+    final b = bridge;
+    if (b is! PreviewTransformBridge) return;
+    _activePreviewKeys.add('$layerId/$property');
+    transformEdits['$layerId/$property'] = value;
+    (b as PreviewTransformBridge).previewTransform(compId, layerId, property, value);
+    transformPreviewRevision.value++;
+  }
+
+  /// End a drag: commit [value] as ONE real op — identical to a non-drag
+  /// [setTransform] call, so undo/redo/autosave behave exactly as before this
+  /// fix. The engine drops its preview overlay unconditionally on any real
+  /// commit, so no explicit "clear preview" call is needed here.
+  void commitTransform(
+      String compId, String layerId, String property, double value) {
+    _activePreviewKeys.remove('$layerId/$property');
+    setTransform(compId, layerId, property, value);
+  }
+
+  /// Cancel a drag without committing (Escape / gesture-cancel): drop the
+  /// preview overlay and the session edit, so the field and the Viewer both
+  /// fall back to the untouched, pre-drag snapshot read-back.
+  void cancelTransformPreview(String layerId, String property) {
+    final key = '$layerId/$property';
+    _activePreviewKeys.remove(key);
+    transformEdits.remove(key);
+    final b = bridge;
+    if (b is PreviewTransformBridge) {
+      (b as PreviewTransformBridge).cancelTransformPreview();
+    }
+    transformPreviewRevision.value++;
   }
 
   /// Drop a user marker on the composition timeline at [frame].
@@ -2099,14 +2166,25 @@ class AppStateStub extends ChangeNotifier {
   /// read-back when it is present, falling back to the session edit map (and
   /// null before any edit). The effect-controls panel adopts this so it shows
   /// true engine values once read-back lands, not only this session's edits.
+  ///
+  /// While a live preview is staged for this exact property (see
+  /// [_activePreviewKeys]), [transformEdits] is preferred INSTEAD of the
+  /// snapshot read-back: a preview never adopts a snapshot, so the read-back
+  /// stays frozen at the pre-drag value for the whole drag — without this, the
+  /// field would appear to freeze the instant a drag starts.
   double? transformValueFor(String layerId, String property) {
+    final key = '$layerId/$property';
+    if (_activePreviewKeys.contains(key)) {
+      final edit = transformEdits[key];
+      if (edit != null) return edit;
+    }
     final snap = snapshot;
     if (snap != null) {
       final layer = _findLayer(snap, layerId);
       final prop = layer?.transform?[property];
       if (prop != null) return prop.value;
     }
-    return transformEdits['$layerId/$property'];
+    return transformEdits[key];
   }
 
   /// A footage [layer]'s source media duration in seconds, from the probed
@@ -2389,6 +2467,7 @@ class AppStateStub extends ChangeNotifier {
     _previewSource?.dispose();
     playheadFrame.dispose();
     cacheBarRevision.dispose();
+    transformPreviewRevision.dispose();
     super.dispose();
   }
 }

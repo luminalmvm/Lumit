@@ -101,6 +101,10 @@ class _NullRenderer implements FrameRenderer {
           void Function(DecodedFrame?) onFrame) =>
       onFrame(DecodedFrame(width: 2, height: 2, rgba: Uint8List(16)));
   @override
+  void requestPreview(String compId, int frame, double scale, int generation,
+          void Function(DecodedFrame?) onFrame) =>
+      onFrame(null);
+  @override
   void requestShared(String compId, int frame, int generation,
           void Function(SharedFrame?) onFrame) =>
       onFrame(null);

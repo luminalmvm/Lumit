@@ -221,6 +221,53 @@ pub unsafe extern "C" fn lumit_bridge_set_transform(
     guard(move || with_bridge(|b| state::set_transform(b, &comp, &layer, &property, value)))
 }
 
+/// Stage (or update) an in-memory transform preview for a drag in progress —
+/// no undo entry, no journal write, no snapshot re-serialisation. Same
+/// argument shape as [`lumit_bridge_set_transform`]; call
+/// [`lumit_bridge_render_comp_frame_preview`] to render a frame under the
+/// staged preview, and [`lumit_bridge_set_transform`] once, on drag-release,
+/// to commit it for real.
+///
+/// # Safety
+/// The three string pointers must each be null or a valid NUL-terminated UTF-8
+/// C string alive for the call.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_preview_transform(
+    comp_id: *const c_char,
+    layer_id: *const c_char,
+    property: *const c_char,
+    value: f64,
+) -> *mut c_char {
+    let (Some(comp), Some(layer), Some(property)) = (
+        c_str_to_string(comp_id),
+        c_str_to_string(layer_id),
+        c_str_to_string(property),
+    ) else {
+        return to_c_string(err_json(
+            "preview transform: an argument was null or not valid UTF-8",
+        ));
+    };
+    guard(move || with_bridge(|b| state::preview_transform(b, &comp, &layer, &property, value)))
+}
+
+/// Drop the active transform preview without committing (Escape / drag-cancel).
+/// The next render falls back to the untouched, pre-drag document.
+#[no_mangle]
+pub extern "C" fn lumit_bridge_cancel_transform_preview() -> *mut c_char {
+    guard(move || with_bridge(state::cancel_transform_preview))
+}
+
+/// Whether this build offers the transform-preview fast path (ABI 11).
+/// Unconditionally `true` whenever the symbol exists at all — mirrors
+/// [`lumit_bridge_shared_supported`]'s stateless-flag shape. Dart's real gate
+/// is the symbol lookup itself (an older `.dll` throws at `lookupFunction`,
+/// not at the call); this flag exists only for parity with the rest of the
+/// capability system.
+#[no_mangle]
+pub extern "C" fn lumit_bridge_preview_transform_supported() -> bool {
+    true
+}
+
 /// Drop a user marker on the composition timeline at `frame`.
 ///
 /// # Safety
@@ -857,6 +904,86 @@ fn render_to_buffer(comp_id: &str, frame: u64, scale: f32) -> Option<(u32, u32, 
 
 #[cfg(not(feature = "render"))]
 fn render_to_buffer(_comp_id: &str, _frame: u64, _scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    None
+}
+
+/// Render composition `comp_id` at `frame` under the active transform preview
+/// (if any) — the drag-preview sibling of [`lumit_bridge_render_comp_frame`].
+/// Identical ownership contract (a Rust-owned buffer, freed via
+/// [`lumit_bridge_free_buffer`] passing the exact length), EXCEPT this call is
+/// never served from or banked into the bridge's rendered-frame cache — every
+/// call renders, so a caller must not call this more than once per frame it
+/// actually wants. Without the `render` feature this always returns null.
+///
+/// # Safety
+/// `comp_id` must be null or a valid NUL-terminated UTF-8 C string. `out_w`,
+/// `out_h` and `out_len` must each be null or a valid, writable pointer to a
+/// `u32`/`u32`/`usize` respectively.
+#[no_mangle]
+pub unsafe extern "C" fn lumit_bridge_render_comp_frame_preview(
+    comp_id: *const c_char,
+    frame: u64,
+    scale: f32,
+    out_w: *mut u32,
+    out_h: *mut u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let write_zero = || {
+        if !out_w.is_null() {
+            *out_w = 0;
+        }
+        if !out_h.is_null() {
+            *out_h = 0;
+        }
+        if !out_len.is_null() {
+            *out_len = 0;
+        }
+    };
+
+    let Some(id) = c_str_to_string(comp_id) else {
+        write_zero();
+        return ptr::null_mut();
+    };
+
+    let rendered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        render_preview_to_buffer(&id, frame, scale)
+    }))
+    .ok()
+    .flatten();
+
+    match rendered {
+        Some((w, h, bytes)) => {
+            let len = bytes.len();
+            let raw = Box::into_raw(bytes.into_boxed_slice()) as *mut u8;
+            if !out_w.is_null() {
+                *out_w = w;
+            }
+            if !out_h.is_null() {
+                *out_h = h;
+            }
+            if !out_len.is_null() {
+                *out_len = len;
+            }
+            raw
+        }
+        None => {
+            write_zero();
+            ptr::null_mut()
+        }
+    }
+}
+
+#[cfg(feature = "render")]
+fn render_preview_to_buffer(comp_id: &str, frame: u64, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    crate::render::render_preview_frame(comp_id, frame, scale)
+}
+
+#[cfg(not(feature = "render"))]
+fn render_preview_to_buffer(
+    _comp_id: &str,
+    _frame: u64,
+    _scale: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
     None
 }
 
@@ -2798,7 +2925,7 @@ mod tests {
         assert!(!ptr.is_null());
         let copied = unsafe { CStr::from_ptr(ptr) }.to_str().unwrap().to_owned();
         assert_eq!(parse(&copied)["ok"], json!(true));
-        assert_eq!(parse(&copied)["abi"], json!(10));
+        assert_eq!(parse(&copied)["abi"], json!(11));
         unsafe { lumit_bridge_free_string(ptr) };
 
         let snap_ptr = lumit_bridge_snapshot();

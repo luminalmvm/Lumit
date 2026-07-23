@@ -378,6 +378,26 @@ class DragValueField extends StatefulWidget {
   final num? resetTo;
   final ValueChanged<num> onChanged;
 
+  /// Fired once when a drag begins. Optional — a caller with nothing to do at
+  /// drag-start (the common case) simply omits it.
+  final VoidCallback? onChangeStart;
+
+  /// Fired with the live value on every accumulated drag tick, in place of
+  /// [onChanged], when supplied (a live-preview fast path — see
+  /// [onChangeEnd]). Falls back to [onChanged] when null, so every existing
+  /// call site behaves exactly as before.
+  final ValueChanged<num>? onChangeLive;
+
+  /// Fired once, with the final value, when a drag ends (mouse-up). Falls
+  /// back to [onChanged] when null. Reset/Copy/Paste and the text-edit commit
+  /// always call [onChanged] directly and never this — they are already
+  /// one-shot edits, not a drag.
+  final ValueChanged<num>? onChangeEnd;
+
+  /// Fired when a drag is cancelled (a gesture cancel, or a released drag
+  /// that never crossed one [speed] increment — so nothing was ever ticked).
+  final VoidCallback? onDragCancel;
+
   const DragValueField({
     super.key,
     required this.value,
@@ -388,6 +408,10 @@ class DragValueField extends StatefulWidget {
     this.decimals = 0,
     this.suffix,
     this.resetTo,
+    this.onChangeStart,
+    this.onChangeLive,
+    this.onChangeEnd,
+    this.onDragCancel,
   });
 
   @override
@@ -398,6 +422,13 @@ class _DragValueFieldState extends State<DragValueField> {
   bool _editing = false;
   bool _hover = false;
   double _dragAccum = 0;
+
+  /// The last value ticked this drag (via [onChangeLive]/[onChanged]), or
+  /// null before the first tick / after a commit or cancel. Distinguishes "a
+  /// released drag that ticked at least once" (commit the last value) from "a
+  /// released drag that never crossed one [DragValueField.speed] increment"
+  /// (nothing to commit — a no-op cancel).
+  num? _lastDragValue;
   late TextEditingController _controller;
   final FocusNode _focus = FocusNode();
 
@@ -528,15 +559,35 @@ class _DragValueFieldState extends State<DragValueField> {
           _focus.requestFocus();
         },
         onSecondaryTapDown: (d) => _contextMenu(context, d.globalPosition),
-        onHorizontalDragStart: (_) => _dragAccum = 0,
+        onHorizontalDragStart: (_) {
+          _dragAccum = 0;
+          _lastDragValue = null;
+          widget.onChangeStart?.call();
+        },
         onHorizontalDragUpdate: (d) {
           _dragAccum += d.delta.dx * widget.speed;
           if (_dragAccum.abs() >= widget.speed) {
             final next =
                 (widget.value + _dragAccum).clamp(widget.min, widget.max);
             _dragAccum = 0;
-            widget.onChanged(next);
+            _lastDragValue = next;
+            (widget.onChangeLive ?? widget.onChanged)(next);
           }
+        },
+        onHorizontalDragEnd: (_) {
+          final v = _lastDragValue;
+          _lastDragValue = null;
+          if (v != null) {
+            (widget.onChangeEnd ?? widget.onChanged)(v);
+          } else {
+            // Never crossed one speed-increment: nothing was ticked, so a
+            // release here is a no-op cancel, not a commit.
+            widget.onDragCancel?.call();
+          }
+        },
+        onHorizontalDragCancel: () {
+          _lastDragValue = null;
+          widget.onDragCancel?.call();
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

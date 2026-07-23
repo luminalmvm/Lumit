@@ -24,6 +24,8 @@ use lumit_core::time::{Duration, FrameRate, Rational};
 use lumit_project::JournalFile;
 use serde_json::json;
 use std::path::PathBuf;
+#[cfg(feature = "render")]
+use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
 
@@ -46,6 +48,26 @@ pub(crate) struct Bridge {
     /// successful save (the journal covers work *between* saves) and when a new
     /// document replaces the old one.
     pub journal: Option<JournalFile>,
+    /// The active drag-preview overlay, or `None` outside any drag. Overwritten
+    /// in place each tick within one drag ("latest wins", docs/14 §5) — a plain
+    /// `Option` behind the existing `BRIDGE` mutex, not a second lock and not a
+    /// channel, so staging a tick costs exactly one mutex acquisition, the same
+    /// as every other bridge call. Lives here, entirely outside `DocumentStore`/
+    /// `Document` — export takes its own fresh `with_bridge(|b| b.store.snapshot())`
+    /// and never sees this, so a preview can never leak into an exported file
+    /// (docs/14 §3: "preview resolution affects preview only").
+    pub preview: Option<TransformPreview>,
+}
+
+/// One in-flight, uncommitted transform preview: which comp/layer it targets,
+/// and the property→value edits staged this drag. A `Vec` (not two named
+/// fields) covers the linked-Scale-axes case (2 entries) and any future
+/// multi-property preview without a shape change.
+#[derive(Clone)]
+pub(crate) struct TransformPreview {
+    pub comp: Uuid,
+    pub layer: Uuid,
+    pub edits: Vec<(TransformProp, Animation)>,
 }
 
 impl Bridge {
@@ -55,6 +77,7 @@ impl Bridge {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         }
     }
 }
@@ -99,6 +122,9 @@ pub(crate) fn snapshot(bridge: &Bridge) -> String {
 }
 
 pub(crate) fn new_project(bridge: &mut Bridge) -> String {
+    // Replacing the store wholesale bypasses `commit()`; drop any stale
+    // preview so it can never reference ids from the discarded document.
+    bridge.preview = None;
     // Clear the outgoing document's journal before switching documents (the old
     // work is being discarded), exactly as `AppState::new_project` does.
     if let Some(journal) = &bridge.journal {
@@ -115,6 +141,7 @@ pub(crate) fn open_project(bridge: &mut Bridge, path: &str) -> String {
     let path = PathBuf::from(path);
     match lumit_project::open(&path) {
         Ok((doc, _manifest)) => {
+            bridge.preview = None;
             bridge.store = DocumentStore::new(doc);
             bridge.path = Some(path);
             bridge.media.clear();
@@ -311,6 +338,10 @@ pub(crate) fn import_footage(bridge: &mut Bridge, path: &str) -> String {
 }
 
 pub(crate) fn undo(bridge: &mut Bridge) -> String {
+    // Bypasses `commit()`, so drop a stale preview here too — otherwise a
+    // lost-mouseup followed by Ctrl+Z could leave an overlay referencing ids
+    // from a document state undo just moved past.
+    bridge.preview = None;
     match bridge.store.undo() {
         Ok(_) => snapshot(bridge),
         Err(e) => err_json(format!("undo: {e}")),
@@ -318,6 +349,7 @@ pub(crate) fn undo(bridge: &mut Bridge) -> String {
 }
 
 pub(crate) fn redo(bridge: &mut Bridge) -> String {
+    bridge.preview = None;
     match bridge.store.redo() {
         Ok(_) => snapshot(bridge),
         Err(e) => err_json(format!("redo: {e}")),
@@ -477,6 +509,92 @@ pub(crate) fn set_transform(
     )
 }
 
+/// Stage (or update) an in-memory transform preview for `layer_id`'s
+/// `property` — no document mutation, no undo entry, no journal write, no
+/// snapshot re-serialisation (the whole point: a drag can call this every
+/// tick for a cost of one mutex acquisition and a small in-memory write). A
+/// call for the SAME (comp, layer) already staged this drag updates just that
+/// property's entry (so the linked-Scale-axes case — two `preview_transform`
+/// calls per tick, one per axis — accumulates both without clobbering each
+/// other); a call for a DIFFERENT (comp, layer) replaces the whole overlay (a
+/// new drag started). Returns the tiny stateless `{"ok":true}` ack
+/// ([`crate::ok_json`]) — callers must NOT treat this as a document snapshot.
+pub(crate) fn preview_transform(
+    bridge: &mut Bridge,
+    comp_id: &str,
+    layer_id: &str,
+    property: &str,
+    value: f64,
+) -> String {
+    let (comp, layer) = match parse_comp_layer(comp_id, layer_id) {
+        Ok(pair) => pair,
+        Err(e) => return err_json(format!("preview transform: {e}")),
+    };
+    let Some(prop) = parse_transform_prop(property) else {
+        return err_json(format!("preview transform: unknown property '{property}'"));
+    };
+    let animation = Animation::Static(value);
+    match &mut bridge.preview {
+        Some(p) if p.comp == comp && p.layer == layer => {
+            if let Some(slot) = p.edits.iter_mut().find(|(pr, _)| *pr == prop) {
+                slot.1 = animation;
+            } else {
+                p.edits.push((prop, animation));
+            }
+        }
+        _ => {
+            bridge.preview = Some(TransformPreview {
+                comp,
+                layer,
+                edits: vec![(prop, animation)],
+            });
+        }
+    }
+    crate::ok_json()
+}
+
+/// Drop the active preview without committing (Escape / drag-cancel). The
+/// next render call falls back to the untouched, pre-drag document. Returns
+/// the tiny stateless ack.
+pub(crate) fn cancel_transform_preview(bridge: &mut Bridge) -> String {
+    bridge.preview = None;
+    crate::ok_json()
+}
+
+/// The document to render THIS frame: the store's real committed snapshot
+/// with the active preview's edits applied on top, entirely in memory — never
+/// published to `DocumentStore`'s `ArcSwap`, never journalled, never given an
+/// undo entry. `None` preview is the existing cheap path (an `Arc` clone, no
+/// new `Document` allocation) — unchanged from what `render_comp_frame_gen`
+/// already does. When a preview IS active this does one `Document::clone`
+/// (the same cost `DocumentStore::commit` already pays per edit) and reuses
+/// `lumit_core::ops::apply` — the exact code [`commit`] calls — so a preview
+/// renders pixel-identical to what the eventual real commit produces; the
+/// returned inverse is discarded (nothing to undo). A preview whose comp/layer
+/// vanished mid-drag (e.g. deleted by an out-of-band edit) is tolerated: the
+/// `Err` is swallowed and the doc renders as if no preview were staged, never
+/// a panic. Only [`crate::render`] (the `render` feature) has a use for this —
+/// without it, nothing renders a preview frame at all.
+#[cfg(feature = "render")]
+pub(crate) fn snapshot_with_preview(bridge: &Bridge) -> Arc<Document> {
+    let Some(preview) = &bridge.preview else {
+        return bridge.store.snapshot();
+    };
+    let mut doc = Document::clone(&bridge.store.snapshot());
+    for (prop, animation) in &preview.edits {
+        let _ = lumit_core::ops::apply(
+            &mut doc,
+            &Op::SetTransformProperty {
+                comp: preview.comp,
+                layer: preview.layer,
+                prop: *prop,
+                animation: animation.clone(),
+            },
+        );
+    }
+    Arc::new(doc)
+}
+
 /// Drop a plain user marker on the composition timeline at `frame`. Committed as
 /// [`Op::SetCompMarkers`] (the whole list, trivially invertible), so undo removes
 /// exactly the one added.
@@ -524,6 +642,10 @@ fn footage_pathbuf(f: &FootageItem) -> PathBuf {
 /// reply prefixed with `ctx` on failure. Shared with the v0.3 edit ops in
 /// [`crate::edits`], so every mutation refreshes the snapshot the same way.
 pub(crate) fn commit(bridge: &mut Bridge, op: Op, ctx: &str) -> String {
+    // Any real commit obsoletes whatever was being drag-previewed (the drag
+    // that staged it either just released — into this very commit — or was
+    // superseded by an unrelated edit).
+    bridge.preview = None;
     match bridge.store.commit(op.clone()) {
         Ok(_) => {
             journal_append(bridge, &op);
@@ -677,7 +799,7 @@ mod tests {
         let v = parse(&version());
         assert_eq!(v["ok"], json!(true));
         assert_eq!(v["abi"], json!(crate::ABI_VERSION));
-        assert_eq!(v["abi"], json!(10));
+        assert_eq!(v["abi"], json!(11));
     }
 
     #[test]
@@ -844,6 +966,151 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("unknown property"));
+    }
+
+    #[test]
+    fn preview_transform_never_touches_undo_or_journal() {
+        let (mut b, comp, layer) = comp_with_layer();
+        let before = b.store.journal_ops().len();
+        for v in [10.0, 20.0, 30.0] {
+            let reply = parse(&preview_transform(
+                &mut b,
+                &comp.to_string(),
+                &layer.to_string(),
+                "position_x",
+                v,
+            ));
+            assert_eq!(reply, json!({ "ok": true }));
+        }
+        // No undo entry, no change to the REAL document.
+        assert_eq!(b.store.journal_ops().len(), before);
+        let doc = b.store.snapshot();
+        let l = doc
+            .comp(comp)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .unwrap();
+        assert_eq!(l.transform.position_x.value_at(0.0), 0.0);
+    }
+
+    #[test]
+    fn commit_after_preview_is_one_undo_step_to_the_pre_drag_value() {
+        let (mut b, comp, layer) = comp_with_layer();
+        let before = b.store.journal_ops().len();
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            10.0,
+        );
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            55.0,
+        );
+        // Drag-release: the real, one-shot commit.
+        let reply = parse(&set_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            55.0,
+        ));
+        assert_eq!(reply["ok"], json!(true));
+        assert_eq!(b.store.journal_ops().len(), before + 1);
+        let doc = b.store.snapshot();
+        let l = doc
+            .comp(comp)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .unwrap();
+        assert_eq!(l.transform.position_x.value_at(0.0), 55.0);
+        // One undo restores the pre-drag value.
+        undo(&mut b);
+        let doc = b.store.snapshot();
+        let l = doc
+            .comp(comp)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .unwrap();
+        assert_eq!(l.transform.position_x.value_at(0.0), 0.0);
+    }
+
+    #[test]
+    fn cancel_preview_restores_pre_drag_render_with_zero_undo_entries() {
+        let (mut b, comp, layer) = comp_with_layer();
+        let before = b.store.journal_ops().len();
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            42.0,
+        );
+        assert!(b.preview.is_some());
+        let reply = parse(&cancel_transform_preview(&mut b));
+        assert_eq!(reply, json!({ "ok": true }));
+        assert!(b.preview.is_none());
+        assert_eq!(b.store.journal_ops().len(), before);
+        // The pre-drag document renders unchanged (no preview staged any more).
+        assert_eq!(snapshot_with_preview(&b), b.store.snapshot());
+    }
+
+    #[test]
+    fn snapshot_with_preview_matches_a_real_commit() {
+        let (mut b, comp, layer) = comp_with_layer();
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            7.5,
+        );
+        let previewed = snapshot_with_preview(&b);
+
+        // Commit the SAME value for real and compare against the preview render
+        // — both should reach the pixel-identical document (same `ops::apply`
+        // call underneath).
+        set_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "position_x",
+            7.5,
+        );
+        let committed = b.store.snapshot();
+
+        assert_eq!(*previewed, *committed);
+    }
+
+    #[test]
+    fn linked_axes_preview_holds_both_entries() {
+        let (mut b, comp, layer) = comp_with_layer();
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "scale_x",
+            50.0,
+        );
+        preview_transform(
+            &mut b,
+            &comp.to_string(),
+            &layer.to_string(),
+            "scale_y",
+            50.0,
+        );
+        let preview = b.preview.as_ref().expect("a preview is staged");
+        assert_eq!(preview.edits.len(), 2);
     }
 
     #[test]

@@ -184,6 +184,13 @@ class PreviewSource extends ChangeNotifier {
   int _lastScopeRenderMs = 0;
   bool _scopePending = false;
 
+  /// Set when a transform-preview tick arrived while a render was already in
+  /// flight (any of the three primary paths, or a previous preview tick) — the
+  /// preview sibling of [_wantedDirty]. A fresh preview render runs once that
+  /// render completes, so a flood of drag ticks still coalesces to at most one
+  /// render in flight, exactly like the existing paths.
+  bool _previewDirty = false;
+
   PreviewSource(this.app,
       {FrameRenderer? renderer, ViewerTextureController? textureController})
       : _renderer = renderer ?? SynchronousFrameRenderer(app) {
@@ -192,6 +199,7 @@ class PreviewSource extends ChangeNotifier {
     _lastEpoch = app.documentEpoch;
     app.addListener(_onAppChanged);
     app.playheadFrame.addListener(_onAppChanged);
+    app.transformPreviewRevision.addListener(_onPreviewTick);
     // Let Settings → Clear cache empty this decoded-frame LRU too (the engine
     // cache and this Dart tier are two halves of the same thing, K-176).
     app.previewCacheClearer = clearDecodedCache;
@@ -617,6 +625,87 @@ class PreviewSource extends ChangeNotifier {
     }
   }
 
+  /// Fired on every [AppStateStub.transformPreviewRevision] tick (a drag
+  /// update, or a cancel-revert): render just the current frame under the
+  /// engine's staged transform preview and show it — WITHOUT clearing or
+  /// growing [_cache] (see [_showPreviewFrame]) and WITHOUT touching
+  /// [AppStateStub.documentEpoch], so a drag never triggers [_syncEpoch]'s
+  /// full-cache clear. Reuses the existing [_pendingKey] latest-wins guard, so
+  /// a flood of ticks still coalesces to at most one render in flight.
+  void _onPreviewTick() {
+    if (_disposed) return;
+    final compId = app.frontCompIdResolved;
+    if (compId == null ||
+        !_renderer.supportsCompRender ||
+        app.bridge is! PreviewTransformBridge) {
+      // The caller (AppStateStub.previewTransform) already checked the
+      // capability before staging a preview at all; this is just belt and
+      // braces against a bridge swap mid-drag.
+      return;
+    }
+    final frame = app.previewFrame;
+    final scale = app.effectivePreviewScale;
+    if (_pendingKey != null) {
+      _previewDirty = true;
+      return;
+    }
+    _pendingKey = 'preview:$compId@$frame@$scale';
+    final gen = ++_seq;
+    _renderer.requestPreview(compId, frame, scale, gen, (rendered) {
+      if (_disposed) return;
+      _pendingKey = null;
+      if (rendered != null && rendered.width > 0 && rendered.height > 0) {
+        _showPreviewFrame(rendered);
+      }
+      if (_previewDirty) {
+        _previewDirty = false;
+        _onPreviewTick();
+      } else {
+        // A normal request may have been deferred behind this preview render
+        // (the shared `_pendingKey` guard); give it its turn.
+        _drainWanted();
+      }
+    });
+  }
+
+  /// Show a preview-rendered frame WITHOUT banking it into [_cache]: a preview
+  /// frame is guaranteed to be superseded by either the next drag tick or the
+  /// cold re-render [_syncEpoch] already runs on the eventual real commit, so
+  /// caching it would just be bookkeeping for a frame nothing will ever reuse.
+  /// Drops shared-texture mode for the drag's duration (this pass only has a
+  /// read-back preview route); the Viewer returns to the shared texture on the
+  /// first normal render after commit, via the existing [_resolveAndDecodeShared]
+  /// path.
+  void _showPreviewFrame(DecodedFrame decoded) {
+    ui.decodeImageFromPixels(
+      decoded.rgba,
+      decoded.width,
+      decoded.height,
+      ui.PixelFormat.rgba8888,
+      (img) {
+        if (_disposed) {
+          img.dispose();
+          return;
+        }
+        _leaveShared();
+        _enterComp();
+        final old = _image;
+        _image = img;
+        _displayedFrame = decoded;
+        _generation++;
+        notifyListeners();
+        // Free the superseded image UNLESS it is still held in the cache (a
+        // real, banked frame from before the drag started) — disposing that
+        // would leave a dead image behind for a later cache hit to serve.
+        if (old != null &&
+            !identical(old, img) &&
+            !_cache.values.any((e) => identical(e.image, old))) {
+          old.dispose();
+        }
+      },
+    );
+  }
+
   /// Enter composited-comp mode: no single-layer target (the comp frame is
   /// self-contained), and the "single-layer" wording is dropped in the Viewer.
   void _enterComp() {
@@ -726,6 +815,7 @@ class PreviewSource extends ChangeNotifier {
     _disposed = true;
     app.removeListener(_onAppChanged);
     app.playheadFrame.removeListener(_onAppChanged);
+    app.transformPreviewRevision.removeListener(_onPreviewTick);
     if (identical(app.previewCacheClearer, clearDecodedCache)) {
       app.previewCacheClearer = null;
     }
@@ -761,6 +851,16 @@ abstract class FrameRenderer {
   /// receives the decoded RGBA frame, or null when the engine cannot composite
   /// it (no adapter / a transient failure).
   void requestComp(String compId, int frame, double scale, int generation,
+      void Function(DecodedFrame?) onFrame);
+
+  /// Render the whole composited comp [compId] at [frame]/[scale] under the
+  /// engine's active transform preview (if any) — the drag-preview sibling of
+  /// [requestComp], mirroring [PreviewTransformBridge.renderPreviewFrame].
+  /// Never served from or banked into the engine's rendered-frame cache, so a
+  /// caller must not request more than one frame it actually wants at a time.
+  /// [onFrame] receives the decoded RGBA frame, or null when the engine
+  /// cannot composite it or the capability is absent.
+  void requestPreview(String compId, int frame, double scale, int generation,
       void Function(DecodedFrame?) onFrame);
 
   /// Render the whole composited comp [compId] at [frame] into a shared GPU
@@ -824,6 +924,15 @@ class SynchronousFrameRenderer implements FrameRenderer {
     final b = app.bridge;
     onFrame(b is CompRenderBridge
         ? (b as CompRenderBridge).renderCompFrame(compId, frame, scale)
+        : null);
+  }
+
+  @override
+  void requestPreview(String compId, int frame, double scale, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    final b = app.bridge;
+    onFrame(b is PreviewTransformBridge
+        ? (b as PreviewTransformBridge).renderPreviewFrame(compId, frame, scale)
         : null);
   }
 

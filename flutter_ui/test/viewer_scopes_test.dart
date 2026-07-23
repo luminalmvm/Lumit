@@ -1342,6 +1342,12 @@ class _QueuedRenderer implements FrameRenderer {
   }
 
   @override
+  void requestPreview(String compId, int frame, double scale, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    _pending.add(('preview', () => onFrame(null)));
+  }
+
+  @override
   void requestShared(String compId, int frame, int generation,
       void Function(SharedFrame?) onFrame) {
     _pending.add(('shared', () => onFrame(null)));

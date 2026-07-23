@@ -155,6 +155,11 @@ class _RecordingRenderer implements FrameRenderer {
   }
 
   @override
+  void requestPreview(String compId, int frame, double scale, int generation,
+          void Function(DecodedFrame?) onFrame) =>
+      onFrame(null);
+
+  @override
   void requestShared(String compId, int frame, int generation,
           void Function(SharedFrame?) onFrame) =>
       onFrame(null);

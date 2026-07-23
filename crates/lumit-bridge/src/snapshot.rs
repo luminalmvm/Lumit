@@ -696,6 +696,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         };
         let snap = snapshot_value(&bridge);
 
@@ -769,6 +770,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         };
         let snap = snapshot_value(&bridge);
         let l = &snap["items"][0]["comp"]["layers"][0];
@@ -813,6 +815,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         };
         let snap = snapshot_value(&bridge);
         assert_eq!(snap["items"][0]["status"], json!("unprobed"));
@@ -848,6 +851,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         }
     }
 
@@ -885,6 +889,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         };
         let snap = snapshot_value(&bridge);
         let block = &snap["items"][0]["comp"];
@@ -1057,6 +1062,7 @@ mod tests {
             path: None,
             media: MediaCache::default(),
             journal: None,
+            preview: None,
         };
         let snap = snapshot_value(&bridge);
         // The comp is at root index 1 (solid at 0).

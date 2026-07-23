@@ -397,6 +397,7 @@ mod tests {
             path: None,
             media: crate::media::MediaCache::default(),
             journal: None,
+            preview: None,
         };
         (b, comp_id, layer_id)
     }

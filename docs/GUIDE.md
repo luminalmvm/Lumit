@@ -2970,3 +2970,35 @@ remainders are named rather than built: output-latency compensation (the few
 milliseconds between the clock and the speaker cone — within the ±half-frame
 tolerance the performance rules allow) and the per-layer waveform lanes the
 egui timeline draws.
+
+**The transform-preview fast path (dragging a numeric field, ABI 11).**
+Dragging a Position/Scale/Rotation/Opacity field used to lag badly, and the
+render isolate above is not what was slow — the *engine call itself* was. Every
+tick of the drag ran the exact same path a single, deliberate edit does:
+push an undo entry (a full copy of the document), write a line to the
+crash-recovery journal on disk, and turn the whole document back into JSON
+text for Dart to read. That is the right amount of work for one edit; it is
+far too much for every pixel of mouse movement, and Dart then re-parsing that
+whole JSON string threw away the Viewer's entire warm picture cache on every
+single tick, so the picture went cold and had to redraw from scratch each
+time too.
+
+The fix keeps a drag's *live* value somewhere much cheaper than the document:
+a small note on the engine side saying "while you're drawing, treat this one
+property as this value" — no undo entry, no disk write, no text conversion.
+The Viewer asks for one picture under that note and shows it; nothing is
+banked into the picture cache, because a preview picture is only ever true
+for the instant of one drag tick and gets thrown away the moment the next one
+(or the real edit) arrives. Only when you *let go of the mouse* does the
+real, permanent edit happen — the same single undo-worthy edit dragging
+always should have been, exactly once, right at the end. Letting go of a
+linked Scale pair still commits both axes as two edits, undoing back one axis
+at a time, precisely as before this fix — only the felt smoothness of the
+drag changed, not what Undo does afterwards. Pressing Escape (or any other
+way a drag gets cancelled without a release) throws the live note away with
+nothing committed at all, so the picture and the number both snap back to
+wherever they were before you started dragging.
+
+An older engine library that predates this simply does not offer the live
+note, and the interface notices and quietly falls back to the old,
+tick-by-tick full-edit behaviour — slower, but correct, and nothing breaks.

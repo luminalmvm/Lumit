@@ -265,6 +265,9 @@ class IsolateFrameRenderer implements FrameRenderer {
       case 'comp':
         _fallback.requestComp(wire[1] as String, wire[2] as int,
             wire[3] as double, wire[4] as int, onFrame);
+      case 'preview':
+        _fallback.requestPreview(wire[1] as String, wire[2] as int,
+            wire[3] as double, wire[4] as int, onFrame);
       case 'thumb':
         _fallback.requestThumbnail(
             wire[1] as String, wire[2] as int, wire[4] as int, onFrame);
@@ -317,6 +320,13 @@ class IsolateFrameRenderer implements FrameRenderer {
   void requestComp(String compId, int frame, double scale, int generation,
       void Function(DecodedFrame?) onFrame) {
     _dispatch(generation, ['comp', compId, frame, scale, generation], onFrame);
+  }
+
+  @override
+  void requestPreview(String compId, int frame, double scale, int generation,
+      void Function(DecodedFrame?) onFrame) {
+    _dispatch(
+        generation, ['preview', compId, frame, scale, generation], onFrame);
   }
 
   @override
@@ -402,6 +412,7 @@ void _workerMain(_WorkerInit init) {
 
   _RenderDart? render;
   _RenderGenDart? renderGen;
+  _RenderDart? renderPreview;
   _DecodeDart? decode;
   _RenderSharedDart? renderShared;
   _RenderSharedDmabufDart? renderSharedDmabuf;
@@ -417,6 +428,16 @@ void _workerMain(_WorkerInit init) {
         'lumit_bridge_render_comp_frame_gen');
   } catch (_) {
     renderGen = null;
+  }
+  // The transform-preview fast-path render (ABI 11): same signature as the
+  // plain, non-generation `render`. An older library omits it, so this stays
+  // null and a 'preview' request answers null (the UI isolate's PreviewSource
+  // never issues one without first checking the capability).
+  try {
+    renderPreview = lib.lookupFunction<_RenderC, _RenderDart>(
+        'lumit_bridge_render_comp_frame_preview');
+  } catch (_) {
+    renderPreview = null;
   }
   try {
     decode =
@@ -486,6 +507,7 @@ void _workerMain(_WorkerInit init) {
     final reply = switch (kind) {
       'comp' =>
         _renderOne(render, renderGen, freeBuffer, id, frame, scale, generation),
+      'preview' => _renderPreviewOne(renderPreview, freeBuffer, id, frame, scale),
       // On the thumb wire the `frame` slot carries the max edge.
       'thumb' => _thumbOne(thumbnail, freeBuffer, id, frame),
       _ => _decodeOne(decode, freeBuffer, id, frame),
@@ -600,6 +622,40 @@ List<Object?> _renderShared(_RenderSharedDart? renderShared,
     final ptr = renderGen != null
         ? renderGen(id.cast(), frame, scale, generation, outW, outH, outLen)
         : render!(id.cast(), frame, scale, outW, outH, outLen);
+    if (ptr == nullptr) return (0, 0, null);
+    final len = outLen.value;
+    try {
+      final bytes = Uint8List.fromList(ptr.asTypedList(len));
+      return (outW.value, outH.value, TransferableTypedData.fromList([bytes]));
+    } finally {
+      freeBuffer(ptr, len);
+    }
+  } finally {
+    malloc.free(id);
+    malloc.free(outW);
+    malloc.free(outH);
+    malloc.free(outLen);
+  }
+}
+
+/// Run one transform-preview render on the worker; returns
+/// `(width, height, ttd?)` — the drag-preview sibling of [_renderOne]. No
+/// generation-aware variant: ticks are already coalesced Dart-side (the
+/// PreviewSource's shared `_pendingKey` guard), so there is never more than
+/// one preview request in flight to skip ahead of.
+(int, int, TransferableTypedData?) _renderPreviewOne(
+    _RenderDart? renderPreview,
+    _FreeBufferDart? freeBuffer,
+    String compId,
+    int frame,
+    double scale) {
+  if (renderPreview == null || freeBuffer == null) return (0, 0, null);
+  final id = compId.toNativeUtf8();
+  final outW = malloc<Uint32>();
+  final outH = malloc<Uint32>();
+  final outLen = malloc<Size>();
+  try {
+    final ptr = renderPreview(id.cast(), frame, scale, outW, outH, outLen);
     if (ptr == nullptr) return (0, 0, null);
     final len = outLen.value;
     try {
