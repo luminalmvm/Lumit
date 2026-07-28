@@ -769,17 +769,44 @@ pub(crate) fn effects_rows(
                                 animation,
                                 extra: serde_json::Map::new(),
                             });
+                        // Follow the graph to this effect param (TF-30).
+                        app.selected_layer = Some(layer.id);
+                        app.graph_effect = Some((idx, pi));
+                        app.graph_prop = None;
+                        app.graph_retime = false;
+                        app.graph_reset_fit();
                         *pending = Some(commit(effects));
                     }
                     // The ◄ ◆ ► navigator, once the param is animated — the effect
                     // twin of the transform rows' `keyframe_nav` (the reported bug:
                     // effect params had a stopwatch but no navigator).
                     effect_param_nav(&mut c, ctx, idx, pi, prop, pending, nav_jump);
-                    c.label(
-                        egui::RichText::new(ps.label)
-                            .small()
-                            .color(ctx.theme.text_muted),
-                    );
+                    let graph_hl = app.selected_layer == Some(layer.id)
+                        && app.graph_effect == Some((idx, pi));
+                    let name_clicked = c
+                        .add(
+                            egui::Label::new(
+                                egui::RichText::new(ps.label).small().color(
+                                    if graph_hl {
+                                        ctx.theme.accent
+                                    } else {
+                                        ctx.theme.text_muted
+                                    },
+                                ),
+                            )
+                            .sense(egui::Sense::click()),
+                        )
+                        .on_hover_text("Graph this parameter")
+                        .clicked();
+                    if name_clicked
+                        && !ui.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.ctrl)
+                    {
+                        app.selected_layer = Some(layer.id);
+                        app.graph_effect = Some((idx, pi));
+                        app.graph_prop = None;
+                        app.graph_retime = false;
+                        app.graph_reset_fit();
+                    }
                     // Value box on the shared value column (owner EC3): snugly
                     // right of the row's midline, the DoF Focus eyedropper after.
                     snap_to_value_column(&mut c);

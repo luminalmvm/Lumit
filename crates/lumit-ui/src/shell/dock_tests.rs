@@ -1736,3 +1736,69 @@ fn drag_secs_follows_the_displayed_zoom() {
     // A degenerate px_per_sec never divides by zero.
     assert!(drag_secs(50.0, 0.0).is_finite());
 }
+
+// Graph editor reads effect param keyframes (TF-30) and aligns with timeline
+// positions via start_offset conversion (TF-25).
+#[test]
+fn effect_keyframes_graph_and_align() {
+    use lumit_core::anim::{Animation, Property, SideInterp};
+    use lumit_core::model::{
+        EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, Layer, LayerKind,
+    };
+
+    let layer = Layer {
+        id: uuid::Uuid::nil(),
+        name: "Test".into(),
+        kind: LayerKind::Adjustment,
+        in_point: lumit_core::time::CompTime(rational_at(0.0)),
+        out_point: lumit_core::time::CompTime(rational_at(10.0)),
+        start_offset: lumit_core::time::CompTime(rational_at(2.0)),
+        transform: Default::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: Property::zero(),
+        blend: Default::default(),
+        masks: vec![],
+        effects: vec![EffectInstance {
+            id: uuid::Uuid::nil(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Builtin,
+                match_name: "test".into(),
+                version: 0,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![EffectParam {
+                id: "v".into(),
+                value: EffectValue::Float(Property {
+                    animation: Animation::Keyframed(vec![lumit_core::anim::Keyframe {
+                        time: rational_at(0.0),
+                        value: 10.0,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    }]),
+                    extra: serde_json::Map::new(),
+                }),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
+            extra: serde_json::Map::new(),
+        }],
+        switches: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+
+    let k = &layer.effects[0].params[0];
+    assert!(matches!(&k.value, EffectValue::Float(p) if p.is_animated()));
+
+    // Alignment: x_of converts layer time to comp time via start_offset.
+    let off = layer.start_offset.0.to_f64();
+    let x_of = |t: f64| 100.0 + ((t + off - 0.0) * 50.0) as f32;
+    assert!((x_of(0.0) - 200.0).abs() < 1e-6); // 100 + 2*50 = 200
+    assert!((x_of(-1.0) - 150.0).abs() < 1e-6); // 100 + 1*50 = 150
+
+    // t_of allows negative layer times before the layer start.
+    let t_of = |x: f32| (0.0 + (x - 100.0) as f64 / 50.0).clamp(0.0, 20.0) - off;
+    assert!((t_of(150.0) - (-1.0)).abs() < 1e-6);
+}

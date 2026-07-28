@@ -867,22 +867,47 @@ pub(crate) fn graph_plot(
     } else {
         None
     };
+    // Effect parameter keys: read from the layer's effect param (TF-30).
+    let effect_keys: Option<Vec<Keyframe>> = app.graph_effect.and_then(|(ei, pi)| {
+        let p = layer.effects.get(ei)?.params.get(pi)?;
+        if let lumit_core::model::EffectValue::Float(prop) = &p.value {
+            Some(match &prop.animation {
+                Animation::Keyframed(ks) => ks.clone(),
+                _ => Vec::new(),
+            })
+        } else {
+            None
+        }
+    });
+    let effect_static = app
+        .graph_effect
+        .and_then(|(ei, pi)| {
+            let p = layer.effects.get(ei)?.params.get(pi)?;
+            if let lumit_core::model::EffectValue::Float(prop) = &p.value {
+                Some(prop.value_at(0.0))
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0.0);
     // A still (Static) property has no keys yet: graph a flat line at its value
     // that you can double-click to add the first keyframe to (Mack). The Time
     // channel always has ≥ 2 boundary keys, so its static value is just the
     // first key (only used if a curve were somehow empty).
     let empty_keys: Vec<Keyframe> = Vec::new();
-    let (keys, static_val): (&Vec<Keyframe>, f64) = match &retime_keys {
-        Some(ks) => (ks, ks.first().map_or(0.0, |k| k.value)),
-        None => {
-            let slot = layer.transform.get(current);
-            let sv = slot.value_at(0.0);
-            match &slot.animation {
-                Animation::Keyframed(k) => (k, sv),
-                _ => (&empty_keys, sv),
-            }
+    let (keys, static_val): (&Vec<Keyframe>, f64) = if let Some(ks) = &effect_keys {
+        (ks, ks.first().map_or(effect_static, |k| k.value))
+    } else if let Some(ks) = &retime_keys {
+        (ks, ks.first().map_or(0.0, |k| k.value))
+    } else {
+        let slot = layer.transform.get(current);
+        let sv = slot.value_at(0.0);
+        match &slot.animation {
+            Animation::Keyframed(k) => (k, sv),
+            _ => (&empty_keys, sv),
         }
     };
+    let is_effect = app.graph_effect.is_some();
 
     // The marquee selection for this channel. A selection made on any other
     // layer/property, or one whose time pins no longer line up with the keys
@@ -890,7 +915,7 @@ pub(crate) fn graph_plot(
     // touching the wrong keyframes.
     let selection: Vec<usize> = match &app.graph_selection {
         Some(s)
-            if s.layer == layer_id && s.retime == is_retime && (is_retime || s.prop == current) =>
+            if s.layer == layer_id && (is_effect || (s.retime == is_retime && (is_retime || s.prop == current))) =>
         {
             match s.indices_for(keys) {
                 Some(sel) => sel,
@@ -946,7 +971,7 @@ pub(crate) fn graph_plot(
         nudge_selected_values(&mut shown, &selection, delta);
     } else if let Some((idx, kt, kv)) = app.graph_edit {
         if let Some(k) = shown.get_mut(idx) {
-            k.time = rational_at(kt);
+            k.time = rational_at_signed(kt);
             k.value = kv;
         }
         shown.sort_by_key(|k| k.time);
@@ -1017,11 +1042,14 @@ pub(crate) fn graph_plot(
     let (vmin, vmax) = app.graph_view_y.unwrap_or(auto_fit);
     // x follows the shared timeline axis (K-079): the same pixels-per-second and
     // scrolled left edge as the lane bars, so panning/zooming the timeline moves
-    // the curve in step. Keys outside the view clip to the lane area.
-    let x_of = |t: f64| rect.left() + ((t - view_start) * px_per_sec) as f32;
+    // the curve in step. Key times are layer-local; adding start_offset converts
+    // to comp time so they align with the lane bars (TF-25).
+    let off = layer.start_offset.0.to_f64();
+    let x_of = |t: f64| rect.left() + ((t + off - view_start) * px_per_sec) as f32;
     let y_of = |v: f64| rect.bottom() - (((v - vmin) / (vmax - vmin)) as f32) * rect.height();
     let t_of = |x: f32| {
-        (view_start + (x - rect.left()) as f64 / px_per_sec.max(1e-6)).clamp(0.0, duration)
+        let ct = (view_start + (x - rect.left()) as f64 / px_per_sec.max(1e-6)).clamp(0.0, duration);
+        ct - off
     };
     let v_of = |y: f32| {
         vmin + ((rect.bottom() - y) / rect.height()).clamp(0.0, 1.0) as f64 * (vmax - vmin)
@@ -1096,7 +1124,7 @@ pub(crate) fn graph_plot(
         if let Some(p) = bg.interact_pointer_pos() {
             let mut new_keys = keys.clone();
             new_keys.push(Keyframe {
-                time: rational_at(t_of(p.x)),
+                time: rational_at_signed(t_of(p.x)),
                 value: v_of(p.y),
                 interp_in: SideInterp::Linear,
                 interp_out: SideInterp::Linear,
@@ -1130,8 +1158,9 @@ pub(crate) fn graph_plot(
     let vis_span = (vis_hi - vis_lo).max(1e-6);
     let values: Vec<(f64, f64)> = (0..=samples)
         .map(|i| {
-            let t = vis_lo + vis_span * i as f64 / samples as f64;
-            (t, sample_at(t))
+            let ct = vis_lo + vis_span * i as f64 / samples as f64;
+            let lt = ct - off;
+            (lt, sample_at(lt))
         })
         .collect();
     // The speed lens scales to its own sampled range; `speed_of` inverts the
@@ -1204,7 +1233,13 @@ pub(crate) fn graph_plot(
     {
         // The Time channel reads in seconds of source; transform props use
         // their own unit (%, °, or none).
-        let unit = if is_retime { "s" } else { prop_unit(current) };
+        let unit = if is_effect {
+            ""
+        } else if is_retime {
+            "s"
+        } else {
+            prop_unit(current)
+        };
         if app.graph_speed_view {
             graph_y_axis(ui, theme, rect, s_lo, s_hi, |v| {
                 format!("{}{unit}/s", fmt_axis_value(v, s_hi - s_lo))
@@ -1654,7 +1689,7 @@ pub(crate) fn graph_plot(
                         // delta — a single undo step; times are untouched.
                         nudge_selected_values(&mut new_keys, &selection, kv - key.value);
                     } else {
-                        let nt = rational_at(kt.max(0.0));
+                        let nt = rational_at_signed(kt);
                         new_keys[i].time = nt;
                         new_keys[i].value = kv;
                         new_keys.sort_by_key(|k| k.time);
@@ -1828,7 +1863,29 @@ pub(crate) fn graph_plot(
     ui.set_clip_rect(saved_clip);
 
     if let Some(new_keys) = pending {
-        let op = if is_retime {
+        let op = if let Some((ei, pi)) = app.graph_effect {
+            let animation = if new_keys.is_empty() {
+                Animation::Static(static_val)
+            } else {
+                Animation::Keyframed(new_keys)
+            };
+            let mut effects = layer.effects.clone();
+            if let Some(e) = effects.get_mut(ei) {
+                if let Some(p) = e.params.get_mut(pi) {
+                    p.value = lumit_core::model::EffectValue::Float(
+                        lumit_core::anim::Property {
+                            animation,
+                            extra: serde_json::Map::new(),
+                        },
+                    );
+                }
+            }
+            lumit_core::Op::SetLayerEffects {
+                comp: comp.id,
+                layer: layer_id,
+                effects,
+            }
+        } else if is_retime {
             // Rebuild the Retime store from the edited Time keyframes (K-078).
             // Fewer than two keys (or otherwise unbuildable) can't be a retime,
             // so that edit is dropped and the existing store kept.

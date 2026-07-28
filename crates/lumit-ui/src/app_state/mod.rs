@@ -915,6 +915,8 @@ pub struct AppState {
     pub pen_path: Vec<lumit_core::mask::Vertex>,
     /// Property shown in the graph editor.
     pub graph_prop: Option<lumit_core::model::TransformProp>,
+    /// Effect parameter shown in the graph editor: (effect index, param index).
+    pub graph_effect: Option<(usize, usize)>,
     /// In-flight keyframe drag: (key index, provisional layer-time, value).
     pub graph_edit: Option<(usize, f64, f64)>,
     /// In-flight marquee (rubber-band) drag on the graph's background:
@@ -1230,6 +1232,7 @@ impl Default for AppState {
             selected_layer: None,
             selected_clip: None,
             graph_prop: None,
+            graph_effect: None,
             graph_edit: None,
             graph_marquee: None,
             graph_selection: None,
