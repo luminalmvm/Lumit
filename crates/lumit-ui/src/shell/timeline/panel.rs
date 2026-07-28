@@ -1627,6 +1627,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             effects_toolbar: false,
                             selected_prop: app.selected_prop,
                             selected_props: app.selected_props.clone(),
+                            u_press_count: app.u_press_count,
                         };
                         let mut fx_nav_jump = None;
                         effects_rows(
@@ -1671,6 +1672,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                             effects_toolbar: false,
                                 selected_prop: app.selected_prop,
                                 selected_props: app.selected_props.clone(),
+                                u_press_count: app.u_press_count,
                             };
                             let mut flow_nav_jump = None;
                             flow_group_rows(ui, &flow_ctx, &mut pending, &mut flow_nav_jump);
@@ -1739,6 +1741,7 @@ pub(crate) fn timeline_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut AppStat
                                     effects_toolbar: false,
                                     selected_prop: app.selected_prop,
                                     selected_props: app.selected_props.clone(),
+                                    u_press_count: app.u_press_count,
                                 };
                                 let mut au_nav_jump = None;
                                 volume_row(ui, &au_ctx, &mut pending, &mut au_nav_jump);

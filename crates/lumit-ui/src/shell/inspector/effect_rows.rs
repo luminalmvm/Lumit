@@ -519,8 +519,14 @@ pub(crate) fn effects_rows(
         // Whether this effect's params are twirled open (owner): collapsed by
         // default in the timeline, open by default in the Effect Controls panel.
         let open_id = ui.id().with(("fx-open", layer.id, e.id));
+        let stable_id = egui::Id::new(("fx-open", layer.id, e.id));
         let mut fx_open = ui
-            .data(|d| d.get_temp::<bool>(open_id))
+            .data_mut(|d| {
+                d.get_temp::<bool>(open_id)
+                    .or_else(|| d.get_persisted::<bool>(open_id))
+                    .or_else(|| d.get_persisted::<bool>(stable_id))
+                    .or_else(|| d.get_temp::<bool>(stable_id))
+            })
             .unwrap_or(ctx.effects_toolbar);
         // Title row: bypass, name (dimmed when bypassed), remove — sitting in a
         // subtle full-width bar so each effect's start is obvious (Mack). The name
@@ -546,7 +552,10 @@ pub(crate) fn effects_rows(
             crate::icons::disclosure(c.painter(), tri_rect, fx_open, ctx.theme.text_muted);
             if tri_resp.clicked() {
                 fx_open = !fx_open;
-                ui.data_mut(|d| d.insert_temp(open_id, fx_open));
+                ui.data_mut(|d| {
+                    d.insert_temp(open_id, fx_open);
+                    d.insert_persisted(stable_id, fx_open);
+                });
             }
             // The per-effect visibility toggle (K-090 confirmation of §1.5): the
             // same eye as layer visibility, and it swaps to a closed eye when the
@@ -671,6 +680,15 @@ pub(crate) fn effects_rows(
             }
             // Inside a closed group: the member row is hidden.
             if group.is_some() && !group_open {
+                continue;
+            }
+            // U key reveal mode (U = 1): show ONLY animated parameters, hide non-animated ones.
+            let is_param_animated = match &param.value {
+                lumit_core::model::EffectValue::Float(p) => p.is_animated(),
+                lumit_core::model::EffectValue::Colour(ch) => ch.iter().any(|p| p.is_animated()),
+                _ => false,
+            };
+            if ctx.u_press_count == 1 && !is_param_animated {
                 continue;
             }
             // Row selection (notes 2.8.1/2.6): this param's row identity and

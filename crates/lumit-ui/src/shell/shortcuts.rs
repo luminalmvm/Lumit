@@ -210,6 +210,32 @@ impl Shell {
             }
         }
 
+        // Viewer magnification: Shift+/ fits, Ctrl+= zooms in, Ctrl+- zooms
+        // out (docs/07-UI-SPEC §2.2, §15).  These are Viewer-context bindings
+        // but checked globally so the shortcut fires as long as no text field
+        // has focus — the same approach used for the timeline zoom pair above.
+        // Fit resets the multiplier to 1.0 and clears any pan offset, which is
+        // what double-clicking the viewer also does (overlays.rs).
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Viewer, "viewer.zoom.fit") {
+            self.app.view_zoom = 1.0;
+            self.app.view_pan = egui::Vec2::ZERO;
+            if self.app.preview_auto_res {
+                self.app.refresh_preview();
+            }
+        }
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Viewer, "viewer.zoom.in") {
+            self.app.view_zoom = (self.app.view_zoom * 1.25).clamp(0.05, 32.0);
+            if self.app.preview_auto_res {
+                self.app.refresh_preview();
+            }
+        }
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Viewer, "viewer.zoom.out") {
+            self.app.view_zoom = (self.app.view_zoom / 1.25).clamp(0.05, 32.0);
+            if self.app.preview_auto_res {
+                self.app.refresh_preview();
+            }
+        }
+
         if self.app.selected_layer.is_some()
             && self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "reveal.animated")
         {

@@ -62,6 +62,8 @@ pub(crate) struct RowCtx<'a> {
     /// toggles, Shift-click ranges. Every row in it lifts its background. Owned
     /// (a cheap per-frame clone) so the row functions can still take `&mut app`.
     pub(crate) selected_props: Vec<crate::app_state::PropSel>,
+    /// Active U multi-tap reveal mode (0 = normal, 1 = reveal animated only, 2 = reveal all modified).
+    pub(crate) u_press_count: u8,
 }
 
 impl RowCtx<'_> {

@@ -1562,6 +1562,7 @@ pub(crate) fn effect_controls_panel(ui: &mut egui::Ui, theme: &Theme, app: &mut 
         effects_toolbar: true,
         selected_prop: app.selected_prop,
         selected_props: app.selected_props.clone(),
+        u_press_count: app.u_press_count,
     };
     let mut fx_edit = None;
     let mut nav_jump = None;

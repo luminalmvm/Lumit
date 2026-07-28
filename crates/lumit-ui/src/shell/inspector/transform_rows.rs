@@ -239,19 +239,28 @@ pub(crate) fn transform_property_rows(
         effects_toolbar: false,
         selected_prop: app.selected_prop,
         selected_props: app.selected_props.clone(),
+        u_press_count: app.u_press_count,
     };
+
+    let show_all = app.u_press_count != 1;
 
     // Footage speed is a keyframable property too (K-072): its own row above
     // the transform, its keys building the retime's speed lens.
     if let LayerKind::Footage { retime, .. } = &layer.kind {
-        speed_property_row(ui, app, &ctx, retime, pending);
+        if show_all || retime.is_some() {
+            speed_property_row(ui, app, &ctx, retime, pending);
+        }
     }
 
     // Anchor and Position: x and y share one row by default, AE-style. Unlike
     // Scale's ratio lock the two values never couple — linking only merges the
     // row furniture (one stopwatch, one navigator, one lane). The chain
     // button splits them into today's separate rows, per layer.
-    if !is_camera {
+    if !is_camera
+        && (show_all
+            || layer.transform.get(TransformProp::AnchorX).is_animated()
+            || layer.transform.get(TransformProp::AnchorY).is_animated())
+    {
         linked_pair_block(
             ui,
             app,
@@ -262,98 +271,118 @@ pub(crate) fn transform_property_rows(
             pending,
         );
     }
-    linked_pair_block(
-        ui,
-        app,
-        &ctx,
-        "pos-unlink",
-        "Position",
-        (TransformProp::PositionX, TransformProp::PositionY),
-        pending,
-    );
+    if show_all
+        || layer.transform.get(TransformProp::PositionX).is_animated()
+        || layer.transform.get(TransformProp::PositionY).is_animated()
+    {
+        linked_pair_block(
+            ui,
+            app,
+            &ctx,
+            "pos-unlink",
+            "Position",
+            (TransformProp::PositionX, TransformProp::PositionY),
+            pending,
+        );
+    }
 
     // Scale with a ratio lock (default on). Locked: one row edits both, keeping
     // the ratio. Unlocked: two independent rows plus a relink control.
-    let scale_id = ui.id().with(("scale-unlink", layer.id));
-    let mut unlinked = ui.data(|d| d.get_temp::<bool>(scale_id)).unwrap_or(false);
-    if unlinked {
-        prop_row(
-            ui,
-            app,
-            &ctx,
-            "Scale x %",
-            TransformProp::ScaleX,
-            0.5,
-            pending,
-        );
-        prop_row(
-            ui,
-            app,
-            &ctx,
-            "Scale y %",
-            TransformProp::ScaleY,
-            0.5,
-            pending,
-        );
-        if link_toggle_row(
-            ui,
-            &ctx,
-            "Link scale",
-            "Re-lock the x:y ratio and edit scale as one value",
-        ) {
-            unlinked = false;
+    if show_all
+        || layer.transform.get(TransformProp::ScaleX).is_animated()
+        || layer.transform.get(TransformProp::ScaleY).is_animated()
+    {
+        let scale_id = ui.id().with(("scale-unlink", layer.id));
+        let mut unlinked = ui.data(|d| d.get_temp::<bool>(scale_id)).unwrap_or(false);
+        if unlinked {
+            prop_row(
+                ui,
+                app,
+                &ctx,
+                "Scale x %",
+                TransformProp::ScaleX,
+                0.5,
+                pending,
+            );
+            prop_row(
+                ui,
+                app,
+                &ctx,
+                "Scale y %",
+                TransformProp::ScaleY,
+                0.5,
+                pending,
+            );
+            if link_toggle_row(
+                ui,
+                &ctx,
+                "Link scale",
+                "Re-lock the x:y ratio and edit scale as one value",
+            ) {
+                unlinked = false;
+            }
+        } else {
+            combined_scale_row(ui, app, &ctx, pending, &mut unlinked);
         }
-    } else {
-        combined_scale_row(ui, app, &ctx, pending, &mut unlinked);
+        ui.data_mut(|d| d.insert_temp(scale_id, unlinked));
     }
-    ui.data_mut(|d| d.insert_temp(scale_id, unlinked));
 
-    prop_row(
-        ui,
-        app,
-        &ctx,
-        "Rotation °",
-        TransformProp::Rotation,
-        0.5,
-        pending,
-    );
-    prop_row(
-        ui,
-        app,
-        &ctx,
-        "Opacity %",
-        TransformProp::Opacity,
-        0.5,
-        pending,
-    );
+    if show_all || layer.transform.get(TransformProp::Rotation).is_animated() {
+        prop_row(
+            ui,
+            app,
+            &ctx,
+            "Rotation °",
+            TransformProp::Rotation,
+            0.5,
+            pending,
+        );
+    }
+    if show_all || layer.transform.get(TransformProp::Opacity).is_animated() {
+        prop_row(
+            ui,
+            app,
+            &ctx,
+            "Opacity %",
+            TransformProp::Opacity,
+            0.5,
+            pending,
+        );
+    }
     if three_d {
-        prop_row(
-            ui,
-            app,
-            &ctx,
-            "Position z",
-            TransformProp::PositionZ,
-            1.0,
-            pending,
-        );
-        prop_row(
-            ui,
-            app,
-            &ctx,
-            "Rotation x °",
-            TransformProp::RotationX,
-            0.5,
-            pending,
-        );
-        prop_row(
-            ui,
-            app,
-            &ctx,
-            "Rotation y °",
-            TransformProp::RotationY,
-            0.5,
-            pending,
-        );
+        if show_all || layer.transform.get(TransformProp::PositionZ).is_animated() {
+            prop_row(
+                ui,
+                app,
+                &ctx,
+                "Position z",
+                TransformProp::PositionZ,
+                1.0,
+                pending,
+            );
+        }
+        if show_all || layer.transform.get(TransformProp::RotationX).is_animated() {
+            prop_row(
+                ui,
+                app,
+                &ctx,
+                "Rotation x °",
+                TransformProp::RotationX,
+                0.5,
+                pending,
+            );
+        }
+        if show_all || layer.transform.get(TransformProp::RotationY).is_animated() {
+            prop_row(
+                ui,
+                app,
+                &ctx,
+                "Rotation y °",
+                TransformProp::RotationY,
+                0.5,
+                pending,
+            );
+        }
     }
 }
 

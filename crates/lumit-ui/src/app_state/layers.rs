@@ -1505,20 +1505,21 @@ impl AppState {
             });
         }
 
-        // Effects group: open if any effect has an animated parameter.
-        let effects_animated = layer.effects.iter().any(|fx| {
-            fx.params.iter().any(|p| match &p.value {
+        // Effects group: open if any effect has an animated parameter, and twirl open each animated effect.
+        for fx in &layer.effects {
+            let has_animated = fx.params.iter().any(|p| match &p.value {
                 lumit_core::model::EffectValue::Float(p) => p.is_animated(),
                 lumit_core::model::EffectValue::Colour(ch) => {
                     ch.iter().any(|p| p.is_animated())
                 }
                 _ => false,
-            })
-        });
-        if effects_animated {
-            ctx.data_mut(|d| {
-                d.insert_persisted(egui::Id::new(("effects-group", selected)), true);
             });
+            if has_animated {
+                ctx.data_mut(|d| {
+                    d.insert_persisted(egui::Id::new(("effects-group", selected)), true);
+                    d.insert_persisted(egui::Id::new(("fx-open", selected, fx.id)), true);
+                });
+            }
         }
 
         // Audio group: open if volume is animated.
@@ -1555,10 +1556,13 @@ impl AppState {
             d.insert_persisted(egui::Id::new(("transform-group", selected)), true);
         });
 
-        // Effects group: open if any effect exists.
+        // Effects group: open if any effect exists, and twirl open each effect.
         if !layer.effects.is_empty() {
             ctx.data_mut(|d| {
                 d.insert_persisted(egui::Id::new(("effects-group", selected)), true);
+                for fx in &layer.effects {
+                    d.insert_persisted(egui::Id::new(("fx-open", selected, fx.id)), true);
+                }
             });
         }
 
@@ -1605,9 +1609,18 @@ impl AppState {
             d.insert_persisted(egui::Id::new(("transform-group", selected)), false);
         });
 
-        // Close Effects group.
+        // Close Effects group and all individual effect twirls.
         ctx.data_mut(|d| {
             d.insert_persisted(egui::Id::new(("effects-group", selected)), false);
+            if let Some(comp_id) = self.preview_comp.or(self.selected_comp) {
+                if let Some(comp) = self.store.snapshot().comp(comp_id) {
+                    if let Some(layer) = comp.layers.iter().find(|l| l.id == selected) {
+                        for fx in &layer.effects {
+                            d.insert_persisted(egui::Id::new(("fx-open", selected, fx.id)), false);
+                        }
+                    }
+                }
+            }
         });
 
         // Close Audio group.
