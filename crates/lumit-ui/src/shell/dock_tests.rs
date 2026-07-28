@@ -1737,68 +1737,76 @@ fn drag_secs_follows_the_displayed_zoom() {
     assert!(drag_secs(50.0, 0.0).is_finite());
 }
 
-// Graph editor reads effect param keyframes (TF-30) and aligns with timeline
-// positions via start_offset conversion (TF-25).
+// The signed rational constructor preserves negative seconds; the unsigned
+// one clamps them — proving rational_at_signed is needed for negative
+// keyframe times (TF-25 regression guard).
 #[test]
-fn effect_keyframes_graph_and_align() {
-    use lumit_core::anim::{Animation, Property, SideInterp};
-    use lumit_core::model::{
-        EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, Layer, LayerKind,
+fn rational_at_signed_preserves_negative_times() {
+    // unsigned: clamps
+    assert!((rational_at(-1.0).to_f64() - 0.0).abs() < 1e-6);
+    // signed: preserves
+    assert!((rational_at_signed(-1.0).to_f64() + 1.0).abs() < 1e-6);
+    assert!((rational_at_signed(-2.5).to_f64() + 2.5).abs() < 1e-6);
+    // signed negative rounds to the flick grid
+    let r = rational_at_signed(-1.0);
+    assert!((r.to_f64() + 1.0).abs() < 1e-6);
+    assert!(r.num() < 0); // numerator is negative
+}
+
+// The graph_plot data path reads keyframes from
+// layer.effects[ei].params[pi] when it is an EffectValue::Float (TF-30).
+#[test]
+fn effect_param_reads_keyframes_for_the_graph() {
+    use lumit_core::anim::{Animation, Property};
+    use lumit_core::model::{EffectParam, EffectValue};
+
+    let param = EffectParam {
+        id: "x".into(),
+        value: EffectValue::Float(Property {
+            animation: Animation::Keyframed(vec![lumit_core::anim::Keyframe {
+                time: rational_at(1.0),
+                value: 42.0,
+                interp_in: lumit_core::anim::SideInterp::Linear,
+                interp_out: lumit_core::anim::SideInterp::Linear,
+            }]),
+            extra: serde_json::Map::new(),
+        }),
+        extra: serde_json::Map::new(),
     };
+
+    // Same extraction chain graph_plot uses (indexed, not by id).
+    let p = &param;
+    let EffectValue::Float(prop) = &p.value else { panic!("not float") };
+    let Animation::Keyframed(ks) = &prop.animation else { panic!("not keyframed") };
+    assert_eq!(ks.len(), 1);
+    assert!((ks[0].value - 42.0).abs() < 1e-6);
+}
+
+// A layer's start_offset round-trips through to_f64() on its internal
+// Rational — the prerequisite for the TF-25 x_of/t_of conversion.
+#[test]
+fn layer_start_offset_round_trips_to_f64() {
+    use lumit_core::model::{Layer, LayerKind};
 
     let layer = Layer {
         id: uuid::Uuid::nil(),
-        name: "Test".into(),
+        name: "T".into(),
         kind: LayerKind::Adjustment,
         in_point: lumit_core::time::CompTime(rational_at(0.0)),
         out_point: lumit_core::time::CompTime(rational_at(10.0)),
-        start_offset: lumit_core::time::CompTime(rational_at(2.0)),
+        start_offset: lumit_core::time::CompTime(rational_at_signed(2.0)),
         transform: Default::default(),
         matte: None,
         parent: None,
         label: 0,
-        volume_db: Property::zero(),
+        volume_db: lumit_core::anim::Property::zero(),
         blend: Default::default(),
         masks: vec![],
-        effects: vec![EffectInstance {
-            id: uuid::Uuid::nil(),
-            effect: EffectKey {
-                namespace: EffectNamespace::Builtin,
-                match_name: "test".into(),
-                version: 0,
-                extra: serde_json::Map::new(),
-            },
-            enabled: true,
-            params: vec![EffectParam {
-                id: "v".into(),
-                value: EffectValue::Float(Property {
-                    animation: Animation::Keyframed(vec![lumit_core::anim::Keyframe {
-                        time: rational_at(0.0),
-                        value: 10.0,
-                        interp_in: SideInterp::Linear,
-                        interp_out: SideInterp::Linear,
-                    }]),
-                    extra: serde_json::Map::new(),
-                }),
-                extra: serde_json::Map::new(),
-            }],
-            sample_temporally: true,
-            extra: serde_json::Map::new(),
-        }],
+        effects: vec![],
         switches: Default::default(),
         extra: serde_json::Map::new(),
     };
 
-    let k = &layer.effects[0].params[0];
-    assert!(matches!(&k.value, EffectValue::Float(p) if p.is_animated()));
-
-    // Alignment: x_of converts layer time to comp time via start_offset.
     let off = layer.start_offset.0.to_f64();
-    let x_of = |t: f64| 100.0 + ((t + off - 0.0) * 50.0) as f32;
-    assert!((x_of(0.0) - 200.0).abs() < 1e-6); // 100 + 2*50 = 200
-    assert!((x_of(-1.0) - 150.0).abs() < 1e-6); // 100 + 1*50 = 150
-
-    // t_of allows negative layer times before the layer start.
-    let t_of = |x: f32| (0.0 + (x - 100.0) as f64 / 50.0).clamp(0.0, 20.0) - off;
-    assert!((t_of(150.0) - (-1.0)).abs() < 1e-6);
+    assert!((off - 2.0).abs() < 1e-6);
 }
