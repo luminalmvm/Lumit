@@ -666,25 +666,6 @@ impl Shell {
                                         Some((layer_id, prop, value))
                                     })
                                     .map(|(edit_layer, prop, value)| {
-                                        if matches!(prop, TransformProp::ScaleX | TransformProp::ScaleY) {
-                                            if let Some(layer) = comp.layers.iter().find(|l| l.id == edit_layer) {
-                                                let partner_prop = if prop == TransformProp::ScaleX {
-                                                    TransformProp::ScaleY
-                                                } else {
-                                                    TransformProp::ScaleX
-                                                };
-                                                let lt = t_comp - layer.start_offset.0.to_f64();
-                                                let old_x = layer.transform.get(prop).value_at(lt);
-                                                let old_y = layer.transform.get(partner_prop).value_at(lt);
-                                                let partner_val = crate::shell::linked_scale(old_x, old_y, value).1;
-                                                return patch_layer_prop(
-                                                    &patch_layer_prop(comp, edit_layer, prop, value),
-                                                    edit_layer,
-                                                    partner_prop,
-                                                    partner_val,
-                                                );
-                                            }
-                                        }
                                         patch_layer_prop(comp, edit_layer, prop, value)
                                     })
                             };
