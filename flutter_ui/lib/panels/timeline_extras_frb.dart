@@ -571,6 +571,7 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // An adjustment layer is a comp-sized effect container, drawn as a solid —
       // the same choice layer_style.dart and the egui frontend make.
       BridgeLayerKind.solid || BridgeLayerKind.adjustment => LumitIcon.solid,
+      BridgeLayerKind.nullObject => LumitIcon.camera,
     };
 
 /// The cache bar: a thin stripe under the time ruler showing which frames are

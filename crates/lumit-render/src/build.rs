@@ -267,7 +267,7 @@ pub fn build_comp_draws_at(
         let raw = match &layer.kind {
             // An adjustment layer has no pixels of its own; until its effect
             // stack exists it is a pass-through and draws nothing.
-            LayerKind::Adjustment => return None,
+            LayerKind::Adjustment | LayerKind::NullObject => return None,
             // Footage and Sequence footage clips both arrive decoded, keyed by
             // the layer id (collect_comp_jobs pushes one job per layer/frame).
             LayerKind::Footage { .. } | LayerKind::Sequence { .. } => {

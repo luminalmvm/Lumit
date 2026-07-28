@@ -1385,6 +1385,7 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
         BridgeLayerKind::Text,
         BridgeLayerKind::Camera,
         BridgeLayerKind::Adjustment,
+        BridgeLayerKind::NullObject,
         BridgeLayerKind::Sequence,
     ] {
         let added = match expected {
@@ -1392,6 +1393,7 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
             BridgeLayerKind::Text => comp.add_text_layer(),
             BridgeLayerKind::Camera => comp.add_camera_layer(),
             BridgeLayerKind::Adjustment => comp.add_adjustment_layer(),
+            BridgeLayerKind::NullObject => comp.add_null_object_layer(),
             BridgeLayerKind::Sequence => comp.add_sequence_layer(),
             other => panic!("{other:?} has no Layer-menu entry"),
         }

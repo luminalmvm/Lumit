@@ -190,6 +190,7 @@ enum BridgeLayerKind {
   camera,
   sequence,
   adjustment,
+  nullObject,
   ;
 }
 

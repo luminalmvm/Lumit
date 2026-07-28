@@ -2174,6 +2174,7 @@ Future<void> _showLayerMenu(
             'Text',
             'Camera',
             'Adjustment',
+            'Null',
             'Sequence'
           ])
             MenuRow(onPressed: () => close(kind), child: Text(kind)),
@@ -2190,6 +2191,8 @@ Future<void> _showLayerMenu(
       comp.addCameraLayer();
     case 'Adjustment':
       comp.addAdjustmentLayer();
+    case 'Null':
+      comp.addNullObjectLayer();
     case 'Sequence':
       comp.addSequenceLayer();
     case _:

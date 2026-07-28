@@ -61,6 +61,7 @@ pub(crate) fn base_layer(
         LayerKind::Camera { .. } => 5,
         LayerKind::Sequence { .. } => 6,
         LayerKind::Adjustment => 7,
+        LayerKind::NullObject => 0,
     };
     Layer {
         id: Uuid::now_v7(),

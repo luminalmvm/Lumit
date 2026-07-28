@@ -80,6 +80,7 @@ pub enum BridgeLayerKind {
     Camera,
     Sequence,
     Adjustment,
+    NullObject,
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -164,6 +165,7 @@ pub(crate) fn read_layer_info(
             K::Camera { .. } => BridgeLayerKind::Camera,
             K::Sequence { .. } => BridgeLayerKind::Sequence,
             K::Adjustment => BridgeLayerKind::Adjustment,
+            K::NullObject => BridgeLayerKind::NullObject,
         },
         switches: BridgeLayerSwitches {
             visible: s.visible,
@@ -690,6 +692,7 @@ impl LayerReference {
             | LayerKind::Camera { .. }
             | LayerKind::Sequence { .. }
             | LayerKind::Adjustment => return Ok(None),
+            LayerKind::NullObject => return Ok(None),
         };
 
         let proj = self.project()?;
@@ -712,6 +715,7 @@ impl LayerReference {
             K::Camera { .. } => BridgeLayerKind::Camera,
             K::Sequence { .. } => BridgeLayerKind::Sequence,
             K::Adjustment => BridgeLayerKind::Adjustment,
+            K::NullObject => BridgeLayerKind::NullObject,
         })
     }
 

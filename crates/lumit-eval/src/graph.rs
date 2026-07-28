@@ -211,9 +211,9 @@ fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
         LayerKind::Precomp { comp } => SourceRef::Precomp(*comp),
         LayerKind::Text { .. } => SourceRef::Text,
         LayerKind::Sequence { .. } => SourceRef::Sequence,
-        // Cameras and adjustment layers have no source of their own; the
+        // Cameras, adjustment and nullobject later have no source of their own; the
         // compiler handles both before this point.
-        LayerKind::Camera { .. } | LayerKind::Adjustment => return None,
+        LayerKind::Camera { .. } | LayerKind::Adjustment | LayerKind::NullObject => return None,
     })
 }
 

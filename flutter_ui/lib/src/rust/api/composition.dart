@@ -274,6 +274,13 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddFootageLayer(
               that: this, footage: footage);
 
+  /// Add a NullObject layer: a null object with no source of
+  /// its own, centred and have no height and width
+  LayerReference addNullObjectLayer() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddNullObjectLayer(
+        that: this,
+      );
+
   /// Place another composition into this one as a Precomp layer.
   ///
   /// Refuses to nest a comp inside itself. A deeper cycle — A inside B inside

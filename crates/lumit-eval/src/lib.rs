@@ -763,6 +763,11 @@ fn feed_source(
             // hashed at the layer level like any other layer's.
             h.update(b"adjust");
         }
+        LayerKind::NullObject => {
+            // No source of its own; Only its transform which the
+            // caller hashes at the layer level like every other layer's.
+            h.update(b"null");
+        }
     }
     Some(())
 }
