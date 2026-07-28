@@ -1758,24 +1758,53 @@ fn rational_at_signed_preserves_negative_times() {
 #[test]
 fn effect_param_reads_keyframes_for_the_graph() {
     use lumit_core::anim::{Animation, Property};
-    use lumit_core::model::{EffectParam, EffectValue};
+    use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, Layer, LayerKind};
 
-    let param = EffectParam {
-        id: "x".into(),
-        value: EffectValue::Float(Property {
-            animation: Animation::Keyframed(vec![lumit_core::anim::Keyframe {
-                time: rational_at(1.0),
-                value: 42.0,
-                interp_in: lumit_core::anim::SideInterp::Linear,
-                interp_out: lumit_core::anim::SideInterp::Linear,
-            }]),
+    let layer = Layer {
+        id: uuid::Uuid::nil(),
+        name: "T".into(),
+        kind: LayerKind::Adjustment,
+        in_point: lumit_core::time::CompTime(rational_at(0.0)),
+        out_point: lumit_core::time::CompTime(rational_at(10.0)),
+        start_offset: lumit_core::time::CompTime(rational_at(0.0)),
+        transform: Default::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: Property::zero(),
+        blend: Default::default(),
+        masks: vec![],
+        effects: vec![EffectInstance {
+            id: uuid::Uuid::nil(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Builtin,
+                match_name: "test".into(),
+                version: 0,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![EffectParam {
+                id: "x".into(),
+                value: EffectValue::Float(Property {
+                    animation: Animation::Keyframed(vec![lumit_core::anim::Keyframe {
+                        time: rational_at(1.0),
+                        value: 42.0,
+                        interp_in: lumit_core::anim::SideInterp::Linear,
+                        interp_out: lumit_core::anim::SideInterp::Linear,
+                    }]),
+                    extra: serde_json::Map::new(),
+                }),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
             extra: serde_json::Map::new(),
-        }),
+        }],
+        switches: Default::default(),
         extra: serde_json::Map::new(),
     };
 
-    // Same extraction chain graph_plot uses (indexed, not by id).
-    let p = &param;
+    // The extraction chain graph_plot uses: layer.effects.get(ei)?.params.get(pi)?.
+    let p = layer.effects.get(0).unwrap().params.get(0).unwrap();
     let EffectValue::Float(prop) = &p.value else { panic!("not float") };
     let Animation::Keyframed(ks) = &prop.animation else { panic!("not keyframed") };
     assert_eq!(ks.len(), 1);
