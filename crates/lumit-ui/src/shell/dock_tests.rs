@@ -962,80 +962,10 @@ fn linked_scale_keeps_ratio() {
 }
 
 /// Regression for TF-29: Linked scale squishes aspect ratio when animated with bezier curves.
-/// When scaling `SideInterp::Bezier` for linked scale, the bezier speed for the partner
-/// axis must be scaled by the ratio of values (v_partner / v_src) so that both curves progress
-/// with identical relative slope, maintaining the exact aspect ratio at every frame.
+/// Synchronizing scale keyframes via `sync_scale_partner_keys` scales Bezier speed by value ratio
+/// (v_partner / v_src) so both curves progress with identical relative slope, maintaining the aspect ratio.
 #[test]
-fn tf_29_linked_scale_bezier_preserves_aspect_ratio_across_span() {
-    use lumit_core::anim::{evaluate, Keyframe, SideInterp};
-
-    // ScaleX: 100.0 -> 200.0 with custom bezier speed 150.0 and influence 1/3
-    let speed_x = 150.0;
-    let infl = 1.0 / 3.0;
-
-    let kx0 = Keyframe {
-        time: rational_at(0.0),
-        value: 100.0,
-        interp_in: SideInterp::Linear,
-        interp_out: SideInterp::Bezier {
-            speed: speed_x,
-            influence: infl,
-        },
-    };
-    let kx1 = Keyframe {
-        time: rational_at(1.0),
-        value: 200.0,
-        interp_in: SideInterp::Bezier {
-            speed: 0.0,
-            influence: infl,
-        },
-        interp_out: SideInterp::Linear,
-    };
-    let keys_x = vec![kx0, kx1];
-
-    // ScaleY: 50.0 -> 100.0 (2:1 aspect ratio, scale_factor = 50 / 100 = 0.5)
-    let factor = 50.0 / 100.0;
-    let ky0 = Keyframe {
-        time: rational_at(0.0),
-        value: 50.0,
-        interp_in: SideInterp::Linear,
-        interp_out: scale_side_interp(kx0.interp_out, factor),
-    };
-    let ky1 = Keyframe {
-        time: rational_at(1.0),
-        value: 100.0,
-        interp_in: scale_side_interp(kx1.interp_in, factor),
-        interp_out: SideInterp::Linear,
-    };
-    let keys_y = vec![ky0, ky1];
-
-    // Verify speed was scaled: 150.0 * 0.5 = 75.0
-    assert_eq!(
-        ky0.interp_out,
-        SideInterp::Bezier {
-            speed: 75.0,
-            influence: infl,
-        }
-    );
-
-    // Verify aspect ratio (x / y == 2.0) is preserved EXACTLY across all intermediate times
-    for i in 0..=100 {
-        let t = i as f64 / 100.0;
-        let vx = evaluate(&keys_x, t).unwrap();
-        let vy = evaluate(&keys_y, t).unwrap();
-        let ratio = vx / vy;
-        assert!(
-            (ratio - 2.0).abs() < 1e-5,
-            "At t={t}: aspect ratio {ratio} != 2.0 (squish detected! vx={vx}, vy={vy})"
-        );
-    }
-}
-
-/// Regression for TF-29: Verify `sync_scale_partner_keys` automatically synchronizes
-/// keyframe times, values via `linked_scale`, and Bezier interpolations via `scale_side_interp`
-/// when editing scale keyframes in the Graph Editor.
-#[test]
-fn tf_29_sync_scale_partner_keys_generates_lockstep_bezier_keys() {
+fn tf_29_linked_scale_bezier_preserves_aspect_ratio() {
     use lumit_core::anim::{evaluate, Keyframe, Property, SideInterp};
     use lumit_core::model::{Layer, LayerKind, Switches, TransformGroup, TransformProp};
     use lumit_core::time::CompTime;
@@ -1064,48 +994,30 @@ fn tf_29_sync_scale_partner_keys_generates_lockstep_bezier_keys() {
         extra: serde_json::Map::new(),
     };
 
-    // User edits ScaleX keyframes in graph: 100 -> 200 with Bezier easing speed 150
-    let speed_x = 150.0;
-    let infl = 1.0 / 3.0;
-
     let src_keys = vec![
         Keyframe {
             time: rational_at(0.0),
             value: 100.0,
             interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Bezier {
-                speed: speed_x,
-                influence: infl,
-            },
+            interp_out: SideInterp::Bezier { speed: 150.0, influence: 1.0 / 3.0 },
         },
         Keyframe {
             time: rational_at(1.0),
             value: 200.0,
-            interp_in: SideInterp::Bezier {
-                speed: 0.0,
-                influence: infl,
-            },
+            interp_in: SideInterp::Bezier { speed: 0.0, influence: 1.0 / 3.0 },
             interp_out: SideInterp::Linear,
         },
     ];
 
-    let (partner_prop, partner_keys) =
-        sync_scale_partner_keys(TransformProp::ScaleX, &src_keys, &layer).unwrap();
+    let (partner_prop, partner_keys) = sync_scale_partner_keys(TransformProp::ScaleX, &src_keys, &layer).unwrap();
     assert_eq!(partner_prop, TransformProp::ScaleY);
-    assert_eq!(partner_keys.len(), 2);
-    assert_eq!(partner_keys[0].value, 50.0);
-    assert_eq!(partner_keys[1].value, 100.0);
+    assert_eq!(partner_keys[0].interp_out, SideInterp::Bezier { speed: 75.0, influence: 1.0 / 3.0 });
 
-    // Verify evaluation preserves exact 2:1 aspect ratio across all intermediate frames
     for i in 0..=100 {
         let t = i as f64 / 100.0;
         let vx = evaluate(&src_keys, t).unwrap();
         let vy = evaluate(&partner_keys, t).unwrap();
-        let ratio = vx / vy;
-        assert!(
-            (ratio - 2.0).abs() < 1e-5,
-            "At t={t}: aspect ratio {ratio} != 2.0 (squish detected! vx={vx}, vy={vy})"
-        );
+        assert!((vx / vy - 2.0).abs() < 1e-5, "At t={t}: aspect ratio {ratio} != 2.0", ratio = vx / vy);
     }
 }
 
