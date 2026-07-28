@@ -2807,6 +2807,7 @@ dependencies = [
  "lumit-eval",
  "lumit-flow",
  "lumit-gpu",
+ "lumit-keymap",
  "lumit-media",
  "lumit-project",
  "lumit-text",

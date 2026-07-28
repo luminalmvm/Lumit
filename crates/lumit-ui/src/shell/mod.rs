@@ -133,6 +133,18 @@ pub struct Shell {
     #[cfg(feature = "media")]
     #[serde(default)]
     settings_export: settings::ExportSettings,
+    /// Active keymap (docs/07-UI-SPEC §15), remappable in Settings → Keymap.
+    #[serde(default = "lumit_keymap::default_keymap")]
+    pub(crate) keymap: lumit_keymap::Keymap,
+    /// Settings → Keymap UI state (runtime only).
+    #[serde(skip, default)]
+    keymap_search: String,
+    #[serde(skip, default)]
+    keymap_context_filter: Option<lumit_keymap::KeyContext>,
+    #[serde(skip, default)]
+    keymap_editing: Option<(lumit_keymap::KeyContext, lumit_keymap::ActionId)>,
+    #[serde(skip, default)]
+    keymap_edit_text: String,
     /// Whether the Settings window is open (runtime only).
     #[serde(skip, default)]
     settings_open: bool,
@@ -420,6 +432,11 @@ impl Default for Shell {
             interface: settings::InterfaceSettings::default(),
             #[cfg(feature = "media")]
             settings_export: settings::ExportSettings::default(),
+            keymap: lumit_keymap::default_keymap(),
+            keymap_search: String::new(),
+            keymap_context_filter: None,
+            keymap_editing: None,
+            keymap_edit_text: String::new(),
             settings_open: false,
             settings_page: settings::SettingsPage::default(),
             palette_open: false,

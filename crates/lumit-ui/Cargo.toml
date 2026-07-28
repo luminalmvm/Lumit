@@ -10,6 +10,7 @@ egui = "0.31"
 # so the binary carries one icon family, not the whole library.
 iconflow = { version = "1.0", features = ["pack-iconoir"] }
 lumit-core = { path = "../lumit-core" }
+lumit-keymap = { path = "../lumit-keymap" }
 egui-wgpu = { version = "0.31", optional = true }
 lumit-audio = { path = "../lumit-audio", optional = true }
 lumit-cache = { path = "../lumit-cache", optional = true }

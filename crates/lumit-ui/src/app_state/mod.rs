@@ -1160,6 +1160,14 @@ pub struct AppState {
     /// and the current pointer y (screen px). Cleared on release, when a
     /// `ReorderLayer` is committed if the drop lands on a new slot.
     pub layer_reorder: Option<(Uuid, f32)>,
+    /// Last time the `U` key was pressed, for detecting the `UU`/`UUU` multi-tap
+    /// (docs/07-UI-SPEC §4.3/§15): a second press within 500 ms reveals all
+    /// modified properties; a third collapses all.
+    pub last_u_press: Option<Instant>,
+    /// How many `U` presses have landed within the current 500 ms window.
+    /// Cycles 0→1→2→0 on each press within the window; resets to 1 on a
+    /// press outside the window.
+    pub u_press_count: u8,
 }
 
 impl Default for AppState {
@@ -1305,6 +1313,8 @@ impl Default for AppState {
             project_panel_w: 0.0,
             renaming_layer: None,
             layer_reorder: None,
+            last_u_press: None,
+            u_press_count: 0,
             selected_item: None,
             selected_items: Vec::new(),
             timeline_layer_search: String::new(),

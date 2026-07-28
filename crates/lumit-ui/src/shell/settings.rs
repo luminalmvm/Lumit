@@ -26,6 +26,7 @@ pub(crate) enum SettingsPage {
     Appearance,
     Interface,
     Performance,
+    Keymap,
     /// Export defaults (K-119). Gated on the `media` feature like every
     /// other export concept (`crate::export` compiles to nothing without
     /// it), so this variant — and the page itself — simply doesn't exist on
@@ -36,19 +37,21 @@ pub(crate) enum SettingsPage {
 
 impl SettingsPage {
     #[cfg(feature = "media")]
+    const ALL: [SettingsPage; 6] = [
+        SettingsPage::General,
+        SettingsPage::Appearance,
+        SettingsPage::Interface,
+        SettingsPage::Performance,
+        SettingsPage::Keymap,
+        SettingsPage::Export,
+    ];
+    #[cfg(not(feature = "media"))]
     const ALL: [SettingsPage; 5] = [
         SettingsPage::General,
         SettingsPage::Appearance,
         SettingsPage::Interface,
         SettingsPage::Performance,
-        SettingsPage::Export,
-    ];
-    #[cfg(not(feature = "media"))]
-    const ALL: [SettingsPage; 4] = [
-        SettingsPage::General,
-        SettingsPage::Appearance,
-        SettingsPage::Interface,
-        SettingsPage::Performance,
+        SettingsPage::Keymap,
     ];
 
     fn title(self) -> &'static str {
@@ -57,6 +60,7 @@ impl SettingsPage {
             SettingsPage::Appearance => "Appearance",
             SettingsPage::Interface => "Interface",
             SettingsPage::Performance => "Performance",
+            SettingsPage::Keymap => "Keymap",
             #[cfg(feature = "media")]
             SettingsPage::Export => "Export",
         }
@@ -264,6 +268,7 @@ impl Shell {
                                 }
                                 SettingsPage::Interface => self.settings_interface(ui, &theme, ctx),
                                 SettingsPage::Performance => self.settings_performance(ui, &theme),
+                                SettingsPage::Keymap => self.settings_keymap(ui, &theme),
                                 #[cfg(feature = "media")]
                                 SettingsPage::Export => self.settings_export(ui, &theme),
                             }
@@ -755,6 +760,270 @@ impl Shell {
         self.theme.apply(ctx);
         let s0 = self.theme.surface_0;
         ctx.style_mut(|s| s.visuals.panel_fill = s0);
+    }
+
+    fn settings_keymap(&mut self, ui: &mut egui::Ui, theme: &Theme) {
+        page_heading(ui, theme, "Keymap");
+
+        // --- Presets and sharing ---
+        settings_group(ui, theme, "Presets and sharing", |ui| {
+            settings_row(
+                ui,
+                theme,
+                "Keymap preset",
+                Some("Load standard defaults or alternate presets."),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("Default").clicked() {
+                            self.keymap = lumit_keymap::default_keymap();
+                        }
+                        if ui.button("After Effects").clicked() {
+                            self.keymap = lumit_keymap::after_effects_preset();
+                        }
+                    });
+                },
+            );
+            settings_divider(ui, theme);
+            settings_row(
+                ui,
+                theme,
+                "Keymap file",
+                Some("Export or import your shortcut configuration as a shareable JSON file."),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("Export keymap…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("JSON keymap", &["json"])
+                                .set_file_name("lumit_keymap.json")
+                                .save_file()
+                            {
+                                if let Ok(json) = serde_json::to_string_pretty(&self.keymap) {
+                                    let _ = std::fs::write(path, json);
+                                }
+                            }
+                        }
+                        if ui.button("Import keymap…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("JSON keymap", &["json"])
+                                .pick_file()
+                            {
+                                if let Ok(text) = std::fs::read_to_string(path) {
+                                    if let Ok(parsed) = serde_json::from_str::<lumit_keymap::Keymap>(&text) {
+                                        self.keymap = parsed;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                },
+            );
+        });
+
+        // --- Search and filter ---
+        settings_group(ui, theme, "Search and filter", |ui| {
+            settings_row(
+                ui,
+                theme,
+                "Search",
+                Some("Filter by action description, ID, or key chord."),
+                |ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.keymap_search)
+                            .hint_text("Search…")
+                            .desired_width(180.0),
+                    );
+                },
+            );
+            settings_divider(ui, theme);
+            let filter_label = match self.keymap_context_filter {
+                None => "All contexts",
+                Some(ctx) => ctx.label(),
+            };
+            settings_row(
+                ui,
+                theme,
+                "Context filter",
+                Some("Limit shortcuts to a specific panel or context."),
+                |ui| {
+                    bare_dropdown(ui, filter_label, |ui| {
+                        if ui
+                            .selectable_label(self.keymap_context_filter.is_none(), "All contexts")
+                            .clicked()
+                        {
+                            self.keymap_context_filter = None;
+                            ui.close_menu();
+                        }
+                        for ctx in lumit_keymap::KeyContext::ALL {
+                            if ui
+                                .selectable_label(self.keymap_context_filter == Some(ctx), ctx.label())
+                                .clicked()
+                            {
+                                self.keymap_context_filter = Some(ctx);
+                                ui.close_menu();
+                            }
+                        }
+                    });
+                },
+            );
+        });
+
+        // --- Conflict detection ---
+        let conflicts = self.keymap.conflicts();
+        if !conflicts.is_empty() {
+            settings_group(ui, theme, "Conflict detection", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "⚠ {} shortcut conflict(s) detected",
+                            conflicts.len()
+                        ))
+                        .color(theme.text_primary),
+                    );
+                });
+                for c in &conflicts {
+                    let actions_str = c
+                        .actions
+                        .iter()
+                        .map(|a| a.description())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "• [{}] clashes between: {}",
+                            c.chord, actions_str
+                        ))
+                        .small()
+                        .color(theme.text_secondary),
+                    );
+                }
+            });
+        }
+
+        // --- Per-context bindings ---
+        let contexts_to_show: Vec<lumit_keymap::KeyContext> = match self.keymap_context_filter {
+            Some(ctx) => vec![ctx],
+            None => lumit_keymap::KeyContext::ALL.to_vec(),
+        };
+
+        for ctx in contexts_to_show {
+            let mut matching_bindings: Vec<lumit_keymap::Binding> = self
+                .keymap
+                .bindings
+                .iter()
+                .filter(|b| b.context == ctx)
+                .cloned()
+                .collect();
+
+            if !self.keymap_search.trim().is_empty() {
+                let q = self.keymap_search.to_ascii_lowercase();
+                matching_bindings.retain(|b| {
+                    b.action.0.to_ascii_lowercase().contains(&q)
+                        || b.action.description().to_ascii_lowercase().contains(&q)
+                        || b.chord.to_string().to_ascii_lowercase().contains(&q)
+                });
+            }
+
+            if matching_bindings.is_empty() {
+                continue;
+            }
+
+            settings_group(ui, theme, ctx.label(), |ui| {
+                let count = matching_bindings.len();
+                for (idx, b) in matching_bindings.into_iter().enumerate() {
+                    let is_conflict = conflicts.iter().any(|c| c.chord == b.chord);
+                    let is_editing = self
+                        .keymap_editing
+                        .as_ref()
+                        .map(|(c_ctx, c_act)| *c_ctx == b.context && c_act == &b.action)
+                        .unwrap_or(false);
+
+                    let action_desc = b.action.description().to_string();
+                    let action_id = b.action.0.clone();
+                    let chord_str = b.chord.to_string();
+
+                    let hint = if is_conflict {
+                        format!("ID: {action_id} (⚠ Conflict)")
+                    } else {
+                        format!("ID: {action_id}")
+                    };
+
+                    settings_row(ui, theme, &action_desc, Some(&hint), |ui| {
+                        if is_editing {
+                            ui.horizontal(|ui| {
+                                let response = ui.add(
+                                    egui::TextEdit::singleline(&mut self.keymap_edit_text)
+                                        .desired_width(110.0)
+                                        .hint_text("Press keys…"),
+                                );
+                                response.request_focus();
+
+                                // Listen for key events to update edit_text live
+                                ui.input(|i| {
+                                    for ev in &i.events {
+                                        if let egui::Event::Key { key, pressed: true, modifiers, .. } = ev {
+                                            if *key == egui::Key::Escape {
+                                                self.keymap_editing = None;
+                                            } else if *key == egui::Key::Enter {
+                                                if let Ok(c) = self.keymap_edit_text.parse::<lumit_keymap::Chord>() {
+                                                    self.keymap.bind(b.context, c, b.action.clone());
+                                                }
+                                                self.keymap_editing = None;
+                                            } else if let Some(key_name) = crate::shell::shortcuts::egui_key_to_string(*key) {
+                                                let chord = lumit_keymap::Chord {
+                                                    mods: lumit_keymap::Modifiers {
+                                                        primary: modifiers.command,
+                                                        shift: modifiers.shift,
+                                                        alt: modifiers.alt,
+                                                    },
+                                                    key: key_name.to_string(),
+                                                };
+                                                self.keymap_edit_text = chord.to_string();
+                                            }
+                                        }
+                                    }
+                                });
+
+                                if ui.button("Save").clicked() {
+                                    if let Ok(c) = self.keymap_edit_text.parse::<lumit_keymap::Chord>() {
+                                        self.keymap.bind(b.context, c, b.action.clone());
+                                    }
+                                    self.keymap_editing = None;
+                                }
+                                if ui.button("Cancel").clicked() {
+                                    self.keymap_editing = None;
+                                }
+                            });
+                        } else {
+                            ui.horizontal(|ui| {
+                                let btn_text = if is_conflict {
+                                    format!("⚠ {}", chord_str)
+                                } else {
+                                    chord_str
+                                };
+                                let btn = egui::Button::new(
+                                    egui::RichText::new(btn_text).color(if is_conflict {
+                                        theme.text_secondary
+                                    } else {
+                                        theme.text_primary
+                                    }),
+                                );
+                                if ui.add(btn).clicked() {
+                                    self.keymap_editing = Some((b.context, b.action.clone()));
+                                    self.keymap_edit_text = b.chord.to_string();
+                                }
+                                if ui.small_button("Clear").clicked() {
+                                    self.keymap.unbind(b.context, &b.chord);
+                                }
+                            });
+                        }
+                    });
+
+                    if idx + 1 < count {
+                        settings_divider(ui, theme);
+                    }
+                }
+            });
+        }
     }
 }
 

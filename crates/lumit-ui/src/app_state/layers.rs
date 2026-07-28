@@ -1454,6 +1454,167 @@ impl AppState {
         #[cfg(feature = "media")]
         self.refresh_preview();
     }
+
+    /// Open the transform / effects / audio groups for selected layers that have
+    /// animated properties (docs/07-UI-SPEC §4.3: `U` reveals animated).
+    pub fn reveal_animated_properties(&mut self, ctx: &egui::Context) {
+        use lumit_core::model::{LayerKind, TransformProp};
+
+        let doc = self.store.snapshot();
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            return;
+        };
+        let Some(comp) = doc.comp(comp_id) else { return };
+        let Some(selected) = self.selected_layer else { return };
+
+        let layer = comp.layers.iter().find(|l| l.id == selected);
+        let Some(layer) = layer else { return };
+
+        // Always open the layer twirl itself.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("layer-twirl", selected)), true);
+        });
+
+        // Transform group: open if any transform property is animated.
+        let transform_animated = [
+            TransformProp::AnchorX,
+            TransformProp::AnchorY,
+            TransformProp::PositionX,
+            TransformProp::PositionY,
+            TransformProp::PositionZ,
+            TransformProp::ScaleX,
+            TransformProp::ScaleY,
+            TransformProp::Rotation,
+            TransformProp::RotationX,
+            TransformProp::RotationY,
+            TransformProp::Opacity,
+        ]
+        .iter()
+        .any(|prop| layer.transform.get(*prop).is_animated());
+
+        // Camera layers: also check zoom.
+        let camera_animated = if let LayerKind::Camera { zoom } = &layer.kind {
+            zoom.is_animated()
+        } else {
+            false
+        };
+
+        if transform_animated || camera_animated {
+            ctx.data_mut(|d| {
+                d.insert_persisted(egui::Id::new(("transform-group", selected)), true);
+            });
+        }
+
+        // Effects group: open if any effect has an animated parameter.
+        let effects_animated = layer.effects.iter().any(|fx| {
+            fx.params.iter().any(|p| match &p.value {
+                lumit_core::model::EffectValue::Float(p) => p.is_animated(),
+                lumit_core::model::EffectValue::Colour(ch) => {
+                    ch.iter().any(|p| p.is_animated())
+                }
+                _ => false,
+            })
+        });
+        if effects_animated {
+            ctx.data_mut(|d| {
+                d.insert_persisted(egui::Id::new(("effects-group", selected)), true);
+            });
+        }
+
+        // Audio group: open if volume is animated.
+        if layer.volume_db.is_animated() {
+            ctx.data_mut(|d| {
+                d.insert_persisted(egui::Id::new(("audio-group", selected)), true);
+            });
+        }
+    }
+
+    /// Open ALL property groups for selected layers, including those with
+    /// non-default values even if not keyframed (docs/07-UI-SPEC §4.3: `UU`
+    /// reveals all modified properties).
+    pub fn reveal_all_modified_properties(&mut self, ctx: &egui::Context) {
+        use lumit_core::model::LayerKind;
+
+        let doc = self.store.snapshot();
+        let Some(comp_id) = self.preview_comp.or(self.selected_comp) else {
+            return;
+        };
+        let Some(comp) = doc.comp(comp_id) else { return };
+        let Some(selected) = self.selected_layer else { return };
+
+        let layer = comp.layers.iter().find(|l| l.id == selected);
+        let Some(layer) = layer else { return };
+
+        // Open the layer twirl.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("layer-twirl", selected)), true);
+        });
+
+        // Transform group: always open for UU (the transform always has values).
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("transform-group", selected)), true);
+        });
+
+        // Effects group: open if any effect exists.
+        if !layer.effects.is_empty() {
+            ctx.data_mut(|d| {
+                d.insert_persisted(egui::Id::new(("effects-group", selected)), true);
+            });
+        }
+
+        // Audio group: open if the layer has audio capability.
+        let footage_has_item = matches!(
+            &layer.kind,
+            LayerKind::Footage { item, .. }
+                if doc.item(*item).is_some_and(|it| {
+                    matches!(it, lumit_core::model::ProjectItem::Footage(_))
+                })
+        );
+        #[cfg(feature = "media")]
+        let precomp_has_audio = if let LayerKind::Precomp { comp: nested } = &layer.kind {
+            let mut visited = vec![comp_id, *nested];
+            self.comp_has_audio(&doc, *nested, &mut visited)
+        } else {
+            false
+        };
+        #[cfg(not(feature = "media"))]
+        let precomp_has_audio = false;
+        let has_audio = footage_has_item || precomp_has_audio;
+        if has_audio {
+            ctx.data_mut(|d| {
+                d.insert_persisted(egui::Id::new(("audio-group", selected)), true);
+            });
+        }
+
+        // Retime group: no separate timeline group for retime — the inspector
+        // shows it as part of the layer.
+    }
+
+    /// Collapse all property groups for selected layers (docs/07-UI-SPEC §4.3:
+    /// third `U` press in a 500 ms window closes everything).
+    pub fn collapse_all_properties(&mut self, ctx: &egui::Context) {
+        let Some(selected) = self.selected_layer else { return };
+
+        // Close the layer twirl.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("layer-twirl", selected)), false);
+        });
+
+        // Close Transform group.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("transform-group", selected)), false);
+        });
+
+        // Close Effects group.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("effects-group", selected)), false);
+        });
+
+        // Close Audio group.
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new(("audio-group", selected)), false);
+        });
+    }
 }
 
 /// The ABSOLUTE lengths (seconds) of a key's bezier handles against its SOURCE

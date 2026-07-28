@@ -114,91 +114,124 @@ impl Shell {
     /// Shift+F3 graph editor (§5), Cmd/Ctrl+D duplicate (§4.7), `=`/`-`/`\`
     /// timeline zoom (§4.6), and `[`/`]`/Alt+`[`/`]` layer span edits (§4.7).
     /// Skipped while a text field holds focus so typing is never stolen.
+    /// Check whether a shortcut bound to `action` in `context` was pressed this frame.
+    pub(crate) fn is_action_pressed(
+        &self,
+        ctx: &egui::Context,
+        context: lumit_keymap::KeyContext,
+        action: &str,
+    ) -> bool {
+        let action_id = lumit_keymap::ActionId::from(action);
+        ctx.input(|i| {
+            for ev in &i.events {
+                if let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = ev
+                {
+                    if let Some(key_name) = egui_key_to_string(*key) {
+                        let chord = lumit_keymap::Chord {
+                            mods: lumit_keymap::Modifiers {
+                                primary: modifiers.command,
+                                shift: modifiers.shift,
+                                alt: modifiers.alt,
+                            },
+                            key: key_name.to_string(),
+                        };
+                        if self.keymap.lookup(context, &chord) == Some(&action_id) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        })
+    }
+
+    /// Cross-platform global shortcuts (both platforms, unlike the non-macOS
+    /// menu accelerators in [`Self::shortcuts`] / the macOS native menu):
+    /// driven by `self.keymap` (docs/07-UI-SPEC §15).
+    /// Skipped while a text field holds focus so typing is never stolen.
     pub(super) fn global_shortcuts(&mut self, ctx: &egui::Context) {
-        use egui::{Key, KeyboardShortcut, Modifiers};
         if ctx.memory(|m| m.focused()).is_some() {
             return;
         }
-        const GRAPH: KeyboardShortcut = KeyboardShortcut::new(Modifiers::SHIFT, Key::F3);
-        if ctx.input_mut(|i| i.consume_shortcut(&GRAPH)) {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "graph.toggle")
+            || self.is_action_pressed(ctx, lumit_keymap::KeyContext::Graph, "graph.toggle")
+        {
             self.app.timeline_graph_mode = !self.app.timeline_graph_mode;
         }
-        // Delete / Backspace (TF-6): selected keyframes first, else the
-        // selected layer. The Delete key was previously withheld on the worry
-        // it could fire from a value field — but the focus gate at the top of
-        // this fn is the fix for that, not avoidance; every shortcut here
-        // already relies on it.
-        const DELETE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Delete);
-        const BACKSPACE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Backspace);
-        if ctx.input_mut(|i| i.consume_shortcut(&DELETE) || i.consume_shortcut(&BACKSPACE))
+
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "edit.delete.selection")
             && !self.app.delete_selected_keyframes()
             && self.app.selected_layer.is_some()
         {
             self.app.delete_selected_layer();
         }
-        // `*` drops a marker at the playhead (07 §15 `marker.add`), during
-        // playback too — it is only a commit, so the transport never pauses.
-        // The asterisk never arrives as an egui Key (it is Shift+8, or the
-        // numpad multiply, depending on layout), so it is read from the text
-        // events instead — which also makes it layout-independent.
+
         let star = ctx.input(|i| {
             i.events
                 .iter()
                 .any(|e| matches!(e, egui::Event::Text(t) if t == "*"))
         });
-        if star {
+        if star || self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "marker.add") {
             self.app.add_marker_at_playhead();
         }
-        // Cmd/Ctrl+D duplicates the selected layer (docs/07-UI-SPEC §4.7, the AE
-        // convention). Only consumed when a layer is selected, so it is a clean
-        // no-op otherwise rather than flashing an error. Razor is Ctrl+Shift+D,
-        // a different chord.
-        const DUPLICATE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
-        if self.app.selected_layer.is_some() && ctx.input_mut(|i| i.consume_shortcut(&DUPLICATE)) {
+
+        if self.app.selected_layer.is_some()
+            && self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "layer.duplicate")
+        {
             self.app.duplicate_layer();
         }
-        // Timeline zoom (docs/07-UI-SPEC §4.6): `=`/`Shift+=` zoom in, `-` zooms
-        // out, `\` fits. Same 1.4× steps and 1..400% clamp as the bottom bar's
-        // zoom buttons. Read (not consumed) — no other reader claims these keys.
-        let (zoom_in, zoom_out, zoom_fit) = ctx.input(|i| {
-            (
-                i.key_pressed(Key::Equals) || i.key_pressed(Key::Plus),
-                i.key_pressed(Key::Minus),
-                i.key_pressed(Key::Backslash),
-            )
-        });
-        if zoom_in {
+
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "timeline.zoom.in") {
             self.app.timeline_zoom = (self.app.timeline_zoom * 1.4).min(400.0);
         }
-        if zoom_out {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "timeline.zoom.out") {
             self.app.timeline_zoom = (self.app.timeline_zoom / 1.4).max(1.0);
         }
-        if zoom_fit {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "timeline.zoom.fit") {
             self.app.timeline_zoom = 1.0;
         }
-        // Layer span edits (docs/07-UI-SPEC §4.7): `[`/`]` move the selected
-        // layer's in/out to the playhead; Alt+`[`/`]` trim that edge. Only when a
-        // layer is selected. The Alt (trim) chord is checked before the plain
-        // (move) one so the more-specific binding wins.
+
         if self.app.selected_layer.is_some() {
             use lumit_core::ops::SpanEdit;
-            const MOVE_IN: KeyboardShortcut =
-                KeyboardShortcut::new(Modifiers::NONE, Key::OpenBracket);
-            const MOVE_OUT: KeyboardShortcut =
-                KeyboardShortcut::new(Modifiers::NONE, Key::CloseBracket);
-            const TRIM_IN: KeyboardShortcut =
-                KeyboardShortcut::new(Modifiers::ALT, Key::OpenBracket);
-            const TRIM_OUT: KeyboardShortcut =
-                KeyboardShortcut::new(Modifiers::ALT, Key::CloseBracket);
-            if ctx.input_mut(|i| i.consume_shortcut(&TRIM_IN)) {
+            if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "layer.trim.in") {
                 self.app.edit_selected_layer_span(SpanEdit::TrimIn);
-            } else if ctx.input_mut(|i| i.consume_shortcut(&MOVE_IN)) {
+            } else if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "layer.move.in") {
                 self.app.edit_selected_layer_span(SpanEdit::MoveIn);
             }
-            if ctx.input_mut(|i| i.consume_shortcut(&TRIM_OUT)) {
+            if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "layer.trim.out") {
                 self.app.edit_selected_layer_span(SpanEdit::TrimOut);
-            } else if ctx.input_mut(|i| i.consume_shortcut(&MOVE_OUT)) {
+            } else if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "layer.move.out") {
                 self.app.edit_selected_layer_span(SpanEdit::MoveOut);
+            }
+        }
+
+        if self.app.selected_layer.is_some()
+            && self.is_action_pressed(ctx, lumit_keymap::KeyContext::Timeline, "reveal.animated")
+        {
+            let now = std::time::Instant::now();
+            let within_window = self
+                .app
+                .last_u_press
+                .map(|t| now.duration_since(t).as_millis() < 500)
+                .unwrap_or(false);
+
+            if within_window {
+                self.app.u_press_count = (self.app.u_press_count + 1) % 3;
+            } else {
+                self.app.u_press_count = 1;
+            }
+            self.app.last_u_press = Some(now);
+
+            match self.app.u_press_count {
+                0 => self.app.collapse_all_properties(ctx),
+                1 => self.app.reveal_animated_properties(ctx),
+                2 => self.app.reveal_all_modified_properties(ctx),
+                _ => unreachable!(),
             }
         }
     }
@@ -206,30 +239,91 @@ impl Shell {
     #[cfg(not(target_os = "macos"))]
     pub(super) fn shortcuts(&mut self, ctx: &egui::Context) {
         use egui::{Key, KeyboardShortcut, Modifiers};
-        const UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
-        const REDO: KeyboardShortcut =
-            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
-        const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-        // The macOS-standard Settings shortcut (Cmd/Ctrl+comma).
         const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
-        // Command palette (Cmd/Ctrl+Shift+P, per docs/07-UI-SPEC §12/§15).
-        const PALETTE: KeyboardShortcut =
-            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::P);
-        // Order matters: consume the more-modified shortcut first.
-        if ctx.input_mut(|i| i.consume_shortcut(&REDO)) {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "edit.redo") {
             self.app.redo();
-        } else if ctx.input_mut(|i| i.consume_shortcut(&UNDO)) {
+        } else if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "edit.undo") {
             self.app.undo();
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&SAVE)) {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "file.save") {
             self.app.save();
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SETTINGS)) {
             self.settings_open = true;
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&PALETTE)) {
+        if self.is_action_pressed(ctx, lumit_keymap::KeyContext::Global, "palette.open") {
             self.open_command_palette();
         }
+    }
+}
+
+/// Helper to map an `egui::Key` to its string representation used in `lumit_keymap::Chord`.
+pub(crate) fn egui_key_to_string(key: egui::Key) -> Option<&'static str> {
+    match key {
+        egui::Key::Space => Some("Space"),
+        egui::Key::A => Some("A"),
+        egui::Key::B => Some("B"),
+        egui::Key::C => Some("C"),
+        egui::Key::D => Some("D"),
+        egui::Key::E => Some("E"),
+        egui::Key::F => Some("F"),
+        egui::Key::G => Some("G"),
+        egui::Key::H => Some("H"),
+        egui::Key::I => Some("I"),
+        egui::Key::J => Some("J"),
+        egui::Key::K => Some("K"),
+        egui::Key::L => Some("L"),
+        egui::Key::M => Some("M"),
+        egui::Key::N => Some("N"),
+        egui::Key::O => Some("O"),
+        egui::Key::P => Some("P"),
+        egui::Key::Q => Some("Q"),
+        egui::Key::R => Some("R"),
+        egui::Key::S => Some("S"),
+        egui::Key::T => Some("T"),
+        egui::Key::U => Some("U"),
+        egui::Key::V => Some("V"),
+        egui::Key::W => Some("W"),
+        egui::Key::X => Some("X"),
+        egui::Key::Y => Some("Y"),
+        egui::Key::Z => Some("Z"),
+        egui::Key::Num0 => Some("0"),
+        egui::Key::Num1 => Some("1"),
+        egui::Key::Num2 => Some("2"),
+        egui::Key::Num3 => Some("3"),
+        egui::Key::Num4 => Some("4"),
+        egui::Key::Num5 => Some("5"),
+        egui::Key::Num6 => Some("6"),
+        egui::Key::Num7 => Some("7"),
+        egui::Key::Num8 => Some("8"),
+        egui::Key::Num9 => Some("9"),
+        egui::Key::F1 => Some("F1"),
+        egui::Key::F2 => Some("F2"),
+        egui::Key::F3 => Some("F3"),
+        egui::Key::F4 => Some("F4"),
+        egui::Key::F5 => Some("F5"),
+        egui::Key::F6 => Some("F6"),
+        egui::Key::F7 => Some("F7"),
+        egui::Key::F8 => Some("F8"),
+        egui::Key::F9 => Some("F9"),
+        egui::Key::F10 => Some("F10"),
+        egui::Key::F11 => Some("F11"),
+        egui::Key::F12 => Some("F12"),
+        egui::Key::PageDown => Some("PageDown"),
+        egui::Key::PageUp => Some("PageUp"),
+        egui::Key::Home => Some("Home"),
+        egui::Key::End => Some("End"),
+        egui::Key::Delete => Some("Delete"),
+        egui::Key::Backspace => Some("Backspace"),
+        egui::Key::Enter => Some("Enter"),
+        egui::Key::Comma => Some(","),
+        egui::Key::Period => Some("."),
+        egui::Key::Equals => Some("="),
+        egui::Key::Minus => Some("-"),
+        egui::Key::Backslash => Some("\\"),
+        egui::Key::OpenBracket => Some("["),
+        egui::Key::CloseBracket => Some("]"),
+        _ => None,
     }
 }
 

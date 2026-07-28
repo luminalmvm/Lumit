@@ -2003,9 +2003,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the twist that an app-wide (Global) shortcut is live everywhere, so it clashes with a
   same-chord shortcut in *any* panel, while two different panels may reuse a key harmlessly.
   The default set (the whole documented table) and an "After Effects" preset both ship
-  clash-free, the map can be saved to a shareable file, and Ctrl/Cmd is stored as one
-  neutral "primary" key so a keymap works on both Windows and Mac. Still to come: wiring the
-  live key presses and the Settings → Keymap screen to this core.
+  clash-free, the map can be saved/loaded as a shareable file, and Ctrl/Cmd is stored as one
+  neutral "primary" key so a keymap works on both Windows and Mac. The Settings → Keymap screen
+  and live keypress dispatching are fully wired to this core with search, conflict detection,
+  and per-context display.
 
 ## 5. Making a change safely (the recipe)
 

@@ -30,6 +30,91 @@ impl From<&str> for ActionId {
     }
 }
 
+impl ActionId {
+    /// Human-readable label for Settings → Keymap display.
+    #[must_use]
+    pub fn description(&self) -> &str {
+        match self.0.as_str() {
+            "playback.toggle" => "Play / pause",
+            "playback.shuttle.reverse" => "Shuttle reverse",
+            "playback.shuttle.pause" => "Shuttle pause",
+            "playback.shuttle.forward" => "Shuttle forward",
+            "playback.frame.next" => "Next frame",
+            "playback.frame.prev" => "Previous frame",
+            "playback.frame.next10" => "Next 10 frames",
+            "playback.frame.prev10" => "Previous 10 frames",
+            "playback.comp.start" => "Comp start",
+            "playback.comp.end" => "Comp end",
+            "playback.workarea.start" => "Work area start",
+            "playback.workarea.end" => "Work area end",
+            "playback.layer.in" => "Selected layer in point",
+            "playback.layer.out" => "Selected layer out point",
+            "keyframe.prev" => "Previous keyframe",
+            "keyframe.next" => "Next keyframe",
+            "edit.point.prev" => "Previous edit point",
+            "edit.point.next" => "Next edit point",
+            "workarea.set.start" => "Set work area start",
+            "workarea.set.end" => "Set work area end",
+            "marker.add" => "Add marker at playhead",
+            "edit.delete.selection" => "Delete selection",
+            "palette.open" => "Command palette",
+            "export.queue.add" => "Add active comp to export queue",
+            "comp.settings" => "Composition settings",
+            "edit.undo" => "Undo",
+            "edit.redo" => "Redo",
+            "file.save" => "Save project",
+            "panel.maximise" => "Maximise / restore panel",
+            "graph.toggle" => "Toggle graph editor",
+            "tool.select" => "Selection tool",
+            "tool.hand" => "Hand (pan) tool",
+            "tool.zoom" => "Zoom tool",
+            "tool.anchor" => "Anchor point tool",
+            "tool.razor" => "Razor tool",
+            "tool.shape" => "Shape / mask tool cycle",
+            "tool.pen" => "Pen tool",
+            "reveal.position" => "Reveal position",
+            "reveal.scale" => "Reveal scale",
+            "reveal.rotation" => "Reveal rotation",
+            "reveal.opacity" => "Reveal opacity",
+            "reveal.anchor" => "Reveal anchor point",
+            "reveal.effects" => "Reveal effects",
+            "reveal.masks" => "Reveal masks",
+            "reveal.animated" => "Reveal animated properties",
+            "reveal.volume" => "Reveal volume",
+            "layer.move.in" => "Move layer in point to playhead",
+            "layer.move.out" => "Move layer out point to playhead",
+            "layer.trim.in" => "Trim layer in point at playhead",
+            "layer.trim.out" => "Trim layer out point at playhead",
+            "layer.split" => "Split layer / cut clip at playhead",
+            "layer.duplicate" => "Duplicate selection",
+            "layer.precompose" => "Precompose",
+            "layer.retime.enable" => "Enable Retime",
+            "timeline.zoom.in" => "Zoom time in",
+            "timeline.zoom.out" => "Zoom time out",
+            "timeline.zoom.fit" => "Fit time zoom",
+            "layer.rename" => "Rename selected layer",
+            "layer.toggle.visible" => "Toggle layer visibility",
+            "graph.ease" => "Ease",
+            "graph.ease.in" => "Ease in",
+            "graph.ease.out" => "Ease out",
+            "graph.fit" => "Auto-zoom fit selection",
+            "viewer.zoom.fit" => "Fit magnification",
+            "viewer.zoom.in" => "Zoom in",
+            "viewer.zoom.out" => "Zoom out",
+            "viewer.res.full" => "Preview resolution full",
+            "viewer.res.half" => "Preview resolution half",
+            "viewer.res.quarter" => "Preview resolution quarter",
+            "viewer.rulers.toggle" => "Toggle rulers",
+            "viewer.grid.toggle" => "Toggle transparency grid",
+            "panel.focus.next" => "Cycle panel focus forward",
+            "panel.focus.prev" => "Cycle panel focus backward",
+            "panel.search.focus" => "Focus panel search field",
+            s if s.starts_with("workspace.switch.") => "Switch workspace",
+            _ => self.0.as_str(),
+        }
+    }
+}
+
 impl fmt::Display for ActionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -50,6 +135,35 @@ pub enum KeyContext {
     /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
+}
+
+impl KeyContext {
+    /// All key contexts in order.
+    pub const ALL: [KeyContext; 8] = [
+        KeyContext::Global,
+        KeyContext::Tools,
+        KeyContext::Project,
+        KeyContext::Timeline,
+        KeyContext::Viewer,
+        KeyContext::Graph,
+        KeyContext::Panels,
+        KeyContext::Effects,
+    ];
+
+    /// Display label for UI context menus and section headers.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            KeyContext::Global => "Global",
+            KeyContext::Tools => "Tools",
+            KeyContext::Project => "Project",
+            KeyContext::Timeline => "Timeline",
+            KeyContext::Viewer => "Viewer",
+            KeyContext::Graph => "Graph Editor",
+            KeyContext::Panels => "Panels",
+            KeyContext::Effects => "Effects & Presets",
+        }
+    }
 }
 
 /// The modifier keys held with the main key. `primary` is Ctrl on Windows and
