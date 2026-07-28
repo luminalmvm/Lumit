@@ -554,6 +554,82 @@ pub(crate) enum KeyShape {
     Circle,
 }
 
+/// Scale a `SideInterp`'s bezier speed by `scale_factor` (the ratio of values
+/// target_val / src_val) so that both bezier curves progress with the exact same
+/// relative slope, keeping the aspect ratio constant at every frame (TF-29).
+pub(crate) fn scale_side_interp(side: lumit_core::anim::SideInterp, scale_factor: f64) -> lumit_core::anim::SideInterp {
+    match side {
+        lumit_core::anim::SideInterp::Bezier { speed, influence } => lumit_core::anim::SideInterp::Bezier {
+            speed: speed * scale_factor,
+            influence,
+        },
+        other => other,
+    }
+}
+
+/// Sync `ScaleX` or `ScaleY` keyframes to its partner axis when scale is linked (TF-29):
+/// Generates matching keyframes for `partner_prop` with identical times, values calculated via
+/// `linked_scale`, and `SideInterp` scaled via `scale_side_interp` so both Bezier curves progress
+/// with identical relative slope, maintaining the exact aspect ratio at every frame.
+pub(crate) fn sync_scale_partner_keys(
+    src_prop: lumit_core::model::TransformProp,
+    src_keys: &[lumit_core::anim::Keyframe],
+    layer: &lumit_core::model::Layer,
+) -> Option<(lumit_core::model::TransformProp, Vec<lumit_core::anim::Keyframe>)> {
+    use lumit_core::anim::{Animation, Keyframe};
+    use lumit_core::model::TransformProp;
+    use crate::shell::linked_scale;
+
+    let partner_prop = match src_prop {
+        TransformProp::ScaleX => TransformProp::ScaleY,
+        TransformProp::ScaleY => TransformProp::ScaleX,
+        _ => return None,
+    };
+
+    let partner_slot = layer.transform.get(partner_prop);
+    let partner_keys_old = match &partner_slot.animation {
+        Animation::Keyframed(k) => k.as_slice(),
+        _ => &[],
+    };
+
+    let mut new_partner_keys = Vec::with_capacity(src_keys.len());
+    for k_src in src_keys {
+        let t = k_src.time;
+        let t_f64 = t.to_f64();
+        let k_p_old = partner_keys_old
+            .iter()
+            .find(|k| (k.time.to_f64() - t_f64).abs() < 1e-5);
+
+        let old_x = layer.transform.get(src_prop).value_at(t_f64);
+        let old_y = layer.transform.get(partner_prop).value_at(t_f64);
+
+        let new_y = if let Some(kp) = k_p_old {
+            if (k_src.value - old_x).abs() > 1e-9 {
+                linked_scale(old_x, kp.value, k_src.value).1
+            } else {
+                kp.value
+            }
+        } else {
+            linked_scale(old_x, old_y, k_src.value).1
+        };
+
+        let factor = if k_src.value.abs() > 1e-9 {
+            new_y / k_src.value
+        } else {
+            1.0
+        };
+
+        new_partner_keys.push(Keyframe {
+            time: t,
+            value: new_y,
+            interp_in: scale_side_interp(k_src.interp_in, factor),
+            interp_out: scale_side_interp(k_src.interp_out, factor),
+        });
+    }
+
+    Some((partner_prop, new_partner_keys))
+}
+
 pub(crate) fn key_shape(k: &lumit_core::anim::Keyframe) -> KeyShape {
     use lumit_core::anim::SideInterp;
     if matches!(k.interp_in, SideInterp::Hold) || matches!(k.interp_out, SideInterp::Hold) {
@@ -1844,13 +1920,39 @@ pub(crate) fn graph_plot(
             let animation = if new_keys.is_empty() {
                 Animation::Static(static_val)
             } else {
-                Animation::Keyframed(new_keys)
+                Animation::Keyframed(new_keys.clone())
             };
-            lumit_core::Op::SetTransformProperty {
+            let base_op = lumit_core::Op::SetTransformProperty {
                 comp: comp.id,
                 layer: layer_id,
                 prop: current,
                 animation,
+            };
+            // TF-29: any keyframe edit (drag, value change, time shift, ease,
+            // tangent handle edit, add/delete) on a linked scale axis must be
+            // synchronized to its partner axis so both keyframe times, values,
+            // and Bezier curves progress in lock-step without squishing.
+            let scale_unlinked = ui
+                .data(|d| d.get_temp::<bool>(ui.id().with(("scale-unlink", layer_id))))
+                .unwrap_or(false);
+            if !scale_unlinked {
+                if let Some((partner_prop, partner_keys)) =
+                    sync_scale_partner_keys(current, &new_keys, layer)
+                {
+                    let partner_op = lumit_core::Op::SetTransformProperty {
+                        comp: comp.id,
+                        layer: layer_id,
+                        prop: partner_prop,
+                        animation: Animation::Keyframed(partner_keys),
+                    };
+                    lumit_core::Op::Batch {
+                        ops: vec![base_op, partner_op],
+                    }
+                } else {
+                    base_op
+                }
+            } else {
+                base_op
             }
         };
         follow_edit(app, &op); // the graph follows the key you just touched
