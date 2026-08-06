@@ -1732,10 +1732,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   lane can draw three at once, splitting the sound into bass, middle and treble. This matters
   because a modern mastered track is loud all the way through, so a single wave is a solid
   block whatever is playing — the phrase for it is "a sausage". The three are drawn *on top of
-  each other* around the same centre line rather than side by side, getting brighter as the
-  pitch goes up: the bass fills a soft wide body, and the hats and other sharp sounds land as
-  bright thin spikes over it. The result is one waveform with its insides showing, so you can
-  cut to the kick or to the hat and see which is which.
+  each other* in one lane rather than side by side, getting brighter as the pitch goes up, so
+  the result is one waveform with its insides showing and you can cut to the kick or to the
+  hat and see which is which. Two small things make three overlapping waves readable instead
+  of a pile (K-382): the palest one is painted first so the darker ones land in *front* of it
+  (a dark shape on a pale one reads as two shapes; the other way round the pale one just
+  swallows it), and each is nudged a couple of pixels higher than the one behind — like
+  fanning a hand of cards, so no card is completely hidden by the one in front.
   There is a second switch beside it for **where the wave sits**. Normally it is centred, with
   the sound drawn going up and down from a middle line — but the two halves are mirror images,
   so half the row is saying the same thing twice. Turn *Waveforms rise from the bottom* on and

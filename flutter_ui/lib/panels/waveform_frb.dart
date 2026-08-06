@@ -19,11 +19,22 @@
 // is in it: a mastered track is a solid block whether it is a kick, a snare or
 // a vocal. So the engine can split the sound into three bands and summarise
 // each, and [WaveformPainter] draws all three **over one another in the same
-// lane**, around the same centre line, ranked from dim to bright as the
-// frequency climbs. The bass fills the soft broad body, the treble lands as
-// bright thin spikes on top of it — so a kick and a hi-hat are told apart
-// inside one silhouette, at a row height where three separate lanes would each
-// be six pixels tall and say nothing.
+// lane** — so a kick and a hi-hat are told apart inside one silhouette, at a
+// row height where three separate lanes would each be six pixels tall and say
+// nothing.
+//
+// Two rules make three overlaid waves readable rather than a pile.
+//
+// **Lightest at the back.** The bands are drawn treble first and bass last, so
+// the pale end of the ramp sits behind and each darker band lands in front of
+// it. A dark shape on a pale one reads as two shapes; the other way round the
+// pale one swallows what is under it.
+//
+// **Each one a little higher.** Every band after the first is lifted a couple
+// of pixels above the one behind it. Perfectly concentric waves hide each
+// other wherever they happen to agree — which, for three bands of one sound,
+// is most of the time; the offset keeps a sliver of each visible whatever the
+// others are doing, the way a fanned hand of cards shows every card.
 //
 // Overlaid rather than stacked on purpose: the whole point is to see *inside*
 // the wave you are already reading, not to read three small waves and add them
@@ -195,12 +206,22 @@ class WaveformPainter extends CustomPainter {
     this.inset = 1,
   });
 
-  /// The colour of each band the answer carries, **in the order the engine
-  /// laid them out** (bass, middle, treble) — which is also back-to-front, so
-  /// the treble's transients land on top of the body the bass fills.
-  List<Color> get _bandColours => switch (peaks?.bands ?? 0) {
-        3 => [colours.low, colours.mid, colours.high],
-        _ => [colours.rest],
+  /// The bands to draw, back to front: which slice of the answer each one is,
+  /// and what colour it takes.
+  ///
+  /// Treble first and bass last — the band order reversed, so the palest end
+  /// of the ramp sits behind and each darker band lands in front of it. A dark
+  /// shape on a pale one reads as two shapes; the other way round the pale one
+  /// swallows what is under it. Fixed by band rather than worked out from the
+  /// colours, so the picture is the same whatever a theme makes of them.
+  List<({int band, Color colour})> get _bandOrder =>
+      switch (peaks?.bands ?? 0) {
+        3 => [
+            (band: 2, colour: colours.high),
+            (band: 1, colour: colours.mid),
+            (band: 0, colour: colours.low),
+          ],
+        _ => [(band: 0, colour: colours.rest)],
       };
 
   @override
@@ -212,7 +233,7 @@ class WaveformPainter extends CustomPainter {
     final to = math.min(size.width, right);
     if (!(to > from)) return;
 
-    final bands = _bandColours;
+    final bands = _bandOrder;
     // One lane, whichever this is: the stack is drawn *through* the wave, not
     // beside it.
     final stacked = bands.length > 1;
@@ -221,15 +242,25 @@ class WaveformPainter extends CustomPainter {
     // what a centred wave's is.
     final baseline =
         style.fromBottom ? size.height - inset : size.height / 2;
+    // How far each band sits above the one behind it, and how much room that
+    // costs the wave itself. Proportional to the row so a tall clip fans wider
+    // than a 22 px lane, and capped at both ends: below a pixel the offset is
+    // invisible, above a few it eats more amplitude than it earns.
+    final step = stacked ? (size.height * 0.08).clamp(1.0, 4.0) : 0.0;
+    final fan = step * (bands.length - 1);
     final reach = math.max(
       0.5,
-      style.fromBottom ? size.height - inset * 2 : size.height / 2 - inset,
+      (style.fromBottom ? size.height - inset * 2 : size.height / 2 - inset) -
+          fan,
     );
     final buckets = held.buckets;
     final span = held.endSeconds - held.startSeconds;
 
-    for (var band = 0; band < bands.length; band++) {
-      final colour = bands[band];
+    for (var drawn = 0; drawn < bands.length; drawn++) {
+      final band = bands[drawn].band;
+      final colour = bands[drawn].colour;
+      // Back to front, each a little higher than the last.
+      final floor = baseline - step * drawn;
       // The single wave keeps its softened envelope and its solid energy core
       // — the shape people already read. A band in the stack is drawn solid
       // and coreless instead: three softened envelopes over one another blend
@@ -257,14 +288,14 @@ class WaveformPainter extends CustomPainter {
           // either way, whichever was further.
           final amp = math.max(hi.abs(), lo.abs());
           canvas.drawLine(
-            Offset(x + 0.5, baseline),
-            Offset(x + 0.5, baseline - amp * reach),
+            Offset(x + 0.5, floor),
+            Offset(x + 0.5, floor - amp * reach),
             body,
           );
         } else {
           canvas.drawLine(
-            Offset(x + 0.5, baseline - hi * reach),
-            Offset(x + 0.5, baseline - lo * reach),
+            Offset(x + 0.5, floor - hi * reach),
+            Offset(x + 0.5, floor - lo * reach),
             body,
           );
         }
@@ -273,8 +304,8 @@ class WaveformPainter extends CustomPainter {
         // with its own brightness, so only the single wave draws it.
         if (!stacked && rms > 0) {
           canvas.drawLine(
-            Offset(x + 0.5, baseline - rms * reach),
-            Offset(x + 0.5, style.fromBottom ? baseline : baseline + rms * reach),
+            Offset(x + 0.5, floor - rms * reach),
+            Offset(x + 0.5, style.fromBottom ? floor : floor + rms * reach),
             core,
           );
         }
