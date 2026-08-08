@@ -160,11 +160,22 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           version="${version:-0.0.0}"
           stage="lumit-$version-linux-x64"
-          # elfutils supplies eu-strip, which flatpak-builder shells out to when
-          # it splits debug symbols out of the binaries. It is not a declared
-          # dependency of flatpak-builder and is absent from the runner image, so
-          # without it the build dies at the first .so it tries to strip.
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
+          # Two packages flatpak-builder needs but does not depend on, both of
+          # which --no-install-recommends would otherwise drop:
+          #   elfutils         supplies eu-strip, which flatpak-builder shells
+          #                    out to when splitting debug symbols out of the
+          #                    binaries; without it the build dies at the first
+          #                    .so it tries to strip.
+          #   librsvg2-common  supplies the gdk-pixbuf SVG loader. The app icon
+          #                    ships as scalable SVG only, and `appstreamcli
+          #                    compose` reads icons through gdk-pixbuf, so
+          #                    without the loader it cannot read the icon
+          #                    (file-read-error), emits no component at all
+          #                    (filters-but-no-output) and fails the build.
+          #                    librsvg2-2 alone is not enough — that is the
+          #                    library, not the loader plugin.
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder elfutils librsvg2-common
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//49 org.gnome.Sdk//49
