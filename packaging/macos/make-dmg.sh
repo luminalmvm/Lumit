@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the macOS disk image (K-252): a release build, the Homebrew FFmpeg
 # dylibs bundled INTO the .app (so the image runs on machines without
-# Homebrew), an ad-hoc re-sign, then a DMG laid out by create-dmg: white
+# Homebrew), a re-sign, then a DMG laid out by create-dmg: white
 # background (dmg-background.png), the app on the left, an Applications
 # shortcut on the right, a curved arrow between them. macOS only.
 #
@@ -15,11 +15,21 @@
 # DLLs: the bridge links the shared FFmpeg, so the libraries must travel with
 # the app. dylibbundler copies every Homebrew-linked dylib (transitive deps
 # included) into Contents/Frameworks and rewrites the install names; the
-# ad-hoc codesign afterwards is mandatory - macOS kills a process whose
-# binaries changed after signing.
+# codesign afterwards is mandatory - macOS kills a process whose binaries
+# changed after signing.
 #
-# Ad-hoc means unsigned in Gatekeeper's eyes: a downloaded copy still warns
-# until the notarisation work in the macOS pass (K-033, docs/TODO.md).
+# Signing and notarisation are opt-in through the environment (K-309), so this
+# script does the same thing on a laptop as it does under CI minus the parts a
+# certificate pays for:
+#
+#   MACOS_SIGN_IDENTITY   the Developer ID identity to sign with. Unset means
+#                         an ad-hoc signature: enough to run locally, still
+#                         "unsigned" as far as Gatekeeper is concerned.
+#   APPLE_API_KEY_PATH    App Store Connect .p8 key. Set (with APPLE_API_KEY_ID
+#   APPLE_API_KEY_ID      and APPLE_API_ISSUER_ID) to notarise and staple the
+#   APPLE_API_ISSUER_ID   .app and the .dmg. Unset skips both.
+#
+# release.yml sets all four from repository secrets; nothing here needs them.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -128,9 +138,56 @@ for bin in "$app/Contents/MacOS/Lumit" $(find "$app/Contents/Frameworks" -type f
     done
 done
 
-# Re-sign everything ad hoc; the install-name rewrites invalidated the
-# existing signatures.
-codesign --force --deep --sign - "$app"
+# Re-sign everything; the install-name rewrites above invalidated the
+# signatures the build produced.
+#
+# NEVER --deep here. It walks nested *bundles* and is unreliable for the loose
+# dylibs dylibbundler just copied into Contents/Frameworks — notarisation then
+# rejects the whole app, naming the one binary it missed, twenty minutes after
+# the tag. Sign the contents explicitly, innermost first: a signature covers
+# what is inside the bundle, so sealing the app before its frameworks records a
+# hash that the next command changes.
+if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
+    identity="$MACOS_SIGN_IDENTITY"
+    # --options runtime is the hardened runtime, which notarisation requires;
+    # --timestamp has Apple countersign, so signatures outlive the certificate
+    # that made them. An ad-hoc signature can carry neither.
+    signopts="--options runtime --timestamp"
+else
+    identity="-"
+    signopts=""
+fi
+for f in "$app/Contents/Frameworks/"*; do
+    [ -e "$f" ] || continue
+    # shellcheck disable=SC2086 # $signopts is a flag list, not a filename
+    codesign --force $signopts --sign "$identity" "$f"
+done
+# Re-signing drops whatever entitlements the build applied, so they are named
+# again here rather than silently lost.
+# shellcheck disable=SC2086 # as above
+codesign --force $signopts --sign "$identity" \
+    --entitlements "$root/flutter_ui/macos/Runner/Release.entitlements" "$app"
+
+# Notarisation: Apple scans the artefact and, if it is happy, issues a ticket;
+# `stapler` attaches that ticket to the file so a machine that has never been
+# online can still see it. A ticket covers exactly what was submitted, which is
+# why this happens twice — once for the .app the updater downloads as a bare
+# .zip (K-297), once for the .dmg below.
+notarise() {
+    xcrun notarytool submit "$1" --wait \
+        --key "$APPLE_API_KEY_PATH" \
+        --key-id "$APPLE_API_KEY_ID" \
+        --issuer "$APPLE_API_ISSUER_ID"
+}
+if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
+    notarydir="$(mktemp -d)"
+    # ditto, not zip: an .app carries symlinks, signatures and executable bits,
+    # and an archiver that drops those submits a bundle macOS will not open.
+    ditto -c -k --keepParent "$app" "$notarydir/Lumit.zip"
+    notarise "$notarydir/Lumit.zip"
+    xcrun stapler staple "$app"
+    rm -rf "$notarydir"
+fi
 
 # create-dmg copies the CONTENTS of its source folder, so the app goes into a
 # staging folder first. The icon coordinates are centres in a 660x400 window,
@@ -138,7 +195,10 @@ codesign --force --deep --sign - "$app"
 # app labelled "Lumit" even for people who show all filename extensions.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-cp -R "$app" "$stage/"
+# ditto rather than cp -R: the stapled ticket and the signature travel as
+# metadata cp is not obliged to carry, and a DMG built from a copy that lost
+# them ships an app Gatekeeper treats as unnotarised.
+ditto "$app" "$stage/Lumit.app"
 
 mkdir -p "$here/dist"
 out="$here/dist/lumit-$version-macos-$arch.dmg"
@@ -155,5 +215,12 @@ else
     # Plain image: app + Applications shortcut, no window dressing.
     ln -s /Applications "$stage/Applications"
     hdiutil create -volname "Lumit" -srcfolder "$stage" -ov -format UDZO "$out"
+fi
+
+# The image needs its own ticket: stapling the app inside it does not vouch for
+# the disk image a user actually double-clicks first.
+if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
+    notarise "$out"
+    xcrun stapler staple "$out"
 fi
 echo "Wrote $out"

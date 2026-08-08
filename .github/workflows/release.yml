@@ -13,10 +13,11 @@
 # (same FFmpeg 7.1 shared build, same LLVM 18 pin, same Flutter 3.44.7); when
 # one changes, change the other.
 #
-# Neither the installer nor the DMG is signed. make-dmg.sh bundles the Homebrew
-# FFmpeg dylibs into the .app and re-signs ad hoc, so the DMG runs without
-# Homebrew, but Gatekeeper still warns; Developer ID signing and notarisation
-# land with the macOS pass (K-033, docs/TODO.md) once there is a certificate.
+# The macOS artefacts are Developer ID signed, notarised and stapled (K-309)
+# when the six signing secrets are present; without them make-dmg.sh falls back
+# to the ad-hoc signature it always used, so forks and a secretless repository
+# still build. The Windows installer is unsigned either way — that waits on a
+# code-signing certificate, which is a purchase and not code.
 
 name: release
 
@@ -179,6 +180,13 @@ jobs:
   macos-dmg:
     name: macOS disk image
     runs-on: macos-latest
+    env:
+      # A step's `if` cannot read the `secrets` context, only `env`, so the
+      # signing gate below tests these. Absent secrets leave them empty and
+      # make-dmg.sh signs ad hoc exactly as it did before K-309.
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -194,6 +202,36 @@ jobs:
           flutter-version: 3.44.7
           channel: stable
           cache: true
+      - name: Import the Developer ID certificate
+        if: env.MACOS_SIGN_IDENTITY != ''
+        env:
+          CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          # The keychain is thrown away with the runner, so its password is a
+          # literal rather than a seventh secret to rotate.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p ci "$keychain"
+          # Default keychains re-lock after five minutes of idling, which is
+          # less than a release build takes; -lut 21600 outlasts the job.
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$CERT_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Without this, the first codesign raises a GUI password prompt that
+          # nothing on a runner can answer, and the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k ci "$keychain"
+          # codesign and trust evaluation both search the keychain *list*, not
+          # the default keychain alone: off the list, the Developer ID
+          # intermediate is invisible and the identity reads as untrusted.
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          echo "$API_KEY_P8_BASE64" | base64 -d > "$RUNNER_TEMP/apple-api-key.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+
       - name: Build the disk image
         run: |
           version="${GITHUB_REF_NAME#v}"

@@ -6987,3 +6987,37 @@ in one request, because a preview of the art alone would show the untouched half
 and the commit would put it back. One layer at a time, as with a move: the engine patches
 one layer into its clone. A layer whose mask *and* art are dragged together previews the
 art; the mask catches up on release.
+
+**K-309 · DECIDED · The macOS artefacts are Developer ID signed and notarised in CI;
+the Windows installer stays unsigned.** Supersedes the fourth paragraph of **K-304**
+(2026-08-07), which recorded that neither artefact was signed and parked both behind a
+purchase. The Apple Developer Program membership has been bought, so half of that
+paragraph has expired; the Windows half has not.
+
+A tagged release now produces a `.app` and a `.dmg` that are signed with a Developer ID
+Application certificate, built with the hardened runtime and a trusted timestamp,
+notarised by Apple and stapled. Gatekeeper opens them without the right-click ceremony,
+including on a machine that has never been online — that is what stapling buys, and it is
+the reason to staple rather than to rely on Apple being reachable at first launch.
+
+Signing is *opt-in through the environment*, not compulsory. `make-dmg.sh` signs ad hoc
+when `MACOS_SIGN_IDENTITY` is unset and skips notarisation when `APPLE_API_KEY_PATH` is,
+which is what a laptop build and a fork both get. This keeps one script for both worlds:
+the alternative — a signed path only CI exercises — is a path that breaks silently and is
+discovered by a tag. The six secrets live in the repository; the identity string is one of
+them rather than a literal in the workflow, because it carries a legal name and this is a
+public repository (the name is embedded in every signed binary regardless, which is
+unavoidable and normal, but there is no reason to commit it as well).
+
+Two details are load-bearing and easy to lose. **`codesign --deep` is banned here.** It
+walks nested bundles but is unreliable for the loose dylibs `dylibbundler` copies into
+`Contents/Frameworks`, and notarisation answers a missed binary with a rejection twenty
+minutes after the tag; the contents are signed explicitly instead, innermost first, since
+a bundle signature seals a hash that signing its frameworks afterwards would change.
+**Notarisation happens twice**, because a ticket covers exactly what was submitted: once
+for the `.app` that K-297's in-place updater downloads as a bare `.zip`, once for the
+`.dmg` a first-time user double-clicks. One submission would leave whichever artefact was
+skipped quarantined, and the updater's payload is the easier of the two to forget.
+
+Signing the Windows installer still waits on a code-signing certificate, so SmartScreen
+still warns. That remains a purchase rather than code, and it does not block a release.

@@ -4040,15 +4040,40 @@ all. That is deliberate: a release quietly missing its Mac build looks exactly
 like a release that never had one, and you would find out from a user rather
 than from CI.
 
-Neither the installer nor the disk image is **signed**. Signing is the paid
-certificate that tells Windows and macOS "a known person made this"; without
-it, SmartScreen shows a blue warning panel and Gatekeeper refuses the first
-double-click (right-click → Open gets past it, once). The disk image *is*
-"ad-hoc signed", which sounds like signing but is not: it is an unnamed
-signature macOS demands before it will run an app carrying its own copies of
-FFmpeg at all. Real signing needs an Apple Developer membership and a Windows
-code-signing certificate — both purchases, neither of them code, and neither
-blocking a release.
+**Signing** is the paid certificate that tells Windows and macOS "a known
+person made this". Without it, SmartScreen shows a blue warning panel and
+Gatekeeper refuses the first double-click (right-click → Open gets past it,
+once). The Windows installer is still unsigned, because that needs a
+code-signing certificate nobody has bought yet.
+
+The Mac side is signed, and it involves two separate things that are easy to
+confuse. **Signing** puts your identity on the app: this came from Mackenzie
+Reed, and here is Apple's certificate saying Apple agrees that is a real
+person. **Notarisation** is a second step where you upload the finished app to
+Apple, their automated scanner checks it for malware, and they hand back a
+"ticket" — a note saying this exact build passed. **Stapling** attaches that
+ticket to the file itself, so a Mac can see the app is approved without asking
+Apple over the internet. Apple wants all three, and a downloaded app that is
+signed but not notarised is treated almost as harshly as one that is neither.
+
+Two things about that are worth knowing because they cause confusing failures.
+The app is notarised *twice*, separately: once as the `.app` on its own and
+once as the `.dmg` it rides inside. A ticket only covers the exact file you
+sent, so approving the disk image says nothing about the bare app that the
+updater downloads. And the signing has to happen from the inside out — the
+FFmpeg libraries first, the app last — because signing the app records a
+fingerprint of everything inside it, and touching anything afterwards makes
+that fingerprint wrong. macOS then refuses to launch the app at all, which
+looks like a mysterious crash rather than a signing problem.
+
+None of this happens on your machine. `make-dmg.sh` only signs for real if it
+finds the certificate details in its environment, which happens in CI, where
+they are stored as GitHub repository secrets. Run the same script on a laptop
+and it falls back to an "ad-hoc" signature — an unnamed one, worth nothing to
+Gatekeeper, but which macOS insists on before it will run an app carrying its
+own copies of FFmpeg at all — and skips notarisation entirely. That is
+deliberate: one script for both cases means the signing path cannot quietly rot
+between releases.
 
 To rehearse all this without publishing anything real, tag a **pre-release**:
 any tag with a suffix, like `v0.2.0-rc1`, runs the identical pipeline but
