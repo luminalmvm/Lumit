@@ -160,7 +160,11 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           version="${version:-0.0.0}"
           stage="lumit-$version-linux-x64"
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          # elfutils supplies eu-strip, which flatpak-builder shells out to when
+          # it splits debug symbols out of the binaries. It is not a declared
+          # dependency of flatpak-builder and is absent from the runner image, so
+          # without it the build dies at the first .so it tries to strip.
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//49 org.gnome.Sdk//49
