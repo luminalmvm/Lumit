@@ -4449,6 +4449,51 @@ shows the newest frame the clock has reached, stops the sound after one late
 picture and restarts it after eight on-time ones. Stopping returns the playhead
 to where playback began (K-254); a scrub is the exception.
 
+### Why the picture goes soft while you drag a value (K-383)
+
+Some effects are expensive in a very particular way. Depth of field and Lens
+dirt are *gather* effects: for every pixel of the output they read a whole disc
+of pixels around it. Double the width of the picture and you have four times as
+many pixels to fill — but each of those pixels is also gathering from a disc
+that has itself doubled in radius, which is four times as many reads each. So
+the work goes up with roughly the *fourth* power of the size. That is why a
+Depth of field that renders comfortably in a small window can take seconds at
+full resolution, and why dragging its aperture felt like arguing with a picture
+that was always a few seconds behind your mouse.
+
+The fix is the one every editor uses: while you are dragging, render the picture
+small. Lumit already knew how to do that. Every "px@comp" parameter — an
+aperture in pixels, a blur radius, a light's position — is multiplied by a
+*preview factor* on the way in, so a frame rendered at a third of the size is
+framed identically to the export, just softer. That machinery was built for
+playback, where the engine drops resolution to keep the sound and picture
+together.
+
+So a drag now uses it too. The engine picks the finest of Full, Half, Third or
+Quarter whose picture still fits inside a 640×360 budget, and never goes below
+Quarter (below that you can no longer judge what you are looking at). A small
+composition, or a big one shown in a small panel, is already inside the budget
+and is not softened at all. A 1080p composition at full size drags at a third,
+which is about a ninth of the pixels and — because of that fourth-power rule —
+something nearer a hundredth of the work for a gather effect.
+
+The moment you let go, the drag *commits*: the value is written to the document,
+and the ordinary render path asks for the frame again at the Viewer's own
+resolution. So the sharp picture comes back on release without anything special
+being arranged for it.
+
+The rule lives in the engine rather than the frontend, in one place, for a
+reason worth knowing: there is a separate engine call for "render a frame with a
+value the user has not committed yet", and *every* use of it is a live drag —
+effect parameters, transform rows, masks, shapes, text, paint, the handles on
+the picture itself. Putting the reduction there means no part of the frontend
+has to remember to ask for it, and a drag added next year gets it for free.
+
+What it does not do: refine while you hold still mid-drag. Pause with the button
+down and the coarse picture stays until you release. That would need a timer per
+gesture at every drag site, for a case that release answers a moment later
+anyway.
+
 ### Telling how long a frame is taking, and where the time went (K-276)
 
 Two readouts, one mechanism. Both come from a small recorder the engine builds

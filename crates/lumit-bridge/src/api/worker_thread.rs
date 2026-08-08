@@ -2925,6 +2925,7 @@ fn render_comp_with_preview(
     let comp = document
         .comp_mut(req.layer.comp_id)
         .ok_or(BridgeError::InvalidComp)?;
+    let (comp_width, comp_height) = (comp.width, comp.height);
 
     let index = comp
         .layers
@@ -2992,18 +2993,27 @@ fn render_comp_with_preview(
         transform.write_at(&mut comp.layers[index].transform, offset)?;
     }
 
-    // A drag is not playback: full resolution (EveryFrame skips the adaptive
-    // tier), and NOT cacheable — these pixels are of provisional values the
+    // A drag is not playback, so EveryFrame: the adaptive tier learns from a
+    // dozen measured frames and a drag is over before it has finished, which is
+    // why the drag has a resolution rule of its own (K-383). Every call that
+    // reaches here is a live drag — a release commits and comes back through
+    // the ordinary render path at the Viewer's own scale — so the reduction is
+    // unconditional here rather than being flagged from Dart, and it covers
+    // every drag the frontend has: effects, transform, masks, shapes, text,
+    // paint, and the Viewer gizmos.
+    //
+    // NOT cacheable either — these pixels are of provisional values the
     // document never committed, so they must neither be served back later nor
     // displace honest frames. It IS the case the bar exists for, though: a
     // dragged value on a heavy comp is exactly where the picture goes quiet.
     let document = std::sync::Arc::new(document);
+    let scale = crate::realtime::drag_scale(comp_width, comp_height, req.scale);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
             req.comp.id,
             req.frame,
-            req.scale,
+            scale,
             &document,
             stream,
             BridgePlaybackMode::EveryFrame,

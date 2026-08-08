@@ -9696,3 +9696,53 @@ centre lines fan up; standing on the floor, the three floors do.
 
 Both are drawing decisions only: nothing about the fetched peaks changes, and the single wave
 is untouched.
+
+**And the easter-egg plate is uploaded once.** It was decoded, linearised and uploaded on
+*every dispatch* — with the full-resolution plate that is ~3 MB of decode and ~16 MB of
+upload per frame, which starves the device until unrelated bind groups fail to create. The
+symptom is a preview that stops rendering and repeats a validation error naming some other
+pass entirely, which is a miserable thing to debug from. It is held in a `Mutex` on the
+`FxEngine`, the same shape as the Lens flare's bake cache and for the same reason.
+
+## K-383 — A live drag renders the Viewer small
+
+**DECIDED** (2026-08-08, landed 2026-08-17 — the commit sat unpushed; renumbered from
+K-316, which was already taken). The drag preview is capped at a 640×360 raster, and
+the full-resolution frame comes back on release. Dragging a Depth of field or Lens dirt parameter left the picture one
+to five seconds behind the pointer, which makes those effects untunable — you
+cannot judge a blur by a frame that arrives after you have already let go. Every
+other editor solves this the same way, and so does Lumit now: while a value is
+being dragged the frame is rendered at a coarser resolution, and the moment the
+drag commits the ordinary render path puts a full-resolution frame back.
+
+**The mechanism already existed; only the decision to use it was missing.** The
+§2.3 preview factor threads through the whole resolve step — every px@comp
+parameter is scaled by it, K-266 and K-268 repaired the two places it leaked —
+so a smaller drag raster frames identically to the export, only softer. Nothing
+new was built: `render_comp_with_preview` simply divides the scale it was handed
+before publishing.
+
+**It is a decision taken before the first tick, not the adaptive tier.** The
+realtime controller (K-030/K-171) learns from a dozen measured frames and is
+deliberately bypassed on the drag path; a drag is usually over before it has
+finished learning, so the first drag on a heavy comp would still stall — which
+is the entire complaint. So the drag rule is a pixel budget instead: the finest
+divisor of 1/2/3/4 whose raster fits 640×360, floored at Quarter because below
+that the picture stops being judgeable. A 1080p comp at full scale drags at a
+third; a comp already under the budget, or one shown small in its panel, is not
+degraded at all. The budget is anchored on B3 of `docs/13-PERFORMANCE-RULES.md`
+(50 ms from input to a possibly degraded frame) and the fact that a gather
+kernel's cost falls with roughly the *fourth* power of the scale — its radius is
+px@comp too — so a third of the scale is nearer a hundredth of the work.
+
+**It lives in the worker, not in Dart, because every call to
+`render_frame_with_preview` is by definition a live drag.** A release commits and
+returns through `render_frame` at the Viewer's own scale. So the reduction needs
+no flag from the frontend, cannot be forgotten by a new call site, and covers
+every drag the frontend has at once: effect parameters, transform rows, masks,
+shape contents, text, paint, and the Viewer gizmos.
+
+**What is not done:** progressive refinement *during* a held drag — pausing
+mid-drag with the button still down keeps the coarse frame until release. That
+needs a per-gesture idle timer at every drag call site, which is a new mechanism
+for a case the release already covers a moment later.
