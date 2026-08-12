@@ -54,9 +54,9 @@ pub struct LensFlareOp {
     pub manual_lights: Vec<[f32; 5]>,
     /// Master gain; 0 short-circuits to the identity.
     pub intensity: f32,
-    /// Traced wavelengths with their RGB weights, already multiplied by the
-    /// ghost energy scale × Ghost intensity (lumit_core `lambda_weights`).
-    pub lambdas: Vec<(f32, [f32; 3])>,
+    /// Traced wavelength bands with their radiometric sub-samples
+    /// (lumit_core `spectral_bands`, K-364).
+    pub bands: Vec<FlareBand>,
     /// How many ranked ghosts render.
     pub max_ghosts: u32,
     /// 0..1 coating blend.
@@ -111,6 +111,23 @@ pub struct LensFlareOp {
     pub bake_key: u64,
 }
 
+/// One traced wavelength band with its radiometric sub-samples (K-364) —
+/// restated from `lumit_core::fx::lens_flare::SpectralBand` because this
+/// crate does not depend on lumit-core. The geometry is traced once at
+/// [`Self::traced_nm`]; the energy is carried at the eight sub-samples,
+/// each reading the baked reflectance table at its own wavelength. The
+/// caller folds the ghost energy gain and Ghost intensity into
+/// [`Self::sub_rgb`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FlareBand {
+    /// The wavelength the geometry is traced at (dispersion-scaled).
+    pub traced_nm: f32,
+    /// Reflectance-table lambda index per sub-sample.
+    pub sub_idx: [u32; 8],
+    /// Linear working RGB weight per sub-sample.
+    pub sub_rgb: [[f32; 3]; 8],
+}
+
 /// The bake handed across the crate seam: plain buffers, no lumit-core
 /// types. Produced by the caller from `lumit_core::fx::lens_flare::bake`
 /// only when the cache misses (the `bake` argument of
@@ -137,6 +154,11 @@ pub struct FlareBakeData {
     pub start_z_mm: f32,
     /// The bake's auto-exposure gain, multiplied into every ghost's energy.
     pub energy_gain: f32,
+    /// The K-364 per-surface spectral reflectance table, flat in the
+    /// lumit-core layout: `[surface][direction 0 = forward, 1 = reverse]
+    /// [lambda 69][cos 16]`. The trace kernel reads it in place of solving a
+    /// thin-film stack per ray.
+    pub reflectance: Vec<f32>,
     /// Starburst sprite, `sb_res`² RGB triplets.
     pub starburst: Vec<f32>,
     /// See `starburst`.
@@ -172,6 +194,9 @@ pub struct FlareProbeBake<'a> {
 /// One cached GPU-side bake: uploaded textures and the surface buffer.
 struct GpuBaked {
     surfaces: wgpu::Buffer,
+    /// The baked reflectance table (K-364), as the trace kernel's storage
+    /// binding.
+    reflectance: wgpu::Buffer,
     surface_count: u32,
     /// The raw surface rows, retained for [`FlareProbeBake`] (K-267) —
     /// a few hundred bytes beside the uploaded buffer.
@@ -411,8 +436,9 @@ const DETECT_TILE: u32 = 32;
 /// setting can push the allocation past this.
 pub(super) const SCRATCH_BYTE_BUDGET: u64 = 48_000_000;
 
-/// Bytes one traced ray occupies (WGSL `Ray`: pos.xy, weight, pad).
-pub(super) const RAY_BYTES: u64 = 16;
+/// Bytes one traced ray occupies (WGSL `Ray`: pos.xy, weight, pad, rgb,
+/// pad — the rgb since K-364, where the weight alone carried the energy).
+pub(super) const RAY_BYTES: u64 = 32;
 
 /// Bytes one drawn cell occupies: four corners at five floats each (K-263 —
 /// through K-262 it was six eight-float vertices, 192 bytes).
@@ -557,8 +583,42 @@ struct GpuCombo {
     bounce2: u32,
     lambda_nm: f32,
     _pad: f32,
-    rgb: [f32; 3],
+    /// Index into the band table (K-364): the combo names the band, the
+    /// band's eight sub-samples carry the colour the combo used to.
+    band: u32,
     _pad2: f32,
+    _pad3: f32,
+    _pad4: f32,
+}
+
+/// One radiometric sub-sample in the WGSL `BandSub` layout (K-364), at
+/// `band * 8 + k`: where in the reflectance table its wavelength sits, and
+/// its RGB weight with the frame's energy gain already folded in.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct GpuBandSub {
+    lambda_idx: u32,
+    r: f32,
+    g: f32,
+    b: f32,
+}
+
+/// The band table for a frame's `op.bands`, with `gain` folded into every
+/// sub-sample weight — the trace kernel's binding 8.
+fn band_subs_of(bands: &[FlareBand], gain: f32) -> Vec<GpuBandSub> {
+    let mut out = Vec::with_capacity(bands.len() * 8);
+    for band in bands {
+        for k in 0..8 {
+            let rgb = band.sub_rgb[k];
+            out.push(GpuBandSub {
+                lambda_idx: band.sub_idx[k],
+                r: rgb[0] * gain,
+                g: rgb[1] * gain,
+                b: rgb[2] * gain,
+            });
+        }
+    }
+    out
 }
 
 #[repr(C)]
@@ -717,6 +777,10 @@ impl LensFlareFx {
                 storage_entry(4, false, c),
                 uniform_entry(5, c),
                 storage_entry(6, true, c),
+                // The K-364 spectral pair: the baked reflectance table and
+                // the frame's band sub-samples.
+                storage_entry(7, true, c),
+                storage_entry(8, true, c),
             ],
         });
         let detect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -1335,6 +1399,21 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
             contents: bytemuck::cast_slice(&rows),
             usage: wgpu::BufferUsages::STORAGE,
         });
+    // A bake with no surfaces has no table; WGSL cannot bind an empty
+    // buffer, so one zero stands in (every lookup then reads out of range
+    // and returns 0, exactly as the CPU's `table.get` does).
+    let table: &[f32] = if data.reflectance.is_empty() {
+        &[0.0]
+    } else {
+        &data.reflectance
+    };
+    let reflectance = ctx
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("fx-lens-flare-reflectance"),
+            contents: bytemuck::cast_slice(table),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
     let float_texture = |label: &str, w: u32, h: u32, format: wgpu::TextureFormat, bytes: &[u8]| {
         ctx.device.create_texture_with_data(
             &ctx.queue,
@@ -1372,6 +1451,7 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
     );
     GpuBaked {
         surfaces,
+        reflectance,
         surface_count: data.surfaces.len() as u32,
         surface_rows: data.surfaces.clone(),
         ghosts: data.ghosts.clone(),
@@ -1626,22 +1706,23 @@ impl FxEngine {
             // (K-262, mirroring `lumit_core::fx::lens_flare::pair_grid`), so
             // combos are sorted grid-major: a run of equal-grid combos is one
             // dispatch batch, and the scratch is sized for the widest grid.
-            let mut tagged: Vec<(u32, GpuCombo)> =
-                Vec::with_capacity(ghost_count * op.lambdas.len());
+            let mut tagged: Vec<(u32, GpuCombo)> = Vec::with_capacity(ghost_count * op.bands.len());
             for (gi, ghost) in baked.ghosts.iter().take(ghost_count).enumerate() {
                 let spread = baked.spreads.get(gi).copied().unwrap_or(1.0);
                 let rung = pair_grid_of(op.grid, spread);
                 let pg = frame_grids.get(gi).copied().unwrap_or(rung);
-                for &(lambda_nm, rgb) in &op.lambdas {
+                for (bi, band) in op.bands.iter().enumerate() {
                     tagged.push((
                         pg,
                         GpuCombo {
                             bounce1: ghost[0],
                             bounce2: ghost[1],
-                            lambda_nm,
+                            lambda_nm: band.traced_nm,
                             _pad: 0.0,
-                            rgb: [rgb[0] * gain, rgb[1] * gain, rgb[2] * gain],
+                            band: bi as u32,
                             _pad2: 0.0,
+                            _pad3: 0.0,
+                            _pad4: 0.0,
                         },
                     ));
                 }
@@ -1666,6 +1747,17 @@ impl FxEngine {
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("fx-lens-flare-combos"),
                         contents: bytemuck::cast_slice(&combos),
+                        usage: wgpu::BufferUsages::STORAGE,
+                    });
+                // The bands' sub-samples (K-364), carrying the exposure
+                // gain the combo colour used to. Non-empty whenever the
+                // combo table is: a combo exists only per band.
+                let band_subs = band_subs_of(&op.bands, gain);
+                let bands_buf = ctx
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("fx-lens-flare-bands"),
+                        contents: bytemuck::cast_slice(&band_subs),
                         usage: wgpu::BufferUsages::STORAGE,
                     });
                 // One scratch for the whole frame, big enough for its widest
@@ -1794,6 +1886,14 @@ impl FxEngine {
                             wgpu::BindGroupEntry {
                                 binding: 6,
                                 resource: lights_buf.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 7,
+                                resource: baked.reflectance.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 8,
+                                resource: bands_buf.as_entire_binding(),
                             },
                         ],
                     });
@@ -2009,10 +2109,13 @@ impl FxEngine {
     }
 
     /// The trace-oracle hook (docs/impl/lens-flare.md §8.5): run the trace
-    /// pass alone for the first `combo_limit` (pair × wavelength) combos of
-    /// the op's MANUAL light and read the ray buffer back — rows `[pos_x,
-    /// pos_y, weight, pad]` per corner, combo-major (weight −1 is the GPU's
-    /// dead sentinel where the CPU returns None). `w`/`h` feed the aspect
+    /// pass alone for the first `combo_limit` (pair × band) combos of the
+    /// op's MANUAL light and read the ray buffer back — the whole WGSL `Ray`
+    /// per corner, combo-major: `[pos_x, pos_y, weight, pad, r, g, b, pad]`,
+    /// weight −1 being the GPU's dead sentinel where the CPU returns None.
+    /// Since K-364 the weight is geometry (feather × iris mask) and the rgb
+    /// is the band-integrated energy, so the two halves of
+    /// `trace_splat_spectral` can be checked apart. `w`/`h` feed the aspect
     /// the in-shader light direction uses. Diagnostics and tests only; no
     /// production path calls it.
     pub fn lens_flare_trace_debug(
@@ -2023,7 +2126,7 @@ impl FxEngine {
         combo_limit: u32,
         w: u32,
         h: u32,
-    ) -> Vec<[f32; 4]> {
+    ) -> Vec<[f32; 8]> {
         use wgpu::util::DeviceExt;
         let lf = self.lens_flare.get();
         // The debug trace wants the real bake, whatever the policy: it is a
@@ -2035,23 +2138,36 @@ impl FxEngine {
         let ghost_count = (op.max_ghosts as usize).min(baked.ghosts.len());
         let mut combos: Vec<GpuCombo> = Vec::new();
         'outer: for ghost in baked.ghosts.iter().take(ghost_count) {
-            for &(lambda_nm, rgb) in &op.lambdas {
+            for (bi, band) in op.bands.iter().enumerate() {
                 if combos.len() >= combo_limit as usize {
                     break 'outer;
                 }
                 combos.push(GpuCombo {
                     bounce1: ghost[0],
                     bounce2: ghost[1],
-                    lambda_nm,
+                    lambda_nm: band.traced_nm,
                     _pad: 0.0,
-                    rgb,
+                    band: bi as u32,
                     _pad2: 0.0,
+                    _pad3: 0.0,
+                    _pad4: 0.0,
                 });
             }
         }
         if combos.is_empty() {
             return Vec::new();
         }
+        // The op's own band weights, unscaled: the debug hook answers what
+        // one traced ray carries, not what a frame's auto-exposure makes of
+        // it (the production path folds `energy_gain` in here).
+        let band_subs = band_subs_of(&op.bands, 1.0);
+        let bands_buf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-lens-flare-dbg-bands"),
+                contents: bytemuck::cast_slice(&band_subs),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
         let grid = op.grid.clamp(2, 128);
         let ray_count = grid * grid;
         let combos_buf = ctx
@@ -2081,7 +2197,7 @@ impl FxEngine {
                 contents: bytemuck::cast_slice(&light_rows),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        let rays_size = combos.len() as u64 * u64::from(ray_count) * 16;
+        let rays_size = combos.len() as u64 * u64::from(ray_count) * RAY_BYTES;
         let rays_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("fx-lens-flare-dbg-rays"),
             size: rays_size,
@@ -2172,6 +2288,14 @@ impl FxEngine {
                     binding: 6,
                     resource: lights_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: baked.reflectance.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: bands_buf.as_entire_binding(),
+                },
             ],
         });
         let read_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -2206,10 +2330,10 @@ impl FxEngine {
             return Vec::new();
         }
         let data = slice.get_mapped_range();
-        data.chunks_exact(16)
+        data.chunks_exact(RAY_BYTES as usize)
             .map(|row| {
                 let f = |i: usize| f32::from_le_bytes([row[i], row[i + 1], row[i + 2], row[i + 3]]);
-                [f(0), f(4), f(8), f(12)]
+                [f(0), f(4), f(8), f(12), f(16), f(20), f(24), f(28)]
             })
             .collect()
     }

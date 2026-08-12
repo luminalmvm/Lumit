@@ -7150,3 +7150,127 @@ fn bake_timing_probe() {
         );
     }
 }
+
+/// **Spectral radiometry preserves exposure and actually resolves the
+/// coating** (K-364, entry A2). Two halves:
+///
+/// The bands' sub-weights sum to what `lambda_weights` gave each whole band
+/// — XYZ→RGB is linear, so splitting the CIE integral must split the RGB
+/// weight exactly. If this drifts, every flare changes brightness on a
+/// change that promised colour accuracy only.
+///
+/// And a coated ghost's band-integrated energy must differ from the old
+/// band-centre sample — the whole point: a 7-layer stack's reflectance
+/// oscillates inside one band, and one sample per band cannot see it.
+#[test]
+fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
+    use crate::fx::lens_flare::*;
+    for count in [3u32, 8, 16] {
+        let old = lambda_weights(count, 1.0);
+        let new = spectral_bands(count, 1.0);
+        assert_eq!(old.len(), new.len());
+        for (k, (o, n)) in old.iter().zip(&new).enumerate() {
+            assert!(
+                (o.0 - n.traced_nm).abs() < 1e-4,
+                "geometry ladder unchanged"
+            );
+            // In XYZ the subs sum exactly to the band mean; in RGB the
+            // out-of-gamut clamp now applies per sub-sample rather than per
+            // band, and Σ max(xᵢ, 0) ≥ max(Σ xᵢ, 0) — so every channel is
+            // AT LEAST the old weight (violet bands clamp G and R), and a
+            // band no clamp touches is exact. "Strictly less thrown away"
+            // is the property; never-dimmer is its testable face.
+            let mut any_exact = false;
+            for c in 0..3 {
+                let sum: f32 = n.sub_rgb.iter().map(|s| s[c]).sum();
+                assert!(
+                    sum + 1e-3 >= o.1[c],
+                    "band {k} channel {c}: spectral must never be dimmer                      ({sum} vs {})",
+                    o.1[c]
+                );
+                if (sum - o.1[c]).abs() < 2e-3 {
+                    any_exact = true;
+                }
+            }
+            assert!(
+                any_exact,
+                "band {k}: at least one channel must match the old weight                  exactly — every channel drifting means the normalisation                  changed, not the clamp"
+            );
+        }
+    }
+
+    // A coated lens, one ghost, one off-axis ray: spectral vs band-centre.
+    let p = LensFlareParams {
+        lens: 16, // Zeiss Master Prime: modern multi-layer coatings
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let bands = spectral_bands(3, 1.0);
+    let old_weights = lambda_weights(3, 1.0);
+    let dir = light_direction([0.3, 0.3], 0.5625, baked.focal_mm);
+    let mut spectral_differs = false;
+    let mut compared = 0u32;
+    // Several ghosts and pupil points: any one surviving ray on a coated
+    // path is enough to show the band centre under-resolves the stack.
+    for pair in baked.pairs.iter().take(8) {
+        for frac in [0.1_f32, 0.3, 0.5] {
+            let origin = [
+                baked.pupil_mm * frac,
+                baked.pupil_mm * frac * 0.5,
+                baked.start_z_mm,
+            ];
+            for (band, old) in bands.iter().zip(&old_weights) {
+                let Some((_, _, rgb)) =
+                    trace_splat_spectral(&baked, *pair, band, origin, dir, 1.0, 1.0, 0.0)
+                else {
+                    continue;
+                };
+                let Some((_, w)) =
+                    trace_splat(&baked, *pair, band.traced_nm, origin, dir, 1.0, 1.0, 0.0)
+                else {
+                    continue;
+                };
+                if w <= 1e-9 {
+                    continue;
+                }
+                compared += 1;
+                for (new_c, old_w) in rgb.iter().zip(old.1) {
+                    let old_c = old_w * w;
+                    if old_c > 1e-8 && (new_c - old_c).abs() / old_c > 0.02 {
+                        spectral_differs = true;
+                    }
+                }
+            }
+        }
+    }
+    assert!(compared > 0, "no ray survived; the probe geometry is wrong");
+    assert!(
+        spectral_differs,
+        "on a multi-coated lens the band-integrated energy must differ from \
+         the band-centre sample — otherwise A2 resolved nothing"
+    );
+
+    // Determinism: the same band twice is the same bits.
+    let probe_origin = [baked.pupil_mm * 0.3, 0.0, baked.start_z_mm];
+    let a = trace_splat_spectral(
+        &baked,
+        baked.pairs[0],
+        &bands[1],
+        probe_origin,
+        dir,
+        0.7,
+        1.0,
+        0.0,
+    );
+    let b = trace_splat_spectral(
+        &baked,
+        baked.pairs[0],
+        &bands[1],
+        probe_origin,
+        dir,
+        0.7,
+        1.0,
+        0.0,
+    );
+    assert_eq!(a, b);
+}

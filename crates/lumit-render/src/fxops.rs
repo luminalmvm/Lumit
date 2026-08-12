@@ -1000,10 +1000,20 @@ pub fn run_ops(
                 let grid = lf::detail_base(tier_base, p.detail);
                 let lambda_count = lf::detail_lambda(tier_lambda, p.detail);
                 let energy = p.ghost_intensity;
-                let lambdas = lf::lambda_weights(lambda_count, p.dispersion)
-                    .into_iter()
-                    .map(|(nm, rgb)| (nm, [rgb[0] * energy, rgb[1] * energy, rgb[2] * energy]))
-                    .collect();
+                // The traced bands with their eight radiometric sub-samples
+                // (K-364), Ghost intensity folded into every sub-weight —
+                // the bake's auto-exposure gain joins it GPU-side.
+                let bands: Vec<lumit_gpu::fx::FlareBand> =
+                    lf::spectral_bands(lambda_count, p.dispersion)
+                        .into_iter()
+                        .map(|b| lumit_gpu::fx::FlareBand {
+                            traced_nm: b.traced_nm,
+                            sub_idx: b.sub_idx,
+                            sub_rgb: b
+                                .sub_rgb
+                                .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
+                        })
+                        .collect();
                 let op = lumit_gpu::fx::LensFlareOp {
                     // Raster pixels → fraction here, where the raster is
                     // known (K-260: the parameter is px@comp).
@@ -1020,7 +1030,7 @@ pub fn run_ops(
                     .map(|l| [l.pos[0], l.pos[1], l.rgb[0], l.rgb[1], l.rgb[2]])
                     .collect(),
                     intensity: p.intensity,
-                    lambdas,
+                    bands,
                     max_ghosts: p.max_ghosts,
                     coating: p.coating,
                     focus_m: p.focus_m,
@@ -1109,6 +1119,7 @@ pub fn run_ops(
                             pupil_mm: b.pupil_mm,
                             start_z_mm: b.start_z_mm,
                             energy_gain: b.energy_gain,
+                            reflectance: b.reflectance.clone(),
                             starburst: b.starburst,
                             sb_res: lf::STARBURST_RES,
                         }

@@ -734,6 +734,18 @@ pub struct FlareBaked {
     /// ray budget by. A tight 5%-of-frame ghost needs a fraction of the
     /// grid a frame-filling defocused one does.
     pub spreads: Vec<f32>,
+    /// Per-surface spectral reflectance (K-364, entry A2): the thin-film
+    /// stack's R evaluated on a fixed (lambda, cos theta) grid at bake time,
+    /// so the per-frame trace reads a table instead of chaining 2x2 complex
+    /// matrices per ray. Layout `[surface][direction][lambda][cos]` with
+    /// direction 0 = crossing front-to-back (n1 = the medium before, n2 =
+    /// after) and 1 = the reverse - a ghost's phase-2 walk crosses surfaces
+    /// backwards, and tabulating both directions beats Snell-conjugating
+    /// angles at trace time. Lambda runs [`cie::LAMBDA_MIN`] to
+    /// [`cie::LAMBDA_MAX`] over [`REFL_LAMBDA_BINS`] samples; cos theta over
+    /// [`REFL_COS_BINS`] bin centres. Uncoated surfaces store plain Fresnel
+    /// at the same grid, so the trace has one path.
+    pub reflectance: Vec<f32>,
     /// The auto-exposure gain (closed loop, K-258): multiplies every splat
     /// so all bundled lenses read comparably at default Intensity.
     pub energy_gain: f32,
@@ -1401,6 +1413,169 @@ pub fn trace_splat(
     Some(([x, y], ray.weight * (ft * ft * (3.0 - 2.0 * ft))))
 }
 
+/// [`trace_splat`]'s spectral sibling (K-364, entry A2): the identical
+/// three-phase walk at the band's geometry wavelength, but the ray's energy
+/// is carried per radiometric sub-sample — [`SPECTRAL_SUB`] throughputs, one
+/// per 1/8th of the band, each reading the baked reflectance table at its
+/// own wavelength — and folded against the band's CIE weights at the sensor.
+/// Returns `(landing, geometric weight, rgb)`: the geometric weight is the
+/// housing feather alone (what the caller multiplies by the iris mask and
+/// the splat smooths), the rgb is the band-integrated energy.
+///
+/// Kept beside [`trace_splat`] as a sibling rather than folded into it: the
+/// scalar walk serves the bake's thousands of ranking probes, where 8×
+/// radiometry would be spent on answers nothing reads, and this one is the
+/// WGSL trace kernel's oracle. The two walks must stay geometry-identical —
+/// any edit to one's phases or feathering belongs in both.
+// Range loops deliberate: `step` takes the surface INDEX (the reflectance
+// table is keyed by it), so iterator-with-enumerate buys nothing here.
+#[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
+pub fn trace_splat_spectral(
+    baked: &FlareBaked,
+    pair: [u32; 2],
+    band: &SpectralBand,
+    origin: [f32; 3],
+    dir: [f32; 3],
+    coating_mix: f32,
+    stop_scale: f32,
+    sensor_shift_mm: f32,
+) -> Option<([f32; 2], f32, [f32; 3])> {
+    let surfs = &baked.surfaces;
+    let n = surfs.len();
+    let (a_idx, b_idx) = (pair[0] as usize, pair[1] as usize);
+    if n < 3 || a_idx >= b_idx || b_idx >= n {
+        return None;
+    }
+    let lambda_nm = band.traced_nm;
+    struct Ray {
+        pos: [f32; 3],
+        dir: [f32; 3],
+        /// Per-sub-sample energy throughput; the geometry is shared.
+        thru: [f32; SPECTRAL_SUB],
+        ior: f32,
+        rrel2: f32,
+    }
+    let mut ray = Ray {
+        pos: origin,
+        dir,
+        thru: [1.0; SPECTRAL_SUB],
+        ior: 1.0,
+        rrel2: 0.0,
+    };
+
+    let ior_at = |s: &FlareSurface| cauchy_ior(s.cauchy_a, s.cauchy_b, lambda_nm);
+    let ior_before = |idx: usize| -> f32 {
+        if idx == 0 {
+            1.0
+        } else {
+            ior_at(&surfs[idx - 1])
+        }
+    };
+
+    // One surface crossing — geometry exactly as `trace_splat`; radiometry
+    // per sub-sample from the baked table, blended against plain Fresnel by
+    // the frame-time Coating dial. `reverse` says which direction the table
+    // is read in (phase 2 crosses surfaces back to front).
+    let step = |ray: &mut Ray, s_idx: usize, n2: f32, reflect: bool, reverse: bool| -> Option<()> {
+        let s = &surfs[s_idx];
+        let semi = if s.is_stop > 0.5 {
+            s.semi_ap_mm * stop_scale
+        } else {
+            s.semi_ap_mm
+        };
+        let (hit, norm, missed) = intersect(ray.pos, ray.dir, s.radius_mm, s.z_mm)?;
+        ray.pos = hit;
+        if missed {
+            ray.rrel2 = ray.rrel2.max(4.0);
+        }
+        let semi_r = if s.radius_mm.abs() < 1e-6 {
+            semi.max(1e-6)
+        } else {
+            semi.min(s.radius_mm.abs()).max(1e-6)
+        };
+        ray.rrel2 = ray
+            .rrel2
+            .max((ray.pos[0] * ray.pos[0] + ray.pos[1] * ray.pos[1]) / (semi_r * semi_r));
+        let n1 = ray.ior;
+        let cos_i = (norm[0] * ray.dir[0] + norm[1] * ray.dir[1] + norm[2] * ray.dir[2]).abs();
+        // Plain Fresnel at the band wavelength: the smooth part, and the
+        // whole answer at Coating 0.
+        let plain = fresnel_cos(cos_i, n1, n2);
+        let mix = coating_mix.clamp(0.0, 1.0);
+        if reflect {
+            ray.dir = reflect3(ray.dir, norm);
+            for (k, t) in ray.thru.iter_mut().enumerate() {
+                let coated =
+                    refl_lookup(&baked.reflectance, s_idx, reverse, band.sub_idx[k], cos_i);
+                let r = (plain + (coated - plain) * mix).clamp(0.0, 1.0);
+                *t *= r;
+            }
+        } else {
+            match refract3(ray.dir, norm, n1 / n2) {
+                Some(d) => ray.dir = d,
+                None => ray.rrel2 = ray.rrel2.max(4.0),
+            }
+            for (k, t) in ray.thru.iter_mut().enumerate() {
+                let coated =
+                    refl_lookup(&baked.reflectance, s_idx, reverse, band.sub_idx[k], cos_i);
+                let r = (plain + (coated - plain) * mix).clamp(0.0, 1.0);
+                *t *= 1.0 - r;
+            }
+            ray.ior = n2;
+        }
+        Some(())
+    };
+
+    // Phase 1: forward through 0..=b, reflecting at b.
+    for s_idx in 0..=b_idx {
+        let n2 = ior_at(&surfs[s_idx]);
+        step(&mut ray, s_idx, n2, s_idx == b_idx, false)?;
+    }
+    // Phase 2: backward through b-1..=a, reflecting at a.
+    for s_idx in (a_idx..b_idx).rev() {
+        let reflect = s_idx == a_idx;
+        let n2 = ior_before(s_idx);
+        step(&mut ray, s_idx, n2, reflect, true)?;
+        if reflect {
+            ray.ior = ior_at(&surfs[s_idx]);
+        }
+    }
+    // Phase 3: forward through a+1..n.
+    for s_idx in (a_idx + 1)..n {
+        let n2 = ior_at(&surfs[s_idx]);
+        step(&mut ray, s_idx, n2, false, false)?;
+    }
+
+    if ray.dir[2].abs() < 1e-12 {
+        return None;
+    }
+    let t = (baked.sensor_z_mm + sensor_shift_mm - ray.pos[2]) / ray.dir[2];
+    // Negated deliberately, as in `trace_splat`: NaN must read as dead.
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    if !(t > 0.0) {
+        return None;
+    }
+    let x = ray.pos[0] + ray.dir[0] * t;
+    let y = ray.pos[1] + ray.dir[1] * t;
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    // Band-integrate: rgb = sum over subs of throughput × CIE weight.
+    let mut rgb = [0.0_f32; 3];
+    for k in 0..SPECTRAL_SUB {
+        let t = ray.thru[k];
+        if !t.is_finite() {
+            return None;
+        }
+        rgb[0] += t * band.sub_rgb[k][0];
+        rgb[1] += t * band.sub_rgb[k][1];
+        rgb[2] += t * band.sub_rgb[k][2];
+    }
+    // Housing feather: full inside 0.95, gone at 1.0 (smoothstep).
+    let ft = ((1.0 - ray.rrel2.sqrt()) / 0.05).clamp(0.0, 1.0);
+    Some(([x, y], ft * ft * (3.0 - 2.0 * ft), rgb))
+}
+
 // ---------------------------------------------------------------------------
 // Pupil sampling (K-261): deterministic Halton spray over the front element,
 // masked by the iris polygon with roundness and softness.
@@ -1649,6 +1824,7 @@ pub fn frame_grid_needs_from_rows(
         spreads: Vec::new(),
         energy_gain: 0.0,
         starburst: Vec::new(),
+        reflectance: Vec::new(),
     };
     frame_grid_needs(&view, pair_count, dir, coating, stop_scale, sensor_shift_mm)
 }
@@ -1959,6 +2135,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         focal_mm: lens.focal_mm,
         native_fstop,
         front_semi_ap,
+        reflectance: bake_reflectance(&lens.surfaces),
         surfaces: lens.surfaces,
         pairs: Vec::new(),
         spreads: Vec::new(),
@@ -2205,6 +2382,170 @@ pub fn lambda_weights(count: u32, dispersion: f32) -> Vec<(f32, [f32; 3])> {
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// Spectral radiometry (K-364, entry A2)
+// ---------------------------------------------------------------------------
+
+/// Lambda samples in the baked reflectance table: [`cie::LAMBDA_MIN`] to
+/// [`cie::LAMBDA_MAX`] inclusive at 5 nm - fine enough to resolve a 7-layer
+/// stack's W-shaped reflectance, which the traced bands alone cannot.
+pub const REFL_LAMBDA_BINS: usize = 69;
+
+/// cos theta bins in the baked reflectance table (bin centres, linear).
+pub const REFL_COS_BINS: usize = 16;
+
+/// Radiometric sub-samples per traced wavelength band (K-364). Geometry
+/// varies slowly with lambda (dispersion is smooth), so the ray path is
+/// traced once per band - but the coating reflectance oscillates several
+/// times across the visible, so each ray's *energy* is integrated at 8
+/// points across its band. Even the lowest quality tier then samples the
+/// spectrum 24 times where it sampled 3.
+pub const SPECTRAL_SUB: usize = 8;
+
+/// One traced wavelength band with its radiometric sub-samples (K-364):
+/// the geometry wavelength, and per sub-sample the reflectance table's
+/// lambda index plus the CIE weight (already through XYZ to RGB and the
+/// ladder's Y-normalisation). The sub-weights of a band sum to what
+/// [`lambda_weights`] gave the whole band — exactly in Y, and up to the
+/// out-of-gamut clamp in R and B, which now applies per sub-sample rather
+/// than per band and so throws strictly less away — so a spectrally flat
+/// throughput renders at the old exposure.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpectralBand {
+    /// The wavelength the geometry is traced at (dispersion-scaled).
+    pub traced_nm: f32,
+    /// Reflectance-table lambda index per sub-sample (the sub-lambda
+    /// snapped to the table's 5 nm grid, so the lookup is exact in lambda).
+    pub sub_idx: [u32; SPECTRAL_SUB],
+    /// Linear working RGB weight per sub-sample.
+    pub sub_rgb: [[f32; 3]; SPECTRAL_SUB],
+}
+
+/// The traced bands with their radiometric sub-samples - [`lambda_weights`]
+/// refined (K-364). Same geometry ladder, same total normalisation; each
+/// band's single RGB weight becomes [`SPECTRAL_SUB`] weights whose sum is
+/// the old value (XYZ to RGB is linear, so splitting the band's CIE
+/// integral splits its RGB weight exactly).
+pub fn spectral_bands(count: u32, dispersion: f32) -> Vec<SpectralBand> {
+    let ladder = cie::wavelength_ladder(count as usize, dispersion);
+    let count = count.max(1) as usize;
+    let range = cie::LAMBDA_MAX - cie::LAMBDA_MIN;
+    let band_w = range / count as f32;
+    // Per band, per sub: the mean CIE XYZ over the sub-span (matching
+    // lambda_weights' ~2 nm integration step), divided by SPECTRAL_SUB so
+    // the subs sum to the band mean.
+    let mut bands_xyz: Vec<[[f32; 3]; SPECTRAL_SUB]> = Vec::with_capacity(count);
+    let mut sum_y = 0.0_f32;
+    for k in 0..count {
+        let lo = cie::LAMBDA_MIN + band_w * k as f32;
+        let sub_w = band_w / SPECTRAL_SUB as f32;
+        let mut subs = [[0.0_f32; 3]; SPECTRAL_SUB];
+        for (si, sub) in subs.iter_mut().enumerate() {
+            let s_lo = lo + sub_w * si as f32;
+            let steps = (sub_w / 2.0).ceil().max(1.0) as usize;
+            let mut acc = [0.0_f32; 3];
+            for i in 0..steps {
+                let nm = s_lo + sub_w * (i as f32 + 0.5) / steps as f32;
+                let w = cie::xyz_at(nm);
+                acc[0] += w[0];
+                acc[1] += w[1];
+                acc[2] += w[2];
+            }
+            let inv = 1.0 / (steps * SPECTRAL_SUB) as f32;
+            *sub = [acc[0] * inv, acc[1] * inv, acc[2] * inv];
+            sum_y += sub[1];
+        }
+        bands_xyz.push(subs);
+    }
+    let norm = 1.0 / sum_y.max(1e-6);
+    ladder
+        .iter()
+        .zip(bands_xyz)
+        .enumerate()
+        .map(|(k, (&(traced_nm, _), subs))| {
+            let lo = cie::LAMBDA_MIN + band_w * k as f32;
+            let sub_w = band_w / SPECTRAL_SUB as f32;
+            let mut sub_idx = [0u32; SPECTRAL_SUB];
+            let mut sub_rgb = [[0.0_f32; 3]; SPECTRAL_SUB];
+            for si in 0..SPECTRAL_SUB {
+                let nm = lo + sub_w * (si as f32 + 0.5);
+                sub_idx[si] = refl_lambda_index(nm);
+                let rgb = cie::xyz_to_linear_rgb(subs[si]);
+                sub_rgb[si] = [
+                    rgb[0].max(0.0) * norm,
+                    rgb[1].max(0.0) * norm,
+                    rgb[2].max(0.0) * norm,
+                ];
+            }
+            SpectralBand {
+                traced_nm,
+                sub_idx,
+                sub_rgb,
+            }
+        })
+        .collect()
+}
+
+/// A wavelength snapped to the reflectance table's 5 nm grid.
+pub fn refl_lambda_index(nm: f32) -> u32 {
+    let step = (cie::LAMBDA_MAX - cie::LAMBDA_MIN) / (REFL_LAMBDA_BINS - 1) as f32;
+    (((nm - cie::LAMBDA_MIN) / step).round() as i64).clamp(0, REFL_LAMBDA_BINS as i64 - 1) as u32
+}
+
+/// Bake the per-surface reflectance table (see [`FlareBaked::reflectance`]).
+/// Direction 0 keys `(n1 = medium before, n2 = medium after)`; direction 1
+/// swaps them, which is what a phase-2 backward crossing evaluates.
+fn bake_reflectance(surfs: &[FlareSurface]) -> Vec<f32> {
+    let step = (cie::LAMBDA_MAX - cie::LAMBDA_MIN) / (REFL_LAMBDA_BINS - 1) as f32;
+    let mut out = vec![0.0_f32; surfs.len() * 2 * REFL_LAMBDA_BINS * REFL_COS_BINS];
+    for (si, s) in surfs.iter().enumerate() {
+        let stack = coating_stack(s.coating_layers);
+        for dir in 0..2usize {
+            for li in 0..REFL_LAMBDA_BINS {
+                let nm = cie::LAMBDA_MIN + step * li as f32;
+                let before = if si == 0 {
+                    1.0
+                } else {
+                    cauchy_ior(surfs[si - 1].cauchy_a, surfs[si - 1].cauchy_b, nm)
+                };
+                let after = cauchy_ior(s.cauchy_a, s.cauchy_b, nm);
+                let (n1, n2) = if dir == 0 {
+                    (before, after)
+                } else {
+                    (after, before)
+                };
+                for ci in 0..REFL_COS_BINS {
+                    let cos_i = (ci as f32 + 0.5) / REFL_COS_BINS as f32;
+                    let r = if s.coating_layers < 0.5 {
+                        fresnel_cos(cos_i, n1, n2)
+                    } else {
+                        stack_reflectance(cos_i, n1, n2, &stack, nm)
+                    };
+                    out[((si * 2 + dir) * REFL_LAMBDA_BINS + li) * REFL_COS_BINS + ci] = r;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Read the baked table at (surface, direction, lambda index, cos theta):
+/// linear interpolation across the cos bins, exact in lambda (the caller's
+/// index is already on the grid). The WGSL trace mirrors this arithmetic
+/// op for op.
+pub fn refl_lookup(table: &[f32], surf: usize, reverse: bool, lambda_idx: u32, cos_i: f32) -> f32 {
+    let base = ((surf * 2 + usize::from(reverse)) * REFL_LAMBDA_BINS + lambda_idx as usize)
+        * REFL_COS_BINS;
+    let c = cos_i.clamp(0.0, 1.0) * REFL_COS_BINS as f32 - 0.5;
+    let j0 = (c.floor().max(0.0) as usize).min(REFL_COS_BINS - 1);
+    let j1 = (j0 + 1).min(REFL_COS_BINS - 1);
+    let f = (c - j0 as f32).clamp(0.0, 1.0);
+    let (Some(&a), Some(&b)) = (table.get(base + j0), table.get(base + j1)) else {
+        return 0.0;
+    };
+    a + (b - a) * f
+}
+
 /// Raster pixels per sensor mm for a `w`-wide target: resolution-independent
 /// framing (§2.3), matching [`light_direction`]'s half-sensor convention.
 pub fn screen_transform(w: u32) -> f32 {
@@ -2425,7 +2766,7 @@ pub fn cpu_flare(
     // setting.
     let base_side = detail_base(tier_base, p.detail);
     let lambda_count = detail_lambda(tier_lambda, p.detail);
-    let weights = lambda_weights(lambda_count, p.dispersion);
+    let bands = spectral_bands(lambda_count, p.dispersion);
     let roundness = effective_roundness(p.roundness, p.fstop, baked.native_fstop);
     let rot = p.aperture_rotation_deg.to_radians();
     let stop_scale = fstop_scale(baked.native_fstop, p.fstop);
@@ -2458,9 +2799,11 @@ pub fn cpu_flare(
         Vec::new()
     };
 
-    // Per-corner trace results for one (pair, λ): landing px and weight
-    // (Fresnel × mask); None = dead. Sized for the widest grid in play.
-    let mut corners: Vec<Option<([f32; 2], f32)>> = Vec::new();
+    // Per-corner trace results for one (pair, band): landing px, geometric
+    // weight (housing feather × iris mask) and band-integrated rgb (K-364);
+    // None = dead. Sized for the widest grid in play.
+    type Corner = ([f32; 2], f32, [f32; 3]);
+    let mut corners: Vec<Option<Corner>> = Vec::new();
     // The pair's iris mask per pupil corner — wavelength-independent, so it
     // is computed once a pair and read by every wavelength (K-263).
     let mut masks: Vec<f32> = Vec::new();
@@ -2502,7 +2845,7 @@ pub fn cpu_flare(
                     );
                 }
             }
-            for &(nm, rgb_w) in &weights {
+            for band in &bands {
                 // The corner traces in parallel — this is where the bake's
                 // time actually went (the auto-exposure thumbnail traces
                 // tens of thousands of rays through the whole prescription,
@@ -2542,20 +2885,21 @@ pub fn cpu_flare(
                             v * baked.pupil_mm * stop_scale,
                             baked.start_z_mm,
                         ];
-                        *corner = trace_splat(
+                        *corner = trace_splat_spectral(
                             baked,
                             *pair,
-                            nm,
+                            band,
                             origin,
                             dir,
                             p.coating,
                             stop_scale,
                             sensor_shift,
                         )
-                        .map(|(pos, wt)| {
+                        .map(|(pos, wt, rgb)| {
                             (
                                 [pos[0] * st + rw as f32 / 2.0, rh as f32 / 2.0 - pos[1] * st],
                                 wt * mask,
+                                rgb,
                             )
                         });
                     });
@@ -2621,18 +2965,25 @@ pub fn cpu_flare(
                 // corners, the pull-in) stay on RAW weights: smearing light
                 // onto a virtual continuation's far-flung corner would draw
                 // the K-264 fan lines again.
-                let smooth_weight = |ci: usize, cj: usize| -> f32 {
-                    let mut sum = 0.0_f32;
+                // Since K-364 the smooth carries the corner's spectral rgb
+                // through the same 3×3 mean the scalar weight took — with a
+                // constant rgb this is exactly the old smooth × that rgb, so
+                // nothing about the K-266 cliff-smoothing changed shape.
+                let smooth_rgb = |ci: usize, cj: usize| -> [f32; 3] {
+                    let mut sum = [0.0_f32; 3];
                     for dj in -1i64..=1 {
                         for di in -1i64..=1 {
                             let x = (ci as i64 + di).clamp(0, side as i64 - 1) as usize;
                             let y = (cj as i64 + dj).clamp(0, side as i64 - 1) as usize;
-                            if let Some((_, wt)) = corners[y * side + x] {
-                                sum += wt.max(0.0);
+                            if let Some((_, wt, rgb)) = corners[y * side + x] {
+                                let w = wt.max(0.0);
+                                sum[0] += w * rgb[0];
+                                sum[1] += w * rgb[1];
+                                sum[2] += w * rgb[2];
                             }
                         }
                     }
-                    sum / 9.0
+                    [sum[0] / 9.0, sum[1] / 9.0, sum[2] / 9.0]
                 };
                 // The SMALLEST live cell touching a corner — the pull-in's
                 // length scale (K-265). The mean is wrong for that job: at
@@ -2695,17 +3046,17 @@ pub fn cpu_flare(
                             },
                         ];
                         let smoothed = [
-                            smooth_weight(i, j),
-                            smooth_weight(i + 1, j),
-                            smooth_weight(i + 1, j + 1),
-                            smooth_weight(i, j + 1),
+                            smooth_rgb(i, j),
+                            smooth_rgb(i + 1, j),
+                            smooth_rgb(i + 1, j + 1),
+                            smooth_rgb(i, j + 1),
                         ];
-                        for ((vert, wt), d) in v.iter_mut().zip(smoothed).zip(density) {
-                            let b = d * gain * wt;
+                        for ((vert, srgb), d) in v.iter_mut().zip(smoothed).zip(density) {
+                            let b = d * gain;
                             vert.rgb = [
-                                b * rgb_w[0] * light.rgb[0],
-                                b * rgb_w[1] * light.rgb[1],
-                                b * rgb_w[2] * light.rgb[2],
+                                b * srgb[0] * light.rgb[0],
+                                b * srgb[1] * light.rgb[1],
+                                b * srgb[2] * light.rgb[2],
                             ];
                         }
                         // Rein in the unlit corners (K-264). A cell that

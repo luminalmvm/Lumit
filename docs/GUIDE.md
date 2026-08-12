@@ -914,6 +914,31 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   uses the textbook design for each layer count. The behaviour is right; the
   exact tint of a specific real lens would need that lens photographed and
   fitted.
+
+  **Tracing three colours and measuring twenty-four (K-364).** The catch with
+  the coatings above is that their effect swings up and down several times
+  across the visible spectrum — a stack cancels one colour, passes the next,
+  cancels another. Lumit was tracing three wavelengths and reading the coating
+  at each, which is three readings of a curve with five wiggles in it: the
+  answer depended on where the three landed, not on the shape of the curve.
+
+  The fix separates two things that used to travel together. *Where* a ray
+  goes barely changes with colour — glass bends red and blue by very slightly
+  different amounts, and that smooth difference is all the geometry cares
+  about — so the path is still traced three times. *How much energy* the ray
+  keeps is where the wiggles live, so each traced ray now carries eight
+  separate energy readings, spread across its share of the spectrum, and each
+  one reads the coating at its own wavelength. Even the lowest quality setting
+  therefore samples colour twenty-four times where it sampled three, for
+  almost no extra tracing.
+
+  The coating maths itself no longer runs per ray at all. Once per lens, the
+  reflectance of every surface is worked out ahead of time onto a small grid —
+  every 5 nm across the visible, at sixteen angles — and the ray simply looks
+  its answer up. Both halves of Lumit do this identically, the one on the
+  processor and the one on the graphics card, so they still agree ray for ray;
+  the card's copy got faster in the bargain, because a table lookup is cheaper
+  than the layer-by-layer calculation it replaced.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the

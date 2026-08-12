@@ -3186,9 +3186,15 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
     let grid = lf::detail_base(tier_base, p.detail);
     let lambda_count = lf::detail_lambda(tier_lambda, p.detail);
     let energy = p.ghost_intensity;
-    let lambdas = lf::lambda_weights(lambda_count, p.dispersion)
+    let bands = lf::spectral_bands(lambda_count, p.dispersion)
         .into_iter()
-        .map(|(nm, rgb)| (nm, [rgb[0] * energy, rgb[1] * energy, rgb[2] * energy]))
+        .map(|b| crate::fx::lens_flare::FlareBand {
+            traced_nm: b.traced_nm,
+            sub_idx: b.sub_idx,
+            sub_rgb: b
+                .sub_rgb
+                .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
+        })
         .collect();
     LensFlareOp {
         light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h as f32],
@@ -3199,7 +3205,7 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
             .map(|l| [l.pos[0], l.pos[1], l.rgb[0], l.rgb[1], l.rgb[2]])
             .collect(),
         intensity: p.intensity,
-        lambdas,
+        bands,
         max_ghosts: p.max_ghosts,
         coating: p.coating,
         focus_m: p.focus_m,
@@ -3286,8 +3292,31 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
         pupil_mm: b.pupil_mm,
         start_z_mm: b.start_z_mm,
         energy_gain: b.energy_gain,
+        reflectance: b.reflectance.clone(),
         starburst: b.starburst,
         sb_res: lf::STARBURST_RES,
+    }
+}
+
+/// The reflectance table's grid is spelled out twice — once in lumit-core,
+/// which bakes it, once in the WGSL that reads it (K-364) — because the
+/// shader cannot import a Rust constant. A drift would silently index the
+/// wrong wavelength for every ray, so the shader source is checked against
+/// the constants it mirrors.
+#[test]
+fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
+    use lumit_core::fx::lens_flare as lf;
+    let src = include_str!("../fx_lens_flare_trace.wgsl");
+    for (name, want) in [
+        ("REFL_LAMBDA_BINS", lf::REFL_LAMBDA_BINS),
+        ("REFL_COS_BINS", lf::REFL_COS_BINS),
+        ("SPECTRAL_SUB", lf::SPECTRAL_SUB),
+    ] {
+        let want = format!("const {name}: u32 = {want}u;");
+        assert!(
+            src.contains(&want),
+            "the trace shader must declare `{want}`"
+        );
     }
 }
 
@@ -3882,16 +3911,16 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             assert!(!gpu.is_empty(), "trace debug returned nothing");
 
             // Rebuild the same combo order the GPU used: pair-major over
-            // the ranked list, wavelength-minor.
+            // the ranked list, band-minor.
             let (grid, lambda_count, _) = lf::quality_ladder(p.quality);
-            let lambdas = lf::lambda_weights(lambda_count, p.dispersion);
+            let bands = lf::spectral_bands(lambda_count, p.dispersion);
             let mut combos = Vec::new();
             'outer: for &pair in baked.pairs.iter().take(p.max_ghosts as usize) {
-                for &(nm, _) in &lambdas {
+                for band in &bands {
                     if combos.len() >= combo_limit as usize {
                         break 'outer;
                     }
-                    combos.push((pair, nm));
+                    combos.push((pair, band));
                 }
             }
             let ray_count = (grid * grid) as usize;
@@ -3910,9 +3939,11 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let mut sum_pos = 0.0f32;
             let mut pos_errs: Vec<f32> = Vec::new();
             let mut weight_errs: Vec<f32> = Vec::new();
+            let mut rgb_errs: Vec<f32> = Vec::new();
             let mut worst_pos = 0.0f32;
             let mut worst_weight = 0.0f32;
-            for (ci, &(pair, nm)) in combos.iter().enumerate() {
+            let mut worst_rgb = 0.0f32;
+            for (ci, &(pair, band)) in combos.iter().enumerate() {
                 for ry in 0..grid {
                     for rx in 0..grid {
                         let g = gpu[ci * ray_count + (ry * grid + rx) as usize];
@@ -3935,13 +3966,17 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                 v * baked.pupil_mm * stop_scale,
                                 baked.start_z_mm,
                             ];
-                            lf::trace_splat(
-                                &baked, pair, nm, origin, dir, p.coating, stop_scale, shift,
+                            lf::trace_splat_spectral(
+                                &baked, pair, band, origin, dir, p.coating, stop_scale, shift,
                             )
-                            .map(|(pos, wt)| {
+                            .map(|(pos, wt, rgb)| {
+                                // The op's bands carry Ghost intensity, the
+                                // reference's do not (K-364).
+                                let e = p.ghost_intensity;
                                 (
                                     [pos[0] * st + w as f32 / 2.0, h as f32 / 2.0 - pos[1] * st],
                                     wt * mask,
+                                    [rgb[0] * e, rgb[1] * e, rgb[2] * e],
                                 )
                             })
                         };
@@ -3953,10 +3988,27 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                     mismatched_liveness += 1;
                                 }
                             }
-                            Some((pos, wt)) => {
+                            Some((pos, wt, rgb)) => {
                                 if !gpu_live {
                                     mismatched_liveness += 1;
                                     continue;
+                                }
+                                // The spectral half (K-364): the ray's
+                                // band-integrated energy, relative to its
+                                // own magnitude. This is what the eight
+                                // per-sub throughputs and the baked
+                                // reflectance table actually produce — the
+                                // weight below is now geometry alone, so
+                                // without this the trace's radiometry would
+                                // go unchecked corner for corner.
+                                let cmax = rgb.iter().fold(0.0f32, |a, &b| a.max(b));
+                                if cmax > 1e-7 {
+                                    let rerr = (0..3)
+                                        .map(|c| (g[4 + c] - rgb[c]).abs())
+                                        .fold(0.0f32, f32::max)
+                                        / cmax;
+                                    rgb_errs.push(rerr);
+                                    worst_rgb = worst_rgb.max(rerr);
                                 }
                                 // Position agreement is claimed only for rays
                                 // CARRYING light. A K-264 virtual
@@ -3982,7 +4034,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                 }
             }
             eprintln!(
-                "lens {lens} light {light_frac:?}: pos {worst_pos}px weight-rel {worst_weight}"
+                "lens {lens} light {light_frac:?}: pos {worst_pos}px weight-rel {worst_weight} rgb-rel {worst_rgb}"
             );
             // Mean position error is what a porting bug blows up by orders
             // of magnitude; the tail is pinned at the 99th percentile (a
@@ -4003,6 +4055,16 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             assert!(
                 w_p99 < 0.05,
                 "p99 weight error {w_p99} (worst {worst_weight})"
+            );
+            assert!(
+                rgb_errs.len() > 100,
+                "too few rays carried energy ({}) to check the spectral walk",
+                rgb_errs.len()
+            );
+            let rgb_p99 = p99(&mut rgb_errs);
+            assert!(
+                rgb_p99 < 0.05,
+                "p99 spectral rgb error {rgb_p99} (worst {worst_rgb})"
             );
             let flip_rate = mismatched_liveness as f32 / total.max(1) as f32;
             assert!(

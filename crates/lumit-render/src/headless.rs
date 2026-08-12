@@ -3057,6 +3057,7 @@ mod tests {
                 pupil_mm: 1.0,
                 start_z_mm: 0.0,
                 energy_gain: 1.0,
+                reflectance: Vec::new(),
                 starburst: Vec::new(),
                 sb_res: 1,
             }) as lumit_gpu::fx::FlareBake;
@@ -3105,6 +3106,7 @@ mod tests {
                 pupil_mm: 1.0,
                 start_z_mm: 0.0,
                 energy_gain: 1.0,
+                reflectance: Vec::new(),
                 starburst: Vec::new(),
                 sb_res: 1,
             }) as lumit_gpu::fx::FlareBake;

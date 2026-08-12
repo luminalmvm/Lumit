@@ -8771,3 +8771,46 @@ This changes pictures for projects that relied on at-or-below-threshold sources 
 so the effect's version bumps 5 → 6 — the K-016 mechanism that retires every cached frame
 the old gate drew. The old behaviour is recoverable by lowering the threshold by the
 softness — which is exactly the sentence that shows the new semantics are the primitive ones.
+
+---
+
+## K-364 — Ghost radiometry is spectral: 8 sub-samples per traced band against a baked reflectance table
+
+**DECIDED** (2026-08-12). Entry A2 of the flare programme; builds directly on K-356's
+transfer-matrix coatings, which created the problem this solves.
+
+A ghost's colour is its path's reflectance, and since K-356 that reflectance is a real
+multi-layer stack whose R(λ) oscillates several times across the visible. The trace sampled
+it once per traced band — at the band centre — and a curve with three minima sampled at
+three points is systematically wrong in exactly the quantity K-356 made accurate.
+
+Geometry and radiometry now split, because they vary at different rates. The ray path is
+still traced once per band (dispersion is smooth; the geometry ladder is unchanged). The
+ray's **energy** is carried per band as eight sub-sample throughputs, each reading a
+**baked reflectance table** — `FlareBaked::reflectance`, R on a (surface, direction, λ at
+5 nm, cos θ) grid, computed once per lens change by the same `stack_reflectance` the trace
+used to chain per ray — and folded against the band's CIE weights at the sensor. Even the
+lowest quality tier now samples the spectrum 24 times where it sampled 3; Ultra samples it
+256 times. The per-frame cost went *down*: eight table reads replaced a 2×2 complex matrix
+chain per surface event, and the WGSL's inline thin-film maths is deleted.
+
+Choices worth recording:
+
+- **Both crossing directions are tabulated** (a ghost's phase-2 walk crosses surfaces
+  backwards) rather than Snell-conjugating angles at trace time. Twice the table, none of
+  the per-ray trigonometry, no reciprocity argument to get subtly wrong.
+- **Sub-wavelengths snap to the table's 5 nm grid**, so the lookup is exact in λ and only
+  cos θ interpolates. The CPU twin and the WGSL mirror the same arithmetic op for op.
+- **Exposure is preserved by construction**: a band's sub-weights are its CIE integral
+  split eight ways, so a spectrally flat throughput renders at exactly the old exposure.
+  The out-of-gamut clamp moves from per-band to per-sub-sample, which throws strictly less
+  away (violet bands used to zero their whole negative channel).
+- **The Coating dial stays frame-time**: the table stores the fully coated stack, plain
+  Fresnel stays analytic at the band wavelength, and the dial blends between them per
+  event — so animating it never rebakes, exactly as before.
+- The trace's corner output grew from a scalar weight to (geometric weight, rgb), and the
+  K-266 3×3 cliff-smoothing now carries weight×rgb through the same mean — with a constant
+  rgb it is exactly the old smooth, so nothing about its shape changed.
+
+The ranking and spread probes inside the bake keep the scalar single-λ walk: they only
+rank, and 8× radiometry there would be spent on answers nothing reads.
