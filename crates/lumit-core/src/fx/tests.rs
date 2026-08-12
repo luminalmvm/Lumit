@@ -5848,8 +5848,11 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         // Raster pixels (K-260): tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
-        // A point source, as the effect has always defaulted to.
+        // A point source, as the effect has always defaulted to, and no
+        // comp lights — Manual mode never reads them.
         source_size: [0.0, 0.0],
+        lights: [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES],
+        light_count: 0,
         intensity: 1.0,
         lens: 16,
         fstop: 2.8,
@@ -6030,6 +6033,103 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     assert_eq!(point.len(), 1);
     assert!((point[0].pos[0] - 20.5 / w as f32).abs() < 1e-6);
     assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);
+}
+
+/// **Light layers resolve, and an area light keeps its size** (K-360).
+///
+/// The whole reason the layer exists is the area kind: a light with a real
+/// width and height flares as its own shape through the machinery K-355 built,
+/// where a point can only ever be a dot. This pins the resolve — including that
+/// only an area light reports extent, whatever the stored numbers say, and that
+/// a light switched off is not a light (K-230's rule for every layer).
+#[test]
+fn lens_flare_light_layers_resolve_with_their_extent() {
+    use crate::anim::Property;
+    use crate::model::*;
+    use crate::time::{CompTime, Duration, FrameRate, Rational};
+
+    let mut comp = Composition {
+        id: uuid::Uuid::now_v7(),
+        name: "Scene".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(30, 1).unwrap(),
+        duration: Duration(Rational::new(5, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: MotionBlur::default(),
+        extra: serde_json::Map::new(),
+    };
+
+    let mut light_layer = |kind: LightKind, x: f64, half: f64, visible: bool| {
+        let mut l = Layer {
+            markers: Vec::new(),
+            id: uuid::Uuid::now_v7(),
+            name: "Light".into(),
+            kind: LayerKind::Light {
+                light: Box::new(LightDef {
+                    kind,
+                    half_size: [Property::fixed(half), Property::fixed(half * 0.5)],
+                    ..LightDef::default()
+                }),
+            },
+            in_point: CompTime(Rational::new(0, 1).unwrap()),
+            out_point: CompTime(Rational::new(5, 1).unwrap()),
+            start_offset: CompTime(Rational::new(0, 1).unwrap()),
+            transform: TransformGroup {
+                position_x: Property::fixed(x),
+                position_y: Property::fixed(200.0),
+                ..TransformGroup::default()
+            },
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            retime: None,
+            interpolation: Default::default(),
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        l.switches.visible = visible;
+        comp.layers.push(l);
+    };
+
+    light_layer(LightKind::Area, 300.0, 80.0, true);
+    light_layer(LightKind::Point, 900.0, 80.0, true);
+    light_layer(LightKind::Area, 1500.0, 40.0, false);
+
+    let lights = comp.lights_at(1.0);
+    assert_eq!(lights.len(), 2, "a light switched off is not a light");
+
+    // Top of the stack first — the order the effects that read lights take
+    // them in, so a crowded frame spends its slots on the ones on top.
+    assert_eq!(lights[0].position.0, 300.0);
+    assert_eq!(lights[0].kind, LightKind::Area);
+    assert_eq!(
+        lights[0].half_size,
+        (80.0, 40.0),
+        "an area light reports its real size"
+    );
+
+    assert_eq!(lights[1].position.0, 900.0);
+    assert_eq!(
+        lights[1].half_size,
+        (0.0, 0.0),
+        "a point light has no extent, whatever the stored numbers say"
+    );
+
+    // Outside every span there are no lights at all.
+    assert!(comp.lights_at(99.0).is_empty());
+
+    // A default light is white at full intensity — a fresh one should light
+    // something rather than land as a black source nobody can see.
+    assert_eq!(lights[1].colour, [1.0, 1.0, 1.0]);
 }
 
 #[test]

@@ -3949,6 +3949,34 @@ half of one. Folded into the frame's cache name like the rest (an opaque frame
 and a see-through frame are two different pictures), and never sent to an
 export, which always draws the backdrop.
 
+### Light layers, and why an area light matters (K-360)
+
+Lumit now has **Light layers** — Layer ▸ New ▸ Point light, Spot light or Area
+light. A light draws nothing itself. Like a Camera, it is a thing the *other*
+layers react to; you will not see it in the picture, only what it does.
+
+It is placed with the ordinary transform, which means it animates, parents to a
+Null and drags about exactly like any other layer. There was no need to invent
+a special way to move a light, so there isn't one.
+
+**The area light is the one worth knowing about.** A point light is a
+mathematical dot — it has a position and nothing else. An area light is a
+*rectangle* with a real width and height: a softbox, a window, a strip light,
+the long tube over a kitchen counter. Real lights have size, and size is what
+makes their reflections look the way they do.
+
+Right now the thing that reads lights is the Lens flare, in its **Lights**
+source mode: instead of you placing the flare by hand, or the effect hunting
+for bright pixels, it flares from the actual lights in your composition. And
+because an area light knows how big it is, the flare draws it as its own
+shape — a strip light's ghosts come out as bars, not as circles. That fell out
+of work already done: the machinery that measures and samples a source's extent
+was built earlier for detected sources, so a light with a size simply walks
+into it.
+
+Move the light, and the flare follows. Animate it, and the flare animates. That
+is the point of making a light a layer rather than a number inside an effect.
+
 ### Two lens flares, and why there are two (K-359)
 
 Lumit has a **Lens flare** and a **Sprite flare**, and they are not two

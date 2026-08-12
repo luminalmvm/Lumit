@@ -265,6 +265,39 @@ Invariants (binding, per K-020/K-022):
   layer's assembled output, after clip retiming — a glow keyframed on the layer is unaffected
   by where cuts fall.
 
+### 5.5 Light layers (K-360)
+
+`LayerKind::Light { light: LightDef }` — a source of light in the composition. Like a Camera
+it draws no pixels of its own: it is something other layers *see*.
+
+**Its placement is the ordinary layer transform**, not a second one of its own, so a light
+animates, parents and is dragged with everything already built for layers. `LightDef` carries
+only what a light *is*:
+
+| Field | Meaning |
+|---|---|
+| `kind` | `point`, `spot` or `area` |
+| `colour` | Scene-linear RGB, animatable per channel |
+| `intensity` | Master gain |
+| `half_size` | The emitting rectangle's half-width and half-height in comp pixels. **Area only** — the other kinds report zero extent whatever is stored, so a kind change cannot leave a stale size behind |
+| `cone_deg` | The spot cone's half-angle; spot only. Aimed by the layer's own z rotation |
+| `falloff_px` | Distance to nothing; zero means no falloff, which is usually what a flare source wants |
+
+Half-extents rather than full, matching the Lens flare's Source size dials (§3.27, K-355), so
+a light is measured from its centre outward like every other point-and-size pair in the model.
+
+`Composition::lights_at(t)` resolves the **visible, in-span** lights at a comp time, **top of
+the stack first** — the order the effects that read lights fill their slots in, so a frame
+with more lights than an effect can carry spends them on the ones nearest the top. A light
+switched off is not a light (K-230's rule for every layer).
+
+**The area kind is the one that earns the layer.** An area light reaches the Lens flare's
+Lights source mode with a real extent and flares as its own shape through the sampling K-355
+already built for detected sources — a strip light throws bar-shaped ghosts, with no new
+rendering code. Frame keys hash a light's own properties, unlike a Camera's (whose pose is
+hashed at comp level), because a light that changed colour without renaming its frames would
+serve a stale one.
+
 ---
 
 ## 6. Properties, keyframes, animation

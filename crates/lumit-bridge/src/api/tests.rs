@@ -1641,6 +1641,7 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
         BridgeLayerKind::Adjustment,
         BridgeLayerKind::NullLayer,
         BridgeLayerKind::Sequence,
+        BridgeLayerKind::Light,
     ] {
         let added = match expected {
             BridgeLayerKind::Solid => comp.add_solid_layer(),
@@ -1649,6 +1650,9 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
             BridgeLayerKind::Adjustment => comp.add_adjustment_layer(),
             BridgeLayerKind::NullLayer => comp.add_null_layer(),
             BridgeLayerKind::Sequence => comp.add_sequence_layer(),
+            // The area kind (K-360) — the one with a size, and so the one
+            // worth checking reaches the document intact.
+            BridgeLayerKind::Light => comp.add_light_layer(2),
             other => panic!("{other:?} has no Layer-menu entry"),
         }
         .expect("layer added");

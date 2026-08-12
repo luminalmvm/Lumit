@@ -195,6 +195,7 @@ pub fn collect_comp_jobs(
             | LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
+            | LayerKind::Light { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {

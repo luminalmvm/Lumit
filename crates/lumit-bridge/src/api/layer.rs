@@ -532,6 +532,9 @@ pub enum BridgeLayerKind {
     /// generated Dart enum would otherwise carry a member called `null`, which
     /// is a Dart reserved word (K-206); `lumit-core` keeps `LayerKind::Null`.
     NullLayer,
+    /// A Light layer (K-360): a source of light other layers see. Draws no
+    /// pixels of its own, like a Camera.
+    Light,
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -724,6 +727,7 @@ pub(crate) fn read_layer_info(
             K::Adjustment => BridgeLayerKind::Adjustment,
             K::Shape { .. } => BridgeLayerKind::Shape,
             K::Null => BridgeLayerKind::NullLayer,
+            K::Light { .. } => BridgeLayerKind::Light,
         },
         switches: BridgeLayerSwitches {
             visible: s.visible,
@@ -2470,6 +2474,7 @@ impl LayerReference {
             LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
+            | LayerKind::Light { .. }
             | LayerKind::Sequence { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => return Ok(None),
@@ -2497,6 +2502,7 @@ impl LayerReference {
             K::Adjustment => BridgeLayerKind::Adjustment,
             K::Shape { .. } => BridgeLayerKind::Shape,
             K::Null => BridgeLayerKind::NullLayer,
+            K::Light { .. } => BridgeLayerKind::Light,
         })
     }
 

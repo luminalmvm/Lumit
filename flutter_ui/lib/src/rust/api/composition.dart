@@ -319,6 +319,17 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddFootageLayer(
               that: this, footage: footage, asSequence: asSequence);
 
+  /// Add a Light layer at the comp centre (K-360).
+  ///
+  /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
+  /// because that is the shape every other frb choice takes. An **area**
+  /// light starts at a tenth of the comp's width and height, which is a
+  /// softbox rather than a pinprick: a light with no size would draw exactly
+  /// as a point one and leave nothing to discover.
+  LayerReference addLightLayer({required int kind}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddLightLayer(
+          that: this, kind: kind);
+
   /// Add a Null layer: an invisible layer with no source of its own, carrying
   /// only a transform, for parenting rigs. It has no size, so only its
   /// position is centred and the anchor stays at the origin.

@@ -182,6 +182,13 @@ impl ShakeSample {
 /// One effect, resolved to plain numbers at a frame — the flat form both the
 /// WGSL kernels (lumit-gpu) and the CPU references below consume.
 #[derive(Debug, Clone, Copy, PartialEq)]
+// Clippy would have the largest variant boxed. It cannot be: `Resolved` is
+// `Copy` by design — plain old data with no owned allocations, so a resolved
+// stack can be hashed byte-for-byte into the frame key (K-143) and copied into
+// a GPU uniform without a clone. `Box` is not `Copy`, so taking the advice
+// would cost the determinism guarantee to save a few hundred bytes on a
+// per-frame, per-layer value that never lives in a long array.
+#[allow(clippy::large_enum_variant)]
 pub enum Resolved {
     Blur {
         /// Kernel half-width in *pixels of the target raster* (the caller
@@ -1465,10 +1472,43 @@ fn resolve_one(
             let sb_intensity = (fl("starburst_intensity").unwrap_or(1.0) as f32).max(0.0);
             let scale = (fl("scale").unwrap_or(1.0) as f32).clamp(0.05, 20.0);
             let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            // Lights mode (K-360): the comp's own Light layers, resolved here
+            // because the expression context already carries the document, the
+            // comp and the time — everything needed, and nothing new to
+            // thread. Positions and extents go in RASTER pixels, so they ride
+            // the same preview factor the Manual position does and
+            // `manual_light` turns both into fractions in one place.
+            let mut lights =
+                [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES];
+            let mut light_count = 0u32;
+            if source == 2 {
+                let ec = &expression_context;
+                if let Some(owner) = ec.comp.and_then(|id| ec.document.comp(id)) {
+                    for resolved in owner.lights_at(ec.comp_time) {
+                        if light_count as usize >= crate::fx::lens_flare::MAX_SOURCES {
+                            break;
+                        }
+                        lights[light_count as usize] = crate::fx::lens_flare::FlareLight {
+                            pos: [
+                                resolved.position.0 as f32 * px_scale,
+                                resolved.position.1 as f32 * px_scale,
+                            ],
+                            rgb: resolved.colour,
+                            extent: [
+                                resolved.half_size.0 as f32 * px_scale,
+                                resolved.half_size.1 as f32 * px_scale,
+                            ],
+                        };
+                        light_count += 1;
+                    }
+                }
+            }
             Some(Resolved::LensFlare(
                 crate::fx::lens_flare::LensFlareParams {
                     light: [lx, ly],
                     source_size: [sw, sh],
+                    lights,
+                    light_count,
                     intensity,
                     lens,
                     fstop,

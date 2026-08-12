@@ -374,6 +374,10 @@ pub fn build_comp_draws_at(
                 }),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
+            // A light is something other layers SEE (K-360). It has no picture
+            // of its own; the effects that read lights take them from
+            // `Composition::lights_at`, not from the draw list.
+            LayerKind::Light { .. } => None,
         };
         // The layer's own clock, the same one its transform and effects are
         // read at (K-213) — a keyframed mask on a layer dragged along the

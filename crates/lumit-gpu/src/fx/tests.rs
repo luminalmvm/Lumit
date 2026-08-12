@@ -3144,8 +3144,11 @@ fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
     lumit_core::fx::lens_flare::LensFlareParams {
         // Raster pixels of a 192×108 probe framing (K-260).
         light: [63.4, 32.4],
-        // A point source, as the effect has always defaulted to.
+        // A point source, as the effect has always defaulted to, and no
+        // comp lights — Manual mode never reads them.
         source_size: [0.0, 0.0],
+        lights: [lumit_core::fx::lens_flare::DEAD_LIGHT; lumit_core::fx::lens_flare::MAX_SOURCES],
+        light_count: 0,
         intensity: 1.0,
         lens: 16,
         fstop: 2.8,

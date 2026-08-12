@@ -350,6 +350,10 @@ enum BridgeLayerKind {
   /// generated Dart enum would otherwise carry a member called `null`, which
   /// is a Dart reserved word (K-206); `lumit-core` keeps `LayerKind::Null`.
   nullLayer,
+
+  /// A Light layer (K-360): a source of light other layers see. Draws no
+  /// pixels of its own, like a Camera.
+  light,
   ;
 }
 

@@ -943,6 +943,51 @@ impl CompositionReference {
         self.add_at_top(layer)
     }
 
+    /// Add a Light layer at the comp centre (K-360).
+    ///
+    /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
+    /// because that is the shape every other frb choice takes. An **area**
+    /// light starts at a tenth of the comp's width and height, which is a
+    /// softbox rather than a pinprick: a light with no size would draw exactly
+    /// as a point one and leave nothing to discover.
+    #[frb(sync)]
+    pub fn add_light_layer(&self, kind: u32) -> Result<LayerReference, BridgeError> {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{LightDef, LightKind, TransformGroup};
+
+        let comp = self.composition()?;
+        let kind = match kind {
+            1 => LightKind::Spot,
+            2 => LightKind::Area,
+            _ => LightKind::Point,
+        };
+        let half = |v: u32| Property::fixed(f64::from(v) * 0.1);
+        let light = Box::new(LightDef {
+            kind,
+            half_size: match kind {
+                LightKind::Area => [half(comp.width), half(comp.height)],
+                _ => [Property::zero(), Property::zero()],
+            },
+            ..LightDef::default()
+        });
+        let name = match kind {
+            LightKind::Point => "Point light",
+            LightKind::Spot => "Spot light",
+            LightKind::Area => "Area light",
+        };
+        let layer = crate::edits::base_layer(
+            name.into(),
+            lumit_core::model::LayerKind::Light { light },
+            comp.duration.0,
+            TransformGroup {
+                position_x: Property::fixed(f64::from(comp.width) * 0.5),
+                position_y: Property::fixed(f64::from(comp.height) * 0.5),
+                ..TransformGroup::default()
+            },
+        );
+        self.add_at_top(layer)
+    }
+
     /// Add an Adjustment layer: a comp-sized effect container with no source of
     /// its own, centred so scale and rotation pivot about the middle.
     #[frb(sync)]

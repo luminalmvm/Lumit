@@ -2278,6 +2278,10 @@
   "@menuBlendingMode": {
     "description": "Menu item."
   },
+  "menuAreaLight": "Area light",
+  "@menuAreaLight": {
+    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
+  },
   "menuCamera": "Camera",
   "@menuCamera": {
     "description": "Menu item."
@@ -2446,6 +2450,10 @@
   "@menuNull": {
     "description": "Menu item."
   },
+  "menuPointLight": "Point light",
+  "@menuPointLight": {
+    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
+  },
   "menuOpenProject": "Open project…",
   "@menuOpenProject": {
     "description": "Menu item."
@@ -2565,6 +2573,10 @@
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
+  },
+  "menuSpotLight": "Spot light",
+  "@menuSpotLight": {
+    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {

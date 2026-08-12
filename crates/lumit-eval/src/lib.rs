@@ -909,6 +909,18 @@ fn feed_source(
         LayerKind::Camera { .. } => {
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
+        LayerKind::Light { light } => {
+            // A light draws nothing of its own, but unlike a Camera it is not
+            // enough to say so: what it *is* changes every frame that reads it
+            // (the Lens flare's Lights mode), so its own properties have to be
+            // in the name or moving a light would serve a stale frame. The
+            // transform is hashed at the layer level, like every other
+            // layer's, which covers where it is.
+            h.update(b"light");
+            if let Ok(json) = serde_json::to_vec(light) {
+                h.update(&json);
+            }
+        }
         LayerKind::Sequence { clips } => {
             // Key the active clip's resolved source (docs/04-RETIMING.md §1.3):
             // a gap is transparent, a footage clip keys its retimed source

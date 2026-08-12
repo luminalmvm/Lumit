@@ -63,6 +63,7 @@ pub(crate) fn base_layer(
         LayerKind::Adjustment => 7,
         LayerKind::Null => 8,
         LayerKind::Shape { .. } => 9,
+        LayerKind::Light { .. } => 10,
     };
     Layer {
         markers: Vec::new(),

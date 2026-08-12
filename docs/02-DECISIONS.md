@@ -8587,3 +8587,37 @@ more than a small bound, which a threshold-driven flare cannot pass.
 
 One procedural compute pass, no inputs but the layer, so it is Cheap where §3.27 is Heavy.
 Both flares stay; neither is the other's fallback.
+
+**K-360 · DECIDED · Light layers, and the flare's Lights source mode finally wired.**
+`LayerKind::Light` (docs/03-DATA-MODEL.md §5.5) — the first new layer kind since Shape, and
+what K-257 reserved the flare's third source mode for.
+
+**A light is a Camera-shaped thing, not a Solid-shaped one.** It draws no pixels of its own;
+it is something other layers *see*. So it carries its placement in the ordinary layer
+transform rather than inventing a second one — a light animates, parents, and is dragged
+with everything already built for that — and `Composition::lights_at` resolves the visible,
+in-span ones at a time, top of the stack first, which is the order the effects that read
+them take their slots in. A light switched off is not a light, exactly as a layer switched
+off is not on the picture (K-230).
+
+**The area kind is the one that earns the layer.** Point and spot are there for completeness;
+a rectangle with a real width and height is what a compositor actually reaches for, and what
+the flare can do something with that a point cannot. An area light arrives at the flare with
+a real extent and flares as its own shape through exactly the machinery K-355 built for
+detected sources — so a strip light throws bar-shaped ghosts, with no new rendering code at
+all. That is why K-355 came first.
+
+**Lights mode needed no new plumbing**, which is worth recording because the obvious design
+does. The lights are resolved in `resolved.rs` from the expression context, which already
+carries the document, the comp and the time — everything needed — and they ride to the GPU
+in a fixed array on `LensFlareParams` rather than a `Vec`, because those params must stay
+`Copy` for the bake cache and the frame-key hash. An empty list in Lights mode is the
+labelled no-op: a comp with no lights flares with nothing, rather than falling back to the
+Manual point and putting a flare somewhere nobody asked for.
+
+The frame key hashes the light's own properties, not just the fact of it — unlike a Camera,
+where the pose is hashed at comp level. A light that changed colour without renaming its
+frames would serve a stale one.
+
+Not built here: **LTC shading of layers by these lights** (NEXT-FEATURES entry 4c). The model
+is now in place for it, which was the dependency.

@@ -866,6 +866,118 @@ pub enum LayerKind {
     /// to it — nothing enforces otherwise — but with no pixels to act on they
     /// never run, the same as on a Camera layer.
     Null,
+    /// A Light layer (K-360, docs/03-DATA-MODEL.md §5.5): a source of light in
+    /// the composition. Like a Camera it draws no pixels of its own — it is
+    /// something other layers *see* — and like a Camera it carries its
+    /// placement in the ordinary layer transform, so it animates, parents and
+    /// is dragged with everything already built for that.
+    ///
+    /// The **area** kind is the one that earns the layer: a rectangle of a real
+    /// width and height, rather than a point pretending to be one. What reads
+    /// it first is the Lens flare's Lights source mode (K-257's reserved
+    /// option), where a light with real extent flares as its own shape rather
+    /// than as a dot — the machinery K-355 already built for detected sources.
+    ///
+    /// Boxed because eight animatable [`Property`] channels make [`LightDef`]
+    /// several times the size of any other layer kind, and every layer in
+    /// every composition would otherwise pay for it.
+    Light {
+        #[serde(default)]
+        light: Box<LightDef>,
+    },
+}
+
+/// What kind of light a [`LayerKind::Light`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LightKind {
+    /// A point of light with no extent — the classic bare bulb.
+    #[default]
+    Point,
+    /// A cone, aimed by the layer's own rotation.
+    Spot,
+    /// A rectangle of a real size: a softbox, a window, a strip light. The
+    /// kind a compositor actually reaches for, and the reason [`LightDef`]
+    /// carries a width and a height at all.
+    Area,
+}
+
+/// A Light layer's own properties (K-360). The placement is NOT here — it is
+/// the layer's ordinary transform, so a light animates and parents exactly as
+/// every other layer does.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LightDef {
+    #[serde(default)]
+    pub kind: LightKind,
+    /// Scene-linear RGB. Animatable per channel, like every colour in the
+    /// model.
+    #[serde(default = "LightDef::white")]
+    pub colour: [Property; 3],
+    /// Master gain on the light's contribution.
+    #[serde(default = "LightDef::one")]
+    pub intensity: Property,
+    /// The emitting rectangle's half-width and half-height in comp pixels —
+    /// meaningful for [`LightKind::Area`], ignored by the other two. Half
+    /// rather than full, so it matches the Lens flare's Source size dials
+    /// (K-355) and a light can be measured from its centre outward.
+    #[serde(default = "LightDef::zero_pair")]
+    pub half_size: [Property; 2],
+    /// The spot cone's half-angle in degrees; ignored unless the kind is
+    /// [`LightKind::Spot`].
+    #[serde(default = "LightDef::default_cone")]
+    pub cone_deg: Property,
+    /// How far the light reaches before it has fallen to nothing, in comp
+    /// pixels. Zero means no falloff at all — the light does not weaken with
+    /// distance, which is what a compositor usually wants from a flare source.
+    #[serde(default = "Property::zero")]
+    pub falloff_px: Property,
+}
+
+impl LightDef {
+    fn one() -> Property {
+        Property::fixed(1.0)
+    }
+    fn white() -> [Property; 3] {
+        [Self::one(), Self::one(), Self::one()]
+    }
+    fn zero_pair() -> [Property; 2] {
+        [Property::zero(), Property::zero()]
+    }
+    fn default_cone() -> Property {
+        Property::fixed(45.0)
+    }
+}
+
+impl Default for LightDef {
+    fn default() -> Self {
+        Self {
+            kind: LightKind::default(),
+            colour: Self::white(),
+            intensity: Self::one(),
+            half_size: Self::zero_pair(),
+            cone_deg: Self::default_cone(),
+            falloff_px: Property::zero(),
+        }
+    }
+}
+
+/// One Light layer resolved at a comp time — what the renderer hands to the
+/// effects that read lights (K-360). Positions are comp pixels, matching every
+/// other px@comp quantity the render path carries.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedLight {
+    pub kind: LightKind,
+    /// Centre, in comp pixels.
+    pub position: (f64, f64),
+    /// Scene-linear RGB, already multiplied by intensity.
+    pub colour: [f32; 3],
+    /// Half-width and half-height in comp pixels; zero for a point.
+    pub half_size: (f64, f64),
+    /// The spot cone's half-angle in degrees, and the layer's own rotation
+    /// about z, which is what aims it.
+    pub cone_deg: f64,
+    pub rotation_deg: f64,
+    pub falloff_px: f64,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -907,6 +1019,52 @@ impl Composition {
                 ),
             })
         })
+    }
+
+    /// Every visible Light layer whose span contains `t`, evaluated at its own
+    /// layer time and in the comp's own pixels (K-360).
+    ///
+    /// Top of the stack first, which is the order the effects that read lights
+    /// take them in — so a frame that has more lights than an effect can carry
+    /// spends its slots on the ones nearest the top, the same rule the layer
+    /// stack uses everywhere else. A light switched off is not a light, exactly
+    /// as a layer switched off is not on the picture (K-230).
+    pub fn lights_at(&self, t: f64) -> Vec<ResolvedLight> {
+        self.layers
+            .iter()
+            .filter_map(|l| {
+                let LayerKind::Light { light } = &l.kind else {
+                    return None;
+                };
+                if !l.switches.visible || t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
+                    return None;
+                }
+                let lt = t - l.start_offset.0.to_f64();
+                let tr = &l.transform;
+                let gain = light.intensity.value_at(lt).max(0.0) as f32;
+                Some(ResolvedLight {
+                    kind: light.kind,
+                    position: (tr.position_x.value_at(lt), tr.position_y.value_at(lt)),
+                    colour: [
+                        (light.colour[0].value_at(lt) as f32).max(0.0) * gain,
+                        (light.colour[1].value_at(lt) as f32).max(0.0) * gain,
+                        (light.colour[2].value_at(lt) as f32).max(0.0) * gain,
+                    ],
+                    // Only an area light has extent; the other two are points,
+                    // whatever the stored numbers happen to say.
+                    half_size: match light.kind {
+                        LightKind::Area => (
+                            light.half_size[0].value_at(lt).max(0.0),
+                            light.half_size[1].value_at(lt).max(0.0),
+                        ),
+                        _ => (0.0, 0.0),
+                    },
+                    cone_deg: light.cone_deg.value_at(lt).clamp(0.0, 180.0),
+                    rotation_deg: tr.rotation.value_at(lt),
+                    falloff_px: light.falloff_px.value_at(lt).max(0.0),
+                })
+            })
+            .collect()
     }
 }
 
@@ -1314,12 +1472,14 @@ fn collect_comp_footage(
                 }
             }
             // No media source of their own: a solid is a colour, text and
-            // shapes are drawn, a camera is a viewpoint, an adjustment layer
-            // works on the composite below it, a null draws nothing.
+            // shapes are drawn, a camera is a viewpoint, a light is something
+            // other layers see, an adjustment layer works on the composite
+            // below it, a null draws nothing.
             LayerKind::Solid { .. }
             | LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
+            | LayerKind::Light { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
         }

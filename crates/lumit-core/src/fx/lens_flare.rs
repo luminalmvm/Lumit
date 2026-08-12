@@ -87,6 +87,18 @@ pub struct LensFlareParams {
     /// of the source rather than of a point (K-355). Matte mode measures this
     /// from the detected source instead and ignores the dial.
     pub source_size: [f32; 2],
+    /// **Lights mode** (`source == 2`, K-360): the comp's own Light layers,
+    /// resolved at this frame and already in raster fractions. Filled by the
+    /// draw builder, which is the only place that can see the rest of the
+    /// composition; empty in every other mode, and an empty list in Lights
+    /// mode is the labelled no-op — a comp with no lights flares with nothing
+    /// rather than falling back to the Manual point, which would put a flare
+    /// somewhere nobody asked for.
+    ///
+    /// A fixed array rather than a `Vec` so these params stay `Copy`, which
+    /// the bake cache and the frame-key hash both rely on.
+    pub lights: [FlareLight; MAX_SOURCES],
+    pub light_count: u32,
     /// Matte mode: linear luma at/above which a detected source flares fully
     /// (open above; a soft gate, see `threshold_softness`).
     pub threshold: f32,
@@ -358,11 +370,40 @@ pub fn expand_area_lights(lights: &[FlareLight], max_side: u32) -> Vec<FlareLigh
     out
 }
 
-/// Manual mode's light list: one source at the parameter position (raster
-/// pixels over the raster `w × h` — the fraction the trace consumes),
-/// carrying the Light tint (white by default) and the Source size dial's
-/// half-extent (K-355; zero is the point source it has always been).
+/// A dead light slot — the value the fixed `lights` array is padded with.
+pub const DEAD_LIGHT: FlareLight = FlareLight {
+    pos: [0.0, 0.0],
+    rgb: [0.0, 0.0, 0.0],
+    extent: [0.0, 0.0],
+};
+
+/// The frame's light list for whichever source mode is in force.
+///
+/// Manual is one source at the parameter position (raster pixels over the
+/// raster `w × h` — the fraction the trace consumes), carrying the Light tint
+/// and the Source size dial's half-extent (K-355; zero is the point source it
+/// has always been). **Lights mode** (K-360) hands back the comp's own Light
+/// layers instead, which the draw builder resolved into `p.lights`; an area
+/// light arrives with a real extent and so flares as its own shape through
+/// exactly the machinery K-355 built for detected sources.
+///
+/// Matte mode never reaches here — its lights are found GPU-side.
 pub fn manual_light(p: &LensFlareParams, w: u32, h: u32) -> Vec<FlareLight> {
+    if p.source == 2 {
+        // A comp with no lights flares with nothing. Falling back to the
+        // Manual point would put a flare somewhere nobody asked for.
+        let (fw, fh) = (w.max(1) as f32, h.max(1) as f32);
+        return p.lights[..(p.light_count as usize).min(MAX_SOURCES)]
+            .iter()
+            .map(|l| FlareLight {
+                // Stored in raster pixels by the resolve, divided here like
+                // the Manual position is — one place decides the fraction.
+                pos: [l.pos[0] / fw, l.pos[1] / fh],
+                rgb: l.rgb,
+                extent: [l.extent[0] / fw, l.extent[1] / fh],
+            })
+            .collect();
+    }
     vec![FlareLight {
         pos: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
         rgb: p.light_tint,
@@ -2042,6 +2083,11 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     let probe_frame = LensFlareParams {
         // Raster pixels of the 96×54 thumbnail (the 0.33/0.30 framing).
         light: [31.7, 16.2],
+        // The probe is always one Manual point, whatever the frame's source
+        // mode: the gain must be steered by bake-key inputs alone, and the
+        // comp's lights are frame-time.
+        lights: [DEAD_LIGHT; MAX_SOURCES],
+        light_count: 0,
         intensity: 1.0,
         lens: p.lens,
         fstop: p.fstop,
