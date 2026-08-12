@@ -1,6 +1,8 @@
 // Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md, K-261,
 // K-366). Two compute entry points of the per-frame ghost pipeline:
-//   trace        — one thread per pupil-grid ray: refract the ray through
+//   trace        — one thread per pupil-grid ray, each taking its light from
+//                  its own point of the source's emitting rectangle (K-367,
+//                  `source_jitter`): refract the ray through
 //                  the prescription with the FlareSim three-phase walk
 //                  (reflecting at the pair's two surfaces), carry eight
 //                  spectral throughputs through the per-surface reflectance
@@ -96,16 +98,17 @@ struct Splat {
 };
 
 // One flare source (see fx_lens_flare_detect.wgsl): position as a raster
-// fraction, colour already multiplied by its gate weight. All-zero rgb is a
-// dead slot the passes skip.
+// fraction, colour already multiplied by its gate weight, and the half-extent
+// of its emitting area as a raster fraction (K-367 — zero is a point source).
+// All-zero rgb is a dead slot the passes skip.
 struct Light {
     pos_x: f32,
     pos_y: f32,
     r: f32,
     g: f32,
     b: f32,
-    _pad0: f32,
-    _pad1: f32,
+    ext_x: f32,
+    ext_y: f32,
     _pad2: f32,
 };
 
@@ -165,6 +168,31 @@ fn dir_of(px: f32, py: f32) -> vec3<f32> {
 
 fn light_dead(l: Light) -> bool {
     return l.r <= 0.0 && l.g <= 0.0 && l.b <= 0.0;
+}
+
+// Per-ray source integration (K-367) — the WGSL twin of lumit_core's
+// `source_jitter`, op for op, with the two constants pinned against it by
+// test. Each ray takes its light from its OWN point of the source's ±extent
+// rectangle, so a source of any size costs exactly the rays a point does and
+// the per-ray splat footprints (K-366) inflate to cover the spacing between
+// neighbours — which is what makes the replicated ghost copies of K-355
+// impossible rather than merely rare.
+// 1/rho and 1/rho^2 of the plastic constant, at the digits an f32 holds.
+const PHI_U: f32 = 0.7548777;
+const PHI_V: f32 = 0.5698403;
+
+// A triangle wave, uniform on [-1, 1]. Not `fract`: `fract` jumps the whole
+// range at each wrap, and the splat footprints are central differences over
+// the very neighbours a jump would separate by the width of the source.
+fn tri(x: f32) -> f32 {
+    return 2.0 * abs(2.0 * (fract(x) - 0.5)) - 1.0;
+}
+
+fn source_jitter(i: u32, j: u32, ext: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        tri((f32(i) + 0.5) * PHI_U) * ext.x,
+        tri((f32(j) + 0.5) * PHI_V) * ext.y,
+    );
 }
 
 fn cauchy_ior(a: f32, b: f32, lambda_nm: f32) -> f32 {
@@ -410,7 +438,10 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     let mask = pupil_mask(u, v);
 
     var pos = vec3<f32>(u * tp.pupil_mm, v * tp.pupil_mm, tp.start_z_mm);
-    var dir = dir_of(light.pos_x, light.pos_y);
+    // The ray's own point of the source (K-367): a point source jitters by
+    // zero and this is bit-identical to the single direction it always had.
+    let jit = source_jitter(gi, gj, vec2<f32>(light.ext_x, light.ext_y));
+    var dir = dir_of(light.pos_x + jit.x, light.pos_y + jit.y);
     // Per-sub-sample energy throughput (K-364): the geometry is shared, the
     // radiometry is not — the coating's reflectance swings across a band
     // that a single traced wavelength cannot resolve.

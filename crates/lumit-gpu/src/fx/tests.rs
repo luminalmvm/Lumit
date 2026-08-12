@@ -3198,11 +3198,21 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
         .collect();
     LensFlareOp {
         light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h as f32],
-        // The same expansion `fxops` makes for the production path, so the
-        // oracle drives the GPU exactly as the renderer does (K-355).
-        manual_lights: lf::expand_area_lights(&lf::manual_light(p, w, h), lf::AREA_SAMPLES_MAX)
+        // One entry per light, extent and all, exactly as `fxops` builds it
+        // for the production path (K-367).
+        manual_lights: lf::manual_light(p, w, h)
             .iter()
-            .map(|l| [l.pos[0], l.pos[1], l.rgb[0], l.rgb[1], l.rgb[2]])
+            .map(|l| {
+                [
+                    l.pos[0],
+                    l.pos[1],
+                    l.rgb[0],
+                    l.rgb[1],
+                    l.rgb[2],
+                    l.extent[0],
+                    l.extent[1],
+                ]
+            })
             .collect(),
         intensity: p.intensity,
         bands,
@@ -3333,6 +3343,28 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
             "the trace shader must declare `{want}`"
         );
     }
+    // The source-integration irrationals (K-367). These decide WHERE in a
+    // source each ray takes its light from, so a drift of one bit would give
+    // the GPU a different source integral from the CPU reference on every
+    // area light — parsed and compared as bits rather than as text, because
+    // the two languages print floats differently.
+    for (name, want) in [("PHI_U", lf::PHI_U), ("PHI_V", lf::PHI_V)] {
+        let decl = format!("const {name}: f32 = ");
+        let at = src
+            .find(&decl)
+            .unwrap_or_else(|| panic!("the trace shader must declare `{decl}…`"));
+        let tail = &src[at + decl.len()..];
+        let end = tail.find(';').expect("a terminated constant declaration");
+        let got: f32 = tail[..end]
+            .trim()
+            .parse()
+            .expect("a parseable float literal");
+        assert_eq!(
+            got.to_bits(),
+            want.to_bits(),
+            "the trace shader's {name} ({got}) must be lumit-core's ({want})"
+        );
+    }
 }
 
 /// The starburst atlas's slice count is spelled twice as well (K-365) —
@@ -3349,6 +3381,18 @@ fn lens_flare_wgsl_starburst_fields_match_lumit_core() {
         src.contains(&want),
         "the combine shader must declare `{want}`"
     );
+    // The starburst stamp grid (K-367): a drift would smear an area source's
+    // spike over a different span on the GPU than on the CPU reference, which
+    // only the combine oracle's mean would notice and only faintly.
+    for want in [
+        format!("const SB_MIN_EXTENT: f32 = {};", lf::SB_MIN_EXTENT),
+        format!("const SB_STAMPS: u32 = {}u;", lf::SB_STAMPS),
+    ] {
+        assert!(
+            src.contains(&want),
+            "the combine shader must declare `{want}`"
+        );
+    }
 }
 
 // The adaptive grid formula is mirrored in this crate (lumit-gpu stays
@@ -4318,14 +4362,16 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
     }
 }
 
-/// **An area light flares like an area, not like a point** (K-355).
+/// **An area light flares like an area, not like a point** (K-355, K-367).
 ///
 /// Source size gives the light a real emitting area, and the flare of one is
-/// the sum of the point flares across it. So the picture must genuinely change
-/// — a wider source spreads its ghosts — while the total light it adds stays
-/// put, because every sample carries a share of one light's flux rather than a
-/// light of its own. A source that grew brighter as it grew wider would be the
-/// obvious way to get this wrong, and is what the energy bound below catches.
+/// the integral of the point flares across it — which since K-367 every ray
+/// evaluates for itself rather than the pipeline running once per sample. So
+/// the picture must genuinely change — a wider source spreads its ghosts —
+/// while the total light it adds stays put, because the pupil grid averages
+/// over the source instead of adding lights to it. A source that grew brighter
+/// as it grew wider would be the obvious way to get this wrong, and is what
+/// the energy bound below catches.
 #[test]
 fn an_area_source_spreads_its_flare_without_gaining_energy() {
     let Ok(ctx) = GpuContext::headless() else {
@@ -4359,8 +4405,9 @@ fn an_area_source_spreads_its_flare_without_gaining_energy() {
         source_size: [18.0, 4.0],
         ..point
     };
-    assert!(
-        lf::expand_area_lights(&lf::manual_light(&area, w, h), lf::AREA_SAMPLES_MAX).len() > 1,
+    assert_ne!(
+        lf::manual_light(&area, w, h)[0].extent,
+        [0.0, 0.0],
         "the test's own source must actually be an area one"
     );
 
@@ -4619,6 +4666,52 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
         assert_eq!(ngpu, img, "neutral point must be bit-exact");
     }
+
+    // The same bound with a real Source size (K-367). An area source is no
+    // longer a list of point lights both twins can be handed: each ray works
+    // out its own point of the emitting rectangle, on the CPU in
+    // `source_jitter` and in the shader's own copy of it. If those two ever
+    // drift the pictures diverge for area sources ALONE, which no point-source
+    // oracle would see.
+    let area = lf::LensFlareParams {
+        source_size: [18.0, 4.0],
+        ..p
+    };
+    assert_ne!(
+        lf::manual_light(&area, w, h)[0].extent,
+        [0.0, 0.0],
+        "this case must actually be an area source"
+    );
+    let a_baked = lf::bake(&area);
+    let a_lights = lf::manual_light(&area, w, h);
+    let a_flare = lf::cpu_flare(&area, &a_baked, fw, fh, &a_lights);
+    let mut a_cpu = img.clone();
+    lf::cpu_combine(
+        &mut a_cpu, w, h, &area, &a_baked, &a_flare, fw, fh, &a_lights,
+    );
+    let a_out = fx.lens_flare(
+        &ctx,
+        &tex,
+        w,
+        h,
+        &flare_op(&area, w, h),
+        None,
+        &(std::sync::Arc::new(move || flare_bake_data(&area)) as crate::fx::FlareBake),
+        &flare_probe(&area, w, h),
+    );
+    let a_gpu = readback_linear_f32(&ctx, &a_out, w, h).unwrap();
+    let a_mean: f32 = a_cpu
+        .iter()
+        .zip(&a_gpu)
+        .map(|(a, b)| (a - b).abs())
+        .sum::<f32>()
+        / a_cpu.len() as f32;
+    assert!(a_mean < 2e-3, "area-source mean |Δ| {a_mean}");
+    let a_ratio = a_gpu.iter().sum::<f32>() / a_cpu.iter().sum::<f32>().max(1e-9);
+    assert!(
+        (0.99..=1.01).contains(&a_ratio),
+        "area-source energy ratio {a_ratio}"
+    );
 }
 
 /// K-267: an anamorphic squeeze below 1 renders into a PADDED flare buffer,
@@ -4715,7 +4808,10 @@ fn wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge() {
 /// constants the two crates must agree on are pinned.
 #[test]
 fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
-    assert_eq!(MAX_LIGHTS as usize, lumit_core::fx::lens_flare::MAX_LIGHTS);
+    assert_eq!(
+        MAX_SOURCES as usize,
+        lumit_core::fx::lens_flare::MAX_SOURCES
+    );
     // The combine kernel's `flare_blend` implements exactly the menu
     // lumit-core declares (K-289) — a mode added to one and not the other
     // would silently clamp to Divide.

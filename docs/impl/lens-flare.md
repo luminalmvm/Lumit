@@ -464,19 +464,38 @@ within a tile) and the GPU (64 partials merged in thread order) agree to the mat
 perceptual bound rather than op-for-op. Each is internally deterministic in fixed order,
 which is the §2.4 property that matters.
 
-**Area sources are sampled, not approximated (K-355).** Each anchor's second moments give
-its half-extent — the standard deviation of its flux about its centre — and a source wider
-than `AREA_MIN_EXTENT` of the frame is split into a centred regular grid of up to
-`AREA_SAMPLES_MAX²` samples, each carrying an equal share of the flux. The flare of an
-extended source *is* the integral of the point flares across it, and the ~2 s/frame budget
-(docs/NEXT-FEATURES.md entry 1) affords evaluating that directly: the sum carries the
-source's shape, so a tube's ghosts are bars and a window's rectangles. Energy is conserved
-by construction — the shares sum to one light — so splitting only smooths. The grid is
-regular and unjittered, so K-353's bit-stability survives. `MAX_LIGHTS` is therefore 64
-slots against `MAX_SOURCES` 16 distinct sources; a source that cannot be split within the
-remaining slots is carried as the single point it started as rather than as a fraction of
-itself. Manual mode gets the same by dial (**Source width** / **Source height**, px@comp
-half-extents, default 0). **Area sources (K-267): every
+**Area sources are integrated per ray, not replicated (K-355 measured them, K-367 renders
+them).** Each anchor's second moments give its half-extent — the standard deviation of its
+flux about its centre — and that half-extent travels with the light, one slot per source,
+into the trace. The flare of an extended source *is* the integral of the point flares
+across it, and the trace already integrates over the pupil, so the two integrals are done
+together: the ray at pupil-grid (i, j) offsets its light position inside the ±extent
+rectangle by `source_jitter` and computes its own direction from there, carrying the
+light's **full** colour (no flux shares — the pupil grid averages). An area source
+therefore costs exactly what a point source costs, whatever its size.
+
+The stratification is `offset_u = tri((i + ½)·PHI_U)·ext_x`, `offset_v` likewise in j with
+`PHI_V`, where `tri(x) = 2·|2·(fract(x) − ½)| − 1` is a triangle wave and `PHI_U`/`PHI_V`
+are 1/ρ and 1/ρ² of the plastic constant. Two points about that, both load-bearing:
+`fract` alone would jump the whole range at each wrap, and K-366's footprints are central
+differences over exactly the neighbours a jump would separate by the width of the source —
+one splat inflated to the source's width stamps a bar across the ghost; and one irrational
+for both axes would put every offset on a diagonal of the rectangle. Extent 0 offsets every
+ray by exactly zero, so a point source is bit-identical to what it always rendered.
+
+K-355's replication — up to `AREA_SAMPLES_MAX²` = 25 point lights per source, expanded on
+the CPU for Manual and inside `detect_pick` for Matte — is deleted, along with the
+`MAX_LIGHTS` = 64 slot table that existed only to hold it. Wherever a ghost was smaller
+than the sample spacing, replication showed as that many separate copies of the aperture;
+per-ray integration makes copies impossible rather than rare, because no two rays share a
+source position and each ray's footprint already inflates by the local source-to-sensor
+stretch — precisely the gap a replica would have sat in. `MAX_SOURCES` (16) is again both
+the sources detection may find and the slots the trace carries. The op seam carries the
+extent (`manual_lights` rows are `[x, y, r, g, b, ext_x, ext_y]`; the WGSL `Light` spends
+two of its three pads on it), and Manual mode sets it by dial (**Source width** /
+**Source height**, px@comp half-extents, default 0). Determinism is by construction — the
+offsets are a pure function of the ray's own grid indices, so K-353's bit-stability
+survives. **Area sources (K-267): every
 gated tile's flux then accumulates onto its nearest anchor** — per tile, `(use source ?
 the tile's brightest pixel's RGB : white) × the gate`, nearest by Chebyshev with ties to
 the lowest anchor index, tiles visited in index order so the float sum matches the CPU
@@ -485,7 +504,15 @@ pixel, colour = the summed flux × the Light tint (K-259). A one-tile point sour
 own anchor's only contributor and reads exactly as before K-267; a practical spanning
 many tiles finally weighs as its whole lit area instead of one pixel. Every downstream stage runs per light on the dispatch z axis — the trace
 computes each light's direction in-shader, the vertex build tints by the light, and the
-combine stamps one starburst per live light, at that light's own field angle (K-365). Manual mode is the same pipeline with one
+combine stamps one starburst per live light — or, for a source wider than `SB_MIN_EXTENT`
+of the raster, a fixed `SB_STAMPS`×`SB_STAMPS` grid of them spanning ±extent at
+`1/(nx·ny)` of the light each (K-367), which is the shift-invariant convolution of the
+sprite with the source in quadrature form. The starburst is a baked sprite, so it cannot
+integrate its source the way the traced ghosts do; it does not need to, being
+shift-invariant, and stamping once at the centre would give a softbox a star's pinpoint
+spike. The K-365 field slice and azimuth are worked out **per stamp**, so a smeared
+starburst near the frame edge leans a little differently at each end of itself; a point
+source is one stamp at full strength on its own position, bit-identical to before. Manual mode is the same pipeline with one
 CPU-written light carrying the tint (white by default). The CPU twin is `lens_flare::detect_lights`, held to the GPU by
 the matte-mode frame oracle. The original design sketch (kept for the record): top-K
 tie-breaking, and the trace runs per detected light with that sample's colour × energy as
@@ -613,6 +640,23 @@ the other cannot silently clamp to Divide.
    stretch, raise at least one pair past its rung at the Normal base, respect the
    boost floor/caps, spend at most the headroom, and agree bit-for-bit through the
    raw-rows seam entry.
+4d. **Per-ray source integration (K-367)**: a point source's jitter is exactly zero over a
+   64² grid sweep and its render is independent of how the light was built and stable
+   across runs (`lens_flare_a_point_source_jitters_by_nothing`); a bar-shaped area source's
+   ghost profile — the line through the point render's brightest pixel, 3-tap smoothed,
+   strict local maxima above 10% of its peak — has no more maxima than the point's, while
+   the same source rebuilt as K-355's 5×5 replication has strictly more
+   (`lens_flare_an_area_source_does_not_replicate_its_ghosts`); a wide source and a point
+   source deposit total energy within 2% (`lens_flare_an_area_source_keeps_its_flux`). The
+   `PHI_U` / `PHI_V` literals are compared bit-for-bit against the shader's
+   (`lens_flare_wgsl_spectral_constants_match_lumit_core`), and the frame oracle carries a
+   non-zero Source size case so a drift between the two jitters cannot hide. The
+   starburst's stamp grid is pinned alongside: a sub-threshold extent renders bit-identically
+   to a point, and a 60 px source's lit span along the row through its light — measured at a
+   tenth of the POINT starburst's peak, so both are read against the same line — grows by
+   roughly the source's own width (`lens_flare_an_area_source_smears_its_starburst`), with
+   `SB_MIN_EXTENT` / `SB_STAMPS` checked against the combine shader's copies
+   (`lens_flare_wgsl_starburst_fields_match_lumit_core`).
 5. **GPU trace oracle** (§8.5 shape, K-261 bounds): corner-for-corner against
    `trace_splat` across two lenses × two lights — mean position error < 0.2 px, p99
    < 3 px (a few-ULP difference near a fold legitimately lands a ray on the other
@@ -638,7 +682,7 @@ the other cannot silently clamp to Divide.
    (`wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge`); past the 2× cap
    the zero-outside rule holds (`lens_flare_combine_does_not_repeat_the_flare_past_its_buffer`).
 7. **Matte mode**: GPU detection + per-light flare against the CPU reference at the
-   frame bound; the shared MAX_LIGHTS / DETECT_TILE constants pinned. Area flux
+   frame bound; the shared MAX_SOURCES / DETECT_TILE constants pinned. Area flux
    (K-267): a multi-tile disc's anchor carries several times a one-pixel dot's flux,
    the dot reads exactly as the pre-K-267 point, both anchors sit on their sources
    (`lens_flare_detects_area_sources_as_summed_flux`).

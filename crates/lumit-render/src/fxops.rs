@@ -1018,17 +1018,24 @@ pub fn run_ops(
                     // Raster pixels → fraction here, where the raster is
                     // known (K-260: the parameter is px@comp).
                     light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
-                    // Manual mode's lights, area-sampled (K-355). One entry
-                    // for a point source — which is what a zero Source size
-                    // gives — and a grid across the emitting area otherwise,
-                    // each carrying its share of the flux.
-                    manual_lights: lf::expand_area_lights(
-                        &lf::manual_light(p, w, h),
-                        lf::AREA_SAMPLES_MAX,
-                    )
-                    .iter()
-                    .map(|l| [l.pos[0], l.pos[1], l.rgb[0], l.rgb[1], l.rgb[2]])
-                    .collect(),
+                    // Manual mode's lights: ONE entry per light, size and all
+                    // (K-367). An area source is no longer replicated into
+                    // point samples — every ray integrates the extent itself,
+                    // so the extent travels with the light.
+                    manual_lights: lf::manual_light(p, w, h)
+                        .iter()
+                        .map(|l| {
+                            [
+                                l.pos[0],
+                                l.pos[1],
+                                l.rgb[0],
+                                l.rgb[1],
+                                l.rgb[2],
+                                l.extent[0],
+                                l.extent[1],
+                            ]
+                        })
+                        .collect(),
                     intensity: p.intensity,
                     bands,
                     max_ghosts: p.max_ghosts,

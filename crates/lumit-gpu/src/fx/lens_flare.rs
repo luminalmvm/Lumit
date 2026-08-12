@@ -45,12 +45,14 @@ pub struct LensFlareOp {
     /// Still the position the frame-grid probe reasons about, and the centre
     /// of [`Self::manual_lights`].
     pub light_frac: [f32; 2],
-    /// Manual mode's light list: the position above if the source is a point,
-    /// or the samples across its emitting area if the Source size dial has
-    /// given it one (K-355). Each entry is `[x, y, r, g, b]` with the share of
-    /// the flux already folded into the colour, so the list sums to one light.
+    /// Manual mode's light list — one entry per light, whatever its size
+    /// (K-367). Each entry is `[x, y, r, g, b, ext_x, ext_y]`: position and
+    /// half-extent as raster fractions, colour in scene-linear RGB. A zero
+    /// extent is a point source; a larger one is an AREA source, which the
+    /// trace integrates per ray rather than replicating into samples (that
+    /// was K-355, and it is what this layout's two extra floats replaced).
     /// Empty falls back to a single white light at [`Self::light_frac`].
-    pub manual_lights: Vec<[f32; 5]>,
+    pub manual_lights: Vec<[f32; 7]>,
     /// Master gain; 0 short-circuits to the identity.
     pub intensity: f32,
     /// Traced wavelength bands with their radiometric sub-samples
@@ -420,11 +422,10 @@ impl<T: Clone> BakeCache<T> {
 /// test. An index past the last option clamps rather than faulting.
 pub const BLEND_COUNT: u32 = 13;
 
-/// Most flare sources a frame renders — must equal
-/// `lumit_core::fx::lens_flare::MAX_LIGHTS` (pinned by test).
-pub const MAX_LIGHTS: u32 = 64;
-/// Distinct sources detection may find — `lumit_core`'s `MAX_SOURCES`. Each
-/// may expand into several light slots when it is an area source (K-355).
+/// Distinct sources detection may find, and so the light slots the trace
+/// carries — must equal `lumit_core::fx::lens_flare::MAX_SOURCES` (pinned by
+/// test). One source is one slot however large it is: since K-367 an area
+/// source is integrated inside the ray loop, not replicated into samples.
 pub const MAX_SOURCES: u32 = 16;
 
 /// Detection tile side — must equal `lens_flare::DETECT_TILE` (pinned by
@@ -628,7 +629,8 @@ struct GpuSurface {
     row: [f32; 8],
 }
 
-/// One flare source in the WGSL `Light` layout: pos.xy, rgb, three pads.
+/// One flare source in the WGSL `Light` layout: pos.xy, rgb, the source's
+/// half-extent as a raster fraction (K-367), one pad.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuLight {
@@ -1502,15 +1504,15 @@ impl FxEngine {
         // as that (K-350).
         let live = baked.is_some();
 
-        // Matte mode runs with MAX_LIGHTS candidate slots (dead ones carry
+        // Matte mode runs with MAX_SOURCES candidate slots (dead ones carry
         // zero weight and cost no fill); Manual and the prepared Lights mode
         // run one.
         let matte_mode = op.source == 1;
         // The frame's light list. Manual fills its slots from the CPU — one
-        // for a point source, several for an area one (K-355); Matte mode
-        // overwrites the buffer with the detection kernels below and may fill
-        // any of them, so it always dispatches the lot.
-        let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_LIGHTS as usize];
+        // per light, size and all (K-367); Matte mode overwrites the buffer
+        // with the detection kernels below and may fill any of them, so it
+        // always dispatches the lot.
+        let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_SOURCES as usize];
         // Matte mode leaves every slot zero here on purpose: the detection
         // kernels below fill them, and if no matte is bound they never run —
         // which is what makes an unset matte the labelled no-op rather than a
@@ -1531,18 +1533,23 @@ impl FxEngine {
                     ],
                 };
             } else {
-                let n = op.manual_lights.len().min(MAX_LIGHTS as usize);
+                let n = op.manual_lights.len().min(MAX_SOURCES as usize);
                 for (slot, light) in op.manual_lights.iter().take(n).enumerate() {
                     light_rows[slot] = GpuLight {
                         row: [
-                            light[0], light[1], light[2], light[3], light[4], 0.0, 0.0, 0.0,
+                            light[0], light[1], light[2], light[3], light[4], light[5], light[6],
+                            0.0,
                         ],
                     };
                 }
                 manual_count = n as u32;
             }
         }
-        let light_count = if matte_mode { MAX_LIGHTS } else { manual_count };
+        let light_count = if matte_mode {
+            MAX_SOURCES
+        } else {
+            manual_count
+        };
         let lights_buf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -2165,7 +2172,7 @@ impl FxEngine {
                 contents: bytemuck::cast_slice(&combos),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_LIGHTS as usize];
+        let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_SOURCES as usize];
         light_rows[0] = GpuLight {
             row: [
                 op.light_frac[0],

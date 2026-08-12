@@ -9,7 +9,7 @@
 //                  scans a strided share of the cell's pixels for the
 //                  brightest (Rec. 709 luma; ties to the lowest linear
 //                  index), thread 0 merges the partials in thread order.
-//   detect_pick  — one thread: top-MAX_LIGHTS anchor cells by luma (ties
+//   detect_pick  — one thread: top-MAX_SOURCES anchor cells by luma (ties
 //                  to the lower cell index), Chebyshev suppression radius
 //                  2, each gated by the soft threshold; then every gated
 //                  tile's flux accumulates onto its nearest anchor
@@ -39,14 +39,17 @@ struct Tile {
     _pad: f32,
 };
 
+// Shares its layout with fx_lens_flare_trace.wgsl: position and half-extent
+// as raster fractions, colour already gated. The extent is what the trace
+// integrates over per ray (K-367).
 struct Light {
     pos_x: f32,
     pos_y: f32,
     r: f32,
     g: f32,
     b: f32,
-    _pad0: f32,
-    _pad1: f32,
+    ext_x: f32,
+    ext_y: f32,
     _pad2: f32,
 };
 
@@ -74,13 +77,10 @@ struct DetectParams {
 @group(0) @binding(3) var<uniform> dp: DetectParams;
 
 const DETECT_TILE: u32 = 32u;
-// Light slots the trace carries, and the distinct sources detection may find.
-// A source expands into up to AREA_SAMPLES_MAX² slots when it has real extent
-// (K-355) — mirrors lumit_core's MAX_LIGHTS / MAX_SOURCES / AREA_SAMPLES_MAX.
-const MAX_LIGHTS: u32 = 64u;
+// Distinct sources detection may find, and so the light slots the trace
+// carries — one per source however large it is (K-367 dropped K-355's
+// expansion into up to 5x5 sample slots). Mirrors lumit_core's MAX_SOURCES.
 const MAX_SOURCES: u32 = 16u;
-const AREA_SAMPLES_MAX: u32 = 5u;
-const AREA_MIN_EXTENT: f32 = 0.004;
 const SUPPRESS_TILES: i32 = 2;
 
 // The soft gate (== lens_flare::threshold_gate, K-363): one-sided — closed
@@ -322,29 +322,28 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
     }
-    // Zero every slot first: the trace dispatches all MAX_LIGHTS of them and
+    // Zero every slot first: the trace dispatches all MAX_SOURCES of them and
     // a dead slot must carry no weight.
-    for (var k = 0u; k < MAX_LIGHTS; k = k + 1u) {
+    for (var k = 0u; k < MAX_SOURCES; k = k + 1u) {
         var dead: Light;
         dead.pos_x = 0.0;
         dead.pos_y = 0.0;
         dead.r = 0.0;
         dead.g = 0.0;
         dead.b = 0.0;
-        dead._pad0 = 0.0;
-        dead._pad1 = 0.0;
+        dead.ext_x = 0.0;
+        dead.ext_y = 0.0;
         dead._pad2 = 0.0;
         lights[k] = dead;
     }
 
-    // Each source becomes one light if it is a point, or a GRID of lights
-    // across its emitting area if it is not (K-355). The flare of an area
-    // source is the integral of the point flares over that area, and at this
-    // budget it is evaluated directly rather than approximated: every sample
-    // carries an equal share of the flux, so a source only gets smoother as
-    // it is split, never brighter. This is what gives a bar-shaped practical
-    // bar-shaped ghosts instead of a point's round ones.
-    var slot = 0u;
+    // Each source becomes ONE light carrying its measured half-extent (K-367).
+    // Through K-355 this expanded an area source into a grid of up to 5x5
+    // point lights and ran the whole ray pipeline once per sample: 25x the
+    // rays, and wherever a ghost was smaller than the sample spacing you saw
+    // that many separate copies of the aperture. The trace integrates the
+    // extent per ray now, so a bar-shaped practical draws one bar-shaped ghost
+    // at a point source's cost.
     for (var k = 0u; k < picked_count; k = k + 1u) {
         // Where the light IS, is the centre of its light (K-354, K-355) — not
         // whichever pixel happened to be brightest this frame. On footage
@@ -362,50 +361,15 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             ex = sqrt(max(m2_x[k] / cen_w[k] - px * px, 0.0)) / f32(dp.w);
             ey = sqrt(max(m2_y[k] / cen_w[k] - py * py, 0.0)) / f32(dp.h);
         }
-        let cx = (px + 0.5) / f32(dp.w);
-        let cy = (py + 0.5) / f32(dp.h);
-
-        var nx = 1u;
-        var ny = 1u;
-        if (ex >= AREA_MIN_EXTENT) {
-            nx = clamp(u32(round(ex / AREA_MIN_EXTENT)), 1u, AREA_SAMPLES_MAX);
-        }
-        if (ey >= AREA_MIN_EXTENT) {
-            ny = clamp(u32(round(ey / AREA_MIN_EXTENT)), 1u, AREA_SAMPLES_MAX);
-        }
-        // No room to split this source faithfully: carry it as a single point
-        // rather than half an area source, which would lose the rest of its
-        // flux.
-        if (slot + nx * ny > MAX_LIGHTS) {
-            nx = 1u;
-            ny = 1u;
-            if (slot >= MAX_LIGHTS) {
-                break;
-            }
-        }
-        let share = 1.0 / f32(nx * ny);
-        for (var iy = 0u; iy < ny; iy = iy + 1u) {
-            for (var ix = 0u; ix < nx; ix = ix + 1u) {
-                var sx = cx;
-                var sy = cy;
-                if (nx > 1u) {
-                    sx = cx + (f32(ix) / f32(nx - 1u) * 2.0 - 1.0) * ex;
-                }
-                if (ny > 1u) {
-                    sy = cy + (f32(iy) / f32(ny - 1u) * 2.0 - 1.0) * ey;
-                }
-                var out: Light;
-                out.pos_x = sx;
-                out.pos_y = sy;
-                out.r = acc_r[k] * dp.tint_r * share;
-                out.g = acc_g[k] * dp.tint_g * share;
-                out.b = acc_b[k] * dp.tint_b * share;
-                out._pad0 = 0.0;
-                out._pad1 = 0.0;
-                out._pad2 = 0.0;
-                lights[slot] = out;
-                slot = slot + 1u;
-            }
-        }
+        var out: Light;
+        out.pos_x = (px + 0.5) / f32(dp.w);
+        out.pos_y = (py + 0.5) / f32(dp.h);
+        out.r = acc_r[k] * dp.tint_r;
+        out.g = acc_g[k] * dp.tint_g;
+        out.b = acc_b[k] * dp.tint_b;
+        out.ext_x = ex;
+        out.ext_y = ey;
+        out._pad2 = 0.0;
+        lights[k] = out;
     }
 }

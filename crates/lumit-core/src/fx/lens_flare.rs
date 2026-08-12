@@ -83,8 +83,9 @@ pub struct LensFlareParams {
     /// Manual mode: the half-width and half-height of the emitting area, in
     /// raster pixels (px@comp, K-260). Zero — the default — is the point
     /// source the effect has always had; anything larger is an AREA source,
-    /// rendered by sampling the flare across it so its ghosts take the shape
-    /// of the source rather than of a point (K-355). Matte mode measures this
+    /// whose emitting rectangle every ray integrates a different point of
+    /// (K-367), so its ghosts take the shape of the source rather than of a
+    /// point and cost no extra rays. Matte mode measures this
     /// from the detected source instead and ignores the dial.
     pub source_size: [f32; 2],
     /// **Lights mode** (`source == 2`, K-360): the comp's own Light layers,
@@ -239,19 +240,19 @@ pub const APERTURE_RES: u32 = 256;
 /// bake still parallelises one slice per core.
 pub const STARBURST_FIELDS: usize = 8;
 
-/// Distinct sources a frame detects (Matte mode's top-K cap; Manual is one).
+/// Distinct sources a frame detects (Matte mode's top-K cap; Manual is one),
+/// and — since K-367 — the light slots the trace carries, because the two are
+/// again the same number: one source is one light, whatever its size.
 /// 16 since K-267: area sources anchor on one slot each, and eight anchors
 /// starved scenes with several practicals plus an area source.
+///
+/// K-355 briefly split this into a separate `MAX_LIGHTS` of 64, because an
+/// area source was then rendered by REPLICATING itself into up to 5×5 point
+/// lights. K-367 integrates the source inside the ray loop instead, so the
+/// replication — and the four-times-larger slot table that existed only to
+/// hold it — is gone.
 pub const MAX_SOURCES: usize = 16;
 
-/// Light slots the trace can carry in one frame.
-///
-/// Four per source since K-355, because a source is no longer always a point:
-/// an AREA source is rendered by sampling the flare across its emitting area,
-/// and every sample needs a slot of its own. A frame of sixteen point sources
-/// still costs sixteen slots; one big softbox spends its slots on being the
-/// right shape instead.
-pub const MAX_LIGHTS: usize = 64;
 /// Detection tile side, raster pixels (impl note §6).
 pub const DETECT_TILE: u32 = 32;
 /// Non-max suppression radius, in tiles (Chebyshev): one highlight must not
@@ -282,106 +283,100 @@ pub struct FlareLight {
     pub rgb: [f32; 3],
     /// Half-extent of the emitting area, as a fraction of the raster (K-355).
     /// Zero is a point source and behaves exactly as it always did; anything
-    /// larger is an AREA source and is rendered by sampling across it — see
-    /// [`area_samples`].
+    /// larger is an AREA source, whose emitting rectangle each ray integrates
+    /// a different point of — see [`source_jitter`] (K-367).
     pub extent: [f32; 2],
 }
 
-/// How many samples an area source is split into along each axis, at most.
+/// Irrational rotations for the two source-integration axes (K-367), driven
+/// by the ray's own pupil-grid indices.
 ///
-/// A flare from an extended source is the sum of the flares of the points
-/// making it up, and the failure mode of sampling it too sparsely is not noise
-/// but **ghost replication** — you see N overlapping copies of the aperture
-/// rather than one smeared ghost. So the count is chosen from the source's own
-/// size rather than fixed, and the ceiling is what a 2 s/frame budget affords
-/// (docs/NEXT-FEATURES.md entry 1).
-pub const AREA_SAMPLES_MAX: u32 = 5;
+/// **Two different irrationals, one per axis.** A single constant would put
+/// every ray's offset on one diagonal of the source rectangle, sampling a
+/// line rather than an area; an irrational RATIO between the two makes the
+/// (u, v) pairs cover the rectangle evenly and stay uncorrelated however many
+/// rays the grid has. These are the plastic constant's pair, 1/ρ and 1/ρ²,
+/// the standard low-discrepancy choice in two dimensions.
+///
+/// Written at the digits an `f32` can actually hold — 1/ρ is 0.754877666…
+/// and 1/ρ² is 0.569840290…, and rounding them by hand rather than letting
+/// the compiler do it keeps the shader's copy of the literal, which a test
+/// compares bit for bit, identical to this one.
+pub const PHI_U: f32 = 0.754_877_7;
+/// See [`PHI_U`].
+pub const PHI_V: f32 = 0.569_840_3;
 
-/// The fraction of the raster below which a source is simply a point.
-const AREA_MIN_EXTENT: f32 = 0.004;
-
-/// Split one light into the point sources that make it up (K-355).
+/// A triangle wave of `x`, uniform on [−1, 1] — `2·|2·(fract(x) − ½)| − 1`.
 ///
-/// **Why sampling rather than something cleverer.** The flare of an area
-/// source is genuinely the integral of the point flares over the emitting
-/// area, and at a two-second budget we can afford to evaluate that integral
-/// directly instead of approximating it. Each sample carries its share of the
-/// source's flux, so total energy is unchanged however finely it is split —
-/// a source only ever gets *smoother*, never brighter.
-///
-/// This is what makes an area light's flare look right: a bar-shaped source
-/// draws bar-shaped ghosts, a window draws rectangular ones, because the ghost
-/// each sample contributes lands in a slightly different place and their sum
-/// carries the source's shape. A single point source returns exactly itself,
-/// so nothing about point lights moves.
-///
-/// The grid is regular and centred, which keeps it deterministic (docs/14) —
-/// no jitter, so the same frame renders the same way every time.
-pub fn area_samples(light: &FlareLight, max_side: u32) -> Vec<FlareLight> {
-    let cap = max_side.clamp(1, AREA_SAMPLES_MAX);
-    let side = |e: f32| -> u32 {
-        if e < AREA_MIN_EXTENT {
-            1
-        } else {
-            // One sample per AREA_MIN_EXTENT of width, capped — enough that
-            // neighbouring samples land closer together than a ghost is wide.
-            ((e / AREA_MIN_EXTENT).round() as u32).clamp(1, cap)
-        }
-    };
-    let (nx, ny) = (side(light.extent[0]), side(light.extent[1]));
-    if nx <= 1 && ny <= 1 {
-        return vec![*light];
-    }
-    let share = 1.0 / (nx * ny) as f32;
-    let mut out = Vec::with_capacity((nx * ny) as usize);
-    for iy in 0..ny {
-        for ix in 0..nx {
-            // Centred on the source: the samples span ±extent about `pos`,
-            // which is the standard deviation of its flux, so they cover the
-            // body of the light rather than its far tails.
-            let f = |i: u32, n: u32, e: f32, c: f32| {
-                if n <= 1 {
-                    return c;
-                }
-                let t = i as f32 / (n - 1) as f32 * 2.0 - 1.0;
-                c + t * e
-            };
-            out.push(FlareLight {
-                pos: [
-                    f(ix, nx, light.extent[0], light.pos[0]),
-                    f(iy, ny, light.extent[1], light.pos[1]),
-                ],
-                rgb: [
-                    light.rgb[0] * share,
-                    light.rgb[1] * share,
-                    light.rgb[2] * share,
-                ],
-                extent: [0.0, 0.0],
-            });
-        }
-    }
-    out
+/// **Why a triangle wave rather than plain `fract`.** `fract` is the usual
+/// low-discrepancy trick, but it JUMPS the whole range each time it wraps,
+/// and two rays adjacent in the pupil grid can land either side of a wrap.
+/// K-366's splat footprints are central differences over exactly those
+/// neighbours, so a jump there inflates one splat by the entire width of the
+/// source and stamps a bright bar across the ghost. A triangle wave is
+/// continuous at every wrap, still uniform, and just as deterministic.
+fn tri(x: f32) -> f32 {
+    2.0 * (2.0 * (x - x.floor() - 0.5)).abs() - 1.0
 }
 
-/// Every light in `lights`, split into its area samples and truncated to the
-/// [`MAX_LIGHTS`] the trace can carry. Brighter sources are split first, so a
-/// crowded frame spends its slots on the lights that matter.
-pub fn expand_area_lights(lights: &[FlareLight], max_side: u32) -> Vec<FlareLight> {
-    let mut out: Vec<FlareLight> = Vec::new();
-    for light in lights {
-        let samples = area_samples(light, max_side);
-        if out.len() + samples.len() > MAX_LIGHTS {
-            // No room to split this one faithfully: carry it as the single
-            // point it started as rather than half an area source, which would
-            // lose the rest of its flux.
-            if out.len() < MAX_LIGHTS {
-                out.push(*light);
-            }
-            continue;
-        }
-        out.extend(samples);
+/// Where in its source's emitting rectangle the ray at pupil-grid `(i, j)`
+/// takes its light from (K-367), as an offset from the source centre in the
+/// same raster fractions [`FlareLight::pos`] uses.
+///
+/// This is what replaced K-355's replication. An area source used to be split
+/// into up to 5×5 point lights and the whole ray pipeline run once per
+/// sample: 25× the rays, and — wherever a ghost was smaller than the sample
+/// spacing — N visibly separate copies of the aperture instead of one smeared
+/// shape. Now the source integral is absorbed into the pupil quadrature the
+/// trace already performs: same ray count as a point source, and the
+/// per-ray footprints inflate by the local source-to-sensor stretch, which is
+/// precisely what fills the gaps between neighbouring samples. Replicas
+/// cannot form, because no two rays share a source position.
+///
+/// A zero extent gives a zero offset for every `(i, j)`, so a point source is
+/// bit-identical to what it rendered before this existed.
+pub(crate) fn source_jitter(i: usize, j: usize, extent: [f32; 2]) -> [f32; 2] {
+    [
+        tri((i as f32 + 0.5) * PHI_U) * extent[0],
+        tri((j as f32 + 0.5) * PHI_V) * extent[1],
+    ]
+}
+
+/// The fraction of the raster below which a source's starburst is a single
+/// stamp — that is, below which the source is a point of light (K-367).
+pub const SB_MIN_EXTENT: f32 = 0.004;
+/// Starburst stamps per axis across a source wider than [`SB_MIN_EXTENT`].
+pub const SB_STAMPS: u32 = 3;
+
+/// How many starburst stamps a source spends on each axis (K-367).
+///
+/// The ghosts integrate the source per ray, but the **starburst** cannot: it
+/// is a baked sprite, not a traced path. It is also *shift-invariant* — the
+/// diffraction pattern of a hole does not change shape as the source moves,
+/// only where it is centred — so the starburst of an extended source is
+/// exactly the point starburst convolved with the source. This is that
+/// convolution in quadrature form: a fixed 3×3 grid spanning ±extent, each
+/// stamp carrying `1/(nx·ny)` of the light, which is what K-355's per-sample
+/// stamping did as a side effect and what the per-ray integration would
+/// otherwise have thrown away. A softbox's spike smears across the softbox;
+/// a point's does not move, and stamps once at full strength — bit-identical
+/// to a single stamp, which a test pins.
+///
+/// Three per axis, not more: the sprite is a broad soft star tens of pixels
+/// across, so three taps already overlap heavily over any source a frame can
+/// hold, and the shader pays this per pixel.
+pub(crate) fn starburst_stamp_grid(extent: [f32; 2]) -> (u32, u32) {
+    let n = |e: f32| if e >= SB_MIN_EXTENT { SB_STAMPS } else { 1 };
+    (n(extent[0]), n(extent[1]))
+}
+
+/// Where stamp `i` of `n` sits across a source axis, in units of its
+/// half-extent: −1 … +1, and 0 when there is only one.
+pub(crate) fn starburst_stamp_offset(i: u32, n: u32) -> f32 {
+    if n <= 1 {
+        return 0.0;
     }
-    out
+    i as f32 / (n - 1) as f32 * 2.0 - 1.0
 }
 
 /// A dead light slot — the value the fixed `lights` array is padded with.
@@ -399,7 +394,7 @@ pub const DEAD_LIGHT: FlareLight = FlareLight {
 /// has always been). **Lights mode** (K-360) hands back the comp's own Light
 /// layers instead, which the draw builder resolved into `p.lights`; an area
 /// light arrives with a real extent and so flares as its own shape through
-/// exactly the machinery K-355 built for detected sources.
+/// exactly the per-ray integration K-367 gave detected sources.
 ///
 /// Matte mode never reaches here — its lights are found GPU-side.
 pub fn manual_light(p: &LensFlareParams, w: u32, h: u32) -> Vec<FlareLight> {
@@ -459,7 +454,7 @@ pub fn threshold_gate(luma: f32, threshold: f32, softness: f32) -> f32 {
 /// Matte-mode source detection (impl note §6), the CPU twin of the WGSL
 /// kernels: tile the matte into [`DETECT_TILE`]-sided cells, keep each cell's
 /// brightest pixel (Rec. 709 luma of the premultiplied buffer; ties break to
-/// the lowest linear index), then pick the top [`MAX_LIGHTS`] cells by luma
+/// the lowest linear index), then pick the top [`MAX_SOURCES`] cells by luma
 /// (ties to the lower cell index) with [`SUPPRESS_TILES`] Chebyshev
 /// suppression, gating each through [`threshold_gate`]. Deterministic by
 /// construction — no float reduction order depends on threading.
@@ -670,8 +665,9 @@ pub fn detect_lights(
             };
             // The source's half-extent, as the standard deviation of its flux
             // about that centre (√(E[x²] − E[x]²)). A point source measures
-            // zero and is sampled once; a practical measures its real width
-            // and is sampled across it (see [`area_samples`]).
+            // zero and every ray takes it from the same place; a practical
+            // measures its real width and each ray integrates a different
+            // point of it (see [`source_jitter`]).
             let half = |m2: f32, mean: f32| {
                 if cen[2] <= 0.0 {
                     return 0.0;
@@ -2916,12 +2912,6 @@ pub fn cpu_flare(
     if w == 0 || h == 0 || p.ghost_intensity <= 0.0 {
         return out;
     }
-    // Area sources are sampled across their extent here, exactly as the GPU
-    // does — Manual's list is expanded by the caller that builds the op, and
-    // Matte's inside the detection kernel, so the reference must expand too
-    // or the two stop being twins (K-355). A list of point sources is
-    // returned unchanged, so nothing about a point light moves.
-    let lights = &expand_area_lights(lights, AREA_SAMPLES_MAX)[..];
     let (tier_base, tier_lambda, _) = quality_ladder(p.quality);
     // The Detail dial scales the tier's base AND its wavelength count
     // before the per-pair budget (K-265); both the CPU reference and the
@@ -2973,7 +2963,6 @@ pub fn cpu_flare(
         if light.rgb[0] <= 0.0 && light.rgb[1] <= 0.0 && light.rgb[2] <= 0.0 {
             continue;
         }
-        let dir = light_direction(light.pos, aspect, baked.focal_mm);
         for (pi, pair) in baked.pairs.iter().take(pair_count).enumerate() {
             // The pair's own grid (K-262), by its measured image spread,
             // raised — never lowered — by this frame's budgeted probe
@@ -3045,6 +3034,18 @@ pub fn cpu_flare(
                             v * baked.pupil_mm * stop_scale,
                             baked.start_z_mm,
                         ];
+                        // **Each ray integrates the source itself** (K-367).
+                        // The ray takes its light from its own point of the
+                        // source's ±extent rectangle, so the source integral
+                        // is absorbed into the pupil quadrature rather than
+                        // replicating the whole pipeline per sample. A point
+                        // source offsets by zero and this is a no-op.
+                        let jit = source_jitter(i, j, light.extent);
+                        let dir = light_direction(
+                            [light.pos[0] + jit[0], light.pos[1] + jit[1]],
+                            aspect,
+                            baked.focal_mm,
+                        );
                         *corner = trace_splat_spectral(
                             baked,
                             *pair,
@@ -3185,6 +3186,19 @@ pub const MAX_BLUR_RADIUS_PX: u32 = 80;
 /// staying anchored on its light. `flare` is the ghost buffer at `fw × fh`
 /// (Draft renders it at half size; sampling is resolution-relative so both
 /// agree). Operates on the premultiplied working buffer in place.
+/// One starburst deposit in [`cpu_combine`] (K-367): where the sprite is
+/// centred (raster fraction), the colour it carries — the light's, times its
+/// share of the stamp grid — and the K-365 field terms for that position.
+struct SbStamp {
+    pos: [f32; 2],
+    rgb: [f32; 3],
+    ca: f32,
+    sa: f32,
+    s0: usize,
+    s1: usize,
+    ts: f32,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn cpu_combine(
     rgba: &mut [f32],
@@ -3200,10 +3214,6 @@ pub fn cpu_combine(
     if p.intensity <= 0.0 || p.mix <= 0.0 {
         return;
     }
-    // The same expansion `cpu_flare` makes: the starburst is stamped per
-    // light, so an area source stamps one per sample at its share of the
-    // flux, which is what the GPU's combine does over its filled slots.
-    let lights = &expand_area_lights(lights, AREA_SAMPLES_MAX)[..];
     let squeeze = p.anamorphic.clamp(0.25, 4.0);
     let fscale = p.scale.clamp(0.05, 20.0);
     let sb_res = STARBURST_RES as usize;
@@ -3213,25 +3223,43 @@ pub fn cpu_combine(
     // sampler below indexes by slice. No slices, no starburst — the same
     // labelled no-op an intensity of zero gives.
     let sb_ready = baked.starburst.len() >= STARBURST_FIELDS * sb_res * sb_res * 3;
-    // Each light's cat's-eye slice pair and sprite rotation (K-365) — a
-    // property of where the light is, not of the pixel, so it is worked out
-    // once per light here rather than per pixel as the shader must.
-    // `(cos az, sin az, slice, next slice, blend)`.
-    let sb_field: Vec<(f32, f32, usize, usize, f32)> = lights
-        .iter()
-        .map(|l| {
-            let (fld, az) = starburst_field(l.pos, aspect);
-            let s = fld * (STARBURST_FIELDS - 1) as f32;
-            let s0 = (s.floor() as usize).min(STARBURST_FIELDS - 1);
-            (
-                az.cos(),
-                az.sin(),
-                s0,
-                (s0 + 1).min(STARBURST_FIELDS - 1),
-                s - s0 as f32,
-            )
-        })
-        .collect();
+    // The frame's starburst stamps (K-367): one per light for a point, a 3×3
+    // grid across the source for an area light — the shift-invariant
+    // convolution of the sprite with the source, in quadrature form (see
+    // [`starburst_stamp_grid`]). Each stamp's cat's-eye slice pair and sprite
+    // rotation (K-365) belong to the STAMP, not to the light: a smeared
+    // starburst near the frame edge leans a little differently at each end of
+    // itself, which is the physical picture. All of it is a property of where
+    // the stamp is rather than of the pixel, so it is worked out once here
+    // where the shader must redo it per pixel.
+    let mut stamps: Vec<SbStamp> = Vec::new();
+    for l in lights {
+        if l.rgb[0] <= 0.0 && l.rgb[1] <= 0.0 && l.rgb[2] <= 0.0 {
+            continue;
+        }
+        let (nx, ny) = starburst_stamp_grid(l.extent);
+        let share = 1.0 / (nx * ny) as f32;
+        for iy in 0..ny {
+            for ix in 0..nx {
+                let pos = [
+                    l.pos[0] + starburst_stamp_offset(ix, nx) * l.extent[0],
+                    l.pos[1] + starburst_stamp_offset(iy, ny) * l.extent[1],
+                ];
+                let (fld, az) = starburst_field(pos, aspect);
+                let s = fld * (STARBURST_FIELDS - 1) as f32;
+                let s0 = (s.floor() as usize).min(STARBURST_FIELDS - 1);
+                stamps.push(SbStamp {
+                    pos,
+                    rgb: [l.rgb[0] * share, l.rgb[1] * share, l.rgb[2] * share],
+                    ca: az.cos(),
+                    sa: az.sin(),
+                    s0,
+                    s1: (s0 + 1).min(STARBURST_FIELDS - 1),
+                    ts: s - s0 as f32,
+                });
+            }
+        }
+    }
     // The flare buffer arrives PADDED (K-267): `cpu_flare` renders it at
     // `flare_pad_dims`, geometry centred, so the resolution-relative tap
     // only shifts by the border. Unpadded, the constant is zero and the
@@ -3277,25 +3305,24 @@ pub fn cpu_combine(
             let sx = cx + (x as f32 + 0.5 - cx) / (squeeze * fscale);
             let sy = cyc + (y as f32 + 0.5 - cyc) / fscale;
             let f = sample_flare(sx, sy);
-            // One starburst sprite per live light, anchored on the light,
-            // sized by Scale, stretched by the squeeze, tinted by the light.
+            // One starburst sprite per stamp, anchored on the stamp, sized by
+            // Scale, stretched by the squeeze, tinted by its share of the
+            // light. A point source has exactly one stamp at its own position
+            // carrying its whole colour, so it lands where it always did.
             let mut sb = [0.0_f32; 3];
             if p.starburst_intensity > 0.0 && sb_half > 0.0 && sb_ready {
-                for (li, light) in lights.iter().enumerate() {
-                    if light.rgb[0] <= 0.0 && light.rgb[1] <= 0.0 && light.rgb[2] <= 0.0 {
-                        continue;
-                    }
-                    let light_px = [light.pos[0] * w as f32, light.pos[1] * h as f32];
+                for stamp in &stamps {
+                    let light_px = [stamp.pos[0] * w as f32, stamp.pos[1] * h as f32];
                     let rel_x = x as f32 + 0.5 - light_px[0];
                     let rel_y = y as f32 + 0.5 - light_px[1];
                     // The cat's-eye (K-365): the sprite is turned so the
-                    // baked +x lean points along the light's own radial
+                    // baked +x lean points along the stamp's own radial
                     // direction, and read from the two field slices
-                    // bracketing the light's field fraction. On-axis the
+                    // bracketing the stamp's field fraction. On-axis the
                     // fraction is 0 and the azimuth arbitrary — but slice 0
                     // is very nearly round, so turning it changes nothing
                     // and the picture stays continuous through the centre.
-                    let (ca, sa, s0, s1, ts) = sb_field[li];
+                    let (ca, sa, s0, s1, ts) = (stamp.ca, stamp.sa, stamp.s0, stamp.s1, stamp.ts);
                     let rot_x = rel_x * ca + rel_y * sa;
                     let rot_y = -rel_x * sa + rel_y * ca;
                     let u = rot_x / (sb_half * squeeze) * 0.5 + 0.5;
@@ -3322,7 +3349,7 @@ pub fn cpu_combine(
                     };
                     for (c, out_c) in sb.iter_mut().enumerate() {
                         let val = tap(s0, c) * (1.0 - ts) + tap(s1, c) * ts;
-                        *out_c += val * p.starburst_intensity * light.rgb[c];
+                        *out_c += val * p.starburst_intensity * stamp.rgb[c];
                     }
                 }
             }

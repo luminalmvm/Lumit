@@ -8920,3 +8920,75 @@ Choices worth recording:
 
 The CPU reference and the WGSL are twins op for op, as they have been since K-261, and the
 two constants above are spelled in both and pinned by test.
+
+## K-367 — An area source is integrated per ray, not replicated into point lights
+
+**DECIDED** (2026-08-12). Entry D of the flare programme, and the answer to the owner's
+report that the effect was rendering "bright areas of a matte using multiple points
+instead of an area".
+
+K-355 gave a source a size and rendered it by **replication**: `expand_area_lights` split
+one light into up to 5×5 point lights spanning ±extent, each carrying a share of the flux,
+and the whole ray pipeline ran once per sample (the Matte path expanded the same way
+inside detection, which is the only reason `MAX_LIGHTS` was 64 rather than 16). The flare
+of an extended source really is the integral of the point flares over it, so the model was
+right; evaluating it by replication was not. It cost up to 25× the rays, and wherever a
+ghost was smaller than the spacing between samples it showed exactly what the owner saw —
+N overlapping copies of the aperture strung out in a line, rather than one smeared shape.
+Sampling more finely could only ever push the artefact below the current ghost size, never
+remove it.
+
+**Each ray integrates the source itself instead.** A ray at pupil-grid (i, j) offsets its
+light position within the source's ±extent rectangle by a smooth deterministic
+stratification and computes its own direction from the jittered position; every ray
+carries the light's full colour, because the pupil grid already averages. The source
+integral is absorbed into the pupil quadrature the trace was already performing, so an
+area source costs exactly what a point source costs, whatever its size — the plan's
+"per-ghost warped convolution", arrived at through the splatting pipeline rather than
+beside it. The sampling *is* the warped convolution, evaluated per ray.
+
+What makes replicas impossible rather than merely rare is K-366. A splat's footprint is
+the image of its pupil cell read by central differences over its neighbours' landings, and
+those neighbours now sit at different points of the source — so each footprint inflates by
+the local source-to-sensor stretch, which is precisely the gap a replica would have sat
+in. No two rays share a source position, and every ray's deposit already covers the
+spacing between them.
+
+Choices worth recording:
+
+- **A triangle wave, not `fract`.** `offset = tri((i + ½)·Φ)·extent`, with
+  `tri(x) = 2·|2·(fract(x) − ½)| − 1`. The usual low-discrepancy trick is a bare `fract`
+  of an irrational rotation, and it is wrong here for one specific reason: `fract` jumps
+  the whole range at each wrap, and the footprints are central differences over exactly
+  the neighbours a jump would separate by the width of the source — one splat inflated to
+  the whole source stamps a bright bar across the ghost. A triangle wave is continuous at
+  every wrap, still uniform on [−1, 1], and just as deterministic.
+- **A different irrational per axis** (`PHI_U` = 1/ρ, `PHI_V` = 1/ρ², the plastic
+  constant's pair): one constant for both would put every offset on a diagonal of the
+  rectangle, sampling a line rather than an area.
+- **Extent 0 is bit-identical to before.** Every ray offsets by exactly zero, so the point
+  source every existing project has does not move — pinned by test over a grid wider than
+  any quality tier launches, alongside the render being independent of how the light was
+  built.
+- **`MAX_LIGHTS` is deleted; `MAX_SOURCES` (16) is again the whole story.** One source is
+  one light slot however large it is. Matte detection stores each source's measured extent
+  instead of looping samples into slots, and the trace dispatch shrinks with it. The op
+  seam carries the extent: `LensFlareOp::manual_lights` is `[x, y, r, g, b, ext_x, ext_y]`
+  and the WGSL `Light` spends two of its three pads on it.
+- **The starburst smears by a fixed 3×3 stamp over the source.** The ghosts integrate
+  their source per ray; the starburst cannot, because it is a baked sprite rather than a
+  traced path. It is *shift-invariant* though — a hole's diffraction pattern does not
+  change shape as the source moves, only where it is centred — so an extended source's
+  starburst is exactly the point sprite convolved with the source, and the combine
+  evaluates that convolution in quadrature: three stamps per axis whose extent passes
+  `SB_MIN_EXTENT` (0.004 of the raster, the old area threshold), spanning ±extent, each
+  carrying `1/(nx·ny)` of the light. The K-355 replication used to give this for free as a
+  side effect of stamping per sample, and per-ray integration would otherwise have thrown
+  it away, leaving a softbox with a star's pinpoint spike. The K-365 field slice and
+  azimuth are computed **per stamp**, so a smeared starburst near the frame edge leans a
+  little differently at each end of itself. A point source is one stamp at full strength
+  on its own position, bit-identical to what it always drew.
+- **Area pictures change, so the effect's version goes 7 → 8.** A point source's does not.
+
+The CPU twin (`source_jitter`) and the shader's copy are op for op, and the two constants
+are pinned by test — compared as bits, since Rust and WGSL print floats differently.

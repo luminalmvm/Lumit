@@ -881,18 +881,53 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   And once you are weighing every lit pixel, you also know **how big the light
   is** — and that turns out to matter enormously. A real flare from a strip
   light does not look like a flare from a star: its ghosts are little images
-  of the strip, stretched the way the strip is. Lumit gets this right the
-  honest way, by treating a large light as what it actually is: many small
-  lights side by side. It works out the flare for a handful of points spread
-  across the source and adds them up, each carrying its share of the
-  brightness — so a tube gives bar-shaped ghosts, a window rectangular ones,
-  a bulb round ones. Splitting a light this way never makes it brighter, only
-  smoother, because the shares always add back up to one light.
+  of the strip, stretched the way the strip is. So a big light has to flare
+  as a shape, not as a dot.
 
   In Manual mode this is two dials, **Source width** and **Source height**,
   measured in pixels from the centre outward. Leave them at zero and you have
   the pinpoint star the effect always drew. When the flare is reading a layer
   instead, it measures the size itself from the picture.
+
+  **Why a softbox flares as one smooth shape (K-367).** The obvious way to
+  flare a big light is to treat it as a handful of small ones side by side:
+  work out the flare for, say, twenty-five points spread across the softbox,
+  each carrying its share of the brightness, and add them up. That is what
+  Lumit did at first, and it has a giveaway that the owner spotted straight
+  away — you can *see the twenty-five*. Wherever a ghost is smaller than the
+  gap between those points, you get twenty-five little irises laid out in a
+  grid instead of one soft rectangle. Using more points only shrinks the gap;
+  it never closes it. It also costs twenty-five times the work.
+
+  What Lumit does now is quietly better and, oddly, cheaper. The flare is
+  already worked out by firing thousands of rays through the lens — a fine
+  spray covering the front of the glass. Each of those rays is now told to
+  come from *its own point* of the light: one ray from the top-left corner of
+  the softbox, the next from somewhere near the middle, the next from the
+  right-hand edge, and so on, spread evenly over the whole panel by a fixed,
+  repeatable pattern. No two rays start from the same place, so there is
+  nothing for copies to form out of — and because each ray already spreads
+  its light over the little patch its neighbours bracket, and its neighbours
+  now come from quite different parts of the softbox, that patch grows to
+  cover exactly the gap a copy would have sat in. The result is one smooth
+  bar for a tube, one smooth rectangle for a window, one smooth disc for a
+  bulb.
+
+  Two nice consequences. A big light now costs the same as a small one —
+  nothing was added to the ray count, the size was folded into rays that were
+  being fired anyway. And a light of zero size offsets every ray by exactly
+  nothing, so every flare you have already built renders the same as before,
+  right down to the last bit.
+
+  The **starburst** — the spiky glint on the light itself — has to be handled
+  separately, because it is not traced at all: it is a picture worked out once
+  and stamped down. The saving grace is that its shape does not change as the
+  light moves, only where it sits, so a starburst from a big soft source is
+  just the small one smeared across that source. Lumit stamps it in a
+  three-by-three grid over the panel, each at a third of a third of the
+  brightness, which comes to the same thing. A softbox gets a broad soft
+  glare where a bare bulb gets a pinpoint star — and a point of light still
+  gets exactly one stamp, unchanged.
 
   **Why ghosts change colour as a light crosses the frame (K-356).** Every
   glass surface in a lens is coated to stop it reflecting — that is what the

@@ -6189,9 +6189,12 @@ fn lens_flare_centres_an_area_source_on_its_light() {
          {:?}",
         lights[0].extent
     );
-    assert!(
-        area_samples(&lights[0], AREA_SAMPLES_MAX).len() > 1,
-        "and must therefore be sampled across, not as one point"
+    // …and that extent is what every ray integrates over (K-367): rays at
+    // different pupil corners take their light from different points of it.
+    assert_ne!(
+        source_jitter(0, 0, lights[0].extent),
+        source_jitter(1, 1, lights[0].extent),
+        "an extent must move the rays' source positions apart"
     );
 
     // A one-pixel source has only itself to average, so point lights are
@@ -6206,6 +6209,293 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     assert_eq!(point.len(), 1);
     assert!((point[0].pos[0] - 20.5 / w as f32).abs() < 1e-6);
     assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);
+}
+
+/// **A point source did not move** (K-367).
+///
+/// The per-ray source integration replaced K-355's replication, and the one
+/// thing it must not do is disturb the source every project already has. A
+/// zero extent has to offset every ray by exactly nothing — not nearly
+/// nothing — so a point light's picture is the same bits it always was. The
+/// old behaviour cannot be run to compare against, so this pins the two
+/// halves that make it true: the jitter is identically zero over a grid wider
+/// than any quality tier launches, and the render is stable and independent
+/// of how the light was built.
+#[test]
+fn lens_flare_a_point_source_jitters_by_nothing() {
+    use crate::fx::lens_flare::*;
+    for j in 0..64 {
+        for i in 0..64 {
+            assert_eq!(
+                source_jitter(i, j, [0.0, 0.0]),
+                [0.0, 0.0],
+                "ray ({i}, {j}) of a point source must take its light from \
+                 the light's own position"
+            );
+        }
+    }
+    // A real extent does move rays apart — otherwise the sweep above would
+    // pass on a jitter that had simply been switched off.
+    assert_ne!(source_jitter(3, 5, [0.1, 0.1]), [0.0, 0.0]);
+
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (96u32, 54u32);
+    let via_param = manual_light(&p, w, h);
+    assert_eq!(via_param[0].extent, [0.0, 0.0], "the default is a point");
+    let hand = vec![FlareLight {
+        pos: via_param[0].pos,
+        rgb: via_param[0].rgb,
+        extent: [0.0, 0.0],
+    }];
+    let a = cpu_flare(&p, &baked, w, h, &via_param);
+    assert!(a.iter().sum::<f32>() > 0.0, "the point flare must render");
+    assert_eq!(
+        a,
+        cpu_flare(&p, &baked, w, h, &hand),
+        "a zero extent must be the plain point path, bit for bit"
+    );
+    assert_eq!(
+        a,
+        cpu_flare(&p, &baked, w, h, &via_param),
+        "and the same frame every run (docs/14 determinism)"
+    );
+}
+
+/// **An area source flares as ONE shape, not as a grid of copies** (K-367).
+///
+/// This is the defect the owner reported: "bright areas of a matte using
+/// multiple points instead of an area". K-355 rendered a source by splitting
+/// it into up to 5×5 point lights, so wherever a ghost was smaller than the
+/// spacing between those samples you saw that many separate copies of the
+/// aperture strung out in a line — five little irises where there should have
+/// been one soft bar. Integrating the source per ray instead makes the copies
+/// impossible rather than merely rare: no two rays share a source position,
+/// and each one's splat footprint (K-366) inflates by the local
+/// source-to-sensor stretch, which is exactly the gap a replica would have
+/// sat in.
+///
+/// Measured as local maxima along the line through the brightest ghost: the
+/// replicated version grew new peaks there, and the integrated one must not.
+#[test]
+fn lens_flare_an_area_source_does_not_replicate_its_ghosts() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        // No ghost blur: a blur would hide replication rather than prevent
+        // it, and this test is about preventing it.
+        ghost_softness: 0.0,
+        light: [64.0, 36.0],
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    let (rw, rh) = flare_pad_dims(w, h, p.anamorphic, p.scale);
+    let point = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h));
+    // A bar-shaped source most of the frame wide — a tube practical, and far
+    // wider than the sample spacing that used to show.
+    let wide = LensFlareParams {
+        source_size: [40.0, 10.0],
+        ..p
+    };
+    let area = cpu_flare(&wide, &baked, w, h, &manual_light(&wide, w, h));
+    assert_ne!(
+        point, area,
+        "an area source must not render as a point does"
+    );
+    // The old mechanism, rebuilt by hand so the comparison is a measurement
+    // rather than an assertion: the same source as the 5x5 grid of point
+    // lights sharing its flux that `expand_area_lights` used to hand the
+    // trace.
+    let centre = manual_light(&wide, w, h)[0];
+    let mut replicated = Vec::new();
+    for iy in 0..5 {
+        for ix in 0..5 {
+            let t = |i: usize| i as f32 / 4.0 * 2.0 - 1.0;
+            replicated.push(FlareLight {
+                pos: [
+                    centre.pos[0] + t(ix) * centre.extent[0],
+                    centre.pos[1] + t(iy) * centre.extent[1],
+                ],
+                rgb: centre.rgb.map(|c| c / 25.0),
+                extent: [0.0, 0.0],
+            });
+        }
+    }
+    let replicated = cpu_flare(&wide, &baked, w, h, &replicated);
+
+    // The profile of ONE ghost: the horizontal line through the brightest
+    // pixel of the POINT render — the same window in all three pictures, so
+    // the comparison is of the same ghost rather than of whatever each
+    // happens to make brightest — smoothed by a 3-tap mean so single-pixel
+    // splat grain cannot count as a peak.
+    let lum = |buf: &[f32], i: usize| buf[i * 3] + buf[i * 3 + 1] + buf[i * 3 + 2];
+    let bi = (0..(rw * rh) as usize)
+        .max_by(|&a, &b| {
+            lum(&point, a)
+                .partial_cmp(&lum(&point, b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("a non-empty flare buffer");
+    let (bx, by) = (bi % rw as usize, bi / rw as usize);
+    let peaks = |buf: &[f32]| -> usize {
+        let lo = bx.saturating_sub(12);
+        let hi = (bx + 12).min(rw as usize - 1);
+        let row: Vec<f32> = (lo..=hi).map(|x| lum(buf, by * rw as usize + x)).collect();
+        let smooth: Vec<f32> = (0..row.len())
+            .map(|i| {
+                let a = row[i.saturating_sub(1)];
+                let b = row[i];
+                let c = row[(i + 1).min(row.len() - 1)];
+                (a + b + c) / 3.0
+            })
+            .collect();
+        let cut = smooth.iter().cloned().fold(0.0_f32, f32::max) * 0.1;
+        (1..smooth.len() - 1)
+            .filter(|&i| smooth[i] > cut && smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1])
+            .count()
+    };
+
+    let (pp, ap, rp) = (peaks(&point), peaks(&area), peaks(&replicated));
+    assert!(pp > 0, "the point flare must have a ghost to profile");
+    assert!(
+        rp > pp,
+        "the test's own replication must actually replicate, or it proves \
+         nothing: {rp} peaks against a point's {pp}"
+    );
+    assert!(
+        ap <= pp,
+        "an area source must smear its ghost, not stamp copies of it: \
+         {ap} peaks against a point's {pp} and the old replication's {rp}"
+    );
+}
+
+/// **The jitter integrates the source; it does not lose light** (K-367).
+///
+/// Every ray carries the light's FULL colour now — there are no per-sample
+/// flux shares, because the pupil grid already averages over the rays. The
+/// obvious way to get that wrong is to keep dividing (a wide source fading as
+/// it widens) or to stop dividing without removing the replication (a wide
+/// source brightening). Both show up as an energy ratio away from one.
+#[test]
+fn lens_flare_an_area_source_keeps_its_flux() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        light: [64.0, 36.0],
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    let point: f32 = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h))
+        .iter()
+        .sum();
+    let wide = LensFlareParams {
+        source_size: [12.0, 12.0],
+        ..p
+    };
+    let area: f32 = cpu_flare(&wide, &baked, w, h, &manual_light(&wide, w, h))
+        .iter()
+        .sum();
+    assert!(point > 0.0, "the point flare must render: {point}");
+    let ratio = area / point;
+    assert!(
+        (0.98..=1.02).contains(&ratio),
+        "an area source must spread one light's flux, not scale it: {ratio} \
+         ({area} against {point})"
+    );
+}
+
+/// **A wide source's starburst smears across it** (K-367).
+///
+/// The ghosts integrate their source per ray, but the starburst cannot: it is
+/// a baked sprite, not a traced path. It *is* shift-invariant, though — the
+/// diffraction pattern of a hole does not change shape as the source moves,
+/// only where it sits — so the starburst of an extended source is exactly the
+/// point sprite convolved with the source, and stamping a fixed 3×3 grid
+/// across the source is that convolution in quadrature. Stamping once at the
+/// centre instead would give a softbox the pinpoint spike of a star, which is
+/// the one thing a softbox does not have.
+#[test]
+fn lens_flare_an_area_source_smears_its_starburst() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 1,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    // An empty ghost buffer, so what is measured is the starburst alone.
+    let flare = vec![0.0_f32; (w * h * 3) as usize];
+    let render = |lights: &[FlareLight]| -> Vec<f32> {
+        let mut rgba = vec![0.0_f32; (w * h * 4) as usize];
+        cpu_combine(&mut rgba, w, h, &p, &baked, &flare, w, h, lights);
+        rgba
+    };
+    let row = |rgba: &[f32], light: &FlareLight| -> Vec<f32> {
+        let y = (light.pos[1] * h as f32) as usize;
+        (0..w as usize)
+            .map(|x| {
+                let i = (y * w as usize + x) * 4;
+                rgba[i] + rgba[i + 1] + rgba[i + 2]
+            })
+            .collect()
+    };
+    // The lit SPAN along the row through the light, measured at a fixed
+    // absolute level rather than at each picture's own half maximum: the
+    // sprite is a very peaked star, so smearing it lowers the peak as much as
+    // it widens the base, and a relative half-max would chase its own tail.
+    // The level is a tenth of the POINT starburst's peak, so both pictures are
+    // measured against the same line.
+    let span = |r: &[f32], cut: f32| -> usize {
+        let lit: Vec<usize> = (0..r.len()).filter(|&i| r[i] >= cut).collect();
+        match (lit.first(), lit.last()) {
+            (Some(&a), Some(&b)) => b - a + 1,
+            _ => 0,
+        }
+    };
+
+    let base = manual_light(&p, w, h);
+    let point = render(&base);
+    let point_row = row(&point, &base[0]);
+    let cut = point_row.iter().cloned().fold(0.0_f32, f32::max) * 0.1;
+    assert!(cut > 0.0, "the starburst must render something");
+    let point_w = span(&point_row, cut);
+
+    // A source under the threshold is a point of light, bit for bit: the
+    // stamp grid collapses to one stamp on the light's own position carrying
+    // its whole colour, so nothing anyone has already built moves.
+    assert_eq!(starburst_stamp_grid([0.0, 0.0]), (1, 1));
+    let tiny = vec![FlareLight {
+        extent: [SB_MIN_EXTENT * 0.5, SB_MIN_EXTENT * 0.5],
+        ..base[0]
+    }];
+    assert_eq!(
+        point,
+        render(&tiny),
+        "a source below the stamp threshold must render as the point it is"
+    );
+
+    // A source 60 px across smears its spike across itself.
+    let ext = 30.0 / w as f32;
+    let wide = vec![FlareLight {
+        extent: [ext, 0.0],
+        ..base[0]
+    }];
+    assert_eq!(starburst_stamp_grid([ext, 0.0]), (SB_STAMPS, 1));
+    let wide_w = span(&row(&render(&wide), &wide[0]), cut);
+    assert!(
+        wide_w > point_w + 40,
+        "a 60 px source must smear its starburst across roughly its own \
+         width: {wide_w} px lit against a point's {point_w}"
+    );
 }
 
 /// **Light layers resolve, and an area light keeps its size** (K-360).
