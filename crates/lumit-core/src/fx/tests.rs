@@ -5806,6 +5806,8 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         // Raster pixels (K-260): tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
+        // A point source, as the effect has always defaulted to.
+        source_size: [0.0, 0.0],
         intensity: 1.0,
         lens: 16,
         fstop: 2.8,
@@ -5862,10 +5864,20 @@ fn lens_flare_detects_matte_sources_deterministically() {
         2,
         "the neighbour must be suppressed: {lights:?}"
     );
-    // Brightest first, at the pixel centre.
-    assert!((lights[0].pos[0] - 20.5 / 128.0).abs() < 1e-6);
+    // Brightest first — and since K-355 the light sits at the flux centre of
+    // everything folded into it, not on its brightest pixel. Both pixels are
+    // one lit region here, so the centre is between them weighted by
+    // brightness: (20·4 + 28·3) / 7 = 164/7.
+    let cx = 164.0 / 7.0;
+    assert!(
+        (lights[0].pos[0] - (cx + 0.5) / 128.0).abs() < 1e-6,
+        "x {}",
+        lights[0].pos[0] * 128.0 - 0.5
+    );
     assert!((lights[0].pos[1] - 24.5 / 96.0).abs() < 1e-6);
-    assert_eq!(lights[0].rgb, [4.0, 4.0, 4.0]);
+    // …and its colour is the MEAN of the lit pixels, not the brightest one's:
+    // (4 + 3) / 2. One sparkle can no longer define a source's colour.
+    assert_eq!(lights[0].rgb, [3.5, 3.5, 3.5]);
     // The warm source keeps its colour.
     assert!((lights[1].pos[0] - 100.5 / 128.0).abs() < 1e-6);
     assert_eq!(lights[1].rgb, [1.5, 1.0, 0.5]);
@@ -5900,12 +5912,10 @@ fn lens_flare_detects_matte_sources_deterministically() {
 /// to reach first, so a flare fired from a large soft source came out of its
 /// edge rather than its middle.
 ///
-/// **What this does not fix, stated so nobody assumes it does:** the weight is
-/// flux, and each tile is still represented by its single brightest pixel, so
-/// one very hot pixel still pulls the centroid toward itself. Suppressing that
-/// needs each tile to carry its whole flux and its own centroid rather than one
-/// pixel's — the rework in NEXT-FEATURES entry 1 Phase D, where real source
-/// regions replace tile-max detection altogether.
+/// Since K-355 every tile carries its own flux moments rather than one pixel's,
+/// so the answer is the source's TRUE centre — and no single pixel, however
+/// hot, can move it. That is what stops a flare jumping about inside a
+/// practical as sensor noise shuffles which pixel happens to be brightest.
 #[test]
 fn lens_flare_centres_an_area_source_on_its_light() {
     use crate::fx::lens_flare::*;
@@ -5925,22 +5935,45 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3]);
     assert_eq!(lights.len(), 1, "one source: {lights:?}");
 
-    // The four tiles each contribute their own top-left covered pixel —
-    // (32,32), (64,32), (32,64), (64,64) — at equal flux, so the centroid is
-    // (48, 48) and the reported position is its pixel centre.
+    // Every lit pixel is weighed, so the answer is the square's exact centre
+    // — (32 + 95) / 2 — rather than a corner of it, which is where this used
+    // to land.
+    let centre = 63.5f32;
     let px = lights[0].pos[0] * w as f32 - 0.5;
     let py = lights[0].pos[1] * h as f32 - 0.5;
-    assert!((px - 48.0).abs() < 1e-3, "x {px}");
-    assert!((py - 48.0).abs() < 1e-3, "y {py}");
+    assert!((px - centre).abs() < 1e-3, "x {px}, want {centre}");
+    assert!((py - centre).abs() < 1e-3, "y {py}, want {centre}");
 
-    // The point of it: closer to the middle of the light than the brightest
-    // pixel of the brightest tile, which is where this used to land.
-    let centre = 63.5f32;
-    let was = 32.0f32;
+    // **The jumping test.** One pixel of the source goes very hot, as sensor
+    // sparkle does frame to frame. That pixel now owns the tile's `luma_max`,
+    // so before K-355 it would have become the light's position outright — a
+    // 30-pixel jump for a source that has not moved. Weighing every pixel
+    // leaves the centre where it was, to well under a pixel.
+    let mut sparkle = matte.clone();
+    let i = ((34 * w + 34) * 4) as usize;
+    for c in 0..3 {
+        sparkle[i + c] = 40.0;
+    }
+    let jumped = detect_lights(&sparkle, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(jumped.len(), 1);
+    let jx = jumped[0].pos[0] * w as f32 - 0.5;
+    let jy = jumped[0].pos[1] * h as f32 - 0.5;
     assert!(
-        (px - centre).abs() < (was - centre).abs(),
-        "the anchor must move toward the centre of the source, not stay at \
-         its corner: {px} vs {was}, centre {centre}"
+        (jx - px).abs() < 1.0 && (jy - py).abs() < 1.0,
+        "one hot pixel moved the light from ({px}, {py}) to ({jx}, {jy})"
+    );
+
+    // And the source knows how big it is, which is what lets it be sampled
+    // across rather than flared as a point (K-355).
+    assert!(
+        lights[0].extent[0] > 0.1,
+        "a source 64 px wide in a 128 px frame must measure a real extent: \
+         {:?}",
+        lights[0].extent
+    );
+    assert!(
+        area_samples(&lights[0], AREA_SAMPLES_MAX).len() > 1,
+        "and must therefore be sampled across, not as one point"
     );
 
     // A one-pixel source has only itself to average, so point lights are

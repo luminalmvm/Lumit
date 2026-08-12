@@ -851,6 +851,38 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   apart lengthens it without ever making it thicker. And the biggest single
   piece of memory the effect owned, about 66 MB on a large frame, was the
   card's four-points-per-pixel canvas; it is gone.
+
+  **Why flares used to jump, and why lights now have a size (K-355).** Point
+  the flare at footage — at a street lamp, a window, a practical in shot — and
+  it used to twitch. The reason was that Lumit asked a very narrow question of
+  the picture: *which single pixel here is brightest?* That pixel became the
+  light. But inside a real lamp, the brightest pixel is a lottery: sensor
+  noise and the odd sparkle move it from one frame to the next, so the light
+  hopped about inside something that had not moved, and the whole flare
+  hopped with it.
+
+  Lumit now asks a better question: *where is the light, on average?* Every
+  lit pixel is weighed, and the light is placed at the balance point of all of
+  them — its centre of brightness. One pixel going forty times too bright
+  moves that balance point by less than a pixel, so the jitter is simply gone.
+  The same change gives a light its *colour* from the average of what is lit
+  rather than from its hottest speck, so a sparkle can no longer tint a flare.
+
+  And once you are weighing every lit pixel, you also know **how big the light
+  is** — and that turns out to matter enormously. A real flare from a strip
+  light does not look like a flare from a star: its ghosts are little images
+  of the strip, stretched the way the strip is. Lumit gets this right the
+  honest way, by treating a large light as what it actually is: many small
+  lights side by side. It works out the flare for a handful of points spread
+  across the source and adds them up, each carrying its share of the
+  brightness — so a tube gives bar-shaped ghosts, a window rectangular ones,
+  a bulb round ones. Splitting a light this way never makes it brighter, only
+  smoother, because the shares always add back up to one light.
+
+  In Manual mode this is two dials, **Source width** and **Source height**,
+  measured in pixels from the centre outward. Leave them at zero and you have
+  the pinpoint star the effect always drew. When the flare is reading a layer
+  instead, it measures the size itself from the picture.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the

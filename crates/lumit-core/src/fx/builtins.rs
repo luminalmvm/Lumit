@@ -3029,6 +3029,29 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                id: "source_width",
+                label: "Source width",
+                // px@comp like the position (K-260), and the HALF-width of the
+                // emitting area: 0 — the default — is the point source the
+                // effect has always had, and anything larger makes it an AREA
+                // light whose ghosts take the shape of the source rather than
+                // of a point (K-355). Pairs with source_height into one row.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "source_height",
+                label: "Source height",
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
                 id: "intensity",
                 label: "Intensity",
                 // Master gain on everything the effect adds; 0 is the

@@ -1336,6 +1336,11 @@ fn resolve_one(
             // Transform-anchor convention (K-260: point params are pixels).
             let lx = fl("light_x").unwrap_or(640.0) as f32 * px_scale;
             let ly = fl("light_y").unwrap_or(360.0) as f32 * px_scale;
+            // Source size (K-355): the half-extent of an area light, in the
+            // same px@comp the position uses, so it rides the same preview
+            // factor. Zero is the point source the effect has always had.
+            let sw = (fl("source_width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
+            let sh = (fl("source_height").unwrap_or(0.0) as f32).max(0.0) * px_scale;
             let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
             // Library index (K-261; out-of-range clamps inside lens_entry).
             // A pre-K-264 save's index pointed into the old 1299-lens
@@ -1396,6 +1401,7 @@ fn resolve_one(
             Some(Resolved::LensFlare(
                 crate::fx::lens_flare::LensFlareParams {
                     light: [lx, ly],
+                    source_size: [sw, sh],
                     intensity,
                     lens,
                     fstop,

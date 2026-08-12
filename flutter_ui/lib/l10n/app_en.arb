@@ -1449,6 +1449,14 @@
   "@fxSource": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxSourceHeight": "Source height",
+  "@fxSourceHeight": {
+    "description": "Effect controls — a control on Lens flare. Half the height of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
+  },
+  "fxSourceWidth": "Source width",
+  "@fxSourceWidth": {
+    "description": "Effect controls — a control on Lens flare. Half the width of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."

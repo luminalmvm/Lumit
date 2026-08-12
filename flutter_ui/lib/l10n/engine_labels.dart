@@ -221,6 +221,8 @@ Map<String, String> get _table => {
       "Soft light": l10n.fxSoftLight,
       "Softness": l10n.fxSoftness,
       "Source": l10n.fxSource,
+      "Source height": l10n.fxSourceHeight,
+      "Source width": l10n.fxSourceWidth,
       "Spin": l10n.fxSpin,
       "Starburst intensity": l10n.fxStarburstIntensity,
       "Status": l10n.fxStatus,

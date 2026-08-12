@@ -197,6 +197,14 @@ cannot do any of that.
 **Cost:** one flare evaluation per source (unchanged from today) plus G small 2-D
 convolutions — milliseconds, and independent of source area. Far inside the budget.
 
+**Status (K-355):** area sources already work, by **direct sampling** — the source's extent
+is measured from its flux and the flare is evaluated at a small grid of points across it,
+each carrying a share of the flux. That is the reference method (it is what the Monte Carlo
+oracle in D3 does, minus the randomness), so ghosts already take the source's shape. What
+Phase D adds is *efficiency and exactness*: sampling converges to the warped convolution but
+needs enough samples that neighbours land closer than a ghost is wide, and the cap is
+currently 5×5 per source. Build it when a source is wide enough that replication shows.
+
 *Shape:* get `J_g` per ghost by finite-differencing the existing trace at θ₀ ± δ (or read
 it off the ray grid); warp the source's radiance tile; convolve with that ghost's kernel;
 scale by the path's throughput; splat. It runs **inside** the per-wavelength loop, because
@@ -311,20 +319,14 @@ Matte mode already has half of what the literature asks for: the luma gate is so
 summing already weighs an area source by its area rather than one pixel. What still
 flickers on video, and the fixes:
 
-1. ~~**Anchor jumping**~~ — **landed as K-354.** Each anchor now takes the flux-weighted
-   centroid of the tiles feeding it, so a source spanning several tiles is found at the
-   centre of its light rather than at whichever corner the tile scan reached first. Point
-   sources are untouched.
-2. **Fireflies — still open, and the first plan for it was wrong.** A single hot pixel
-   (sensor sparkle, a specular glint) still owns its tile and so still pulls both the flux
-   and the K-354 centroid toward itself, frame to frame. The draft here proposed a Karis
-   `1/(1+luma)` weighting, which assumes a per-pixel *sum* the detector does not have: a
-   tile is represented by its single brightest pixel, for position and for flux. The real
-   fix is to make each tile carry **its whole gated flux and its own centroid** instead of
-   one pixel's — a change to the tile reduction in both twins (the workgroup merge stays a
-   fixed-order sum, so determinism is unaffected). That is the same information Phase D's
-   source regions need, so **do it there rather than twice**: it is listed here only so the
-   gap is not mistaken for a fixed one.
+1. ~~**Anchor jumping**~~ — **landed as K-354, completed by K-355.**
+2. ~~**Fireflies**~~ — **landed as K-355.** Each tile now carries its whole gated flux, its
+   own flux centroid and its mean colour rather than one pixel's, so no single hot pixel can
+   move a light or define its colour. A 40× sparkle shifts a 64 px source by under a pixel.
+
+**What is left of this entry:** nothing. Area sources are handled by direct sampling
+(K-355), which is the reference method; Phase D's per-ghost warped convolution remains the
+*optimisation* of that, not a correction to it.
 
 **Temporal smoothing is a recorded non-option**, not an oversight: a frame must be a
 function of the document and the frame alone (docs/14 determinism; the caches name frames

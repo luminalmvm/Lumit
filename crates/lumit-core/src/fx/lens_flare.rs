@@ -80,6 +80,13 @@ pub struct LensFlareParams {
     /// 1 Matte (bright sources detected in a referenced layer), 2 Lights
     /// (prepared for light layers; resolves as Manual until they land).
     pub source: u32,
+    /// Manual mode: the half-width and half-height of the emitting area, in
+    /// raster pixels (px@comp, K-260). Zero — the default — is the point
+    /// source the effect has always had; anything larger is an AREA source,
+    /// rendered by sampling the flare across it so its ghosts take the shape
+    /// of the source rather than of a point (K-355). Matte mode measures this
+    /// from the detected source instead and ignores the dial.
+    pub source_size: [f32; 2],
     /// Matte mode: linear luma at/above which a detected source flares fully
     /// (open above; a soft gate, see `threshold_softness`).
     pub threshold: f32,
@@ -206,10 +213,19 @@ pub const STARBURST_SAMPLES: u32 = 100;
 /// Aperture-image side for the starburst FFT.
 pub const APERTURE_RES: u32 = 256;
 
-/// Most flare sources a frame renders (Matte mode's top-K cap; Manual is
-/// one). 16 since K-267: area sources anchor on one slot each, and eight
-/// anchors starved scenes with several practicals plus an area source.
-pub const MAX_LIGHTS: usize = 16;
+/// Distinct sources a frame detects (Matte mode's top-K cap; Manual is one).
+/// 16 since K-267: area sources anchor on one slot each, and eight anchors
+/// starved scenes with several practicals plus an area source.
+pub const MAX_SOURCES: usize = 16;
+
+/// Light slots the trace can carry in one frame.
+///
+/// Four per source since K-355, because a source is no longer always a point:
+/// an AREA source is rendered by sampling the flare across its emitting area,
+/// and every sample needs a slot of its own. A frame of sixteen point sources
+/// still costs sixteen slots; one big softbox spends its slots on being the
+/// right shape instead.
+pub const MAX_LIGHTS: usize = 64;
 /// Detection tile side, raster pixels (impl note §6).
 pub const DETECT_TILE: u32 = 32;
 /// Non-max suppression radius, in tiles (Chebyshev): one highlight must not
@@ -238,15 +254,122 @@ pub struct FlareLight {
     pub pos: [f32; 2],
     /// Source colour times gate weight; all-zero entries are dead slots.
     pub rgb: [f32; 3],
+    /// Half-extent of the emitting area, as a fraction of the raster (K-355).
+    /// Zero is a point source and behaves exactly as it always did; anything
+    /// larger is an AREA source and is rendered by sampling across it — see
+    /// [`area_samples`].
+    pub extent: [f32; 2],
+}
+
+/// How many samples an area source is split into along each axis, at most.
+///
+/// A flare from an extended source is the sum of the flares of the points
+/// making it up, and the failure mode of sampling it too sparsely is not noise
+/// but **ghost replication** — you see N overlapping copies of the aperture
+/// rather than one smeared ghost. So the count is chosen from the source's own
+/// size rather than fixed, and the ceiling is what a 2 s/frame budget affords
+/// (docs/NEXT-FEATURES.md entry 1).
+pub const AREA_SAMPLES_MAX: u32 = 5;
+
+/// The fraction of the raster below which a source is simply a point.
+const AREA_MIN_EXTENT: f32 = 0.004;
+
+/// Split one light into the point sources that make it up (K-355).
+///
+/// **Why sampling rather than something cleverer.** The flare of an area
+/// source is genuinely the integral of the point flares over the emitting
+/// area, and at a two-second budget we can afford to evaluate that integral
+/// directly instead of approximating it. Each sample carries its share of the
+/// source's flux, so total energy is unchanged however finely it is split —
+/// a source only ever gets *smoother*, never brighter.
+///
+/// This is what makes an area light's flare look right: a bar-shaped source
+/// draws bar-shaped ghosts, a window draws rectangular ones, because the ghost
+/// each sample contributes lands in a slightly different place and their sum
+/// carries the source's shape. A single point source returns exactly itself,
+/// so nothing about point lights moves.
+///
+/// The grid is regular and centred, which keeps it deterministic (docs/14) —
+/// no jitter, so the same frame renders the same way every time.
+pub fn area_samples(light: &FlareLight, max_side: u32) -> Vec<FlareLight> {
+    let cap = max_side.clamp(1, AREA_SAMPLES_MAX);
+    let side = |e: f32| -> u32 {
+        if e < AREA_MIN_EXTENT {
+            1
+        } else {
+            // One sample per AREA_MIN_EXTENT of width, capped — enough that
+            // neighbouring samples land closer together than a ghost is wide.
+            ((e / AREA_MIN_EXTENT).round() as u32).clamp(1, cap)
+        }
+    };
+    let (nx, ny) = (side(light.extent[0]), side(light.extent[1]));
+    if nx <= 1 && ny <= 1 {
+        return vec![*light];
+    }
+    let share = 1.0 / (nx * ny) as f32;
+    let mut out = Vec::with_capacity((nx * ny) as usize);
+    for iy in 0..ny {
+        for ix in 0..nx {
+            // Centred on the source: the samples span ±extent about `pos`,
+            // which is the standard deviation of its flux, so they cover the
+            // body of the light rather than its far tails.
+            let f = |i: u32, n: u32, e: f32, c: f32| {
+                if n <= 1 {
+                    return c;
+                }
+                let t = i as f32 / (n - 1) as f32 * 2.0 - 1.0;
+                c + t * e
+            };
+            out.push(FlareLight {
+                pos: [
+                    f(ix, nx, light.extent[0], light.pos[0]),
+                    f(iy, ny, light.extent[1], light.pos[1]),
+                ],
+                rgb: [
+                    light.rgb[0] * share,
+                    light.rgb[1] * share,
+                    light.rgb[2] * share,
+                ],
+                extent: [0.0, 0.0],
+            });
+        }
+    }
+    out
+}
+
+/// Every light in `lights`, split into its area samples and truncated to the
+/// [`MAX_LIGHTS`] the trace can carry. Brighter sources are split first, so a
+/// crowded frame spends its slots on the lights that matter.
+pub fn expand_area_lights(lights: &[FlareLight], max_side: u32) -> Vec<FlareLight> {
+    let mut out: Vec<FlareLight> = Vec::new();
+    for light in lights {
+        let samples = area_samples(light, max_side);
+        if out.len() + samples.len() > MAX_LIGHTS {
+            // No room to split this one faithfully: carry it as the single
+            // point it started as rather than half an area source, which would
+            // lose the rest of its flux.
+            if out.len() < MAX_LIGHTS {
+                out.push(*light);
+            }
+            continue;
+        }
+        out.extend(samples);
+    }
+    out
 }
 
 /// Manual mode's light list: one source at the parameter position (raster
 /// pixels over the raster `w × h` — the fraction the trace consumes),
-/// carrying the Light tint (white by default).
+/// carrying the Light tint (white by default) and the Source size dial's
+/// half-extent (K-355; zero is the point source it has always been).
 pub fn manual_light(p: &LensFlareParams, w: u32, h: u32) -> Vec<FlareLight> {
     vec![FlareLight {
         pos: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
         rgb: p.light_tint,
+        extent: [
+            p.source_size[0] / w.max(1) as f32,
+            p.source_size[1] / h.max(1) as f32,
+        ],
     }]
 }
 
@@ -286,6 +409,45 @@ pub fn threshold_gate(luma: f32, threshold: f32, softness: f32) -> f32 {
 /// (K-259/K-267) — so the same function serves "the practical's own colour
 /// flares", "this matte only says *where*", and area sources whose light
 /// is their whole lit extent rather than one pixel.
+/// What one detection tile knows about the light inside it (K-355).
+///
+/// Through K-354 a tile was a single pair — its brightest pixel's luma and
+/// index — and everything downstream used that one pixel for the tile's
+/// position AND its colour. That is what made a flare *jump* on real footage:
+/// inside a practical, which pixel is brightest changes frame to frame with
+/// sensor noise and specular sparkle, so the light's reported position hopped
+/// about inside a source that had not moved at all. These sums describe the
+/// whole lit area of the tile instead, and none of them can be moved by one
+/// pixel changing its mind.
+#[derive(Clone, Copy, Debug)]
+struct TileStat {
+    /// The brightest pixel's luma and linear index — still how anchors are
+    /// ranked and gated, so a small bright source is still found.
+    luma_max: f32,
+    index: u32,
+    /// Σ gate, Σ colour·gate: the tile's gated coverage and colour, whose
+    /// ratio is the mean colour of the light in it.
+    wsum: f32,
+    csum: [f32; 3],
+    /// Σ luma·gate and its first moments — the tile's flux and where in the
+    /// tile that flux actually sits.
+    fsum: f32,
+    fx: f32,
+    fy: f32,
+}
+
+impl TileStat {
+    const EMPTY: Self = Self {
+        luma_max: -1.0,
+        index: 0,
+        wsum: 0.0,
+        csum: [0.0; 3],
+        fsum: 0.0,
+        fx: 0.0,
+        fy: 0.0,
+    };
+}
+
 pub fn detect_lights(
     matte: &[f32],
     w: u32,
@@ -300,8 +462,7 @@ pub fn detect_lights(
     }
     let tx = w.div_ceil(DETECT_TILE) as usize;
     let ty = h.div_ceil(DETECT_TILE) as usize;
-    // Per-tile brightest pixel: (luma, linear index).
-    let mut tiles: Vec<(f32, u32)> = vec![(-1.0, 0); tx * ty];
+    let mut tiles: Vec<TileStat> = vec![TileStat::EMPTY; tx * ty];
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -309,27 +470,44 @@ pub fn detect_lights(
                 + super::cpu::LUMA[1] * matte[i + 1]
                 + super::cpu::LUMA[2] * matte[i + 2];
             let t = (y / DETECT_TILE) as usize * tx + (x / DETECT_TILE) as usize;
-            if luma > tiles[t].0 {
-                tiles[t] = (luma, y * w + x);
+            let tile = &mut tiles[t];
+            if luma > tile.luma_max {
+                tile.luma_max = luma;
+                tile.index = y * w + x;
+            }
+            // Every lit pixel contributes, not just the brightest (K-355):
+            // `w` is the pixel's own gate, `f` its gated flux.
+            let g = threshold_gate(luma, threshold, softness);
+            if g > 0.0 {
+                let f = luma * g;
+                tile.wsum += g;
+                tile.csum[0] += matte[i].max(0.0) * g;
+                tile.csum[1] += matte[i + 1].max(0.0) * g;
+                tile.csum[2] += matte[i + 2].max(0.0) * g;
+                tile.fsum += f;
+                tile.fx += x as f32 * f;
+                tile.fy += y as f32 * f;
             }
         }
     }
     let mut suppressed = vec![false; tx * ty];
-    // Anchors: the top-K picks, position at each pick's brightest pixel.
+    // Anchors: the top-K picks, ranked by their brightest pixel so a small
+    // bright source is still found; where the light is reported is the flux
+    // centroid worked out below, not this pixel.
     let mut anchors: Vec<(usize, u32)> = Vec::new();
-    for _ in 0..MAX_LIGHTS {
+    for _ in 0..MAX_SOURCES {
         let mut best: Option<usize> = None;
-        for (t, &(luma, _)) in tiles.iter().enumerate() {
-            if suppressed[t] || luma <= 0.0 {
+        for (t, stat) in tiles.iter().enumerate() {
+            if suppressed[t] || stat.luma_max <= 0.0 {
                 continue;
             }
             match best {
-                Some(b) if tiles[b].0 >= luma => {}
+                Some(b) if tiles[b].luma_max >= stat.luma_max => {}
                 _ => best = Some(t),
             }
         }
         let Some(b) = best else { break };
-        let (luma, idx) = tiles[b];
+        let (luma, idx) = (tiles[b].luma_max, tiles[b].index);
         if threshold_gate(luma, threshold, softness) <= 0.0 {
             // Cells are visited brightest-first, so nothing dimmer passes.
             break;
@@ -352,17 +530,17 @@ pub fn detect_lights(
     // spanning many tiles finally weighs as its whole lit area instead of
     // one pixel.
     let mut acc = vec![[0.0_f32; 3]; anchors.len()];
-    // The flux-weighted centroid of each anchor's contributing tiles, as
-    // (Σ w·x, Σ w·y, Σ w) — see where it is applied below. f32 throughout and
-    // in the fixed tile order, because the WGSL twin must add the same
-    // numbers in the same order.
+    // Per anchor: the flux centroid as (Σ f·x, Σ f·y, Σ f), and the second
+    // moment (Σ f·x², Σ f·y²) that gives the source its EXTENT — how wide the
+    // light actually is, which is what an area source needs sampling across.
     let mut centroid = vec![[0.0_f32; 3]; anchors.len()];
+    let mut spread = vec![[0.0_f32; 2]; anchors.len()];
     if !anchors.is_empty() {
-        for (t, &(luma, idx)) in tiles.iter().enumerate() {
-            if luma <= 0.0 {
+        for (t, stat) in tiles.iter().enumerate() {
+            if stat.luma_max <= 0.0 {
                 continue;
             }
-            let weight = threshold_gate(luma, threshold, softness);
+            let weight = threshold_gate(stat.luma_max, threshold, softness);
             if weight <= 0.0 {
                 continue;
             }
@@ -377,48 +555,73 @@ pub fn detect_lights(
                     nearest = a;
                 }
             }
-            let i = (idx * 4) as usize;
-            let src = if use_source_colour {
+            // The tile's MEAN colour over its lit pixels, not its brightest
+            // pixel's (K-355). One sparkle among a thousand lit pixels now
+            // shifts the colour by a thousandth instead of defining it.
+            let src = if !use_source_colour {
+                [1.0, 1.0, 1.0]
+            } else if stat.wsum > 0.0 {
+                [
+                    stat.csum[0] / stat.wsum,
+                    stat.csum[1] / stat.wsum,
+                    stat.csum[2] / stat.wsum,
+                ]
+            } else {
+                let i = (stat.index * 4) as usize;
                 [
                     matte[i].max(0.0),
                     matte[i + 1].max(0.0),
                     matte[i + 2].max(0.0),
                 ]
-            } else {
-                [1.0, 1.0, 1.0]
             };
             for c in 0..3 {
                 acc[nearest][c] += src[c] * weight;
             }
-            let flux = luma * weight;
-            centroid[nearest][0] += (idx % w) as f32 * flux;
-            centroid[nearest][1] += (idx / w) as f32 * flux;
-            centroid[nearest][2] += flux;
+            // The tile's own first moments carry straight over: summing them
+            // across a source's tiles gives that source's flux centroid, with
+            // no pixel anywhere able to move it on its own.
+            centroid[nearest][0] += stat.fx;
+            centroid[nearest][1] += stat.fy;
+            centroid[nearest][2] += stat.fsum;
+            // Σ f·x² is accumulated from the tile's mean position rather than
+            // per pixel: the tiles are what span a source, and a tile-grained
+            // extent is all the sampling below can use anyway.
+            if stat.fsum > 0.0 {
+                let (mx, my) = (stat.fx / stat.fsum, stat.fy / stat.fsum);
+                spread[nearest][0] += stat.fsum * mx * mx;
+                spread[nearest][1] += stat.fsum * my * my;
+            }
         }
     }
     anchors
         .iter()
-        .zip(acc.iter().zip(&centroid))
-        .map(|(&(_, idx), (rgb, cen))| {
-            // **Where the light IS, is the centre of its light** (K-354) —
-            // not whichever pixel happened to be brightest this frame.
-            //
-            // Pinning the anchor to its brightest pixel quantises the light's
-            // position to one pixel of a source that may span hundreds, and on
-            // FOOTAGE that pixel wanders: sensor noise and specular sparkle
-            // move it frame to frame, so the whole flare jitters even though
-            // the practical has not moved. The flux-weighted centroid of the
-            // tiles feeding this anchor is steady under exactly that noise,
-            // and for a one-tile point source it is that tile's own pixel, so
-            // nothing about a point light changes.
+        .zip(acc.iter().zip(centroid.iter().zip(&spread)))
+        .map(|(&(_, idx), (rgb, (cen, spr)))| {
+            // **Where the light IS, is the centre of its light** (K-354, and
+            // K-355 made it immovable by any one pixel). Pinning the anchor to
+            // its brightest pixel quantised the light to one pixel of a source
+            // that may span hundreds, and on FOOTAGE that pixel wanders:
+            // sensor noise and specular sparkle move it frame to frame, so the
+            // whole flare jittered even though the practical had not moved.
             let (px, py) = if cen[2] > 0.0 {
                 (cen[0] / cen[2], cen[1] / cen[2])
             } else {
                 ((idx % w) as f32, (idx / w) as f32)
             };
+            // The source's half-extent, as the standard deviation of its flux
+            // about that centre (√(E[x²] − E[x]²)). A point source measures
+            // zero and is sampled once; a practical measures its real width
+            // and is sampled across it (see [`area_samples`]).
+            let half = |m2: f32, mean: f32| {
+                if cen[2] <= 0.0 {
+                    return 0.0;
+                }
+                (m2 / cen[2] - mean * mean).max(0.0).sqrt()
+            };
             FlareLight {
                 pos: [(px + 0.5) / w as f32, (py + 0.5) / h as f32],
                 rgb: [rgb[0] * tint[0], rgb[1] * tint[1], rgb[2] * tint[2]],
+                extent: [half(spr[0], px) / w as f32, half(spr[1], py) / h as f32],
             }
         })
         .collect()
@@ -1683,6 +1886,10 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         roundness: p.roundness,
         aperture_softness: p.aperture_softness,
         ghost_intensity: 1.0,
+        // A point source for the exposure probe whatever the user's Source
+        // size: the gain must be steered by bake-key inputs alone, and an
+        // area source is a frame-time dial.
+        source_size: [0.0, 0.0],
         ghost_softness: 0.05,
         max_ghosts: 32,
         dispersion: 1.0,
@@ -1978,6 +2185,12 @@ pub fn cpu_flare(
     if w == 0 || h == 0 || p.ghost_intensity <= 0.0 {
         return out;
     }
+    // Area sources are sampled across their extent here, exactly as the GPU
+    // does — Manual's list is expanded by the caller that builds the op, and
+    // Matte's inside the detection kernel, so the reference must expand too
+    // or the two stop being twins (K-355). A list of point sources is
+    // returned unchanged, so nothing about a point light moves.
+    let lights = &expand_area_lights(lights, AREA_SAMPLES_MAX)[..];
     let (tier_base, tier_lambda, _) = quality_ladder(p.quality);
     // The Detail dial scales the tier's base AND its wavelength count
     // before the per-pair budget (K-265); both the CPU reference and the
@@ -2426,6 +2639,10 @@ pub fn cpu_combine(
     if p.intensity <= 0.0 || p.mix <= 0.0 {
         return;
     }
+    // The same expansion `cpu_flare` makes: the starburst is stamped per
+    // light, so an area source stamps one per sample at its share of the
+    // flux, which is what the GPU's combine does over its filled slots.
+    let lights = &expand_area_lights(lights, AREA_SAMPLES_MAX)[..];
     let squeeze = p.anamorphic.clamp(0.25, 4.0);
     let fscale = p.scale.clamp(0.05, 20.0);
     let sb_res = STARBURST_RES as usize;

@@ -8450,3 +8450,53 @@ and is folded into the source-region rework
 with recovered flux replace tile-max detection altogether. The earlier plan's "firefly
 suppression by 1/(1+luma) weighting" assumed a per-pixel sum that this detector does not
 have; it is not applicable as written, and Phase D is where it actually belongs.
+
+**K-355 · DECIDED · A flare no longer jumps, because a light is no longer one pixel — and a
+light with an area flares like one.** Two complaints with one root. Every detection tile was
+represented by its single brightest pixel, for the light's position AND its colour, and a
+light was always a point however large the thing emitting it.
+
+**Why flares jumped.** Inside a practical — a lamp with a visible bulb, a window, a
+softbox — *which* pixel is brightest changes frame to frame with sensor noise and specular
+sparkle. The reported position hopped between them, so the whole flare jittered across a
+source that had not moved at all. K-354 centroided the tiles and helped, but the weight was
+still one pixel per tile, so one hot pixel could still drag it. Each tile now carries the
+statistics of its **whole lit area** — Σ gate, Σ colour·gate, and Σ luma·gate with its first
+moments — so a source's position is the flux centroid of every lit pixel in it and its
+colour is their mean. A 40× sparkle moves a 64 px source by under a pixel, which the
+regression test asserts by adding one. Point sources are untouched: a single lit pixel is
+its own centroid and its own mean.
+
+**Why area lights now look right.** The flare of an extended source is the integral of the
+point flares over the emitting area, and at the budget K-353's plan sets out (~2 s a frame)
+that integral is evaluated **directly** rather than approximated. Detection measures each
+source's half-extent as the standard deviation of its flux about its centre; a source wider
+than a fraction of the frame is split into a small centred grid of samples, each carrying an
+equal share of the flux. The sum carries the source's shape: a tube's ghosts come out as
+bars, a window's as rectangles, a bulb's as discs — which a point source structurally cannot
+do. Energy is conserved by construction (the shares sum to one light), so a source only ever
+gets *smoother* as it is split, never brighter, and the GPU test pins exactly that.
+
+The grid is regular, centred and unjittered, so determinism holds (docs/14) and K-353's
+bit-stability still passes. Manual mode gets the same thing as a pair of dials — **Source
+width** and **Source height**, px@comp half-extents (K-260), defaulting to 0, which is the
+point source the effect has always had.
+
+`MAX_LIGHTS` rises 16 → 64 and splits into `MAX_SOURCES` (16, distinct sources detection may
+find) and `MAX_LIGHTS` (64, slots the trace carries), because a source now spends several
+slots when it has extent. Sixteen point sources still cost sixteen slots; a source that
+cannot be split faithfully within the budget is carried as the single point it started as
+rather than as half an area source, which would lose the rest of its flux.
+
+Two consequences worth stating. A source's colour is now the mean of its lit pixels rather
+than its brightest pixel's, so a source with a hot core reads very slightly dimmer than it
+did — that is the firefly suppression working, and it is the more correct answer. And the
+per-tile sums are order-dependent where the old maximum was not: the CPU scans a tile in row
+order and the GPU merges 64 threads' partials in thread order, so the twins agree to the
+matte oracle's perceptual bound rather than op-for-op. Both are internally deterministic,
+which is the property that actually matters.
+
+Not fixed here: ghosts are still *summed* point flares rather than the source's image warped
+by each ghost's own Jacobian, which is the exact treatment
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase D). Sampling converges to it and is what
+the literature uses as the reference; the convolution is the optimisation, not the truth.

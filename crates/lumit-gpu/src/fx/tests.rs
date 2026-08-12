@@ -3144,6 +3144,8 @@ fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
     lumit_core::fx::lens_flare::LensFlareParams {
         // Raster pixels of a 192×108 probe framing (K-260).
         light: [63.4, 32.4],
+        // A point source, as the effect has always defaulted to.
+        source_size: [0.0, 0.0],
         intensity: 1.0,
         lens: 16,
         fstop: 2.8,
@@ -3187,6 +3189,12 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
         .collect();
     LensFlareOp {
         light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h as f32],
+        // The same expansion `fxops` makes for the production path, so the
+        // oracle drives the GPU exactly as the renderer does (K-355).
+        manual_lights: lf::expand_area_lights(&lf::manual_light(p, w, h), lf::AREA_SAMPLES_MAX)
+            .iter()
+            .map(|l| [l.pos[0], l.pos[1], l.rgb[0], l.rgb[1], l.rgb[2]])
+            .collect(),
         intensity: p.intensity,
         lambdas,
         max_ghosts: p.max_ghosts,
@@ -4001,6 +4009,71 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             assert!(live > 100, "too few live rays ({live}) to mean anything");
         }
     }
+}
+
+/// **An area light flares like an area, not like a point** (K-355).
+///
+/// Source size gives the light a real emitting area, and the flare of one is
+/// the sum of the point flares across it. So the picture must genuinely change
+/// — a wider source spreads its ghosts — while the total light it adds stays
+/// put, because every sample carries a share of one light's flux rather than a
+/// light of its own. A source that grew brighter as it grew wider would be the
+/// obvious way to get this wrong, and is what the energy bound below catches.
+#[test]
+fn an_area_source_spreads_its_flare_without_gaining_energy() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    use lumit_core::fx::lens_flare as lf;
+    let (w, h) = (128u32, 72u32);
+    let img = corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    let render = |p: lf::LensFlareParams| {
+        let op = flare_op(&p, w, h);
+        let out = fx.lens_flare(
+            &ctx,
+            &tex,
+            w,
+            h,
+            &op,
+            None,
+            &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+            &flare_probe(&p, w, h),
+        );
+        readback_linear_f32(&ctx, &out, w, h).unwrap()
+    };
+
+    let point = flare_params();
+    let area = lf::LensFlareParams {
+        // Half-extents in raster pixels: a wide, short strip, like a tube.
+        source_size: [18.0, 4.0],
+        ..point
+    };
+    assert!(
+        lf::expand_area_lights(&lf::manual_light(&area, w, h), lf::AREA_SAMPLES_MAX).len() > 1,
+        "the test's own source must actually be an area one"
+    );
+
+    let a = render(point);
+    let b = render(area);
+    assert_ne!(a, b, "an area source must not render as a point does");
+
+    // Energy is conserved: the samples share one light's flux.
+    let energy = |v: &[f32]| -> f32 { v.iter().zip(&img).map(|(x, y)| (x - y).abs()).sum::<f32>() };
+    let (ea, eb) = (energy(&a), energy(&b));
+    assert!(ea > 1e-2, "the point flare must be visible: {ea}");
+    let ratio = eb / ea.max(1e-9);
+    assert!(
+        (0.5..=1.5).contains(&ratio),
+        "an area source must spread its light, not multiply it: {ratio} \
+         ({eb} vs {ea})"
+    );
+
+    // And it is still the same picture every time.
+    assert_eq!(b, render(area), "an area source must be bit-stable too");
 }
 
 /// **The flare is bit-stable across repeated renders, in every shape of

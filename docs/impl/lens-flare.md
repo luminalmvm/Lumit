@@ -387,10 +387,40 @@ eye) — deviation D5, kept from K-256.
 
 Shipped in the K-257 pass as the **Matte** source mode (docs/08 §3.27): the flare
 sources itself from a referenced layer's picture. A compute reduction tiles the matte
-into a 32 px grid (max Rec. 709 luma + argmax per tile; ties to the lowest linear index;
-fixed-order partial merges, so it is deterministic), then a single-thread pass picks the
-top-16 ANCHOR tiles by luma (`MAX_LIGHTS`, 8 → 16 in K-267) with a 2-tile Chebyshev
-non-max suppression, each gated by the soft Threshold. **Area sources (K-267): every
+into a 32 px grid, then a single-thread pass picks the top-16 ANCHOR tiles by luma
+(`MAX_SOURCES`, 8 → 16 in K-267) with a 2-tile Chebyshev non-max suppression, each gated
+by the soft Threshold.
+
+**Each tile carries the statistics of its whole lit area, not one pixel (K-355)** — the
+maximum luma and its argmax (still how anchors are *ranked*, so a small bright source is
+still found), plus `Σ gate`, `Σ colour·gate`, and `Σ luma·gate` with its first moments
+`Σ x·luma·gate` / `Σ y·luma·gate`. This is what stopped flares **jumping** on footage:
+representing a tile by its brightest pixel meant the light's position was decided by a
+lottery that sensor noise and specular sparkle re-ran every frame, so a flare twitched
+across a practical that had not moved. A source's position is now the flux centroid of
+every lit pixel feeding it and its colour their mean, neither of which one pixel can
+move; a 40× sparkle shifts a 64 px source by under a pixel (pinned by
+`lens_flare_centres_an_area_source_on_its_light`). Point sources are untouched — a single
+lit pixel is its own centroid and its own mean.
+
+The per-tile sums are order-dependent where the old maximum was not, so the CPU (row order
+within a tile) and the GPU (64 partials merged in thread order) agree to the matte oracle's
+perceptual bound rather than op-for-op. Each is internally deterministic in fixed order,
+which is the §2.4 property that matters.
+
+**Area sources are sampled, not approximated (K-355).** Each anchor's second moments give
+its half-extent — the standard deviation of its flux about its centre — and a source wider
+than `AREA_MIN_EXTENT` of the frame is split into a centred regular grid of up to
+`AREA_SAMPLES_MAX²` samples, each carrying an equal share of the flux. The flare of an
+extended source *is* the integral of the point flares across it, and the ~2 s/frame budget
+(docs/NEXT-FEATURES.md entry 1) affords evaluating that directly: the sum carries the
+source's shape, so a tube's ghosts are bars and a window's rectangles. Energy is conserved
+by construction — the shares sum to one light — so splitting only smooths. The grid is
+regular and unjittered, so K-353's bit-stability survives. `MAX_LIGHTS` is therefore 64
+slots against `MAX_SOURCES` 16 distinct sources; a source that cannot be split within the
+remaining slots is carried as the single point it started as rather than as a fraction of
+itself. Manual mode gets the same by dial (**Source width** / **Source height**, px@comp
+half-extents, default 0). **Area sources (K-267): every
 gated tile's flux then accumulates onto its nearest anchor** — per tile, `(use source ?
 the tile's brightest pixel's RGB : white) × the gate`, nearest by Chebyshev with ties to
 the lowest anchor index, tiles visited in index order so the float sum matches the CPU

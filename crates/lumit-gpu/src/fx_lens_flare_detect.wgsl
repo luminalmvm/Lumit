@@ -15,9 +15,28 @@
 //                  tile's flux accumulates onto its nearest anchor
 //                  (K-267 area sources); dead slots zeroed.
 
+// What one tile knows about the light inside it — the WGSL twin of
+// lumit_core's `TileStat` (K-355). Through K-354 this was the brightest pixel
+// alone, which is what made flares JUMP on footage: which pixel is brightest
+// inside a practical changes frame to frame with sensor noise, so the light's
+// position hopped about inside a source that had not moved.
 struct Tile {
+    // Still how anchors are ranked and gated, so a small bright source is
+    // still found.
     luma: f32,
     index: u32,
+    // Sum of gates, and of colour x gate: their ratio is the mean colour of
+    // the light in this tile, which one sparkle cannot define.
+    wsum: f32,
+    csum_r: f32,
+    csum_g: f32,
+    csum_b: f32,
+    // Sum of luma x gate and its first moments: the tile's flux and where in
+    // the tile that flux sits.
+    fsum: f32,
+    fx: f32,
+    fy: f32,
+    _pad: f32,
 };
 
 struct Light {
@@ -55,11 +74,36 @@ struct DetectParams {
 @group(0) @binding(3) var<uniform> dp: DetectParams;
 
 const DETECT_TILE: u32 = 32u;
-const MAX_LIGHTS: u32 = 16u;
+// Light slots the trace carries, and the distinct sources detection may find.
+// A source expands into up to AREA_SAMPLES_MAX² slots when it has real extent
+// (K-355) — mirrors lumit_core's MAX_LIGHTS / MAX_SOURCES / AREA_SAMPLES_MAX.
+const MAX_LIGHTS: u32 = 64u;
+const MAX_SOURCES: u32 = 16u;
+const AREA_SAMPLES_MAX: u32 = 5u;
+const AREA_MIN_EXTENT: f32 = 0.004;
 const SUPPRESS_TILES: i32 = 2;
+
+// The soft gate (== lens_flare::threshold_gate). Declared before its first
+// use, which WGSL requires.
+fn gate(luma: f32) -> f32 {
+    if (dp.softness <= 0.0) {
+        return f32(luma >= dp.threshold);
+    }
+    let t = clamp(
+        (luma - (dp.threshold - dp.softness)) / (2.0 * dp.softness),
+        0.0,
+        1.0,
+    );
+    return t * t * (3.0 - 2.0 * t);
+}
 
 var<workgroup> partial_luma: array<f32, 64>;
 var<workgroup> partial_index: array<u32, 64>;
+var<workgroup> partial_w: array<f32, 64>;
+var<workgroup> partial_c: array<vec3<f32>, 64>;
+var<workgroup> partial_f: array<f32, 64>;
+var<workgroup> partial_fx: array<f32, 64>;
+var<workgroup> partial_fy: array<f32, 64>;
 
 @compute @workgroup_size(8, 8)
 fn detect_tiles(
@@ -71,6 +115,11 @@ fn detect_tiles(
     let tile_y0 = wg.y * DETECT_TILE;
     var best_luma = -1.0;
     var best_index = 0u;
+    var wsum = 0.0;
+    var csum = vec3<f32>(0.0);
+    var fsum = 0.0;
+    var fx = 0.0;
+    var fy = 0.0;
     // Each thread strides the tile 8 apart in both axes: 4×4 pixels each.
     // Row-major visit order per thread keeps its own tie-break at the
     // lowest linear index; the merge below keeps the global one.
@@ -91,14 +140,36 @@ fn detect_tiles(
                 best_luma = luma;
                 best_index = index;
             }
+            // Every lit pixel contributes, not just the brightest (K-355).
+            let g = gate(luma);
+            if (g > 0.0) {
+                let f = luma * g;
+                wsum = wsum + g;
+                csum = csum + max(c.rgb, vec3<f32>(0.0)) * g;
+                fsum = fsum + f;
+                fx = fx + f32(x) * f;
+                fy = fy + f32(y) * f;
+            }
         }
     }
     partial_luma[li] = best_luma;
     partial_index[li] = best_index;
+    partial_w[li] = wsum;
+    partial_c[li] = csum;
+    partial_f[li] = fsum;
+    partial_fx[li] = fx;
+    partial_fy[li] = fy;
     workgroupBarrier();
     if (li == 0u) {
         var luma = -1.0;
         var index = 0u;
+        var w_all = 0.0;
+        var c_all = vec3<f32>(0.0);
+        var f_all = 0.0;
+        var fx_all = 0.0;
+        var fy_all = 0.0;
+        // Thread order, so the sums are the same numbers in the same order
+        // every run — the determinism docs/14 requires.
         for (var i = 0u; i < 64u; i = i + 1u) {
             let pl = partial_luma[i];
             let pi = partial_index[i];
@@ -106,25 +177,25 @@ fn detect_tiles(
                 luma = pl;
                 index = pi;
             }
+            w_all = w_all + partial_w[i];
+            c_all = c_all + partial_c[i];
+            f_all = f_all + partial_f[i];
+            fx_all = fx_all + partial_fx[i];
+            fy_all = fy_all + partial_fy[i];
         }
         var t: Tile;
         t.luma = luma;
         t.index = index;
+        t.wsum = w_all;
+        t.csum_r = c_all.r;
+        t.csum_g = c_all.g;
+        t.csum_b = c_all.b;
+        t.fsum = f_all;
+        t.fx = fx_all;
+        t.fy = fy_all;
+        t._pad = 0.0;
         tiles[wg.y * dp.tiles_x + wg.x] = t;
     }
-}
-
-// The soft gate (== lens_flare::threshold_gate).
-fn gate(luma: f32) -> f32 {
-    if (dp.softness <= 0.0) {
-        return f32(luma >= dp.threshold);
-    }
-    let t = clamp(
-        (luma - (dp.threshold - dp.softness)) / (2.0 * dp.softness),
-        0.0,
-        1.0,
-    );
-    return t * t * (3.0 - 2.0 * t);
 }
 
 @compute @workgroup_size(1)
@@ -146,14 +217,16 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
     var acc_r: array<f32, 16>;
     var acc_g: array<f32, 16>;
     var acc_b: array<f32, 16>;
-    // The flux-weighted centroid of each anchor's contributing tiles, as
-    // (sum w*x, sum w*y, sum w) — see where it is applied at the bottom.
+    // The flux centroid of each source, as (sum f*x, sum f*y, sum f), and the
+    // second moments that give it its EXTENT — see the bottom of this pass.
     var cen_x: array<f32, 16>;
     var cen_y: array<f32, 16>;
     var cen_w: array<f32, 16>;
+    var m2_x: array<f32, 16>;
+    var m2_y: array<f32, 16>;
     var picked_count = 0u;
     // Anchor picks: top-K by luma with Chebyshev suppression.
-    for (var k = 0u; k < MAX_LIGHTS; k = k + 1u) {
+    for (var k = 0u; k < MAX_SOURCES; k = k + 1u) {
         var best_tile = 0u;
         var best_luma = -1.0;
         for (var t = 0u; t < tile_count; t = t + 1u) {
@@ -191,6 +264,8 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             cen_x[picked_count] = 0.0;
             cen_y[picked_count] = 0.0;
             cen_w[picked_count] = 0.0;
+            m2_x[picked_count] = 0.0;
+            m2_y[picked_count] = 0.0;
             picked_count = picked_count + 1u;
         }
     }
@@ -220,50 +295,120 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
                     nearest = p;
                 }
             }
-            let px = tl.index % dp.w;
-            let py = tl.index / dp.w;
-            let c = textureLoad(matte_tex, vec2<i32>(i32(px), i32(py)), 0);
+            // The tile's MEAN colour over its lit pixels, not its brightest
+            // pixel's (K-355): one sparkle among a thousand lit pixels now
+            // shifts the colour by a thousandth instead of defining it.
             var src = vec3<f32>(1.0, 1.0, 1.0);
             if (dp.use_source_colour == 1u) {
-                src = max(c.rgb, vec3<f32>(0.0));
+                if (tl.wsum > 0.0) {
+                    src = vec3<f32>(tl.csum_r, tl.csum_g, tl.csum_b) / tl.wsum;
+                } else {
+                    let px = tl.index % dp.w;
+                    let py = tl.index / dp.w;
+                    let c = textureLoad(matte_tex, vec2<i32>(i32(px), i32(py)), 0);
+                    src = max(c.rgb, vec3<f32>(0.0));
+                }
             }
             acc_r[nearest] = acc_r[nearest] + src.r * weight;
             acc_g[nearest] = acc_g[nearest] + src.g * weight;
             acc_b[nearest] = acc_b[nearest] + src.b * weight;
-            let flux = tl.luma * weight;
-            cen_x[nearest] = cen_x[nearest] + f32(px) * flux;
-            cen_y[nearest] = cen_y[nearest] + f32(py) * flux;
-            cen_w[nearest] = cen_w[nearest] + flux;
+            // The tile's own first moments carry straight over, so no pixel
+            // anywhere can move the source's position on its own.
+            cen_x[nearest] = cen_x[nearest] + tl.fx;
+            cen_y[nearest] = cen_y[nearest] + tl.fy;
+            cen_w[nearest] = cen_w[nearest] + tl.fsum;
+            if (tl.fsum > 0.0) {
+                let mx = tl.fx / tl.fsum;
+                let my = tl.fy / tl.fsum;
+                m2_x[nearest] = m2_x[nearest] + tl.fsum * mx * mx;
+                m2_y[nearest] = m2_y[nearest] + tl.fsum * my * my;
+            }
         }
     }
+    // Zero every slot first: the trace dispatches all MAX_LIGHTS of them and
+    // a dead slot must carry no weight.
     for (var k = 0u; k < MAX_LIGHTS; k = k + 1u) {
-        var out: Light;
-        out.pos_x = 0.0;
-        out.pos_y = 0.0;
-        out.r = 0.0;
-        out.g = 0.0;
-        out.b = 0.0;
-        out._pad0 = 0.0;
-        out._pad1 = 0.0;
-        out._pad2 = 0.0;
-        if (k < picked_count) {
-            // Where the light IS, is the centre of its light (K-354) — not
-            // whichever pixel happened to be brightest this frame. On footage
-            // that pixel wanders with sensor noise and specular sparkle, and
-            // the whole flare jitters with it. A one-tile point source has
-            // only its own pixel to average, so point lights are unchanged.
-            var px = f32(anchor_px[k]);
-            var py = f32(anchor_py[k]);
-            if (cen_w[k] > 0.0) {
-                px = cen_x[k] / cen_w[k];
-                py = cen_y[k] / cen_w[k];
-            }
-            out.pos_x = (px + 0.5) / f32(dp.w);
-            out.pos_y = (py + 0.5) / f32(dp.h);
-            out.r = acc_r[k] * dp.tint_r;
-            out.g = acc_g[k] * dp.tint_g;
-            out.b = acc_b[k] * dp.tint_b;
+        var dead: Light;
+        dead.pos_x = 0.0;
+        dead.pos_y = 0.0;
+        dead.r = 0.0;
+        dead.g = 0.0;
+        dead.b = 0.0;
+        dead._pad0 = 0.0;
+        dead._pad1 = 0.0;
+        dead._pad2 = 0.0;
+        lights[k] = dead;
+    }
+
+    // Each source becomes one light if it is a point, or a GRID of lights
+    // across its emitting area if it is not (K-355). The flare of an area
+    // source is the integral of the point flares over that area, and at this
+    // budget it is evaluated directly rather than approximated: every sample
+    // carries an equal share of the flux, so a source only gets smoother as
+    // it is split, never brighter. This is what gives a bar-shaped practical
+    // bar-shaped ghosts instead of a point's round ones.
+    var slot = 0u;
+    for (var k = 0u; k < picked_count; k = k + 1u) {
+        // Where the light IS, is the centre of its light (K-354, K-355) — not
+        // whichever pixel happened to be brightest this frame. On footage
+        // that pixel wanders with sensor noise and specular sparkle, and the
+        // whole flare jittered with it.
+        var px = f32(anchor_px[k]);
+        var py = f32(anchor_py[k]);
+        var ex = 0.0;
+        var ey = 0.0;
+        if (cen_w[k] > 0.0) {
+            px = cen_x[k] / cen_w[k];
+            py = cen_y[k] / cen_w[k];
+            // Half-extent as the standard deviation of the flux about that
+            // centre: zero for a point, the real width for a practical.
+            ex = sqrt(max(m2_x[k] / cen_w[k] - px * px, 0.0)) / f32(dp.w);
+            ey = sqrt(max(m2_y[k] / cen_w[k] - py * py, 0.0)) / f32(dp.h);
         }
-        lights[k] = out;
+        let cx = (px + 0.5) / f32(dp.w);
+        let cy = (py + 0.5) / f32(dp.h);
+
+        var nx = 1u;
+        var ny = 1u;
+        if (ex >= AREA_MIN_EXTENT) {
+            nx = clamp(u32(round(ex / AREA_MIN_EXTENT)), 1u, AREA_SAMPLES_MAX);
+        }
+        if (ey >= AREA_MIN_EXTENT) {
+            ny = clamp(u32(round(ey / AREA_MIN_EXTENT)), 1u, AREA_SAMPLES_MAX);
+        }
+        // No room to split this source faithfully: carry it as a single point
+        // rather than half an area source, which would lose the rest of its
+        // flux.
+        if (slot + nx * ny > MAX_LIGHTS) {
+            nx = 1u;
+            ny = 1u;
+            if (slot >= MAX_LIGHTS) {
+                break;
+            }
+        }
+        let share = 1.0 / f32(nx * ny);
+        for (var iy = 0u; iy < ny; iy = iy + 1u) {
+            for (var ix = 0u; ix < nx; ix = ix + 1u) {
+                var sx = cx;
+                var sy = cy;
+                if (nx > 1u) {
+                    sx = cx + (f32(ix) / f32(nx - 1u) * 2.0 - 1.0) * ex;
+                }
+                if (ny > 1u) {
+                    sy = cy + (f32(iy) / f32(ny - 1u) * 2.0 - 1.0) * ey;
+                }
+                var out: Light;
+                out.pos_x = sx;
+                out.pos_y = sy;
+                out.r = acc_r[k] * dp.tint_r * share;
+                out.g = acc_g[k] * dp.tint_g * share;
+                out.b = acc_b[k] * dp.tint_b * share;
+                out._pad0 = 0.0;
+                out._pad1 = 0.0;
+                out._pad2 = 0.0;
+                lights[slot] = out;
+                slot = slot + 1u;
+            }
+        }
     }
 }

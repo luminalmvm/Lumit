@@ -43,7 +43,15 @@ pub type FlareBake = Arc<dyn Fn() -> FlareBakeData + Send + Sync>;
 pub struct LensFlareOp {
     /// Manual light position as a fraction of the raster (x right, y down)
     /// — the caller divides its raster-pixel parameter by the raster (K-260).
+    /// Still the position the frame-grid probe reasons about, and the centre
+    /// of [`Self::manual_lights`].
     pub light_frac: [f32; 2],
+    /// Manual mode's light list: the position above if the source is a point,
+    /// or the samples across its emitting area if the Source size dial has
+    /// given it one (K-355). Each entry is `[x, y, r, g, b]` with the share of
+    /// the flux already folded into the colour, so the list sums to one light.
+    /// Empty falls back to a single white light at [`Self::light_frac`].
+    pub manual_lights: Vec<[f32; 5]>,
     /// Master gain; 0 short-circuits to the identity.
     pub intensity: f32,
     /// Traced wavelengths with their RGB weights, already multiplied by the
@@ -378,7 +386,10 @@ pub const BLEND_COUNT: u32 = 13;
 
 /// Most flare sources a frame renders — must equal
 /// `lumit_core::fx::lens_flare::MAX_LIGHTS` (pinned by test).
-pub const MAX_LIGHTS: u32 = 16;
+pub const MAX_LIGHTS: u32 = 64;
+/// Distinct sources detection may find — `lumit_core`'s `MAX_SOURCES`. Each
+/// may expand into several light slots when it is an area source (K-355).
+pub const MAX_SOURCES: u32 = 16;
 
 /// Detection tile side — must equal `lens_flare::DETECT_TILE` (pinned by
 /// the same test).
@@ -1384,25 +1395,43 @@ impl FxEngine {
         // zero weight and cost no fill); Manual and the prepared Lights mode
         // run one.
         let matte_mode = op.source == 1;
-        let light_count = if matte_mode { MAX_LIGHTS } else { 1 };
-
-        // The frame's light list. Manual fills slot 0 from the CPU; Matte
-        // mode overwrites the buffer with the detection kernels below.
+        // The frame's light list. Manual fills its slots from the CPU — one
+        // for a point source, several for an area one (K-355); Matte mode
+        // overwrites the buffer with the detection kernels below and may fill
+        // any of them, so it always dispatches the lot.
         let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_LIGHTS as usize];
+        // Matte mode leaves every slot zero here on purpose: the detection
+        // kernels below fill them, and if no matte is bound they never run —
+        // which is what makes an unset matte the labelled no-op rather than a
+        // manual light nobody asked for.
+        let mut manual_count = 1;
         if !matte_mode {
-            light_rows[0] = GpuLight {
-                row: [
-                    op.light_frac[0],
-                    op.light_frac[1],
-                    op.light_tint[0],
-                    op.light_tint[1],
-                    op.light_tint[2],
-                    0.0,
-                    0.0,
-                    0.0,
-                ],
-            };
+            if op.manual_lights.is_empty() {
+                light_rows[0] = GpuLight {
+                    row: [
+                        op.light_frac[0],
+                        op.light_frac[1],
+                        op.light_tint[0],
+                        op.light_tint[1],
+                        op.light_tint[2],
+                        0.0,
+                        0.0,
+                        0.0,
+                    ],
+                };
+            } else {
+                let n = op.manual_lights.len().min(MAX_LIGHTS as usize);
+                for (slot, light) in op.manual_lights.iter().take(n).enumerate() {
+                    light_rows[slot] = GpuLight {
+                        row: [
+                            light[0], light[1], light[2], light[3], light[4], 0.0, 0.0, 0.0,
+                        ],
+                    };
+                }
+                manual_count = n as u32;
+            }
         }
+        let light_count = if matte_mode { MAX_LIGHTS } else { manual_count };
         let lights_buf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1438,7 +1467,10 @@ impl FxEngine {
                 let tiles_y = mh.div_ceil(DETECT_TILE);
                 let tiles_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("fx-lens-flare-tiles"),
-                    size: u64::from(tiles_x * tiles_y) * 8,
+                    // Ten words per tile since K-355: the brightest pixel's
+                    // luma and index, then the gated coverage, colour and
+                    // flux moments that describe the whole lit area of it.
+                    size: u64::from(tiles_x * tiles_y) * 40,
                     usage: wgpu::BufferUsages::STORAGE,
                     mapped_at_creation: false,
                 });
