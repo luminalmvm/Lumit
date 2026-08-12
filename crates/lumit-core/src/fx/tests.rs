@@ -5760,90 +5760,111 @@ fn lens_flare_focus_shift_follows_the_thin_lens() {
     assert!(focus_shift_mm(0.2, 50.0) <= 50.0);
 }
 
-// The streak guard (K-262), tested where the bug lived. K-261 inflated ANY
-// sub-pixel quad to 4 px² by scaling about its centroid — which for a
-// fold-straddling sliver (near-zero area, large extent) multiplied its
-// length by up to 100×, drawing the "random lines across the flare" the
-// owner reported. Both oracles agreed with each other while drawing it, so
-// parity could never have caught this; the guard itself is the pin.
+// The splat guard (K-366), tested where the old quad bugs lived. Quads
+// connected rays across caustic folds, and the sliver/inflate rescue
+// machinery (K-261..K-264) existed to survive that; splats never connect
+// rays, so what needs pinning now is the deposit itself: flux is conserved
+// away from the density cap, a footprint never drops below the anti-alias
+// floor, and a fold (near-parallel axes) deposits a finite bright line
+// rather than nothing or a spike.
 #[test]
-fn lens_flare_quad_guard_drops_slivers_and_keeps_ghosts() {
+fn lens_flare_splats_conserve_flux_and_survive_folds() {
     use crate::fx::lens_flare::*;
-    let quad = |pts: [[f32; 2]; 4]| -> [FlareVertex; 4] {
-        [
-            FlareVertex {
-                pos: pts[0],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[1],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[2],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[3],
-                rgb: [1.0; 3],
-            },
-        ]
-    };
-    let longest = |v: &[FlareVertex; 4]| {
-        (0..4)
-            .map(|i| {
-                let (a, b) = (v[i].pos, v[(i + 1) % 4].pos);
-                (a[0] - b[0]).hypot(a[1] - b[1])
-            })
-            .fold(0.0f32, f32::max)
-    };
+    let sum = |buf: &[f32]| -> f32 { buf.iter().sum() };
+    let (w, h) = (64u32, 64u32);
 
-    // A big well-formed cell: drawn untouched.
-    let mut big = quad([[0.0, 0.0], [50.0, 0.0], [50.0, 50.0], [0.0, 50.0]]);
-    let before = big;
-    assert!(inflate_quad(&mut big));
-    assert_eq!(big[2].pos, before[2].pos);
-    assert_eq!(big[0].rgb, before[0].rgb);
-
-    // A compact sub-sample cell (well under the 1 px² floor): inflated,
-    // flux conserved, still compact.
-    let mut tiny = quad([[10.0, 10.0], [10.4, 10.0], [10.4, 10.4], [10.0, 10.4]]);
-    assert!(inflate_quad(&mut tiny));
-    assert!(
-        longest(&tiny) <= MAX_INFLATE_EDGE_PX * 3.0,
-        "{}",
-        longest(&tiny)
+    // An ordinary footprint: deposited flux equals the flux put in (the
+    // tent integrates to the parallelogram's area, which the divisor is).
+    let mut out = vec![0.0_f32; (w * h * 3) as usize];
+    splat_ray(
+        &mut out,
+        w,
+        h,
+        [32.0, 32.0],
+        [4.0, 0.0],
+        [0.0, 3.0],
+        [7.0, 5.0, 3.0],
+        16.0,
     );
-    assert!(tiny[0].rgb[0] < 1.0, "inflation must dim to conserve flux");
-
-    // THE K-262 BUG: a sub-pixel SLIVER — 40 px long, hair thin. K-261
-    // stretched this to ~400 px; it must be dropped, never inflated.
-    let mut sliver = quad([[10.0, 10.0], [50.0, 10.02], [50.0, 10.03], [10.0, 10.01]]);
+    let total = sum(&out);
     assert!(
-        !inflate_quad(&mut sliver),
-        "a fold sliver must be dropped, never inflated"
+        (total - 15.0).abs() < 0.15,
+        "an uncapped splat deposits its whole flux: {total} vs 15"
     );
 
-    // THE K-264 REVERSAL: a long thin quad ABOVE the area floor (150 px²)
-    // is a fold-straddling cell and K-262 dropped it — which cut the
-    // triangular notches out of every caustic rim the owner reported at
-    // Ultra. With the vertex-smoothed density its brightness comes from its
-    // neighbourhood, so it DRAWS, untouched.
-    let mut fold = quad([[0.0, 0.0], [300.0, 0.0], [300.0, 0.5], [0.0, 0.5]]);
-    let before_fold = fold;
-    assert!(
-        inflate_quad(&mut fold),
-        "a drawable-area fold cell draws since K-264 — dropping it notches the rims"
+    // A caustic fold: axes long but nearly parallel. The deposit must be
+    // finite (the density cap) and non-zero (the anti-alias floor) — the
+    // two halves of what the quad machinery got wrong in turn.
+    let mut fold = vec![0.0_f32; (w * h * 3) as usize];
+    splat_ray(
+        &mut fold,
+        w,
+        h,
+        [32.0, 32.0],
+        [10.0, 0.0],
+        [10.0, 1e-4],
+        [1.0, 1.0, 1.0],
+        16.0,
     );
-    assert_eq!(fold[1].pos, before_fold[1].pos, "and it draws unmodified");
+    let fold_total = sum(&fold);
+    assert!(fold_total > 0.0, "a fold still deposits");
+    let peak = fold.iter().fold(0.0_f32, |a, &b| a.max(b));
+    assert!(
+        peak <= 1.0 / (MIN_AREA_FRAC * 16.0) + 1.0,
+        "the density cap bounds a fold's brightness: peak {peak}"
+    );
 
-    // An elongated cell that is short is a caustic rim cell: kept, always.
-    let mut rim = quad([[0.0, 0.0], [12.0, 0.0], [12.0, 1.5], [0.0, 1.5]]);
-    assert!(inflate_quad(&mut rim), "rim cells must survive");
+    // A sub-pixel footprint deposits over at least a pixel, not nothing.
+    let mut tiny = vec![0.0_f32; (w * h * 3) as usize];
+    splat_ray(
+        &mut tiny,
+        w,
+        h,
+        [32.0, 32.0],
+        [0.05, 0.0],
+        [0.0, 0.05],
+        [1.0, 1.0, 1.0],
+        16.0,
+    );
+    assert!(
+        sum(&tiny) > 0.0,
+        "the anti-alias floor keeps sub-pixel rays"
+    );
+
+    // Off-raster splats are calmly clipped.
+    let mut off = vec![0.0_f32; (w * h * 3) as usize];
+    splat_ray(
+        &mut off,
+        w,
+        h,
+        [-100.0, -100.0],
+        [4.0, 0.0],
+        [0.0, 4.0],
+        [1.0, 1.0, 1.0],
+        16.0,
+    );
+    assert_eq!(sum(&off), 0.0);
+
+    // ray_axes: central differences where neighbours live, the floor when
+    // none do, and a dead axis borrowed from the live one at right angles.
+    let side = 3usize;
+    let mut corners: Vec<Option<lens_flare::Corner>> = vec![None; side * side];
+    corners[4] = Some(([10.0, 10.0], 1.0, [1.0; 3]));
+    let (a1, a2) = ray_axes(&corners, side, 1, 1);
+    assert_eq!(
+        (a1, a2),
+        ([MIN_SPLAT_AXIS_PX, 0.0], [0.0, MIN_SPLAT_AXIS_PX])
+    );
+    corners[3] = Some(([6.0, 10.0], 1.0, [1.0; 3]));
+    corners[5] = Some(([14.0, 10.0], 1.0, [1.0; 3]));
+    let (a1, a2) = ray_axes(&corners, side, 1, 1);
+    assert_eq!(a1, [2.0, 0.0], "central difference halved twice: 8/2/2");
+    assert!(
+        (a2[0] - 0.0).abs() < 1e-6 && (a2[1].abs() - MIN_SPLAT_AXIS_PX).abs() < 1e-6,
+        "the dead axis sits at right angles to the live one: {a2:?}"
+    );
 }
 
-// Adaptive grid (K-262): the budget follows the ghost's image size, and a
-// pair's grid is stable and sane whatever its spread.
 #[test]
 fn lens_flare_grid_budget_follows_ghost_size() {
     use crate::fx::lens_flare::*;

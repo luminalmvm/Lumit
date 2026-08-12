@@ -8865,3 +8865,58 @@ Choices worth recording:
 The blade parity the starburst has always had — an even blade count gives N spikes, an
 odd one 2N — is now pinned by a test on slice 0, because the vignette multiply is exactly
 the kind of change that can quietly round the iris off and leave a plausible-looking glow.
+
+---
+
+## K-366 — The ghost grid is splatted per ray, not rasterised as quads
+
+**DECIDED** (2026-08-12). Entry B1 of the flare programme.
+
+The trace fires a grid of rays through the pupil and every one of them lands somewhere on
+the sensor. Since K-261 the renderer joined neighbouring landings into quads and drew
+those quads, brightness being the launch cell's area over the landed one. That is a fair
+model of a smooth map and a wrong one at a **caustic fold**, which is precisely where a
+flare's rims and arcs live: at a fold the map folds back on itself, so a quad joining four
+rays across it is a sliver spanning geometry that is not one patch at all. Every rescue
+K-261..K-264 added — sub-pixel inflation about the centroid, sliver parking, the unlit
+corner pull-in, the vertex-smoothed density — and K-353's pixel widening with its analytic
+four-sample coverage exist to survive that one wrong join. Each fixed the artefact in front
+of it and moved the next one somewhere else: notched rims, fan lines out of the bore,
+Ultra faceting, dropped fold flux.
+
+A ray now deposits on its own. Its footprint is the image of its pupil cell under the
+ghost's map, read as a 2×2 Jacobian by central differences over the neighbouring rays'
+landings (`ray_axes`; one-sided at the grid edge or beside a dead ray). It spreads its
+flux over that parallelogram as a separable tent `(1−|u|)(1−|v|)`, which integrates to the
+parallelogram's area — so flux is conserved exactly, and a fold is simply several splats
+landing on top of one another, which is the integral the effect wanted all along. Nothing
+is joined to anything, so there is no sliver to park, nothing to inflate, no corner to
+pull in and no coverage to compute; all of that machinery is deleted rather than patched
+again.
+
+Choices worth recording:
+
+- **The density cap is kept, unchanged.** At a fold the density `cell ÷ landed` genuinely
+  diverges; the integral over a pixel does not, but a *discrete* ray concentrates the
+  divergence into a few pixels. `MIN_AREA_FRAC` = 3e-3 caps it at ≈333×, which is K-262's
+  number and K-262's reason.
+- **`MIN_SPLAT_AXIS_PX` = 0.75 replaces `MIN_QUAD_PX`'s inflation.** It is an anti-alias
+  floor, not a rescue: a footprint that collapses below a pixel still deposits over
+  roughly one, so a caustic line is a line rather than a row of dropped sub-pixel points.
+  The fold case — both axes long but nearly parallel — pushes the second axis across the
+  first up to the same floor, which is what stops an edge-on fold's flux vanishing into a
+  zero-area parallelogram.
+- **The GPU does the division, the raster does the tent.** `build_splats` (one thread per
+  ray, replacing `quad_area` and `build_verts`) writes centre, half-axes and the peak;
+  the draw is one instanced six-vertex quad per ray whose fragment evaluates the tent and
+  adds. A tent is continuous, so the single-sampled target of K-353 needs no coverage
+  logic at all and the pipeline keeps its bit-stability by construction — fixed instance
+  order, additive blend, one sample.
+- **Scratch is now per ray, not per quad.** 48 bytes a splat against 84 a cell (20-byte
+  corners plus the area word), and `side²` of them where there were `(side−1)²` — a wash
+  in memory, one compute pass fewer, and the `SCRATCH_BYTE_BUDGET` bound is unchanged.
+- **Pictures move, so the effect's version goes 6 → 7.** Folds and rims are where the
+  difference is; smooth ghost bodies render as they did.
+
+The CPU reference and the WGSL are twins op for op, as they have been since K-261, and the
+two constants above are spelled in both and pinned by test.

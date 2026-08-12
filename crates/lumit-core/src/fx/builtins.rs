@@ -3232,7 +3232,9 @@ pub const BUILTINS: &[EffectSchema] = &[
         enabled_when: &[],
         match_name: "lens_flare",
         label: "Lens flare",
-        version: 6,
+        // 7 since K-366: per-ray splatting replaced quad rasterisation, so
+        // the picture a saved project renders moves (folds and rims most).
+        version: 7,
         category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Heavy,

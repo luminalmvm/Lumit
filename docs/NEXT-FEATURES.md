@@ -166,6 +166,12 @@ bundle folds.
 This retires the sliver/fold machinery K-262 through K-353 kept patching (`MIN_QUAD_PX`,
 sliver drops, K-353's corner widening) — there are no quads to fold.
 
+**Status:** the splatting half is **done** (K-366, CPU and GPU): quads are gone, each ray
+deposits over its own Jacobian footprint as a separable tent, and the sliver / inflate /
+pull-in / widening machinery is deleted. What remains of this entry is the **grid** half —
+the 16² prepass and handing resolution out by on-sensor area, raising the ceiling toward
+256². The per-pair budget of K-262/K-267 is the interim version of that.
+
 ### D. Per-ghost warped convolution — the *optimisation* of K-355's area sampling
 
 **The wrong model first, so it is not re-proposed:** flare from an extended source is

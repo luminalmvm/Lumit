@@ -2724,171 +2724,168 @@ pub fn screen_transform(w: u32) -> f32 {
 // the K-114/K-256 pattern).
 // ---------------------------------------------------------------------------
 
-/// One rasterisation vertex (matches the WGSL vertex buffer): raster
-/// position, RGB-weighted intensity.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct FlareVertex {
-    pub pos: [f32; 2],
-    pub rgb: [f32; 3],
-}
-
-/// Minimum screen area a drawn quad may have, px² (K-261, retuned K-264).
-/// A caustic-folded quad shrinks below a pixel, and a centre-sampled
-/// rasteriser drops triangles that cover no pixel centre — deleting exactly
-/// the flux that makes a flare's bright rims and fold lines. Quads below
-/// this inflate about their centroid to this area with their colour scaled
-/// by (true / inflated) area, so the deposited flux is conserved.
-///
-/// One px², down from K-261's four (K-264): the floor was sized for a
-/// raster that sampled once per pixel, and at four it also caught the
-/// MERELY SMALL — a defocused wash ghost rendered small (a Draft preview, a
-/// zoomed-out Viewer) has every cell at a couple of px², and inflating them
-/// all tiled the ghost with overlapping diamonds, a mosaic. With the 4×
-/// multisampled raster (and its coverage-sampling CPU twin) a one-px² quad
-/// reliably covers samples, so only truly sub-sample cells need rescuing.
-pub const MIN_QUAD_PX: f32 = 1.0;
-/// Longest screen edge a quad may have and still be *inflated* (K-262). A
-/// cell whose ray corners straddle a caustic fold or a housing clip lands
-/// as a SLIVER: near-zero area but large extent. Scaling such a quad up to
-/// [`MIN_QUAD_PX`] stretches it along its long axis — a 20 px sliver became
-/// a 2000 px line, which is the "random lines across the flare" artefact.
-/// Slivers are dropped instead: their flux is genuinely smeared to nothing,
-/// and the neighbouring well-formed cells carry the ghost's light.
-pub const MAX_INFLATE_EDGE_PX: f32 = 6.0;
-/// Floor on a landed quad's area as a fraction of its launch cell — which
-/// is really a **cap on caustic density** (K-262). At a fold the density
-/// `cell ÷ landed` genuinely diverges, but the *integral* over a pixel is
-/// finite: our discrete cell concentrates that whole divergence into a few
-/// pixels, so one cell reaching 10 000× drew a hard chromatic line. Capping
-/// at 1/3e-3 ≈ 333× keeps the bright rims and arcs and removes the spikes.
+/// Floor on a ray's landed footprint as a fraction of its launch cell —
+/// which is really a **cap on caustic density** (K-262, kept by K-366). At
+/// a fold the density `cell ÷ landed` genuinely diverges, but the *integral*
+/// over a pixel is finite: a discrete ray concentrates that divergence into
+/// a few pixels, so an uncapped splat drew a hard chromatic line. Capping at
+/// 1/3e-3 ≈ 333× keeps the bright rims and arcs and removes the spikes.
 pub const MIN_AREA_FRAC: f32 = 3e-3;
 
-/// Flux-conserving screen-space floor on a quad's size (K-261, refined by
-/// K-262 and K-264; mirrored by the WGSL build). Returns false when the
-/// quad must be dropped.
-///
-/// - Area at or above [`MIN_QUAD_PX`]: drawn unchanged — including long
-///   thin fold cells, which K-262 dropped. The drop existed because a
-///   cell-flat density at the 333× cap painted such a cell as a hard
-///   chromatic line; with the K-264 vertex-smoothed density its brightness
-///   is its neighbourhood's, and dropping it is what cut the triangular
-///   notches out of every caustic rim the owner reported at Ultra.
-/// - Below it and COMPACT (longest edge within [`MAX_INFLATE_EDGE_PX`]):
-///   inflated about its centroid to the floor, colour scaled by the true ÷
-///   inflated area ratio — flux exact, and the rasteriser can no longer
-///   drop it for covering no sample.
-/// - Below it and STRETCHED (a sub-sample sliver): dropped. Inflating one
-///   multiplies its length — the K-261 "random lines" artefact — and
-///   un-inflated it covers nothing; its neighbours carry the rim.
-pub(crate) fn inflate_quad(v: &mut [FlareVertex; 4]) -> bool {
-    let e = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| {
-        (a[0] - b[0]) * (c[1] - a[1]) - (a[1] - b[1]) * (c[0] - a[0])
-    };
-    let a0 = e(v[0].pos, v[1].pos, v[2].pos);
-    let a1 = e(v[0].pos, v[2].pos, v[3].pos);
-    let area_px = ((a0 + a1) / 2.0).abs();
-    if area_px >= MIN_QUAD_PX {
-        return true;
-    }
-    let mut longest = 0.0_f32;
-    for i in 0..4 {
-        let a = v[i].pos;
-        let b = v[(i + 1) % 4].pos;
-        longest = longest.max((a[0] - b[0]).hypot(a[1] - b[1]));
-    }
-    if longest > MAX_INFLATE_EDGE_PX {
-        return false;
-    }
-    let eps = MIN_QUAD_PX * 1e-4;
-    let s = (MIN_QUAD_PX / area_px.max(eps)).sqrt();
-    let cx = (v[0].pos[0] + v[1].pos[0] + v[2].pos[0] + v[3].pos[0]) / 4.0;
-    let cy = (v[0].pos[1] + v[1].pos[1] + v[2].pos[1] + v[3].pos[1]) / 4.0;
-    let scale = area_px.max(eps) / MIN_QUAD_PX;
-    for c in v.iter_mut() {
-        c.pos[0] = cx + (c.pos[0] - cx) * s;
-        c.pos[1] = cy + (c.pos[1] - cy) * s;
-        for ch in &mut c.rgb {
-            *ch *= scale;
+/// Shortest half-axis a splat's footprint may have, px (K-366): the
+/// anti-alias floor. A ray whose local footprint collapses below a pixel
+/// still deposits over roughly one, so a caustic line is a line and not a
+/// row of dropped sub-pixel points — the job [`MIN_QUAD_PX`]'s inflation
+/// used to do, without the sliver cases that came with connecting rays.
+pub const MIN_SPLAT_AXIS_PX: f32 = 0.75;
+
+/// One traced corner: landing px, geometric weight (housing feather × iris
+/// mask) and band-integrated rgb (K-364); the splat path's working type.
+pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
+
+/// A ray's local footprint axes (K-366): the image of one pupil-grid step
+/// under the ghost map, by central differences over the neighbouring rays'
+/// landings — one-sided at the grid edge or beside a dead ray, and the
+/// anti-alias floor when no neighbour survives at all. Half-steps, so the
+/// parallelogram `centre ± a1 ± a2` tiles the grid exactly once.
+pub(crate) fn ray_axes(
+    corners: &[Option<Corner>],
+    side: usize,
+    i: usize,
+    j: usize,
+) -> ([f32; 2], [f32; 2]) {
+    let at = |x: usize, y: usize| corners[y * side + x].map(|(p, _, _)| p);
+    let axis = |lo: Option<[f32; 2]>, here: [f32; 2], hi: Option<[f32; 2]>| -> Option<[f32; 2]> {
+        match (lo, hi) {
+            // Central difference over two grid steps = one step per side.
+            (Some(a), Some(b)) => Some([(b[0] - a[0]) / 2.0, (b[1] - a[1]) / 2.0]),
+            (None, Some(b)) => Some([b[0] - here[0], b[1] - here[1]]),
+            (Some(a), None) => Some([here[0] - a[0], here[1] - a[1]]),
+            (None, None) => None,
         }
+    };
+    let here = at(i, j).unwrap_or([0.0, 0.0]);
+    let ax = axis(
+        (i > 0).then(|| at(i - 1, j)).flatten(),
+        here,
+        (i + 1 < side).then(|| at(i + 1, j)).flatten(),
+    );
+    let ay = axis(
+        (j > 0).then(|| at(i, j - 1)).flatten(),
+        here,
+        (j + 1 < side).then(|| at(i, j + 1)).flatten(),
+    );
+    // Half-axes: the splat spans centre ± a, so a full grid step is 2a.
+    let half = |v: [f32; 2]| [v[0] / 2.0, v[1] / 2.0];
+    match (ax, ay) {
+        (Some(x), Some(y)) => (half(x), half(y)),
+        // One live axis: give the dead one the anti-alias floor, at right
+        // angles, so the splat is a thin quad along the live direction.
+        (Some(x), None) => {
+            let len = (x[0] * x[0] + x[1] * x[1]).sqrt().max(1e-6);
+            let n = [
+                -x[1] / len * MIN_SPLAT_AXIS_PX,
+                x[0] / len * MIN_SPLAT_AXIS_PX,
+            ];
+            (half(x), n)
+        }
+        (None, Some(y)) => {
+            let len = (y[0] * y[0] + y[1] * y[1]).sqrt().max(1e-6);
+            let n = [
+                -y[1] / len * MIN_SPLAT_AXIS_PX,
+                y[0] / len * MIN_SPLAT_AXIS_PX,
+            ];
+            (n, half(y))
+        }
+        // A lone survivor: the floor in both directions.
+        (None, None) => ([MIN_SPLAT_AXIS_PX, 0.0], [0.0, MIN_SPLAT_AXIS_PX]),
     }
-    true
 }
 
-/// The 4× multisample positions inside a pixel, as offsets from its origin
-/// — the STANDARD sample locations every Vulkan/D3D device uses at count 4,
-/// which is what makes the CPU twin agree with the hardware resolve rather
-/// than merely resemble it (K-264).
-pub const MSAA_SAMPLES: [[f32; 2]; 4] = [
-    [0.375, 0.125],
-    [0.875, 0.375],
-    [0.125, 0.625],
-    [0.625, 0.875],
-];
-
-/// Rasterise one triangle with barycentric colour interpolation into the
-/// additive RGB buffer — the CPU twin of the hardware fill, INCLUDING its
-/// 4× multisampling (K-264): coverage is tested at the four standard sample
-/// positions, the colour is evaluated once at the pixel centre (the
-/// hardware's non-centroid interpolation, extrapolated when the centre is
-/// outside), and the pixel takes colour × covered/4 — exactly what the
-/// multisample resolve of an additively-blended fp16 target produces.
-/// Jagged silhouettes were one of the three Ultra artefacts the owner
-/// reported; sampling coverage instead of the centre alone is the fix.
-fn raster_triangle(out: &mut [f32], w: u32, h: u32, v: [FlareVertex; 3]) {
-    // The bounding box widens by one so pixels whose centre is outside but
-    // whose samples are covered still get their fraction.
-    let min_x = (v[0].pos[0].min(v[1].pos[0]).min(v[2].pos[0]).floor() as i64 - 1).max(0);
-    let max_x = (v[0].pos[0].max(v[1].pos[0]).max(v[2].pos[0]).ceil() as i64 + 1).min(w as i64 - 1);
-    let min_y = (v[0].pos[1].min(v[1].pos[1]).min(v[2].pos[1]).floor() as i64 - 1).max(0);
-    let max_y = (v[0].pos[1].max(v[1].pos[1]).max(v[2].pos[1]).ceil() as i64 + 1).min(h as i64 - 1);
-    if min_x > max_x || min_y > max_y {
-        return;
-    }
-    let edge = |a: [f32; 2], b: [f32; 2], px: f32, py: f32| {
-        (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])
+/// Deposit one ray's flux over its footprint (K-366): a separable tent over
+/// the parallelogram `centre ± a1 ± a2`, so the kernel integrates to the
+/// parallelogram's area and flux is conserved exactly — except at a caustic,
+/// where the density cap (see [`MIN_AREA_FRAC`]) deliberately sheds the
+/// divergence. The WGSL splat fragment mirrors this arithmetic op for op.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn splat_ray(
+    out: &mut [f32],
+    w: u32,
+    h: u32,
+    centre: [f32; 2],
+    a1_in: [f32; 2],
+    a2_in: [f32; 2],
+    flux_rgb: [f32; 3],
+    cell_area_px: f32,
+) {
+    // The anti-alias floor per axis, preserving direction.
+    let floor_axis = |a: [f32; 2], fallback: [f32; 2]| -> [f32; 2] {
+        let len = (a[0] * a[0] + a[1] * a[1]).sqrt();
+        if len < 1e-6 {
+            return fallback;
+        }
+        if len < MIN_SPLAT_AXIS_PX {
+            let f = MIN_SPLAT_AXIS_PX / len;
+            [a[0] * f, a[1] * f]
+        } else {
+            a
+        }
     };
-    let area = edge(v[0].pos, v[1].pos, v[2].pos[0], v[2].pos[1]);
-    if area.abs() < 1e-9 {
+    let a1 = floor_axis(a1_in, [MIN_SPLAT_AXIS_PX, 0.0]);
+    let mut a2 = floor_axis(a2_in, [0.0, MIN_SPLAT_AXIS_PX]);
+    // Near-parallel axes are a fold seen edge-on: the footprint collapses
+    // even though both axes are long. Push a2's across-component up to the
+    // floor so the deposit is at least a pixel-wide line, not a zero-area
+    // parallelogram whose flux vanishes.
+    let mut det = a1[0] * a2[1] - a1[1] * a2[0];
+    let a1_len = (a1[0] * a1[0] + a1[1] * a1[1]).sqrt().max(1e-6);
+    if det.abs() < MIN_SPLAT_AXIS_PX * a1_len {
+        let n = [-a1[1] / a1_len, a1[0] / a1_len];
+        let sign = if det >= 0.0 { 1.0 } else { -1.0 };
+        a2 = [
+            a2[0] + n[0] * MIN_SPLAT_AXIS_PX * sign,
+            a2[1] + n[1] * MIN_SPLAT_AXIS_PX * sign,
+        ];
+        det = a1[0] * a2[1] - a1[1] * a2[0];
+    }
+    let area = det.abs().max(1e-6);
+    // The density cap: the divisor never drops below the launch cell's
+    // capped fraction, so a fold brightens to 333× and stops (K-262's rule,
+    // carried over unchanged).
+    let divisor = area.max(MIN_AREA_FRAC * cell_area_px);
+    let peak = [
+        flux_rgb[0] / divisor,
+        flux_rgb[1] / divisor,
+        flux_rgb[2] / divisor,
+    ];
+    let inv_det = 1.0 / det;
+    // Bounding box of the parallelogram.
+    let ext_x = a1[0].abs() + a2[0].abs();
+    let ext_y = a1[1].abs() + a2[1].abs();
+    let x0 = ((centre[0] - ext_x).floor().max(0.0)) as i64;
+    let x1 = ((centre[0] + ext_x).ceil().min(w as f32 - 1.0)) as i64;
+    let y0 = ((centre[1] - ext_y).floor().max(0.0)) as i64;
+    let y1 = ((centre[1] + ext_y).ceil().min(h as f32 - 1.0)) as i64;
+    if x1 < x0 || y1 < y0 {
         return;
     }
-    // Edge functions with their constant terms lifted out of the loop
-    // (K-263); the sample-coverage test works on their raw signs, so a
-    // wholly-outside pixel costs multiplies, never divisions.
-    let (e0_dx, e0_dy) = (v[2].pos[0] - v[1].pos[0], v[2].pos[1] - v[1].pos[1]);
-    let (e1_dx, e1_dy) = (v[0].pos[0] - v[2].pos[0], v[0].pos[1] - v[2].pos[1]);
-    let (e2_dx, e2_dy) = (v[1].pos[0] - v[0].pos[0], v[1].pos[1] - v[0].pos[1]);
-    let sign = if area > 0.0 { 1.0 } else { -1.0 };
-    for y in min_y..=max_y {
-        for x in min_x..=max_x {
-            let mut covered = 0u32;
-            for smp in MSAA_SAMPLES {
-                let px = x as f32 + smp[0];
-                let py = y as f32 + smp[1];
-                let e0 = e0_dx * (py - v[1].pos[1]) - e0_dy * (px - v[1].pos[0]);
-                let e1 = e1_dx * (py - v[2].pos[1]) - e1_dy * (px - v[2].pos[0]);
-                let e2 = e2_dx * (py - v[0].pos[1]) - e2_dy * (px - v[0].pos[0]);
-                if e0 * sign >= 0.0 && e1 * sign >= 0.0 && e2 * sign >= 0.0 {
-                    covered += 1;
-                }
-            }
-            if covered == 0 {
+    for py in y0..=y1 {
+        for px in x0..=x1 {
+            let dx = px as f32 + 0.5 - centre[0];
+            let dy = py as f32 + 0.5 - centre[1];
+            // (u, v) in the parallelogram's own frame: solve [a1 a2]·(u,v)ᵀ = d.
+            let u = (dx * a2[1] - dy * a2[0]) * inv_det;
+            let v = (dy * a1[0] - dx * a1[1]) * inv_det;
+            if u.abs() >= 1.0 || v.abs() >= 1.0 {
                 continue;
             }
-            // Colour at the pixel CENTRE, unclamped — extrapolated when the
-            // centre sits outside the triangle, as the hardware's
-            // non-centroid interpolation does.
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
-            let e0 = e0_dx * (py - v[1].pos[1]) - e0_dy * (px - v[1].pos[0]);
-            let e1 = e1_dx * (py - v[2].pos[1]) - e1_dy * (px - v[2].pos[0]);
-            let w0 = e0 / area;
-            let w1 = e1 / area;
-            let w2 = 1.0 - w0 - w1;
-            let frac = covered as f32 / 4.0;
-            let i = ((y as u32 * w + x as u32) * 3) as usize;
-            out[i] += frac * (w0 * v[0].rgb[0] + w1 * v[1].rgb[0] + w2 * v[2].rgb[0]);
-            out[i + 1] += frac * (w0 * v[0].rgb[1] + w1 * v[1].rgb[1] + w2 * v[2].rgb[1]);
-            out[i + 2] += frac * (w0 * v[0].rgb[2] + w1 * v[1].rgb[2] + w2 * v[2].rgb[2]);
+            let k = (1.0 - u.abs()) * (1.0 - v.abs());
+            let idx = ((py as u32 * w + px as u32) * 3) as usize;
+            if let Some(px3) = out.get_mut(idx..idx + 3) {
+                px3[0] += peak[0] * k;
+                px3[1] += peak[1] * k;
+                px3[2] += peak[2] * k;
+            }
         }
     }
 }
@@ -2968,13 +2965,10 @@ pub fn cpu_flare(
     // Per-corner trace results for one (pair, band): landing px, geometric
     // weight (housing feather × iris mask) and band-integrated rgb (K-364);
     // None = dead. Sized for the widest grid in play.
-    type Corner = ([f32; 2], f32, [f32; 3]);
     let mut corners: Vec<Option<Corner>> = Vec::new();
     // The pair's iris mask per pupil corner — wavelength-independent, so it
     // is computed once a pair and read by every wavelength (K-263).
     let mut masks: Vec<f32> = Vec::new();
-    // Landed area per grid cell for the (pair, λ) being drawn; 0 = dead.
-    let mut areas: Vec<f32> = Vec::new();
     for light in lights {
         if light.rgb[0] <= 0.0 && light.rgb[1] <= 0.0 && light.rgb[2] <= 0.0 {
             continue;
@@ -3069,226 +3063,38 @@ pub fn cpu_flare(
                             )
                         });
                     });
-                // Landed area per grid cell, 0 = dead (any corner dead) —
-                // the input to the K-264 vertex-smoothed density below.
-                let qs = side - 1;
-                areas.clear();
-                areas.resize(qs * qs, 0.0);
-                let e = |a: [f32; 2], b: [f32; 2], q: [f32; 2]| {
-                    (a[0] - b[0]) * (q[1] - a[1]) - (a[1] - b[1]) * (q[0] - a[0])
-                };
-                for j in 0..qs {
-                    for i in 0..qs {
-                        let c = [
-                            corners[j * side + i],
-                            corners[j * side + i + 1],
-                            corners[(j + 1) * side + i + 1],
-                            corners[(j + 1) * side + i],
-                        ];
-                        if let [Some(c0), Some(c1), Some(c2), Some(c3)] = c {
-                            let a0 = e(c0.0, c1.0, c2.0);
-                            let a1 = e(c0.0, c2.0, c3.0);
-                            areas[j * qs + i] = ((a0 + a1) / 2.0).abs();
-                        }
-                    }
-                }
-                // Density at a GRID CORNER: launch cell area over the mean
-                // of the live cells that touch the corner (K-264, the
-                // [Hullin 2011] rule — each vertex carries the average area
-                // of its surrounding quads). A per-CELL density is constant
-                // across the cell and jumps at its edge, which is exactly
-                // the faceting the owner saw at Ultra; averaged to the
-                // corners and interpolated by the raster it is continuous
-                // across the whole ghost. The [`MIN_AREA_FRAC`] floor on
-                // the mean is still the caustic density cap.
-                let corner_mean_area = |ci: usize, cj: usize| -> f32 {
-                    let (mut sum, mut n) = (0.0_f32, 0u32);
-                    for qj in cj.saturating_sub(1)..=cj.min(qs - 1) {
-                        for qi in ci.saturating_sub(1)..=ci.min(qs - 1) {
-                            let a = areas[qj * qs + qi];
-                            if a > 0.0 {
-                                sum += a;
-                                n += 1;
-                            }
-                        }
-                    }
-                    if n > 0 {
-                        sum / n as f32
-                    } else {
-                        0.0
-                    }
-                };
-                let corner_density = |ci: usize, cj: usize| -> f32 {
-                    cell_area_px / corner_mean_area(ci, cj).max(MIN_AREA_FRAC * cell_area_px)
-                };
-                // A corner's weight for COLOUR: the mean over its 3×3 ray
-                // neighbourhood, dead rays as zero (K-266) — the WGSL
-                // `smooth_weight` twin. The raw per-ray weight cliffs (a
-                // housing feather compressed into less than a cell, a
-                // vignette cut) land inside one cell and drew every wash
-                // ghost's edge as chunky facets; smoothed one lattice step,
-                // a cliff becomes a two-cell ramp. Geometry decisions (lit
-                // corners, the pull-in) stay on RAW weights: smearing light
-                // onto a virtual continuation's far-flung corner would draw
-                // the K-264 fan lines again.
-                // Since K-364 the smooth carries the corner's spectral rgb
-                // through the same 3×3 mean the scalar weight took — with a
-                // constant rgb this is exactly the old smooth × that rgb, so
-                // nothing about the K-266 cliff-smoothing changed shape.
-                let smooth_rgb = |ci: usize, cj: usize| -> [f32; 3] {
-                    let mut sum = [0.0_f32; 3];
-                    for dj in -1i64..=1 {
-                        for di in -1i64..=1 {
-                            let x = (ci as i64 + di).clamp(0, side as i64 - 1) as usize;
-                            let y = (cj as i64 + dj).clamp(0, side as i64 - 1) as usize;
-                            if let Some((_, wt, rgb)) = corners[y * side + x] {
-                                let w = wt.max(0.0);
-                                sum[0] += w * rgb[0];
-                                sum[1] += w * rgb[1];
-                                sum[2] += w * rgb[2];
-                            }
-                        }
-                    }
-                    [sum[0] / 9.0, sum[1] / 9.0, sum[2] / 9.0]
-                };
-                // The SMALLEST live cell touching a corner — the pull-in's
-                // length scale (K-265). The mean is wrong for that job: at
-                // a fold the stretched cells inflate it, so pulled corners
-                // stuck out by the fold's size instead of the local cell's,
-                // and every hard ghost edge grew a grid-independent
-                // sawtooth corona (the owner's EF 70-200).
-                let corner_min_area = |ci: usize, cj: usize| -> f32 {
-                    let mut min = f32::MAX;
-                    for qj in cj.saturating_sub(1)..=cj.min(qs - 1) {
-                        for qi in ci.saturating_sub(1)..=ci.min(qs - 1) {
-                            let a = areas[qj * qs + qi];
-                            if a > 0.0 && a < min {
-                                min = a;
-                            }
-                        }
-                    }
-                    if min == f32::MAX {
-                        0.0
-                    } else {
-                        min
-                    }
-                };
-                for j in 0..qs {
-                    for i in 0..qs {
-                        if areas[j * qs + i] <= 0.0 {
-                            continue;
-                        }
-                        let c = [
-                            corners[j * side + i],
-                            corners[j * side + i + 1],
-                            corners[(j + 1) * side + i + 1],
-                            corners[(j + 1) * side + i],
-                        ];
-                        let [Some(c0), Some(c1), Some(c2), Some(c3)] = c else {
+                // Per-ray splatting (K-366). Each traced ray deposits its
+                // pupil cell's flux over its own local footprint — the image
+                // of the launch cell under this ghost's map, read off the
+                // neighbouring rays as a 2×2 Jacobian. Rays are never
+                // connected across a fold the way the old quads were, so a
+                // caustic is just splats piling up (the correct integral)
+                // and the whole sliver/inflate/pull-in rescue machinery of
+                // K-261..K-264 has nothing left to rescue.
+                for j in 0..side {
+                    for i in 0..side {
+                        let Some((pos, wgt, rgb)) = corners[j * side + i] else {
                             continue;
                         };
-                        let density = [
-                            corner_density(i, j),
-                            corner_density(i + 1, j),
-                            corner_density(i + 1, j + 1),
-                            corner_density(i, j + 1),
-                        ];
-                        let mut v: [FlareVertex; 4] = [
-                            FlareVertex {
-                                pos: c0.0,
-                                rgb: [0.0; 3],
-                            },
-                            FlareVertex {
-                                pos: c1.0,
-                                rgb: [0.0; 3],
-                            },
-                            FlareVertex {
-                                pos: c2.0,
-                                rgb: [0.0; 3],
-                            },
-                            FlareVertex {
-                                pos: c3.0,
-                                rgb: [0.0; 3],
-                            },
-                        ];
-                        let smoothed = [
-                            smooth_rgb(i, j),
-                            smooth_rgb(i + 1, j),
-                            smooth_rgb(i + 1, j + 1),
-                            smooth_rgb(i, j + 1),
-                        ];
-                        for ((vert, srgb), d) in v.iter_mut().zip(smoothed).zip(density) {
-                            let b = d * gain;
-                            vert.rgb = [
-                                b * srgb[0] * light.rgb[0],
-                                b * srgb[1] * light.rgb[1],
-                                b * srgb[2] * light.rgb[2],
-                            ];
-                        }
-                        // Rein in the unlit corners (K-264). A cell that
-                        // spans from lit geometry to a mount-absorbed
-                        // virtual continuation can be hundreds of px long;
-                        // drawn it fans a faint line out of the ghost's
-                        // bore, dropped it notches the bore's edge (both
-                        // shipped, both reported). The zero-weight corner
-                        // carries no light — its only job is geometry — so
-                        // it is PULLED toward the lit corners' centroid to
-                        // within a few cell-widths, and the fade to zero
-                        // lands where the boundary is, smoothly.
-                        let corners4 = [c0, c1, c2, c3];
-                        let lit: Vec<usize> = (0..4).filter(|&k| corners4[k].1 > 0.0).collect();
-                        if lit.is_empty() {
-                            // No light anywhere in the cell: draw nothing
-                            // rather than rasterise an invisible quad that
-                            // may span the frame.
+                        if wgt <= 0.0 {
                             continue;
                         }
-                        if lit.len() < 4 {
-                            let mut cx = 0.0_f32;
-                            let mut cy = 0.0_f32;
-                            for &k in &lit {
-                                cx += corners4[k].0[0];
-                                cy += corners4[k].0[1];
-                            }
-                            cx /= lit.len() as f32;
-                            cy /= lit.len() as f32;
-                            // Smallest lit neighbour sets the scale: the
-                            // true boundary lies within one cell of the
-                            // last lit corner, so one COMPACT cell-width
-                            // is the reach — the mean let fold-stretched
-                            // neighbours grow it into sawteeth (K-265).
-                            let mut min_area = f32::MAX;
-                            for &k in &lit {
-                                let (ci, cj) = match k {
-                                    0 => (i, j),
-                                    1 => (i + 1, j),
-                                    2 => (i + 1, j + 1),
-                                    _ => (i, j + 1),
-                                };
-                                let m = corner_min_area(ci, cj);
-                                if m > 0.0 {
-                                    min_area = min_area.min(m);
-                                }
-                            }
-                            let reach = min_area.min(1e12).sqrt().max(1.0);
-                            for (k, vert) in v.iter_mut().enumerate() {
-                                if corners4[k].1 > 0.0 {
-                                    continue;
-                                }
-                                let dx = vert.pos[0] - cx;
-                                let dy = vert.pos[1] - cy;
-                                let d = dx.hypot(dy);
-                                if d > reach {
-                                    let f = reach / d;
-                                    vert.pos = [cx + dx * f, cy + dy * f];
-                                }
-                            }
-                        }
-                        if !inflate_quad(&mut v) {
-                            continue;
-                        }
-                        raster_triangle(&mut out, rw, rh, [v[0], v[1], v[2]]);
-                        raster_triangle(&mut out, rw, rh, [v[0], v[2], v[3]]);
+                        let (a1, a2) = ray_axes(&corners, side, i, j);
+                        let flux = wgt * gain * cell_area_px;
+                        splat_ray(
+                            &mut out,
+                            rw,
+                            rh,
+                            pos,
+                            a1,
+                            a2,
+                            [
+                                flux * rgb[0] * light.rgb[0],
+                                flux * rgb[1] * light.rgb[1],
+                                flux * rgb[2] * light.rgb[2],
+                            ],
+                            cell_area_px,
+                        );
                     }
                 }
             }

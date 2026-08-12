@@ -6,8 +6,8 @@ the *how*: the optical model, the exact formulas, the GPU pass structure, and th
 plan. Sources: the FlareSim renderer (github.com/SeanBRVFX/FlareSim_Nuke_builded, itself
 built on space55/blackhole-rt) for the optical model and the lens-file collection — its
 model is reimplemented here from understanding, not translated; *Physically-Based
-Real-Time Lens Flare Rendering* [Hullin et al. 2011] for the quad-grid energy method the
-renderer keeps; *Temporal Glare* [Ritschel et al. 2009] for the starburst maths.
+Real-Time Lens Flare Rendering* [Hullin et al. 2011] for the pupil-grid energy method the
+renderer keeps (splatted per ray since K-366 rather than rasterised as quads); *Temporal Glare* [Ritschel et al. 2009] for the starburst maths.
 
 **In plain terms.** A camera lens is a stack of curved glass discs with an iris somewhere
 in the middle. Most light goes straight through to the sensor — that is the picture. A
@@ -102,7 +102,7 @@ below removes naturally). At bake time:
 3. **Ranking**: descending probe brightness, ties by pair order — deterministic. The
    frame renders the first `max_ghosts`.
 
-No per-pair area boost (FlareSim's `ghost_normalize`) exists here: the quad-grid energy
+No per-pair area boost (FlareSim's `ghost_normalize`) exists here: the pupil-grid energy
 term makes defocus dilution physical, so compensating it would double-count.
 
 ## 3. The per-frame trace (the FlareSim three-phase walk)
@@ -215,74 +215,67 @@ bounds hold the plan:
   continuously re-rendering Viewer used to hold a rolling backlog of abandoned
   tens-of-megabyte buffers.
 
-## 4. Rasterising the ghosts (the energy-conserving quad grid)
+## 4. Splatting the ghosts (per-ray, energy-conserving — K-366)
 
-Each live grid cell draws as two triangles. **Density lives at the grid CORNERS, not
-the cells (K-264, [Hullin 2011]'s per-vertex rule)**: a corner's density is the launch
-cell area over the MEAN landed area of the live cells touching it, and the raster
-interpolates it across the cell. A per-cell density is constant inside the cell and
-jumps at its edge — that discontinuity, repeated at every cell, was the faceting and the
-moiré the owner reported at Ultra; corner-averaged and interpolated, the density field
-is continuous across the whole ghost. A bundle focused small still burns bright and a
-spread one still sits dim — the same energy conservation, reconstructed smoothly.
-Per-corner colour = corner density × Fresnel weight × mask × the wavelength's CIE band
-RGB × the light's colour × the exposure gain. The guards:
+**Each ray deposits on its own; rays are never joined.** Through K-353 the renderer built
+quads out of neighbouring landings and drew those, which is a fair model of a smooth map
+and a wrong one at a **caustic fold** — where the map folds back on itself, so a quad
+across it spans geometry that is not one patch. Every rescue K-261..K-264 added
+(sub-pixel inflation, sliver parking, the unlit-corner pull-in, vertex-smoothed density)
+and K-353's pixel widening with its analytic four-sample coverage existed to survive that
+join, and each moved the artefact rather than removing it. Splatting removes the join.
 
-- **Caustic density cap (K-262)**: the corner's MEAN area is floored at 3e-3 of the
-  launch cell, so density tops out near 333×. At a fold the density genuinely diverges
-  but its *integral* over a pixel is finite; a discrete cell concentrates that whole
-  divergence into a few pixels, and an uncapped floor (1e-4 → 10 000×) drew hard
-  chromatic lines through the ghosts. Applied to the mean, a cluster of fold cells
-  cannot exceed it either.
-- **Sub-sample inflation (K-261, retuned K-264)**: a compact quad below `MIN_QUAD_PX`
-  (now 1 px²) inflates about its centroid with colour scaled by true ÷ inflated area:
-  flux exact, nothing dropped. The floor was 4 px² when the raster sampled once per
-  pixel; with 4× multisampling that floor also caught the merely SMALL — a wash ghost
-  rendered small has every cell at a couple of px², and inflating them all tiled it
-  with overlapping diamonds. A sub-sample SLIVER (longest edge past 6 px) still parks:
-  inflating one is the K-261 streak artefact, and un-inflated it covers nothing.
-- **Corner weights smooth over the 3×3 ray neighbourhood for COLOUR (K-266)**:
-  a weight cliff — the housing feather compressed into less than a cell, a
-  vignette cut — otherwise lands inside one cell and draws every wash ghost's
-  edge as chunky facets. Geometry decisions (lit corners, the pull-in) stay on
-  RAW weights, or virtual continuations would smear light into fan lines.
-- **Long thin fold cells DRAW (K-264, reversing K-262's drop-at-any-size)**: the drop
-  existed because a cell-flat density at the cap painted them as chromatic lines, and
-  it cut triangular notches out of every caustic rim. With corner-averaged density
-  their brightness is their neighbourhood's, and they tile the rim as geometry.
+One ray's deposit is decided in three steps, spelled identically in
+`lumit_core::fx::lens_flare` and in `fx_lens_flare_trace.wgsl`:
 
-**Pass structure (K-263/K-264).** `quad_area` writes each cell's landed area (0 =
-dead), then `build_verts` reads its own and its neighbours' areas for the corner
-densities — two passes because a neighbour computed in another workgroup needs a pass
-boundary to be visible. **A cell stores four corners at 20 bytes, once** (K-263) —
-through K-262 it wrote the two triangles' six vertices at 32 bytes each — and the
-raster's vertex shader maps its six vertex indices onto them (`corner_of`, the index
-buffer spelled in the shader). Same triangles, same winding, same primitive order, 2.4×
-less vertex memory written and read. **The raster is single-sampled and computes its own
-coverage (K-353, superseding K-264's hardware multisampling)**. Triangle silhouettes were
-the jagged edges in the owner's Ultra report and are still smoothed at the same four
-standard sample positions — but the fragment evaluates them itself rather than asking the
-rasteriser. Barycentric coordinates are affine in screen position, so `dpdx`/`dpdy` of
-them are exact; a fragment reconstructs its barycentric at each sample offset and takes
-`colour × covered/4`, which is *precisely* what the CPU reference's `raster_triangle`
-already did with `MSAA_SAMPLES`. The oracle therefore agrees with the GPU by construction.
+1. **The footprint** (`ray_axes`): the image of the ray's pupil cell under this ghost's
+   map, as a 2×2 Jacobian by central differences over the four neighbouring rays'
+   landings — one-sided at the grid edge or beside a dead ray, a right-angle borrow at
+   the anti-alias floor when one axis has no live neighbour at all, the floor in both
+   directions for a lone survivor. Half-axes, so the parallelogram `centre ± a1 ± a2`
+   tiles the pupil grid exactly once.
+2. **The peak** (`splat_ray` up to the divide): flux is `weight × gain × cell_area_px`
+   times the ray's band-integrated rgb times the light's colour; the divisor is the
+   footprint's area, floored by the density cap. On the GPU this whole step is
+   `build_splats`, one thread per RAY, writing `{centre, a1, a2, peak rgb, live}` —
+   48 bytes.
+3. **The deposit**: a separable tent `(1−|u|)(1−|v|)` over the parallelogram, `(u, v)`
+   from the inverse 2×2. The tent integrates to the parallelogram's area, which is what
+   the peak was divided by — so **flux is conserved exactly**, and a fold is simply
+   several splats landing on top of one another, which is the correct integral.
 
-**Why the hardware path had to go:** additively blending fp16 into a 4× multisample target
-is not reproducible run to run on this hardware, and that — not the draw order, not the
-bake, not the pools — is what failed the §2.4 bit-stability assertion for months (K-353
-has the full measurement). Two consequences of doing coverage this way are load-bearing:
+The two guards, and nothing else:
 
-- **Every triangle is widened by a pixel before rasterising**, because a single-sampled
-  rasteriser only makes a fragment where the pixel *centre* is covered, and a cell can
-  cover sample positions without covering any centre. The fragment's coverage test then
-  discards the padding. Without this a third of the flare's energy simply vanished.
-- **The widening displaces the two edge lines and re-intersects them**, rather than pushing
-  each corner away from the centroid. A fold cell is a *sliver* whose corners are nearly
-  collinear, so "away from the centroid" points along it and never widens the thin axis —
-  the last 3% of missing energy, which the padded-anamorphic test caught.
+- **Caustic density cap (K-262, kept unchanged)**: the divisor is floored at
+  `MIN_AREA_FRAC` = 3e-3 of the launch cell, so density tops out near 333×. At a fold the
+  density genuinely diverges but its *integral* over a pixel is finite; a discrete ray
+  concentrates that whole divergence into a few pixels, and an uncapped divisor drew hard
+  chromatic lines through the ghosts.
+- **Anti-alias floor (`MIN_SPLAT_AXIS_PX` = 0.75 px)**: a footprint axis shorter than
+  that is scaled up to it, direction preserved, so a caustic line is a line rather than a
+  row of dropped sub-pixel points. The fold case — both axes long but nearly parallel —
+  is caught by `|det| < MIN_SPLAT_AXIS_PX × |a1|` and pushes `a2` across `a1` up to the
+  same floor, which is what stops an edge-on fold's flux vanishing into a zero-area
+  parallelogram. This is the job `MIN_QUAD_PX`'s inflation used to do, without the sliver
+  cases that came with connecting rays.
 
-Gone with the multisample target: the ~66 MB pooled 4-sample texture (K-265) and the
-resolve.
+**Pass structure (K-366).** `trace` then `build_splats`, both dispatched over the batch's
+rays — two passes, because the splat stage reads its neighbours' landings and a neighbour
+traced in another workgroup needs a pass boundary to be visible. (`quad_area` and
+`build_verts` are gone with the quads.) The draw is **one instanced six-vertex quad per
+splat**: vertex `k` maps to `(u, v) ∈ {−1, 1}²`, position is `centre + a1·u + a2·v` mapped
+to clip space through the raster-dims uniform, and the fragment evaluates the tent and
+adds. A dead or unlit ray still occupies its slot — the batch's splats are one contiguous
+instance range — and draws as a degenerate off-screen quad.
+
+**The target is single-sampled and needs no coverage logic** (K-353's measurement stands,
+K-366 makes its machinery unnecessary). A tent falls to zero at the quad's own edge, so
+there is no silhouette to antialias: no widening, no `dpdx` barycentric reconstruction, no
+four-sample test. Bit-stability follows by construction — fixed instance order, additive
+blend, one sample. Additively blending fp16 into a 4× *multisample* target is what was not
+reproducible run to run on this hardware, and that — not the draw order, not the bake, not
+the pools — is what failed the §2.4 assertion for months; the ~66 MB pooled 4-sample
+texture (K-265) and its resolve went with it.
 
 The combine's flare tap is ZERO outside the buffer (K-266): squeeze or scale
 below 1 asks for coordinates past it, and clamp-addressing repeated the edge
@@ -291,7 +284,7 @@ row outward as a smear.
 The additive raster (hardware, one-one blend, fp16 buffer; Draft at half resolution) is
 followed by the **Ghost blur**: 3 separable box passes (≈ Gaussian) at a radius of
 `Ghost softness × 0.01 × frame diagonal` — FlareSim's Ghost Blur, a touch of
-out-of-focus softness that also hides quad facets at low qualities.
+out-of-focus softness that also hides the point-splat grain at low qualities.
 
 The blur radius is capped at 80 px (K-262) and the sum runs through a **workgroup line
 cache** (K-263): a workgroup covers 64 consecutive pixels along the blur axis, so the
@@ -542,17 +535,20 @@ the other cannot silently clamp to Divide.
 
 ## 7. Traps (learned the hard way — do not rediscover)
 
-- **Sub-pixel quads are silently dropped by every rasteriser.** The caustic flux that
-  makes a flare's bright rims lives exactly there. The inflation of §4 is load-bearing;
-  measured without it, the frame's dynamic range collapsed from ~116× to 6.6×.
-- **…but inflating a SLIVER draws a streak.** A cell straddling a fold has near-zero area
-  and large extent; scaling it about its centroid to reach the 4 px² floor multiplies its
-  *length* by up to 100×, so a 20 px sliver becomes a 2000 px line. This shipped in K-261
-  and is the "random lines across the flare" the owner reported. Inflate only COMPACT
-  quads; drop stretched ones (§4). Note that both oracles agreed with each other while
-  drawing it — the CPU and WGSL mirrored the same wrong formula — so **parity tests can
-  never catch this class**: the pin is a unit test of the guard itself
-  (`lens_flare_quad_guard_drops_slivers_and_keeps_ghosts`), which fails on the K-261 code.
+- **Sub-pixel deposits are silently dropped by every rasteriser.** The caustic flux that
+  makes a flare's bright rims lives exactly there. The anti-alias floor of §4 is
+  load-bearing; measured without its predecessor (the K-261 inflation), the frame's
+  dynamic range collapsed from ~116× to 6.6×.
+- **…and rescuing a sub-pixel SLIVER by scaling it draws a streak.** This is the trap
+  K-366 removed rather than guarded: a *quad* straddling a fold has near-zero area and
+  large extent, so scaling it about its centroid to reach a px² floor multiplies its
+  *length* by up to 100× — a 20 px sliver becomes a 2000 px line, which shipped in K-261
+  as the "random lines across the flare" the owner reported. Splats are per ray and never
+  straddle anything, so no such shape exists; the floor scales an axis by at most
+  `MIN_SPLAT_AXIS_PX / |axis|` about the ray's own landing. Note that both oracles agreed
+  with each other while drawing the streak — the CPU and WGSL mirrored the same wrong
+  formula — so **parity tests can never catch this class**: the pin is a unit test of the
+  deposit itself (`lens_flare_splats_conserve_flux_and_survive_folds`).
 - **A hard boundary anywhere in the walk becomes a staircase.** The pupil grid samples
   the boundary at cell granularity, so any binary kill — mask, skirt clip, sphere miss,
   TIR — draws its edge as blocks the size of a cell. K-264 removed every one: geometry
@@ -561,10 +557,11 @@ the other cannot silently clamp to Divide.
 - **Do not spray the front bezel.** Prescriptions list housing semi-apertures far wider
   than the entrance beam; a full-width spray wastes ~96% of its rays on some lenses and
   the survivors render as noise. Size the spray to the entrance pupil (§3).
-- **Point splatting cannot reach reference smoothness at photographic ghost sizes.**
-  The Monte-Carlo variant of this model (tried first for K-261) needs orders of
-  magnitude more rays than the quad grid for the same smooth rim; the quad-grid energy
-  term is the noise-free integral of the same physics. Splats were kept only as history.
+- **A ray must deposit over its FOOTPRINT, never as a point.** The Monte-Carlo variant
+  of this model (tried first for K-261) splatted each ray as a point and needed orders of
+  magnitude more rays for the same smooth rim. K-366's splat is not that: each ray spreads
+  its flux over the image of its own pupil cell, which is the same noise-free energy
+  integral the quad grid computed — without joining neighbours across a fold to get it.
 - **The exposure loop amplifies whatever survives rendering.** Any attempt to fade an
   artefact that also carries the lens's probe energy is undone by the gain; suppress
   artefacts geometrically (feather, skirt) or cap the gain, never by scaling energy the
@@ -603,9 +600,11 @@ the other cannot silently clamp to Divide.
 4. **Trace**: the top pairs land a solid live population with finite positions and
    weights in [0, 1]; the pupil mask is 1 at centre, 0 far outside, and passes less area
    as a hexagon than as a circle.
-4b. **Quad guard (K-262)**: a big cell is drawn untouched; a compact sub-pixel cell is
-   inflated, dimmed and stays compact; a sub-pixel sliver and a long thin quad are both
-   dropped; a short elongated rim cell survives. Fails on the K-261 inflation.
+4b. **Splat guard (K-366)**: an ordinary footprint deposits exactly the flux put into it
+   (the tent integrates to the area the peak was divided by); a fold — axes long but
+   nearly parallel — deposits a finite bright line rather than nothing or a spike; a
+   collapsed footprint never falls below the anti-alias floor. Tested where the old quad
+   bugs lived (`lens_flare_splats_conserve_flux_and_survive_folds`).
 4c. **Grid budget (K-262/K-265/K-267)**: `pair_grid` is monotonic in spread, clamped to
    8..512 for degenerate inputs, and every bundled pair carries a finite spread. The
    GPU's mirrored copies (`pair_grid_of`, `flare_pad_dims_of`) are pinned equal to

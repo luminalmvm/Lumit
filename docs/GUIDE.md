@@ -949,6 +949,38 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   processor and the one on the graphics card, so they still agree ray for ray;
   the card's copy got faster in the bargain, because a table lookup is cheaper
   than the layer-by-layer calculation it replaced.
+
+  **Every ray now paints its own little patch (K-366).** Until this change the
+  flare was drawn as a net: neighbouring rays were joined into four-cornered
+  panels and the panels were painted. That works beautifully where the light
+  spreads out smoothly, and it is wrong exactly where a flare is at its most
+  beautiful — at a *fold*, the bright rim or arc where the lens crushes a whole
+  band of rays onto one line. At a fold the light doubles back on itself, so a
+  panel joining four rays across it stretches over two places at once and comes
+  out as a hair-thin sliver. Every rescue the flare has ever grown — puffing up
+  panels too small to see, throwing away the slivers, reining in stray corners,
+  growing every shape by a pixel before drawing it — existed to survive that one
+  bad join, and each one moved the problem somewhere else: notched rims one
+  release, faint lines across the picture another, blocky facets a third.
+
+  So the rays are no longer joined at all. Each ray asks its four neighbours
+  where *they* landed, works out how big a patch of the picture its own share of
+  the light covers, and dabs that share over the patch — brightest in the middle,
+  fading to nothing at the edge, like a soft round brush stroke of exactly the
+  right size. The total light in a dab is always the light the ray carried, so
+  nothing is gained or lost however the patch is stretched. And a fold is now
+  simply many dabs landing on top of one another, which is the honest answer:
+  that *is* what a fold is. All the rescue machinery is deleted rather than
+  patched again, including the growing-by-a-pixel from the fix above — a dab
+  fades out on its own, so there is no hard edge left to smooth.
+
+  Two knobs stay. A dab is never allowed to be thinner than about three quarters
+  of a pixel, so a caustic line comes out as a line instead of a dotted row of
+  misses; and there is still a ceiling on how bright a fold may get (about 333
+  times), because a fold's brightness genuinely runs away in the maths while a
+  real photograph's does not. Ghost bodies look as they did; rims and arcs are
+  cleaner. Because the picture does move, the effect's version number steps up,
+  which is how Lumit records that an old project renders a little differently.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the

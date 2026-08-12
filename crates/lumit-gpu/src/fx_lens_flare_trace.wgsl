@@ -1,31 +1,25 @@
 // Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md, K-261,
-// K-263/K-264). Three compute entry points of the per-frame ghost pipeline:
-//   trace       — one thread per pupil-grid corner: refract the ray through
-//                 the prescription with the FlareSim three-phase walk
-//                 (reflecting at the pair's two surfaces), carry eight
-//                 spectral throughputs through the per-surface reflectance
-//                 (K-364), land on the sensor and band-integrate them into
-//                 the ray's rgb; the weight the corner keeps is geometry
-//                 alone — housing feather × iris mask. Mirrors lumit_core's
-//                 `trace_splat_spectral` op-for-op; the dead sentinel is
-//                 weight −1 (the CPU returns None).
-//   quad_area   — one thread per grid cell: the cell's landed area in
-//                 flare-buffer px² (0 = a dead corner). Not folded into
-//                 build_verts (K-264), because build_verts reads the areas
-//                 of NEIGHBOURING cells too — the vertex-smoothed density —
-//                 and neighbours across a workgroup boundary need a pass
-//                 boundary to be visible.
-//   build_verts — one thread per grid cell: density at each of the cell's
-//                 four corners is launch cell area over the MEAN landed
-//                 area of the live cells touching that corner ([Hullin
-//                 2011]'s per-vertex rule, K-264) — continuous across the
-//                 grid where the old per-cell density jumped at every cell
-//                 edge and drew the Ultra faceting. Sub-pixel COMPACT quads
-//                 inflate about their centroid with flux conserved (K-261);
-//                 sub-pixel slivers park; long thin fold cells DRAW (K-264
-//                 — parking them cut notches into every caustic rim).
-// The additive raster lives in fx_lens_flare_draw.wgsl (4x multisampled
-// since K-264), the box blur in fx_lens_flare_blur.wgsl, detection in
+// K-366). Two compute entry points of the per-frame ghost pipeline:
+//   trace        — one thread per pupil-grid ray: refract the ray through
+//                  the prescription with the FlareSim three-phase walk
+//                  (reflecting at the pair's two surfaces), carry eight
+//                  spectral throughputs through the per-surface reflectance
+//                  (K-364), land on the sensor and band-integrate them into
+//                  the ray's rgb; the weight the ray keeps is geometry
+//                  alone — housing feather × iris mask. Mirrors lumit_core's
+//                  `trace_splat_spectral` op-for-op; the dead sentinel is
+//                  weight −1 (the CPU returns None).
+//   build_splats — one thread per RAY (K-366): the ray's own footprint, by
+//                  central differences over its neighbours' landings
+//                  (lumit_core `ray_axes`), and the peak of the tent it
+//                  deposits its pupil cell's flux over (lumit_core
+//                  `splat_ray`'s arithmetic up to the divide). Rays are
+//                  never connected to one another, so a caustic fold is
+//                  just splats piling up — the correct integral — and the
+//                  sliver/inflate/pull-in machinery of K-261..K-264 has
+//                  nothing left to rescue.
+// The additive raster lives in fx_lens_flare_draw.wgsl (one instanced quad
+// per splat), the box blur in fx_lens_flare_blur.wgsl, detection in
 // fx_lens_flare_detect.wgsl and the combine in fx_lens_flare_combine.wgsl.
 
 struct Surface {
@@ -79,18 +73,26 @@ struct Ray {
     _pad2: f32,
 };
 
-// One drawn corner (K-263): clip position and additive colour, nothing else.
-// Through K-262 this carried three pad floats AND was written six times per
-// cell (the two triangles' vertex lists spelled out). A cell now stores its
-// four corners once at 20 bytes each — 80 bytes a cell where it was 192 — and
-// the raster's vertex shader maps its six vertex indices onto them. Same
-// triangles, same order, 2.4× less vertex memory to write and to read back.
-struct Vertex {
-    ndc_x: f32,
-    ndc_y: f32,
+// One ray's deposit (K-366): where it landed, the two half-axes of the
+// parallelogram footprint it spreads over, and the PEAK of the separable
+// tent — its flux already divided by the density-capped footprint area, so
+// the raster's fragment only has to evaluate (1−|u|)(1−|v|). `live` is 1.0
+// for a ray with flux and 0.0 for a dead or unlit one, which the raster
+// draws as a degenerate off-screen quad (the slot must still be written:
+// the batch's splats are one contiguous instance range).
+struct Splat {
+    cx: f32,
+    cy: f32,
+    a1x: f32,
+    a1y: f32,
+    a2x: f32,
+    a2y: f32,
     r: f32,
     g: f32,
     b: f32,
+    live: f32,
+    _pad0: f32,
+    _pad1: f32,
 };
 
 // One flare source (see fx_lens_flare_detect.wgsl): position as a raster
@@ -126,7 +128,9 @@ struct TraceParams {
     stop_scale: f32,       // scales the stop surface's semi-aperture
     cell_area_px: f32,     // launch cell area in flare-buffer px²
     ray_stride: u32,       // rays per slot — THIS batch's grid² (K-263)
-    quad_stride: u32,      // quads per slot — THIS batch's (grid-1)² (K-263)
+    // Keeps the uniform struct a multiple of 16 bytes; held the per-slot
+    // quad count until K-366 dropped quads for per-ray splats.
+    _pad_stride: u32,
     blades: u32,
     rot_rad: f32,
     roundness: f32,        // effective (wide-open blended)
@@ -137,9 +141,9 @@ struct TraceParams {
 @group(0) @binding(0) var<storage, read> surfaces: array<Surface>;
 @group(0) @binding(1) var<storage, read> combos: array<Combo>;
 @group(0) @binding(2) var<storage, read_write> rays: array<Ray>;
-// Landed area per grid cell, px²; 0 = dead (K-264).
-@group(0) @binding(3) var<storage, read_write> areas: array<f32>;
-@group(0) @binding(4) var<storage, read_write> verts: array<Vertex>;
+// Binding 3 held the per-cell landed areas until K-366; the numbering is
+// left alone so the rest of the bindings keep their places.
+@group(0) @binding(4) var<storage, read_write> splats: array<Splat>;
 @group(0) @binding(5) var<uniform> tp: TraceParams;
 @group(0) @binding(6) var<storage, read> lights: array<Light>;
 // The baked per-surface reflectance table (K-364), laid out
@@ -581,286 +585,165 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     rays[slot] = out;
 }
 
-fn edge_px(a: vec2<f32>, b: vec2<f32>, c: vec2<f32>) -> f32 {
-    return (a.x - b.x) * (c.y - a.y) - (a.y - b.y) * (c.x - a.x);
+// ---------------------------------------------------------------------------
+// Per-ray splatting (K-366) — the WGSL twin of lumit_core's `ray_axes` and
+// the front half of `splat_ray`, op for op.
+// ---------------------------------------------------------------------------
+
+// Shortest half-axis a splat's footprint may have, px — the anti-alias
+// floor. Must equal lumit_core's `MIN_SPLAT_AXIS_PX` (pinned by test).
+const MIN_SPLAT_AXIS_PX: f32 = 0.75;
+// Floor on a ray's landed footprint as a fraction of its launch cell — the
+// caustic density cap. Must equal lumit_core's `MIN_AREA_FRAC` (same test).
+const MIN_AREA_FRAC: f32 = 0.003;
+
+// A neighbour's landing: xy = position, z = 1 live / 0 dead (weight < 0 is
+// the trace's dead sentinel, where the CPU reference holds None).
+fn landing_at(base: u32, x: u32, y: u32) -> vec3<f32> {
+    let r = rays[base + y * tp.grid + x];
+    if (r.weight < 0.0) {
+        return vec3<f32>(0.0, 0.0, 0.0);
+    }
+    return vec3<f32>(r.pos_x, r.pos_y, 1.0);
 }
 
-// Park a culled cell: four degenerate, black, off-screen corners. The cell
-// still occupies its slot in the batch's contiguous draw range, so it must be
-// written rather than skipped.
-fn park_cell(out_base: u32) {
-    var park: Vertex;
-    park.ndc_x = -4.0;
-    park.ndc_y = -4.0;
-    park.r = 0.0;
-    park.g = 0.0;
-    park.b = 0.0;
-    for (var i = 0u; i < 4u; i = i + 1u) {
-        verts[out_base + i] = park;
+// One axis of the footprint by central difference over the two neighbours,
+// one-sided where only one of them survives, absent where neither does.
+fn axis_diff(lo: vec3<f32>, here: vec2<f32>, hi: vec3<f32>) -> vec3<f32> {
+    if (lo.z > 0.5 && hi.z > 0.5) {
+        return vec3<f32>((hi.xy - lo.xy) / 2.0, 1.0);
     }
+    if (hi.z > 0.5) {
+        return vec3<f32>(hi.xy - here, 1.0);
+    }
+    if (lo.z > 0.5) {
+        return vec3<f32>(here - lo.xy, 1.0);
+    }
+    return vec3<f32>(0.0, 0.0, 0.0);
 }
 
-// The cell's landed area from its four rays; negative-weight (dead)
-// corners make it 0. Shared by quad_area and, for the cell's own guard,
-// build_verts.
-fn cell_area_of(base: u32, qx: u32, qy: u32) -> f32 {
-    let c0 = rays[base + qy * tp.grid + qx];
-    let c1 = rays[base + qy * tp.grid + qx + 1u];
-    let c2 = rays[base + (qy + 1u) * tp.grid + qx + 1u];
-    let c3 = rays[base + (qy + 1u) * tp.grid + qx];
-    if (c0.weight < 0.0 || c1.weight < 0.0 || c2.weight < 0.0 || c3.weight < 0.0) {
-        return 0.0;
+// The anti-alias floor on one axis, direction preserved.
+fn floor_axis(a: vec2<f32>, fallback: vec2<f32>) -> vec2<f32> {
+    let len = sqrt(a.x * a.x + a.y * a.y);
+    if (len < 1e-6) {
+        return fallback;
     }
-    let p0 = vec2<f32>(c0.pos_x, c0.pos_y);
-    let p1 = vec2<f32>(c1.pos_x, c1.pos_y);
-    let p2 = vec2<f32>(c2.pos_x, c2.pos_y);
-    let p3 = vec2<f32>(c3.pos_x, c3.pos_y);
-    let a0 = edge_px(p0, p1, p2);
-    let a1 = edge_px(p0, p2, p3);
-    return abs((a0 + a1) / 2.0);
-}
-
-@compute @workgroup_size(64)
-fn quad_area(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let side = tp.grid - 1u;
-    if (gid.x >= tp.quad_stride || gid.y >= tp.combo_count || gid.z >= tp.light_count) {
-        return;
+    if (len < MIN_SPLAT_AXIS_PX) {
+        return a * (MIN_SPLAT_AXIS_PX / len);
     }
-    let slot = gid.z * tp.combo_count + gid.y;
-    let qx = gid.x % side;
-    let qy = gid.x / side;
-    areas[slot * tp.quad_stride + gid.x] = cell_area_of(slot * tp.ray_stride, qx, qy);
-}
-
-// Density at grid corner (cx, cy): launch cell area over the MEAN landed
-// area of the live cells touching the corner (K-264, [Hullin 2011]'s
-// per-vertex rule; the CPU twin is `corner_density` in cpu_flare). The
-// MIN_AREA_FRAC floor on the mean is still the caustic density cap.
-fn corner_mean_area(area_base: u32, side: u32, cx: u32, cy: u32) -> f32 {
-    var sum = 0.0;
-    var n = 0.0;
-    let qx0 = max(cx, 1u) - 1u;
-    let qy0 = max(cy, 1u) - 1u;
-    let qx1 = min(cx, side - 1u);
-    let qy1 = min(cy, side - 1u);
-    for (var qy = qy0; qy <= qy1; qy = qy + 1u) {
-        for (var qx = qx0; qx <= qx1; qx = qx + 1u) {
-            let a = areas[area_base + qy * side + qx];
-            if (a > 0.0) {
-                sum = sum + a;
-                n = n + 1.0;
-            }
-        }
-    }
-    if (n > 0.0) {
-        return sum / n;
-    }
-    return 0.0;
-}
-
-fn density_of(mean: f32) -> f32 {
-    return tp.cell_area_px / max(mean, 3e-3 * tp.cell_area_px);
-}
-
-// A corner's colour: the mean of weight × rgb over its 3x3 ray
-// neighbourhood, dead rays as zero (K-266, spectral since K-364). The raw
-// per-ray weight cliffs — the housing feather compressed into less than a
-// cell, a vignette cut — land inside one cell and drew every wash ghost's
-// edge as chunky facets; smoothed one lattice step, a cliff becomes a
-// two-cell ramp and the raster's interpolation does the rest. Geometry
-// decisions (lit corners, pull-in) stay on RAW weights: smearing light onto
-// a virtual continuation's far-flung corner would draw the K-264 fan lines
-// again.
-//
-// Weight and colour smooth TOGETHER rather than the weight alone times a
-// per-combo tint: a ray's rgb is its own now, and with a constant rgb this
-// is exactly the old smooth × that rgb, so the K-266 cliff-smoothing did
-// not change shape.
-fn smooth_rgb(base: u32, cx: u32, cy: u32) -> vec3<f32> {
-    var sum = vec3<f32>(0.0);
-    for (var dy = -1; dy <= 1; dy = dy + 1) {
-        for (var dx = -1; dx <= 1; dx = dx + 1) {
-            let x = u32(clamp(i32(cx) + dx, 0, i32(tp.grid) - 1));
-            let y = u32(clamp(i32(cy) + dy, 0, i32(tp.grid) - 1));
-            let ray = rays[base + y * tp.grid + x];
-            let w = max(ray.weight, 0.0);
-            sum = sum + w * vec3<f32>(ray.r, ray.g, ray.b);
-        }
-    }
-    return sum / 9.0;
-}
-
-// The SMALLEST live cell touching a corner — the pull-in's length scale
-// (K-265; the CPU twin's comment tells the story).
-fn corner_min_area(area_base: u32, side: u32, cx: u32, cy: u32) -> f32 {
-    var m = 1e30;
-    let qx0 = max(cx, 1u) - 1u;
-    let qy0 = max(cy, 1u) - 1u;
-    let qx1 = min(cx, side - 1u);
-    let qy1 = min(cy, side - 1u);
-    for (var qy = qy0; qy <= qy1; qy = qy + 1u) {
-        for (var qx = qx0; qx <= qx1; qx = qx + 1u) {
-            let a = areas[area_base + qy * side + qx];
-            if (a > 0.0 && a < m) {
-                m = a;
-            }
-        }
-    }
-    if (m == 1e30) {
-        return 0.0;
-    }
-    return m;
+    return a;
 }
 
 @compute @workgroup_size(64)
-fn build_verts(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let side = tp.grid - 1u;
-    // Dispatched over THIS batch's cells (K-263): a batch is a run of
-    // combos at ONE grid, so the stride is its own and its cells are
-    // contiguous — nothing outside them is dispatched, written, or drawn.
-    if (gid.x >= tp.quad_stride || gid.y >= tp.combo_count || gid.z >= tp.light_count) {
+fn build_splats(@builtin(global_invocation_id) gid: vec3<u32>) {
+    // Dispatched over THIS batch's rays (K-263): one thread per ray, so the
+    // splats index exactly as the rays do.
+    if (gid.x >= tp.ray_stride || gid.y >= tp.combo_count || gid.z >= tp.light_count) {
         return;
     }
     let slot = gid.z * tp.combo_count + gid.y;
-    let out_base = (slot * tp.quad_stride + gid.x) * 4u;
-    let qx = gid.x % side;
-    let qy = gid.x / side;
-    let area_px = areas[slot * tp.quad_stride + gid.x];
-    if (area_px <= 0.0) {
-        park_cell(out_base);
-        return;
-    }
     let base = slot * tp.ray_stride;
-    let c0 = rays[base + qy * tp.grid + qx];
-    let c1 = rays[base + qy * tp.grid + qx + 1u];
-    let c2 = rays[base + (qy + 1u) * tp.grid + qx + 1u];
-    let c3 = rays[base + (qy + 1u) * tp.grid + qx];
-    var p = array<vec2<f32>, 4>(
-        vec2<f32>(c0.pos_x, c0.pos_y),
-        vec2<f32>(c1.pos_x, c1.pos_y),
-        vec2<f32>(c2.pos_x, c2.pos_y),
-        vec2<f32>(c3.pos_x, c3.pos_y),
-    );
-    let area_base = slot * tp.quad_stride;
-    // Vertex-smoothed density (K-264): each corner's own neighbourhood
-    // mean, interpolated by the raster — continuous across cells, where the
-    // per-cell constant of K-263 jumped at every cell edge (the faceting).
+    let out_i = base + gid.x;
+    var s: Splat;
+    s.cx = 0.0;
+    s.cy = 0.0;
+    s.a1x = 0.0;
+    s.a1y = 0.0;
+    s.a2x = 0.0;
+    s.a2y = 0.0;
+    s.r = 0.0;
+    s.g = 0.0;
+    s.b = 0.0;
+    s.live = 0.0;
+    s._pad0 = 0.0;
+    s._pad1 = 0.0;
 
-    var means = array<f32, 4>(
-        corner_mean_area(area_base, side, qx, qy),
-        corner_mean_area(area_base, side, qx + 1u, qy),
-        corner_mean_area(area_base, side, qx + 1u, qy + 1u),
-        corner_mean_area(area_base, side, qx, qy + 1u),
-    );
-    var d = array<f32, 4>(
-        density_of(means[0]),
-        density_of(means[1]),
-        density_of(means[2]),
-        density_of(means[3]),
-    );
-    let light = lights[tp.light_offset + gid.z];
-    // The combo carries no colour since K-364 — the ray does, and the gain
-    // rides the band's sub-sample weights.
-    let tint = vec3<f32>(light.r, light.g, light.b);
-    var col = array<vec3<f32>, 4>(
-        tint * (d[0] * smooth_rgb(base, qx, qy)),
-        tint * (d[1] * smooth_rgb(base, qx + 1u, qy)),
-        tint * (d[2] * smooth_rgb(base, qx + 1u, qy + 1u)),
-        tint * (d[3] * smooth_rgb(base, qx, qy + 1u)),
-    );
-    // Flux-conserving sub-pixel inflation (K-261, refined K-262/K-264 — the
-    // CPU `inflate_quad` twin). A sub-pixel COMPACT quad inflates about its
-    // centroid, colour scaled by true ÷ inflated area, so the raster cannot
-    // drop its caustic flux; a sub-pixel SLIVER parks (inflating one is the
-    // K-261 streak artefact; un-inflated it covers nothing). A long thin
-    // cell at drawable size DRAWS since K-264: its brightness is now its
-    // neighbourhood's, and parking it cut notches into every caustic rim.
-    let min_quad_px = 1.0;
-    let max_inflate_edge_px = 6.0;
-    // Rein in the unlit corners (K-264, the CPU cell loop's twin). A cell
-    // spanning from lit geometry to a mount-absorbed virtual continuation
-    // can be hundreds of px long; drawn it fans a faint line out of the
-    // ghost's bore, dropped it notches the bore's edge. The zero-weight
-    // corner carries no light — its only job is geometry — so it is pulled
-    // toward the lit corners' centroid to within a few cell-widths, and
-    // the fade to zero lands where the boundary is.
-    var w4 = array<f32, 4>(c0.weight, c1.weight, c2.weight, c3.weight);
-    var lit_n = 0.0;
-    var lit_c = vec2<f32>(0.0);
-    for (var i = 0; i < 4; i = i + 1) {
-        if (w4[i] > 0.0) {
-            lit_n = lit_n + 1.0;
-            lit_c = lit_c + p[i];
-        }
-    }
-    if (lit_n == 0.0) {
-        // No light anywhere in the cell: nothing to draw.
-        park_cell(out_base);
+    let ray = rays[out_i];
+    // A dead ray, or one the iris masked out entirely, deposits nothing —
+    // but its slot is still written, because the draw walks the batch's
+    // splats as one contiguous instance range.
+    if (!(ray.weight > 0.0)) {
+        splats[out_i] = s;
         return;
     }
-    if (lit_n < 4.0) {
-        lit_c = lit_c / lit_n;
-        // Smallest lit neighbour, not the mean: fold-stretched neighbours
-        // grew the reach into sawteeth (K-265).
-        var min_area = 1e30;
-        for (var i = 0; i < 4; i = i + 1) {
-            if (w4[i] <= 0.0) {
-                continue;
-            }
-            var cx = qx;
-            var cy = qy;
-            if (i == 1 || i == 2) {
-                cx = qx + 1u;
-            }
-            if (i == 2 || i == 3) {
-                cy = qy + 1u;
-            }
-            let m = corner_min_area(area_base, side, cx, cy);
-            if (m > 0.0) {
-                min_area = min(min_area, m);
-            }
-        }
-        let reach = max(sqrt(min(min_area, 1e12)), 1.0);
-        for (var i = 0; i < 4; i = i + 1) {
-            if (w4[i] > 0.0) {
-                continue;
-            }
-            let dd = p[i] - lit_c;
-            let dist = length(dd);
-            if (dist > reach) {
-                p[i] = lit_c + dd * (reach / dist);
-            }
-        }
+    let i = gid.x % tp.grid;
+    let j = gid.x / tp.grid;
+    let here = vec2<f32>(ray.pos_x, ray.pos_y);
+
+    var lo_x = vec3<f32>(0.0);
+    if (i > 0u) {
+        lo_x = landing_at(base, i - 1u, j);
     }
-    if (area_px < min_quad_px) {
-        var longest = 0.0;
-        for (var i = 0; i < 4; i = i + 1) {
-            let dd = p[i] - p[(i + 1) % 4];
-            longest = max(longest, length(dd));
-        }
-        if (longest > max_inflate_edge_px) {
-            park_cell(out_base);
-            return;
-        }
-        let eps = min_quad_px * 1e-4;
-        let scl = sqrt(min_quad_px / max(area_px, eps));
-        let scale = max(area_px, eps) / min_quad_px;
-        let centre = (p[0] + p[1] + p[2] + p[3]) / 4.0;
-        for (var i = 0; i < 4; i = i + 1) {
-            p[i] = centre + (p[i] - centre) * scl;
-            col[i] = col[i] * scale;
-        }
+    var hi_x = vec3<f32>(0.0);
+    if (i + 1u < tp.grid) {
+        hi_x = landing_at(base, i + 1u, j);
     }
-    // Corner order 0,1,2,3 around the cell; the raster expands it into the
-    // two triangles (0,1,2) and (0,2,3) — the same winding and the same
-    // primitive order the six spelled-out vertices had.
-    for (var i = 0; i < 4; i = i + 1) {
-        var vert: Vertex;
-        vert.ndc_x = p[i].x / tp.raster_w * 2.0 - 1.0;
-        vert.ndc_y = 1.0 - p[i].y / tp.raster_h * 2.0;
-        vert.r = col[i].x;
-        vert.g = col[i].y;
-        vert.b = col[i].z;
-        verts[out_base + u32(i)] = vert;
+    var lo_y = vec3<f32>(0.0);
+    if (j > 0u) {
+        lo_y = landing_at(base, i, j - 1u);
     }
+    var hi_y = vec3<f32>(0.0);
+    if (j + 1u < tp.grid) {
+        hi_y = landing_at(base, i, j + 1u);
+    }
+    let ax = axis_diff(lo_x, here, hi_x);
+    let ay = axis_diff(lo_y, here, hi_y);
+
+    // Half-axes: the splat spans centre ± a, so a full grid step is 2a. A
+    // dead axis borrows the live one's right angle at the anti-alias floor,
+    // and a lone survivor takes the floor in both directions.
+    var a1 = vec2<f32>(MIN_SPLAT_AXIS_PX, 0.0);
+    var a2 = vec2<f32>(0.0, MIN_SPLAT_AXIS_PX);
+    if (ax.z > 0.5 && ay.z > 0.5) {
+        a1 = ax.xy / 2.0;
+        a2 = ay.xy / 2.0;
+    } else if (ax.z > 0.5) {
+        let len = max(sqrt(ax.x * ax.x + ax.y * ax.y), 1e-6);
+        a1 = ax.xy / 2.0;
+        a2 = vec2<f32>(-ax.y / len * MIN_SPLAT_AXIS_PX, ax.x / len * MIN_SPLAT_AXIS_PX);
+    } else if (ay.z > 0.5) {
+        let len = max(sqrt(ay.x * ay.x + ay.y * ay.y), 1e-6);
+        a1 = vec2<f32>(-ay.y / len * MIN_SPLAT_AXIS_PX, ay.x / len * MIN_SPLAT_AXIS_PX);
+        a2 = ay.xy / 2.0;
+    }
+
+    a1 = floor_axis(a1, vec2<f32>(MIN_SPLAT_AXIS_PX, 0.0));
+    a2 = floor_axis(a2, vec2<f32>(0.0, MIN_SPLAT_AXIS_PX));
+    // Near-parallel axes are a fold seen edge-on: the footprint collapses
+    // even though both axes are long. Push a2 across a1 up to the floor so
+    // the deposit is at least a pixel-wide line, not a zero-area
+    // parallelogram whose flux vanishes.
+    var det = a1.x * a2.y - a1.y * a2.x;
+    let a1_len = max(sqrt(a1.x * a1.x + a1.y * a1.y), 1e-6);
+    if (abs(det) < MIN_SPLAT_AXIS_PX * a1_len) {
+        let n = vec2<f32>(-a1.y / a1_len, a1.x / a1_len);
+        let sgn = select(-1.0, 1.0, det >= 0.0);
+        a2 = a2 + n * (MIN_SPLAT_AXIS_PX * sgn);
+        det = a1.x * a2.y - a1.y * a2.x;
+    }
+    let area = max(abs(det), 1e-6);
+    // The density cap: the divisor never drops below the launch cell's
+    // capped fraction, so a fold brightens to 333× and stops (K-262's rule,
+    // carried over unchanged).
+    let divisor = max(area, MIN_AREA_FRAC * tp.cell_area_px);
+    // The ray's flux is its launch cell's, weighted by geometry; its colour
+    // is the band-integrated throughput (gain already folded into the band
+    // sub-samples) times the light's own. Dividing here leaves the fragment
+    // with nothing to do but the tent.
+    let light = lights[tp.light_offset + gid.z];
+    let flux = ray.weight * tp.cell_area_px;
+    let peak = (flux * vec3<f32>(ray.r, ray.g, ray.b) * vec3<f32>(light.r, light.g, light.b))
+        / divisor;
+
+    s.cx = here.x;
+    s.cy = here.y;
+    s.a1x = a1.x;
+    s.a1y = a1.y;
+    s.a2x = a2.x;
+    s.a2y = a2.y;
+    s.r = peak.x;
+    s.g = peak.y;
+    s.b = peak.z;
+    s.live = 1.0;
+    splats[out_i] = s;
 }

@@ -3319,6 +3319,20 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
             "the trace shader must declare `{want}`"
         );
     }
+    // The two splat constants (K-366) are spelled twice for the same reason:
+    // a drift in the anti-alias floor or the density cap changes what every
+    // ray deposits, so the GPU would stop being the CPU reference's twin in
+    // a way only the fold tolerances would show.
+    for (name, want) in [
+        ("MIN_SPLAT_AXIS_PX", lf::MIN_SPLAT_AXIS_PX),
+        ("MIN_AREA_FRAC", lf::MIN_AREA_FRAC),
+    ] {
+        let want = format!("const {name}: f32 = {want};");
+        assert!(
+            src.contains(&want),
+            "the trace shader must declare `{want}`"
+        );
+    }
 }
 
 /// The starburst atlas's slice count is spelled twice as well (K-365) —
@@ -3382,9 +3396,7 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
 /// ends up taking the graphics device down with it.
 #[test]
 fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
-    use crate::fx::lens_flare::{
-        plan_batches, AREA_BYTES, CELL_BYTES, RAY_BYTES, SCRATCH_BYTE_BUDGET,
-    };
+    use crate::fx::lens_flare::{plan_batches, RAY_BYTES, SCRATCH_BYTE_BUDGET, SPLAT_BYTES};
     // Grid-major tables as the frame builds them, including the worst case
     // (every combo at the widest grid) and a mixed one.
     let tables: Vec<Vec<u32>> = vec![
@@ -3410,18 +3422,17 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                     "a batch must dispatch at its combos' own grid"
                 );
                 let rays = u64::from(b.grid) * u64::from(b.grid);
-                let quads = u64::from(b.grid - 1) * u64::from(b.grid - 1);
                 let slots = u64::from(b.lights) * u64::from(b.combos);
                 assert_eq!(b.ray_bytes, slots * rays * RAY_BYTES);
-                assert_eq!(b.area_bytes, slots * quads * AREA_BYTES);
-                assert_eq!(b.vert_bytes, slots * quads * CELL_BYTES);
+                // One splat per RAY since K-366, not one per quad.
+                assert_eq!(b.splat_bytes, slots * rays * SPLAT_BYTES);
                 assert!(
-                    b.ray_bytes + b.area_bytes + b.vert_bytes <= SCRATCH_BYTE_BUDGET,
+                    b.ray_bytes + b.splat_bytes <= SCRATCH_BYTE_BUDGET,
                     "batch at grid {} × {} combos × {} lights wants {} bytes",
                     b.grid,
                     b.combos,
                     b.lights,
-                    b.ray_bytes + b.area_bytes + b.vert_bytes
+                    b.ray_bytes + b.splat_bytes
                 );
                 for c in b.combo_offset..b.combo_offset + b.combos {
                     assert_eq!(

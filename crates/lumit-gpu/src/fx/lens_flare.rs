@@ -1,21 +1,20 @@
 //! The Lens flare GPU pipeline (docs/08 §3.27, docs/impl/lens-flare.md,
-//! K-256/K-257): per-frame ray-trace compute, quad-energy and vertex-build
-//! compute, an additive hardware raster of the warped ghost grids, the
-//! Matte-mode source detection, and the combine kernel. The engine-pure
-//! maths and the bake live in `lumit_core::fx::lens_flare`; this module
-//! consumes pre-baked data through [`FlareBakeData`] (the caller converts,
-//! keeping this crate lumit-core-free in production, exactly as the effect
-//! op structs do).
+//! K-256/K-257, K-366): per-frame ray-trace compute, splat-build compute, an
+//! additive hardware raster of one small quad per ray, the Matte-mode source
+//! detection, and the combine kernel. The engine-pure maths and the bake live
+//! in `lumit_core::fx::lens_flare`; this module consumes pre-baked data
+//! through [`FlareBakeData`] (the caller converts, keeping this crate
+//! lumit-core-free in production, exactly as the effect op structs do).
 //!
 //! In plain terms: every frame, a few hundred thousand tiny ray programs
 //! push light through the chosen lens on the graphics card — once per flare
-//! source — and the landing grid of each ghost is drawn as warped triangles
-//! that add their light into a flare image; one last pass lays that (plus a
-//! baked starburst sprite per source) over the picture. In Matte mode the
-//! sources themselves are found on the card first: the matte layer's
-//! brightest points, detected by two small kernels. The slow maths — the
-//! Fourier transforms — never runs here; it arrives as textures baked on
-//! the CPU and cached by parameter hash.
+//! source — and each ray that survives dabs its share of the light onto a
+//! flare image, spread over the little patch its neighbours say it covers;
+//! one last pass lays that (plus a baked starburst sprite per source) over
+//! the picture. In Matte mode the sources themselves are found on the card
+//! first: the matte layer's brightest points, detected by two small kernels.
+//! The slow maths — the Fourier transforms — never runs here; it arrives as
+//! textures baked on the CPU and cached by parameter hash.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{
@@ -219,7 +218,7 @@ struct GpuBaked {
 }
 
 /// The per-frame scratch one flare render works through: the ray landings and
-/// the quad corners the raster pulls from (K-263).
+/// the splats the raster pulls from (K-263, K-366).
 ///
 /// **Why this is pooled rather than allocated per frame.** These are the two
 /// big buffers in the effect — tens of megabytes at working qualities — and a
@@ -232,19 +231,16 @@ struct GpuBaked {
 /// shares with everything else. Held and reused, the frame allocates nothing.
 struct Scratch {
     rays: wgpu::Buffer,
-    areas: wgpu::Buffer,
-    verts: wgpu::Buffer,
+    splats: wgpu::Buffer,
     ray_bytes: u64,
-    area_bytes: u64,
-    vert_bytes: u64,
+    splat_bytes: u64,
 }
 
 /// The lens flare's pipelines, its bake cache and its scratch pool, one field
 /// on [`FxEngine`].
 pub struct LensFlareFx {
     trace: wgpu::ComputePipeline,
-    quad_area: wgpu::ComputePipeline,
-    build_verts: wgpu::ComputePipeline,
+    build_splats: wgpu::ComputePipeline,
     detect_tiles: wgpu::ComputePipeline,
     detect_pick: wgpu::ComputePipeline,
     draw: wgpu::RenderPipeline,
@@ -435,7 +431,7 @@ pub const MAX_SOURCES: u32 = 16;
 /// the same test).
 const DETECT_TILE: u32 = 32;
 
-/// Byte budget for the per-frame trace scratch — rays and quad corners
+/// Byte budget for the per-frame trace scratch — rays and splats
 /// together (K-263). A **hard** cap, not a hint: where K-262's batch size
 /// bottomed out at one combo and then let eight lights at an Ultra grid ask
 /// for a hundred megabytes anyway, the light dimension now splits too, so no
@@ -446,13 +442,10 @@ pub(super) const SCRATCH_BYTE_BUDGET: u64 = 48_000_000;
 /// pad — the rgb since K-364, where the weight alone carried the energy).
 pub(super) const RAY_BYTES: u64 = 32;
 
-/// Bytes one drawn cell occupies: four corners at five floats each (K-263 —
-/// through K-262 it was six eight-float vertices, 192 bytes).
-pub(super) const CELL_BYTES: u64 = 4 * 20;
-
-/// Bytes one cell's landed-area entry occupies (K-264) — the input to the
-/// vertex-smoothed density.
-pub(super) const AREA_BYTES: u64 = 4;
+/// Bytes one splat occupies (K-366, WGSL `Splat`: centre, two half-axes,
+/// peak rgb, live, two pads). One per RAY, where the drawn cell it replaces
+/// was one per (grid−1)² quad.
+pub(super) const SPLAT_BYTES: u64 = 48;
 
 /// Ray–surface steps one command buffer may hold before the frame submits
 /// what it has and opens another (K-263).
@@ -491,7 +484,9 @@ struct TraceParams {
     stop_scale: f32,
     cell_area_px: f32,
     ray_stride: u32,
-    quad_stride: u32,
+    /// Padding that keeps the uniform a multiple of 16 bytes; held the
+    /// per-slot quad count until K-366 replaced quads with per-ray splats.
+    _pad_stride: u32,
     blades: u32,
     rot_rad: f32,
     roundness: f32,
@@ -531,9 +526,9 @@ fn frame_optics(native_fstop: f32, focal_mm: f32, fstop: f32, focus_m: f32) -> F
     }
 }
 
-/// What the draw's vertex stage needs beyond the cells themselves: the
-/// raster it is drawing into, so a cell can be widened by a known number of
-/// PIXELS rather than a guess in clip space (K-353).
+/// What the draw's vertex stage needs beyond the splats themselves: the
+/// raster it is drawing into, because a splat's centre and axes are in
+/// flare-buffer PIXELS and the quad has to reach clip space (K-366).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct DrawDims {
@@ -779,7 +774,8 @@ impl LensFlareFx {
                 storage_entry(0, true, c),
                 storage_entry(1, true, c),
                 storage_entry(2, false, c),
-                storage_entry(3, false, c),
+                // Binding 3 held the per-cell landed areas until K-366; the
+                // numbering is left alone so nothing else has to move.
                 storage_entry(4, false, c),
                 uniform_entry(5, c),
                 storage_entry(6, true, c),
@@ -880,8 +876,12 @@ impl LensFlareFx {
             })
         };
         let trace = compute("trace", "fx-lens-flare-trace", &trace_mod, &trace_pl);
-        let quad_area = compute("quad_area", "fx-lens-flare-area", &trace_mod, &trace_pl);
-        let build_verts = compute("build_verts", "fx-lens-flare-verts", &trace_mod, &trace_pl);
+        let build_splats = compute(
+            "build_splats",
+            "fx-lens-flare-splats",
+            &trace_mod,
+            &trace_pl,
+        );
 
         let detect_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("fx-lens-flare-detect-pl"),
@@ -921,12 +921,11 @@ impl LensFlareFx {
                 ..Default::default()
             },
             depth_stencil: None,
-            // Single-sampled, and antialiased anyway (K-353, superseding
-            // K-264's hardware multisampling): the fragment tests the four
-            // standard sample positions itself from the barycentric
-            // gradients. Hardware 4x MSAA gave the same silhouette smoothing
-            // but blended fp16 into a multisample target, which this GPU does
-            // not do reproducibly — see the note in `fx_lens_flare_draw.wgsl`.
+            // Single-sampled, and antialiased anyway (K-353, K-366): the
+            // splat's tent falls to zero at its own edge, so there is no
+            // silhouette to smooth. Hardware 4x MSAA gave the smoothing but
+            // blended fp16 into a multisample target, which this GPU does not
+            // do reproducibly (impl/lens-flare.md §2.4).
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &draw_mod,
@@ -973,8 +972,7 @@ impl LensFlareFx {
 
         Self {
             trace,
-            quad_area,
-            build_verts,
+            build_splats,
             detect_tiles,
             detect_pick,
             draw,
@@ -1192,13 +1190,7 @@ impl LensFlareFx {
     /// Take the pooled scratch if it is free and big enough, else build one.
     /// The lock covers the take and nothing else — never an allocation, never
     /// an encode (docs/14 §4).
-    fn take_scratch(
-        &self,
-        ctx: &GpuContext,
-        ray_bytes: u64,
-        area_bytes: u64,
-        vert_bytes: u64,
-    ) -> Scratch {
+    fn take_scratch(&self, ctx: &GpuContext, ray_bytes: u64, splat_bytes: u64) -> Scratch {
         let held = self.scratch.lock().ok().and_then(|mut s| s.take());
         match held {
             // Big enough and not wildly oversized: reuse as is. The upper
@@ -1207,20 +1199,17 @@ impl LensFlareFx {
             // peak for the session.
             Some(s)
                 if s.ray_bytes >= ray_bytes
-                    && s.area_bytes >= area_bytes
-                    && s.vert_bytes >= vert_bytes
+                    && s.splat_bytes >= splat_bytes
                     && s.ray_bytes <= ray_bytes.saturating_mul(4)
-                    && s.vert_bytes <= vert_bytes.saturating_mul(4) =>
+                    && s.splat_bytes <= splat_bytes.saturating_mul(4) =>
             {
                 s
             }
             _ => Scratch {
                 rays: scratch_buffer(ctx, "fx-lens-flare-rays", ray_bytes),
-                areas: scratch_buffer(ctx, "fx-lens-flare-areas", area_bytes),
-                verts: scratch_buffer(ctx, "fx-lens-flare-verts", vert_bytes),
+                splats: scratch_buffer(ctx, "fx-lens-flare-splats", splat_bytes),
                 ray_bytes,
-                area_bytes,
-                vert_bytes,
+                splat_bytes,
             },
         }
     }
@@ -1275,7 +1264,7 @@ pub fn flare_pad_dims_of(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u3
     )
 }
 
-/// One dispatch of the trace → cells → raster chain: a run of combos that
+/// One dispatch of the trace → splats → raster chain: a run of combos that
 /// share a pupil grid, and a chunk of the frame's lights (K-263).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Batch {
@@ -1289,10 +1278,9 @@ pub(super) struct Batch {
     pub(super) light_offset: u32,
     /// How many lights.
     pub(super) lights: u32,
-    /// Scratch the batch needs: ray landings, cell areas, quad corners.
+    /// Scratch the batch needs: ray landings and their splats (K-366).
     pub(super) ray_bytes: u64,
-    pub(super) area_bytes: u64,
-    pub(super) vert_bytes: u64,
+    pub(super) splat_bytes: u64,
 }
 
 impl Batch {
@@ -1354,8 +1342,8 @@ pub(super) fn plan_batches(combo_grids: &[u32], light_count: u32) -> Vec<Batch> 
             .map(|n| offset + n)
             .unwrap_or(combo_grids.len());
         let rays = u64::from(grid) * u64::from(grid);
-        let quads = u64::from(grid - 1) * u64::from(grid - 1);
-        let per_slot = rays * RAY_BYTES + quads * (AREA_BYTES + CELL_BYTES);
+        // One splat per RAY since K-366, not one drawn cell per quad.
+        let per_slot = rays * (RAY_BYTES + SPLAT_BYTES);
         // At least one slot always runs: a single (light × combo) pair at the
         // widest grid is 27 MB, inside the budget, so this floor is a
         // formality that keeps the loop total rather than a silent overrun.
@@ -1378,8 +1366,7 @@ pub(super) fn plan_batches(combo_grids: &[u32], light_count: u32) -> Vec<Batch> 
                     light_offset: light_at,
                     lights,
                     ray_bytes: slots_used * rays * RAY_BYTES,
-                    area_bytes: slots_used * quads * AREA_BYTES,
-                    vert_bytes: slots_used * quads * CELL_BYTES,
+                    splat_bytes: slots_used * rays * SPLAT_BYTES,
                 });
                 light_at += lights;
             }
@@ -1482,7 +1469,7 @@ impl FxEngine {
     /// rendered layer (the DoF layer-input shape) — read only when
     /// `op.source == 1`; an absent matte there means no sources, the
     /// labelled-no-op convention. The whole frame — source detection, trace,
-    /// energy, vertex build, the additive ghost raster in batches, and the
+    /// energy, splat build, the additive ghost raster in batches, and the
     /// combine — encodes into ONE encoder and submits once.
     #[allow(clippy::too_many_arguments)]
     pub fn lens_flare(
@@ -1748,7 +1735,7 @@ impl FxEngine {
                 // by ITS OWN grid. Through K-262 one stride served the whole
                 // frame — the widest grid in it — so a single frame-filling
                 // ghost made every compact ghost dispatch and draw at that
-                // ghost's cell count, tens of times the cells they own.
+                // ghost's ray count, tens of times the rays they own.
                 let plan = plan_batches(&combo_grids, light_count);
                 let combos_buf = ctx
                     .device
@@ -1770,14 +1757,13 @@ impl FxEngine {
                     });
                 // One scratch for the whole frame, big enough for its widest
                 // batch and pooled between frames (see [`Scratch`]).
-                let (need_rays, need_areas, need_verts) =
-                    plan.iter().fold((16u64, 16u64, 16u64), |(r, a, v), b| {
-                        (r.max(b.ray_bytes), a.max(b.area_bytes), v.max(b.vert_bytes))
-                    });
-                let scratch = lf.take_scratch(ctx, need_rays, need_areas, need_verts);
-                // The raster's own size, so the vertex stage can widen each
-                // cell by a pixel and let the fragment's coverage test see
-                // every pixel the cell touches (K-353).
+                let (need_rays, need_splats) = plan.iter().fold((16u64, 16u64), |(r, s), b| {
+                    (r.max(b.ray_bytes), s.max(b.splat_bytes))
+                });
+                let scratch = lf.take_scratch(ctx, need_rays, need_splats);
+                // The raster's own size: a splat's centre and half-axes are
+                // in flare-buffer pixels, and the vertex stage maps its quad
+                // from there into clip space (K-366).
                 let draw_dims = ctx
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1794,7 +1780,7 @@ impl FxEngine {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: scratch.verts.as_entire_binding(),
+                            resource: scratch.splats.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -1819,7 +1805,6 @@ impl FxEngine {
                         ..
                     } = *job;
                     let batch_rays = grid * grid;
-                    let batch_quads = (grid - 1) * (grid - 1);
                     // Frame-time optics shared with the CPU reference
                     // (K-261), plus the launch cell area in flare-buffer px².
                     let FrameOptics {
@@ -1852,9 +1837,9 @@ impl FxEngine {
                                 sensor_z_mm: baked.sensor_z_mm,
                                 stop_scale,
                                 cell_area_px: cell_mm * cell_mm * st_flare * st_flare,
-                                // This batch's own strides (K-263).
+                                // This batch's own stride (K-263).
                                 ray_stride: batch_rays,
-                                quad_stride: batch_quads,
+                                _pad_stride: 0,
                                 blades: op.blades.clamp(3, 16),
                                 rot_rad: op.aperture_rotation_deg.to_radians(),
                                 roundness: op.roundness.max(wide_open),
@@ -1880,12 +1865,8 @@ impl FxEngine {
                                 resource: scratch.rays.as_entire_binding(),
                             },
                             wgpu::BindGroupEntry {
-                                binding: 3,
-                                resource: scratch.areas.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
                                 binding: 4,
-                                resource: scratch.verts.as_entire_binding(),
+                                resource: scratch.splats.as_entire_binding(),
                             },
                             wgpu::BindGroupEntry {
                                 binding: 5,
@@ -1906,15 +1887,13 @@ impl FxEngine {
                         ],
                     });
                     // Each stage in its own pass: the pass boundary is the
-                    // write-then-read barrier between them. The area stage
-                    // is separate from the vertex stage (K-264) because the
-                    // vertex stage reads NEIGHBOURING cells' areas — the
-                    // vertex-smoothed density — and a neighbour computed in
-                    // another workgroup needs a pass boundary to be visible.
-                    let stages: [(&wgpu::ComputePipeline, u32, &str); 3] = [
+                    // write-then-read barrier between them. The splat stage
+                    // reads its NEIGHBOURS' landings for the footprint
+                    // (K-366), and a neighbour traced by another workgroup
+                    // needs a pass boundary to be visible.
+                    let stages: [(&wgpu::ComputePipeline, u32, &str); 2] = [
                         (&lf.trace, batch_rays, "fx-lens-flare-trace-pass"),
-                        (&lf.quad_area, batch_quads, "fx-lens-flare-area-pass"),
-                        (&lf.build_verts, batch_quads, "fx-lens-flare-verts-pass"),
+                        (&lf.build_splats, batch_rays, "fx-lens-flare-splats-pass"),
                     ];
                     for (pipeline, x_items, label) in stages {
                         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1940,8 +1919,9 @@ impl FxEngine {
                         });
                         rpass.set_pipeline(&lf.draw);
                         rpass.set_bind_group(0, &draw_bind, &[]);
-                        // Exactly this batch's cells, contiguous from zero.
-                        rpass.draw(0..light_chunk * batch * batch_quads * 6, 0..1);
+                        // One instanced quad per splat, over exactly this
+                        // batch's rays, contiguous from zero (K-366).
+                        rpass.draw(0..6, 0..light_chunk * batch * batch_rays);
                     }
                     // Hand over what is encoded before it grows into a
                     // submission the operating system would kill (see
@@ -2213,17 +2193,13 @@ impl FxEngine {
             mapped_at_creation: false,
         });
         // The layout requires every binding; the trace entry never touches
-        // the area or vertex buffers, so minimal stand-ins satisfy it.
-        let dummy = |label: &str, size: u64| {
-            ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(label),
-                size,
-                usage: wgpu::BufferUsages::STORAGE,
-                mapped_at_creation: false,
-            })
-        };
-        let areas_buf = dummy("fx-lens-flare-dbg-areas", 4);
-        let verts_buf = dummy("fx-lens-flare-dbg-verts", 32);
+        // the splat buffer, so a minimal stand-in satisfies it.
+        let splats_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fx-lens-flare-dbg-splats"),
+            size: SPLAT_BYTES,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
         let params = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -2254,7 +2230,7 @@ impl FxEngine {
                         stop_scale,
                         cell_area_px: cell_mm * cell_mm * op.screen_transform * op.screen_transform,
                         ray_stride: grid * grid,
-                        quad_stride: (grid - 1) * (grid - 1),
+                        _pad_stride: 0,
                         blades: op.blades.clamp(3, 16),
                         rot_rad: op.aperture_rotation_deg.to_radians(),
                         roundness: op.roundness.max(wide_open),
@@ -2281,12 +2257,8 @@ impl FxEngine {
                     resource: rays_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: areas_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: verts_buf.as_entire_binding(),
+                    resource: splats_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
