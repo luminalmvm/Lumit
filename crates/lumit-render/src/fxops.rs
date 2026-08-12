@@ -859,6 +859,29 @@ pub fn run_ops(
                     );
                 }
             }
+            Resolved::SpriteFlare(p) => {
+                tex = fx.sprite_flare(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::SpriteFlareOp {
+                        light: p.light,
+                        intensity: p.intensity,
+                        tint: p.tint,
+                        glow_size: p.glow_size,
+                        glow_intensity: p.glow_intensity,
+                        ghosts: p.ghosts,
+                        ghost_spacing: p.ghost_spacing,
+                        ghost_size: p.ghost_size,
+                        ghost_intensity: p.ghost_intensity,
+                        streak_length: p.streak_length,
+                        streak_intensity: p.streak_intensity,
+                        streak_angle_deg: p.streak_angle_deg,
+                        mix: p.mix,
+                    },
+                );
+            }
             Resolved::LightWrap {
                 width_px,
                 intensity,

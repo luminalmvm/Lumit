@@ -371,6 +371,179 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Sprite flare (docs/08 §3.29, K-359): the ART-DIRECTED flare, and a
+    // deliberately separate effect from the physically simulated §3.27 rather
+    // than a mode of it — the two answer different questions. Everything is
+    // placed from the light's POSITION: a glow on it, a train of iris ghosts
+    // marching along the line through the frame's centre (which is where a real
+    // lens puts its reflections, mirrored about the optical axis), and an
+    // anamorphic streak through it. No bright-pass, so nothing to flicker on
+    // footage — the complaint that sent the physical flare's Matte mode back to
+    // the drawing board. Intensity 0 and Mix 0 are the bit-exact passthrough.
+    EffectSchema {
+        groups: &[
+            ParamGroup {
+                label: "Glow",
+                params: &["glow_size", "glow_intensity"],
+                collapsed: false,
+                visible_when: None,
+            },
+            ParamGroup {
+                label: "Ghosts",
+                params: &["ghosts", "ghost_spacing", "ghost_size", "ghost_intensity"],
+                collapsed: false,
+                visible_when: None,
+            },
+            ParamGroup {
+                label: "Streak",
+                params: &["streak_length", "streak_intensity", "streak_angle"],
+                collapsed: false,
+                visible_when: None,
+            },
+        ],
+        enabled_when: &[],
+        match_name: "sprite_flare",
+        label: "Sprite flare",
+        version: 1,
+        category: FxCategory::Stylise,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::FullFrame,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "light_x",
+                label: "Light x",
+                // px@comp (K-260), like the physical flare's light. Open both
+                // sides: an off-frame light still throws ghosts across it,
+                // which is most of what this effect is for.
+                kind: ParamKind::Float {
+                    default: 640.0,
+                    slider: (0.0, 3840.0),
+                    hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "light_y",
+                label: "Light y",
+                kind: ParamKind::Float {
+                    default: 360.0,
+                    slider: (0.0, 2160.0),
+                    hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "intensity",
+                label: "Intensity",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "tint",
+                label: "Tint",
+                // Scene-linear, and open above so an HDR tint can push the
+                // flare hotter than the plate.
+                kind: ParamKind::Colour {
+                    default: [1.0, 1.0, 1.0, 1.0],
+                    range: (0.0, 4.0),
+                },
+            },
+            ParamSchema {
+                id: "glow_size",
+                label: "Glow size",
+                kind: ParamKind::Float {
+                    default: 120.0,
+                    slider: (0.0, 800.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "glow_intensity",
+                label: "Glow intensity",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghosts",
+                label: "Ghosts",
+                // How many discs march along the axis; 0 is none of them.
+                kind: ParamKind::Int {
+                    default: 6,
+                    slider: (0, 16),
+                    hard: (Some(0), Some(16)),
+                },
+            },
+            ParamSchema {
+                id: "ghost_spacing",
+                label: "Ghost spacing",
+                // A fraction of the light→centre distance, so the train
+                // stretches and gathers as the light moves, exactly as a real
+                // one does.
+                kind: ParamKind::Float {
+                    default: 0.35,
+                    slider: (0.0, 1.5),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghost_size",
+                label: "Ghost size",
+                kind: ParamKind::Float {
+                    default: 60.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghost_intensity",
+                label: "Ghost intensity",
+                kind: ParamKind::Float {
+                    default: 0.35,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_length",
+                label: "Streak length",
+                kind: ParamKind::Float {
+                    default: 300.0,
+                    slider: (0.0, 2000.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_intensity",
+                label: "Streak intensity",
+                kind: ParamKind::Float {
+                    default: 0.5,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_angle",
+                label: "Streak angle",
+                // 0 is horizontal — the anamorphic look.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (-180.0, 180.0),
+                    hard: (None, None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
     // Light wrap (docs/08 §3.28, K-358): the oldest trick in compositing and
     // one Lumit had no answer for. A keyed subject reads as pasted on because
     // in a real camera the light behind it spills round its edges; this takes

@@ -8566,3 +8566,24 @@ is actually drawn onto and what an export writes there, so it goes through a new
 opposite sides — *what is behind the picture* — and having one without the other is what
 made a black comp confusing. Black and white are offered as presets because that is nine
 uses in ten.
+
+**K-359 · DECIDED · The sprite flare is its own effect, not a mode of the physical one.**
+docs/08 §3.29. The owner asked for an Optical-Flares-style flare alongside the simulated
+one (2026-08-12), and *alongside* is the whole design: §3.27 asks "what would this lens
+actually do", §3.29 asks "draw me a flare here". They answer different questions, and the
+first draft of NEXT-FEATURES muddled itself by trying to make one serve both.
+
+Everything is placed from the light's **position** — a glow on it, a train of iris ghosts
+along the line from the light through the frame's centre, and an anamorphic streak. The
+ghosts march through the centre because that is where a real lens puts its reflections
+(mirrored about the optical axis), and their spacing is a *fraction* of the light→centre
+distance, so the train stretches and gathers as the light moves rather than sliding rigidly.
+
+**No bright-pass, which is the point.** Nothing is read from the picture's brightness, so
+there is no threshold for a source to cross and nothing to pop as grain moves — the exact
+complaint that made §3.27's Matte mode unpleasant on footage. The oracle asserts it as a
+property rather than trusting it: moving the light one pixel may not change any pixel by
+more than a small bound, which a threshold-driven flare cannot pass.
+
+One procedural compute pass, no inputs but the layer, so it is Cheap where §3.27 is Heavy.
+Both flares stay; neither is the other's fallback.

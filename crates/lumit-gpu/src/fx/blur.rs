@@ -163,6 +163,58 @@ struct LightWrapParams {
     mix_amt: f32,
 }
 
+/// One resolved sprite flare (docs/08 §3.29, K-359) — the art-directed flare,
+/// placed from a light position rather than from the picture's bright pixels.
+/// Mirrors `lumit_core::fx::cpu::SpriteFlareParams`; this crate never depends
+/// on `lumit-core` (docs/05 §architecture), so the shape is restated rather
+/// than shared.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFlareOp {
+    /// Where the light is, in raster pixels.
+    pub light: [f32; 2],
+    /// Master gain; 0 is the bit-exact passthrough.
+    pub intensity: f32,
+    /// Scene-linear RGB every element is multiplied by.
+    pub tint: [f32; 3],
+    pub glow_size: f32,
+    pub glow_intensity: f32,
+    pub ghosts: u32,
+    pub ghost_spacing: f32,
+    pub ghost_size: f32,
+    pub ghost_intensity: f32,
+    pub streak_length: f32,
+    pub streak_intensity: f32,
+    pub streak_angle_deg: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The sprite flare's uniform block (docs/08 §3.29, K-359) — field for field
+/// what `fx_sprite_flare.wgsl` declares.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SpriteFlareParams {
+    w: u32,
+    h: u32,
+    light_x: f32,
+    light_y: f32,
+    intensity: f32,
+    tint_r: f32,
+    tint_g: f32,
+    tint_b: f32,
+    glow_size: f32,
+    glow_intensity: f32,
+    ghosts: u32,
+    ghost_spacing: f32,
+    ghost_size: f32,
+    ghost_intensity: f32,
+    streak_length: f32,
+    streak_intensity: f32,
+    streak_angle_deg: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
+}
+
 /// One resolved glow (docs/08 §3.3, v1 core): bright-pass with a soft knee,
 /// the shared gaussian on the leftover light, additive recombine. The
 /// radius is already in raster pixels; intensity 0 is the neutral point
@@ -377,6 +429,55 @@ impl FxEngine {
             w,
             h,
             bytemuck::bytes_of(&params),
+        );
+        out
+    }
+
+    /// **Sprite flare** (docs/08 §3.29, K-359): the art-directed flare, drawn
+    /// from a light POSITION rather than from the picture's bright pixels — so
+    /// it cannot flicker on footage, because there is no threshold to cross.
+    ///
+    /// One procedural pass, no inputs but the layer itself. Intensity 0 and
+    /// Mix 0 are the bit-exact passthrough, matching the CPU reference's
+    /// short-circuit.
+    pub fn sprite_flare(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        p: &SpriteFlareOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-sprite-flare-out");
+        self.dispatch(
+            ctx,
+            &self.sprite_flare,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&SpriteFlareParams {
+                w,
+                h,
+                light_x: p.light[0],
+                light_y: p.light[1],
+                intensity: p.intensity,
+                tint_r: p.tint[0],
+                tint_g: p.tint[1],
+                tint_b: p.tint[2],
+                glow_size: p.glow_size,
+                glow_intensity: p.glow_intensity,
+                ghosts: p.ghosts,
+                ghost_spacing: p.ghost_spacing,
+                ghost_size: p.ghost_size,
+                ghost_intensity: p.ghost_intensity,
+                streak_length: p.streak_length,
+                streak_intensity: p.streak_intensity,
+                streak_angle_deg: p.streak_angle_deg,
+                mix_amt: p.mix,
+                _pad: [0.0; 2],
+            }),
         );
         out
     }

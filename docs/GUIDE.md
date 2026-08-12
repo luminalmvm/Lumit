@@ -3949,6 +3949,36 @@ half of one. Folded into the frame's cache name like the rest (an opaque frame
 and a see-through frame are two different pictures), and never sent to an
 export, which always draws the backdrop.
 
+### Two lens flares, and why there are two (K-359)
+
+Lumit has a **Lens flare** and a **Sprite flare**, and they are not two
+attempts at the same thing.
+
+**Lens flare** is a simulation. It has a real lens inside it — the actual glass
+elements of a real photographic lens, their curvatures and spacings — and it
+traces light bouncing between those surfaces. The flare it draws is whatever
+that lens would genuinely do. That is why it takes work to render, and why it
+behaves in ways you did not design: ghosts change colour as the light crosses
+frame, the train stretches at the edges, the starburst is the true diffraction
+pattern of the aperture. You are photographing something.
+
+**Sprite flare** is a drawing. You tell it where the light is, and it draws a
+glow, a row of ghosts and a streak. Nothing is simulated and nothing is read
+off the picture — which means it does exactly what you set, every frame,
+forever. It is cheap, and it never surprises you.
+
+Reach for the first when you want the shot to look photographed. Reach for the
+second when you want a specific look and want it to stay put. Neither is a
+fallback for the other, and both stay.
+
+The ghosts in the sprite version march along the line from the light through
+the *middle of the frame*, which is not an arbitrary choice — that is where a
+real lens throws them, because they are reflections about the lens's own axis.
+Move the light left and the ghosts swing right. Their spacing is a proportion
+of that distance rather than a fixed number of pixels, so the train gathers as
+the light nears the centre and stretches as it leaves — which is the thing that
+makes it read as a lens rather than as a row of circles.
+
 ### Light wrap — why a cut-out looks pasted on, and the fix (K-358)
 
 Key a person off a green screen, drop them on a new background, and something

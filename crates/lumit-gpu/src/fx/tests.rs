@@ -4011,6 +4011,110 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     }
 }
 
+/// **Sprite flare** (docs/08 §3.29, K-359): the WGSL agrees with the CPU
+/// reference, the neutral points pass through bit-exactly, and — the property
+/// the whole effect exists for — moving the light moves the flare *smoothly*,
+/// with no threshold to pop across.
+#[test]
+fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (64u32, 48u32);
+    let img = corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    let params = |lx: f32| lumit_core::fx::cpu::SpriteFlareParams {
+        light: [lx, 18.0],
+        intensity: 1.0,
+        tint: [1.0, 0.9, 0.7],
+        glow_size: 14.0,
+        glow_intensity: 1.0,
+        ghosts: 5,
+        ghost_spacing: 0.35,
+        ghost_size: 10.0,
+        ghost_intensity: 0.5,
+        streak_length: 30.0,
+        streak_intensity: 0.6,
+        streak_angle_deg: 12.0,
+        mix: 1.0,
+    };
+    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::SpriteFlareOp {
+        light: p.light,
+        intensity: p.intensity,
+        tint: p.tint,
+        glow_size: p.glow_size,
+        glow_intensity: p.glow_intensity,
+        ghosts: p.ghosts,
+        ghost_spacing: p.ghost_spacing,
+        ghost_size: p.ghost_size,
+        ghost_intensity: p.ghost_intensity,
+        streak_length: p.streak_length,
+        streak_intensity: p.streak_intensity,
+        streak_angle_deg: p.streak_angle_deg,
+        mix: p.mix,
+    };
+
+    let p = params(20.0);
+    let mut cpu = img.clone();
+    lumit_core::fx::cpu::sprite_flare(&mut cpu, w, h, &p);
+    let out = fx.sprite_flare(&ctx, &tex, w, h, &op(&p));
+    let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+    let added: f32 = gpu.iter().zip(&img).map(|(a, b)| (a - b).abs()).sum();
+    assert!(added > 1e-2, "the flare drew nothing ({added})");
+    let worst = worst_diff(&cpu, &gpu);
+    eprintln!("sprite_flare: worst {worst:.2e}");
+    assert!(worst < 5e-3, "worst |Δ| {worst}");
+
+    // Bit-stable.
+    let again = fx.sprite_flare(&ctx, &tex, w, h, &op(&p));
+    assert_eq!(
+        gpu,
+        readback_linear_f32(&ctx, &again, w, h).unwrap(),
+        "the sprite flare must be bit-stable"
+    );
+
+    // **It cannot pop.** This is the whole reason the effect exists beside the
+    // physically simulated one: there is no bright-pass, so nudging the light
+    // by a pixel nudges the picture by a little. A threshold-driven flare
+    // fails this — a source crossing the gate appears all at once.
+    let mut previous: Option<Vec<f32>> = None;
+    let mut worst_step = 0.0f32;
+    for step in 0..6 {
+        let q = params(20.0 + step as f32);
+        let mut frame = img.clone();
+        lumit_core::fx::cpu::sprite_flare(&mut frame, w, h, &q);
+        if let Some(prev) = &previous {
+            worst_step = worst_step.max(worst_diff(prev, &frame));
+        }
+        previous = Some(frame);
+    }
+    assert!(
+        worst_step < 0.35,
+        "a one-pixel move of the light changed a pixel by {worst_step} — \
+         the flare must slide, not pop"
+    );
+
+    // Neutral points: Intensity 0 and Mix 0 are the input, untouched.
+    for neutral in [
+        lumit_core::fx::cpu::SpriteFlareParams {
+            intensity: 0.0,
+            ..p
+        },
+        lumit_core::fx::cpu::SpriteFlareParams { mix: 0.0, ..p },
+    ] {
+        let nout = fx.sprite_flare(&ctx, &tex, w, h, &op(&neutral));
+        assert_eq!(
+            readback_linear_f32(&ctx, &nout, w, h).unwrap(),
+            img,
+            "a neutral sprite flare must be the bit-exact input"
+        );
+    }
+}
+
 /// **Light wrap** (docs/08 §3.28, K-358): the WGSL agrees with the CPU
 /// reference, the neutral points pass the input through bit-exactly, and the
 /// wrap lands where it should — inside the foreground's edge, nowhere else.

@@ -1053,9 +1053,21 @@
   "@fxGhostIntensity": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxGhostSize": "Ghost size",
+  "@fxGhostSize": {
+    "description": "Effect controls — a control on Sprite flare. How big each of the flare's ghost discs is drawn."
+  },
   "fxGhostSoftness": "Ghost softness",
   "@fxGhostSoftness": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxGhostSpacing": "Ghost spacing",
+  "@fxGhostSpacing": {
+    "description": "Effect controls — a control on Sprite flare. How far apart the ghosts sit along the line from the light through the middle of the frame."
+  },
+  "fxGhosts": "Ghosts",
+  "@fxGhosts": {
+    "description": "Effect controls — a control on Sprite flare. How many ghost discs the flare draws."
   },
   "fxGlow": "Glow",
   "@fxGlow": {
@@ -1465,9 +1477,21 @@
   "@fxSourceWidth": {
     "description": "Effect controls — a control on Lens flare. Half the width of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
   },
+  "fxGlowIntensity": "Glow intensity",
+  "@fxGlowIntensity": {
+    "description": "Effect controls — a control on Sprite flare. How bright the soft glow on the light itself is."
+  },
+  "fxGlowSize": "Glow size",
+  "@fxGlowSize": {
+    "description": "Effect controls — a control on Sprite flare. How wide the soft glow on the light itself spreads, in pixels."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxSpriteFlare": "Sprite flare",
+  "@fxSpriteFlare": {
+    "description": "Effect name in the Effects list. An art-directed lens flare drawn from a light position you set — a glow, a train of ghosts and a streak — rather than simulated through a real lens."
   },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
@@ -1478,6 +1502,22 @@
     "description": "Effect controls — a control on Matte key."
   },
   "fxStops": "Stops",
+  "fxStreak": "Streak",
+  "@fxStreak": {
+    "description": "Effect controls — the heading over Sprite flare's streak controls. The long thin horizontal flare an anamorphic lens throws."
+  },
+  "fxStreakAngle": "Streak angle",
+  "@fxStreakAngle": {
+    "description": "Effect controls — a control on Sprite flare. Which way the long thin streak through the light is angled; 0 is horizontal."
+  },
+  "fxStreakIntensity": "Streak intensity",
+  "@fxStreakIntensity": {
+    "description": "Effect controls — a control on Sprite flare. How bright the long thin streak through the light is."
+  },
+  "fxStreakLength": "Streak length",
+  "@fxStreakLength": {
+    "description": "Effect controls — a control on Sprite flare. How far the long thin streak reaches from the light, in pixels."
+  },
   "@fxStops": {
     "description": "Effect controls — a control on Exposure."
   },

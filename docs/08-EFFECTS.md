@@ -1762,6 +1762,31 @@ blurring the whole thing gets it for nothing), fold the two into one texture, sc
 CPU reference does the same four steps in the same order, so the twins agree by
 construction rather than by resemblance.
 
+### 3.29 Sprite flare — the art-directed flare
+
+A **deliberately separate effect** from §3.27's physical simulation, not a mode of it: the
+two answer different questions and mixing them is what made the first plan for this
+muddled. §3.27 asks *what would this lens actually do*; this one asks *draw me a flare
+here*.
+
+Everything is placed from the light's **position** — a **Glow** on it, a train of iris
+**Ghosts** marching along the line from the light through the frame's centre (which is
+where a real lens puts its reflections, mirrored about the optical axis, so the train swings
+to the far side of the middle as the light crosses frame), and an anamorphic **Streak**
+through it. Ghost spacing is a *fraction* of the light→centre distance, so the train
+stretches and gathers as the light moves rather than sliding rigidly.
+
+**There is no bright-pass, and that is the point.** Nothing is read from the picture's
+brightness, so there is no threshold for a source to cross and nothing to pop in or out as
+grain moves — the complaint that sent §3.27's Matte mode back to the drawing board on
+footage. The oracle asserts it directly: nudging the light by a pixel may not change any
+pixel by more than a small bound.
+
+One procedural pass, no inputs but the layer itself, so it is Cheap. Intensity 0 and Mix 0
+are the bit-exact passthrough. Everything with a distance is px@comp (K-260) and shrinks
+with the preview raster, the light's position included — or the flare would slide between
+preview and export.
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)

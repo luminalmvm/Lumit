@@ -10,6 +10,7 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // own functions by the callers that hold the extra texture; here they
         // are the passthrough rather than a silent half-effect.
         Resolved::LightWrap { .. } => {}
+        Resolved::SpriteFlare(p) => sprite_flare(rgba, w, h, p),
         Resolved::Blur {
             radius_px,
             edge,
@@ -2131,6 +2132,123 @@ pub fn blur_radial(
             for c in 0..4 {
                 let v = acc[c] / nf;
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
+            }
+        }
+    }
+}
+
+/// One resolved sprite flare (docs/08 §3.29, K-359) — the art-directed
+/// sibling of the physically simulated §3.27.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFlareParams {
+    /// Where the light is, in raster pixels (px@comp, K-260).
+    pub light: [f32; 2],
+    /// Master gain on everything the effect draws; 0 is the neutral point.
+    pub intensity: f32,
+    /// Scene-linear RGB every element is multiplied by.
+    pub tint: [f32; 3],
+    /// The central glow's radius in raster pixels, and its gain.
+    pub glow_size: f32,
+    pub glow_intensity: f32,
+    /// How many iris ghosts march along the axis, their spacing as a fraction
+    /// of the light→centre distance, their base radius and their gain.
+    pub ghosts: u32,
+    pub ghost_spacing: f32,
+    pub ghost_size: f32,
+    pub ghost_intensity: f32,
+    /// The anamorphic streak's half-length in raster pixels, its gain, and its
+    /// angle in degrees (0 = horizontal).
+    pub streak_length: f32,
+    pub streak_intensity: f32,
+    pub streak_angle_deg: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Most ghosts a sprite flare will draw — the loop bound both twins share.
+pub const SPRITE_FLARE_MAX_GHOSTS: u32 = 16;
+
+/// The light a sprite flare adds at one pixel, before tint and Intensity
+/// (docs/08 §3.29, K-359). Shared by the CPU reference and mirrored op-for-op
+/// in WGSL, so the two cannot drift.
+///
+/// Everything is placed from the **light's position**, never from the picture's
+/// brightness: that is the whole difference from §3.27's Matte mode and the
+/// reason this one does not flicker on footage. The elements march along the
+/// line from the light through the frame's centre, which is what a real lens
+/// does — the ghosts are reflections about the optical axis, so they land on
+/// the far side of the middle as the light moves.
+#[must_use]
+pub fn sprite_flare_at(px: f32, py: f32, w: u32, h: u32, p: &SpriteFlareParams) -> f32 {
+    let (cx, cy) = (w as f32 * 0.5, h as f32 * 0.5);
+    let (lx, ly) = (p.light[0], p.light[1]);
+    let mut acc = 0.0f32;
+
+    // The central glow: a soft falloff on the light itself.
+    if p.glow_intensity > 0.0 && p.glow_size > 0.0 {
+        let d = ((px - lx).powi(2) + (py - ly).powi(2)).sqrt() / p.glow_size;
+        acc += p.glow_intensity * (-d * d).exp();
+    }
+
+    // The ghosts, mirrored through the centre and shrinking with distance —
+    // the far ones are the small tight discs, the near ones broad and faint.
+    if p.ghost_intensity > 0.0 && p.ghost_size > 0.0 {
+        let (ax, ay) = (lx - cx, ly - cy);
+        let n = p.ghosts.min(SPRITE_FLARE_MAX_GHOSTS);
+        for i in 1..=n {
+            let t = -(i as f32) * p.ghost_spacing;
+            let (gx, gy) = (cx + ax * t, cy + ay * t);
+            // A ghost further from the axis' centre is a larger, softer disc.
+            let radius = p.ghost_size * (0.35 + 0.65 * t.abs());
+            if radius <= 0.0 {
+                continue;
+            }
+            let d = ((px - gx).powi(2) + (py - gy).powi(2)).sqrt() / radius;
+            // A soft-edged disc: flat in the middle, falling to nothing at the
+            // rim, which is what an out-of-focus iris looks like.
+            let disc = (1.0 - d * d).max(0.0);
+            // Alternate ghosts fall off harder, so the train reads as a train
+            // rather than as one smear.
+            let shaped = if i % 2 == 0 { disc * disc } else { disc };
+            acc += p.ghost_intensity * shaped / (i as f32);
+        }
+    }
+
+    // The anamorphic streak: a long thin glow through the light.
+    if p.streak_intensity > 0.0 && p.streak_length > 0.0 {
+        let a = p.streak_angle_deg.to_radians();
+        let (s, c) = (a.sin(), a.cos());
+        let (dx, dy) = (px - lx, py - ly);
+        // Into the streak's own frame, then squashed: long along it, tight
+        // across it.
+        let along = (dx * c + dy * s) / p.streak_length;
+        let across = (-dx * s + dy * c) / (p.streak_length * 0.03).max(1e-3);
+        let d2 = along * along + across * across;
+        acc += p.streak_intensity * (-d2).exp();
+    }
+
+    acc.max(0.0)
+}
+
+/// **Sprite flare** (docs/08 §3.29, K-359): the art-directed flare, drawn from
+/// a light POSITION rather than from the picture's bright pixels.
+pub fn sprite_flare(rgba: &mut [f32], w: u32, h: u32, p: &SpriteFlareParams) {
+    if p.intensity <= 0.0 || p.mix <= 0.0 {
+        return;
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let e = sprite_flare_at(x as f32 + 0.5, y as f32 + 0.5, w, h, p) * p.intensity;
+            if e <= 0.0 {
+                continue;
+            }
+            for c in 0..3 {
+                let base = rgba[i + c];
+                // Additive, like every other light in the engine: a flare is
+                // light arriving at the sensor, not a grade.
+                let lit = base + e * p.tint[c];
+                rgba[i + c] = base * (1.0 - p.mix) + lit * p.mix;
             }
         }
     }

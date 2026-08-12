@@ -198,6 +198,7 @@ impl FxEngine {
             "fx-sharpen-simple",
         );
         let light_wrap_mod = module(include_str!("../fx_light_wrap.wgsl"), "fx-light-wrap");
+        let sprite_flare_mod = module(include_str!("../fx_sprite_flare.wgsl"), "fx-sprite-flare");
         let rgb_split_mod = module(include_str!("../fx_rgbsplit.wgsl"), "fx-rgb-split");
         let spectral_mod = module(include_str!("../fx_spectral.wgsl"), "fx-spectral-split");
         let chromatic_mod = module(
@@ -237,6 +238,7 @@ impl FxEngine {
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
         let sharpen_simple = pipeline(&sharpen_simple_mod, "fx-sharpen-simple", "sharpen_simple");
+        let sprite_flare = pipeline(&sprite_flare_mod, "fx-sprite-flare", "sprite_flare");
         let light_wrap_pack = pipeline(&light_wrap_mod, "fx-light-wrap-pack", "pack");
         let light_wrap_combine = pipeline(&light_wrap_mod, "fx-light-wrap", "combine");
         let rgb_split = pipeline(&rgb_split_mod, "fx-rgb-split", "rgb_split");
@@ -326,6 +328,7 @@ impl FxEngine {
             sharpen_unpremultiply,
             sharpen_combine,
             sharpen_simple,
+            sprite_flare,
             light_wrap_pack,
             light_wrap_combine,
             rgb_split,
