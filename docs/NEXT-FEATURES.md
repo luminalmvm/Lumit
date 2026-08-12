@@ -453,14 +453,14 @@ regression tests, so this table is a reading order rather than a record:
 | **Area sources** (part of 1·D) | **Landed**, K-355 — by direct sampling, the reference method |
 | 1·A1 — multi-layer AR coatings | **Landed**, K-356 |
 | 6 — viewer bar completion | **Landed**, K-357 |
+| 5 — light wrap | **Landed**, K-358 |
 
 **Still to build**, in the order they are worth doing:
 
 | # | Entry | Why this position |
 |---|-------|-------------------|
-| 1 | 5 — light wrap | The cheapest "light meets footage" feature there is, and it pairs with the flare work just landed. Needs a **Background** layer-input parameter ([impl/layer-input.md](impl/layer-input.md) is the pattern — the flare's Matte reference is the closest twin), then blur → edge mask → screen |
-| 2 | 7 — region of interest | Independent; the Viewer's remaining §2.2 debt |
-| 3 | 1·A2 — spectral radiometry | Free accuracy now that A1's stack varies fast with λ: 81 samples against the CIE curves, LUT fetches rather than rays |
+| 1 | 1·A2 — spectral radiometry | The accuracy A1 opened up: now that the coating stack varies *fast* with λ, sampling reflectance at the band centre under-resolves it. **Not as cheap as this file first claimed** — the plan assumed a LUT fetch, but reflectance sits inside the per-ray, per-surface loop, so band-averaging it costs real trace time (~20 surfaces × N sub-samples per ray). Budget for it deliberately, or integrate per (surface, band) into the bake where the ray path does not vary |
+| 2 | 7 — region of interest | Independent; the Viewer's remaining §2.2 debt. **Costlier than it looks:** `realise` composites at `(width, height)` with no viewport, so a real saving needs a scissor threaded through every pass — and the effect stack is *compute* shaders, which scissor does not apply to at all. Either give the realiser a sub-rectangle end to end, or accept that ROI saves rasterisation only and say so. Do not start it as a small job |
 | 4 | 4a/4b — Light layer + flare Lights mode | Model decision first (a `03-DATA-MODEL` change); the flare wiring is cheap after, and the flare's Lights source mode is already reserved |
 | 5 | 1·B2 — field-angle starburst | A bake with a big visual payoff; independent of the ray work |
 | 6 | 2 — sprite-based flare effect | Independent of all of it; a separate effect entirely |
