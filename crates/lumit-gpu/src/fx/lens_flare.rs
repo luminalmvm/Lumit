@@ -139,7 +139,7 @@ pub struct FlareBakeData {
     /// coating_layers, is_stop, pad — the WGSL `Surface` layout (K-261).
     pub surfaces: Vec<[f32; 8]>,
     /// Ranked ghost pairs, brightest first.
-    pub ghosts: Vec<[u32; 2]>,
+    pub ghosts: Vec<[u32; 4]>,
     /// Each pair's image spread (fraction of the sensor diagonal), parallel
     /// to `ghosts` — the adaptive grid budget's input (K-262).
     pub spreads: Vec<f32>,
@@ -180,7 +180,7 @@ pub struct FlareProbeBake<'a> {
     /// Surface rows in the `FlareBakeData` layout.
     pub surfaces: &'a [[f32; 8]],
     /// Ranked ghost pairs, brightest first.
-    pub ghosts: &'a [[u32; 2]],
+    pub ghosts: &'a [[u32; 4]],
     /// Sensor plane z, mm.
     pub sensor_z_mm: f32,
     /// Focal length, mm.
@@ -208,7 +208,7 @@ struct GpuBaked {
     /// The raw surface rows, retained for [`FlareProbeBake`] (K-267) —
     /// a few hundred bytes beside the uploaded buffer.
     surface_rows: Vec<[f32; 8]>,
-    ghosts: Vec<[u32; 2]>,
+    ghosts: Vec<[u32; 4]>,
     spreads: Vec<f32>,
     sensor_z_mm: f32,
     focal_mm: f32,
@@ -588,8 +588,12 @@ struct GpuCombo {
     /// Index into the band table (K-364): the combo names the band, the
     /// band's eight sub-samples carry the colour the combo used to.
     band: u32,
-    _pad2: f32,
-    _pad3: f32,
+    /// The third and fourth bounces of a four-bounce path (K-368), or
+    /// `NO_BOUNCE` for the two-bounce ghosts that were all this struct held
+    /// until then. They took two of the padding slots, so the layout — and
+    /// every stride around it — is unchanged.
+    bounce3: u32,
+    bounce4: u32,
     _pad4: f32,
 }
 
@@ -1722,8 +1726,8 @@ impl FxEngine {
                             lambda_nm: band.traced_nm,
                             _pad: 0.0,
                             band: bi as u32,
-                            _pad2: 0.0,
-                            _pad3: 0.0,
+                            bounce3: ghost[2],
+                            bounce4: ghost[3],
                             _pad4: 0.0,
                         },
                     ));
@@ -2143,8 +2147,8 @@ impl FxEngine {
                     lambda_nm: band.traced_nm,
                     _pad: 0.0,
                     band: bi as u32,
-                    _pad2: 0.0,
-                    _pad3: 0.0,
+                    bounce3: ghost[2],
+                    bounce4: ghost[3],
                     _pad4: 0.0,
                 });
             }

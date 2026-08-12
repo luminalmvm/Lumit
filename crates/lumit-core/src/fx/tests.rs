@@ -4926,9 +4926,127 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     );
     assert_eq!(a.energy_gain, b.energy_gain);
     assert!(!a.pairs.is_empty());
-    for pair in &a.pairs {
-        assert!(pair[0] < pair[1]);
-        assert!((pair[1] as usize) < a.surfaces.len());
+    for path in &a.pairs {
+        assert!(path[0] < path[1]);
+        assert!((path[1] as usize) < a.surfaces.len());
+        // Four-bounce paths (K-368) carry the same walk one leg further in:
+        // the third bounce is past the second, the fourth before the third.
+        if path[2] != NO_BOUNCE {
+            assert!(path[0] < path[2] && path[3] < path[2]);
+            assert!((path[2] as usize) < a.surfaces.len());
+            assert_ne!(path[3], NO_BOUNCE);
+        } else {
+            assert_eq!(path[3], NO_BOUNCE);
+        }
+    }
+}
+
+/// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the
+/// enumeration stays bounded, and old uncoated glass shows the doubled
+/// ghosts modern coatings suppress.
+#[test]
+fn lens_flare_four_bounce_ghosts_rank_and_render() {
+    use crate::fx::lens_flare::*;
+    // The walk: a known-bright two-bounce path lands, and its sentinel form
+    // is what it always was.
+    let p = default_flare_params();
+    let baked = bake(&p);
+    let dir = light_direction([0.33, 0.30], 9.0 / 16.0, baked.focal_mm);
+    let two = baked.pairs[0];
+    let origin = [baked.pupil_mm * 0.3, 0.0, baked.start_z_mm];
+    let hit = trace_splat(
+        &baked,
+        [two[0], two[1], NO_BOUNCE, NO_BOUNCE],
+        550.0,
+        origin,
+        dir,
+        0.75,
+        1.0,
+        0.0,
+    );
+    let Some((pos, w)) = hit else {
+        panic!("the brightest ranked path traced nothing at the default light")
+    };
+    assert!(pos[0].is_finite() && pos[1].is_finite() && w.is_finite());
+    // Bit-equal twice: the walk carries no state between calls.
+    assert_eq!(
+        hit,
+        trace_splat(
+            &baked,
+            [two[0], two[1], NO_BOUNCE, NO_BOUNCE],
+            550.0,
+            origin,
+            dir,
+            0.75,
+            1.0,
+            0.0
+        )
+    );
+
+    // Vintage glass shows its double ghosts. The Biotar is a 1927 design and
+    // every surface of it is bare or single-coated, so a four-bounce path
+    // keeps ~10⁻⁶ of the light rather than the ~10⁻¹⁰ a modern stack leaves.
+    //
+    // **The ranking reality, measured.** On every bundled lens the whole
+    // two-bounce family outranks the whole four-bounce one — four extra
+    // Fresnel factors are simply worth more than any geometry — so what
+    // decides whether a four-bounce ghost renders is not whether it beats a
+    // pair but whether the pairs run out first. The Biotar has 11 surfaces
+    // and 45 surviving pairs, so its four-bounce paths start at rank 45 and
+    // over a hundred of them fall inside the rendered 200. The 24-surface
+    // Master Prime has 252 pairs, and its four-bounce paths never get a
+    // look in — which is the physically right answer for modern multicoated
+    // glass, and the assertion below pins it.
+    let vintage = LensFlareParams {
+        lens: 17, // Zeiss Biotar 50mm F1.4
+        ..default_flare_params()
+    };
+    let vb = bake(&vintage);
+    let four_in_view = vb
+        .pairs
+        .iter()
+        .take(MAX_RENDERED_PAIRS)
+        .filter(|p| p[2] != NO_BOUNCE)
+        .count();
+    assert!(
+        four_in_view > 0,
+        "the Biotar renders no four-bounce ghost at all: {} paths ranked",
+        vb.pairs.len()
+    );
+    // …and they are honest ghosts, not table entries: one must actually
+    // land light on the sensor.
+    let vdir = light_direction([0.33, 0.30], 0.5625, vb.focal_mm);
+    let landed = vb.pairs.iter().filter(|p| p[2] != NO_BOUNCE).any(|&path| {
+        (0..8).any(|k| {
+            let frac = k as f32 / 8.0;
+            let o = [vb.pupil_mm * frac, vb.pupil_mm * frac * 0.5, vb.start_z_mm];
+            matches!(
+                trace_splat(&vb, path, 550.0, o, vdir, 1.0, 1.0, 0.0),
+                Some((_, w)) if w > 0.0
+            )
+        })
+    });
+    assert!(landed, "no four-bounce path put light on the sensor");
+
+    // Modern coatings keep them rare: on the Master Prime the brightest
+    // ghosts are all still the two-bounce ones.
+    let modern = bake(&default_flare_params()); // lens 16, Master Prime
+    for path in modern.pairs.iter().take(8) {
+        assert_eq!(
+            path[2], NO_BOUNCE,
+            "a four-bounce path outranked the two-bounce ghosts on a \
+             multi-coated lens: {path:?}"
+        );
+    }
+
+    // The enumeration bound holds: no more four-bounce paths survive than
+    // were ever probed.
+    for b in [&baked, &vb] {
+        let four = b.pairs.iter().filter(|p| p[2] != NO_BOUNCE).count();
+        assert!(
+            four <= FOUR_BOUNCE_PROBE_CAP,
+            "{four} probed-and-kept paths"
+        );
     }
 }
 
@@ -7579,12 +7697,23 @@ fn bake_timing_probe() {
         };
         let t = std::time::Instant::now();
         let baked = crate::fx::lens_flare::bake(&p);
+        let four = |take: usize| {
+            baked
+                .pairs
+                .iter()
+                .take(take)
+                .filter(|p| p[2] != crate::fx::lens_flare::NO_BOUNCE)
+                .count()
+        };
         eprintln!(
-            "lens {lens:2} ({}): {:6.1} ms, {} surfaces, {} pairs",
+            "lens {lens:2} ({}): {:6.1} ms, {} surfaces, {} paths ({} four-bounce, {} in the rendered {})",
             crate::fx::lens_flare::lens_entry(lens).name,
             t.elapsed().as_secs_f64() * 1000.0,
             baked.surfaces.len(),
             baked.pairs.len(),
+            four(usize::MAX),
+            four(crate::fx::lens_flare::MAX_RENDERED_PAIRS),
+            crate::fx::lens_flare::MAX_RENDERED_PAIRS,
         );
     }
 }

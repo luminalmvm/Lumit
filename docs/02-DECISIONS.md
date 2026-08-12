@@ -8992,3 +8992,61 @@ Choices worth recording:
 
 The CPU twin (`source_jitter`) and the shader's copy are op for op, and the two constants
 are pinned by test — compared as bits, since Rust and WGSL print floats differently.
+
+## K-368 — Four-bounce ghosts are enumerated under a reflectance-product prefilter and ranked in one list with the pairs
+
+**DECIDED** (2026-08-12). Entry C1 of the flare accuracy programme.
+
+A ghost is light that reflected off **two** lens surfaces on its way to the sensor, and
+the bake has always traced exactly those: `N(N−1)/2` paths for `N` interfaces, ranked by
+an on-axis ray probe. Light that bounces **four** times lands on the sensor too. With
+modern coatings each such path carries on the order of 10⁻⁵ of a two-bounce one, which
+sounds like nothing — but the sun is ~10⁵ times a normal highlight, a few four-bounce
+paths happen to focus tightly rather than wash out, and with vintage uncoated glass
+(R ≈ 4% a surface) they are plainly visible as the chains of doubled ghosts old lenses
+are known for. Not tracing them made every bundled prescription slightly cleaner than the
+glass it describes.
+
+**The path model.** `FlareBaked::pairs` becomes `Vec<[u32; 4]>`. Slots 0 and 1 keep
+exactly the meaning K-261 gave them — the ray runs forward to `b`, reflects, back to `a`,
+reflects, then out — so `a < b` still holds and a two-bounce path is
+`[a, b, NO_BOUNCE, NO_BOUNCE]` with `NO_BOUNCE = u32::MAX`. A four-bounce path adds the
+same figure once more: forward from `a` to `c` reflecting there, back to `d` reflecting
+there, then forward to the sensor. Hence `a < c` and `d < c`, while `c` may sit either
+side of `b` and `d` may be `a` itself. The sentinel is what keeps the two-bounce case
+honest: with `c` = `u32::MAX` no surface index can equal it, so phase 3 runs to the end
+of the stack with its reflect flag always false and the ghosts every existing project has
+execute the statements they always did — in all three walks (`trace_splat`,
+`trace_splat_spectral`, and the WGSL trace kernel, which spends two of `Combo`'s padding
+slots on `bounce_c`/`bounce_d` and so keeps its layout).
+
+**Why they are prefiltered rather than probed.** There are ~N⁴/4 four-bounce paths — over
+a hundred thousand on a normal prescription, millions on a zoom — and the ray probe that
+ranks pairs costs three traced rays each. They are therefore pre-ranked by an upper bound
+on the energy a path can carry: the product of the four surfaces' reflectances at normal
+incidence and 550 nm, precomputed once per surface. It is an upper bound in the coating's
+own terms (an AR stack is designed to be at its worst on-axis) and it is a product of
+numbers under one, so a partial product bounds the whole — which is what lets the search
+prune an entire `(a, b)` sub-tree the moment its pair reflectance cannot beat the worst
+candidate already kept. The best `FOUR_BOUNCE_PROBE_CAP` = 1500 of them are kept, in a
+bounded top-K heap keyed by (bound bits, tuple) so the kept set is one deterministic set
+rather than whichever equal-bound path arrived first.
+
+**The bound decides only what is probed.** What renders is decided by the same on-axis
+three-wavelength ray probe every pair faces, against the same `PAIR_MIN_INTENSITY` floor,
+and the survivors merge into **one** ranked list — descending probe brightness, ties by
+tuple order. Everything downstream (`MAX_RENDERED_PAIRS`, the spread probes, the frame
+grid plan, the GPU combo table) consumes that list unchanged and cannot tell the two kinds
+apart. A crude bound can therefore only cost a path its chance to be measured; it can
+never make one render brighter than it is.
+
+Measured on the bundled library: the whole two-bounce family outranks the whole
+four-bounce one on every lens — four Fresnel factors are worth more than any geometry — so
+what decides whether the extra ghosts appear is whether the pairs run out first. The
+11-surface Biotar has 45 pairs, so its four-bounce paths start at rank 45 and over a
+hundred fall inside the rendered 200; the 24-surface Master Prime has 252 pairs and its
+four-bounce paths never get a look in, which is the right answer for modern multicoated
+glass. Bakes stay inside the budget (118–208 ms across the library, the cap's 1500 probes
+included).
+
+**Existing projects gain ghosts, so the effect's version goes 8 → 9.**

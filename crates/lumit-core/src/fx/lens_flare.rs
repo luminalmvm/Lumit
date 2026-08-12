@@ -263,6 +263,31 @@ pub const SUPPRESS_TILES: i64 = 2;
 /// (FlareSim's `min_intensity`).
 pub const PAIR_MIN_INTENSITY: f32 = 1e-7;
 
+/// The empty bounce slot (K-368): a ghost path is `[a, b, c, d]` and a
+/// two-bounce path — every ghost the effect traced before K-368 — is
+/// `[a, b, NO_BOUNCE, NO_BOUNCE]`.
+///
+/// **The path model.** Slot 0 and slot 1 keep exactly the meaning K-261 gave
+/// them: the ray runs forward to `b` and reflects there, back to `a` and
+/// reflects there, then forward to the sensor, so `a < b` always. A
+/// four-bounce path adds the same figure once more: forward from `a` to `c`
+/// and reflect, back to `d` and reflect, then forward to the sensor. Hence
+/// `a < c` (the third bounce is past the second) and `d < c`, while `c` may
+/// sit anywhere relative to `b` and `d` may be `a` itself.
+pub const NO_BOUNCE: u32 = u32::MAX;
+
+/// Four-bounce candidates the bake ray-probes (K-368).
+///
+/// There are about N⁴/4 four-bounce paths on an N-interface prescription —
+/// a hundred thousand on a normal lens, a couple of million on a zoom — and
+/// probing them all would cost more than the whole rest of the bake. They
+/// are ranked instead by a cheap upper bound (the product of the four
+/// surfaces' normal-incidence reflectances, which no angle can exceed) and
+/// only the best this many are probed. The bound decides only what is
+/// *probed*; what survives to render is still decided by the same on-axis
+/// ray probe every two-bounce pair faces.
+pub const FOUR_BOUNCE_PROBE_CAP: usize = 1500;
+
 /// Ranked pairs a frame can ever render — the Max ghosts parameter's own
 /// ceiling (docs/08 §3.27), and so the number of pairs the bake measures an
 /// image spread for (K-263). A pair past it keeps the neutral spread of 1.0
@@ -736,9 +761,10 @@ pub struct FlareBaked {
     pub pupil_mm: f32,
     /// Ray start z, mm (in front of the first surface).
     pub start_z_mm: f32,
-    /// Ranked ghost pairs, brightest first; the frame renders the first
-    /// `max_ghosts`.
-    pub pairs: Vec<[u32; 2]>,
+    /// Ranked ghost paths, brightest first; the frame renders the first
+    /// `max_ghosts`. Two-bounce and four-bounce paths share one list and one
+    /// ranking (K-368) — see [`NO_BOUNCE`] for the layout.
+    pub pairs: Vec<[u32; 4]>,
     /// Each pair's on-axis image extent as a fraction of the sensor
     /// diagonal, parallel to `pairs` (K-262): what [`pair_grid`] spends the
     /// ray budget by. A tight 5%-of-frame ghost needs a fraction of the
@@ -1303,18 +1329,20 @@ pub fn starburst_field(light: [f32; 2], aspect_h_over_w: f32) -> (f32, f32) {
     (frac, dy.atan2(dx))
 }
 
-/// Trace one pupil sample through one ghost pair at one wavelength — the
-/// FlareSim three-phase walk (K-261), the CPU twin the WGSL splat kernel
-/// mirrors op-for-op. `origin` is the ray start (mm), `dir` the unit beam
-/// direction; the ray transmits through every surface except the pair's
-/// two, where it reflects (weight × R; transmits weight × (1−R)). Returns
-/// the sensor landing (mm, y up) and the accumulated Fresnel weight.
+/// Trace one pupil sample through one ghost path at one wavelength — the
+/// FlareSim three-phase walk (K-261) with K-368's two extra phases, the CPU
+/// twin the WGSL splat kernel mirrors op-for-op. `origin` is the ray start
+/// (mm), `dir` the unit beam direction; the ray transmits through every
+/// surface except the path's bounces, where it reflects (weight × R;
+/// transmits weight × (1−R)). Returns the sensor landing (mm, y up) and the
+/// accumulated Fresnel weight. A two-bounce path — `[a, b, NO_BOUNCE,
+/// NO_BOUNCE]` — executes exactly the statements it did before K-368.
 #[allow(clippy::too_many_arguments)]
 // Negated comparisons deliberate: NaN reads as dead (see `intersect`).
 #[allow(clippy::neg_cmp_op_on_partial_ord)]
 pub fn trace_splat(
     baked: &FlareBaked,
-    pair: [u32; 2],
+    path: [u32; 4],
     lambda_nm: f32,
     origin: [f32; 3],
     dir: [f32; 3],
@@ -1324,8 +1352,13 @@ pub fn trace_splat(
 ) -> Option<([f32; 2], f32)> {
     let surfs = &baked.surfaces;
     let n = surfs.len();
-    let (a_idx, b_idx) = (pair[0] as usize, pair[1] as usize);
+    let (a_idx, b_idx) = (path[0] as usize, path[1] as usize);
+    let (c_idx, d_idx) = (path[2] as usize, path[3] as usize);
+    let four = path[2] != NO_BOUNCE;
     if n < 3 || a_idx >= b_idx || b_idx >= n {
+        return None;
+    }
+    if four && (c_idx >= n || c_idx <= a_idx || d_idx >= c_idx) {
         return None;
     }
     /// The walking ray: position, direction, surviving energy, the medium it
@@ -1430,9 +1463,30 @@ pub fn trace_splat(
             ray.ior = ior_at(s);
         }
     }
-    // Phase 3: forward through a+1..n.
-    for s in surfs.iter().skip(a_idx + 1) {
-        step(&mut ray, s, ior_at(s), false)?;
+    // Phase 3: forward through a+1.., reflecting at c if the path has a
+    // third bounce. Without one `end3` is n and `c_idx` the sentinel, which
+    // no surface index can equal — so a two-bounce path runs K-261's phase 3
+    // statement for statement.
+    let end3 = if four { c_idx + 1 } else { n };
+    for (s_idx, s) in surfs.iter().enumerate().take(end3).skip(a_idx + 1) {
+        step(&mut ray, s, ior_at(s), s_idx == c_idx)?;
+    }
+    if four {
+        // Phase 4 (K-368): backward through c-1..=d, reflecting at d. Phase
+        // 2's walk again, one leg further in — same reversed media, same
+        // hand-back of the ior at the mirror.
+        for s_idx in (d_idx..c_idx).rev() {
+            let s = &surfs[s_idx];
+            let reflect = s_idx == d_idx;
+            step(&mut ray, s, ior_before(s_idx), reflect)?;
+            if reflect {
+                ray.ior = ior_at(s);
+            }
+        }
+        // Phase 5: forward through d+1..n.
+        for s in surfs.iter().skip(d_idx + 1) {
+            step(&mut ray, s, ior_at(s), false)?;
+        }
     }
 
     // Propagate to the (focus-shifted) sensor plane.
@@ -1531,7 +1585,7 @@ pub fn trace_transmit(
 #[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
 pub fn trace_splat_spectral(
     baked: &FlareBaked,
-    pair: [u32; 2],
+    path: [u32; 4],
     band: &SpectralBand,
     origin: [f32; 3],
     dir: [f32; 3],
@@ -1541,8 +1595,13 @@ pub fn trace_splat_spectral(
 ) -> Option<([f32; 2], f32, [f32; 3])> {
     let surfs = &baked.surfaces;
     let n = surfs.len();
-    let (a_idx, b_idx) = (pair[0] as usize, pair[1] as usize);
+    let (a_idx, b_idx) = (path[0] as usize, path[1] as usize);
+    let (c_idx, d_idx) = (path[2] as usize, path[3] as usize);
+    let four = path[2] != NO_BOUNCE;
     if n < 3 || a_idx >= b_idx || b_idx >= n {
+        return None;
+    }
+    if four && (c_idx >= n || c_idx <= a_idx || d_idx >= c_idx) {
         return None;
     }
     let lambda_nm = band.traced_nm;
@@ -1639,10 +1698,30 @@ pub fn trace_splat_spectral(
             ray.ior = ior_at(&surfs[s_idx]);
         }
     }
-    // Phase 3: forward through a+1..n.
-    for s_idx in (a_idx + 1)..n {
+    // Phase 3: forward through a+1.., reflecting at c if the path has a
+    // third bounce (K-368) — the geometry `trace_splat` walks, as this
+    // sibling's contract requires.
+    let end3 = if four { c_idx + 1 } else { n };
+    for s_idx in (a_idx + 1)..end3 {
         let n2 = ior_at(&surfs[s_idx]);
-        step(&mut ray, s_idx, n2, false, false)?;
+        step(&mut ray, s_idx, n2, s_idx == c_idx, false)?;
+    }
+    if four {
+        // Phase 4: backward through c-1..=d, reflecting at d — reversed
+        // media, so the reflectance table is read the other way round.
+        for s_idx in (d_idx..c_idx).rev() {
+            let reflect = s_idx == d_idx;
+            let n2 = ior_before(s_idx);
+            step(&mut ray, s_idx, n2, reflect, true)?;
+            if reflect {
+                ray.ior = ior_at(&surfs[s_idx]);
+            }
+        }
+        // Phase 5: forward through d+1..n.
+        for s_idx in (d_idx + 1)..n {
+            let n2 = ior_at(&surfs[s_idx]);
+            step(&mut ray, s_idx, n2, false, false)?;
+        }
     }
 
     if ray.dir[2].abs() < 1e-12 {
@@ -1770,7 +1849,7 @@ pub(crate) fn frame_grid_needs(
         .pairs
         .iter()
         .take(pair_count)
-        .map(|&pair| {
+        .map(|&path| {
             for cell in landings.iter_mut() {
                 *cell = None;
             }
@@ -1787,7 +1866,7 @@ pub(crate) fn frame_grid_needs(
                     ];
                     landings[j * G + i] = trace_splat(
                         baked,
-                        pair,
+                        path,
                         550.0,
                         o,
                         dir,
@@ -1888,7 +1967,7 @@ pub fn plan_frame_grids(base_side: u32, spreads: &[f32], needs: &[f32]) -> Vec<u
 #[allow(clippy::too_many_arguments)]
 pub fn frame_grid_needs_from_rows(
     surfaces: &[[f32; 8]],
-    pairs: &[[u32; 2]],
+    pairs: &[[u32; 4]],
     sensor_z_mm: f32,
     focal_mm: f32,
     pupil_mm: f32,
@@ -2197,6 +2276,98 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
 /// by orders of magnitude; the closed loop cannot.
 const TARGET_PROBE_MEAN: f32 = 0.010;
 
+/// The four-bounce paths worth ray-probing (K-368), best bound first.
+///
+/// In plain terms: a ghost is light that bounced off two surfaces on its way
+/// through. Some of it bounces twice more and still lands on the sensor —
+/// far fainter, but the sun is ~10⁵ times a normal highlight and a few of
+/// those paths focus tightly, so on uncoated glass they are plainly there.
+/// The trouble is arithmetic: `N(N−1)/2` two-bounce paths become ~N⁴/4
+/// four-bounce ones, and a ray probe each is out of the question.
+///
+/// So they are pre-ranked by an **upper bound** on the energy the path can
+/// carry: the product of the four surfaces' reflectances at normal
+/// incidence and 550 nm. It is an upper bound in the coating's own terms —
+/// an AR stack is designed to be at its worst on-axis, and the rest of the
+/// path only ever removes light — and it is a product of numbers under one,
+/// so a partial product bounds the whole. That is what lets the search stop
+/// early: once the kept set is full, any `(a, b)` whose pair reflectance
+/// cannot beat the worst kept candidate even with the best possible `c` and
+/// `d` is skipped whole.
+///
+/// The bound never decides what renders. It decides only which candidates
+/// reach [`bake_with`]'s ray probe, and that probe — the same one, the same
+/// [`PAIR_MIN_INTENSITY`] floor — decides the rest.
+fn four_bounce_candidates(
+    surfs: &[FlareSurface],
+    has_interface: &dyn Fn(usize) -> bool,
+) -> Vec<[u32; 4]> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    let n = surfs.len();
+    let ifaces: Vec<usize> = (0..n).filter(|&i| has_interface(i)).collect();
+    if ifaces.len() < 2 {
+        return Vec::new();
+    }
+    // One normal-incidence reflectance per surface, at the design
+    // wavelength: the whole cost of the prefilter, paid once.
+    let r0: Vec<f32> = (0..n)
+        .map(|i| {
+            let s = &surfs[i];
+            let n1 = if i == 0 {
+                1.0
+            } else {
+                cauchy_ior(surfs[i - 1].cauchy_a, surfs[i - 1].cauchy_b, 550.0)
+            };
+            let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, 550.0);
+            if s.coating_layers < 0.5 {
+                fresnel_cos(1.0, n1, n2)
+            } else {
+                stack_reflectance(1.0, n1, n2, &coating_stack(s.coating_layers), 550.0)
+            }
+        })
+        .collect();
+    let r_max = ifaces.iter().fold(0.0_f32, |m, &i| m.max(r0[i]));
+    // A bounded top-K: the heap's root is the WORST kept candidate, so the
+    // memory is `FOUR_BOUNCE_PROBE_CAP` entries however many paths the
+    // prescription has. The bound travels as its bit pattern because f32 has
+    // no total order — non-negative finite floats compare as their bits do —
+    // and the tuple breaks ties, so the kept set is one deterministic set
+    // rather than whichever equal-bound path was seen first.
+    let mut heap: BinaryHeap<(Reverse<u32>, [u32; 4])> = BinaryHeap::new();
+    for (ai, &a) in ifaces.iter().enumerate() {
+        for &b in &ifaces[ai + 1..] {
+            let ab = r0[a] * r0[b];
+            if heap.len() >= FOUR_BOUNCE_PROBE_CAP {
+                if let Some(&(Reverse(bits), _)) = heap.peek() {
+                    if ab * r_max * r_max <= f32::from_bits(bits) {
+                        continue;
+                    }
+                }
+            }
+            for &c in ifaces.iter().filter(|&&c| c > a) {
+                for &d in ifaces.iter().filter(|&&d| d < c) {
+                    let bound = ab * r0[c] * r0[d];
+                    if bound <= 0.0 || !bound.is_finite() {
+                        continue;
+                    }
+                    heap.push((
+                        Reverse(bound.to_bits()),
+                        [a as u32, b as u32, c as u32, d as u32],
+                    ));
+                    if heap.len() > FOUR_BOUNCE_PROBE_CAP {
+                        heap.pop();
+                    }
+                }
+            }
+        }
+    }
+    // The heap's drain order is unspecified; the probe's input order is not.
+    let mut out: Vec<[u32; 4]> = heap.into_iter().map(|(_, path)| path).collect();
+    out.sort_unstable();
+    out
+}
+
 /// Run the full bake for a params bundle — pure, deterministic, CPU-only
 /// (K-261): parse the prescription, enumerate and rank the ghost pairs,
 /// measure per-pair defocus boosts, bake the starburst, close the exposure
@@ -2284,7 +2455,11 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
 
     // Enumerate every a<b pair where both surfaces actually change medium
     // (a reflection needs an interface; the stop is air-air and drops out),
-    // probe each on-axis, rank by probe brightness.
+    // add the four-bounce paths the K-368 prefilter picked out, probe each
+    // on-axis, and rank the two kinds together in ONE list — the ranking
+    // cannot tell them apart, and on a lens with few pairs (the bundled
+    // Biotar runs out after 45) the four-bounce paths reach the rendered
+    // set, which is exactly why old glass shows doubled ghosts.
     let n = baked.surfaces.len();
     let ior_at =
         |i: usize| baked.surfaces[i].cauchy_a + baked.surfaces[i].cauchy_b / (0.587_56 * 0.587_56);
@@ -2299,32 +2474,37 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     // independent and `collect` keeps input order, so the ranking sees the
     // same numbers in the same order as the serial loop did — determinism
     // by construction, not by luck (docs/14).
-    let candidates: Vec<[u32; 2]> = (0..n)
+    let mut candidates: Vec<[u32; 4]> = (0..n)
         .filter(|&a| has_interface(a))
         .flat_map(|a| {
             ((a + 1)..n)
                 .filter(|&b| has_interface(b))
-                .map(move |b| [a as u32, b as u32])
+                .map(move |b| [a as u32, b as u32, NO_BOUNCE, NO_BOUNCE])
         })
         .collect();
+    candidates.extend(four_bounce_candidates(&baked.surfaces, &|i| {
+        has_interface(i)
+    }));
     use rayon::prelude::*;
-    let ranked: Vec<([u32; 2], f32)> = candidates
+    let ranked: Vec<([u32; 4], f32)> = candidates
         .par_iter()
-        .filter_map(|&pair| {
+        .filter_map(|&path| {
             // On-axis brightness probe at the R/G/B wavelengths, full file
-            // coating (the Coating dial is frame-time).
+            // coating (the Coating dial is frame-time). Four-bounce paths
+            // face exactly this probe and exactly this floor (K-368): the
+            // enumeration bound decided only which of them got here.
             let mut est = 0.0_f32;
             for nm in [650.0, 550.0, 450.0] {
-                if let Some((_, w)) = trace_splat(&baked, pair, nm, centre, axis, 1.0, 1.0, 0.0) {
+                if let Some((_, w)) = trace_splat(&baked, path, nm, centre, axis, 1.0, 1.0, 0.0) {
                     est += w;
                 }
             }
             est /= 3.0;
-            (est >= PAIR_MIN_INTENSITY).then_some((pair, est))
+            (est >= PAIR_MIN_INTENSITY).then_some((path, est))
         })
         .collect();
     let mut ranked = ranked;
-    // Descending probe brightness; ties by pair order (deterministic).
+    // Descending probe brightness; ties by path order (deterministic).
     ranked.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -2342,7 +2522,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     // the neutral 1.0, the same value an unmeasurable pair has always had.
     let mut spreads = vec![1.0_f32; baked.pairs.len()];
     let sensor_diag = (SENSOR_MM[0] * SENSOR_MM[0] + SENSOR_MM[1] * SENSOR_MM[1]).sqrt();
-    let probe_pairs: Vec<[u32; 2]> = baked
+    let probe_pairs: Vec<[u32; 4]> = baked
         .pairs
         .iter()
         .take(MAX_RENDERED_PAIRS)

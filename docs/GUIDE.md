@@ -1016,6 +1016,39 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   real photograph's does not. Ghost bodies look as they did; rims and arcs are
   cleaner. Because the picture does move, the effect's version number steps up,
   which is how Lumit records that an old project renders a little differently.
+
+  **The ghosts of the ghosts (K-368).** A ghost is light that bounced off two
+  glass surfaces on its way through the lens. But light that has bounced twice
+  can bounce twice more and still land on the sensor, and that is what produces
+  the *chains* of doubled blobs old lenses are famous for. Lumit used to ignore
+  those four-bounce paths, on the reasonable grounds that each one carries about
+  a hundred-thousandth of what a two-bounce ghost does. The catch is the sun:
+  it is about a hundred thousand times brighter than an ordinary highlight, so
+  the two cancel out — and a few of these paths happen to focus their light into
+  a tight spot rather than spreading it into a wash, which makes them visible
+  even when they are faint. On old uncoated glass, where every surface reflects
+  a full four per cent instead of a fraction of one, they are not faint at all.
+
+  The difficulty is counting. A lens with twenty-seven surfaces has a few
+  hundred two-bounce paths — easy to try them all — but around a hundred
+  thousand four-bounce ones, and each trial costs real work. So Lumit sorts them
+  first by a cheap estimate that can only ever be *too generous*: multiply
+  together how reflective the four surfaces are at their most reflective. The
+  best fifteen hundred by that estimate are then tested properly, exactly the
+  way the two-bounce ghosts are tested, and whatever survives is ranked into the
+  same single list with them. Because the cheap estimate only decides which
+  paths get *measured* — never how bright anything renders — being generous with
+  it is safe: the worst it can do is spend a measurement on a path that turns
+  out to be dim.
+
+  What falls out is pleasingly close to the real world. On the modern
+  multicoated cine primes the extra paths exist but never rank high enough to
+  draw, because the lens has so many ordinary ghosts ahead of them — which is
+  precisely why modern lenses look clean. On a 1927 Biotar, which runs out of
+  ordinary ghosts after forty-five of them, over a hundred of the four-bounce
+  paths make the cut and the flare gains the doubled train that glass really
+  has. Old projects gain those ghosts, so the effect's version number steps up
+  again.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the

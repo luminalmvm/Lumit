@@ -35,19 +35,28 @@ struct Surface {
     _pad: f32,
 };
 
-// One (pair × wavelength) combo: the two bounce surfaces, the wavelength the
+// One (path × wavelength) combo: the bounce surfaces, the wavelength the
 // GEOMETRY is traced at, and the band's index into `band_subs` — the
 // radiometric sub-samples the energy is carried at (K-364).
+//
+// `bounce_c`/`bounce_d` are the third and fourth bounces of a four-bounce
+// path (K-368); `NO_BOUNCE` in `bounce_c` marks the two-bounce ghosts that
+// were all this struct carried before, and they walk exactly the phases they
+// always did. The two fields took two of the padding slots, so the layout
+// mirrors lumit-gpu's `GpuCombo` at the size it always had.
 struct Combo {
     bounce_a: u32,
     bounce_b: u32,
     lambda_nm: f32,
     _pad: f32,
     band: u32,
-    _pad2: f32,
-    _pad3: f32,
+    bounce_c: u32,
+    bounce_d: u32,
     _pad4: f32,
 };
+
+// The empty bounce slot — lumit_core's `NO_BOUNCE`.
+const NO_BOUNCE: u32 = 0xffffffffu;
 
 // One radiometric sub-sample of a band (K-364): where in the baked
 // reflectance table its wavelength sits, and its RGB weight, already
@@ -414,7 +423,14 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     let combo = combos[tp.combo_offset + gid.y];
     let a_idx = combo.bounce_a;
     let b_idx = combo.bounce_b;
+    let c_idx = combo.bounce_c;
+    let d_idx = combo.bounce_d;
+    let four = c_idx != NO_BOUNCE;
     if (a_idx >= b_idx || b_idx >= tp.surface_count) {
+        rays[slot] = dead;
+        return;
+    }
+    if (four && (c_idx >= tp.surface_count || c_idx <= a_idx || d_idx >= c_idx)) {
         rays[slot] = dead;
         return;
     }
@@ -539,8 +555,12 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // Phase 3: forward through a+1..n.
-    for (var s_idx = a_idx + 1u; s_idx < tp.surface_count; s_idx = s_idx + 1u) {
+    // Phase 3: forward through a+1.., reflecting at c if the path has a
+    // third bounce (K-368). Without one the end is the surface count and
+    // `c_idx` the sentinel no index can equal, so a two-bounce ghost runs
+    // exactly the phase it always did.
+    let end3 = select(tp.surface_count, c_idx + 1u, four);
+    for (var s_idx = a_idx + 1u; s_idx < end3; s_idx = s_idx + 1u) {
         let s = surfaces[s_idx];
         let hit = intersect(pos, dir, s.radius_mm, s.z_mm);
         if (!hit.ok) {
@@ -560,15 +580,94 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, lambda);
         let cos_i = abs(dot(hit.normal, dir));
         let plain = fresnel_cos(cos_i, current, n2);
-        surface_event(&thru, combo.band, s_idx, 0u, cos_i, plain, false);
-        let refr = refract_dir(dir, hit.normal, current / n2);
-        if (refr.w < 0.5) {
-            // TIR: continue straight, weight zero (K-264).
-            rrel2 = max(rrel2, 4.0);
+        let is_bounce = s_idx == c_idx;
+        surface_event(&thru, combo.band, s_idx, 0u, cos_i, plain, is_bounce);
+        if (is_bounce) {
+            dir = reflect_dir(dir, hit.normal);
         } else {
-            dir = refr.xyz;
+            let refr = refract_dir(dir, hit.normal, current / n2);
+            if (refr.w < 0.5) {
+                // TIR: continue straight, weight zero (K-264).
+                rrel2 = max(rrel2, 4.0);
+            } else {
+                dir = refr.xyz;
+            }
+            current = n2;
         }
-        current = n2;
+    }
+
+    if (four) {
+        // Phase 4 (K-368): backward through c-1..=d, reflecting at d —
+        // phase 2's walk again, one leg further in, table read reversed.
+        for (var k = c_idx; k > d_idx; k = k - 1u) {
+            let s_idx = k - 1u;
+            let s = surfaces[s_idx];
+            let hit = intersect(pos, dir, s.radius_mm, s.z_mm);
+            if (!hit.ok) {
+                rays[slot] = dead;
+                return;
+            }
+            pos = hit.pos;
+            if (hit.missed) {
+                rrel2 = max(rrel2, 4.0);
+            }
+            var semi_r = max(semi_of(s), 1e-6);
+            if (abs(s.radius_mm) >= 1e-6) {
+                semi_r = max(min(semi_r, abs(s.radius_mm)), 1e-6);
+            }
+            rrel2 = max(rrel2, (pos.x * pos.x + pos.y * pos.y) / (semi_r * semi_r));
+            var n2 = 1.0;
+            if (s_idx > 0u) {
+                let before = surfaces[s_idx - 1u];
+                n2 = cauchy_ior(before.cauchy_a, before.cauchy_b, lambda);
+            }
+            let cos_i = abs(dot(hit.normal, dir));
+            let plain = fresnel_cos(cos_i, current, n2);
+            let is_bounce = s_idx == d_idx;
+            surface_event(&thru, combo.band, s_idx, 1u, cos_i, plain, is_bounce);
+            if (is_bounce) {
+                dir = reflect_dir(dir, hit.normal);
+                current = cauchy_ior(s.cauchy_a, s.cauchy_b, lambda);
+            } else {
+                let refr = refract_dir(dir, hit.normal, current / n2);
+                if (refr.w < 0.5) {
+                    rrel2 = max(rrel2, 4.0);
+                } else {
+                    dir = refr.xyz;
+                }
+                current = n2;
+            }
+        }
+
+        // Phase 5: forward through d+1..n.
+        for (var s_idx = d_idx + 1u; s_idx < tp.surface_count; s_idx = s_idx + 1u) {
+            let s = surfaces[s_idx];
+            let hit = intersect(pos, dir, s.radius_mm, s.z_mm);
+            if (!hit.ok) {
+                rays[slot] = dead;
+                return;
+            }
+            pos = hit.pos;
+            if (hit.missed) {
+                rrel2 = max(rrel2, 4.0);
+            }
+            var semi_r = max(semi_of(s), 1e-6);
+            if (abs(s.radius_mm) >= 1e-6) {
+                semi_r = max(min(semi_r, abs(s.radius_mm)), 1e-6);
+            }
+            rrel2 = max(rrel2, (pos.x * pos.x + pos.y * pos.y) / (semi_r * semi_r));
+            let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, lambda);
+            let cos_i = abs(dot(hit.normal, dir));
+            let plain = fresnel_cos(cos_i, current, n2);
+            surface_event(&thru, combo.band, s_idx, 0u, cos_i, plain, false);
+            let refr = refract_dir(dir, hit.normal, current / n2);
+            if (refr.w < 0.5) {
+                rrel2 = max(rrel2, 4.0);
+            } else {
+                dir = refr.xyz;
+            }
+            current = n2;
+        }
     }
 
     // Propagate to the (focus-shifted) sensor plane.

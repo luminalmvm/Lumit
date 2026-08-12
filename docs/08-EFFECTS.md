@@ -1566,8 +1566,10 @@ cast of real flares comes from.
 
 **Algorithm sketch** (full detail in the impl note):
 1. **Bake** (CPU, on parameter change only, cached): parse the selected .lens
-   prescription; enumerate every two-surface bounce pair, filter by interface
-   and an on-axis brightness probe, rank brightest-first; bake the
+   prescription; enumerate every two-surface bounce pair — and, under a
+   reflectance-product prefilter, the best four-bounce paths (K-368) —
+   filter by interface and an on-axis brightness probe, rank the two kinds
+   brightest-first in one list; bake the
    **starburst sprite** (Fourier amplitude of the iris image under a Fresnel
    propagation term, integrated across the visible spectrum with CIE
    weights); close the **auto-exposure loop** by rendering a thumbnail.
@@ -1575,8 +1577,9 @@ cast of real flares comes from.
    a regular grid of rays over the entrance pupil — each corner weighted by
    the iris mask (blades, roundness, softness) — refracts through every
    surface with per-surface Fresnel/MgF₂-coating weights (the FlareSim
-   three-phase walk, K-261), reflecting at the pair's two surfaces, landing
-   on the focus-shifted sensor.
+   three-phase walk, K-261), reflecting at the path's two surfaces — or, for
+   a four-bounce path, at its four (K-368) — landing on the focus-shifted
+   sensor.
 3. **Rasterise** (GPU raster, additive): each live grid cell draws as two
    triangles at density `launch cell area ÷ landed area` (energy
    conservation — a ghost focused small burns bright; fold caustics blow up

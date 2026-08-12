@@ -105,6 +105,43 @@ below removes naturally). At bake time:
 No per-pair area boost (FlareSim's `ghost_normalize`) exists here: the pupil-grid energy
 term makes defocus dilution physical, so compensating it would double-count.
 
+### 2.1 Four-bounce paths (K-368)
+
+Light that reflects **four** times reaches the sensor too. Each such path keeps ~10⁻⁵ of
+a two-bounce one under modern coatings, but the sun is ~10⁵ times a normal highlight and
+some of these paths focus tightly instead of washing out; on vintage uncoated glass
+(R ≈ 4% a surface) they are the chains of doubled ghosts old lenses are known for.
+
+A path is stored as `[a, b, c, d]`. Slots 0 and 1 mean what they always did — reflect at
+`b` going forward, at `a` coming back — so `a < b`, and a two-bounce path is
+`[a, b, NO_BOUNCE, NO_BOUNCE]` (`NO_BOUNCE = u32::MAX`). A four-bounce path repeats the
+figure: forward from `a` to `c` reflecting there, back to `d` reflecting there, then out.
+So `a < c` and `d < c`; `c` may be either side of `b`, and `d` may equal `a`. All four
+must pass the interface filter.
+
+They cannot all be probed — there are ~N⁴/4 of them, over a hundred thousand on a normal
+prescription — so they are **prefiltered by a cheap upper bound**: the product of the
+four surfaces' reflectances at normal incidence and 550 nm (one number per surface,
+computed once; `stack_reflectance`, or `fresnel_cos` where the file says the surface is
+bare). It bounds the path because an AR stack is at its worst on-axis and every later
+factor only removes light, and being a product of numbers under one it bounds *partially*
+too — which prunes a whole `(a, b)` sub-tree the moment its pair reflectance cannot beat
+the worst candidate kept. The best `FOUR_BOUNCE_PROBE_CAP` = 1500 survive, chosen by a
+bounded top-K heap keyed by (bound bits, tuple) so the kept set is deterministic rather
+than order-of-arrival.
+
+Those 1500 then face the **same** brightness probe and the same `PAIR_MIN_INTENSITY`
+floor as the pairs, and the survivors are ranked **into one list with them** (descending
+probe brightness, ties by tuple). Everything downstream — `MAX_RENDERED_PAIRS`, the
+spread probes, the frame grid plan, the GPU combo table — consumes that list without
+knowing the two kinds apart. The bound decides only what is *probed*; the probe decides
+what renders.
+
+Measured over the library, every two-bounce path outranks every four-bounce one, so what
+matters is whether the pairs run out inside `MAX_RENDERED_PAIRS`: the 11-surface Biotar
+has 45 pairs and renders over a hundred four-bounce ghosts, while the 24-surface Master
+Prime has 252 pairs and renders none.
+
 ## 3. The per-frame trace (the FlareSim three-phase walk)
 
 Rays launch from a **regular pupil grid**: `side²` corners over the pupil square, at
@@ -124,10 +161,15 @@ inside the cell — killing them killed whole cells and quantised every iris-sha
 edge to the pupil grid. The same `pupil_mask` renders the aperture image the starburst
 FFT consumes, so the two agree by construction.
 
-Per (pair × wavelength), the walk is FlareSim's three phases: **forward** through
+Per (path × wavelength), the walk is FlareSim's three phases: **forward** through
 surfaces `0..=b` (transmitting with weight × (1−R), reflecting at `b` with weight × R),
 **backward** through `b−1..=a` (reflecting at `a`), **forward** again through `a+1..end`,
-then a final propagation to the sensor plane (shifted by the K-260 thin-lens focus term
+then a final propagation to the sensor plane. A four-bounce path (§2.1) ends phase 3 at
+`c` and reflects there, then walks **backward** through `c−1..=d` reflecting at `d` and
+**forward** through `d+1..end` — the same two phases again, with the same reversed-media
+handling phase 2 uses. A two-bounce path's `c` is the sentinel, which no surface index
+can equal, so its phase 3 runs to the end with its reflect flag always false: the walk it
+had before K-368, statement for statement. Then the propagation (shifted by the K-260 thin-lens focus term
 `f²/(1000·d − f)` mm). Intersection picks the sphere solution closest to the surface vertex. **A ray never
 dies at an aperture (K-264)** — the K-261 skirt clip is gone, and the three ways a walk
 used to end now all continue with their weight forced to zero instead, because a dead
@@ -627,6 +669,14 @@ the other cannot silently clamp to Divide.
 4. **Trace**: the top pairs land a solid live population with finite positions and
    weights in [0, 1]; the pupil mask is 1 at centre, 0 far outside, and passes less area
    as a hexagon than as a circle.
+4a. **Four-bounce paths (K-368)**: the sentinel form of a bright pair traces to a finite
+   landing and is bit-equal twice; the Biotar ranks four-bounce paths inside the rendered
+   `MAX_RENDERED_PAIRS` and at least one of them puts light on the sensor, while the
+   Master Prime's top eight stay two-bounce; no more four-bounce paths survive than were
+   ever probed (`lens_flare_four_bounce_ghosts_rank_and_render`). The bake-invariant test
+   checks the path constraints (`a < b`, `a < c`, `d < c`, sentinels in pairs), and the
+   GPU trace oracle carries a Biotar case deep enough to walk the extra phases, asserting
+   that four-bounce rays were actually compared.
 4b. **Splat guard (K-366)**: an ordinary footprint deposits exactly the flux put into it
    (the tent integrates to the area the peak was divided by); a fold — axes long but
    nearly parallel — deposits a finite bright line rather than nothing or a spike; a

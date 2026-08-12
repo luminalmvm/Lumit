@@ -3961,17 +3961,22 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     let fx = FxEngine::new(&ctx);
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (192u32, 108u32);
-    for lens in [16u32, 5] {
+    // Lens 17 (the Zeiss Biotar) carries the FOUR-BOUNCE phases (K-368):
+    // its two-bounce family runs out at rank 45, so a deep enough combo
+    // window reaches paths the extra two phases actually walk. The other
+    // two lenses rank no four-bounce path anywhere near the top and check
+    // the two-bounce walk at the shallow window they always did.
+    for (lens, max_ghosts, combo_limit) in [(16u32, 10u32, 12u32), (5, 10, 12), (17, 60, 180)] {
         for light_frac in [[0.33f32, 0.30f32], [0.85, 0.75]] {
             let p = lf::LensFlareParams {
                 lens,
+                max_ghosts,
                 light: [light_frac[0] * w as f32, light_frac[1] * h as f32],
                 ..flare_params()
             };
             let baked = lf::bake(&p);
             let op = flare_op(&p, w, h);
             let dir = lf::light_direction(light_frac, h as f32 / w as f32, baked.focal_mm);
-            let combo_limit = 12u32;
             let gpu = fx.lens_flare_trace_debug(
                 &ctx,
                 &op,
@@ -4008,6 +4013,9 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let mut mismatched_liveness = 0u32;
             let mut total = 0u32;
             let mut live = 0u32;
+            // Rays compared on a four-bounce path (K-368): the phases the
+            // other two lenses never reach.
+            let mut four_live = 0u32;
             let mut sum_pos = 0.0f32;
             let mut pos_errs: Vec<f32> = Vec::new();
             let mut weight_errs: Vec<f32> = Vec::new();
@@ -4096,6 +4104,9 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                     continue;
                                 }
                                 live += 1;
+                                if pair[2] != lf::NO_BOUNCE {
+                                    four_live += 1;
+                                }
                                 let pos_err = (g[0] - pos[0]).abs().max((g[1] - pos[1]).abs());
                                 sum_pos += pos_err;
                                 pos_errs.push(pos_err);
@@ -4144,6 +4155,15 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                 "lens {lens}: {mismatched_liveness}/{total} rays flipped live/dead"
             );
             assert!(live > 100, "too few live rays ({live}) to mean anything");
+            if lens == 17 {
+                // Without this the extra phases could be wrong in the
+                // shader and every bound above would still pass, because
+                // nothing would have walked them.
+                assert!(
+                    four_live > 0,
+                    "no four-bounce ray was compared — the K-368 phases went unchecked"
+                );
+            }
         }
     }
 }
