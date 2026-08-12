@@ -2473,7 +2473,7 @@
   "@menuTrackCamera": {
     "description": "Menu item."
   },
-  "menuTrackMatte": "Matte",
+  "menuTrackMatte": "Track matte",
   "@menuTrackMatte": {
     "description": "Menu item: set a layer's matte (the AE 'track matte' feature; Lumit's glossary says matte)."
   },
