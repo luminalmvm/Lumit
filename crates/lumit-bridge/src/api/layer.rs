@@ -39,6 +39,9 @@ pub struct BridgeLayerSwitches {
     /// Shy (docs/07 §4.2): hidden from the Timeline's list while the comp's
     /// shy filter is on. Never changes what renders.
     pub shy: bool,
+    /// Accepts lights (K-361): whether the comp's Light layers shade this one.
+    /// Defaults on, and does nothing at all in a comp with no lights.
+    pub accepts_lights: bool,
 }
 
 /// One vertex of a mask's path (K-222): where it sits in **layer space**, and
@@ -497,6 +500,8 @@ pub enum BridgeLayerSwitch {
     MotionBlur,
     Collapse,
     Shy,
+    /// K-361: whether the comp's Light layers shade this one.
+    AcceptsLights,
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.
@@ -739,6 +744,7 @@ pub(crate) fn read_layer_info(
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            accepts_lights: s.accepts_lights,
         },
         blend: lumit_core::model::BlendMode::ALL
             .iter()
@@ -2520,6 +2526,7 @@ impl LayerReference {
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            accepts_lights: s.accepts_lights,
         })
     }
 
@@ -2572,6 +2579,11 @@ impl LayerReference {
                 comp,
                 layer,
                 shy: on,
+            },
+            BridgeLayerSwitch::AcceptsLights => lumit_core::Op::SetLayerAcceptsLights {
+                comp,
+                layer,
+                accepts_lights: on,
             },
         })
     }

@@ -2005,6 +2005,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
         S::MotionBlur,
         S::Collapse,
         S::Shy,
+        S::AcceptsLights,
     ] {
         let start = layer.get_switches().expect("switches");
         let now = match switch {
@@ -2017,6 +2018,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
             S::MotionBlur => start.motion_blur,
             S::Collapse => start.collapse,
             S::Shy => start.shy,
+            S::AcceptsLights => start.accepts_lights,
         };
         layer.set_switch(switch, !now).expect("toggled");
         assert_ne!(

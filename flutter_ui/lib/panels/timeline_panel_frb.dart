@@ -5453,6 +5453,7 @@ class _ColumnHeader extends StatelessWidget {
             cell(LumitIcon.fx, l10n.switchEffects),
             cell(LumitIcon.motionBlur, l10n.switchMotionBlur),
             cell(LumitIcon.cube3d, l10n.switchThreeD),
+            cell(LumitIcon.aperture, l10n.switchAcceptsLights),
           ],
         ),
       // The render-time column's header is its switch — see timeline_timings.
@@ -6092,6 +6093,14 @@ class _OutlineRowState extends State<_OutlineRow> {
           _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
               BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
+          // Accepts lights (K-361). The light's own icon, because that is what
+          // the switch is about; it does nothing in a comp with no lights, so
+          // it costs a glance rather than a decision.
+          _switch(context, id, 'lit', LumitIcon.aperture, switches.acceptsLights,
+              BridgeLayerSwitch.acceptsLights,
+              tip: switches.acceptsLights
+                  ? l10n.switchAcceptsLightsOn
+                  : l10n.switchAcceptsLightsOff),
         ],
       ),
     );

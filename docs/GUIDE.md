@@ -3977,6 +3977,62 @@ into it.
 Move the light, and the flare follows. Animate it, and the flare animates. That
 is the point of making a light a layer rather than a number inside an effect.
 
+### Lights that actually light things (K-361)
+
+A Light layer used to be something the Lens flare read. Now it is also
+something your **footage** reads: turn on a layer's **Accepts lights** switch —
+it is on by default — and the composition's lights fall across it.
+
+Point a big area light at a piece of footage from slightly off to one side and
+you get the thing this is for: a soft gradient raking across the shot, brighter
+where the light faces it squarely, easing off toward the edges. That is what a
+softbox does in a room, and it is what sells a composited element as belonging
+in the same space as the plate behind it.
+
+**How it knows.** There is a piece of geometry, several hundred years old, that
+answers this exactly. Stand on the surface being lit and look up. The light is
+a rectangle somewhere in your sky. How brightly you are lit is simply *how much
+of your sky that rectangle covers* — with light arriving from near the horizon
+counting for less, because it arrives at a slant and smears over more surface.
+And that quantity has a closed-form answer: add up one number per edge of the
+rectangle, four edges, done.
+
+That last part is why this is fast. There is no ray tracing, no sampling, no
+noise to clean up. Four small calculations per pixel and the answer is not an
+estimate of the right number — it *is* the right number. It is the same
+calculation the games industry uses for area lights, in the case where the
+surface is matte rather than shiny.
+
+**Two decisions you will notice.**
+
+*Light adds; it does not take away.* Dropping a light into a composition can
+only ever brighten things. A physically strict renderer would say that anything
+the light does not reach receives nothing and should therefore be black — true
+of a dark room, useless in a compositor, where the picture underneath is
+already lit by whatever was in the shot. So the light is added on top of what
+is there. A happy consequence: a composition with no lights in it is
+untouched — not "almost identical", but the same file, byte for byte, as before
+any of this existed. Every project you have ever saved still renders exactly as
+it did.
+
+*A layer is lit as the flat plane it is.* Lumit is 2.5D: a layer is a flat card
+in space, and the whole card faces one direction. So the whole card is lit as
+one surface. It does not know that the footage on it shows a face with a nose
+on it — nothing tells it where the surface bulges, and guessing from brightness
+goes wrong the moment someone wears a white shirt. A softbox raking across a
+card is honest and it is what the geometry really is; the alternative is a
+guess that looks impressive until it doesn't.
+
+One thing that catches people: **a light in the same plane as the layer does
+nothing at all.** That is correct, not a bug — a strip light lying flat on a
+table throws no light *along* the table. Give the light some z, so it sits in
+front of the layer, and it will do something. New lights come with a size but
+no depth, so this is the first knob to reach for.
+
+The switch is in the Timeline's render column, alongside the 3D and motion-blur
+switches, marked with the same icon as a Light layer. Turn it off on a layer you
+want the lights to leave alone.
+
 ### Two lens flares, and why there are two (K-359)
 
 Lumit has a **Lens flare** and a **Sprite flare**, and they are not two

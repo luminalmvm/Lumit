@@ -196,9 +196,11 @@ struct Switches {
     motion_blur: bool,                 // K-120: per-layer shutter smear (needs the comp master on)
     three_d: bool,                     // 2.5D: position in z, honour the active camera
     collapse: bool,                    // Precomp layers: transform concatenation (docs/06 §1.4)
+    shy: bool,                         // docs/07 §4.2: hidden from the layer list; never changes pixels
+    accepts_lights: bool,              // K-361: the comp's Light layers shade this one (default on)
 }
-// Future switches (K-168, deferred): `shy` (needs an outline filter row) and
-// `quality` (Draft|Full — needs a bicubic sampler choice). `adjustment` is not a
+// Future switches (K-168, deferred): `quality` (Draft|Full — needs a bicubic
+// sampler choice). `adjustment` is not a
 // switch — an adjustment layer is a LayerKind (§5.2).
 ```
 
@@ -297,6 +299,15 @@ already built for detected sources — a strip light throws bar-shaped ghosts, w
 rendering code. Frame keys hash a light's own properties, unlike a Camera's (whose pose is
 hashed at comp level), because a light that changed colour without renaming its frames would
 serve a stale one.
+
+**Two things read a light.** The Lens flare's Lights source mode (§3.27, K-360) puts a flare
+where the light lands in the projected picture. The **lighting pass** (K-361,
+[06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §1.8) shades every layer whose
+`accepts_lights` switch is on, which is what makes a softbox fall across footage. The two
+want different things from a light and both get them from the same resolve: the flare works
+in the projected picture and ignores depth entirely, while shading needs `z` and the
+out-of-plane rotations, because a rectangle in the same plane as the surface it lights is
+edge-on and throws nothing.
 
 ---
 

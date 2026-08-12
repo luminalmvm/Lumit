@@ -176,6 +176,39 @@ fn feed_comp(
         feed_f64(h, comp.motion_blur.shutter_phase);
         h.update(&comp.motion_blur.samples.to_le_bytes());
     }
+    // The comp's lights (docs/06, K-361). Hashed once here rather than per
+    // layer, because a light shades every layer that accepts it — and hashed
+    // only when the comp actually has one, so every key made before lighting
+    // existed stays valid. A Light layer draws no pixels of its own, so
+    // nothing else in this walk would notice it moving.
+    let lights = comp.lights_at(t);
+    if !lights.is_empty() {
+        h.update(b"lights/");
+        for l in &lights {
+            h.update(&[match l.kind {
+                lumit_core::model::LightKind::Point => 0u8,
+                lumit_core::model::LightKind::Spot => 1,
+                lumit_core::model::LightKind::Area => 2,
+            }]);
+            for v in [
+                l.position.0,
+                l.position.1,
+                l.z,
+                l.half_size.0,
+                l.half_size.1,
+                l.cone_deg,
+                l.rotation_deg,
+                l.rotation_x_deg,
+                l.rotation_y_deg,
+                l.falloff_px,
+            ] {
+                feed_f64(h, v);
+            }
+            for c in l.colour {
+                feed_f64(h, f64::from(c));
+            }
+        }
+    }
     // Draw order is content: iterate the stack as rendered. Layers outside
     // their span, hidden, or muted by someone else's solo (K-105) contribute
     // nothing — presence is gated, never hashed, so trimming a bar without
@@ -521,6 +554,13 @@ fn feed_layer(
     }
     h.update(&[u8::from(layer.switches.three_d)]);
     h.update(&[blend_tag(layer.blend)]);
+    // Accepts lights (K-361) only matters where there is a light to accept.
+    // Hashed only when the comp has one and the switch is OFF — the default is
+    // on, so this is the state that departs from what a pre-lighting key
+    // described, and gating it that way keeps every one of those keys valid.
+    if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
+        h.update(b"unlit");
+    }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
     if layer.switches.collapse && matches!(layer.kind, LayerKind::Precomp { .. }) {

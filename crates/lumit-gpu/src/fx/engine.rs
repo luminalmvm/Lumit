@@ -215,6 +215,7 @@ impl FxEngine {
         let matte_key_mod = module(include_str!("../fx_matte_key.wgsl"), "fx-matte-key");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
+        let lighting_mod = module(include_str!("../fx_lighting.wgsl"), "fx-lighting");
         let temperature_mod = module(include_str!("../fx_temperature.wgsl"), "fx-temperature");
         let invert_mod = module(include_str!("../fx_invert.wgsl"), "fx-invert");
         let tint_mod = module(include_str!("../fx_tint.wgsl"), "fx-tint");
@@ -255,6 +256,7 @@ impl FxEngine {
         let matte_key = pipeline(&matte_key_mod, "fx-matte-key", "matte_key");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
+        let lighting = pipeline(&lighting_mod, "fx-lighting", "lighting");
         let temperature = pipeline(&temperature_mod, "fx-temperature", "temperature");
         let invert = pipeline(&invert_mod, "fx-invert", "invert");
         let tint = pipeline(&tint_mod, "fx-tint", "tint");
@@ -341,6 +343,7 @@ impl FxEngine {
             matte_key,
             vignette,
             exposure,
+            lighting,
             temperature,
             invert,
             tint,

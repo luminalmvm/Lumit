@@ -381,6 +381,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
         | Op::SetLayerMotionBlur { comp, layer, .. }
+        | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerShy { comp, layer, .. }
         | Op::SetLayerLocked { comp, layer, .. }
         | Op::SetLayerLabel { comp, layer, .. }

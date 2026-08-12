@@ -247,6 +247,118 @@ pub fn motion_blur_samples(
         .collect()
 }
 
+/// The comp's Light layers, reduced to what the lighting pass needs (docs/06,
+/// K-361): each light's emitting rectangle as four corners in comp pixels,
+/// wound the same way for every light so the form-factor integral has a
+/// consistent sign.
+///
+/// Returns empty — the pass's no-op — when the layer's Accepts lights switch
+/// is off, when the layer is itself a light or a camera (a light does not light
+/// itself, and neither draws pixels to shade), or when the comp holds no
+/// lights at all. That last case is the one that matters for compatibility: a
+/// project made before lighting existed has no Light layers, so this is empty
+/// on every draw, so no lighting pass runs and the frame is unchanged to the
+/// byte.
+///
+/// The nearest `MAX_LIT_LIGHTS` win when there are more, measured from the
+/// layer's position — a budget rather than an error, because running out of
+/// uniform slots must not make a frame fail (docs/13).
+pub fn shading_lights(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+) -> Vec<lumit_gpu::fx::LightingLight> {
+    use lumit_core::model::{LayerKind, LightKind};
+
+    if !layer.switches.accepts_lights
+        || matches!(
+            layer.kind,
+            LayerKind::Light { .. } | LayerKind::Camera { .. }
+        )
+    {
+        return Vec::new();
+    }
+    let mut lights = comp.lights_at(t_comp);
+    if lights.is_empty() {
+        return Vec::new();
+    }
+    if lights.len() > lumit_gpu::fx::MAX_LIT_LIGHTS {
+        let lt = t_comp - layer.start_offset.0.to_f64();
+        let (lx, ly) = (
+            layer.transform.position_x.value_at(lt),
+            layer.transform.position_y.value_at(lt),
+        );
+        // Total order, so two runs pick the same lights: distance first, and
+        // the original stacking order breaks any tie.
+        let mut keyed: Vec<_> = lights
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let (dx, dy) = (l.position.0 - lx, l.position.1 - ly);
+                (dx * dx + dy * dy, i)
+            })
+            .collect();
+        keyed.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        keyed.truncate(lumit_gpu::fx::MAX_LIT_LIGHTS);
+        keyed.sort_by_key(|&(_, i)| i);
+        lights = keyed.iter().map(|&(_, i)| lights[i]).collect();
+    }
+
+    lights
+        .iter()
+        .map(|l| {
+            // The same placement maths a layer gets, so a light and a layer
+            // that share a transform occupy the same place in space.
+            let place = lumit_gpu::place_matrix(
+                (l.position.0 as f32, l.position.1 as f32),
+                (0.0, 0.0),
+                (100.0, 100.0),
+                l.rotation_deg as f32,
+                l.z as f32,
+                l.rotation_x_deg as f32,
+                l.rotation_y_deg as f32,
+            );
+            let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
+            let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
+            lumit_gpu::fx::LightingLight {
+                corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
+                colour: l.colour,
+                falloff_px: l.falloff_px as f32,
+                is_area: l.kind == LightKind::Area && hw > 0.0 && hh > 0.0,
+                // A spot is aimed along its own local +z, away from the
+                // camera; anything below -1 tells the kernel "not a spot".
+                cone_cos: match l.kind {
+                    LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
+                    _ => -2.0,
+                },
+                axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
+            }
+        })
+        .collect()
+}
+
+/// A point through a column-major placement matrix, done by hand so the render
+/// crate does not take a maths dependency for nine multiplies. Placements are
+/// affine — the camera's perspective is applied later — so there is no w to
+/// divide by.
+pub(crate) fn place_point(m: &[[f32; 4]; 4], x: f32, y: f32, z: f32) -> [f32; 3] {
+    [0, 1, 2].map(|k| m[0][k] * x + m[1][k] * y + m[2][k] * z + m[3][k])
+}
+
+/// A direction through the same matrix: the translation column is left out,
+/// which is what makes it a direction rather than a position.
+pub(crate) fn place_dir(m: &[[f32; 4]; 4], x: f32, y: f32, z: f32) -> [f32; 3] {
+    [0, 1, 2].map(|k| m[0][k] * x + m[1][k] * y + m[2][k] * z)
+}
+
+pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if len < 1e-6 || !len.is_finite() {
+        return [0.0, 0.0, 1.0];
+    }
+    v.map(|c| c / len)
+}
+
 /// Build a comp's draw list recursively (preview side of Precomp layers).
 /// Bottom-up order; matte sources come from decoded pixels (precomp mattes
 /// await the GPU mask pass, mirroring export). The ordinary render entry: draws
@@ -873,6 +985,10 @@ pub fn build_comp_draws_at(
                     // An adjustment layer is a staging point, not a picture —
                     // motion blur has no image of its own to smear (docs/06 §4).
                     mb: Vec::new(),
+                    // An adjustment layer has no surface of its own — it is
+                    // the composite of everything below, whose layers were
+                    // each already lit. Shading it would light them twice.
+                    lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
                 });
@@ -1108,6 +1224,8 @@ pub fn build_comp_draws_at(
             // transform sampled across the open shutter, empty unless it blurs.
             // Built the same way export does, so the two smear identically.
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
+            // The comp's lights, if this layer takes them (docs/06, K-361).
+            lights: shading_lights(comp, layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
@@ -1565,6 +1683,107 @@ mod render_below_at_tests {
         // "0.0" against "500000.0" — a longer line, so a wider raster.
         assert!(width_at(5.0) > width_at(0.0));
         assert_eq!(width_at(5.0), width_at(5.0), "and it is deterministic");
+    }
+
+    /// A Light layer in a comp must actually change the picture — and a comp
+    /// with no lights must render byte-for-byte as it did before lighting
+    /// existed (docs/06, K-361). The second half is the compatibility promise:
+    /// every project ever saved has no Light layers, and none of them may
+    /// shift by a byte.
+    ///
+    /// Also pinned here: the Accepts lights switch really switches off. That
+    /// is the escape hatch a compositor reaches for when a layer must not be
+    /// touched, and a switch that quietly does nothing is worse than none.
+    #[test]
+    fn a_light_layer_lights_the_comp_and_no_lights_changes_nothing() {
+        use lumit_core::model::{LightDef, LightKind};
+
+        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let engine = lumit_gpu::ColourEngine::new(&ctx);
+        let compositor = lumit_gpu::Compositor::new(&ctx);
+        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let realiser = Realiser {
+            ctx: ctx.clone_handle(),
+            engine: &engine,
+            compositor: &compositor,
+            fx: &fx,
+            lut_cache: &lut_cache,
+            render_scale: 1.0,
+            samples: 1,
+            profiler: None,
+        };
+        // A softbox in front of the comp, big enough to rake across it.
+        let mut light = text_layer(160.0);
+        light.kind = LayerKind::Light {
+            light: Box::new(LightDef {
+                kind: LightKind::Area,
+                half_size: [Property::fixed(120.0), Property::fixed(80.0)],
+                ..LightDef::default()
+            }),
+        };
+        light.transform.position_z = Property::fixed(-200.0);
+
+        let comp_with = |layers: Vec<Layer>| Composition {
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 320,
+            height: 180,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour([0.1, 0.1, 0.1, 1.0]),
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let doc = std::sync::Arc::new(Document::new());
+        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+        let t = 0.3;
+        let render = |comp: &Composition| {
+            let mut visited = vec![comp.id];
+            let draws = build_comp_draws(&doc, comp, t, &pixels, &mut visited);
+            let tex = realiser.realise(
+                comp.camera_pose(t),
+                comp.width,
+                comp.height,
+                comp.background.0.map(f64::from),
+                &draws,
+            );
+            engine
+                .readback8(
+                    &ctx,
+                    &engine.display(&ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
+                )
+                .unwrap()
+        };
+
+        let subject = text_layer(160.0);
+        let dark = render(&comp_with(vec![subject.clone()]));
+        let dark_again = render(&comp_with(vec![subject.clone()]));
+        assert_eq!(
+            dark, dark_again,
+            "a comp with no lights is deterministic, as it always was"
+        );
+
+        let lit = render(&comp_with(vec![subject.clone(), light.clone()]));
+        assert_ne!(dark, lit, "a Light layer must actually light the comp");
+        assert!(
+            lit.iter().zip(&dark).all(|(a, b)| a >= b),
+            "light adds, so no channel may come out darker than it went in"
+        );
+
+        // The switch off puts it back exactly where it started.
+        let mut unlit_subject = subject.clone();
+        unlit_subject.switches.accepts_lights = false;
+        let unlit = render(&comp_with(vec![unlit_subject, light]));
+        assert_eq!(
+            dark, unlit,
+            "Accepts lights off must render byte-identically to no light at all"
+        );
     }
 
     // docs/impl/temporal-rerender.md §7 step 1: a re-render of a still scene at

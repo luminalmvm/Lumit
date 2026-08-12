@@ -56,7 +56,7 @@ const double cellGap = 4;
 /// The five A/V switch cells.
 const double switchesGroupWidth = 5 * switchCellWidth;
 
-/// The render group's span. Wider than its four switch cells because the
+/// The render group's span. Wider than its five switch cells because the
 /// fold-out property rows put their value cells inside exactly this span
 /// (docs/07 §4.3): a 3-axis position needs the room. The switches themselves
 /// pack to the left in ordinary [switchCellWidth] cells.
@@ -109,7 +109,7 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
 double minGroupWidth(TimelineGroup group) => switch (group) {
       TimelineGroup.switches => switchesGroupWidth,
       TimelineGroup.identity => 120,
-      TimelineGroup.render => 4 * switchCellWidth,
+      TimelineGroup.render => 5 * switchCellWidth,
       TimelineGroup.compose => 180,
       // Enough for the widest number the readout writes ("12.34 s").
       TimelineGroup.timings => 56,

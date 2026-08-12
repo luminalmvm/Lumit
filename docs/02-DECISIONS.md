@@ -8621,3 +8621,71 @@ frames would serve a stale one.
 
 Not built here: **LTC shading of layers by these lights** (NEXT-FEATURES entry 4c). The model
 is now in place for it, which was the dependency.
+
+---
+
+## K-361 — Layers are shaded by lights with a closed-form area-light integral, and light adds rather than replaces
+
+**DECIDED** (2026-08-12). Supersedes nothing; completes K-360, which built the Light layer
+and said this was the dependency it was there to satisfy.
+
+A layer with the new **Accepts lights** switch on is shaded by the composition's Light
+layers in a pass that runs after its effect stack and before it is placed —
+`lumit_core::lighting` (the reference), `fx_lighting.wgsl` (its twin), called from
+`Realiser::realise_segment`. It is **not an effect**: it has no entry in docs/08, no
+`Resolved` variant and no place in a stack, because it is not something you add to a layer,
+it is something the composition does to it. docs/06 gains the pass.
+
+**The maths is closed-form, and that is the whole point.** How brightly a flat surface is lit
+by a flat glowing rectangle has an exact answer — the cosine-weighted fraction of the
+surface's sky that the rectangle covers, which is a sum of one term per edge. Four edges,
+four terms, no sampling and no noise. This is the diffuse form factor, and it is also the
+identity-matrix case of **Linearly Transformed Cosines** (Heitz et al. 2016), which is what
+NEXT-FEATURES entry 4c named.
+
+**LTC's fitted matrix tables are deliberately not shipped.** They are what buys roughness and
+specular highlights, they are 64×64×2 textures of published-but-third-party fitted data, and
+a 2.5D compositor shading flat layer planes has nothing to be glossy with — there are no
+per-pixel normals, and inventing them from luminance is a content-dependent quality cliff
+that Nuke's Relight is the ceiling for, not a first landing. Diffuse over a quad is the
+honest 2.5D answer and it needs no tables at all. The code is shaped so a matrix fetch drops
+in ahead of the same integral if that changes.
+
+**Light adds; it does not replace.** The pass multiplies the picture by `1 + light`. Physical
+shading multiplies by the light alone, which means dropping one light into a composition
+plunges everything it does not reach into black — the correct answer to a question no
+compositor is asking. Adding also makes the no-op exact rather than approximate: a
+composition with no Light layers produces an empty light list, the pass never runs, and the
+frame is byte-for-byte what it was before any of this existed. That is the compatibility
+promise, and it is a test.
+
+**A point light has no inverse square.** Its brightness is the cosine law and the artistic
+falloff dial, nothing else. An inverse square measured in comp pixels is a number with no
+physical meaning that a compositor would only have to fight; `falloff_px` already says, in
+pixels, where the light stops, which is the control someone actually wants.
+
+**The rectangle is clipped to the horizon**, not merely clamped at the end. The part of a
+light that has sunk behind the surface must be removed before the sum, or the answer is
+nonsense rather than merely too big — and a light straddling the plane is a real case, not a
+corner one. The form factor is then taken as a **magnitude**: the sign only records which way
+round the corners were listed, and a light here has no back face to hide behind, so no
+caller has to wind its corners a particular way to get light.
+
+**A 2D layer is shaded where it is drawn, not where its transform says.** A layer without the
+3D switch is composited flat at z = 0 whatever its z and out-of-plane rotations hold, so the
+shading forces those to zero too. Shading a layer at a depth the compositor ignores would
+light something that is not there.
+
+`ResolvedLight` gained `z`, `rotation_x_deg` and `rotation_y_deg` for this. The Lens flare
+ignores them — it works in the projected picture, where a light is simply wherever it lands —
+but shading cannot: a rectangle in the same plane as the surface it lights is edge-on and
+throws nothing, so a softbox that does anything at all is a softbox in front.
+
+**Budget:** eight lights per layer, the nearest kept, chosen by a total order so two runs pick
+the same eight. Running out of uniform slots must never make a frame fail (docs/13).
+
+**Frame key:** the comp's lights are hashed once at comp level (a Light layer draws no pixels,
+so nothing else in that walk would notice one moving), and only when the comp has one.
+`accepts_lights` is hashed only when it is *off* and a light exists — the default is on, so
+off is the state that departs from what a pre-lighting key described. Every key made before
+this stays valid.

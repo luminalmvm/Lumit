@@ -268,6 +268,12 @@ pub struct CompLayerDraw {
     /// these and averages them into one smeared layer; the single-placement
     /// fields above stay the frame-time (k=0-ish) representative placement.
     pub mb: Vec<lumit_gpu::MbSample>,
+    /// The comp's Light layers that shade this one (docs/06, K-361), already
+    /// reduced to comp-pixel rectangles. Empty unless the comp holds lights
+    /// and this layer's Accepts lights switch is on — and empty means the
+    /// lighting pass never runs, which is how a comp without lights renders
+    /// byte-for-byte as it did before lighting existed.
+    pub lights: Vec<lumit_gpu::fx::LightingLight>,
     /// The below-stack re-rendered at a held time for a temporal adjustment
     /// (Posterize Time, docs/08 §3.25). Some only on an adjustment
     /// [`DrawSource::Adjust`] draw whose stack holds a Posterize Time effect

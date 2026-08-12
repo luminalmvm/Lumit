@@ -503,7 +503,7 @@ impl Realiser<'_> {
             };
             // The effect stack runs on the linear source, after masks and
             // before the transform (docs/08 §1.5; docs/06 render order).
-            let tex = if l.fx.is_empty() {
+            let mut tex = if l.fx.is_empty() {
                 tex
             } else {
                 let (w, h) = (tex.width(), tex.height());
@@ -563,6 +563,16 @@ impl Realiser<'_> {
                     fx_ms.as_mut(),
                 )
             };
+            // The lighting pass (docs/06, K-361): shade the finished layer
+            // with the comp's Light layers, after its effects and before it is
+            // placed. `l.lights` is empty unless the comp holds lights and
+            // this layer accepts them, and empty means the pass never runs —
+            // so a comp without lights renders byte-for-byte as before.
+            if let Some(op) = lighting_op(l, tex.width(), tex.height()) {
+                tex = self
+                    .fx
+                    .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op);
+            }
             self.layer_done(l, started, fx_ms);
             linear_textures.push(tex);
         }
@@ -741,4 +751,62 @@ impl Realiser<'_> {
             self.samples,
         )
     }
+}
+
+/// The lighting pass's parameters for one draw (docs/06, K-361), or `None`
+/// when nothing lights it — which is the common case and the reason a comp
+/// without Light layers pays nothing.
+///
+/// The layer's plane is described to the kernel as an affine frame rather than
+/// a matrix: where texel (0, 0) sits in comp pixels, and how far one texel of
+/// movement carries you in each direction. That is all a placement is (the
+/// camera's perspective comes later, when the lit layer is projected), and it
+/// works out the same whether the layer is being rendered at full resolution
+/// or a quarter of it, because the steps are measured against the raster this
+/// pass is actually running on.
+fn lighting_op(
+    l: &crate::draw::CompLayerDraw,
+    w: u32,
+    h: u32,
+) -> Option<lumit_gpu::fx::LightingOp> {
+    use crate::build::{place_dir, place_point, unit};
+
+    if l.lights.is_empty() || w == 0 || h == 0 {
+        return None;
+    }
+    // A 2D layer is drawn flat at z = 0 whatever its transform says, because
+    // no camera reads those fields. Shading it at its stored depth would light
+    // a layer that is not where the light was told it is.
+    let (z, rx, ry) = if l.three_d {
+        (l.z, l.rotation_x_deg, l.rotation_y_deg)
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+    let mut place =
+        lumit_gpu::place_matrix(l.position, l.anchor, l.scale, l.rotation_deg, z, rx, ry);
+    if let Some(pre) = &l.pre {
+        place = lumit_gpu::concat_place(*pre, place);
+    }
+    let (nw, nh) = l.natural_size;
+    let origin = place_point(&place, 0.0, 0.0, 0.0);
+    let du = place_dir(&place, nw / w as f32, 0.0, 0.0);
+    let dv = place_dir(&place, 0.0, nh / h as f32, 0.0);
+    Some(lumit_gpu::fx::LightingOp {
+        origin,
+        du,
+        dv,
+        // Wound so an untransformed layer faces the viewer: this model puts
+        // increasing z away from the camera, as After Effects does, so the
+        // side a light has to be on is the negative one.
+        normal: unit(cross(dv, du)),
+        lights: l.lights.clone(),
+    })
+}
+
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }

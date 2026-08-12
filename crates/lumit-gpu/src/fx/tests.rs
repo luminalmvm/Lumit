@@ -4846,3 +4846,125 @@ fn lens_flare_montage() {
     ppm.extend_from_slice(&canvas);
     std::fs::write(std::env::var("LUMIT_FLARE_DUMP").unwrap(), ppm).unwrap();
 }
+
+/// The §1.6 oracle rule applied to the lighting pass (docs/06, K-361), which
+/// is not an effect but is held to the same standard: the kernel must agree
+/// with `lumit_core::lighting::shade`, be bit-stable, and leave the picture
+/// untouched to the byte when nothing lights it.
+///
+/// The tolerance is looser than a pointwise kernel's 2 ULP because the sum is
+/// four `acos` calls deep and the two paths do not have to agree on the last
+/// bit of a transcendental — an absolute epsilon, as the blur oracle uses.
+#[test]
+fn wgsl_lighting_matches_the_cpu_oracle() {
+    use lumit_core::lighting::{ShadingLight, ShadingSurface};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+
+    // A layer lying in the z = 0 plane at 1:1, facing the viewer.
+    let surface = ShadingSurface {
+        origin: [0.0, 0.0, 0.0],
+        du: [1.0, 0.0, 0.0],
+        dv: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, -1.0],
+    };
+    let rect = |cx: f32, cy: f32, cz: f32, half: f32| {
+        [
+            [cx - half, cy - half, cz],
+            [cx + half, cy - half, cz],
+            [cx + half, cy + half, cz],
+            [cx - half, cy + half, cz],
+        ]
+    };
+    let softbox = ShadingLight {
+        corners: rect(16.0, 12.0, -40.0, 30.0),
+        colour: [1.0, 0.8, 0.6],
+        falloff_px: 0.0,
+        is_area: true,
+        cone_cos: -2.0,
+        axis: [0.0, 0.0, 1.0],
+    };
+    let bulb = ShadingLight {
+        corners: [[4.0, 4.0, -20.0]; 4],
+        colour: [0.2, 0.4, 1.0],
+        falloff_px: 120.0,
+        is_area: false,
+        cone_cos: -2.0,
+        axis: [0.0, 0.0, 1.0],
+    };
+    let spot = ShadingLight {
+        corners: [[16.0, 12.0, -60.0]; 4],
+        colour: [1.0, 1.0, 1.0],
+        falloff_px: 0.0,
+        is_area: false,
+        cone_cos: 25f32.to_radians().cos(),
+        axis: [0.0, 0.0, 1.0],
+    };
+    // A light sunk behind the layer: the horizon clip is what makes this
+    // nothing rather than nonsense, so it belongs in the comparison.
+    let behind = ShadingLight {
+        corners: rect(16.0, 12.0, 50.0, 30.0),
+        colour: [1.0, 1.0, 1.0],
+        falloff_px: 0.0,
+        is_area: true,
+        cone_cos: -2.0,
+        axis: [0.0, 0.0, 1.0],
+    };
+
+    for (name, lights) in [
+        ("none", vec![]),
+        ("softbox", vec![softbox]),
+        ("point", vec![bulb]),
+        ("spot", vec![spot]),
+        ("behind", vec![behind]),
+        ("three", vec![softbox, bulb, spot]),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &lights);
+
+        let op = crate::fx::LightingOp {
+            origin: surface.origin,
+            du: surface.du,
+            dv: surface.dv,
+            normal: surface.normal,
+            lights: lights
+                .iter()
+                .map(|l| crate::fx::LightingLight {
+                    corners: l.corners,
+                    colour: l.colour,
+                    falloff_px: l.falloff_px,
+                    is_area: l.is_area,
+                    cone_cos: l.cone_cos,
+                    axis: l.axis,
+                })
+                .collect(),
+        };
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.lighting(&ctx, &tex, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("lighting {name}: worst {worst}");
+        assert!(worst < 2e-2, "{name}: worst absolute difference {worst}");
+
+        if name == "none" || name == "behind" {
+            assert_eq!(gpu, img, "{name}: must leave the picture exactly alone");
+        } else {
+            assert!(gpu != img, "{name}: the light must actually do something");
+        }
+
+        let out2 = fx.lighting(&ctx, &tex, w, h, &op);
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "{name}: the lighting pass must be bit-stable");
+    }
+}

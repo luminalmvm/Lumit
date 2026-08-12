@@ -731,6 +731,22 @@ pub struct Switches {
     /// renders, which is why the evaluator does not read it.
     #[serde(default)]
     pub shy: bool,
+    /// Accepts lights (K-361): the layer is shaded by the comp's Light layers.
+    /// Defaults on, so placing a light lights the scene without hunting for a
+    /// switch — but a comp with no lights shades nothing either way, so 2D
+    /// montage work pays nothing for the default.
+    #[serde(default = "default_true")]
+    pub accepts_lights: bool,
+}
+
+impl Layer {
+    /// Whether this layer is a Light (K-360) — asked often enough by the
+    /// lighting path that it is worth a name rather than a `matches!` at each
+    /// call site.
+    #[must_use]
+    pub fn is_light(&self) -> bool {
+        matches!(self.kind, LayerKind::Light { .. })
+    }
 }
 
 /// Whether any layer in `comp` is soloed (K-105). When true, the compositor
@@ -752,6 +768,7 @@ impl Default for Switches {
             solo: false,
             motion_blur: false,
             shy: false,
+            accepts_lights: true,
         }
     }
 }
@@ -978,6 +995,14 @@ pub struct ResolvedLight {
     pub cone_deg: f64,
     pub rotation_deg: f64,
     pub falloff_px: f64,
+    /// Depth in comp pixels, and the two out-of-plane rotations (K-361). The
+    /// Lens flare ignores these — it works in the projected picture, where a
+    /// light is wherever it lands. Shading needs them: a rectangle sitting in
+    /// the same plane as the surface it lights is edge-on and throws nothing,
+    /// so a softbox that does anything at all is a softbox in front.
+    pub z: f64,
+    pub rotation_x_deg: f64,
+    pub rotation_y_deg: f64,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -1062,6 +1087,9 @@ impl Composition {
                     cone_deg: light.cone_deg.value_at(lt).clamp(0.0, 180.0),
                     rotation_deg: tr.rotation.value_at(lt),
                     falloff_px: light.falloff_px.value_at(lt).max(0.0),
+                    z: tr.position_z.value_at(lt),
+                    rotation_x_deg: tr.rotation_x.value_at(lt),
+                    rotation_y_deg: tr.rotation_y.value_at(lt),
                 })
             })
             .collect()

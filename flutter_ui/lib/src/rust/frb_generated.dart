@@ -8479,8 +8479,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeLayerSwitches dco_decode_bridge_layer_switches(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return BridgeLayerSwitches(
       visible: dco_decode_bool(arr[0]),
       audible: dco_decode_bool(arr[1]),
@@ -8491,6 +8491,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       motionBlur: dco_decode_bool(arr[6]),
       collapse: dco_decode_bool(arr[7]),
       shy: dco_decode_bool(arr[8]),
+      acceptsLights: dco_decode_bool(arr[9]),
     );
   }
 
@@ -10643,6 +10644,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_motionBlur = sse_decode_bool(deserializer);
     var var_collapse = sse_decode_bool(deserializer);
     var var_shy = sse_decode_bool(deserializer);
+    var var_acceptsLights = sse_decode_bool(deserializer);
     return BridgeLayerSwitches(
         visible: var_visible,
         audible: var_audible,
@@ -10652,7 +10654,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         fx: var_fx,
         motionBlur: var_motionBlur,
         collapse: var_collapse,
-        shy: var_shy);
+        shy: var_shy,
+        acceptsLights: var_acceptsLights);
   }
 
   @protected
@@ -13017,6 +13020,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.motionBlur, serializer);
     sse_encode_bool(self.collapse, serializer);
     sse_encode_bool(self.shy, serializer);
+    sse_encode_bool(self.acceptsLights, serializer);
   }
 
   @protected

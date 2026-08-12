@@ -158,6 +158,13 @@ pub enum Op {
         layer: Uuid,
         motion_blur: bool,
     },
+    /// Toggle a layer's Accepts lights switch (K-361): whether the comp's
+    /// Light layers shade it.
+    SetLayerAcceptsLights {
+        comp: Uuid,
+        layer: Uuid,
+        accepts_lights: bool,
+    },
     /// Toggle a layer's shy switch (docs/07 §4.2): hidden from the Timeline's
     /// list while the comp's shy filter is on. Never changes what renders.
     SetLayerShy {
@@ -392,6 +399,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
         | Op::SetLayerMotionBlur { comp, layer, .. }
+        | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerCollapse { comp, layer, .. }
         | Op::SetTextDocument { comp, layer, .. }
         | Op::SetLayerMarkers { comp, layer, .. }
@@ -808,6 +816,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 motion_blur: previous,
+            })
+        }
+        Op::SetLayerAcceptsLights {
+            comp,
+            layer,
+            accepts_lights,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.accepts_lights, *accepts_lights);
+            Ok(Op::SetLayerAcceptsLights {
+                comp: *comp,
+                layer: *layer,
+                accepts_lights: previous,
             })
         }
         Op::SetCompMotionBlur { comp, motion_blur } => {

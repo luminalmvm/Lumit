@@ -8980,6 +8980,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitch {
             6 => crate::api::layer::BridgeLayerSwitch::MotionBlur,
             7 => crate::api::layer::BridgeLayerSwitch::Collapse,
             8 => crate::api::layer::BridgeLayerSwitch::Shy,
+            9 => crate::api::layer::BridgeLayerSwitch::AcceptsLights,
             _ => unreachable!("Invalid variant for BridgeLayerSwitch: {}", inner),
         };
     }
@@ -8997,6 +8998,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitches {
         let mut var_motionBlur = <bool>::sse_decode(deserializer);
         let mut var_collapse = <bool>::sse_decode(deserializer);
         let mut var_shy = <bool>::sse_decode(deserializer);
+        let mut var_acceptsLights = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeLayerSwitches {
             visible: var_visible,
             audible: var_audible,
@@ -9007,6 +9009,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitches {
             motion_blur: var_motionBlur,
             collapse: var_collapse,
             shy: var_shy,
+            accepts_lights: var_acceptsLights,
         };
     }
 }
@@ -12113,6 +12116,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerSwitch {
             Self::MotionBlur => 6.into_dart(),
             Self::Collapse => 7.into_dart(),
             Self::Shy => 8.into_dart(),
+            Self::AcceptsLights => 9.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -12141,6 +12145,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerSwitches {
             self.motion_blur.into_into_dart().into_dart(),
             self.collapse.into_into_dart().into_dart(),
             self.shy.into_into_dart().into_dart(),
+            self.accepts_lights.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -14075,6 +14080,7 @@ impl SseEncode for crate::api::layer::BridgeLayerSwitch {
                 crate::api::layer::BridgeLayerSwitch::MotionBlur => 6,
                 crate::api::layer::BridgeLayerSwitch::Collapse => 7,
                 crate::api::layer::BridgeLayerSwitch::Shy => 8,
+                crate::api::layer::BridgeLayerSwitch::AcceptsLights => 9,
                 _ => {
                     unimplemented!("");
                 }
@@ -14096,6 +14102,7 @@ impl SseEncode for crate::api::layer::BridgeLayerSwitches {
         <bool>::sse_encode(self.motion_blur, serializer);
         <bool>::sse_encode(self.collapse, serializer);
         <bool>::sse_encode(self.shy, serializer);
+        <bool>::sse_encode(self.accepts_lights, serializer);
     }
 }
 

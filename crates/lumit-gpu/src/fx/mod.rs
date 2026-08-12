@@ -16,6 +16,7 @@ mod common;
 mod dof;
 mod engine;
 mod lens_flare;
+mod lighting;
 mod split;
 mod stylise;
 mod temporal;
@@ -28,6 +29,7 @@ pub use common::*;
 // effect's two dozen scalars, and a public type does need naming.
 pub use dof::*;
 pub use lens_flare::*;
+pub use lighting::*;
 pub use split::*;
 pub use stylise::*;
 pub use temporal::*;
@@ -65,6 +67,9 @@ pub struct FxEngine {
     matte_key: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
+    /// The lighting pass (docs/06, K-361). Not an effect — the realiser calls
+    /// it directly, between a layer's effect stack and its composite.
+    lighting: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
     tint: wgpu::ComputePipeline,

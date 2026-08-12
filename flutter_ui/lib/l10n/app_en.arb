@@ -3672,6 +3672,18 @@
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
   },
+  "switchAcceptsLights": "Accepts lights",
+  "@switchAcceptsLights": {
+    "description": "Layer switch and its column heading in the Timeline: whether the composition's Light layers shade this layer."
+  },
+  "switchAcceptsLightsOff": "Accepts lights: off",
+  "@switchAcceptsLightsOff": {
+    "description": "Tooltip on the Accepts lights switch when it is off: the composition's lights leave this layer alone."
+  },
+  "switchAcceptsLightsOn": "Accepts lights: on",
+  "@switchAcceptsLightsOn": {
+    "description": "Tooltip on the Accepts lights switch when it is on: the composition's lights shade this layer."
+  },
   "switchVisible": "Visible",
   "@switchVisible": {
     "description": "Layer switch: the layer is drawn. One or two words — it is a tooltip."
