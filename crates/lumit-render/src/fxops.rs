@@ -1122,6 +1122,7 @@ pub fn run_ops(
                             reflectance: b.reflectance.clone(),
                             starburst: b.starburst,
                             sb_res: lf::STARBURST_RES,
+                            sb_fields: lf::STARBURST_FIELDS as u32,
                         }
                     }) as lumit_gpu::fx::FlareBake),
                     &probe,

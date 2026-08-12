@@ -67,6 +67,54 @@ fn tap_rgb(tex: texture_2d<f32>, fx_in: f32, fy_in: f32, dims: vec2<i32>) -> vec
     return a * (1.0 - ty) + b * ty;
 }
 
+// Field-angle slices in the starburst atlas (K-365) -- the WGSL spelling of
+// lumit_core::fx::lens_flare::STARBURST_FIELDS, pinned against it by test.
+// The atlas is ONE texture, STARBURST_RES wide by STARBURST_RES * F tall,
+// slice 0 (on-axis) at the top.
+const STARBURST_FIELDS: u32 = 8u;
+
+// Where a light sits in the field: (field fraction, azimuth) -- the twin of
+// lumit_core's `starburst_field`. Offsets in sensor mm follow `dir_of`'s
+// convention (half the 36 mm sensor width is 18, the y fraction scaled by
+// the raster aspect), over the sensor's half-diagonal. The azimuth is taken
+// on the RASTER's offsets, y down, because it turns the sprite in raster
+// space; sensor y is up, so this mirrors the true meridional angle, which
+// the cat's-eye's own symmetry makes invisible.
+fn starburst_field(px: f32, py: f32, aspect: f32) -> vec2<f32> {
+    let half_w = 18.0;
+    let dx = px - 0.5;
+    let dy = py - 0.5;
+    let x_mm = 2.0 * dx * half_w;
+    let y_mm = 2.0 * dy * aspect * half_w;
+    let half_diag = 0.5 * sqrt(36.0 * 36.0 + 24.0 * 24.0);
+    let frac = clamp(sqrt(x_mm * x_mm + y_mm * y_mm) / half_diag, 0.0, 1.0);
+    return vec2<f32>(frac, atan2(dy, dx));
+}
+
+// Bilinear tap of one slice of the starburst atlas at unit (u, v) -- the
+// same arithmetic lumit_core's combine uses. The slice's own rows are the
+// only ones read (`base` offsets, the clamp keeps a malformed atlas in
+// bounds), so slice s can never bleed into s +/- 1.
+fn tap_sb(u: f32, v: f32, sw: i32, rows: i32, slice: i32) -> vec3<f32> {
+    let fx = u * f32(sw - 1);
+    let fy = v * f32(rows - 1);
+    let x0 = clamp(i32(floor(fx)), 0, sw - 1);
+    let y0 = clamp(i32(floor(fy)), 0, rows - 1);
+    let x1 = min(x0 + 1, sw - 1);
+    let y1 = min(y0 + 1, rows - 1);
+    let tx = clamp(fx - floor(fx), 0.0, 1.0);
+    let ty = clamp(fy - floor(fy), 0.0, 1.0);
+    let sdims = vec2<i32>(textureDimensions(sb_tex));
+    let base = slice * rows;
+    let ry0 = clamp(base + y0, 0, sdims.y - 1);
+    let ry1 = clamp(base + y1, 0, sdims.y - 1);
+    let a = textureLoad(sb_tex, vec2<i32>(x0, ry0), 0).rgb * (1.0 - tx)
+        + textureLoad(sb_tex, vec2<i32>(x1, ry0), 0).rgb * tx;
+    let b = textureLoad(sb_tex, vec2<i32>(x0, ry1), 0).rgb * (1.0 - tx)
+        + textureLoad(sb_tex, vec2<i32>(x1, ry1), 0).rgb * tx;
+    return a * (1.0 - ty) + b * ty;
+}
+
 // W3C soft-light D(d) helper (== the compositor's and Echo's).
 fn flare_soft_light_d(d: vec4<f32>) -> vec4<f32> {
     let poly = ((16.0 * d - 12.0) * d + 4.0) * d;
@@ -147,10 +195,13 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
         fdims,
     );
     // One starburst sprite per live light: anchored on its light, sized by
-    // Scale, stretched by the squeeze, tinted by the light.
+    // Scale, stretched by the squeeze, tinted by the light -- and turned
+    // and blended across the K-365 field slices, so a light near the frame
+    // edge gets the cat's-eye starburst its field angle really produces.
     var sb = vec3<f32>(0.0);
     if (cp.sb_intensity > 0.0 && cp.sb_half > 0.0) {
         let sdims = vec2<i32>(textureDimensions(sb_tex));
+        let rows = max(sdims.y / i32(STARBURST_FIELDS), 1);
         for (var li = 0u; li < cp.light_count; li = li + 1u) {
             let light = lights[li];
             if (light.r <= 0.0 && light.g <= 0.0 && light.b <= 0.0) {
@@ -158,15 +209,26 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
             let rel_x = f32(xy.x) + 0.5 - light.pos_x * cp.w;
             let rel_y = f32(xy.y) + 0.5 - light.pos_y * cp.h;
-            let u = rel_x / (cp.sb_half * cp.squeeze) * 0.5 + 0.5;
-            let v = rel_y / cp.sb_half * 0.5 + 0.5;
+            // Turn the sprite so the baked +x cat's-eye lean points along
+            // the light's own radial direction (rotation by -azimuth).
+            let fa = starburst_field(light.pos_x, light.pos_y, cp.h / cp.w);
+            let ca = cos(fa.y);
+            let sa = sin(fa.y);
+            let rot_x = rel_x * ca + rel_y * sa;
+            let rot_y = -rel_x * sa + rel_y * ca;
+            let u = rot_x / (cp.sb_half * cp.squeeze) * 0.5 + 0.5;
+            let v = rot_y / cp.sb_half * 0.5 + 0.5;
             if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
                 continue;
             }
-            sb = sb
-                + tap_rgb(sb_tex, u * f32(sdims.x - 1), v * f32(sdims.y - 1), sdims)
-                    * cp.sb_intensity
-                    * vec3<f32>(light.r, light.g, light.b);
+            // The two slices bracketing this light's field fraction.
+            let s = fa.x * f32(STARBURST_FIELDS - 1u);
+            let s0 = min(i32(floor(s)), i32(STARBURST_FIELDS) - 1);
+            let s1 = min(s0 + 1, i32(STARBURST_FIELDS) - 1);
+            let ts = s - f32(s0);
+            let sprite = tap_sb(u, v, sdims.x, rows, s0) * (1.0 - ts)
+                + tap_sb(u, v, sdims.x, rows, s1) * ts;
+            sb = sb + sprite * cp.sb_intensity * vec3<f32>(light.r, light.g, light.b);
         }
     }
     let add = (f + sb) * cp.intensity;

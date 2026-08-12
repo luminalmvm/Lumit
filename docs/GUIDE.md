@@ -582,6 +582,16 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   blades, which Lumit gets by taking a Fourier transform of the iris shape — an
   established bit of optics maths — so an 8-blade iris genuinely makes an 8-spike star,
   and the spikes fringe into rainbows because each wavelength bends by a different amount.
+  That star is not the same shape everywhere in the frame. Look through a lens from an
+  angle, rather than straight down the barrel, and the round hole you see is not round —
+  the metal rims at the front and the back of the barrel overlap it from opposite sides
+  and pinch it into a pointed oval, the shape photographers call a **cat's eye** (it is
+  the same effect that squashes out-of-focus background highlights into lemon slices near
+  the edges of a picture). Light bends around *that* shape, not the iris, so a real
+  starburst squashes and leans as the light moves out towards a corner. Lumit works out
+  the shape of the hole at eight angles across the frame when you pick a lens, and each
+  light in the shot reads the two that bracket where it actually sits, turned to point
+  the right way. A light dead centre gets exactly the star it always got.
   The expensive maths (the Fourier transforms, the iris image) runs once on the CPU when
   you change a parameter and is remembered; only the ray shooting and drawing happen per
   frame, which is what keeps it scrubbable. When it's doing too much, the dials to reach

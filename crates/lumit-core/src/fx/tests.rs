@@ -4915,12 +4915,139 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     let a = bake(&p);
     let b = bake(&p);
     assert_eq!(a.pairs, b.pairs);
+    // Bit-identical across runs INCLUDING the K-365 field slices, which are
+    // baked in parallel: `collect` restores slice order, so the thread pool
+    // cannot reach the pixels.
     assert_eq!(a.starburst, b.starburst);
+    assert_eq!(
+        a.starburst.len(),
+        STARBURST_FIELDS * (STARBURST_RES * STARBURST_RES * 3) as usize,
+        "the sprite is the field slices concatenated, slice-major"
+    );
     assert_eq!(a.energy_gain, b.energy_gain);
     assert!(!a.pairs.is_empty());
     for pair in &a.pairs {
         assert!(pair[0] < pair[1]);
         assert!((pair[1] as usize) < a.surfaces.len());
+    }
+}
+
+/// One angular ring of a starburst slice: `bins` samples of the pattern's
+/// luma at `radius` (a fraction of the sprite's half-size), taken from the
+/// nearest texel and smoothed over ±`SMOOTH` bins so a spike reads as one
+/// bump rather than a comb of them.
+fn starburst_ring(slice: &[f32], n: usize, radius: f32) -> Vec<f32> {
+    const BINS: usize = 720;
+    const SMOOTH: isize = 5;
+    let c = (n - 1) as f32 / 2.0;
+    let r = radius * (n as f32 / 2.0);
+    let raw: Vec<f32> = (0..BINS)
+        .map(|k| {
+            let a = std::f32::consts::TAU * k as f32 / BINS as f32;
+            let x = (c + r * a.cos()).round().clamp(0.0, (n - 1) as f32) as usize;
+            let y = (c + r * a.sin()).round().clamp(0.0, (n - 1) as f32) as usize;
+            let i = (y * n + x) * 3;
+            0.2126 * slice[i] + 0.7152 * slice[i + 1] + 0.0722 * slice[i + 2]
+        })
+        .collect();
+    (0..BINS)
+        .map(|k| {
+            let mut s = 0.0;
+            for d in -SMOOTH..=SMOOTH {
+                s += raw[(k as isize + d).rem_euclid(BINS as isize) as usize];
+            }
+            s / (2 * SMOOTH + 1) as f32
+        })
+        .collect()
+}
+
+/// Strict local maxima of a circular ring that stand above `1.5 ×` its mean
+/// — the diffraction spikes, counted without caring how bright they are.
+fn starburst_spikes(ring: &[f32]) -> usize {
+    let n = ring.len();
+    let mean = ring.iter().sum::<f32>() / n as f32;
+    (0..n)
+        .filter(|&k| {
+            let v = ring[k];
+            v > 1.5 * mean && v > ring[(k + n - 1) % n] && v > ring[(k + 1) % n]
+        })
+        .count()
+}
+
+/// **The starburst still counts the blades** (K-256's physics, re-checked
+/// after the K-365 field slices): the sprite is the iris polygon's
+/// Fraunhofer diffraction, and a polygon's spikes run perpendicular to its
+/// edges — so an EVEN blade count gives N spikes (opposite edges are
+/// parallel and share a spike) and an ODD one gives 2N. Slice 0 is the
+/// on-axis picture; a bake that lost the polygon, or concatenated its
+/// slices in the wrong order, changes this count.
+#[test]
+fn starburst_slice_zero_counts_the_iris_blades() {
+    use crate::fx::lens_flare::*;
+    let n = STARBURST_RES as usize;
+    for (blades, want) in [(6u32, 6usize), (5, 10)] {
+        // Lens 18 is the cheapest bundled prescription. Roundness 0 keeps
+        // the polygon a polygon — and the f-stop must be well down from the
+        // lens's native 4.5, because `effective_roundness` rounds the iris
+        // off near wide open (a real iris's blades barely meet there), and
+        // a circle has no blades to count.
+        let p = LensFlareParams {
+            lens: 18,
+            blades,
+            roundness: 0.0,
+            fstop: 16.0,
+            ..default_flare_params()
+        };
+        let baked = bake(&p);
+        let ring = starburst_ring(&baked.starburst[..n * n * 3], n, 0.3);
+        assert_eq!(
+            starburst_spikes(&ring),
+            want,
+            "{blades} blades must give {want} spikes"
+        );
+    }
+}
+
+/// **The cat's-eye is real** (K-365): at the sensor-corner field angle the
+/// front and rear mechanical stops clip the iris into a sliver, so the last
+/// field slice must differ from the on-axis one — and must still carry
+/// light, because a starburst that goes black in the corners is a worse
+/// picture than one that never changed. If `trace_transmit` ever silently
+/// returned 1 everywhere, the first assertion fails; if it ever returned 0
+/// everywhere, the second does.
+#[test]
+fn the_corner_field_slice_is_a_cats_eye_not_the_on_axis_sprite() {
+    use crate::fx::lens_flare::*;
+    let per = (STARBURST_RES * STARBURST_RES * 3) as usize;
+    // Lens 16 is the Master Prime: fast enough that its stops really do
+    // clip at the corner field angle. Lens 0 is the bundled APS-C design,
+    // which at the full-frame corner passes nothing at all — the case the
+    // dead-slice hold exists for.
+    for lens in [16u32, 0] {
+        let p = LensFlareParams {
+            lens,
+            ..default_flare_params()
+        };
+        let baked = bake(&p);
+        let on_axis = &baked.starburst[..per];
+        let corner = &baked.starburst[(STARBURST_FIELDS - 1) * per..];
+        let energy = on_axis.iter().sum::<f32>().max(1e-9);
+        let l1: f32 = on_axis
+            .iter()
+            .zip(corner)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / energy;
+        assert!(
+            l1 > 0.02,
+            "lens {lens}: corner slice differs from on-axis by only {l1}"
+        );
+        let corner_energy = corner.iter().sum::<f32>();
+        assert!(
+            corner_energy > 0.1 * energy,
+            "lens {lens}: the corner slice kept only {corner_energy} of \
+             {energy} — the vignette has killed the sprite, not shaped it"
+        );
     }
 }
 

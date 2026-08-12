@@ -332,6 +332,42 @@ border, and the combine stamps it as a quad, so on a dark scene every starburst 
 a hard-edged grey square. Radial, not square — light around a point falls off in
 circles, and a square window merely softened the square.
 
+**The sprite is baked `STARBURST_FIELDS` (8) times, at eight field angles** (K-365):
+off-axis the diffracting hole is not the iris but the **cat's-eye** the front and rear
+mechanical stops clip it to, so the starburst squashes and leans towards the frame
+corner. Slice `f` renders at `θ = f/(F−1) · atan(half sensor diagonal / focal)`, its
+aperture image the same `pupil_mask` polygon multiplied by the imaging path's vignette:
+`trace_transmit` — the straight refract-only walk through every surface, no reflections
+— accumulating the same `rrel2` housing feather the ghost trace does, at 550 nm. Two
+things it deliberately does *not* do:
+
+- **the stop surface contributes no feather.** The iris is already the polygon mask;
+  counting it again would shrink every aperture image by its own edge;
+- **the sampled disc is the entrance pupil, `focal / 2N`, not `FlareBaked::pupil_mm`.**
+  That field is the pupil *spray* radius — the entrance pupil with half again as margin,
+  because ghost paths accept rays the imaging pupil rejects. Traced at the wider radius
+  the vignette clips the polygon into a circle at two thirds of its own edge, and every
+  aperture image, on-axis included, comes out round.
+
+The origin is back-projected to the front vertex plane, so a tilted slice samples the
+same disc rather than a disc slid sideways by `START_Z_BACKOFF_MM · tan θ`. On-axis the
+vignette is 1 across the whole pupil for every bundled prescription, so **slice 0 is
+bit-identical to the pre-K-365 sprite** — a test pins that the blade spikes still count
+(even N → N spikes, odd N → 2N). A lens that does not cover the full frame (the bundled
+7Artisans is an APS-C design) passes nothing at the outer angles and would bake a black
+sprite; a dead slice holds the last live one instead, so the starburst stops changing
+rather than vanishing.
+
+The eight slices are independent FFTs and bake in parallel, `collect`ed back into slice
+order so the thread pool cannot reach the pixels; the whole bake costs roughly 1.3× its
+one-slice self. They are stored concatenated slice-major in `FlareBaked::starburst` and
+uploaded as ONE atlas texture, `STARBURST_RES` wide by `STARBURST_RES × F` tall, which
+keeps `sb_tex` a plain `texture_2d`. The combine (§8) computes each light's field
+fraction and azimuth with `starburst_field`, rotates the sprite-relative pixel by
+−azimuth, and lerps the two bracketing slices; taps are offset by the slice's own rows,
+so no slice bleeds into its neighbour. The shader spells `STARBURST_FIELDS` itself and
+a test pins the two spellings together.
+
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)
 with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). The gain ceiling is
@@ -342,7 +378,8 @@ roundness and iris softness; light position, intensities, dispersion, coating, G
 softness, focus, quality and mix are frame-time and never rebake.
 
 **The bake costs about 0.66 s** for a 24-surface prescription on a middling CPU, of which
-the exposure probe's trace is roughly 0.5 s and the starburst 0.12 s — the rest is pair
+the exposure probe's trace is roughly 0.5 s and the starburst 0.12 s (K-365's eight field
+slices go wide across the pool and cost about 1.3x that one, not eight times it) — the rest is pair
 ranking. It used to spend that on the render thread, so choosing a lens froze the picture;
 **it now runs on a bake thread beside the frame (K-350)** — see §5a. Three K-263 economies,
 all exact, cut it to that figure:
@@ -455,7 +492,7 @@ pixel, colour = the summed flux × the Light tint (K-259). A one-tile point sour
 own anchor's only contributor and reads exactly as before K-267; a practical spanning
 many tiles finally weighs as its whole lit area instead of one pixel. Every downstream stage runs per light on the dispatch z axis — the trace
 computes each light's direction in-shader, the vertex build tints by the light, and the
-combine stamps one starburst per live light. Manual mode is the same pipeline with one
+combine stamps one starburst per live light, at that light's own field angle (K-365). Manual mode is the same pipeline with one
 CPU-written light carrying the tint (white by default). The CPU twin is `lens_flare::detect_lights`, held to the GPU by
 the matte-mode frame oracle. The original design sketch (kept for the record): top-K
 tie-breaking, and the trace runs per detected light with that sample's colour × energy as

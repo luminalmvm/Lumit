@@ -8814,3 +8814,54 @@ Choices worth recording:
 
 The ranking and spread probes inside the bake keep the scalar single-λ walk: they only
 rank, and 8× radiometry there would be spent on answers nothing reads.
+
+---
+
+## K-365 — The starburst is field-dependent: eight cat's-eye slices, one azimuth, rotated at draw time
+
+**DECIDED** (2026-08-12). Entry B2 of the flare programme.
+
+The starburst is Fraunhofer diffraction at the iris, and the bake treated the iris as the
+whole story: one sprite per lens, stamped identically wherever the light sat. Off-axis
+that is wrong. The hole light actually diffracts through is the iris clipped by the
+front and rear mechanical stops from opposite sides — the **cat's-eye** every
+photographer knows from the lemon-shaped bokeh at a picture's edges — so a real starburst
+squashes and leans as the light moves out towards a corner, and ours did not.
+
+The aperture is now baked at `STARBURST_FIELDS` = 8 field angles, slice 0 on-axis and
+slice 7 at the sensor-corner angle `atan(half sensor diagonal / focal)`. Each slice is
+the same `pupil_mask` polygon multiplied by the imaging path's vignette, measured by a
+new straight refract-only walk (`trace_transmit`) that accumulates the housing feather
+`trace_splat` already uses. The slices are concatenated slice-major and uploaded as one
+atlas texture; the combine reads the two slices bracketing each light's field fraction
+and lerps.
+
+Choices worth recording:
+
+- **One azimuth, rotated at draw time.** The cat's-eye is symmetric about the meridional
+  plane, so the whole family is one baked azimuth (the lean along +x) turned by −azimuth
+  when the sprite is stamped. Baking the azimuths instead would multiply the bake by the
+  number of directions and buy nothing.
+- **Slice 0 is the old picture, bit-for-bit.** On-axis the imaging vignette is 1 across
+  the whole entrance pupil for every bundled prescription, so a centred light renders
+  exactly what it rendered before. Nothing about this change is a look; it is a shape
+  that was missing off-centre.
+- **The vignette trace skips the stop and samples the entrance pupil.** The iris is
+  already the polygon mask, so counting the stop again would shrink every image by its
+  own edge; and the disc traced is `focal / 2N`, not the wider ghost-spray radius, which
+  when used clipped the polygon into a circle at two thirds of its edge and made every
+  aperture round. Both are the kind of double-count that reads as "the feature does
+  nothing" rather than as a bug.
+- **A dead slice holds the last live one.** A lens that does not cover the full frame —
+  the bundled 7Artisans is an APS-C design, and a user `.lens` file may be anything —
+  passes nothing at the outer field angles, and its corner slice bakes black. A starburst
+  that vanishes as the light nears the corner is a worse picture than one that stopped
+  changing there.
+- **The bake stays under half a second.** The eight slices are independent FFTs and go
+  wide across the pool; a 24-surface prescription measured 170 ms before and 225 ms after
+  on the development machine. The bake already runs beside the frame (K-350), so this
+  never touches the picture's latency.
+
+The blade parity the starburst has always had — an even blade count gives N spikes, an
+odd one 2N — is now pinned by a test on slice 0, because the vignette multiply is exactly
+the kind of change that can quietly round the iris off and leave a plausible-looking glow.

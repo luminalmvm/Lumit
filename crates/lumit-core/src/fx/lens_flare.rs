@@ -225,6 +225,20 @@ pub const STARBURST_SAMPLES: u32 = 100;
 /// Aperture-image side for the starburst FFT.
 pub const APERTURE_RES: u32 = 256;
 
+/// Field-angle slices the starburst is baked at (K-365).
+///
+/// Off-axis the diffracting hole is not the iris alone: the front and rear
+/// mechanical stops clip it into a **cat's-eye**, so the starburst squashes
+/// and leans as the light moves out towards the frame corner. The bake
+/// therefore renders the aperture at `STARBURST_FIELDS` field angles —
+/// slice 0 on-axis (the picture the effect drew before K-365), slice
+/// `STARBURST_FIELDS − 1` at the sensor-corner field angle — and the
+/// combine blends the two slices bracketing each light's own field
+/// fraction. Eight is the point where doubling the count stops changing the
+/// blended sprite (the vignette varies smoothly in the field) while the
+/// bake still parallelises one slice per core.
+pub const STARBURST_FIELDS: usize = 8;
+
 /// Distinct sources a frame detects (Matte mode's top-K cap; Manual is one).
 /// 16 since K-267: area sources anchor on one slot each, and eight anchors
 /// starved scenes with several practicals plus an area source.
@@ -749,7 +763,11 @@ pub struct FlareBaked {
     /// The auto-exposure gain (closed loop, K-258): multiplies every splat
     /// so all bundled lenses read comparably at default Intensity.
     pub energy_gain: f32,
-    /// The starburst sprite, `STARBURST_RES`² × RGB, peak-normalised.
+    /// The starburst sprite at [`STARBURST_FIELDS`] field angles (K-365),
+    /// slice-major: `STARBURST_FIELDS × STARBURST_RES² × 3` floats, slice
+    /// 0 on-axis and slice `STARBURST_FIELDS − 1` at the sensor corner,
+    /// each peak-normalised. One azimuth only (the cat's-eye leans along
+    /// +x); the combine rotates the sprite to the light's own azimuth.
     pub starburst: Vec<f32>,
 }
 
@@ -1263,6 +1281,32 @@ pub fn light_direction(light: [f32; 2], aspect_h_over_w: f32, focal_mm: f32) -> 
     [v[0] / len, v[1] / len, v[2] / len]
 }
 
+/// Where one light sits in the field, for the starburst's cat's-eye slice
+/// (K-365): `(field fraction, azimuth)` for a light at `light` (raster
+/// fraction) on a raster of aspect `h/w`.
+///
+/// The field fraction is the light's offset in sensor millimetres — the
+/// same convention [`light_direction`] projects with, the x fraction against
+/// the sensor half-width and the y fraction against that half-width times
+/// the raster aspect — over the sensor's half-diagonal, clamped to 1. A
+/// light at the frame corner of a 3:2 raster reads 1; a squarer raster
+/// reaches the corner sooner and clamps.
+///
+/// The azimuth is measured on the **raster's** offsets, y DOWN, because
+/// what it rotates is the sprite in raster space. Sensor y is up, so this
+/// mirrors the true meridional angle — invisible, because the cat's-eye is
+/// symmetric about the meridional plane and so is its diffraction pattern.
+pub fn starburst_field(light: [f32; 2], aspect_h_over_w: f32) -> (f32, f32) {
+    let half_w = SENSOR_MM[0] / 2.0;
+    let dx = light[0] - 0.5;
+    let dy = light[1] - 0.5;
+    let x_mm = 2.0 * dx * half_w;
+    let y_mm = 2.0 * dy * aspect_h_over_w * half_w;
+    let half_diag = 0.5 * (SENSOR_MM[0] * SENSOR_MM[0] + SENSOR_MM[1] * SENSOR_MM[1]).sqrt();
+    let frac = (x_mm.hypot(y_mm) / half_diag).clamp(0.0, 1.0);
+    (frac, dy.atan2(dx))
+}
+
 /// Trace one pupil sample through one ghost pair at one wavelength — the
 /// FlareSim three-phase walk (K-261), the CPU twin the WGSL splat kernel
 /// mirrors op-for-op. `origin` is the ray start (mm), `dir` the unit beam
@@ -1411,6 +1455,65 @@ pub fn trace_splat(
     // Housing feather: full inside 0.95, gone at 1.0 (smoothstep).
     let ft = ((1.0 - ray.rrel2.sqrt()) / 0.05).clamp(0.0, 1.0);
     Some(([x, y], ray.weight * (ft * ft * (3.0 - 2.0 * ft))))
+}
+
+/// The STRAIGHT imaging path through the whole stack (K-365): no
+/// reflections, every surface refracted front to back, returning the same
+/// housing/vignette feather [`trace_splat`] applies at the sensor — 1 for a
+/// ray that clears every clear aperture comfortably, falling smoothly to 0
+/// as it grazes one, `None` for a ray that dies (total internal reflection,
+/// or a surface it can never reach).
+///
+/// This is what shapes the cat's-eye: at a field angle the mechanical stops
+/// in front of and behind the iris clip the bundle from opposite sides, so
+/// the hole light actually diffracts through is a lens-shaped sliver rather
+/// than the iris polygon. The **stop surface is deliberately skipped** when
+/// accumulating the feather: the iris is already in the polygon mask
+/// [`bake_aperture_field`] multiplies this by, and counting it twice would
+/// shrink every aperture image by its own edge.
+pub fn trace_transmit(
+    baked: &FlareBaked,
+    lambda_nm: f32,
+    origin: [f32; 3],
+    dir: [f32; 3],
+) -> Option<f32> {
+    let surfs = &baked.surfaces;
+    if surfs.len() < 3 {
+        return None;
+    }
+    let mut pos = origin;
+    let mut d = dir;
+    let mut ior = 1.0_f32;
+    let mut rrel2 = 0.0_f32;
+    for s in surfs.iter() {
+        let (hit, norm, missed) = intersect(pos, d, s.radius_mm, s.z_mm)?;
+        pos = hit;
+        if missed {
+            // Outside the glass entirely: the mount absorbs it (the same
+            // 4.0 `trace_splat` uses, which the feather reads as gone).
+            rrel2 = rrel2.max(4.0);
+        }
+        if s.is_stop <= 0.5 {
+            // The feather denominator is `trace_splat`'s exactly: the
+            // smaller of the clear aperture and the glass's own lateral
+            // extent (K-264).
+            let semi_r = if s.radius_mm.abs() < 1e-6 {
+                s.semi_ap_mm.max(1e-6)
+            } else {
+                s.semi_ap_mm.min(s.radius_mm.abs()).max(1e-6)
+            };
+            rrel2 = rrel2.max((pos[0] * pos[0] + pos[1] * pos[1]) / (semi_r * semi_r));
+        }
+        let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, lambda_nm);
+        // TIR on the imaging path means nothing transmits along it.
+        d = refract3(d, norm, ior / n2)?;
+        ior = n2;
+    }
+    if !rrel2.is_finite() {
+        return None;
+    }
+    let ft = ((1.0 - rrel2.sqrt()) / 0.05).clamp(0.0, 1.0);
+    Some(ft * ft * (3.0 - 2.0 * ft))
 }
 
 /// [`trace_splat`]'s spectral sibling (K-364, entry A2): the identical
@@ -1915,28 +2018,68 @@ pub fn lens_text_hash(text: &str) -> u64 {
     h
 }
 
-/// The aperture image for the starburst FFT: the pupil mask rendered into a
-/// texture (iris at 0.75 of the half-extent, leaving rim room for the
-/// diffraction spread).
-pub(crate) fn bake_aperture(p: &LensFlareParams, native_fstop: f32, res: u32) -> Vec<f32> {
+/// The aperture image for the starburst FFT at one field angle (K-365): the
+/// pupil mask (iris at 0.75 of the half-extent, leaving rim room for the
+/// diffraction spread), multiplied by the **imaging path's vignette** at
+/// that angle — which is what turns the iris polygon into the off-axis
+/// cat's-eye.
+///
+/// `field_frac` runs 0 (on-axis) to 1 (the sensor-corner field angle
+/// `atan(half sensor diagonal / focal)`). Every aperture pixel becomes a ray
+/// through that point of the entrance pupil at the field angle's direction,
+/// and [`trace_transmit`] says how much of it survives the mechanical stops.
+/// The azimuth is fixed along +x: the cat's-eye is symmetric about the
+/// meridional plane, so one azimuth is the whole family and the combine
+/// rotates the sprite to each light instead.
+///
+/// At `field_frac == 0` this is the pre-K-365 aperture image times the
+/// on-axis vignette, which a sane prescription passes at ~1 inside its own
+/// pupil — so slice 0 is the picture the effect has always drawn.
+pub(crate) fn bake_aperture_field(
+    p: &LensFlareParams,
+    native_fstop: f32,
+    res: u32,
+    baked: &FlareBaked,
+    field_frac: f32,
+) -> Vec<f32> {
     let n = res as usize;
     let mut img = vec![0.0_f32; n * n];
     let rot = p.aperture_rotation_deg.to_radians();
     let roundness = effective_roundness(p.roundness, p.fstop, native_fstop);
     let softness = (p.aperture_softness * 0.25).max(0.004);
     let size = 0.75_f32;
+    let half_diag = 0.5 * (SENSOR_MM[0] * SENSOR_MM[0] + SENSOR_MM[1] * SENSOR_MM[1]).sqrt();
+    let theta = field_frac.clamp(0.0, 1.0) * (half_diag / baked.focal_mm.max(1e-3)).atan();
+    let dir = [theta.sin(), 0.0, theta.cos()];
+    // Rays start `START_Z_BACKOFF_MM` in front of the glass, as every other
+    // trace in this file does, but the pupil point they are sampling is at
+    // the FRONT VERTEX plane — so a tilted ray is walked backwards to the
+    // start plane first. Without that back-projection the whole sampled disc
+    // slides sideways with the field angle and the corner slice is mostly
+    // front-element miss: an artefact of where the ray happens to start, not
+    // an aperture.
+    let front_z = baked.surfaces.first().map_or(0.0, |s| s.z_mm);
+    let lead = dir[0] / dir[2] * (front_z - baked.start_z_mm);
+    // The aperture image spans the ENTRANCE PUPIL, `focal / 2N` — not
+    // `FlareBaked::pupil_mm`, which is that with half again as margin
+    // because ghost paths accept rays the imaging pupil rejects. Traced at
+    // the wider radius, the imaging vignette clips the iris polygon into a
+    // circle at two thirds of its own edge and every aperture image comes
+    // out round, on-axis and off.
+    let entrance_mm = (baked.focal_mm / (2.0 * baked.native_fstop.max(0.7)))
+        .clamp(1.0, baked.front_semi_ap.max(1.0));
     for y in 0..n {
         for x in 0..n {
             let ndc_x = 2.0 * (x as f32 / (n - 1) as f32) - 1.0;
             let ndc_y = 2.0 * (y as f32 / (n - 1) as f32) - 1.0;
-            img[y * n + x] = pupil_mask(
-                ndc_x / size,
-                ndc_y / size,
-                p.blades,
-                rot,
-                roundness,
-                softness,
-            );
+            let (u, v) = (ndc_x / size, ndc_y / size);
+            let mask = pupil_mask(u, v, p.blades, rot, roundness, softness);
+            if mask <= 0.0 {
+                continue;
+            }
+            let origin = [u * entrance_mm - lead, v * entrance_mm, baked.start_z_mm];
+            let vignette = trace_transmit(baked, 550.0, origin, dir).unwrap_or(0.0);
+            img[y * n + x] = mask * vignette;
         }
     }
     img
@@ -2265,8 +2408,31 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     }
     baked.spreads = spreads;
 
-    let aperture = bake_aperture(p, native_fstop, APERTURE_RES);
-    baked.starburst = bake_starburst(&aperture, STARBURST_RES);
+    // The starburst, once per field-angle slice (K-365) — the slices are
+    // independent FFTs, so they go wide, and `collect` puts them back in
+    // slice order whatever order the pool finished them in (determinism).
+    let mut slices: Vec<Vec<f32>> = (0..STARBURST_FIELDS)
+        .into_par_iter()
+        .map(|f| {
+            let frac = f as f32 / (STARBURST_FIELDS - 1) as f32;
+            let aperture = bake_aperture_field(p, native_fstop, APERTURE_RES, &baked, frac);
+            bake_starburst(&aperture, STARBURST_RES)
+        })
+        .collect();
+    // A lens that does not cover the full frame — the bundled 7Artisans is
+    // an APS-C design, and a user file may be anything — passes NOTHING at
+    // the outer field angles, so its aperture is empty and its sprite comes
+    // out black. A starburst that vanishes as the light nears the corner is
+    // a worse picture than one that stopped changing there, so a dead slice
+    // holds the last live one instead.
+    let floor = slices.first().map_or(0.0, |s| s.iter().sum::<f32>()) * 1e-3;
+    for f in 1..slices.len() {
+        if slices[f].iter().sum::<f32>() <= floor {
+            let held = slices[f - 1].clone();
+            slices[f] = held;
+        }
+    }
+    baked.starburst = slices.concat();
 
     // Closed-loop auto exposure (K-258): render the reference thumbnail with
     // gain 1 at FIXED frame-time settings — only bake-key inputs may steer
@@ -3236,6 +3402,30 @@ pub fn cpu_combine(
     let fscale = p.scale.clamp(0.05, 20.0);
     let sb_res = STARBURST_RES as usize;
     let sb_half = 0.6 * fscale * w.min(h) as f32;
+    let aspect = h as f32 / w.max(1) as f32;
+    // A bake always carries every slice; a hand-built one need not, and the
+    // sampler below indexes by slice. No slices, no starburst — the same
+    // labelled no-op an intensity of zero gives.
+    let sb_ready = baked.starburst.len() >= STARBURST_FIELDS * sb_res * sb_res * 3;
+    // Each light's cat's-eye slice pair and sprite rotation (K-365) — a
+    // property of where the light is, not of the pixel, so it is worked out
+    // once per light here rather than per pixel as the shader must.
+    // `(cos az, sin az, slice, next slice, blend)`.
+    let sb_field: Vec<(f32, f32, usize, usize, f32)> = lights
+        .iter()
+        .map(|l| {
+            let (fld, az) = starburst_field(l.pos, aspect);
+            let s = fld * (STARBURST_FIELDS - 1) as f32;
+            let s0 = (s.floor() as usize).min(STARBURST_FIELDS - 1);
+            (
+                az.cos(),
+                az.sin(),
+                s0,
+                (s0 + 1).min(STARBURST_FIELDS - 1),
+                s - s0 as f32,
+            )
+        })
+        .collect();
     // The flare buffer arrives PADDED (K-267): `cpu_flare` renders it at
     // `flare_pad_dims`, geometry centred, so the resolution-relative tap
     // only shifts by the border. Unpadded, the constant is zero and the
@@ -3284,16 +3474,26 @@ pub fn cpu_combine(
             // One starburst sprite per live light, anchored on the light,
             // sized by Scale, stretched by the squeeze, tinted by the light.
             let mut sb = [0.0_f32; 3];
-            if p.starburst_intensity > 0.0 && sb_half > 0.0 {
-                for light in lights {
+            if p.starburst_intensity > 0.0 && sb_half > 0.0 && sb_ready {
+                for (li, light) in lights.iter().enumerate() {
                     if light.rgb[0] <= 0.0 && light.rgb[1] <= 0.0 && light.rgb[2] <= 0.0 {
                         continue;
                     }
                     let light_px = [light.pos[0] * w as f32, light.pos[1] * h as f32];
                     let rel_x = x as f32 + 0.5 - light_px[0];
                     let rel_y = y as f32 + 0.5 - light_px[1];
-                    let u = rel_x / (sb_half * squeeze) * 0.5 + 0.5;
-                    let v = rel_y / sb_half * 0.5 + 0.5;
+                    // The cat's-eye (K-365): the sprite is turned so the
+                    // baked +x lean points along the light's own radial
+                    // direction, and read from the two field slices
+                    // bracketing the light's field fraction. On-axis the
+                    // fraction is 0 and the azimuth arbitrary — but slice 0
+                    // is very nearly round, so turning it changes nothing
+                    // and the picture stays continuous through the centre.
+                    let (ca, sa, s0, s1, ts) = sb_field[li];
+                    let rot_x = rel_x * ca + rel_y * sa;
+                    let rot_y = -rel_x * sa + rel_y * ca;
+                    let u = rot_x / (sb_half * squeeze) * 0.5 + 0.5;
+                    let v = rot_y / sb_half * 0.5 + 0.5;
                     if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
                         continue;
                     }
@@ -3304,12 +3504,19 @@ pub fn cpu_combine(
                     let x1 = (x0 + 1).min(sb_res - 1);
                     let y1 = (y0 + 1).min(sb_res - 1);
                     let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
+                    // Slice-major, so a slice is one contiguous sprite: the
+                    // bilinear taps can never bleed into its neighbour.
+                    let tap = |slice: usize, c: usize| -> f32 {
+                        let base = slice * sb_res * sb_res * 3;
+                        let a = baked.starburst[base + (y0 * sb_res + x0) * 3 + c] * (1.0 - tx)
+                            + baked.starburst[base + (y0 * sb_res + x1) * 3 + c] * tx;
+                        let b = baked.starburst[base + (y1 * sb_res + x0) * 3 + c] * (1.0 - tx)
+                            + baked.starburst[base + (y1 * sb_res + x1) * 3 + c] * tx;
+                        a * (1.0 - ty) + b * ty
+                    };
                     for (c, out_c) in sb.iter_mut().enumerate() {
-                        let a = baked.starburst[(y0 * sb_res + x0) * 3 + c] * (1.0 - tx)
-                            + baked.starburst[(y0 * sb_res + x1) * 3 + c] * tx;
-                        let b = baked.starburst[(y1 * sb_res + x0) * 3 + c] * (1.0 - tx)
-                            + baked.starburst[(y1 * sb_res + x1) * 3 + c] * tx;
-                        *out_c += (a * (1.0 - ty) + b * ty) * p.starburst_intensity * light.rgb[c];
+                        let val = tap(s0, c) * (1.0 - ts) + tap(s1, c) * ts;
+                        *out_c += val * p.starburst_intensity * light.rgb[c];
                     }
                 }
             }

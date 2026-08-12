@@ -159,10 +159,16 @@ pub struct FlareBakeData {
     /// [lambda 69][cos 16]`. The trace kernel reads it in place of solving a
     /// thin-film stack per ray.
     pub reflectance: Vec<f32>,
-    /// Starburst sprite, `sb_res`² RGB triplets.
+    /// Starburst sprite, `sb_fields × sb_res²` RGB triplets, slice-major.
     pub starburst: Vec<f32>,
     /// See `starburst`.
     pub sb_res: u32,
+    /// Field-angle slices in `starburst` (K-365): the sprite is baked at
+    /// several field angles, because the mechanical stops clip the iris
+    /// into a cat's-eye off-axis, and the combine blends the two slices
+    /// bracketing each light. Uploaded as one atlas `sb_res` wide by
+    /// `sb_res × sb_fields` tall; 0 is read as 1 (a single on-axis slice).
+    pub sb_fields: u32,
 }
 
 /// What the frame-time spread probe (K-267) reads from a cached bake,
@@ -1442,10 +1448,12 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
         rgba.extend_from_slice(rgb);
         rgba.push(0.0f32);
     }
+    // One atlas, the field slices stacked vertically (K-365), so `sb_tex`
+    // stays a plain 2D texture and the combine offsets its taps by slice.
     let starburst = float_texture(
         "fx-lens-flare-starburst",
         data.sb_res,
-        data.sb_res,
+        data.sb_res * data.sb_fields.max(1),
         wgpu::TextureFormat::Rgba32Float,
         bytemuck::cast_slice(&rgba),
     );

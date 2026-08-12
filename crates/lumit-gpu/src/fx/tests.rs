@@ -3295,6 +3295,7 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
         reflectance: b.reflectance.clone(),
         starburst: b.starburst,
         sb_res: lf::STARBURST_RES,
+        sb_fields: lf::STARBURST_FIELDS as u32,
     }
 }
 
@@ -3318,6 +3319,22 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
             "the trace shader must declare `{want}`"
         );
     }
+}
+
+/// The starburst atlas's slice count is spelled twice as well (K-365) —
+/// lumit-core bakes the slices and stacks them, the combine shader divides
+/// the atlas height by its own constant to find a slice's rows. A drift
+/// would read every light's starburst from the wrong part of the atlas, in
+/// smooth-looking wrong colours nobody would trace back to a constant.
+#[test]
+fn lens_flare_wgsl_starburst_fields_match_lumit_core() {
+    use lumit_core::fx::lens_flare as lf;
+    let src = include_str!("../fx_lens_flare_combine.wgsl");
+    let want = format!("const STARBURST_FIELDS: u32 = {}u;", lf::STARBURST_FIELDS);
+    assert!(
+        src.contains(&want),
+        "the combine shader must declare `{want}`"
+    );
 }
 
 // The adaptive grid formula is mirrored in this crate (lumit-gpu stays

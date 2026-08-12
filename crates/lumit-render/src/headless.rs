@@ -3060,6 +3060,7 @@ mod tests {
                 reflectance: Vec::new(),
                 starburst: Vec::new(),
                 sb_res: 1,
+                sb_fields: 1,
             }) as lumit_gpu::fx::FlareBake;
             parts.fx.warm_flare_bake(0xfeed_face, &bake)
         };
@@ -3109,6 +3110,7 @@ mod tests {
                 reflectance: Vec::new(),
                 starburst: Vec::new(),
                 sb_res: 1,
+                sb_fields: 1,
             }) as lumit_gpu::fx::FlareBake;
             parts.fx.warm_flare_bake(0xdead_beef, &bake)
         };
