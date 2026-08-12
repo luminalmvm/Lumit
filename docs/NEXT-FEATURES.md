@@ -443,23 +443,32 @@ while a region is set; folding is better, scrubbing inside a region is the use c
 
 ## Suggested order
 
+**Landed so far** (2026-08-12), newest first — each has its decision entry and its
+regression tests, so this table is a reading order rather than a record:
+
+| Entry | State |
+|---|---|
+| 0 — flare bit-stability | **Landed**, K-353. Everything else assumes it |
+| 3 — harden Matte detection | **Landed**, K-354 + K-355 (both halves) |
+| **Area sources** (part of 1·D) | **Landed**, K-355 — by direct sampling, the reference method |
+| 1·A1 — multi-layer AR coatings | **Landed**, K-356 |
+| 6 — viewer bar completion | **Landed**, K-357 |
+
+**Still to build**, in the order they are worth doing:
+
 | # | Entry | Why this position |
 |---|-------|-------------------|
-| — | 0 — flare bit-stability | **Landed** (K-353). Everything else assumes it |
-| 1 | 3 — harden Matte detection | Small, immediate payoff on footage, touches the passes while they are fresh |
-| 2 | 6 — viewer bar completion | Small, finishes the surfaces the Viewer work just opened |
-| 3 | 1·A1 + 1·A2 — coatings and spectral radiometry | Free accuracy: CPU bakes, no per-frame budget, fixes ghost colour |
-| 4 | 4a/4b — Light layer + flare Lights mode | Model decision first (a `03-DATA-MODEL` change), wiring is cheap after |
+| 1 | 5 — light wrap | The cheapest "light meets footage" feature there is, and it pairs with the flare work just landed. Needs a **Background** layer-input parameter ([impl/layer-input.md](impl/layer-input.md) is the pattern — the flare's Matte reference is the closest twin), then blur → edge mask → screen |
+| 2 | 7 — region of interest | Independent; the Viewer's remaining §2.2 debt |
+| 3 | 1·A2 — spectral radiometry | Free accuracy now that A1's stack varies fast with λ: 81 samples against the CIE curves, LUT fetches rather than rays |
+| 4 | 4a/4b — Light layer + flare Lights mode | Model decision first (a `03-DATA-MODEL` change); the flare wiring is cheap after, and the flare's Lights source mode is already reserved |
 | 5 | 1·B2 — field-angle starburst | A bake with a big visual payoff; independent of the ray work |
-| 6 | 1·D4 + 1·D2 — source regions, shift-invariant glare | Real flux from footage, plus the free half of area sources |
-| 7 | 1·D — per-ghost warped convolution | **The headline for footage**: ghosts become images of the source |
-| 8 | 5 — light wrap | Anytime after its below-stack plumbing exists |
-| 9 | 1·B1 — dense grid + per-ray splatting | The big one; retires the quad/sliver machinery. Its own PR |
-| 10 | 4c — LTC area lights | Lands on a Light model already proven by 4b |
-| 11 | 2 — sprite-based flare effect | Independent of all of it; a separate effect entirely |
-| 12 | 7 — region of interest | Independent; whenever the Viewer is next open |
-| 13 | 1·C1, 1·C2 — four-bounce, Fresnel ringing | The last accuracy percent; C2 is the hardest item here |
-| 14 | 1·E — calibration and invertibility | Only if flare *removal* is genuinely a goal |
+| 6 | 2 — sprite-based flare effect | Independent of all of it; a separate effect entirely |
+| 7 | 1·B1 — dense grid + per-ray splatting | The big one; retires the quad/sliver machinery. Its own PR |
+| 8 | 4c — LTC area lights | Lands on a Light model already proven by 4b |
+| 9 | 1·D — per-ghost warped convolution | The *optimisation* of the area sampling K-355 shipped, not a correction to it. Build when a source is wide enough that sample replication shows |
+| 10 | 1·C1, 1·C2 — four-bounce, Fresnel ringing | The last accuracy percent; C2 is the hardest item here |
+| 11 | 1·E — calibration and invertibility | Only if flare *removal* is genuinely a goal |
 
 Skipped deliberately, so they are not re-proposed: **paraxial and polynomial-optics lens
 models** (Lee & Eisemann 2013, Hullin 2012, Bodonyi 2025 — speed devices that cost accuracy
