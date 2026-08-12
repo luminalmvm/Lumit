@@ -15,6 +15,7 @@
 // run at all. They are among the tests most worth having; the skip is a
 // statement about the runner, not about them.
 
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -32,6 +33,7 @@ import 'package:lumit_flutter/panels/viewer_zoom.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/settings.dart';
+import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -374,6 +376,40 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-grid')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('viewer-grid')));
       await tester.pump();
+    });
+
+    /// **The resolution dropdown is on the bar, and adaptive playback owns it
+    /// while adaptive playback is choosing** (docs/07 §2.2 item 2). Adaptive is
+    /// the default mode, so out of the box the dropdown is a muted readout;
+    /// switching to every-frame playback hands the choice back.
+    testWidgets(
+        'the resolution dropdown chooses, and is disabled while playback'
+        ' is adaptive', (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final dropdown = find.byKey(const ValueKey('viewer-resolution'));
+      expect(dropdown, findsOneWidget);
+
+      // Adaptive (the default): the engine walks the ladder itself, so the
+      // dropdown opens nothing.
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      expect(find.text('Quarter'), findsNothing,
+          reason: 'disabled while adaptive playback picks the resolution');
+
+      p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
+      p.uiState.workspace.touch();
+      await tester.pump();
+
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Half').last);
+      await tester.pumpAndSettle();
+      expect(p.uiState.previewResolution, PreviewResolution.half,
+          reason: 'the bar reaches the same state the View menu sets — the '
+              'resolution→scale arithmetic itself is pinned in '
+              'menu_bar_frb_test.dart');
     });
 
     /// A scrub of [pixels] on a [DragValueField]. The first `kDragSlopDefault`
@@ -2613,6 +2649,41 @@ void main() {
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 1);
       expect(audioClock().seconds, greaterThanOrEqualTo(0));
+    });
+
+    /// **LAST in this file**: `openProject` clears the engine's project
+    /// registry, so every reference an earlier test holds dies here.
+    ///
+    /// The missing-file badge probes each footage layer over the bridge, one
+    /// round trip each, and those answers can still be in flight when another
+    /// document replaces the one they were asked about — which is exactly what
+    /// opening a project does. Unguarded, the probe threw `InvalidProject` into
+    /// nobody's hands and the console filled with an unhandled exception.
+    testWidgets('a footage probe survives the document being replaced',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('lumit-viewer-swap');
+      final other = '${dir.path}/other.lum';
+
+      final p = withLayer();
+      // Enough layers that the probe loop — one bridge round trip per layer,
+      // in order — is still working through them when the open lands.
+      for (var i = 0; i < 30; i++) {
+        final gone =
+            p.state.project!.importFootage(path: 'C:/nowhere/gone$i.mp4');
+        p.comp.addFootageLayer(footage: gone, asSequence: false);
+      }
+      p.state.project!.save(path: other);
+      await settleFrb(tester, until: () => File(other).existsSync());
+
+      await mount(tester, p);
+      // Straight into the open, with the badge's probes unanswered: the
+      // registry is cleared while they are on the wire.
+      final adopted = p.state.project;
+      p.state.openProject(other);
+      await settleFrb(
+          tester, until: () => !identical(p.state.project, adopted));
+
+      expect(tester.takeException(), isNull);
     });
   }, skip: !engineAvailable);
 }

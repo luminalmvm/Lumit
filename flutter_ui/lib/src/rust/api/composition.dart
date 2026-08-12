@@ -887,22 +887,6 @@ class CompositionReference {
               scale: scale,
               layer: layer);
 
-  /// Set what the Viewer looks *through*: `stops` of exposure and whether the
-  /// tone map is engaged (K-314, docs/07 §2.2 items 12-13).
-  ///
-  /// **Preview only.** It moves the display encode of every frame the session
-  /// renderer composites from here on and nothing else — no document, no op,
-  /// no undo step. An export builds its own renderer and this is never sent
-  /// to it, so the export is neutral by construction.
-  ///
-  /// The frontend follows this with its ordinary request for the frame under
-  /// the playhead: a setting changes what the *next* frame looks like, and
-  /// without an ask the picture would not move until something else did.
-  void setDisplayView({required double stops, required bool toneMap}) =>
-      BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceSetDisplayView(
-              that: this, stops: stops, toneMap: toneMap);
-
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
@@ -930,6 +914,33 @@ class CompositionReference {
   void setSettings({required BridgeCompSettings settings}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSettings(
           that: this, settings: settings);
+
+  /// Set what the Viewer looks *through*, whole: `stops` of exposure and
+  /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
+  /// whether the comp's background colour is left out of the composite so
+  /// the transparency grid can show through what nothing covers (K-352).
+  ///
+  /// **Preview only.** It moves how every frame the session renderer makes
+  /// from here on is composited and display-encoded, and nothing else — no
+  /// document, no op, no undo step. An export builds its own renderer and
+  /// this is never sent to it, so an export is neutral and draws the
+  /// backdrop by construction.
+  ///
+  /// One call carrying the whole look, so the renderer can never hold half
+  /// of one. The frontend follows a *change* with its ordinary request for
+  /// the frame under the playhead: a setting changes what the next frame is
+  /// made of, and without an ask the picture would not move until something
+  /// else did.
+  void setViewerLook(
+          {required double stops,
+          required bool toneMap,
+          required bool transparentBackground}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetViewerLook(
+              that: this,
+              stops: stops,
+              toneMap: toneMap,
+              transparentBackground: transparentBackground);
 
   /// Set the work area, or clear it with `None`.
   void setWorkArea({BridgeSpan? span}) =>

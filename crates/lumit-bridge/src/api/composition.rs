@@ -1481,20 +1481,34 @@ impl CompositionReference {
         ))
     }
 
-    /// Set what the Viewer looks *through*: `stops` of exposure and whether the
-    /// tone map is engaged (K-314, docs/07 §2.2 items 12-13).
+    /// Set what the Viewer looks *through*, whole: `stops` of exposure and
+    /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
+    /// whether the comp's background colour is left out of the composite so
+    /// the transparency grid can show through what nothing covers (K-352).
     ///
-    /// **Preview only.** It moves the display encode of every frame the session
-    /// renderer composites from here on and nothing else — no document, no op,
-    /// no undo step. An export builds its own renderer and this is never sent
-    /// to it, so the export is neutral by construction.
+    /// **Preview only.** It moves how every frame the session renderer makes
+    /// from here on is composited and display-encoded, and nothing else — no
+    /// document, no op, no undo step. An export builds its own renderer and
+    /// this is never sent to it, so an export is neutral and draws the
+    /// backdrop by construction.
     ///
-    /// The frontend follows this with its ordinary request for the frame under
-    /// the playhead: a setting changes what the *next* frame looks like, and
-    /// without an ask the picture would not move until something else did.
+    /// One call carrying the whole look, so the renderer can never hold half
+    /// of one. The frontend follows a *change* with its ordinary request for
+    /// the frame under the playhead: a setting changes what the next frame is
+    /// made of, and without an ask the picture would not move until something
+    /// else did.
     #[frb(sync)]
-    pub fn set_display_view(&self, stops: f64, tone_map: bool) -> Result<(), BridgeError> {
-        self.dispatch(WorkerRequest::SetDisplayView { stops, tone_map })
+    pub fn set_viewer_look(
+        &self,
+        stops: f64,
+        tone_map: bool,
+        transparent_background: bool,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(WorkerRequest::SetViewerLook {
+            stops,
+            tone_map,
+            transparent_background,
+        })
     }
 
     /// Stop playing, and silence the sound. Harmless when nothing is playing.

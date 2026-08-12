@@ -1285,13 +1285,18 @@ pub enum WorkerRequest {
     Play(PlayRequest),
     /// Stop playing. Harmless when nothing is playing.
     StopPlayback,
-    /// Set the Viewer's exposure and tone map (K-314). A *setting*, not a
-    /// picture: it changes how every frame from here on is display-encoded and
-    /// nothing about the document. Preview only — an export builds its own
-    /// renderer, which nobody sends this to.
-    SetDisplayView {
+    /// Set the whole of how the Viewer is looking, in one message: exposure
+    /// and tone map (K-314) plus whether the comp's background colour is left
+    /// out of the composite while the transparency grid is up (K-352). A
+    /// *setting*, not a picture: it changes how every frame from here on is
+    /// made and display-encoded and nothing about the document. Preview only —
+    /// an export builds its own renderer, which nobody sends this to. One
+    /// message rather than one per control, so the renderer can never hold
+    /// half a look.
+    SetViewerLook {
         stops: f64,
         tone_map: bool,
+        transparent_background: bool,
     },
 }
 
@@ -2617,10 +2622,17 @@ fn handle_requests(
                     state.playback = None;
                     Ok(())
                 }
-                WorkerRequest::SetDisplayView { stops, tone_map } => {
+                WorkerRequest::SetViewerLook {
+                    stops,
+                    tone_map,
+                    transparent_background,
+                } => {
                     state
                         .renderer
                         .set_display_view(lumit_render::DisplayParams::from_stops(stops, tone_map));
+                    state
+                        .renderer
+                        .set_transparent_background(transparent_background);
                     Ok(())
                 }
             };
@@ -2654,7 +2666,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
-        | WorkerRequest::SetDisplayView { .. } => DrainClass::PictureKeepAll,
+        | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
         WorkerRequest::RenderComp(_) | WorkerRequest::RenderCompWithPreview(_) => {
             DrainClass::PictureNewestWins
         }

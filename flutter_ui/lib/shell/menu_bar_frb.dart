@@ -917,7 +917,7 @@ Future<void> openProjectFrb(LumitState app,
     {Future<String?> Function()? picker}) async {
   final path = await (picker ?? pickProjectToOpen)();
   if (path == null) return;
-  app.openProject(path);
+  await app.openProject(path);
 }
 
 Future<void> importFootageFrb(LumitState app,

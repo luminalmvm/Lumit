@@ -8331,3 +8331,59 @@ permanently unnameable.
 Not fixed here, and unchanged: the flare's raster still draws the cells it culled, and the
 `wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals` bit-stability question is
 still open (both remain in TODO).
+
+**K-351 · DECIDED · Opening a project shows one loading card and nothing else, and no
+shader a project does not use is compiled before its first frame.** Two halves of the same
+complaint — the first preview took the better part of ten seconds, and the interface spent
+that time looking loaded but empty.
+
+**The measurement first**, because the cause was not where it looked. On this machine a
+render worker took **7.7 s to start**, and 6.5 s of that was `LensFlareFx::new`: the flare's
+ray tracer is the largest shader in the program and its three pipelines dominate every other
+kernel put together (`crates/lumit-render/examples/first_frame_probe.rs` is the probe that
+says so). Every project paid it, including one with an empty composition and no flare
+anywhere in it, because the worker built every pipeline before answering its first request.
+The flare's pipelines are now built on a **thread of their own** (`LazyFlare`) and joined by
+the first frame that actually draws a flare — which, by the time anyone applies one, has long
+since finished. Worker start is 1.1 s. Nothing about what the effect draws changes: this is
+only about *when* the compiling happens, and the bake-deferral machinery of K-350 is
+untouched — the flag set before the pipelines exist is applied when they do.
+
+**And the reading of the document is off the drawing thread.** `open_project` is no longer
+`#[frb(sync)]`: parsing a `.lum` and stating every media file it names froze the window for
+as long as it took. It now runs on a worker thread, which is what makes the second half
+possible.
+
+**One swap, not a fill.** While a document is being read *and* until the Viewer has
+something to show of it, the shell stands behind a single card with a progress bar
+(`OpeningOverlay`) and the panels behind it still hold the previous project. Panels that
+filled one by one while the picture was still coming read as a slow editor; everything
+appearing at once reads as an application loading, which is what it is. The card lifts on
+the first reply from the new project's worker — any reply, not the frame alone, so a first
+render that faults cannot leave the interface covered — or, for a project that fronts no
+composition, as soon as the session restore says there is no picture to wait for.
+
+Not fixed here: the 1.1 s that remains is the graphics device (0.6 s) and the other engines
+(0.5 s), and a project's own footage still probes on first use.
+
+**K-352 · DECIDED · The transparency grid actually sees transparency: while it is up, the
+Viewer's renderer leaves the comp's background colour out of the composite.** docs/07 §2.2
+item 4 always said the grid is a checkerboard "instead of the comp background colour", and
+it never was: the comp you are looking at cleared to its backdrop at full alpha (nested
+comps clear transparent, K-241, but the top of the walk did not), so every uncovered pixel
+reached the Viewer opaque and the board behind the picture could never show — even with
+every layer hidden. The grid button was a control that did nothing visible.
+
+The grid state now lives in `LumitUiState` (not the panel) and rides the Viewer's one
+look message: `set_viewer_look` carries exposure, tone map (K-314) and this flag together,
+so the renderer can never hold half a look and each control costs no channel of its own.
+Renderer-owned, deduplicated against the last look actually sent (the record clears on
+project adoption, so a worker just born cannot disagree with the button), and never sent
+to an export's own renderer — an export always draws the backdrop. The two backdrops are two different pictures, so the flag is folded into the
+frame's cache name beside the view (K-346's mechanism); the one-time cost is that frames
+banked under a non-neutral view before this entry take new names.
+
+Also fixed here, the board's edge: the picture and its board share one rectangle, but the
+board is painted anti-aliased while the platform texture is not, so a fractional rectangle
+bled a soft row of board out under the picture at some zooms. The shared rectangle is now
+snapped to whole device pixels (`snapToDevicePixels`), where the two rasterise identically.

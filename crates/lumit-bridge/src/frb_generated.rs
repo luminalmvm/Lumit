@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 329358268;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1269538195;
 
 // Section: executor
 
@@ -590,15 +590,16 @@ fn wire__crate__api__state__LumitBridgeState_new_project_impl(
     )
 }
 fn wire__crate__api__state__LumitBridgeState_open_project_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "LumitBridgeState_open_project",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -618,13 +619,15 @@ fn wire__crate__api__state__LumitBridgeState_open_project_impl(
                 >,
             >>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, BridgeError>((move || {
-                let output_ok = crate::api::state::LumitBridgeState::open_project(
-                    &api_path,
-                    api_on_change_stream,
-                )?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, BridgeError>((move || {
+                    let output_ok = crate::api::state::LumitBridgeState::open_project(
+                        &api_path,
+                        api_on_change_stream,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -2403,43 +2406,6 @@ fn wire__crate__api__composition__composition_reference_sample_pixels_impl(
         },
     )
 }
-fn wire__crate__api__composition__composition_reference_set_display_view_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "composition_reference_set_display_view",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that =
-                <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
-            let api_stops = <f64>::sse_decode(&mut deserializer);
-            let api_tone_map = <bool>::sse_decode(&mut deserializer);
-            deserializer.end();
-            transform_result_sse::<_, BridgeError>((move || {
-                let output_ok = crate::api::composition::CompositionReference::set_display_view(
-                    &api_that,
-                    api_stops,
-                    api_tone_map,
-                )?;
-                Ok(output_ok)
-            })())
-        },
-    )
-}
 fn wire__crate__api__composition__composition_reference_set_markers_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -2541,6 +2507,45 @@ fn wire__crate__api__composition__composition_reference_set_settings_impl(
                 let output_ok = crate::api::composition::CompositionReference::set_settings(
                     &api_that,
                     api_settings,
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__composition__composition_reference_set_viewer_look_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "composition_reference_set_viewer_look",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that =
+                <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_stops = <f64>::sse_decode(&mut deserializer);
+            let api_tone_map = <bool>::sse_decode(&mut deserializer);
+            let api_transparent_background = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::composition::CompositionReference::set_viewer_look(
+                    &api_that,
+                    api_stops,
+                    api_tone_map,
+                    api_transparent_background,
                 )?;
                 Ok(output_ok)
             })())
@@ -10665,6 +10670,12 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        13 => wire__crate__api__state__LumitBridgeState_open_project_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         20 => wire__crate__api__layer__bridge_mask_mode_default_impl(
             port,
             ptr,
@@ -10755,7 +10766,6 @@ fn pde_ffi_dispatcher_sync_impl(
 9 => wire__crate__api__effect__BridgeEffectInstance_set_value_impl(ptr, rust_vec_len, data_len),
 11 => wire__crate__api__state__LumitBridgeState_get_current_project_impl(ptr, rust_vec_len, data_len),
 12 => wire__crate__api__state__LumitBridgeState_new_project_impl(ptr, rust_vec_len, data_len),
-13 => wire__crate__api__state__LumitBridgeState_open_project_impl(ptr, rust_vec_len, data_len),
 14 => wire__crate__api__audio__audio_clock_impl(ptr, rust_vec_len, data_len),
 15 => wire__crate__api__audio__audio_pause_impl(ptr, rust_vec_len, data_len),
 16 => wire__crate__api__audio__audio_seek_impl(ptr, rust_vec_len, data_len),
@@ -10806,10 +10816,10 @@ fn pde_ffi_dispatcher_sync_impl(
 63 => wire__crate__api__composition__composition_reference_render_frame_with_transform_preview_impl(ptr, rust_vec_len, data_len),
 64 => wire__crate__api__composition__composition_reference_render_scope_impl(ptr, rust_vec_len, data_len),
 65 => wire__crate__api__composition__composition_reference_sample_pixels_impl(ptr, rust_vec_len, data_len),
-66 => wire__crate__api__composition__composition_reference_set_display_view_impl(ptr, rust_vec_len, data_len),
-67 => wire__crate__api__composition__composition_reference_set_markers_impl(ptr, rust_vec_len, data_len),
-68 => wire__crate__api__composition__composition_reference_set_motion_blur_enabled_impl(ptr, rust_vec_len, data_len),
-69 => wire__crate__api__composition__composition_reference_set_settings_impl(ptr, rust_vec_len, data_len),
+66 => wire__crate__api__composition__composition_reference_set_markers_impl(ptr, rust_vec_len, data_len),
+67 => wire__crate__api__composition__composition_reference_set_motion_blur_enabled_impl(ptr, rust_vec_len, data_len),
+68 => wire__crate__api__composition__composition_reference_set_settings_impl(ptr, rust_vec_len, data_len),
+69 => wire__crate__api__composition__composition_reference_set_viewer_look_impl(ptr, rust_vec_len, data_len),
 70 => wire__crate__api__composition__composition_reference_set_work_area_impl(ptr, rust_vec_len, data_len),
 71 => wire__crate__api__composition__composition_reference_start_export_impl(ptr, rust_vec_len, data_len),
 72 => wire__crate__api__composition__composition_reference_stop_playback_impl(ptr, rust_vec_len, data_len),

@@ -157,6 +157,13 @@ pub struct HeadlessRenderer {
     /// the promise is a property of the code's shape rather than a rule anyone
     /// has to remember — and `an_export_ignores_the_viewer_view` pins it.
     view: lumit_gpu::DisplayParams,
+    /// Whether the fronted comp's own background colour is left out of the
+    /// composite, so pixels nothing covers stay transparent and the Viewer's
+    /// transparency grid shows through them (K-352). The Viewer sets it to
+    /// follow its grid button; like [`Self::view`] it is a way of *looking*,
+    /// and the export renderer — which nobody calls this on — always draws
+    /// the backdrop.
+    transparent_background: bool,
     /// The Windows zero-copy Viewer targets (K-177): **one per size, kept and
     /// reused**, most recently used last.
     ///
@@ -524,6 +531,7 @@ impl HeadlessRenderer {
             watching: false,
             measuring: false,
             view: lumit_gpu::DisplayParams::NEUTRAL,
+            transparent_background: false,
             #[cfg(all(windows, feature = "shared-texture"))]
             shared: Vec::new(),
             #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -626,6 +634,19 @@ impl HeadlessRenderer {
         self.view = view;
     }
 
+    /// Leave the fronted comp's background colour out of the composite, so
+    /// pixels nothing covers stay transparent and the Viewer's transparency
+    /// grid shows through them (K-352). A way of looking, like the display
+    /// view above — the export renderer never has this called on it, so an
+    /// export always draws the backdrop.
+    ///
+    /// The flag is folded into the frame's name (see [`Self::named_under_view`]):
+    /// the two backdrops are two different pictures, and a frame banked under
+    /// one must never be served as the other.
+    pub fn set_transparent_background(&mut self, transparent: bool) {
+        self.transparent_background = transparent;
+    }
+
     /// A content name with the Viewer's own way of looking folded in.
     ///
     /// Neutral returns the name untouched — byte-for-byte what
@@ -634,14 +655,17 @@ impl HeadlessRenderer {
     /// the same hash the name was built with, under its own tag so a look can
     /// never be confused for content.
     fn named_under_view(&self, base: u128) -> u128 {
-        if self.view.is_neutral() {
+        if self.view.is_neutral() && !self.transparent_background {
             return base;
         }
         let mut h = blake3::Hasher::new();
         h.update(b"view/");
         h.update(&base.to_le_bytes());
         h.update(&self.view.gain.to_bits().to_le_bytes());
-        h.update(&[u8::from(self.view.tone_map)]);
+        h.update(&[
+            u8::from(self.view.tone_map),
+            u8::from(self.transparent_background),
+        ]);
         let bytes = h.finalize();
         let mut k = [0u8; 16];
         k.copy_from_slice(&bytes.as_bytes()[..16]);
@@ -876,7 +900,15 @@ impl HeadlessRenderer {
             }
             let draws =
                 crate::build::build_comp_draws(doc, comp, t, &pixels_by_layer, &mut visited);
-            let background = comp.background.0.map(f64::from);
+            // The comp's backdrop is a way of viewing, not a layer (K-241);
+            // with the transparency grid up the Viewer asks for none at all,
+            // so what nothing covers arrives with zero alpha and the grid
+            // shows through it (K-352).
+            let background = if self.transparent_background {
+                [0.0; 4]
+            } else {
+                comp.background.0.map(f64::from)
+            };
             if let Some(w) = &watcher {
                 w.compositing(draws.len() as u32);
             }
@@ -2316,6 +2348,52 @@ mod tests {
         assert_eq!(alpha, 255, "the solid is opaque");
     }
 
+    /// **The transparency grid can see through an empty comp (K-352).** The
+    /// comp's backdrop is opaque black by default, so every pixel nothing
+    /// covers used to reach the Viewer with alpha 1 and the checkerboard
+    /// behind the picture could never show — even with every layer hidden.
+    /// With the flag on, the interactive path leaves the backdrop out and
+    /// uncovered pixels arrive with zero alpha; off again, the backdrop is
+    /// back. Fails without the `transparent_background` branch in
+    /// `preview_display_texture_fmt`.
+    ///
+    /// An export stays opaque the same way it stays neutral (see
+    /// `an_export_ignores_the_viewer_view`): `export::run` builds its own
+    /// renderer, and nothing ever calls `set_transparent_background` on it.
+    #[test]
+    fn the_transparent_background_flag_uncovers_the_grid() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Empty", 8, 8);
+        let store = DocumentStore::new(doc);
+        let doc = store.snapshot();
+        let q = Quality::default();
+
+        let (rgba, w, h) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("opaque render");
+        let idx = (((h / 2) * w + w / 2) * 4) as usize;
+        assert_eq!(rgba[idx + 3], 255, "born opaque: the backdrop is drawn");
+
+        r.set_transparent_background(true);
+        let (rgba, _, _) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("transparent render");
+        assert_eq!(rgba[idx + 3], 0, "nothing covers this pixel, so no alpha");
+
+        r.set_transparent_background(false);
+        let (rgba, _, _) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("opaque again");
+        assert_eq!(rgba[idx + 3], 255, "grid down, backdrop back");
+    }
+
     /// `scale` below 1 downsamples the output buffer; the centre stays the solid
     /// colour, proving the resize path is wired and does not corrupt the frame.
     #[test]
@@ -2441,6 +2519,26 @@ mod tests {
             r.frame_key(&doc, comp_id, 0, q),
             neutral,
             "returning to neutral returns the frame's own name"
+        );
+
+        // The backdrop is part of the picture too (K-352): a frame composited
+        // without it must never be served as one composited with it, so the
+        // transparency-grid flag names frames apart exactly as a view does.
+        r.set_transparent_background(true);
+        let transparent = r.frame_key(&doc, comp_id, 0, q);
+        assert!(
+            transparent.is_some(),
+            "a transparent backdrop still names the frame"
+        );
+        assert!(
+            !seen.contains(&transparent),
+            "the two backdrops are two different pictures"
+        );
+        r.set_transparent_background(false);
+        assert_eq!(
+            r.frame_key(&doc, comp_id, 0, q),
+            neutral,
+            "backdrop back, name back — frames banked opaque are hits again"
         );
     }
 

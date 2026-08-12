@@ -61,12 +61,12 @@ These are v1-scope surfaces it does not yet match.
 **Viewer bar ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
 - The wireframe/overlay *menu*; guides menu; region-of-interest;
     background-colour swatch.
-- **Preview resolution is a menu row, not yet a bar dropdown** (§2.2 item 2).
-    Full / Half / Quarter work end to end — the View menu, the three chords and
-    the command palette all set the `scale` every render request carries — but
-    the dropdown the bar is supposed to carry is not built, **Third** and
-    **Auto** have no rows, and the choice is shell-wide rather than stored per
-    composition in the project as §2.2 asks.
+- **Preview resolution is on the bar, but only Full / Half / Quarter** (§2.2
+    item 2). The bar dropdown, the View menu, the three chords and the command
+    palette all set the `scale` every render request carries, and the dropdown
+    is disabled while adaptive playback chooses the tier itself — but **Third**
+    and **Auto** have no rows, and the choice is shell-wide rather than stored
+    per composition in the project as §2.2 asks.
 - **The colour-management badge is a readout and cannot yet be clicked**
     (§2.2 item 8). It is built: always on the bar, naming the display
     transform, and saying the picture is not the export while the exposure or
@@ -281,7 +281,13 @@ imported theme travels with the user rather than the machine's settings.
     passes at `--concurrency=1`, which is what CI runs. They contend for the
     shared engine (audio device, render worker) across test *files*. Give those
     files a serial marker or make the engine per-file - the serial run is a
-    mitigation, not the fix, and it costs wall-clock.
+    mitigation, not the fix, and it costs wall-clock. A concrete signature,
+    measured 2026-08-12 *within* `viewer_panel_frb_test.dart` alone on the
+    owner's machine: five frame-arrival tests fail late in the file with
+    "Could not create the renderer … device request failed: Not enough memory
+    left" — the workers the earlier tests spun up exhaust the device, so the
+    failing set shifts run to run and every member passes alone. Whatever fixes
+    the contention should make that message impossible, not rarer.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and K-254 gave the bare digits to the numbered
     markers. Needs its own chord or a modal reading.

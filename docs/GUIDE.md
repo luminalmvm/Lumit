@@ -3474,6 +3474,44 @@ cannot report a module that took its time or came up degraded. Noted in
 engine behind it at all falls back to a canned list, so the placeholder still
 opens on something honest rather than a blank rectangle.
 
+### Opening a project, and why the old one stays on screen
+
+Opening a `.lum` is not a small read. The engine parses the whole document and
+then checks every media file it names is where the file says it is, and on a
+large project that is long enough to notice. Two things follow from it, both in
+`LumitState.openProject` in `main.dart`.
+
+**The read happens away from the interface.** `open_project` is one of the few
+bridge calls that is deliberately *not* marked `sync`: a sync call runs on the
+same thread that draws, so a slow one freezes the window until it is done, to the
+point where Windows offers to close the program for you. Unmarked, frb runs it on
+a worker thread and hands Dart a promise, and the interface keeps drawing.
+
+**Nothing changes over until all of it is ready — including the picture.** While
+the read is running, the `opening` flag is up and the shell covers itself with a
+card and a moving bar (`OpeningOverlay` in `shell/splash.dart`). Behind the card
+the panels are still drawing the *previous* document — that is deliberate. The
+alternative is watching an editor come apart and reassemble panel by panel as
+the new document arrives.
+
+The card does not lift when the document is in. It lifts when the Viewer has
+something to show of it, or when the session restore says there is nothing to
+show — a project that opens with no composition fronted. Panels filling while
+the preview was still coming read as a slow editor; everything arriving at once
+reads as an application loading (K-351). What ends it is `previewReady`, called
+on the first reply from the new project's render worker: any reply, not the
+frame alone, so a first render that fails cannot leave the shell covered for
+good.
+
+There is a subtlety worth knowing, because it caused a bug. Opening a project
+clears the engine's registry of open projects, so **every handle Dart is holding
+dies at that moment** — including any question already asked and not yet
+answered. The missing-file badge in the Viewer asks each footage layer whether
+its file is still there, one round trip each; if the document is replaced while
+those answers are in flight, the rest of them come back as errors. They are
+caught and dropped rather than reported: there is no missing media in a document
+that is gone, and the panel is about to be rebuilt from the new one anyway.
+
 ### The bridge
 
 `crates/lumit-bridge` builds to one shared library the app loads at startup. It
@@ -3660,6 +3698,35 @@ computing, so the bake thread takes everything waiting, keeps the newest, and dr
 rest before they start — the same "is my work still wanted" habit the rest of the engine
 has.
 
+### The six and a half seconds nobody was using (K-351)
+
+A shader is a small program the graphics card runs, and the card's driver has to
+translate ours into its own instructions before any of them can run. That
+translation happens when Lumit starts a render worker, not when the shader was
+written, and for most of Lumit's forty-odd kernels it takes a few milliseconds
+each.
+
+The lens flare is not most kernels. Its ray tracer is by a distance the largest
+shader in the program, and on a real card its pipelines take about six and a half
+seconds to compile — which the render worker paid *before it would answer its
+first request*. Every project paid it: a project with one empty composition, a
+project with no flare in it anywhere, every time one was opened. It was almost
+the whole of the wait between opening a project and seeing a picture.
+
+So the flare's pipelines are now built on a thread of their own (`LazyFlare` in
+`lumit-gpu`) while the rest of the engine gets on with the first frame, and the
+first frame that actually draws a flare waits for that thread — by which time,
+in practice, it finished long ago. Nothing about what the effect draws changes;
+only when the compiling happens. Worker start went from 7.7 seconds to 1.1.
+
+If you want to see the numbers on your own machine,
+`crates/lumit-render/examples/first_frame_probe.rs` is the stopwatch that found
+this, and it prints each part of a renderer's start-up in turn:
+
+```
+cargo run --release -p lumit-render --features shared-texture --example first_frame_probe
+```
+
 ### How the picture reaches the screen
 
 Video frames are far too large to pass through function calls sixty times a
@@ -3768,6 +3835,19 @@ tidy and read as a fault — leave the tone map on and the whole cache ladder is
 switched off for the session, with nothing on screen to say so. Naming each look
 separately costs only that several looks compete for the same budget, which the
 tiers already know how to sort out by eviction.
+
+**The transparency grid is a way of looking too (K-352).** The checkerboard the
+Viewer draws behind the picture can only show through pixels that are actually
+transparent, and for a long time none were: the comp being looked at was always
+composited onto its own background colour at full alpha, so even an empty comp
+arrived as solid black. While the grid button is on, the engine now leaves that
+backdrop out entirely — what nothing covers stays transparent, and the board
+shows through it, which is the whole point of the button. It follows every rule
+the exposure does — in fact it travels in the same message: the engine is told
+the whole look (exposure, tone map, grid) in one call, so it can never hold
+half of one. Folded into the frame's cache name like the rest (an opaque frame
+and a see-through frame are two different pictures), and never sent to an
+export, which always draws the backdrop.
 
 **The cache bar** under the time ruler shows what is held: mint at the current
 preview resolution, dimmed mint only at a coarser one, steel-blue on disk,

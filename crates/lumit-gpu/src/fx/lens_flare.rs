@@ -19,7 +19,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc::{channel, Receiver, Sender},
     Arc, Mutex, OnceLock,
 };
@@ -546,6 +546,96 @@ struct GpuLight {
     row: [f32; 8],
 }
 
+/// The Lens flare's pipelines, built on a thread of their own.
+///
+/// # In plain terms
+///
+/// Compiling a shader is the graphics card's driver turning our code into
+/// something it can run, and it happens when the program starts rather than
+/// when it was written. Most of Lumit's kernels take a few milliseconds each.
+/// The flare's ray tracer is not most kernels — it is the largest shader in the
+/// program by a distance, and on a real card its three pipelines take about six
+/// and a half seconds to compile.
+///
+/// That was six and a half seconds between opening a project and seeing
+/// anything at all, because the render worker built every pipeline before it
+/// would answer its first request — including for a composition with nothing in
+/// it, and for the overwhelming majority of projects that contain no lens flare
+/// at all. So the flare's pipelines are built on a background thread while the
+/// rest of the engine gets on with the first frame, and the first frame that
+/// actually draws a flare waits for that thread to finish. By then it long
+/// since has.
+///
+/// Nothing about what the effect *draws* changes: this is only about when the
+/// compiling happens.
+pub(super) struct LazyFlare {
+    /// For the fallback build: a device handle is cheap to hold (it is a
+    /// reference-counted handle, not a copy of the card).
+    device: wgpu::Device,
+    /// The background build, taken and joined by the first [`Self::get`].
+    building: Mutex<Option<std::thread::JoinHandle<LensFlareFx>>>,
+    ready: OnceLock<LensFlareFx>,
+    /// [`FxEngine::set_deferred_flare_bakes`] can be answered before there is
+    /// an engine to tell — the worker sets it at start-up, which is precisely
+    /// the moment this exists to keep free. Held here and applied on build.
+    deferred: AtomicBool,
+}
+
+impl LazyFlare {
+    pub(super) fn spawn(ctx: &GpuContext) -> Self {
+        let device = ctx.device.clone();
+        let building = std::thread::Builder::new()
+            .name("lumit-flare-pipelines".into())
+            .spawn({
+                let device = device.clone();
+                move || LensFlareFx::with_device(&device)
+            })
+            .ok();
+        Self {
+            device,
+            building: Mutex::new(building),
+            ready: OnceLock::new(),
+            deferred: AtomicBool::new(false),
+        }
+    }
+
+    /// The engine, waiting for the background build if it has not landed.
+    ///
+    /// A machine that would give us no thread, or a build thread that died,
+    /// builds here instead — slowly, but on the path that actually needs it
+    /// rather than never.
+    pub(super) fn get(&self) -> &LensFlareFx {
+        self.ready.get_or_init(|| {
+            let built = self
+                .building
+                .lock()
+                .ok()
+                .and_then(|mut held| held.take())
+                .and_then(|thread| thread.join().ok())
+                .unwrap_or_else(|| LensFlareFx::with_device(&self.device));
+            built
+                .deferred
+                .store(self.deferred.load(Ordering::Relaxed), Ordering::Relaxed);
+            built
+        })
+    }
+
+    /// The engine only if it is already built — for the questions asked on
+    /// every frame (is a bake pending? what generation are we on?), which must
+    /// never be the thing that waits for a compile. Neither has an answer worth
+    /// having before the first flare is drawn anyway: nothing has been baked.
+    pub(super) fn ready(&self) -> Option<&LensFlareFx> {
+        self.ready.get()
+    }
+
+    pub(super) fn set_deferred(&self, deferred: bool) {
+        self.deferred.store(deferred, Ordering::Relaxed);
+        if let Some(lf) = self.ready.get() {
+            lf.deferred.store(deferred, Ordering::Relaxed);
+        }
+    }
+}
+
 impl LensFlareFx {
     /// See [`Self::cache`]. Raised from eight at K-263: a bake is a surface
     /// buffer and one 256² sprite, about a megabyte, so holding a couple of
@@ -553,8 +643,9 @@ impl LensFlareFx {
     /// trying lenses — the way the picker is actually used.
     const CACHE_CAP: usize = 24;
 
-    pub(super) fn new(ctx: &GpuContext) -> Self {
-        let device = &ctx.device;
+    /// Everything here is built from the device alone, which is what lets
+    /// [`LazyFlare`] build it on a thread that has no `GpuContext` to hand.
+    pub(super) fn with_device(device: &wgpu::Device) -> Self {
         let storage_entry =
             |binding: u32, read_only: bool, vis: wgpu::ShaderStages| wgpu::BindGroupLayoutEntry {
                 binding,
@@ -1305,7 +1396,7 @@ impl FxEngine {
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
         let out = work_texture(ctx, w, h, "fx-lens-flare-out");
-        let lf = &self.lens_flare;
+        let lf = self.lens_flare.get();
 
         // Neutral short-circuit mirror (the combine kernel also guards, but
         // skipping the whole pipeline is the honest fast path).
@@ -1899,7 +1990,7 @@ impl FxEngine {
         h: u32,
     ) -> Vec<[f32; 4]> {
         use wgpu::util::DeviceExt;
-        let lf = &self.lens_flare;
+        let lf = self.lens_flare.get();
         // The debug trace wants the real bake, whatever the policy: it is a
         // test and diagnostic path, and an answer for the previous lens would
         // be an answer to a question nobody asked.

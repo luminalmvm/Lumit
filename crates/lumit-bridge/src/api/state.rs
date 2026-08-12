@@ -506,7 +506,11 @@ impl LumitBridgeState {
         }
     }
 
-    #[frb(sync)]
+    /// Deliberately **not** `#[frb(sync)]`, unlike its `new_project` sibling:
+    /// reading a `.lum` parses a whole document and stats every media file it
+    /// names, and on the UI isolate that froze the window for as long as it
+    /// took. Async puts it on a worker thread, which is what lets Dart hold the
+    /// previous document on screen behind a progress bar until this returns.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,

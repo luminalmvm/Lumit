@@ -314,7 +314,7 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
-        let lens_flare = super::LensFlareFx::new(ctx);
+        let lens_flare = super::LazyFlare::spawn(ctx);
         Self {
             lens_flare,
             blur,

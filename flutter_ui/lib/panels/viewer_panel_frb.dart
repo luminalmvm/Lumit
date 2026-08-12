@@ -95,7 +95,6 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// the panel as it is resized.
   double? _zoom;
   ViewerChannel _channel = ViewerChannel.rgb;
-  bool _grid = true;
 
   /// Whether the layer controls — the wireframe boxes, the handles and the
   /// hover highlight — are drawn over the picture (K-217). On by default,
@@ -325,7 +324,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
           builder: (context, tier, _) => _Toolbar(
             zoom: _zoom,
             channel: _channel,
-            grid: _grid,
+            // Session state rather than panel state (K-352): the engine has to
+            // be told when it flips, and [LumitUiState] is what talks to it.
+            grid: ui.viewerGrid,
             wireframes: _wireframes,
             look: ui.viewerLook,
             showToneMap: ui.workspace.interface.showToneMap,
@@ -341,7 +342,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             // which is what the measured rectangle in the layout builder knows.
             onZoom: (z) => _goToZoom(z, Offset.zero, from: _shownScale),
             onChannel: (c) => setState(() => _channel = c),
-            onGrid: () => setState(() => _grid = !_grid),
+            onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
             onWireframes: () => setState(() => _wireframes = !_wireframes),
             onPlayPause: _togglePlay,
             onSeek: (f) => _seek(comp, ui, f),
@@ -397,7 +398,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
                 comp: comp,
                 uiState: ui,
                 fitted: fitted,
-                grid: _grid,
+                grid: ui.viewerGrid,
                 wireframes: _wireframes,
                 channel: _channel,
                 compSize: size,
@@ -498,7 +499,15 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       (constraints.maxWidth - drawn.width) / 2,
       (constraints.maxHeight - drawn.height) / 2,
     );
-    return (centre + pan) & drawn;
+    // Snapped to the device-pixel grid before anyone sees it: the
+    // checkerboard is painted anti-aliased while the platform texture is not,
+    // so a fractional edge bled a soft row of board out under the picture at
+    // some zooms. Snapping here rather than at a call site keeps the
+    // invariant wherever the rect travels.
+    return snapToDevicePixels(
+      (centre + pan) & drawn,
+      MediaQuery.devicePixelRatioOf(context),
+    );
   }
 
   /// One wheel notch is ~12 % in or out, smooth on a trackpad (the delta is
@@ -1313,7 +1322,16 @@ class _MissingBadgeState extends State<_MissingBadge> {
   Future<void> _probe() async {
     var count = 0;
     for (final f in widget.footage) {
-      if (await f.getStatus() == LumitMediaStatus.missing) count++;
+      // A probe outlives the document it was started for: opening a project
+      // clears the engine's registry, and every reference held from the
+      // outgoing one throws from here on. There is no missing media in a
+      // document that is gone — drop the count and wait to be rebuilt with the
+      // new project's footage.
+      try {
+        if (await f.getStatus() == LumitMediaStatus.missing) count++;
+      } catch (_) {
+        return;
+      }
     }
     if (mounted && count != _missing) setState(() => _missing = count);
   }
@@ -1432,6 +1450,19 @@ ColorFilter? channelFilterFor(ViewerChannel channel) => switch (channel) {
 /// magnification.
 Rect checkerArea(Rect picture, Size panel) =>
     picture.intersect(Offset.zero & panel);
+
+/// [rect] with every edge on a whole device pixel.
+///
+/// The picture and its checkerboard are given the same rectangle, but they
+/// rasterise it differently — the board through an anti-aliased canvas, the
+/// platform texture without — so a fractional edge showed as a soft row of
+/// board sticking out under the picture. Snapping the shared rectangle is
+/// what makes "the same rectangle" true on screen and not just in the layout.
+Rect snapToDevicePixels(Rect rect, double dpr) {
+  double snap(double v) => (v * dpr).roundToDouble() / dpr;
+  return Rect.fromLTRB(
+      snap(rect.left), snap(rect.top), snap(rect.right), snap(rect.bottom));
+}
 
 
 /// The transparency checkerboard behind the picture.
@@ -1594,6 +1625,15 @@ class _Toolbar extends StatelessWidget {
                       : '${(_zoomSteps[i]! * 100).round()}%',
               onChanged: (i) => onZoom(_zoomSteps[i]),
             ),
+          ),
+          const SizedBox(width: 6),
+          // The preview resolution (docs/07 §2.2 item 2): how many pixels the
+          // engine is asked to make, beside the magnification it is so easily
+          // mistaken for. Muted while adaptive playback is choosing the tier
+          // itself — a choice something else is making is not yours to make.
+          const SizedBox(
+            width: 76,
+            child: _ResolutionDropdown(),
           ),
           const SizedBox(width: 6),
           SizedBox(
@@ -1911,6 +1951,35 @@ String get _transportName => switch (_transport) {
       BridgeViewerTransport.dmaBuf => l10n.transportDmaBuf,
       BridgeViewerTransport.readBack => l10n.transportReadBack,
     };
+
+/// The preview resolution, on the bar (docs/07 §2.2 item 2).
+///
+/// The same choice the View menu's Resolution rows make — [LumitUiState] holds
+/// it, so the menu tick and this face cannot disagree. Disabled while playback
+/// is adaptive: the engine is walking the degradation ladder itself, and a
+/// dropdown that claimed the choice while something else made it would be a
+/// control that lies.
+class _ResolutionDropdown extends StatelessWidget {
+  const _ResolutionDropdown();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context);
+    final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
+    return LumitTooltip(
+      message: adaptive
+          ? l10n.tipPreviewResolutionAdaptive
+          : l10n.tipPreviewResolution,
+      child: BareDropdown<PreviewResolution>(
+        key: const ValueKey('viewer-resolution'),
+        value: ui.previewResolution,
+        options: PreviewResolution.values,
+        label: (resolution) => resolution.title,
+        onChanged: adaptive ? null : ui.setPreviewResolution,
+      ),
+    );
+  }
+}
 
 /// Which of the two playback behaviours is in force — the name of the mode and
 /// nothing else (K-287).

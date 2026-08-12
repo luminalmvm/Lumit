@@ -204,6 +204,10 @@
       }
     }
   },
+  "openingProject": "Opening project…",
+  "@openingProject": {
+    "description": "Card shown over the interface while a project file is being read from disk."
+  },
   "couldNotOpenLink": "Could not open {url}",
   "@couldNotOpenLink": {
     "description": "Bottom-strip notice when a Help menu link could not be handed to the machine's browser. {url} is a web address and is not translated.",
@@ -3990,6 +3994,14 @@
   "tipPlayheadTime": "Playhead time",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. Under five words."
+  },
+  "tipPreviewResolution": "Preview resolution",
+  "@tipPreviewResolution": {
+    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). Under five words."
+  },
+  "tipPreviewResolutionAdaptive": "Adaptive playback chooses the resolution",
+  "@tipPreviewResolutionAdaptive": {
+    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "Properties",
   "@tipProperties": {

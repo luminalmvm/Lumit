@@ -88,7 +88,7 @@ class BridgeLib
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 329358268;
+  int get rustContentHash => -1269538195;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -136,7 +136,7 @@ abstract class BridgeLibApi extends BaseApi {
   ProjectReference crateApiStateLumitBridgeStateNewProject(
       {RustStreamSink<ScopedChange>? onChangeStream});
 
-  ProjectReference? crateApiStateLumitBridgeStateOpenProject(
+  Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
       {required String path, RustStreamSink<ScopedChange>? onChangeStream});
 
   BridgeAudioClock crateApiAudioAudioClock();
@@ -350,11 +350,6 @@ abstract class BridgeLibApi extends BaseApi {
       required double scale,
       LayerReference? layer});
 
-  void crateApiCompositionCompositionReferenceSetDisplayView(
-      {required CompositionReference that,
-      required double stops,
-      required bool toneMap});
-
   void crateApiCompositionCompositionReferenceSetMarkers(
       {required CompositionReference that,
       required List<BridgeMarker> markers});
@@ -365,6 +360,12 @@ abstract class BridgeLibApi extends BaseApi {
   void crateApiCompositionCompositionReferenceSetSettings(
       {required CompositionReference that,
       required BridgeCompSettings settings});
+
+  void crateApiCompositionCompositionReferenceSetViewerLook(
+      {required CompositionReference that,
+      required double stops,
+      required bool toneMap,
+      required bool transparentBackground});
 
   void crateApiCompositionCompositionReferenceSetWorkArea(
       {required CompositionReference that, BridgeSpan? span});
@@ -1259,14 +1260,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  ProjectReference? crateApiStateLumitBridgeStateOpenProject(
+  Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
       {required String path, RustStreamSink<ScopedChange>? onChangeStream}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         sse_encode_opt_StreamSink_scoped_change_Sse(onChangeStream, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_project_reference,
@@ -2805,38 +2807,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           );
 
   @override
-  void crateApiCompositionCompositionReferenceSetDisplayView(
-      {required CompositionReference that,
-      required double stops,
-      required bool toneMap}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_box_autoadd_composition_reference(that, serializer);
-        sse_encode_f_64(stops, serializer);
-        sse_encode_bool(toneMap, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData:
-            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
-      ),
-      constMeta:
-          kCrateApiCompositionCompositionReferenceSetDisplayViewConstMeta,
-      argValues: [that, stops, toneMap],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta
-      get kCrateApiCompositionCompositionReferenceSetDisplayViewConstMeta =>
-          const TaskConstMeta(
-            debugName: "composition_reference_set_display_view",
-            argNames: ["that", "stops", "toneMap"],
-          );
-
-  @override
   void crateApiCompositionCompositionReferenceSetMarkers(
       {required CompositionReference that,
       required List<BridgeMarker> markers}) {
@@ -2845,7 +2815,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_list_bridge_marker(markers, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2873,7 +2843,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_bool(on_, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2903,7 +2873,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_box_autoadd_bridge_comp_settings(settings, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -2921,6 +2891,39 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           const TaskConstMeta(
             debugName: "composition_reference_set_settings",
             argNames: ["that", "settings"],
+          );
+
+  @override
+  void crateApiCompositionCompositionReferenceSetViewerLook(
+      {required CompositionReference that,
+      required double stops,
+      required bool toneMap,
+      required bool transparentBackground}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_f_64(stops, serializer);
+        sse_encode_bool(toneMap, serializer);
+        sse_encode_bool(transparentBackground, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData:
+            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
+      ),
+      constMeta: kCrateApiCompositionCompositionReferenceSetViewerLookConstMeta,
+      argValues: [that, stops, toneMap, transparentBackground],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta
+      get kCrateApiCompositionCompositionReferenceSetViewerLookConstMeta =>
+          const TaskConstMeta(
+            debugName: "composition_reference_set_viewer_look",
+            argNames: ["that", "stops", "toneMap", "transparentBackground"],
           );
 
   @override

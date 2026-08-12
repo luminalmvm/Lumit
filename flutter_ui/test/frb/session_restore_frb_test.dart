@@ -73,7 +73,13 @@ void main() {
     // state the application is never in.
     state.comps();
 
+    // Not awaited: reading a document is an async frb call whose continuation
+    // only lands on the real event-loop turns settleFrb provides. What is
+    // waited for is the *adoption* — `opening` also covers the first frame,
+    // which a widget test with no Viewer mounted never receives.
+    final adopted = state.project;
     state.openProject(path);
+    await settleFrb(tester, until: () => !identical(state.project, adopted));
 
     expect(layoutOf(workspace), arranged,
         reason: 'the panels came back where this project had them');
@@ -109,7 +115,9 @@ void main() {
       ),
     );
 
+    final adopted = state.project;
     state.openProject(path);
+    await settleFrb(tester, until: () => !identical(state.project, adopted));
 
     expect(ui.openComps, isEmpty, reason: 'a comp that is gone opens no tab');
     expect(ui.selectedComp, isNull);
@@ -148,7 +156,10 @@ void main() {
     expect(other.sessionFor(path), isNull, reason: 'never opened here');
     expect(layoutOf(other), isNot(arranged));
 
+    final adopted = otherState.project;
     otherState.openProject(path);
+    await settleFrb(
+        tester, until: () => !identical(otherState.project, adopted));
 
     expect(layoutOf(other), arranged,
         reason: 'the arrangement came out of the file');

@@ -571,7 +571,12 @@ class BareDropdown<T> extends StatelessWidget {
   final T value;
   final List<T> options;
   final String Function(T) label;
-  final ValueChanged<T> onChanged;
+
+  /// Null disables the control — the closed face still names the value, drawn
+  /// in [HouseButton]'s own disabled style, and opens nothing. For a choice
+  /// something else is currently making (the Viewer's resolution while
+  /// adaptive playback picks the tier itself).
+  final ValueChanged<T>? onChanged;
 
   /// The heading an option sits under, or null for none. Options keep their
   /// given order; a heading is drawn each time the answer changes, so a list
@@ -602,49 +607,51 @@ class BareDropdown<T> extends StatelessWidget {
       // 12.1, which clears 3 by nothing at all. Horizontal is the button's own,
       // so nothing moves sideways.
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-      onPressed: () async {
-        final box = context.findRenderObject()! as RenderBox;
-        final origin = box.localToGlobal(Offset.zero);
-        final picked = await showLumitPopup<T>(
-          context: context,
-          position: origin + Offset(0, box.size.height + 2),
-          // IntrinsicWidth bounds the stretch: a float in the overlay has
-          // unbounded width, and a stretched Column inside one otherwise
-          // forces an infinite width (the settings-dropdown crash).
-          builder: (close) => FloatSurface(
-            child: IntrinsicWidth(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < options.length; i++) ...[
-                    if (group != null &&
-                        group!(options[i]) != null &&
-                        (i == 0 ||
-                            group!(options[i - 1]) != group!(options[i])))
-                      Padding(
-                        padding:
-                            EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
-                        child: Text(
-                          group!(options[i])!,
-                          style: t.small.copyWith(color: t.textMuted),
-                        ),
-                      ),
-                    MenuRow(
-                      selected: options[i] == value,
-                      onPressed: () => close(options[i]),
-                      child: Text(label(options[i])),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-        if (picked != null) onChanged(picked);
-      },
+      onPressed: onChanged == null ? null : () => _open(context, t),
       child: _dropdownFace(t, label(value)),
     );
+  }
+
+  Future<void> _open(BuildContext context, LumitTheme t) async {
+    final box = context.findRenderObject()! as RenderBox;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showLumitPopup<T>(
+      context: context,
+      position: origin + Offset(0, box.size.height + 2),
+      // IntrinsicWidth bounds the stretch: a float in the overlay has
+      // unbounded width, and a stretched Column inside one otherwise
+      // forces an infinite width (the settings-dropdown crash).
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < options.length; i++) ...[
+                if (group != null &&
+                    group!(options[i]) != null &&
+                    (i == 0 ||
+                        group!(options[i - 1]) != group!(options[i])))
+                  Padding(
+                    padding:
+                        EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
+                    child: Text(
+                      group!(options[i])!,
+                      style: t.small.copyWith(color: t.textMuted),
+                    ),
+                  ),
+                MenuRow(
+                  selected: options[i] == value,
+                  onPressed: () => close(options[i]),
+                  child: Text(label(options[i])),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) onChanged!(picked);
   }
 }
 

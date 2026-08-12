@@ -415,8 +415,13 @@ void main() {
       await tester.pump();
       expect(p.state.project!.getItems(), isEmpty);
 
+      // Reading the document is an async frb call now, so the open lands on
+      // settleFrb's real event-loop turns rather than on a pump. Adoption is
+      // what is being waited for: the held reference is another project's.
+      final before = p.state.project;
       await choose(tester, 'File', 'Open project…');
-      await tester.pump();
+      await settleFrb(tester,
+          until: () => !identical(p.state.project, before));
 
       final names = allItems(p.state).map((i) => i.name()).toList();
       expect(names, contains('hero.mov'));

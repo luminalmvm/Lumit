@@ -758,7 +758,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             if (_missing[id] != isMissing) {
               setState(() => _missing[id] = isMissing);
             }
-          });
+            // A probe can outlive its document: opening a project clears the
+            // engine's registry and every reference held from the outgoing one
+            // throws. Nothing is missing in a document that is gone, and the
+            // panel is about to be rebuilt from the new one.
+          }).catchError((_) {});
         }
       }
       if (item is ItemReference_Folder) {
