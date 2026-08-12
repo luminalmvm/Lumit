@@ -178,26 +178,123 @@ fn fresnel_cos(cos_i_in: f32, n1: f32, n2: f32) -> f32 {
     return 0.5 * (rs * rs + rp * rp);
 }
 
-// Single-layer thin-film reflectance (lumit_core `coating_reflectance`).
-fn coating_refl(cos_i_in: f32, n1: f32, n2: f32, coating_n: f32, d_nm: f32, lambda_nm: f32) -> f32 {
-    let cos_i = abs(cos_i_in);
-    let sin2_c = (n1 / coating_n) * (n1 / coating_n) * (1.0 - cos_i * cos_i);
-    if (sin2_c >= 1.0) {
+// The coating library, mirroring lumit_core `coating_stack` (K-356). A lens
+// file publishes a layer COUNT, never the recipe — real designs are
+// manufacturer secrets — so each order takes its textbook design: a MgF2
+// quarter, a V-coat, then the classic broadband quarter/half/quarter W that
+// gives a multicoated lens its two reflectance minima and the green-magenta
+// cast between them.
+const COATING_DESIGN_NM: f32 = 550.0;
+const MGF2_N: f32 = 1.38;
+const AL2O3_N: f32 = 1.63;
+const ZRO2_N: f32 = 2.10;
+const MAX_COATING_LAYERS: u32 = 6u;
+
+// Layer `i` of the stack for `layers`, as (index, quarter waves); a zero
+// index means the slot is empty.
+fn coating_layer(layers: f32, i: u32) -> vec2<f32> {
+    let n = min(u32(max(round(layers), 0.0)), MAX_COATING_LAYERS);
+    if (i >= n) {
+        return vec2<f32>(0.0, 0.0);
+    }
+    if (n == 1u) {
+        return vec2<f32>(MGF2_N, 1.0);
+    }
+    if (n == 2u) {
+        if (i == 0u) { return vec2<f32>(MGF2_N, 1.0); }
+        return vec2<f32>(ZRO2_N, 1.0);
+    }
+    if (i == 0u) { return vec2<f32>(MGF2_N, 1.0); }
+    if (i == 1u) { return vec2<f32>(ZRO2_N, 2.0); }
+    if (i == 2u) { return vec2<f32>(AL2O3_N, 1.0); }
+    if (i % 2u == 0u) { return vec2<f32>(AL2O3_N, 1.0); }
+    return vec2<f32>(ZRO2_N, 1.0);
+}
+
+fn cmul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+// Multi-layer thin-film reflectance by the characteristic transfer matrix —
+// lumit_core `stack_reflectance`, op for op. Per layer the phase thickness is
+// 2*pi*n*d*cos(theta)/lambda and the admittance n*cos(theta) (s) or
+// n/cos(theta) (p); chaining the layer matrices and closing on the substrate
+// gives Y = C/B and r = (eta0*B - C)/(eta0*B + C). Both polarisations, meaned.
+//
+// The cos(theta) inside the phase is why this matters: the reflectance band
+// shifts BLUE as the angle of incidence rises, which is the observed effect
+// that a ghost changes hue as its source moves off axis. A scalar coating
+// strength cannot express it at all.
+fn stack_refl(cos_i_in: f32, n1: f32, n2: f32, layers: f32, lambda_nm: f32) -> f32 {
+    let cos_i = clamp(abs(cos_i_in), 1e-6, 1.0);
+    let sin_i = n1 * sqrt(max(1.0 - cos_i * cos_i, 0.0));
+    let s_sub = sin_i / max(n2, 1e-6);
+    let c2_sub = 1.0 - s_sub * s_sub;
+    if (c2_sub <= 0.0) {
         return fresnel_cos(cos_i, n1, n2);
     }
-    let cos_c = sqrt(1.0 - sin2_c);
-    let delta = 2.0 * 3.141592653589793 * coating_n * d_nm * cos_c / lambda_nm;
-    let r01 = (n1 * cos_i - coating_n * cos_c) / (n1 * cos_i + coating_n * cos_c);
-    let sin2_2 = (coating_n / n2) * (coating_n / n2) * (1.0 - cos_c * cos_c);
-    if (sin2_2 >= 1.0) {
-        return fresnel_cos(cos_i, n1, n2);
+    let cos_sub = sqrt(c2_sub);
+
+    var total = 0.0;
+    for (var pol = 0u; pol < 2u; pol = pol + 1u) {
+        var eta0 = n1 * cos_i;
+        var eta_sub = n2 * cos_sub;
+        if (pol == 1u) {
+            eta0 = n1 / cos_i;
+            eta_sub = n2 / cos_sub;
+        }
+        var m0 = vec2<f32>(1.0, 0.0);
+        var m1 = vec2<f32>(0.0, 0.0);
+        var m2 = vec2<f32>(0.0, 0.0);
+        var m3 = vec2<f32>(1.0, 0.0);
+        var bad = false;
+        for (var i = 0u; i < MAX_COATING_LAYERS; i = i + 1u) {
+            let l = coating_layer(layers, i);
+            if (l.x <= 0.0 || l.y <= 0.0) {
+                continue;
+            }
+            let s = sin_i / max(l.x, 1e-6);
+            let c2 = 1.0 - s * s;
+            if (c2 <= 0.0) {
+                bad = true;
+                break;
+            }
+            let cos_l = sqrt(c2);
+            let d_nm = l.y * COATING_DESIGN_NM / (4.0 * l.x);
+            let delta = 2.0 * 3.141592653589793 * l.x * d_nm * cos_l / max(lambda_nm, 1e-6);
+            var eta = l.x * cos_l;
+            if (pol == 1u) {
+                eta = l.x / cos_l;
+            }
+            let cd = cos(delta);
+            let sd = sin(delta);
+            let l0 = vec2<f32>(cd, 0.0);
+            let l1 = vec2<f32>(0.0, sd / eta);
+            let l2 = vec2<f32>(0.0, eta * sd);
+            let l3 = vec2<f32>(cd, 0.0);
+            let a0 = cmul(m0, l0) + cmul(m1, l2);
+            let a1 = cmul(m0, l1) + cmul(m1, l3);
+            let a2 = cmul(m2, l0) + cmul(m3, l2);
+            let a3 = cmul(m2, l1) + cmul(m3, l3);
+            m0 = a0;
+            m1 = a1;
+            m2 = a2;
+            m3 = a3;
+        }
+        if (bad) {
+            return fresnel_cos(cos_i, n1, n2);
+        }
+        let b = m0 + m1 * eta_sub;
+        let c = m2 + m3 * eta_sub;
+        let num = eta0 * b - c;
+        let den = eta0 * b + c;
+        let dm = dot(den, den);
+        if (dm <= 1e-20) {
+            return fresnel_cos(cos_i, n1, n2);
+        }
+        total = total + dot(num, num) / dm;
     }
-    let cos_2 = sqrt(1.0 - sin2_2);
-    let r12 = (coating_n * cos_c - n2 * cos_2) / (coating_n * cos_c + n2 * cos_2);
-    let cos_2d = cos(2.0 * delta);
-    let num = r01 * r01 + r12 * r12 + 2.0 * r01 * r12 * cos_2d;
-    let den = 1.0 + r01 * r01 * r12 * r12 + 2.0 * r01 * r12 * cos_2d;
-    return clamp(num / den, 0.0, 1.0);
+    return clamp(total * 0.5, 0.0, 1.0);
 }
 
 // Reflectance of one surface: bare Fresnel blended toward the file's AR
@@ -207,13 +304,7 @@ fn surface_refl(cos_i: f32, n1: f32, n2: f32, layers: f32, lambda_nm: f32) -> f3
     if (layers < 0.5 || tp.coating <= 0.0) {
         return plain;
     }
-    let mgf2_n = 1.38;
-    let qw = 550.0 / (4.0 * mgf2_n);
-    var coated = coating_refl(cos_i, n1, n2, mgf2_n, qw, lambda_nm);
-    let extra = clamp(i32(round(layers - 1.0)), 0, 8);
-    for (var i = 0; i < extra; i = i + 1) {
-        coated = coated * 0.25;
-    }
+    let coated = stack_refl(cos_i, n1, n2, layers, lambda_nm);
     return clamp(plain + (coated - plain) * clamp(tp.coating, 0.0, 1.0), 0.0, 1.0);
 }
 

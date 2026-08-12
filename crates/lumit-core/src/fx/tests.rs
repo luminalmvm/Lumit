@@ -4811,16 +4811,58 @@ fn lens_flare_optics_match_the_textbook() {
     let expect = ((1.0f32 - 1.5) / (1.0 + 1.5)).powi(2);
     assert!((r - expect).abs() < 1e-4, "{r} vs {expect}");
 
-    // The MgF₂ quarter-wave coating at its design wavelength reflects LESS
-    // than bare glass, and each extra layer quarters the residual again.
-    let plain = fresnel_cos(1.0, 1.0, 1.9);
-    let one = surface_reflectance(1.0, 1.0, 1.9, 1.0, 550.0, 1.0);
-    let two = surface_reflectance(1.0, 1.0, 1.9, 2.0, 550.0, 1.0);
+    // Coatings, on ordinary crown glass (K-356). Note the glass: MgF₂ is
+    // very nearly the IDEAL single layer for n ≈ 1.9, because 1.38² = 1.904,
+    // so a stack comparison there measures a coincidence rather than a
+    // coating. n = 1.5 is the honest case and the common one.
+    let plain = fresnel_cos(1.0, 1.0, 1.5);
+    let one = surface_reflectance(1.0, 1.0, 1.5, 1.0, 550.0, 1.0);
+    let three = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 1.0);
     assert!(one < plain, "coated {one} should be below bare {plain}");
-    assert!(two < one, "multicoat {two} should be below single {one}");
+    assert!(
+        three < one,
+        "the broadband stack {three} should beat the single layer {one}"
+    );
+
+    // **Reflectance varies across the band, and that is the point.** A real
+    // multicoat has minima rather than a flat floor, which is what gives
+    // ghosts their colour: the stack reflects some wavelengths several times
+    // more than others. The old single-number model could not do this.
+    let across: Vec<f32> = [430.0f32, 500.0, 550.0, 620.0, 680.0]
+        .iter()
+        .map(|&nm| surface_reflectance(1.0, 1.0, 1.5, 3.0, nm, 1.0))
+        .collect();
+    let lo = across.iter().copied().fold(f32::MAX, f32::min);
+    let hi = across.iter().copied().fold(0.0f32, f32::max);
+    assert!(
+        hi > lo * 3.0,
+        "a broadband stack must be wavelength-selective: {across:?}"
+    );
+
+    // **And it shifts with the angle of incidence**, because the phase
+    // thickness carries a cos θ — which is the observed effect that a ghost
+    // changes hue as its source moves off axis. Steeply off-axis, the band
+    // has moved enough that the design wavelength is no longer the minimum.
+    let straight = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 1.0);
+    let oblique = surface_reflectance(0.6, 1.0, 1.5, 3.0, 550.0, 1.0);
+    assert!(
+        oblique > straight * 1.5,
+        "the coating must vary with angle: {oblique} at 53° vs {straight} \
+         at normal"
+    );
+
     // The Coating dial at 0 is bare glass regardless of the file layers.
-    let off = surface_reflectance(1.0, 1.0, 1.9, 2.0, 550.0, 0.0);
+    let off = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 0.0);
     assert!((off - plain).abs() < 1e-6);
+
+    // A bare stack (0 layers) is exactly the uncoated interface, and the
+    // transfer matrix agrees with plain Fresnel there — the degenerate case
+    // that proves the chain closes correctly.
+    let empty = stack_reflectance(1.0, 1.0, 1.5, &coating_stack(0.0), 550.0);
+    assert!(
+        (empty - plain).abs() < 1e-5,
+        "an empty stack {empty} must equal bare Fresnel {plain}"
+    );
 }
 
 // §8.4 — the prescription library and pair ranking (K-261, curated to

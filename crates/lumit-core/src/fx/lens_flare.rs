@@ -860,10 +860,182 @@ pub fn coating_reflectance(
     (num / den).clamp(0.0, 1.0)
 }
 
+/// The design wavelength every coating in the library is cut for, nm.
+pub const COATING_DESIGN_NM: f32 = 550.0;
+/// Magnesium fluoride — the classic single-layer AR, and the outer layer of
+/// every stack below.
+pub const MGF2_N: f32 = 1.38;
+/// Alumina, the mid-index layer of a broadband stack.
+pub const AL2O3_N: f32 = 1.63;
+/// Zirconia, the high-index layer.
+pub const ZRO2_N: f32 = 2.10;
+/// Most layers a stack may have.
+pub const MAX_COATING_LAYERS: usize = 6;
+
+/// The canonical stack for a `.lens` coating column, **outermost first** —
+/// each entry `(refractive index, optical thickness in quarter waves at
+/// [`COATING_DESIGN_NM`])`.
+///
+/// A lens prescription publishes a layer *count*, never the recipe: real
+/// coating designs are manufacturer secrets, and the literature is unanimous
+/// that they can only be measured, not predicted (K-356). What a renderer can
+/// do is use the textbook design of each order, which is what these are:
+///
+/// - **1 layer** — MgF₂ quarter wave, the classic single coating. One
+///   reflectance minimum at 550 nm, a broad V.
+/// - **2 layers** — a V-coat: high-index quarter under a MgF₂ quarter. Deeper
+///   minimum, still one of them.
+/// - **3 layers** — the classic broadband W: quarter / half / quarter, which
+///   is what gives a real multicoated lens two minima and the green-magenta
+///   cast between them.
+/// - **4+** — the same W with extra quarter-wave pairs beneath, broadening it
+///   further and lowering the mean.
+///
+/// The shape matters more than the exact recipe: it is the *variation of
+/// reflectance with wavelength and angle* that makes ghosts change hue as a
+/// light crosses the frame, and a single number cannot produce it at all.
+pub fn coating_stack(layers: f32) -> [(f32, f32); MAX_COATING_LAYERS] {
+    let none = (0.0, 0.0);
+    let n = (layers.round().max(0.0) as usize).min(MAX_COATING_LAYERS);
+    let mut out = [none; MAX_COATING_LAYERS];
+    match n {
+        0 => {}
+        1 => out[0] = (MGF2_N, 1.0),
+        2 => {
+            out[0] = (MGF2_N, 1.0);
+            out[1] = (ZRO2_N, 1.0);
+        }
+        _ => {
+            out[0] = (MGF2_N, 1.0);
+            out[1] = (ZRO2_N, 2.0);
+            out[2] = (AL2O3_N, 1.0);
+            // Extra pairs alternate high/low beneath the W, each a quarter
+            // wave, which is how broadband stacks are actually extended.
+            for (i, slot) in out.iter_mut().enumerate().take(n).skip(3) {
+                *slot = if i % 2 == 0 {
+                    (AL2O3_N, 1.0)
+                } else {
+                    (ZRO2_N, 1.0)
+                };
+            }
+        }
+    }
+    out
+}
+
+/// Complex multiply, as `(re, im)` — the whole of the complex arithmetic the
+/// transfer matrix needs, spelled out rather than pulled in as a dependency.
+#[inline]
+fn cmul(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
+    (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0)
+}
+
+/// Reflectance of a multi-layer thin-film stack by the **characteristic
+/// transfer matrix** — the standard treatment, and the one thing that gets
+/// ghost colour right (K-356).
+///
+/// Per layer the phase thickness is `δ = 2π n d cos θ / λ` and the optical
+/// admittance `η = n cos θ` (s polarisation) or `n / cos θ` (p); the layer's
+/// characteristic matrix is `[[cos δ, i sin δ / η], [i η sin δ, cos δ]]`.
+/// Chaining them and closing on the substrate's admittance gives `Y = C / B`,
+/// whence `r = (η₀ − Y) / (η₀ + Y)`. Both polarisations are computed and
+/// averaged, which is what unpolarised light asks for.
+///
+/// **Why the angle matters as much as the wavelength.** `δ` carries a `cos θ`,
+/// so the whole reflectance band shifts *blue* as the angle of incidence
+/// rises. Flare rays strike interfaces at large and varied angles, so this is
+/// the dominant term — and it is exactly the observed effect that a ghost
+/// changes hue as its source moves off axis. No scalar coating strength can
+/// express it.
+pub fn stack_reflectance(
+    cos_i: f32,
+    n1: f32,
+    n2: f32,
+    stack: &[(f32, f32); MAX_COATING_LAYERS],
+    lambda_nm: f32,
+) -> f32 {
+    let cos_i = cos_i.abs().clamp(1e-6, 1.0);
+    // Snell's invariant: n·sinθ is the same in every medium of the stack.
+    let sin_i = n1 * (1.0 - cos_i * cos_i).max(0.0).sqrt();
+    let cos_in_medium = |n: f32| -> Option<f32> {
+        let s = sin_i / n.max(1e-6);
+        let c2 = 1.0 - s * s;
+        (c2 > 0.0).then(|| c2.sqrt())
+    };
+    let Some(cos_sub) = cos_in_medium(n2) else {
+        // Total internal reflection somewhere in the stack: the film model
+        // has nothing to say, so fall back to the bare interface.
+        return fresnel_cos(cos_i, n1, n2);
+    };
+
+    // `s` polarisation then `p`; unpolarised light is their mean.
+    let mut total = 0.0;
+    for pol in 0..2 {
+        let admittance = |n: f32, c: f32| if pol == 0 { n * c } else { n / c };
+        let eta0 = admittance(n1, cos_i);
+        let eta_sub = admittance(n2, cos_sub);
+        // The identity matrix, as (m00, m01, m10, m11) of complex pairs.
+        let mut m = [(1.0f32, 0.0f32), (0.0, 0.0), (0.0, 0.0), (1.0, 0.0)];
+        let mut valid = true;
+        for &(n, quarters) in stack.iter() {
+            if n <= 0.0 || quarters <= 0.0 {
+                continue;
+            }
+            let Some(cos_l) = cos_in_medium(n) else {
+                valid = false;
+                break;
+            };
+            // Physical thickness from the optical one: `quarters` quarter
+            // waves at the design wavelength.
+            let d_nm = quarters * COATING_DESIGN_NM / (4.0 * n);
+            let delta = 2.0 * std::f32::consts::PI * n * d_nm * cos_l / lambda_nm.max(1e-6);
+            let eta = admittance(n, cos_l);
+            let (cd, sd) = (delta.cos(), delta.sin());
+            let l = [(cd, 0.0), (0.0, sd / eta), (0.0, eta * sd), (cd, 0.0)];
+            // m = m · l
+            let a = [
+                (
+                    cmul(m[0], l[0]).0 + cmul(m[1], l[2]).0,
+                    cmul(m[0], l[0]).1 + cmul(m[1], l[2]).1,
+                ),
+                (
+                    cmul(m[0], l[1]).0 + cmul(m[1], l[3]).0,
+                    cmul(m[0], l[1]).1 + cmul(m[1], l[3]).1,
+                ),
+                (
+                    cmul(m[2], l[0]).0 + cmul(m[3], l[2]).0,
+                    cmul(m[2], l[0]).1 + cmul(m[3], l[2]).1,
+                ),
+                (
+                    cmul(m[2], l[1]).0 + cmul(m[3], l[3]).0,
+                    cmul(m[2], l[1]).1 + cmul(m[3], l[3]).1,
+                ),
+            ];
+            m = a;
+        }
+        if !valid {
+            return fresnel_cos(cos_i, n1, n2);
+        }
+        // [B, C] = M · [1, η_sub]
+        let b = (m[0].0 + m[1].0 * eta_sub, m[0].1 + m[1].1 * eta_sub);
+        let c = (m[2].0 + m[3].0 * eta_sub, m[2].1 + m[3].1 * eta_sub);
+        // r = (η₀·B − C) / (η₀·B + C)
+        let num = (eta0 * b.0 - c.0, eta0 * b.1 - c.1);
+        let den = (eta0 * b.0 + c.0, eta0 * b.1 + c.1);
+        let dm = den.0 * den.0 + den.1 * den.1;
+        if dm <= 1e-20 {
+            return fresnel_cos(cos_i, n1, n2);
+        }
+        total += (num.0 * num.0 + num.1 * num.1) / dm;
+    }
+    (total * 0.5).clamp(0.0, 1.0)
+}
+
 /// Reflectance of one lens surface: uncoated Fresnel blended toward the
 /// prescription's AR coating by the Coating dial. `layers` is the .lens
-/// coating column: 1 = single-layer MgF₂ quarter-wave at 550 nm; each extra
-/// layer quarters the residual (FlareSim's multicoat approximation).
+/// coating column, resolved to a real multi-layer design by
+/// [`coating_stack`] and evaluated by [`stack_reflectance`] (K-356,
+/// superseding the single-layer-times-a-quarter approximation).
 pub fn surface_reflectance(
     cos_i: f32,
     n1: f32,
@@ -876,14 +1048,7 @@ pub fn surface_reflectance(
     if layers < 0.5 || coating_mix <= 0.0 {
         return plain;
     }
-    const MGF2_N: f32 = 1.38;
-    const DESIGN_NM: f32 = 550.0;
-    let qw = DESIGN_NM / (4.0 * MGF2_N);
-    let mut coated = coating_reflectance(cos_i, n1, n2, MGF2_N, qw, lambda_nm);
-    let extra = (layers - 1.0).clamp(0.0, 8.0).round() as u32;
-    for _ in 0..extra {
-        coated *= 0.25;
-    }
+    let coated = stack_reflectance(cos_i, n1, n2, &coating_stack(layers), lambda_nm);
     (plain + (coated - plain) * coating_mix.clamp(0.0, 1.0)).clamp(0.0, 1.0)
 }
 

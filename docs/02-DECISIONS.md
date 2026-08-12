@@ -8500,3 +8500,39 @@ Not fixed here: ghosts are still *summed* point flares rather than the source's 
 by each ghost's own Jacobian, which is the exact treatment
 ([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase D). Sampling converges to it and is what
 the literature uses as the reference; the convolution is the optimisation, not the truth.
+
+**K-356 · DECIDED · Lens coatings are real multi-layer stacks solved by transfer matrix,
+not one layer times a quarter.** The flare's per-surface reflectance was a single-layer MgF₂
+quarter wave, with every additional layer of the prescription's coating column approximated
+as "quarter the residual again". That is the FlareSim shortcut, and it is the reason ghost
+*colour* was the least convincing thing about the effect: a single-layer coating has one
+reflectance minimum, so it can only ever tint ghosts one way, while a real multicoated lens
+has two or more and runs magenta, then green, then amber as a light crosses the frame.
+
+Each surface's coating is now a stack, and its reflectance the standard **characteristic
+transfer matrix**: per layer a phase thickness `δ = 2π n d cos θ / λ` and an optical
+admittance `η = n cos θ` (s) or `n / cos θ` (p), matrices `[[cos δ, i sin δ/η], [i η sin δ,
+cos δ]]` chained and closed on the substrate to give `Y = C/B` and `r = (η₀ − Y)/(η₀ + Y)`,
+with both polarisations averaged for unpolarised light.
+
+**The angle term is the one that earns this.** `δ` carries `cos θ`, so the whole reflectance
+band shifts blue as the angle of incidence rises — and flare rays strike interfaces at large,
+varied angles. That is precisely the observed behaviour a scalar coating strength cannot
+express: a ghost changing hue as its source moves off axis. The test pins it (53° reflects
+over 1.5× what normal incidence does at the design wavelength) alongside wavelength
+selectivity (a broadband stack's reflectance varies more than 3× across the visible).
+
+**What the stacks are, and the honest limit on them.** A `.lens` file publishes a layer
+*count*, never a recipe — real designs are manufacturer secrets, and every serious attempt in
+the literature concludes coatings can only be *measured*, not predicted. So each order takes
+its textbook design: one layer is the MgF₂ quarter wave, two a V-coat, three the classic
+broadband quarter/half/quarter W, and more extends it with alternating quarter-wave pairs.
+The *shape* is what matters here, not the exact recipe. Per-lens calibration against
+photographed flares is what would make the model invertible, and it stays out of scope
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase E).
+
+One test had to change, and its old assertion was a fossil of the old model: it compared a
+single layer against a "multicoat" on **n = 1.9** glass, where MgF₂ is very nearly the ideal
+single layer (1.38² = 1.904) and any stack is *worse* at exactly 550 nm. That is a
+coincidence of that glass, not a property of coatings; the comparison now runs on ordinary
+n = 1.5 crown, where the broadband stack beats the single layer as it should.

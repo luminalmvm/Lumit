@@ -63,10 +63,31 @@ n(λ) = A + B/λ²
 This reproduces n_d and the Abbe number exactly, which is all the flare can see.
 
 **Reflectance.** Bare glass is unpolarised Fresnel by incidence cosine. A coated surface
-is the Airy two-interface summation for a single MgF₂ (n 1.38) quarter-wave layer tuned
-at 550 nm; each extra layer quarters the residual (the FlareSim multicoat
-approximation). The Coating dial blends bare → coated per surface, so 0 is a vintage
-uncoated look and 1 the prescription's own character.
+is a real multi-layer stack solved by the **characteristic transfer matrix** (K-356,
+superseding the single-layer-times-a-quarter approximation): per layer
+`δ = 2π n d cos θ / λ` and `η = n cos θ` (s) or `n / cos θ` (p), matrices
+`[[cos δ, i sin δ/η], [i η sin δ, cos δ]]` chained and closed on the substrate for
+`Y = C/B`, `r = (η₀ − Y)/(η₀ + Y)`, both polarisations meaned. The Coating dial blends
+bare → coated per surface, so 0 is a vintage uncoated look and 1 the prescription's own
+character.
+
+**Why it is worth the matrix.** `δ` carries a `cos θ`, so the reflectance band shifts blue
+as the angle of incidence rises — and flare rays strike interfaces at large, varied angles.
+That is the observed effect a scalar cannot express: **a ghost changes hue as its source
+crosses the frame.** A single-layer coating has one reflectance minimum and can only tint
+ghosts one way; a real multicoat has two or more, which is where the magenta/green/amber
+character of a modern lens comes from.
+
+A `.lens` file gives a layer *count*, never the recipe (real designs are trade secrets, and
+the literature is unanimous that coatings can only be measured), so `coating_stack` maps the
+count to that order's textbook design: MgF₂ quarter, V-coat, the classic broadband
+quarter/half/quarter W, then alternating quarter-wave pairs. The shape is the point, not the
+recipe; per-lens calibration is Phase E of NEXT-FEATURES entry 1 and out of scope here.
+
+One trap worth recording: **do not benchmark coatings on n ≈ 1.9 glass.** MgF₂ is very
+nearly the ideal single layer there (1.38² = 1.904), so a single layer beats any stack at
+the design wavelength — a coincidence of that glass, not a property of coatings. The oracle
+compares on ordinary n = 1.5 crown.
 
 ## 2. Ghost pairs: enumeration, filter, ranking
 
@@ -528,8 +549,12 @@ the other cannot silently clamp to Divide.
 
 1. **FFT**: round trip, 8-point DFT match, Parseval (ortho).
 2. **Optics units**: Cauchy reproduces (n_d, V); Snell at 45°; TIR returns None;
-   normal-incidence Fresnel = ((n1−n2)/(n1+n2))²; the MgF₂ quarter-wave cuts bare-glass
-   reflectance and each extra layer cuts it further; Coating 0 is bare glass exactly.
+   normal-incidence Fresnel = ((n1−n2)/(n1+n2))². Coatings on n = 1.5 crown (K-356): a
+   single layer beats bare glass and the broadband stack beats the single layer; the stack
+   is wavelength-selective (>3× across the visible, which is what colours ghosts) and
+   angle-dependent (53° reflects >1.5× normal incidence, which is what makes a ghost change
+   hue off axis); an empty stack equals bare Fresnel, so the matrix chain closes; Coating 0
+   is bare glass exactly.
 3. **Library**: all 1299 files parse with sane focal lengths (2..2000 mm), surface
    counts (3..64) and positive semi-apertures; the bake is deterministic (pairs, sprite,
    gain bit-equal across runs); every ranked pair indexes real surfaces.

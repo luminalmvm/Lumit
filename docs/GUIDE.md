@@ -883,6 +883,37 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   measured in pixels from the centre outward. Leave them at zero and you have
   the pinpoint star the effect always drew. When the flare is reading a layer
   instead, it measures the size itself from the picture.
+
+  **Why ghosts change colour as a light crosses the frame (K-356).** Every
+  glass surface in a lens is coated to stop it reflecting — that is what the
+  faint purple or green sheen on a lens front element is. Those coatings are
+  the reason lens flare is coloured at all: what little light *does* bounce
+  back off each surface has been filtered by them, so a ghost is tinted by
+  the coating that made it.
+
+  A coating works by interference: light bouncing off the front of a
+  microscopically thin film and light bouncing off its back arrive slightly
+  out of step, and cancel. How far out of step depends on the wavelength —
+  which is why a coating kills some colours better than others — *and* on the
+  angle the light arrives at, because a slanted path through the film is a
+  longer path. So as a light moves toward the edge of frame and its rays hit
+  the glass more steeply, the colour the coating suppresses shifts. That is
+  the real-world effect of a flare going magenta on one side of the frame and
+  green on the other.
+
+  Lumit used to model this with a single film, which can only ever cancel one
+  colour, so ghosts could only be tinted one way. It now solves real
+  multi-layer stacks properly — the standard optics calculation, layer by
+  layer, for both wavelength and angle. Modern lenses use several layers
+  precisely to get two or more cancelled colours, which is where their
+  characteristic look comes from, and that is now what Lumit draws.
+
+  One honest limit: a lens prescription tells you *how many* layers a surface
+  has, never the recipe — those are trade secrets, and the research is
+  unanimous that real coatings can only be measured, not guessed. So Lumit
+  uses the textbook design for each layer count. The behaviour is right; the
+  exact tint of a specific real lens would need that lens photographed and
+  fitted.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the
