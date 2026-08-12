@@ -1,25 +1,16 @@
 # Next features — the implementation plan
 
-**Status: living.** The implementation companion to [TODO.md](TODO.md) for the next
-tranche of work: what to build, in what order, and exactly how — so a session can pick an
-entry up cold. Delete an entry when it lands (its regression tests are the record, per
-[14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)); when an entry changes a spec or
-reverses a decision, that edit and the [02-DECISIONS.md](02-DECISIONS.md) entry land in
-the same commit as the code.
+**Status: living, and mostly landed.** The implementation companion to [TODO.md](TODO.md)
+for this tranche of work. Its rule stands: delete an entry when it lands (the regression
+tests are the record, per [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)) — so this
+file is now two things. First, the **verification map**: everything that landed, which PR
+holds it, and where it deviated from the plan as first written, so the stack can be checked
+against intent before anything merges. Second, the **remaining plan**: the flare's
+ray-tracing accuracy work (old entry 1), which is the only entry still open, plus a short
+list of loose ends.
 
-In plain terms: this is the "how" file for the work the backlog only names. The two
-biggest entries — the lens flare and lights — came out of two research passes
-(2026-08-12) over how the industry actually does this on real footage; the sources are
-cited inline so the reasoning can be checked rather than trusted.
-
-**The flare entries were rewritten the same day**, after the owner set the budget: the
-physically based flare is to be done *properly* at roughly **2 seconds per frame**, not
-approximated down to milliseconds, and a sprite-based flare is welcome as a **separate
-effect** rather than a replacement. Entry 1 is that plan; entry 2 is the sprite one. The
-first draft of this file recommended the opposite trade and was wrong.
-
-Standing obligations every entry inherits (they are why the estimates are not smaller):
-each feature lands with its regression tests, its `app_en.arb` strings (plus
+Standing obligations every remaining entry inherits (they are why the estimates are not
+smaller): each feature lands with its regression tests, its `app_en.arb` strings (plus
 `engine_labels.dart` for anything the engine sends — the `engine_labels_test.dart` gate),
 its GUIDE.md plain-English section, and its spec/decision edits, all in the same change.
 New effects follow [08-EFFECTS.md](08-EFFECTS.md) §2's contract (CPU oracle beside the
@@ -27,456 +18,253 @@ WGSL kernel, bit-stable draw order, px@comp point parameters — K-260).
 
 ---
 
-## 0. ~~The bit-stability blocker~~ — LANDED (K-353)
+## State of play: three stacked PRs, merge in order
 
-Kept here only as the reading order: everything below builds on a raster that now
-renders the same frame twice. The cause was hardware 4× multisampling (additive fp16
-into a multisample target is not reproducible on this hardware); the flare computes its
-own coverage now. See K-353 and [impl/lens-flare.md](impl/lens-flare.md). Delete this
-heading once the entries under it have landed.
+Nothing has touched `main`. The work sits on three stacked branches; **merge #93 first,
+then #94, then #95** — each later PR's diff is only its own commits, but its branch
+contains everything beneath it.
+
+| PR | Branch | Contains | Decisions |
+|---|---|---|---|
+| [#93](https://github.com/luminalmvm/Lumit/pull/93) | `claude/viewer-grid-and-startup` | Transparency grid sized/snapped to the comp and seeing through to nothing; opening a project shows one card | K-351, K-352 |
+| [#94](https://github.com/luminalmvm/Lumit/pull/94) | `claude/flare-v2` | Flare bit-stability (own coverage, no MSAA); source anchored at its flux centroid; jitter killed by per-pixel tile statistics; area sources by direct sampling; multi-layer TMM coatings; this plan's rewrite | K-353, K-354, K-355, K-356 |
+| [#95](https://github.com/luminalmvm/Lumit/pull/95) | `claude/viewer-completion` | Third/Auto resolution per comp + background swatch; Light wrap; Sprite flare; Light layers + flare Lights mode; area-light shading of layers; region of interest | K-357, K-358, K-359, K-360, K-361, K-362 |
+
+Every commit carries its decision entry, regression tests, GUIDE.md section and arb
+strings. Verified before each push: fmt + clippy clean (warnings-as-errors), 377
+lumit-core / 71 lumit-eval / 99 lumit-render / 97 lumit-gpu (single-threaded) / 213
+lumit-bridge, `flutter analyze` clean, l10n gates green.
+
+**Crowdin upload owed** for the English keys added across the stack — listed per commit
+in the messages and gathered in PR #95's description. Headlines: `fxStreak`,
+`switchAcceptsLights(-On/-Off)`, `tipRegionOfInterest`, `tipDragRegionOfInterest`,
+`tipClearRegionOfInterest`, plus the earlier viewer-bar and light-wrap batches.
+
+**Known-flaky, not a regression:** running all of `viewer_panel_frb_test.dart` in one go
+can fail 5–6 frame-arrival tests with `Could not create the renderer … Not enough memory
+left` — GPU device exhaustion from many test shells on one machine. Each fails-in-bulk
+test passes in isolation, and the signature reproduces with the changes disabled.
+
+## Where the landed work deviates from the plan as first written
+
+Read these before reviewing — each is deliberate, each is recorded in its decision entry,
+and none is a silent narrowing:
+
+- **Area lights shade layers without LTC's fitted tables** (K-361; the plan's entry 4c
+  specified vendoring `selfshadow/ltc_code`). The diffuse case a 2.5D compositor needs is
+  the *identity-matrix* case of LTC — a closed-form polygon form factor, four edges, four
+  `acos`, no tables, no licence check, no vendoring. The code is shaped so a matrix fetch
+  drops in ahead of the same integral when roughness/specular is ever wanted; K-361 records
+  the reasoning at length.
+- **Light adds, it does not replace** (K-361). The lighting pass multiplies by
+  `1 + light`, not by the light alone — so a comp with no Light layers renders
+  byte-for-byte as before (a test, not a hope), and dropping in a light can never plunge
+  the unlit remainder into black.
+- **`accepts_lights` defaults on for every layer**, not only 3D ones as the plan sketched
+  — harmless, since a comp with no lights shades nothing either way, and it means placing
+  a light lights the scene without hunting for a switch. A 2D layer is shaded flat at
+  z = 0 whatever its transform stores, matching where the compositor actually draws it.
+- **The region of interest is not a scissor** (K-362; the plan said "scissor/viewport on
+  the composite target"). It is a *window*: the comp-pixels-to-NDC mapping shifts and the
+  target is sized to the region, so the composite writes only the pixels asked for. Draw
+  lists holding an adjustment layer or a motion-blurring layer **refuse the window** (both
+  stage through comp-sized intermediates) and the frame is composited whole and cropped —
+  same pixels either way, pinned by a regression test. Honest costing: it saves the
+  composite, display encode and publish, **not** the per-layer effect stack. Frame names
+  fold the region in (the "folding is better" option this file named).
+- **Area flare sources landed by direct sampling** (K-355), the reference method — the
+  per-ghost warped convolution below is now the *optimisation* of something correct, not
+  a correction to something wrong.
+- **Spectral radiometry was re-costed** (details in the entry below): reflectance sits
+  inside the per-ray, per-surface loop, not behind a free LUT fetch, so it is a deliberate
+  budget line rather than the freebie the first draft claimed.
+- **Light wrap reads its background through the layer-input mechanism** (K-358,
+  `layer_input_param → "background"`), the same tunnel DoF's depth input uses — not new
+  below-stack plumbing.
+- **`Resolved` stays `Copy` and carries an `#[allow(large_enum_variant)]`** with its
+  reasoning: boxing the flare params would cost the byte-for-byte frame-key hashing.
+  `LayerKind::Light` *is* boxed (eight animatable Properties made it the largest variant
+  by far).
+
+## Loose ends — small, none blocking a merge
+
+1. **Light layers have no purpose-drawn Viewer gizmo.** The plan asked for one (centre
+   mark; rect outline for an area light) and warned against repeating the Camera's
+   "cannot be picked" gap. Today a Light falls through `_boxes()`'s generic path. Works,
+   but an area light's emitting rectangle is not visualised in the Viewer.
+2. **Flare Lights mode does not project through the camera pose.** `lights_at` yields
+   comp-space x/y and the flare uses them directly; a light with z, viewed through a
+   camera, flares at its unprojected position. The plan's 3b asked for projection through
+   `comp.camera_pose(t)`. Shading (K-361) handles depth correctly; only the flare's
+   source placement is flat. Small, contained in `resolved.rs`'s lens_flare arm.
+3. **Flare WGSL cross-platform bit-stability** remains verified on this machine's
+   adapter; CI's macOS lane is the second datapoint (standing note from the audit ledger).
 
 ---
 
-## 1. The physically based flare, done properly — the ~2 s/frame target
+## The one open entry: the physically based flare at ~2 s/frame
 
-**The brief changed, and for the better** (owner, 2026-08-12). The earlier plan here
-proposed replacing the physically based path with a cheap sprite stack because the
-literature says the real-time version is not usable on footage. That is the wrong trade
-for Lumit. The owner's position: a sprite-based flare is welcome **as its own separate
-effect** (entry 2), but the physically based one should be done *properly*, and **~2
-seconds per frame is an acceptable budget** — the reference point being an acquaintance's
-own generator, accurate enough to **remove** real flares from footage.
+The brief (owner, 2026-08-12): the physically based flare done *properly* at roughly
+**2 seconds per frame** — the reference point being an acquaintance's generator accurate
+enough to **remove** real flares from footage — with the sprite flare as its own separate
+effect (landed, K-359). Bit-stability (K-353), centroid anchoring (K-354), area sources
+(K-355) and multi-layer TMM coatings (K-356) are in; what remains is the accuracy work
+below, in the order it is worth doing.
 
-That budget changes everything. The anchor for "interactive physically based" is the
-Hullin-style pipeline as actually implemented: a 27-interface lens → 351 two-bounce
-ghosts, a 32×32 ray grid per ghost, **12 ms total**
-([bitsquid](https://bitsquid.blogspot.com/2017/07/physically-based-lens-flare.html),
-[jpgrenier](https://www.jpgrenier.org/lensflare.html)). 2000 ms is ~167× that. Lumit's
-flare is already in this family — a real prescription, a pupil grid, per-wavelength
-tracing, ranked ghosts, a baked starburst, an iris model, coating and f-stop. So this is
-not a rewrite; it is spending a budget the effect never had on the approximations it was
-forced into.
+**Standing rule, from [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md): every bake
+belongs on the CPU in Rust.** Coating tables, starburst FFTs, colour-matching integration
+— all functions of the lens and parameters, not the frame. CPU bakes are deterministic by
+construction and free per frame. Only the ray grid needs the GPU.
 
-**A standing rule for this whole entry, from [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md):
-every bake belongs on the CPU in Rust.** The coating tables, the starburst FFTs, the
-colour-matching integration — all of them are functions of the lens and the parameters,
-not of the frame. Putting them on the CPU makes them deterministic by construction (the
-property K-353 just had to rescue) and removes them from the per-frame budget in the same
-move. Only the ray grid needs the GPU.
+### A2. Real spectral radiometry
 
-### Phase A — accuracy that costs nothing (do these first)
+Split geometry from radiometry, because they vary at different rates. Ray *geometry*
+varies slowly with λ (dispersion is a smooth perturbation) — 8–16 wavelengths,
+interpolated, is plenty. Ray *radiometry* varies fast, because the K-356 coating stacks
+oscillate several times across the visible — so evaluate reflectance at **81 samples,
+5 nm across 380–780 nm**, integrate against the **CIE 1931 2° colour-matching functions**
+to XYZ, then one fixed 3×3 into working RGB.
 
-**A1. Multi-layer anti-reflective coatings, by transfer matrix.** The single biggest
-correctness gain per line of code, and the one that fixes *ghost colour*. Today (and in
-every real-time implementation) the coating is an ideal single-layer quarter-wave stack
-with a hand-tuned blend — one reflectance minimum, hence one broad colour cast. Real lens
-coatings are 4–7 layer stacks whose reflectance R(λ) is W- or M-shaped, which is why real
-ghosts run magenta, then green, then amber across a frame. The correct model is the
-standard thin-film **transfer matrix**: per layer, phase thickness `δ = 2π n d cos θ / λ`
-and admittance `η = n cos θ` (s) or `n / cos θ` (p); chain the 2×2 characteristic
-matrices, take `Y = C/B`, then `r = (η₀ − Y)/(η₀ + Y)`, `R = |r|²`; average s and p for
-unpolarised light.
+Do *not* keep three RGB samples: three samples cannot represent a curve with three
+minima, so ghost hues come out systematically wrong. (Hero-wavelength sampling is a Monte
+Carlo variance trick; this is a deterministic quadrature.)
 
-Angle dependence is not a small correction: because `δ ∝ cos θ`, the whole reflectance
-band **shifts blue as the angle of incidence rises**, which is exactly the observed effect
-that a ghost changes hue as the source moves off-axis. Flare rays hit interfaces at large
-and varied angles, so this dominates — and a scalar "coating" parameter cannot represent
-any of it.
-
-*Shape:* compute `R(λ, cos θ)` on the CPU into a 64×64 (or 128×128) f32 LUT **per
-interface** at lens-load time, upload as a texture array, and have the trace do a bilinear
-fetch. Per-frame cost ≈ zero. Put the layer stack in the lens file as data, and keep a
-per-interface calibration offset — real coatings are measured, not predicted (see Phase E).
-*Refs:* [COMSOL thin-film](https://doc.comsol.com/6.1/doc/com.comsol.help.roptics/roptics_ug_optics.6.73.html),
-[AR coating](https://en.wikipedia.org/wiki/Anti-reflective_coating).
-
-**A2. Real spectral radiometry.** Split geometry from radiometry, because they vary at
-different rates. Ray *geometry* varies slowly with λ (dispersion is a smooth perturbation)
-— 8–16 wavelengths, interpolated, is plenty. Ray *radiometry* varies fast, because A1's
-reflectance oscillates several times across the visible — so evaluate it at **81 samples,
-5 nm across 380–780 nm**, which costs LUT fetches rather than rays. Integrate against the
-**CIE 1931 2° colour-matching functions** to XYZ, then one fixed 3×3 into working RGB.
-
-Do *not* keep three RGB samples: three samples cannot represent a curve with three minima,
-so ghost hues come out systematically wrong. (Hero-wavelength sampling is not applicable —
-that is a Monte Carlo variance-reduction trick, and this is a deterministic quadrature.)
-*Refs:* [CIE CMFs](https://www.fourmilab.ch/documents/specrend/),
+**Re-costed after an attempt:** the first draft called this free, assuming a LUT fetch.
+It is not — reflectance sits inside the per-ray, per-surface loop, so band-averaging
+costs ~20 surfaces × N sub-samples per ray of real trace time. Either budget for it
+deliberately, or integrate per (surface, band) into the bake where the ray path does not
+vary. *Refs:* [CIE CMFs](https://www.fourmilab.ch/documents/specrend/),
 [pbrt colour](https://pbr-book.org/4ed/Radiometry,_Spectra,_and_Color/Color).
 
-### Phase B — spend the budget on rays
+### B2. A field-angle-dependent starburst (a bake, big visual payoff)
 
-**B1. A dense, adaptive ray grid with per-ray splatting.** Raise 32² toward **256²** per
-ghost, allocated adaptively: a 16² prepass gives each ghost a bounding box and peak
-irradiance, then resolution is handed out in proportion to on-sensor area. Critically,
-**replace the interpolated-quad rasterisation with per-ray splatting weighted by the exact
-Jacobian**, and clip against every aperture **per ray** rather than per quad. Sparse grid
-plus bilinear interpolation of the transfer is where the current model actually dies:
-caustic folds inside a ghost get averaged away, and per-quad energy is wrong exactly where
-the bundle folds.
+The starburst is Fraunhofer diffraction and correctly `|FFT(pupil)|²` — that part is
+right. Two things are not. First, **the diffracting aperture changes shape across the
+frame**: off-axis the limiting pupil is the front and rear mechanical stops clipping the
+iris into a **cat's-eye**, plus `cos θ` foreshortening. Ray-trace the true exit-pupil
+outline at 8–16 field angles, FFT each at 2048²–4096², interpolate. Second, the cheap
+λ-rescale of one FFT is exact only for a real-valued pupil; the moment the pupil carries
+phase (dust, scratches, coating defects — what makes real starbursts asymmetric) it needs
+one FFT per wavelength. 81 FFTs of 2048² on the CPU with `rustfft` is well under a
+second, **and it is a bake, not a per-frame cost**.
 
-This also retires the sliver/fold machinery that K-262 through K-353 kept patching
-(`MIN_QUAD_PX`, sliver drops, the widening K-353 just added) — there are no quads to fold.
-It is the largest single change in this entry and should be its own PR.
-
-**B2. A field-angle-dependent starburst.** The starburst is Fraunhofer diffraction and is
-correctly `|FFT(pupil)|²` — that part is already right. Two things are not. First, **the
-diffracting aperture changes shape across the frame**: off-axis the limiting pupil is no
-longer the iris but the front and rear mechanical stops clipping it into a **cat's-eye**,
-plus a `cos θ` foreshortening. So ray-trace the true exit-pupil outline at 8–16 field
-angles, FFT each at 2048²–4096², and interpolate. Second, the cheap **λ-rescale of one
-FFT is exact only for a real-valued pupil**; the moment the pupil carries phase (dust,
-scratches, coating defects — the things that make real starbursts asymmetric and
-interesting) it needs one FFT per wavelength. At 81 FFTs of 2048² on the CPU with
-`rustfft` that is well under a second, **and it is a bake, not a per-frame cost**.
-
-A free correctness check: blade parity. An even blade count gives that many spikes, an odd
-count twice as many. If the FFT does not reproduce that by itself, something is wrong.
-*Refs:* [Fraunhofer/Fresnel](https://phys.libretexts.org/Bookshelves/Optics/BSc_Optics_(Konijnenberg_Adam_and_Urbach)/06:_Scalar_diffraction_optics/6.07:_Fresnel_and_Fraunhofer_Approximations),
+Free correctness check: blade parity — an even blade count gives that many spikes, an odd
+count twice as many. *Refs:*
+[Fraunhofer/Fresnel](https://phys.libretexts.org/Bookshelves/Optics/BSc_Optics_(Konijnenberg_Adam_and_Urbach)/06:_Scalar_diffraction_optics/6.07:_Fresnel_and_Fraunhofer_Approximations),
 [Tang's flare report](https://www.cs.toronto.edu/~hxtang/projects/flare_render/lensflare_huixuan.pdf).
 
-### Phase C — the things nobody does in real time
+### B1. Dense adaptive ray grid with per-ray splatting (the big one — its own PR)
 
-**C1. Energy-ranked four-bounce ghosts.** For N interfaces there are exactly `N(N−1)/2`
-two-bounce paths (351 at N=27) — what everyone traces. Four-bounce paths number ~10⁵ at
-the same N. With a modern coating (R ≈ 0.3%) a four-bounce path carries ~10⁻⁵ of a
-two-bounce one, so the vast majority are invisible; but the sun is ~10⁵× a normal
-highlight, and a few four-bounce paths land as *tight, well-focused* spots rather than
-broad discs. Those are exactly the small hard artefacts a removal model would otherwise
-leave as residual. With uncoated or vintage glass (R ≈ 4%) they are plainly visible.
+Raise 32² toward **256²** per ghost, allocated adaptively: a 16² prepass gives each ghost
+a bounding box and peak irradiance, then resolution is handed out in proportion to
+on-sensor area. Critically, **replace interpolated-quad rasterisation with per-ray
+splatting weighted by the exact Jacobian**, clipping against every aperture **per ray**.
+Sparse grid + bilinear interpolation is where the current model actually dies: caustic
+folds inside a ghost get averaged away, and per-quad energy is wrong exactly where the
+bundle folds.
 
-*Shape:* enumerate all of them on the CPU, run a 16² energy prepass, keep the top few
-hundred by peak sensor irradiance, render survivors at full grid. This is the
-ranked-path method stray-light analysis already uses (Zemax's Ghost Focus Generator does
-the same), and against a 2 s budget it is nearly free.
+This retires the sliver/fold machinery K-262 through K-353 kept patching (`MIN_QUAD_PX`,
+sliver drops, K-353's corner widening) — there are no quads to fold.
 
-**C2. Fresnel ringing on ghost edges, by fractional Fourier transform.** The starburst is
-Fraunhofer; **the ghosts are Fresnel**, because each ghost image is defocused by its own
-amount. The operator that interpolates between "identity" (in contact) and "Fourier" (far
-field) as a function of defocus is the **fractional Fourier transform** — one parameter
-gives both the hard aperture polygon and the diffraction pattern, and everything
-real-time drops it, which is why real-time ghosts have hard edges. Budget: applying it to
-all 351 ghosts × 12 λ at 256² is ~2 s on its own, so apply it to the **top ~32 ghosts by
-energy** (~100 ms). Hardest item here; do it last. *Ref:* Joo et al. 2016,
-[CGF 35(4)](https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.12953).
+### D. Per-ghost warped convolution — the *optimisation* of K-355's area sampling
 
-### Phase D — area and extended sources (the part that makes footage work)
+**The wrong model first, so it is not re-proposed:** flare from an extended source is
+**not** source ⊛ one global PSF — glare is shift-variant
+([Talvala 2007](https://graphics.stanford.edu/papers/glare_removal/glare_removal.pdf)).
 
-This is the answer to "make it work with area lights", and the research is unambiguous
-about the shape of it.
-
-**The wrong model first, so it is not re-proposed.** Flare from an extended source is
-**not** the convolution of the source with a single point-source flare PSF. Talvala et al.
-measured this directly and their figure caption says it plainly — the glare patterns are
-not shift-invariant ([Stanford, SIGGRAPH 2007](https://graphics.stanford.edu/papers/glare_removal/glare_removal.pdf)).
-A ghost 400 px from the source moves and changes shape at a different rate than the source
-does, so one global convolution cannot be right. (Hullin's own limitations section offers
-exactly that approximation for area lights, unvalidated — it is the gap this fills.)
-
-**The right model: convolution *per ghost*, in that ghost's own frame.** Each ghost path
-is an imaging system, and its map from incident direction to sensor position is locally
-affine — this is the classical paraxial ghost-imaging result, that each ghost sub-system
-has its own cardinal points and its own **ghost magnification**, so a ghost is a
-magnified, generally defocused *image of the source*. Linearising at the source centre
-gives a 2×2 Jacobian `J_g` per ghost, and then
+**The right model:** each ghost path is an imaging system whose map from direction to
+sensor position is locally affine (classical paraxial ghost imaging — each ghost has its
+own magnification). Linearise at the source centre for a 2×2 Jacobian `J_g` per ghost:
 
 ```
 Ghost_g(x)  =  [ PointGhost_g  ⊛  (S ∘ J_g⁻¹) ] (x)
 ```
 
 — the point-source ghost kernel convolved with the source's radiance map, affinely warped
-by that ghost's Jacobian (flip, anisotropic scale and rotation included; ghosts on the far
-side of frame are inverted images of the source). Shift-invariance holds *within* a ghost
-over the source's angular support, and fails *between* ghosts — which is precisely why the
-per-ghost decomposition is the correct treatment of a shift-variant system.
+per ghost (flip, anisotropic scale, rotation). Shift-invariance holds *within* a ghost
+and fails *between* ghosts, which is why the per-ghost decomposition is the correct
+treatment. A neon tube's ghosts become bars, a window's rectangles — a near-focused ghost
+shows the *shape of the source*, a defocused one takes the aperture polygon.
 
-**What this buys, concretely:** a neon tube's ghosts become elongated bars, a window's
-become rectangles, a headlight's become discs — and a near-focused ghost shows the *shape
-of the source* while a defocused one takes the aperture polygon. Point sprites structurally
-cannot do any of that.
+**Status:** K-355's direct sampling already converges to this (it is the Monte Carlo
+oracle minus the randomness), capped at 5×5 samples per source. Build the convolution
+when a source is wide enough that sample replication shows. Get `J_g` by
+finite-differencing the existing trace at θ₀ ± δ; runs inside the per-wavelength loop
+(`J_g` and the kernel are both λ-dependent). Sub-items when it is built:
 
-**Cost:** one flare evaluation per source (unchanged from today) plus G small 2-D
-convolutions — milliseconds, and independent of source area. Far inside the budget.
+- **D1** — guard the linearisation: evaluate `J_g` at the source's corners, quadtree-split
+  when it varies by more than a kernel width, blend with a windowed partition of unity.
+- **D2** — the starburst half *is* shift-invariant: convolve the source region's radiance
+  map with the diffraction kernel per band — softboxes and windows get correct soft glare
+  for one FFT pair each.
+- **D3** — a brute-force Monte Carlo mode as the *oracle* (Animal Logic's method,
+  [DigiPro 2019](https://animallogic.com/wp-content/uploads/2023/06/Physical-Based-Lens-Flare-Rendering.pdf)):
+  joint importance sampling over paths and pupil cells. Tests assert the fast path
+  matches; it is also the honest answer for occlusion (a lens hood clipping the source is
+  not linear in the source).
+- **D4** — source regions on real footage: log-luminance threshold → connected components
+  → morphological close → area/flux floor → cap at 16 by flux → **track components frame
+  to frame**. Keep the region's **radiance map**, not a centroid — the map is `S` above.
+  Flux matters more than shape, and clipping destroys it: prefer HDR footage, else
+  highlight reconstruction, else an explicit **per-region intensity multiplier** in the UI
+  (the production answer). Never let a hallucinated highlight silently set flare
+  amplitude — surface the number.
 
-**Status (K-355):** area sources already work, by **direct sampling** — the source's extent
-is measured from its flux and the flare is evaluated at a small grid of points across it,
-each carrying a share of the flux. That is the reference method (it is what the Monte Carlo
-oracle in D3 does, minus the randomness), so ghosts already take the source's shape. What
-Phase D adds is *efficiency and exactness*: sampling converges to the warped convolution but
-needs enough samples that neighbours land closer than a ghost is wide, and the cap is
-currently 5×5 per source. Build it when a source is wide enough that replication shows.
+### C1. Energy-ranked four-bounce ghosts
 
-*Shape:* get `J_g` per ghost by finite-differencing the existing trace at θ₀ ± δ (or read
-it off the ray grid); warp the source's radiance tile; convolve with that ghost's kernel;
-scale by the path's throughput; splat. It runs **inside** the per-wavelength loop, because
-`J_g` and the kernel are both λ-dependent.
+`N(N−1)/2` two-bounce paths (351 at N=27) are what everyone traces; four-bounce paths
+number ~10⁵. With modern coatings each carries ~10⁻⁵ of a two-bounce path — but the sun
+is ~10⁵× a normal highlight, and a few four-bounce paths land as *tight, well-focused*
+spots (the residuals a removal model would otherwise leave). With vintage glass (R ≈ 4%)
+they are plainly visible. Enumerate on the CPU, 16² energy prepass, keep the top few
+hundred by peak irradiance, render survivors at full grid — the ranked-path method
+stray-light analysis already uses. Nearly free against 2 s.
 
-**D1. Guard the linearisation with adaptive subdivision.** Evaluate `J_g` at the source's
-corners; if it varies across the source by more than a kernel width, quadtree-split the
-source region and repeat per patch, blending with a windowed partition of unity (the
-Efficient Filter Flow structure). This is the correctness dial, it degrades gracefully, and
-2 s buys dozens of patches per source.
+### C2. Fresnel ringing on ghost edges, by fractional Fourier transform (hardest — last)
 
-**D2. The starburst half *is* shift-invariant, so take the free win.** Veiling glare and
-the starburst are centred on the source and vary only slowly with field angle, which is why
-every eye-glare paper convolves the whole HDR frame with one PSF (Ritschel's *Temporal
-Glare*, Kakimoto, Spencer). So convolve the source region's radiance map with the
-diffraction kernel directly, per wavelength — one FFT pair per band, and softboxes and
-windows get correct soft glare for nothing.
+The starburst is Fraunhofer; **the ghosts are Fresnel**, each defocused by its own
+amount. The fractional Fourier transform interpolates between identity and Fourier as a
+function of defocus — one parameter gives both the hard aperture polygon and the
+diffraction ringing everyone real-time drops. All 351 ghosts × 12 λ at 256² is ~2 s on
+its own, so apply to the **top ~32 ghosts by energy** (~100 ms). *Ref:* Joo et al. 2016,
+[CGF 35(4)](https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.12953).
 
-**D3. A brute-force Monte Carlo mode, as the oracle rather than the default.** The
-production reference is Animal Logic's *Lego Movie 2* renderer: connect a random sample on
-the light source to a random sample on the front lens, importance-sampled jointly over
-paths and pupil cells (which lifted their sensor hit rate from ~15% to ~90%), and splat.
-Use it in tests to assert the fast path matches within tolerance, and for the case where
-linearity genuinely fails — **occlusion**, where a lens hood or foreground object clips
-part of the source, which is not linear in the source and must be sampled.
-*Ref:* [DigiPro 2019](https://animallogic.com/wp-content/uploads/2023/06/Physical-Based-Lens-Flare-Rendering.pdf).
+### E. Calibration and invertibility — only if flare *removal* is genuinely a goal
 
-**D4. Where the source region comes from, on real footage.** Log-luminance threshold →
-connected components → morphological close and a small dilation → drop components below an
-area/flux floor → cap at 16 by total flux → **track components frame to frame** so a
-flickering practical does not pop. Keep the region's **radiance map**, not just a centroid
-and a total — that map is the `S` above.
+The literature converges: **coatings and manufacturing deviations cannot be predicted,
+only measured.** If removal is the goal, what matters is not more wavelengths but:
+(1) differentiability of the forward model — removal is *fitting*; (2) correct handling
+of the aperture occlusion discontinuity; (3) Fresnel throughput, not just geometry;
+(4) element spacings as fitted parameters; (5) strict scene-referred linearity;
+(6) a **per-lens calibration workflow** — photograph a point source across field angles
+and f-stops, fit spacings and coating stacks. The acquaintance's generator is almost
+certainly forward model *plus* per-lens calibration, then fit-and-subtract.
 
-**Flux matters more than shape, and clipping destroys it.** Flare amplitude is linear in
-source flux, so clipping a 1000:1 source at 1.0 under-drives the entire flare by orders of
-magnitude. In descending order of trustworthiness: use raw/HDR footage; else standard
-single-channel highlight reconstruction; else — and this is the production answer — an
-explicit **per-region intensity multiplier** in the UI (Animal Logic flag lights for the
-flare pass and give them separate intensity multipliers). A single-image HDR CNN may
-provide an initial *guess* only; the literature is blunt that saturated content is
-hallucinated. Never let a hallucinated highlight silently set flare amplitude — surface the
-number and let the artist tune it. This is the calibration knob the physical world always
-needs.
+### Build order for the remainder
 
-### Phase E — only if flare *removal* is genuinely a goal
+A2 → B2 → B1 → D (with D1–D4) → C1 → C2 → E(if wanted).
 
-Every serious attempt in the literature converges on the same conclusion: **coatings and
-manufacturing deviations cannot be predicted, only measured.** Walch et al. built their
-model by measuring real captured flares and fitting, precisely because the internal
-parameters — especially the AR coatings — can only be approximated. The 2026
-*Precomputed Lens Transport Maps* work identifies the gap that matters for invertibility:
-prior polynomial and neural lens models **omit Fresnel intensity throughput**, which
-precludes accurate simulation of internal reflections.
+### What not to build (unchanged, so it is not re-proposed)
 
-So if removal is the goal, what matters is not more wavelengths but: (1) differentiability
-of the forward model in its parameters, because removal is *fitting*, not simulating;
-(2) correct handling of the aperture occlusion discontinuity, which is the dominant fitting
-error when a smooth model smears across it; (3) Fresnel throughput, not just ray geometry;
-(4) sub-pixel ghost positions, controlled by the element spacings you are least likely to
-know — so make them fitted, not fixed; (5) strict scene-referred linearity with exposure
-modelled explicitly; (6) a **per-lens calibration workflow** — photograph a point source
-across a grid of field angles and f-stops, fit spacings and coating stacks to the observed
-ghosts.
-
-**Read on the acquaintance's generator:** almost certainly a physically based forward model
-*plus* per-lens calibration, then fit-and-subtract. The physics gets the right parametric
-family; the calibration picks the right member of it. A simulator without a calibration
-path will not reach that bar however many wavelengths it samples.
-
-### What not to build
-
-Lee & Eisemann 2013's paraxial matrix model and the polynomial-optics line (Hullin 2012,
-Bodonyi 2025) are **speed devices**: they trade bounded fit error for evaluation cost. At
-2 s/frame they cost accuracy and buy nothing. Keep polynomial optics only as a
-ground-truth-comparison harness if it is ever worth quantifying how far the interactive
-path was off. Also skip precomputed *flare-field* interpolation across source positions —
-Hullin's team tried warping precomputed flares and reported it failed, flares being too
-sensitive to subtle changes.
-
-### Suggested build order within entry 1
-
-A1 → A2 (free accuracy, no budget spent) → B2 (a bake, big visual payoff) → D4 + D2
-(source regions and the free shift-invariant half) → D (per-ghost warped convolution, the
-headline for footage) → B1 (dense grid + splatting, the big one) → C1 → C2 → E.
+**Paraxial/polynomial-optics lens models** (Lee & Eisemann 2013, Hullin 2012, Bodonyi
+2025) — speed devices that cost accuracy and buy nothing at 2 s/frame. **Precomputed
+flare-field interpolation across source positions** — Hullin's team tried and reported
+failure. **A global source ⊛ PSF convolution** — measurably wrong (Talvala 2007).
+**Temporal history buffers** — they break the determinism the caches are named on.
+**ML relighting** — non-deterministic, wrong weight class. **Representative-point
+sphere/tube lights** — the rect case is covered; add spheres only if a use case shows up.
 
 ---
 
-## 2. A sprite-based flare, as its own effect
+## Recorded upgrade paths — not scheduled, but not lost
 
-Blessed explicitly by the owner alongside entry 1: an **Optical Flares-style** effect that
-is not physically derived at all. No bright pass and no ray tracing — a light **position**
-(px@comp, animatable and trackable) drives a designer-authored stack of elements, each
-placed along the line from the light through frame centre at its own offset, scale, tint
-and opacity: glow, iris ghosts, halo ring, streak, starburst. Deterministic on video, zero
-flicker, art-directable, and cheap (one pass of N procedural quads).
+Each is written into its decision entry so it survives this file's deletion:
 
-This is a **new effect** in [08-EFFECTS.md](08-EFFECTS.md) §3, not a mode of the physical
-one — the two answer different questions and mixing them is what made the plan muddled the
-first time. Its element stack is data (a preset file), not shaders. The one genuinely new
-kernel it wants is the **anamorphic streak**: a Kawase streak filter — downsample ~1/16,
-then 3–4 passes each sampling 4 taps along the streak direction at distance 4^pass, weight
-`a^(b·dist)`, attenuation ~0.9–0.95
-([Oat](https://www.chrisoat.com/papers/Oat-ScenePostprocessing.pdf)) — a directional
-variant of blur passes the engine already has, and useful to the physical flare too.
-
----
-
-## 3. Harden Matte detection on footage (small, do early)
-
-Matte mode already has half of what the literature asks for: the luma gate is soft
-(`threshold` + `threshold_softness`, `lens_flare::threshold_gate`), and K-267's tile flux
-summing already weighs an area source by its area rather than one pixel. What still
-flickers on video, and the fixes:
-
-1. ~~**Anchor jumping**~~ — **landed as K-354, completed by K-355.**
-2. ~~**Fireflies**~~ — **landed as K-355.** Each tile now carries its whole gated flux, its
-   own flux centroid and its mean colour rather than one pixel's, so no single hot pixel can
-   move a light or define its colour. A 40× sparkle shifts a 64 px source by under a pixel.
-
-**What is left of this entry:** nothing. Area sources are handled by direct sampling
-(K-355), which is the reference method; Phase D's per-ghost warped convolution remains the
-*optimisation* of that, not a correction to it.
-
-**Temporal smoothing is a recorded non-option**, not an oversight: a frame must be a
-function of the document and the frame alone (docs/14 determinism; the caches name frames
-on exactly that promise), and a detector that remembers the previous frame breaks random
-access, preview/export identity and the frame oracle in one move. The footage answer to
-"the threshold pops" is entry 1's Phase D — real source regions with real flux — not
-history buffers.
-
-## 4. Light layers, and area lights via LTC
-
-**What exists:** nothing in the model — `LayerKind` has no Light; the flare reserves
-Lights mode "until light layers land (K-257)"; the roadmap parks lights in Phase 5.
-The user-visible goal: a light you can aim at *footage* and have it read as light.
-
-**Step 3a — the Light layer (model + UI, no shading yet).**
-`LayerKind::Light` in [03-DATA-MODEL.md](03-DATA-MODEL.md) — a decision-sized model
-change, logged in 02-DECISIONS. Kinds: **point**, **spot**, **area (rect)** — the rect
-is the one that earns the entry. Properties (all animatable `Property`s): colour,
-intensity, radius/size (a rect light has width × height), falloff. Transform reuses the
-layer transform (a rect light is a rectangle in 2.5D space exactly as a layer is — same
-position/rotation basis the camera pose already uses). Like a Camera, it draws no
-pixels; like a Null, it needs a pickable gizmo in the Viewer (the Camera's no-box
-carve-out in `viewer_panel_frb.dart::_boxes` is the pattern — do not repeat its "cannot
-be picked" gap for lights). Bridge: fold into `BridgeLayerInfo`/the comp read model, an
-`addLightLayer` op, Timeline identity colour (docs/15 §6.1 reserves token values).
-
-**Step 3b — flare Lights mode (K-257, cheap once 3a lands).**
-Resolve each Light layer's comp-space position at the frame, project through the active
-camera pose (the same maths `comp.camera_pose(t)` feeds the realiser), fill the
-`GpuLight` slots the flare already dispatches. A flare that follows a keyframed light is
-the tracked-flare workflow with no tracker. Delete the "resolves as Manual" fallback and
-its comment.
-
-**Step 3c — area-light shading of layers: Linearly Transformed Cosines.**
-The state of the art for real-time polygonal area lights, and comfortably WGSL-shaped
-([Heitz et al. 2016](https://eheitzresearch.wordpress.com/415-2/),
-[tutorial](https://learnopengl.com/Guest-Articles/2022/Area-Lights)):
-
-- Two **64×64 LUT textures** (a 3×3 inverse-matrix in RGBA + Fresnel/form-factor
-  scalars), indexed by (roughness, view angle), bilinear-filtered. The data is
-  published — [selfshadow/ltc_code](https://github.com/selfshadow/ltc_code) — embed it
-  as bytes, no fitting work. Licence-check the repo before vendoring; re-deriving the
-  tables from the paper is the fallback.
-- Per shaded pixel: fetch matrix, transform the light rect's four vertices into
-  cosine space, sum an analytic integral per edge, apply the form-factor correction.
-  Diffuse is the same integral with the identity matrix.
-- Measured cost in the literature: ~0.5 ms *full-screen* on a 2014 laptop GPU; shading
-  layer quads it is noise.
-
-For a 2.5D compositor the geometry collapses beautifully: the shaded surface is a flat
-layer plane (normal = layer orientation), the light is a rect in the same space — LTC
-diffuse over a quad produces exactly the smooth gradient an editor expects a softbox to
-throw across footage. Ship that as the default look; per-pixel normals (normal-map
-AOVs, luminance-derived fake normals) are explicitly out of scope for the first landing
-— both are content-dependent quality cliffs, and the flat-plane result is already the
-honest 2.5D answer ([Nuke's Relight](https://learn.foundry.com/nuke/content/reference_guide/3d_nodes/relight.html)
-is the ceiling to aim at later, not now).
-
-Where it runs: a compositor pass on each lit layer's quad (the realiser already walks
-layers with their 3D poses — the shading term multiplies into the layer sample). Gate it
-behind a per-layer **"accepts lights"** switch defaulting on for 3D layers, so 2D
-montage work pays nothing. **Spec edits:** 06-RENDER-PIPELINE gains the lighting pass;
-08-EFFECTS is untouched (this is not an effect); 03-DATA-MODEL gains the switch.
-
-**Test plan:** CPU oracle of the LTC integral for a handful of (roughness, angle, rect)
-cases against the published reference implementation's numbers; a GPU oracle rendering
-one lit quad and asserting the gradient's monotonic falloff and its peak under the
-light's centre; determinism (two renders, identical bytes); a no-lights comp renders
-byte-identical to today (the pass must be a true no-op when absent).
-
-## 5. Light wrap — the cheapest "light meets footage" feature that exists
-
-The compositing classic for keyed foregrounds: blur the *background*, mask it by the
-inverted-and-blurred alpha edge of the foreground, screen it back over the edges — the
-background's light "wraps" the subject
-([explainer](https://max-klomeier.medium.com/introduction-light-wrapping-70b03f2092c3)).
-One blur plus two mask multiplies, entirely out of kernels the engine already has; per
-line of code nothing else in this file comes close, and it pairs naturally with entry 3
-(a rect light behind a keyed subject + wrap = the money shot).
-
-Build as an ordinary effect (docs/08 §2 contract): parameters **width** (px@comp),
-**intensity**, **wrap source** (the layer stack below, the way Fast motion blur's
-adjustment-layer case names it — note that TODO's "fast motion blur only works on
-footage layers" entry describes the same below-stack plumbing; whichever lands first
-digs the tunnel the other reuses). CPU oracle + WGSL kernel + arb/engine-label strings
-+ an 08-EFFECTS §3 entry.
-
-## 6. Viewer bar completion — the two owed halves of what just landed
-
-Natural follow-ups to K-352 and the resolution dropdown, both small and both already
-specified in docs/07 §2.2:
-
-- **Third and Auto resolution rows, stored per comp** (item 2). Third = scale 1/3 (the
-  adaptive ladder already renders it — `resolutionThird` exists as a tier name). Auto =
-  render only the pixels the magnification can display, which is what
-  `reportViewerScale` already measures — the row mostly *names* existing behaviour.
-  Per-comp storage rides the session blob exactly as `viewerLooks` does (K-314's
-  pattern, K-245's blob).
-- **Background colour swatch** (item 10): per-comp background colour (a document write,
-  undoable, unlike the looks) plus quick black/white/checker. The checker option is
-  K-352's flag; the swatch is the first UI for `comp.background` at all.
-
-## 7. Region of interest (docs/07 §2.2 item 7)
-
-Drag a rectangle; the engine composites only that region. The realiser already
-composites at a scaled raster (K-186 / the preview-scale work), so the mechanism is a
-scissor/viewport on the composite target plus an offset in the present — not a new
-pipeline. One-click clear; never affects export (same construction as the preview
-scale: the export renderer never receives it). Frame names must fold the region in
-(the K-346/K-352 mechanism — a cropped frame is not the full frame) or refuse names
-while a region is set; folding is better, scrubbing inside a region is the use case.
-
----
-
-## Suggested order
-
-**Landed so far** (2026-08-12), newest first — each has its decision entry and its
-regression tests, so this table is a reading order rather than a record:
-
-| Entry | State |
-|---|---|
-| 0 — flare bit-stability | **Landed**, K-353. Everything else assumes it |
-| 3 — harden Matte detection | **Landed**, K-354 + K-355 (both halves) |
-| **Area sources** (part of 1·D) | **Landed**, K-355 — by direct sampling, the reference method |
-| 1·A1 — multi-layer AR coatings | **Landed**, K-356 |
-| 6 — viewer bar completion | **Landed**, K-357 |
-| 5 — light wrap | **Landed**, K-358 |
-| 2 — sprite-based flare | **Landed**, K-359 |
-| 4a/4b — Light layer + flare Lights mode | **Landed**, K-360 |
-| 4c — area lights shading layers | **Landed**, K-361 — the closed-form diffuse integral; LTC's fitted matrix tables deliberately not shipped, and the entry says why |
-| 7 — region of interest | **Landed**, K-362 — a window on the composite. Saves the composite, the display encode and the publish; **not** the effect stack. Layer culling is the upgrade, and K-362 records why it is not here |
-
-**Still to build**, in the order they are worth doing. Everything that is not flare
-internals has now landed — what remains is the ray-tracing accuracy work on entry 1:
-
-| # | Entry | Why this position |
-|---|-------|-------------------|
-| 1 | 1·A2 — spectral radiometry | The accuracy A1 opened up: now that the coating stack varies *fast* with λ, sampling reflectance at the band centre under-resolves it. **Not as cheap as this file first claimed** — the plan assumed a LUT fetch, but reflectance sits inside the per-ray, per-surface loop, so band-averaging it costs real trace time (~20 surfaces × N sub-samples per ray). Budget for it deliberately, or integrate per (surface, band) into the bake where the ray path does not vary |
-| 4 | 1·B2 — field-angle starburst | A bake with a big visual payoff; independent of the ray work |
-| 5 | 1·B1 — dense grid + per-ray splatting | The big one; retires the quad/sliver machinery. Its own PR |
-| 9 | 1·D — per-ghost warped convolution | The *optimisation* of the area sampling K-355 shipped, not a correction to it. Build when a source is wide enough that sample replication shows |
-| 10 | 1·C1, 1·C2 — four-bounce, Fresnel ringing | The last accuracy percent; C2 is the hardest item here |
-| 11 | 1·E — calibration and invertibility | Only if flare *removal* is genuinely a goal |
-
-Skipped deliberately, so they are not re-proposed: **paraxial and polynomial-optics lens
-models** (Lee & Eisemann 2013, Hullin 2012, Bodonyi 2025 — speed devices that cost accuracy
-and buy nothing at 2 s/frame); **precomputed flare-field interpolation across source
-positions** (Hullin's team tried warping precomputed flares and reported failure); **a
-global source ⊛ PSF convolution for ghosts** (measurably wrong — flare is shift-variant,
-Talvala 2007); **temporal history buffers** for flare smoothing (they break the determinism
-the caches are named on); **ML relighting** (non-deterministic, wrong weight class);
-**representative-point sphere/tube lights** (LTC covers the rect case a compositor needs;
-add spheres only if a use case shows up).
+- **LTC specular/roughness** on the lighting pass (K-361): drop the fitted matrix fetch
+  in ahead of the existing integral. Wanted only when layers have something to be glossy
+  with (normals), which is its own project.
+- **Layer culling for the region of interest** (K-362): skip layers whose placement
+  misses the region — the saving the current window does not make. Dangerous half-done
+  (an adjustment layer's blur can pull off-region layers in), which is why it waits.
+- **Nuke-Relight-style per-pixel normals** (K-361's stated ceiling): content-dependent
+  quality cliff; explicitly out of scope for the flat-plane pass that shipped.

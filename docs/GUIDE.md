@@ -3977,6 +3977,32 @@ into it.
 Move the light, and the flare follows. Animate it, and the flare animates. That
 is the point of making a light a layer rather than a number inside an effect.
 
+### What runs on the GPU, what runs on the CPU, and why lens changes felt slow
+
+A fair question came up: "why aren't we doing all of this on the GPU?" The answer is that
+the expensive every-frame work — tracing rays through the lens, drawing the ghosts,
+detecting sources in a matte — already *is* on the GPU. What runs on the CPU is the
+**bake**: the work done once per lens change, not per frame. Ranking which ghost pairs are
+bright enough to draw, computing the starburst's diffraction pattern, measuring each
+ghost's size. Those are functions of the lens, not of the frame, so doing them per frame
+would be waste wherever they ran — and on the CPU they are deterministic by construction,
+which the caches that name frames depend on.
+
+Three things made that split *feel* broken, and all three are fixed:
+
+- **The development build ran the engine unoptimised.** `flutter run` builds a debug app,
+  and the Rust engine inherited that — every bake was about sixteen times slower than the
+  released code would be. A one-second lens change became twenty-three. The engine's maths
+  crates are now compiled fully optimised even in a debug app.
+- **The bake used one core.** The ray tracing inside it now runs across all of them —
+  producing bit-identical numbers, just sooner. A lens change bakes in roughly a sixth of
+  the time it did, on top of the build fix.
+- **A finished bake could go unnoticed.** The Viewer deliberately keeps showing the old
+  lens while the new one bakes (a wait you can watch, not a freeze) — but the "is it done?"
+  check could only be answered by rendering a frame, and nothing rendered a frame until it
+  was done. So the picture sat one lens behind until you moved the playhead. The check no
+  longer needs a frame, and the picture replaces itself the moment the optics are ready.
+
 ### The region of interest — working on one corner (K-362)
 
 On a heavy shot every preview frame costs the whole frame, even when you are

@@ -5081,7 +5081,9 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
             }
         }
     }
-    let lights = detect_lights(&matte, w, h, 1.0, 0.25, true, [1.0, 1.0, 1.0]);
+    // Threshold below the sources' luma: K-363's gate is "brighter than",
+    // so a white (1.0) source at threshold 1.0 is at the line, not over it.
+    let lights = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0, 1.0, 1.0]);
     assert_eq!(lights.len(), 2, "one disc anchor, one dot anchor");
     // The disc's anchor sits inside the disc, the dot's on the dot.
     let disc = &lights[0];
@@ -5098,7 +5100,7 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
     );
     // The dot reads as the classic point: white × gate(1.0) — and the disc
     // reads as MANY tiles of that, several times the dot's flux.
-    let gate = threshold_gate(1.0, 1.0, 0.25);
+    let gate = threshold_gate(1.0, 0.5, 0.25);
     assert!(
         (dot_light.rgb[0] - gate).abs() < 1e-6,
         "{:?}",
@@ -5927,12 +5929,17 @@ fn lens_flare_detects_matte_sources_deterministically() {
     assert!((lights[1].pos[0] - 100.5 / 128.0).abs() < 1e-6);
     assert_eq!(lights[1].rgb, [1.5, 1.0, 0.5]);
 
-    // The soft gate scales (luma 4 in a [3, 7] gate lands at ~0.16), and a
-    // threshold above every source finds none.
-    let gated = detect_lights(&matte, w, h, 5.0, 2.0, true, [1.0; 3]);
+    // The soft gate scales (K-363: luma 4 against a gate opening 3 → 5
+    // lands half-way, 0.5), and a threshold above every source finds none —
+    // including one AT a source's luma, which "brighter than" excludes.
+    let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3]);
     assert!(!gated.is_empty());
     assert!(gated[0].rgb[0] < 4.0, "the gate must attenuate: {gated:?}");
     assert!(detect_lights(&matte, w, h, 10.0, 0.0, true, [1.0; 3]).is_empty());
+    assert!(
+        detect_lights(&matte, w, h, 4.0, 0.0, true, [1.0; 3]).is_empty(),
+        "a threshold at the brightest source's own luma finds nothing:          the gate is 'brighter than', not 'at least'"
+    );
 
     // Determinism: two runs agree bit-for-bit.
     assert_eq!(
@@ -5940,11 +5947,29 @@ fn lens_flare_detects_matte_sources_deterministically() {
         detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3])
     );
 
-    // The gate itself: hard step at softness 0, smooth half-way at the
-    // threshold otherwise.
+    // The gate itself (K-363, one-sided): closed at and below the threshold,
+    // open a softness above it. The two cases the owner asked for by name:
+    // at threshold 1 only light brighter than 1 flares, and at threshold 0
+    // anything brighter than black does — black itself never.
     assert_eq!(threshold_gate(0.99, 1.0, 0.0), 0.0);
-    assert_eq!(threshold_gate(1.0, 1.0, 0.0), 1.0);
-    assert!((threshold_gate(1.0, 1.0, 0.5) - 0.5).abs() < 1e-6);
+    assert_eq!(
+        threshold_gate(1.0, 1.0, 0.0),
+        0.0,
+        "at the line is not over it"
+    );
+    assert_eq!(threshold_gate(1.01, 1.0, 0.0), 1.0);
+    assert_eq!(
+        threshold_gate(1.0, 1.0, 0.5),
+        0.0,
+        "softness opens the gate above the threshold, never below or at it"
+    );
+    assert!(threshold_gate(1.25, 1.0, 0.5) > 0.0 && threshold_gate(1.25, 1.0, 0.5) < 1.0);
+    assert_eq!(threshold_gate(1.5, 1.0, 0.5), 1.0);
+    assert_eq!(threshold_gate(0.0, 0.0, 0.25), 0.0, "black never flares");
+    assert!(
+        threshold_gate(0.05, 0.0, 0.25) > 0.0,
+        "at threshold 0, anything brighter than black flares"
+    );
 }
 
 /// **A source spanning several tiles is found at the centre of its light, not
@@ -7101,4 +7126,27 @@ fn custom_name_roundtrips_and_defaults_to_none() {
     let json = serde_json::to_string(&named).unwrap();
     let back: EffectInstance = serde_json::from_str(&json).unwrap();
     assert_eq!(back.custom_name.as_deref(), Some("Blur the sign"));
+}
+
+/// TEMPORARY perf probe (not part of the suite): times a bake per library
+/// lens so the 23-second report can be reproduced or ruled out. Run with
+/// `cargo test -p lumit-core --release bake_timing -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn bake_timing_probe() {
+    for lens in 0..crate::fx::lens_library::LENS_LIBRARY.len() as u32 {
+        let p = crate::fx::lens_flare::LensFlareParams {
+            lens,
+            ..default_flare_params()
+        };
+        let t = std::time::Instant::now();
+        let baked = crate::fx::lens_flare::bake(&p);
+        eprintln!(
+            "lens {lens:2} ({}): {:6.1} ms, {} surfaces, {} pairs",
+            crate::fx::lens_flare::lens_entry(lens).name,
+            t.elapsed().as_secs_f64() * 1000.0,
+            baked.surfaces.len(),
+            baked.pairs.len(),
+        );
+    }
 }

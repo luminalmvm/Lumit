@@ -8745,3 +8745,29 @@ the failure mode this feature would otherwise introduce.
 
 Per comp, in the session beside the preview resolution (K-357), for the same reason: choosing
 where to look is a way of working, not an edit.
+
+---
+
+## K-363 — The flare threshold is one-sided: the luma a pixel must exceed, softened only upward
+
+**DECIDED** (2026-08-12, owner). Supersedes the symmetric gate K-259 shipped.
+
+The Matte-mode Threshold now means what it says: **the absolute scene-linear luma a pixel
+must exceed to flare at all.** At 1.0 only over-range highlights flare; at 0.0 anything
+brighter than black does — and black itself never flares. Threshold softness widens the
+onset *above* the line (fully open at `threshold + softness`), never below it.
+
+The gate it replaces opened at `threshold − softness` and reached half strength at the
+threshold itself. Two consequences the owner hit: sources dimmer than the stated threshold
+still flared, and — the degenerate case that made the old shape indefensible — at threshold
+0 with any softness, **pure black passed the gate at half strength**. A threshold whose zero
+does not mean "everything brighter than black" is a dial that cannot be reasoned about.
+
+Both twins changed together (`lens_flare::threshold_gate` and `fx_lens_flare_detect.wgsl`'s
+`gate`), the detection tests pin the two named cases, and the hard-edge comparison is
+strictly greater-than — "at the line" is not "over it".
+
+This changes pictures for projects that relied on at-or-below-threshold sources flaring,
+so the effect's version bumps 5 → 6 — the K-016 mechanism that retires every cached frame
+the old gate drew. The old behaviour is recoverable by lowering the threshold by the
+softness — which is exactly the sentence that shows the new semantics are the primitive ones.

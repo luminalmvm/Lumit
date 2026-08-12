@@ -8,6 +8,7 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+rayon = "1"
 arc-swap = "1"
 parking_lot = "0.12"
 rhai = { version = "1.25.1", features=["metadata", "sync"] }

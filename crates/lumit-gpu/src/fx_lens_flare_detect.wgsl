@@ -83,17 +83,14 @@ const AREA_SAMPLES_MAX: u32 = 5u;
 const AREA_MIN_EXTENT: f32 = 0.004;
 const SUPPRESS_TILES: i32 = 2;
 
-// The soft gate (== lens_flare::threshold_gate). Declared before its first
-// use, which WGSL requires.
+// The soft gate (== lens_flare::threshold_gate, K-363): one-sided — closed
+// at and below the threshold, fully open a softness above it. Declared
+// before its first use, which WGSL requires.
 fn gate(luma: f32) -> f32 {
     if (dp.softness <= 0.0) {
-        return f32(luma >= dp.threshold);
+        return f32(luma > dp.threshold);
     }
-    let t = clamp(
-        (luma - (dp.threshold - dp.softness)) / (2.0 * dp.softness),
-        0.0,
-        1.0,
-    );
+    let t = clamp((luma - dp.threshold) / dp.softness, 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
 }
 

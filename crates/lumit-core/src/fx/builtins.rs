@@ -3232,7 +3232,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         enabled_when: &[],
         match_name: "lens_flare",
         label: "Lens flare",
-        version: 5,
+        version: 6,
         category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Heavy,
@@ -3545,7 +3545,9 @@ pub const BUILTINS: &[EffectSchema] = &[
             ParamSchema {
                 id: "threshold",
                 label: "Threshold",
-                // Linear luma at/above which a detected source flares fully.
+                // The absolute scene-linear luma a pixel must EXCEED to
+                // flare (K-363): at 1.0 only over-range highlights, at 0.0
+                // anything brighter than black — black itself never.
                 // Slider normalised 0–1 (typing goes above; open ceiling).
                 kind: ParamKind::Float {
                     default: 1.0,

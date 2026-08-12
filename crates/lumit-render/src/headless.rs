@@ -3071,6 +3071,65 @@ mod tests {
         );
     }
 
+    /// A bake that has **finished** must read as finished from an idle
+    /// thread — with no frame render in between (the K-350 follow-up fix).
+    ///
+    /// The regression this pins: `bake_pending` used to read the in-flight
+    /// set, which only a frame render's `collect` cleared — so after the
+    /// bake thread finished, the worker's republish tick saw "still pending"
+    /// forever, never re-made the picture, and the lens on screen stayed one
+    /// change behind until the user moved the playhead. The user's words:
+    /// "if I change the lens most of the time it doesn't even update until
+    /// I switch frame."
+    #[test]
+    fn a_landed_bake_reads_as_landed_without_a_frame_render() {
+        let r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        r.set_deferred_flare_bakes(true);
+        let queued = {
+            let Some(parts) = r.parts.as_ref() else {
+                return;
+            };
+            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
+                surfaces: Vec::new(),
+                ghosts: Vec::new(),
+                spreads: Vec::new(),
+                sensor_z_mm: 0.0,
+                focal_mm: 1.0,
+                native_fstop: 1.0,
+                pupil_mm: 1.0,
+                start_z_mm: 0.0,
+                energy_gain: 1.0,
+                starburst: Vec::new(),
+                sb_res: 1,
+            }) as lumit_gpu::fx::FlareBake;
+            parts.fx.warm_flare_bake(0xdead_beef, &bake)
+        };
+        if !queued {
+            return; // no bake thread on this machine
+        }
+        // The bake itself is trivial; give the thread a moment to run it.
+        // Polling with a deadline rather than one sleep, so the test is fast
+        // when the machine is and honest when it is loaded.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while r.flare_bake_pending() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "a finished bake must stop reading as pending without any                  frame render — the republish tick depends on exactly this"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(
+            r.flare_bake_generation() >= 2,
+            "queued and landed both move the generation"
+        );
+    }
+
     /// An unknown comp id is a calm error, never a panic.
     #[test]
     fn unknown_comp_is_an_error() {

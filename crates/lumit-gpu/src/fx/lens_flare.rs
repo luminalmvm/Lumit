@@ -248,6 +248,15 @@ pub struct LensFlareFx {
     last_drawn: Mutex<Option<u64>>,
     /// Bakes handed to the baker and not yet collected.
     in_flight: Mutex<HashSet<u64>>,
+    /// Bakes the thread has finished that no frame has uploaded yet. Filled
+    /// by [`Self::poll_landed`] — which any thread may call, no device needed
+    /// — and drained by [`Self::collect`] on the render thread. This split is
+    /// what lets an *idle* worker notice a bake has landed: `bake_pending`
+    /// used to read `in_flight`, which only `collect` cleared, and `collect`
+    /// only ran inside a frame render — so after the bake finished, the
+    /// republish tick saw "still pending" forever and the picture stayed one
+    /// lens behind until the user happened to move the playhead.
+    landed: Mutex<Vec<(u64, FlareBakeData)>>,
     /// Bumped whenever a bake is queued and again when one lands. A frame
     /// rendered across a change of this number may have drawn a lens other
     /// than the one its parameters name, so the caller must not file it under
@@ -912,6 +921,7 @@ impl LensFlareFx {
             deferred: std::sync::atomic::AtomicBool::new(false),
             last_drawn: Mutex::new(None),
             in_flight: Mutex::new(HashSet::new()),
+            landed: Mutex::new(Vec::new()),
             generation: AtomicU64::new(0),
         }
     }
@@ -1013,34 +1023,56 @@ impl LensFlareFx {
         }
     }
 
-    /// Upload and file everything the bake thread has finished. Called at the
-    /// top of every [`Self::baked`], which is the only place that runs on the
-    /// render thread with a device to hand.
-    fn collect(&self, ctx: &GpuContext) {
+    /// Take everything the bake thread has finished off its channel: clear
+    /// each key from the in-flight list, bump the generation, and park the
+    /// data for [`Self::collect`] to upload. Needs no device, so **any**
+    /// thread may call it — which is the point: the worker's idle tick asks
+    /// `bake_pending` between frames, and a landed bake must read as landed
+    /// there, not only once a frame render happens to come by.
+    fn poll_landed(&self) {
         let Some(baker) = self.baker.get().and_then(Option::as_ref) else {
             return;
         };
-        // The finished bakes, taken out from under the lock before any upload:
-        // the rule is the rule even for a channel (docs/14 §3).
-        let mut landed: Vec<(u64, Option<FlareBakeData>)> = Vec::new();
+        // The finished bakes, taken out from under the lock before anything
+        // else is locked: the rule is the rule even for a channel (docs/14).
+        let mut fresh: Vec<(u64, Option<FlareBakeData>)> = Vec::new();
         if let Ok(done) = baker.done.lock() {
             while let Ok(one) = done.try_recv() {
-                landed.push(one);
+                fresh.push(one);
             }
         }
-        for (key, data) in landed {
+        if fresh.is_empty() {
+            return;
+        }
+        for (key, data) in fresh {
             // A superseded key comes back with nothing: it is taken off the
-            // in-flight list and nothing is uploaded for it.
+            // in-flight list and nothing is parked for it.
             if let Some(data) = data {
-                let built = Arc::new(upload_bake(ctx, &data));
-                if let Ok(mut cache) = self.cache.lock() {
-                    cache.insert(key, built);
+                if let Ok(mut landed) = self.landed.lock() {
+                    landed.push((key, data));
                 }
             }
             if let Ok(mut flight) = self.in_flight.lock() {
                 flight.remove(&key);
             }
             self.generation.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Upload and file everything the bake thread has finished. Called at the
+    /// top of every [`Self::baked`], which is the only place that runs on the
+    /// render thread with a device to hand.
+    fn collect(&self, ctx: &GpuContext) {
+        self.poll_landed();
+        let parked: Vec<(u64, FlareBakeData)> = match self.landed.lock() {
+            Ok(mut landed) => landed.drain(..).collect(),
+            Err(_) => Vec::new(),
+        };
+        for (key, data) in parked {
+            let built = Arc::new(upload_bake(ctx, &data));
+            if let Ok(mut cache) = self.cache.lock() {
+                cache.insert(key, built);
+            }
         }
     }
 
@@ -1055,6 +1087,10 @@ impl LensFlareFx {
     /// Whether a bake is being made right now — so a frame drawn during it is
     /// showing a lens other than the one it names.
     pub(super) fn bake_pending(&self) -> bool {
+        // Landed-but-not-uploaded is not pending: the upload is microseconds
+        // inside the next frame, and it is that next frame the caller is
+        // deciding whether to make.
+        self.poll_landed();
         self.in_flight
             .lock()
             .map(|f| !f.is_empty())

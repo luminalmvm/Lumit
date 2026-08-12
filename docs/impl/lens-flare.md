@@ -410,7 +410,12 @@ Shipped in the K-257 pass as the **Matte** source mode (docs/08 §3.27): the fla
 sources itself from a referenced layer's picture. A compute reduction tiles the matte
 into a 32 px grid, then a single-thread pass picks the top-16 ANCHOR tiles by luma
 (`MAX_SOURCES`, 8 → 16 in K-267) with a 2-tile Chebyshev non-max suppression, each gated
-by the soft Threshold.
+by the soft Threshold. **The gate is one-sided (K-363)**: closed at and below the
+threshold, fully open a Softness above it. Threshold is the absolute scene-linear luma a
+pixel must *exceed* — at 1.0 only over-range highlights flare, at 0.0 anything brighter
+than black does, and black itself never flares. (The earlier symmetric gate opened from
+`threshold − softness`, which let pure black through at half strength when the threshold
+sat at zero.)
 
 **Each tile carries the statistics of its whole lit area, not one pixel (K-355)** — the
 maximum luma and its argmax (still how anchors are *ranked*, so a small bright source is

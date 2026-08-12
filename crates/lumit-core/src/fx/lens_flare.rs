@@ -426,14 +426,19 @@ pub fn focus_shift_mm(focus_m: f32, efl_mm: f32) -> f32 {
     (efl_mm * efl_mm / denom).clamp(0.0, efl_mm)
 }
 
-/// The soft threshold gate: 0 at `threshold - softness`, 1 at `threshold +
-/// softness` (smoothstep-shaped); softness 0 is the hard step. Shared by the
-/// CPU reference and mirrored op-for-op in the WGSL detection.
+/// The soft threshold gate (K-363): 0 at and below `threshold`, 1 at
+/// `threshold + softness`, smoothstep between. **One-sided by decision**: the
+/// threshold is the absolute scene-linear luma a pixel must EXCEED to flare
+/// at all. At 1.0 only over-range highlights flare; at 0.0 anything brighter
+/// than black does — and black itself never flares, which the earlier
+/// symmetric gate (open from `threshold - softness`) got wrong: at threshold
+/// 0 it let pure black through at half strength. Softness softens the onset
+/// *above* the line, never below it.
 pub fn threshold_gate(luma: f32, threshold: f32, softness: f32) -> f32 {
     if softness <= 0.0 {
-        return if luma >= threshold { 1.0 } else { 0.0 };
+        return f32::from(luma > threshold);
     }
-    let t = ((luma - (threshold - softness)) / (2.0 * softness)).clamp(0.0, 1.0);
+    let t = ((luma - threshold) / softness).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
 
@@ -1973,16 +1978,23 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     };
     let centre = [0.0, 0.0, baked.start_z_mm];
     let axis = [0.0, 0.0, 1.0];
-    let mut ranked: Vec<([u32; 2], f32)> = Vec::new();
-    for a in 0..n {
-        if !has_interface(a) {
-            continue;
-        }
-        for b in (a + 1)..n {
-            if !has_interface(b) {
-                continue;
-            }
-            let pair = [a as u32, b as u32];
+    // Every candidate first, then the probes in parallel (the bake was a
+    // one-core wait on a many-core machine). Each pair's probe is
+    // independent and `collect` keeps input order, so the ranking sees the
+    // same numbers in the same order as the serial loop did — determinism
+    // by construction, not by luck (docs/14).
+    let candidates: Vec<[u32; 2]> = (0..n)
+        .filter(|&a| has_interface(a))
+        .flat_map(|a| {
+            ((a + 1)..n)
+                .filter(|&b| has_interface(b))
+                .map(move |b| [a as u32, b as u32])
+        })
+        .collect();
+    use rayon::prelude::*;
+    let ranked: Vec<([u32; 2], f32)> = candidates
+        .par_iter()
+        .filter_map(|&pair| {
             // On-axis brightness probe at the R/G/B wavelengths, full file
             // coating (the Coating dial is frame-time).
             let mut est = 0.0_f32;
@@ -1992,12 +2004,10 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
                 }
             }
             est /= 3.0;
-            if est < PAIR_MIN_INTENSITY {
-                continue;
-            }
-            ranked.push((pair, est));
-        }
-    }
+            (est >= PAIR_MIN_INTENSITY).then_some((pair, est))
+        })
+        .collect();
+    let mut ranked = ranked;
     // Descending probe brightness; ties by pair order (deterministic).
     ranked.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
@@ -2029,43 +2039,49 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     // pairs were handed the half grid and rendered their wash as 9 px
     // staircase blocks. The budget takes the larger of the two answers.
     let off_axis = light_direction([0.33, 0.30], 0.5625, baked.focal_mm);
-    for (pi, &pair) in probe_pairs.iter().enumerate() {
-        const G: u32 = 8;
-        let mut spread = 0.0_f32;
-        for dir in [axis, off_axis] {
-            let (mut min_x, mut max_x) = (f32::MAX, f32::MIN);
-            let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
-            let mut seen = 0u32;
-            for gy in 0..G {
-                for gx in 0..G {
-                    let u = ((gx as f32 + 0.5) / G as f32) * 2.0 - 1.0;
-                    let v = ((gy as f32 + 0.5) / G as f32) * 2.0 - 1.0;
-                    if u * u + v * v > 1.0 {
-                        continue;
-                    }
-                    let o = [u * baked.pupil_mm, v * baked.pupil_mm, baked.start_z_mm];
-                    // Zero-weight rays are K-264's virtual continuations —
-                    // real geometry, no light — and must not widen the
-                    // measured image extent.
-                    if let Some((pos, wgt)) =
-                        trace_splat(&baked, pair, 550.0, o, dir, 1.0, 1.0, 0.0)
-                    {
-                        if wgt <= 1e-6 {
+    let probed: Vec<f32> = probe_pairs
+        .par_iter()
+        .map(|&pair| {
+            const G: u32 = 8;
+            let mut spread = 0.0_f32;
+            for dir in [axis, off_axis] {
+                let (mut min_x, mut max_x) = (f32::MAX, f32::MIN);
+                let (mut min_y, mut max_y) = (f32::MAX, f32::MIN);
+                let mut seen = 0u32;
+                for gy in 0..G {
+                    for gx in 0..G {
+                        let u = ((gx as f32 + 0.5) / G as f32) * 2.0 - 1.0;
+                        let v = ((gy as f32 + 0.5) / G as f32) * 2.0 - 1.0;
+                        if u * u + v * v > 1.0 {
                             continue;
                         }
-                        min_x = min_x.min(pos[0]);
-                        max_x = max_x.max(pos[0]);
-                        min_y = min_y.min(pos[1]);
-                        max_y = max_y.max(pos[1]);
-                        seen += 1;
+                        let o = [u * baked.pupil_mm, v * baked.pupil_mm, baked.start_z_mm];
+                        // Zero-weight rays are K-264's virtual continuations —
+                        // real geometry, no light — and must not widen the
+                        // measured image extent.
+                        if let Some((pos, wgt)) =
+                            trace_splat(&baked, pair, 550.0, o, dir, 1.0, 1.0, 0.0)
+                        {
+                            if wgt <= 1e-6 {
+                                continue;
+                            }
+                            min_x = min_x.min(pos[0]);
+                            max_x = max_x.max(pos[0]);
+                            min_y = min_y.min(pos[1]);
+                            max_y = max_y.max(pos[1]);
+                            seen += 1;
+                        }
                     }
                 }
+                if seen >= 2 {
+                    spread = spread
+                        .max(((max_x - min_x).hypot(max_y - min_y) / sensor_diag).clamp(0.0, 8.0));
+                }
             }
-            if seen >= 2 {
-                spread = spread
-                    .max(((max_x - min_x).hypot(max_y - min_y) / sensor_diag).clamp(0.0, 8.0));
-            }
-        }
+            spread
+        })
+        .collect();
+    for (pi, &spread) in probed.iter().enumerate() {
         if spread > 0.0 {
             spreads[pi] = spread;
         }
@@ -2487,8 +2503,20 @@ pub fn cpu_flare(
                 }
             }
             for &(nm, rgb_w) in &weights {
-                for j in 0..side {
-                    for i in 0..side {
+                // The corner traces in parallel — this is where the bake's
+                // time actually went (the auto-exposure thumbnail traces
+                // tens of thousands of rays through the whole prescription,
+                // one core at a time). Each corner is independent and the
+                // results land at their own indices, so the splat below
+                // reads exactly the numbers the serial loop produced, in
+                // exactly the order it read them — the output is
+                // bit-identical, only sooner (docs/14 determinism).
+                use rayon::prelude::*;
+                corners
+                    .par_iter_mut()
+                    .enumerate()
+                    .for_each(|(idx, corner)| {
+                        let (j, i) = (idx / side, idx % side);
                         let (u, v) = (unit(i), unit(j));
                         // …unless it is so far outside the iris that no
                         // cell touching it can hold ANY lit corner: the
@@ -2499,8 +2527,8 @@ pub fn cpu_flare(
                         // corners for bit-identical output.
                         let spacing = 2.0 / (side - 1) as f32;
                         if u * u + v * v > (1.0 + 1.5 * spacing).powi(2) {
-                            corners[j * side + i] = None;
-                            continue;
+                            *corner = None;
+                            return;
                         }
                         // A masked-out corner still TRACES (K-264): its
                         // weight is zero but its geometry is real, so the
@@ -2508,13 +2536,13 @@ pub fn cpu_flare(
                         // INSIDE the cell. Killing the ray instead killed
                         // the whole cell, and every iris-shaped ghost edge
                         // was quantised to the pupil grid.
-                        let mask = masks[j * side + i];
+                        let mask = masks[idx];
                         let origin = [
                             u * baked.pupil_mm * stop_scale,
                             v * baked.pupil_mm * stop_scale,
                             baked.start_z_mm,
                         ];
-                        corners[j * side + i] = trace_splat(
+                        *corner = trace_splat(
                             baked,
                             *pair,
                             nm,
@@ -2530,8 +2558,7 @@ pub fn cpu_flare(
                                 wt * mask,
                             )
                         });
-                    }
-                }
+                    });
                 // Landed area per grid cell, 0 = dead (any corner dead) —
                 // the input to the K-264 vertex-smoothed density below.
                 let qs = side - 1;
