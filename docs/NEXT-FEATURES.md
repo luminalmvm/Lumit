@@ -454,6 +454,7 @@ regression tests, so this table is a reading order rather than a record:
 | 1·A1 — multi-layer AR coatings | **Landed**, K-356 |
 | 6 — viewer bar completion | **Landed**, K-357 |
 | 5 — light wrap | **Landed**, K-358 |
+| 2 — sprite-based flare | **Landed**, K-359 |
 
 **Still to build**, in the order they are worth doing:
 
@@ -461,11 +462,10 @@ regression tests, so this table is a reading order rather than a record:
 |---|-------|-------------------|
 | 1 | 1·A2 — spectral radiometry | The accuracy A1 opened up: now that the coating stack varies *fast* with λ, sampling reflectance at the band centre under-resolves it. **Not as cheap as this file first claimed** — the plan assumed a LUT fetch, but reflectance sits inside the per-ray, per-surface loop, so band-averaging it costs real trace time (~20 surfaces × N sub-samples per ray). Budget for it deliberately, or integrate per (surface, band) into the bake where the ray path does not vary |
 | 2 | 7 — region of interest | Independent; the Viewer's remaining §2.2 debt. **Costlier than it looks:** `realise` composites at `(width, height)` with no viewport, so a real saving needs a scissor threaded through every pass — and the effect stack is *compute* shaders, which scissor does not apply to at all. Either give the realiser a sub-rectangle end to end, or accept that ROI saves rasterisation only and say so. Do not start it as a small job |
-| 4 | 4a/4b — Light layer + flare Lights mode | Model decision first (a `03-DATA-MODEL` change); the flare wiring is cheap after, and the flare's Lights source mode is already reserved |
-| 5 | 1·B2 — field-angle starburst | A bake with a big visual payoff; independent of the ray work |
-| 6 | 2 — sprite-based flare effect | Independent of all of it; a separate effect entirely |
-| 7 | 1·B1 — dense grid + per-ray splatting | The big one; retires the quad/sliver machinery. Its own PR |
-| 8 | 4c — LTC area lights | Lands on a Light model already proven by 4b |
+| 3 | 4a/4b — Light layer + flare Lights mode | **The largest remaining item, and the only one that changes the document.** `LayerKind::Light` is a `03-DATA-MODEL` change and therefore a decision, with serialisation, the read model, the bridge, layer creation, a Timeline identity colour and a Viewer gizmo behind it. The flare's Lights source mode is already reserved and is cheap once the model exists. Do it on its own branch, and land the model before anything reads it |
+| 4 | 1·B2 — field-angle starburst | A bake with a big visual payoff; independent of the ray work |
+| 5 | 1·B1 — dense grid + per-ray splatting | The big one; retires the quad/sliver machinery. Its own PR |
+| 6 | 4c — LTC area lights | Lands on a Light model already proven by 4b |
 | 9 | 1·D — per-ghost warped convolution | The *optimisation* of the area sampling K-355 shipped, not a correction to it. Build when a source is wide enough that sample replication shows |
 | 10 | 1·C1, 1·C2 — four-bounce, Fresnel ringing | The last accuracy percent; C2 is the hardest item here |
 | 11 | 1·E — calibration and invertibility | Only if flare *removal* is genuinely a goal |
