@@ -224,8 +224,6 @@ pub struct LensFlareFx {
     /// case worth holding memory for, so a second render makes its own and
     /// whichever finishes first keeps the slot.
     scratch: Mutex<Option<Scratch>>,
-    /// The pooled multisample target with its size — see [`Self::take_msaa`].
-    msaa: Mutex<Option<(wgpu::Texture, u32, u32)>>,
     /// The off-thread bake (K-350), when this engine is allowed one. `None`
     /// until the first deferred miss, and never built at all on an engine
     /// whose bakes must be exact — the exporter's (see
@@ -481,6 +479,16 @@ fn frame_optics(native_fstop: f32, focal_mm: f32, fstop: f32, focus_m: f32) -> F
     }
 }
 
+/// What the draw's vertex stage needs beyond the cells themselves: the
+/// raster it is drawing into, so a cell can be widened by a known number of
+/// PIXELS rather than a guess in clip space (K-353).
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct DrawDims {
+    raster: [f32; 2],
+    _pad: [f32; 2],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct DetectParams {
@@ -702,7 +710,10 @@ impl LensFlareFx {
         });
         let draw_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lens-flare-draw-layout"),
-            entries: &[storage_entry(0, true, wgpu::ShaderStages::VERTEX)],
+            entries: &[
+                storage_entry(0, true, wgpu::ShaderStages::VERTEX),
+                uniform_entry(1, wgpu::ShaderStages::VERTEX),
+            ],
         });
         let blur_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lens-flare-blur-layout"),
@@ -820,15 +831,13 @@ impl LensFlareFx {
                 ..Default::default()
             },
             depth_stencil: None,
-            // 4x multisampled (K-264): the ghost geometry is triangles, and
-            // their silhouettes were one of the three Ultra artefacts —
-            // coverage sampling smooths them at a cost that is a rounding
-            // error next to the trace. The CPU reference models the same
-            // four standard sample positions, so the oracle stays tight.
-            multisample: wgpu::MultisampleState {
-                count: 4,
-                ..Default::default()
-            },
+            // Single-sampled, and antialiased anyway (K-353, superseding
+            // K-264's hardware multisampling): the fragment tests the four
+            // standard sample positions itself from the barycentric
+            // gradients. Hardware 4x MSAA gave the same silhouette smoothing
+            // but blended fp16 into a multisample target, which this GPU does
+            // not do reproducibly — see the note in `fx_lens_flare_draw.wgsl`.
+            multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &draw_mod,
                 entry_point: Some("fs_flare"),
@@ -854,7 +863,6 @@ impl LensFlareFx {
             multiview: None,
             cache: None,
         });
-
         let combine_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("fx-lens-flare-combine-pl"),
             bind_group_layouts: &[&combine_layout],
@@ -889,7 +897,6 @@ impl LensFlareFx {
             combine_layout,
             cache: Mutex::new(BakeCache::new(Self::CACHE_CAP)),
             scratch: Mutex::new(None),
-            msaa: Mutex::new(None),
             baker: OnceLock::new(),
             deferred: std::sync::atomic::AtomicBool::new(false),
             last_drawn: Mutex::new(None),
@@ -1098,46 +1105,6 @@ impl LensFlareFx {
                 area_bytes,
                 vert_bytes,
             },
-        }
-    }
-
-    /// The pooled 4x multisample render target (K-265): the largest
-    /// allocation the effect makes (~66 MB at a 1080p flare buffer), and
-    /// creating it per frame was the K-263 lesson all over again — a
-    /// rolling backlog of dropped allocations the driver reclaims late,
-    /// which the owner felt as renders slowing over minutes and then the
-    /// application dying. Keyed by size; a size change (zoom tier, comp
-    /// resize) rebuilds it once.
-    fn take_msaa(&self, ctx: &GpuContext, fw: u32, fh: u32) -> wgpu::Texture {
-        if let Ok(mut slot) = self.msaa.lock() {
-            if let Some((tex, w, h)) = slot.take() {
-                if w == fw && h == fh {
-                    return tex;
-                }
-            }
-        }
-        ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("fx-lens-flare-msaa"),
-            size: wgpu::Extent3d {
-                width: fw.max(1),
-                height: fh.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 4,
-            dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        })
-    }
-
-    /// Hand the multisample target back for the next frame.
-    fn put_msaa(&self, tex: wgpu::Texture, fw: u32, fh: u32) {
-        if let Ok(mut slot) = self.msaa.lock() {
-            if slot.is_none() {
-                *slot = Some((tex, fw, fh));
-            }
         }
     }
 
@@ -1457,7 +1424,8 @@ impl FxEngine {
         // is centred; the screen transform stays derived from the base.
         let (fpw, fph) = flare_pad_dims_of(fw, fh, op.anamorphic, op.scale);
         let flare_tex = work_texture(ctx, fpw, fph, "fx-lens-flare-buffer");
-        let msaa_tex = live.then(|| lf.take_msaa(ctx, fpw, fph));
+        // No multisample target since K-353 — the raster antialiases itself.
+        let _ = live;
 
         let mut encoder = ctx.encoder("fx-lens-flare-enc");
 
@@ -1545,18 +1513,11 @@ impl FxEngine {
         // flare buffer directly.
         {
             let view = flare_tex.create_view(&Default::default());
-            let msaa_view = msaa_tex
-                .as_ref()
-                .map(|t| t.create_view(&Default::default()));
-            let (target, resolve) = match &msaa_view {
-                Some(m) => (m, Some(&view)),
-                None => (&view, None),
-            };
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("fx-lens-flare-clear"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: resolve,
+                    view: &view,
+                    resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
@@ -1646,29 +1607,38 @@ impl FxEngine {
                         (r.max(b.ray_bytes), a.max(b.area_bytes), v.max(b.vert_bytes))
                     });
                 let scratch = lf.take_scratch(ctx, need_rays, need_areas, need_verts);
+                // The raster's own size, so the vertex stage can widen each
+                // cell by a pixel and let the fragment's coverage test see
+                // every pixel the cell touches (K-353).
+                let draw_dims = ctx
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("fx-lens-flare-draw-dims"),
+                        contents: bytemuck::bytes_of(&DrawDims {
+                            raster: [fpw as f32, fph as f32],
+                            _pad: [0.0; 2],
+                        }),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
                 let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("fx-lens-flare-draw-bind"),
                     layout: &lf.draw_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: scratch.verts.as_entire_binding(),
-                    }],
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: scratch.verts.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: draw_dims.as_entire_binding(),
+                        },
+                    ],
                 });
 
+                // Straight into the flare buffer: since K-353 there is no
+                // multisample target to resolve from, and the raster
+                // antialiases itself in the fragment.
                 let flare_view = flare_tex.create_view(&Default::default());
-                // Draw into the multisample target, resolving into the flare
-                // buffer (K-264). Every batch pass loads the multisample
-                // contents and re-resolves, so the last pass leaves the
-                // complete frame in `flare_tex`. The `None` arm cannot run —
-                // a baked frame is a live frame — but the no-panic rule
-                // (docs/14) prefers a plain raster to an unwrap.
-                let msaa_view = msaa_tex
-                    .as_ref()
-                    .map(|t| t.create_view(&Default::default()));
-                let (draw_view, draw_resolve) = match &msaa_view {
-                    Some(m) => (m, Some(&flare_view)),
-                    None => (&flare_view, None),
-                };
                 // Where the frame breaks its work into separate submissions.
                 let flushes = plan_flushes(&plan, baked.surface_count);
                 for (bi, job) in plan.iter().enumerate() {
@@ -1783,8 +1753,8 @@ impl FxEngine {
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("fx-lens-flare-draw-pass"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: draw_view,
-                                resolve_target: draw_resolve,
+                                view: &flare_view,
+                                resolve_target: None,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Load,
                                     store: wgpu::StoreOp::Store,
@@ -1967,9 +1937,6 @@ impl FxEngine {
             cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
         }
         drop(encoder);
-        if let Some(tex) = msaa_tex {
-            lf.put_msaa(tex, fpw, fph);
-        }
         out
     }
 

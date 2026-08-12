@@ -682,9 +682,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   one the original research paper used: give the brightness to the CORNERS
   (each corner averages the panels around it) and let the graphics card blend
   smoothly across every panel — the seams simply cease to exist. The jagged
-  outlines got the standard cure, multisampling: the card checks four points
-  per pixel instead of one at the edges of shapes, which is how every game
-  smooths its edges. And the triangular notches in the bright rims turned out to
+  outlines got the standard cure, multisampling: four points checked per pixel
+  instead of one at the edges of shapes, which is how every game smooths its
+  edges. (Lumit later had to stop asking the *card* to do that counting and do
+  it in its own arithmetic instead — same four points, same result, but
+  repeatable. See "the flare that would not draw the same picture twice"
+  below.) And the triangular notches in the bright rims turned out to
   be panels the code was *throwing away* out of caution — an earlier bug made
   long thin panels dangerous to draw, so they were dropped, and every dropped
   one left a bite mark in a rim. They are safe to draw now that brightness is
@@ -814,6 +817,40 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   own black background and hides the layer, which is what "Black" was for —
   the flare as a separate element you Screen back on in another comp — so a
   project saved with Black opens on Normal.
+
+  **The flare that would not draw the same picture twice (K-353).** Lumit
+  holds itself to a rule: the same composition, the same frame, the same
+  settings must produce *the same pixels* — that is what lets a frame be
+  cached, and what makes the preview a promise about the export. The lens
+  flare had quietly stopped keeping it. Render the same flare twice and a few
+  hundred pixels came back a hair different, in different places each time,
+  and the test that says so had been failing for months without anyone knowing
+  which part was to blame.
+
+  The answer came from crossing things off. The ray tracing was innocent —
+  ask it for the same rays twice and every one lands in exactly the same
+  place. The blur was innocent; so was the starburst. It even happened with a
+  single ghost of a single colour, so it was not a matter of adding up too
+  many things. What was left was the *drawing* — and specifically the four-
+  points-per-pixel smoothing described further up. Asking the graphics card to
+  keep four half-precision numbers per pixel and add light into them turns out
+  not to be repeatable on this hardware: the card is free to do that
+  arithmetic in a slightly different order each time, and half-precision
+  numbers are small enough to notice.
+
+  So Lumit stopped asking. The smoothing is still there and still uses the
+  same four points — the flare does the counting itself, in its own
+  arithmetic, which is repeatable by construction. It also happens to be the
+  *exact* calculation the slow reference implementation already did, so the
+  two now agree because they are the same sum rather than because one
+  resembles the other. Two details had to come with it: shapes are grown by a
+  pixel before drawing (otherwise a sliver of light that passes between pixel
+  centres is never asked about at all, and a third of the flare's brightness
+  went missing), and that growing pushes the *edges* outward rather than the
+  corners — a folded sliver's corners lie almost in a line, so pushing them
+  apart lengthens it without ever making it thicker. And the biggest single
+  piece of memory the effect owned, about 66 MB on a large frame, was the
+  card's four-points-per-pixel canvas; it is gone.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the

@@ -17,16 +17,6 @@ this file is the concrete backlog underneath it.
 
 These sit above everything else: they are what the editor feels like in the hand.
 
-- **The lens flare is not bit-stable on this machine, today.**
-    `lumit-gpu`'s `fx::tests::wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals`
-    fails its own "GPU lens flare must be bit-stable" assertion on a clean `main`
-    (checked 2026-08-08 by stashing every local change and running it alone): two
-    runs of the same flare give different pixels. Bit-stability is the property
-    the whole additive-blend draw order exists to protect
-    ([impl/lens-flare.md](impl/lens-flare.md) §2.4), so this is a real
-    regression and not a flaky test - and it means the two flare performance
-    items below cannot be measured honestly until it is understood. Find which
-    stage varies before changing anything.
 - **The flare's raster still draws the cells it culled.** After K-263 a batch
     draws exactly its own cells, but a cell the guards kill is still stored and
     still submitted as a degenerate off-screen triangle. Compacting to just the

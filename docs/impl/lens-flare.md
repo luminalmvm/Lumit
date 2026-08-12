@@ -237,12 +237,31 @@ boundary to be visible. **A cell stores four corners at 20 bytes, once** (K-263)
 through K-262 it wrote the two triangles' six vertices at 32 bytes each — and the
 raster's vertex shader maps its six vertex indices onto them (`corner_of`, the index
 buffer spelled in the shader). Same triangles, same winding, same primitive order, 2.4×
-less vertex memory written and read. **The raster is 4× multisampled (K-264)**, with a
-resolve into the flare buffer: triangle silhouettes were the jagged edges in the
-owner's Ultra report, and coverage sampling smooths them for a cost that is a rounding
-error beside the trace. The CPU reference models the SAME four standard sample
-positions (coverage × centre-interpolated colour, `MSAA_SAMPLES`), which is what keeps
-the frame oracle tight rather than merely close.
+less vertex memory written and read. **The raster is single-sampled and computes its own
+coverage (K-353, superseding K-264's hardware multisampling)**. Triangle silhouettes were
+the jagged edges in the owner's Ultra report and are still smoothed at the same four
+standard sample positions — but the fragment evaluates them itself rather than asking the
+rasteriser. Barycentric coordinates are affine in screen position, so `dpdx`/`dpdy` of
+them are exact; a fragment reconstructs its barycentric at each sample offset and takes
+`colour × covered/4`, which is *precisely* what the CPU reference's `raster_triangle`
+already did with `MSAA_SAMPLES`. The oracle therefore agrees with the GPU by construction.
+
+**Why the hardware path had to go:** additively blending fp16 into a 4× multisample target
+is not reproducible run to run on this hardware, and that — not the draw order, not the
+bake, not the pools — is what failed the §2.4 bit-stability assertion for months (K-353
+has the full measurement). Two consequences of doing coverage this way are load-bearing:
+
+- **Every triangle is widened by a pixel before rasterising**, because a single-sampled
+  rasteriser only makes a fragment where the pixel *centre* is covered, and a cell can
+  cover sample positions without covering any centre. The fragment's coverage test then
+  discards the padding. Without this a third of the flare's energy simply vanished.
+- **The widening displaces the two edge lines and re-intersects them**, rather than pushing
+  each corner away from the centroid. A fold cell is a *sliver* whose corners are nearly
+  collinear, so "away from the centroid" points along it and never widens the thin axis —
+  the last 3% of missing energy, which the padded-anamorphic test caught.
+
+Gone with the multisample target: the ~66 MB pooled 4-sample texture (K-265) and the
+resolve.
 
 The combine's flare tap is ZERO outside the buffer (K-266): squeeze or scale
 below 1 asks for coordinates past it, and clamp-addressing repeated the edge

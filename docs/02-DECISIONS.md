@@ -8387,3 +8387,45 @@ Also fixed here, the board's edge: the picture and its board share one rectangle
 board is painted anti-aliased while the platform texture is not, so a fractional rectangle
 bled a soft row of board out under the picture at some zooms. The shared rectangle is now
 snapped to whole device pixels (`snapToDevicePixels`), where the two rasterise identically.
+
+**K-353 · DECIDED · The lens flare antialiases itself, and hardware multisampling is gone
+from it — which is what made the flare bit-stable again.** The flare had been failing its
+own "GPU lens flare must be bit-stable" assertion on a clean main since before 2026-08-08
+(docs/TODO.md carried it as the standing blocker). It is fixed, and the cause was not
+where any of the guesses pointed.
+
+**What was measured, in order.** The ray trace is bit-identical run to run — the trace
+oracle hook reads the ray landings back and they never move. The ghost blur and the
+starburst are innocent: switching either off leaves the variance untouched. The variance
+survives all the way down to a single ghost at one wavelength and minimum detail, so it is
+not an accumulation-depth effect either. Pooling is not the cause; allocating the scratch
+and the multisample target fresh every frame changes nothing. What does change everything
+is the number of samples: rendering the identical frame through a single-sampled pipeline
+is bit-identical across every configuration tried, four runs each. **Additively blending
+fp16 into a 4x multisample target is not reproducible on this hardware** — a few hundred
+of 36864 floats came back one fp16 ULP different each run, in different places each time.
+
+**The fix keeps the antialiasing and drops the hardware.** K-264 added multisampling
+because jagged ghost silhouettes were one of the three Ultra artefacts; that reason still
+stands, so the coverage is now computed rather than sampled. Barycentric coordinates are
+affine in screen position, so `dpdx`/`dpdy` of them are exact, and a fragment can evaluate
+its own barycentric at each of the four standard sample positions and take
+`colour x covered/4`. That is exactly the model `lumit_core`'s `raster_triangle` already
+spelled out as the CPU twin, so the oracle now agrees with the GPU **by construction**
+rather than by resembling a hardware resolve.
+
+Two things that fix demanded and are worth knowing. A single-sampled rasteriser only makes
+a fragment where the pixel CENTRE is covered, so cells that cover sample positions but no
+centre would simply vanish — a third of the flare's energy went missing at the first
+attempt. Every triangle is therefore widened by a pixel before rasterising, and the
+fragment's own coverage test throws the padding away again. The widening displaces the two
+edge lines and re-intersects them rather than pushing corners away from the centroid:
+a caustic-folded cell is a **sliver** whose corners are nearly collinear, so "away from the
+centroid" points along it and leaves its thin axis exactly as thin as it was — which is the
+3% of energy the anamorphic test caught still missing after the first widening.
+
+Also gone with the multisample target: the largest allocation the effect made, ~66 MB at a
+1080p flare buffer (K-265's pool), and the resolve.
+
+Not fixed here, and still open: the flare's raster still draws the cells it culled, which
+remains in TODO.

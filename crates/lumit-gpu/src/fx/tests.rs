@@ -4003,6 +4003,133 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     }
 }
 
+/// **The flare is bit-stable across repeated renders, in every shape of
+/// frame** (K-353, docs/14 determinism, impl/lens-flare.md §2.4).
+///
+/// The shipped bit-stability check renders twice with one set of parameters.
+/// That was not enough to catch what was actually wrong: the flare's raster
+/// drew into a 4x multisample target, and additively blending fp16 into one
+/// is not reproducible run to run on this hardware — the same frame came
+/// back a few hundred fp16 ULPs different each time, in different places.
+/// Four runs across configurations that switch each stage off in turn is
+/// what localised it, and it is what would catch a return of it: the frame
+/// varied whatever the ghost blur and the starburst were doing, and varied
+/// down to a single ghost at minimum detail.
+///
+/// `added` is asserted alongside, because a configuration that renders
+/// nothing is trivially stable and would prove nothing — that is exactly how
+/// the first attempt at this measurement fooled itself.
+#[test]
+fn the_flare_renders_the_same_frame_every_time() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    use lumit_core::fx::lens_flare as lf;
+    let (w, h) = (128u32, 72u32);
+    let img = corpus(w, h);
+    let base = flare_params();
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    // Bisect by stage. Each configuration switches one stage off; the one
+    // whose absence makes the frame stable is the one introducing variance.
+    // `added` proves the flare actually drew — a configuration that renders
+    // nothing is trivially "stable" and says nothing.
+    for (name, p) in [
+        ("all stages", base),
+        (
+            "no ghost blur",
+            lf::LensFlareParams {
+                ghost_softness: 0.0,
+                ..base
+            },
+        ),
+        (
+            "no starburst",
+            lf::LensFlareParams {
+                starburst_intensity: 0.0,
+                ..base
+            },
+        ),
+        (
+            "one ghost only",
+            lf::LensFlareParams {
+                max_ghosts: 1,
+                ..base
+            },
+        ),
+        (
+            "one ghost, no blur, no starburst",
+            lf::LensFlareParams {
+                max_ghosts: 1,
+                ghost_softness: 0.0,
+                starburst_intensity: 0.0,
+                ..base
+            },
+        ),
+        (
+            "minimal: 1 ghost, no dispersion, min detail",
+            lf::LensFlareParams {
+                max_ghosts: 1,
+                ghost_softness: 0.0,
+                starburst_intensity: 0.0,
+                dispersion: 0.0,
+                detail: 0.0,
+                ..base
+            },
+        ),
+    ] {
+        let op = flare_op(&p, w, h);
+        let mut runs: Vec<Vec<f32>> = Vec::new();
+        for _ in 0..4 {
+            let out = fx.lens_flare(
+                &ctx,
+                &tex,
+                w,
+                h,
+                &op,
+                None,
+                &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+                &flare_probe(&p, w, h),
+            );
+            runs.push(readback_linear_f32(&ctx, &out, w, h).unwrap());
+        }
+        let added: f32 = runs[0]
+            .iter()
+            .zip(&img)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / (w * h) as f32;
+        assert!(
+            added > 1e-4,
+            "{name}: renders nothing ({added:e}), so stability would be vacuous"
+        );
+        for i in 1..runs.len() {
+            let differing = runs[0].iter().zip(&runs[i]).filter(|(x, y)| x != y).count();
+            assert_eq!(
+                differing,
+                0,
+                "{name}: run {i} differs from run 0 in {differing} floats \
+                 (worst {:e}) — the flare must render the same frame every time",
+                worst_diff(&runs[0], &runs[i])
+            );
+        }
+    }
+
+    // And the trace under it, which is where a variance would be worst: every
+    // stage downstream reads these ray landings.
+    let p = base;
+    let op = flare_op(&p, w, h);
+    let bake = std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake;
+    let first = fx.lens_flare_trace_debug(&ctx, &op, &bake, 8, w, h);
+    assert!(!first.is_empty(), "the trace oracle hook rendered no rays");
+    for i in 1..3 {
+        let again = fx.lens_flare_trace_debug(&ctx, &op, &bake, 8, w, h);
+        assert_eq!(first, again, "trace run {i} differs from run 0");
+    }
+}
+
 /// Impl note §8.6 + §8.7: the full GPU frame (trace → raster → combine)
 /// stays within the perceptual bound of the CPU scanline reference, the
 /// flare is actually visible (the energy floor that keeps the bound honest),
