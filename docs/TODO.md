@@ -49,14 +49,7 @@ Flutter is the only frontend (K-174, K-182); git history is the parity reference
 These are v1-scope surfaces it does not yet match.
 
 **Viewer bar ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
-- The wireframe/overlay *menu*; guides menu; region-of-interest;
-    background-colour swatch.
-- **Preview resolution is on the bar, but only Full / Half / Quarter** (§2.2
-    item 2). The bar dropdown, the View menu, the three chords and the command
-    palette all set the `scale` every render request carries, and the dropdown
-    is disabled while adaptive playback chooses the tier itself — but **Third**
-    and **Auto** have no rows, and the choice is shell-wide rather than stored
-    per composition in the project as §2.2 asks.
+- The wireframe/overlay *menu*; guides menu; region-of-interest.
 - **The colour-management badge is a readout and cannot yet be clicked**
     (§2.2 item 8). It is built: always on the bar, naming the display
     transform, and saying the picture is not the export while the exposure or

@@ -397,6 +397,34 @@ impl CompositionReference {
         Ok(())
     }
 
+    /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
+    /// item 10). What the composite is drawn onto where nothing covers it, and
+    /// what an export writes there — distinct from the Viewer's transparency
+    /// grid (K-352), which only decides whether that backdrop is *drawn*.
+    #[frb(sync)]
+    #[must_use]
+    pub fn background(&self) -> [f32; 4] {
+        self.composition()
+            .map(|c| c.background.0)
+            .unwrap_or([0.0, 0.0, 0.0, 1.0])
+    }
+
+    /// Set this composition's background colour — one op, one undo step
+    /// (K-357). A document edit that reaches the export, unlike the Viewer's
+    /// preview-only grid.
+    #[frb(sync)]
+    pub fn set_background(&self, rgba: [f32; 4]) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetCompBackground {
+                comp: self.id,
+                background: lumit_core::model::LinearColour(rgba),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// Turn the comp's master motion-blur shutter on or off (K-120), keeping
     /// the shutter's angle, phase and sample count as they are. One op, one
     /// undo step — the Timeline's master button.

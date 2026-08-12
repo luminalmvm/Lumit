@@ -3949,6 +3949,28 @@ half of one. Folded into the frame's cache name like the rest (an opaque frame
 and a see-through frame are two different pictures), and never sent to an
 export, which always draws the backdrop.
 
+**Auto, Full, and the difference between them (K-357).** The Viewer bar's
+resolution dropdown says how many pixels the engine is asked to *make* — which
+is not the same as how big the picture is drawn. **Auto** makes only the pixels
+the current magnification can actually show, so a Viewer in a small panel is
+cheap; it is the default because it is what Lumit has always quietly done.
+**Full** makes them all, whatever the panel is showing, which is what you want
+when you are judging fine detail. **Half**, **Third** and **Quarter** are real
+reductions of the composition — Half makes a quarter of the pixels — for when a
+shot is too heavy to preview smoothly. None of them can reach an export.
+
+The choice belongs to the **composition**, not to Lumit: a heavy effects shot
+can sit at Quarter while the title card in the next tab stays at Auto, and each
+remembers its own. It is remembered with the project but is not part of the
+work, so it makes no undo step.
+
+**The background swatch** sits next to the transparency grid button, and the
+two are opposite sides of one question — what is behind the picture. The grid
+is a way of *looking* (it changes nothing about the composition). The swatch
+changes the composition itself: it is the colour the picture is drawn onto, it
+travels in the file, it comes out in the export, and Ctrl+Z undoes it. Black
+and white are one click each, since that is what it is nearly always set to.
+
 **The cache bar** under the time ruler shows what is held: mint at the current
 preview resolution, dimmed mint only at a coarser one, steel-blue on disk,
 nothing for absent. The render worker computes the strip and publishes it; the

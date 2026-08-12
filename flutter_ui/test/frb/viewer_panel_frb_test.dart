@@ -17,6 +17,7 @@
 
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -410,6 +411,81 @@ void main() {
           reason: 'the bar reaches the same state the View menu sets — the '
               'resolution→scale arithmetic itself is pinned in '
               'menu_bar_frb_test.dart');
+    });
+
+    /// **Auto and Full are not the same tier** (K-357). Auto renders what the
+    /// panel can show — which is what the Viewer has always in fact done, and
+    /// why it is the default — while Full means composition resolution
+    /// whatever the panel is showing. Before this there was no way to ask for
+    /// the latter at all: the tier labelled Full was silently Auto.
+    testWidgets('Auto follows the panel, Full does not', (tester) async {
+      final p = withLayer();
+      p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
+      await mount(tester, p);
+
+      // The panel is smaller than the comp, so the two must differ.
+      p.uiState.reportViewerScale(0.25);
+      expect(p.uiState.previewResolution, PreviewResolution.auto,
+          reason: 'Auto is the default');
+      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
+          reason: 'Auto renders only what the panel can show');
+
+      p.uiState.setPreviewResolution(PreviewResolution.full);
+      expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
+          reason: 'Full is comp resolution whatever the panel shows');
+
+      p.uiState.setPreviewResolution(PreviewResolution.third);
+      expect(p.uiState.viewerScale, closeTo(1.0 / 3.0, 1e-9),
+          reason: 'a fixed tier is the tier you asked for');
+    });
+
+    /// **The resolution is remembered per composition** (K-357, docs/07 §2.2):
+    /// a heavy shot can preview at Quarter while the title card beside it does
+    /// not, and fronting one back shows its own tier rather than the other's.
+    testWidgets('the preview resolution is per composition', (tester) async {
+      final p = withLayer();
+      final other = p.state.project!.newComposition(name: 'Other');
+      await mount(tester, p);
+
+      p.uiState.setPreviewResolution(PreviewResolution.quarter);
+      expect(p.uiState.previewResolution, PreviewResolution.quarter);
+
+      p.uiState.setSelectedComp(other);
+      expect(p.uiState.previewResolution, PreviewResolution.auto,
+          reason: 'a comp never set is at the default');
+
+      p.uiState.setSelectedComp(p.comp);
+      expect(p.uiState.previewResolution, PreviewResolution.quarter,
+          reason: 'and the first comp kept its own');
+
+      // It rides the session blob, so it survives into the project's ui_state
+      // (K-245) — not the document, so no op and no undo step.
+      expect(p.uiState.session().previewResolutions[p.comp.internalid.toString()],
+          'quarter');
+    });
+
+    /// **The background swatch is a document edit** (K-357, docs/07 §2.2 item
+    /// 10) — unlike everything else on that half of the bar, which are ways of
+    /// looking. So it goes through an op, reaches the export, and undoes.
+    testWidgets('the background swatch writes the comp and undoes',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      expect(find.byKey(const ValueKey('viewer-background')), findsOneWidget);
+      final before = p.comp.background();
+      expect(before[3], 1.0, reason: 'a comp starts on opaque black');
+
+      p.comp.setBackground(
+        rgba: F32Array4(Float32List.fromList([0.5, 0.25, 0.125, 1.0])),
+      );
+      final after = p.comp.background();
+      expect(after[0], closeTo(0.5, 1e-6));
+      expect(after[1], closeTo(0.25, 1e-6));
+
+      p.state.project!.undo();
+      expect(p.comp.background()[0], closeTo(before[0], 1e-6),
+          reason: 'one undo puts the backdrop back');
     });
 
     /// A scrub of [pixels] on a [DragValueField]. The first `kDragSlopDefault`

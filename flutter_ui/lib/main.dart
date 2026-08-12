@@ -1214,10 +1214,10 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// A getter, not a field, because two separate things decide it: the panel
   /// measures itself ([reportViewerScale]) and the user chooses a preview
-  /// resolution ([previewResolution]). Multiplying them here means a change to
+  /// resolution ([previewResolution]). Resolving them here means a change to
   /// either is in force on the very next render request, with nothing to keep
   /// in step.
-  double get viewerScale => _panelScale * previewResolution.scale;
+  double get viewerScale => previewResolution.scaleFor(_panelScale);
 
   /// The scale the *panel* implies, last time the Viewer laid itself out.
   double _panelScale = 1.0;
@@ -1230,24 +1230,35 @@ class LumitUiState extends ChangeNotifier {
     _panelScale = scale > 1.0 ? 1.0 : scale;
   }
 
-  /// How many pixels the engine is asked for, as a fraction of composition
-  /// resolution (docs/07 §2.2 item 2, glossary §5).
-  ///
-  /// Full until something says otherwise. Shell-wide rather than per
-  /// composition, and not written down: §2.2 wants it stored per comp in the
-  /// project, alongside a bar dropdown that also offers Third and Auto, and
-  /// neither is built (docs/TODO.md). What *is* built is the thing that
-  /// matters — a real raster reduction that never reaches the export.
-  PreviewResolution previewResolution = PreviewResolution.full;
+  /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
+  /// item 2). Per comp because it is a way of *working on* one — a heavy shot
+  /// wants Quarter while the title card beside it does not — and it rides the
+  /// session blob beside [viewerLooks] rather than the document, because
+  /// choosing it is not an edit and must never reach an export (glossary §5).
+  final Map<String, PreviewResolution> previewResolutions = {};
 
-  /// Choose the preview resolution, and ask for the frame again — the setting
-  /// changes what the *next* frame is made of, so without the ask the picture
-  /// would not change until something else moved.
+  /// How many pixels the engine is asked for, for the fronted comp.
+  ///
+  /// Auto until something says otherwise: it renders what the panel can show,
+  /// which is what the Viewer has always in fact done.
+  PreviewResolution get previewResolution =>
+      previewResolutions[_selectedComp?.internalid.toString()] ??
+      PreviewResolution.auto;
+
+  /// Choose the preview resolution for the fronted comp, and ask for the frame
+  /// again — the setting changes what the *next* frame is made of, so without
+  /// the ask the picture would not change until something else moved.
   void setPreviewResolution(PreviewResolution resolution) {
-    if (previewResolution == resolution) return;
-    previewResolution = resolution;
+    final id = _selectedComp?.internalid.toString();
+    if (id == null || previewResolution == resolution) return;
+    if (resolution == PreviewResolution.auto) {
+      previewResolutions.remove(id);
+    } else {
+      previewResolutions[id] = resolution;
+    }
     // The View menu ticks the one in force, so the bar has to be rebuilt.
     notifyListeners();
+    rememberSession();
     requestFrame();
   }
 
@@ -1689,6 +1700,9 @@ class LumitUiState extends ChangeNotifier {
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
         viewerLooks: Map.of(viewerLooks),
+        previewResolutions: {
+          for (final e in previewResolutions.entries) e.key: e.value.name,
+        },
       );
 
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
@@ -1751,6 +1765,7 @@ class LumitUiState extends ChangeNotifier {
       clearSelection();
       playheadFrame.value = 0;
       viewerLooks.clear();
+      previewResolutions.clear();
       // A new project is a new worker, and a new worker is born knowing
       // nothing of this session's look — the null record is what makes the
       // first front tell it everything, the grid included.
@@ -1778,6 +1793,17 @@ class LumitUiState extends ChangeNotifier {
       viewerLooks.addEntries(
         session.viewerLooks.entries.where((e) => known.containsKey(e.key)),
       );
+      // Same rule for the per-comp resolutions, plus: a name this build does
+      // not have (a project written by a newer one) simply reads as Auto
+      // rather than stopping the project from opening.
+      for (final e in session.previewResolutions.entries) {
+        if (!known.containsKey(e.key)) continue;
+        for (final r in PreviewResolution.values) {
+          if (r.name == e.value && r != PreviewResolution.auto) {
+            previewResolutions[e.key] = r;
+          }
+        }
+      }
       for (final id in session.openComps) {
         final comp = known[id];
         if (comp != null) openComps.add(comp.internalid);

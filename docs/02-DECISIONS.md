@@ -8536,3 +8536,33 @@ single layer against a "multicoat" on **n = 1.9** glass, where MgF₂ is very ne
 single layer (1.38² = 1.904) and any stack is *worse* at exactly 550 nm. That is a
 coincidence of that glass, not a property of coatings; the comparison now runs on ordinary
 n = 1.5 crown, where the broadband stack beats the single layer as it should.
+
+**K-357 · DECIDED · Auto is a real preview tier, the resolution is per composition, and the
+comp's backdrop has a swatch.** The three halves docs/07 §2.2 owed after the bar dropdown
+landed.
+
+**Auto is not Full under another name, and the old "Full" was neither.** The tier labelled
+Full silently multiplied the panel's own scale, so it never meant composition resolution —
+there was no way to ask for that at all, which is exactly what you want when judging detail
+at 100 %. Auto now means "render only the pixels the current magnification can display" and
+is the default because it is what the Viewer has always in fact done; Full means composition
+resolution whatever the panel is showing; Half, Third and Quarter are the fractions they
+say, taken as asked rather than multiplied by the panel, so the tier you chose is the tier
+you get. Third and Auto have no chord of their own (§15 names three), so `action` is now
+optional on the enum.
+
+**The tier is per composition**, in the session blob beside the viewer looks (K-314's
+pattern, K-245's blob) rather than in the document: a heavy shot wants Quarter while the
+title card beside it does not, and choosing how coarsely to preview is a way of *working on*
+a comp, not an edit to it — so it makes no op, no undo step, and can never reach an export
+(glossary §5). A tier name a build does not recognise reads as Auto rather than refusing the
+project.
+
+**The background swatch is the opposite kind of thing, and sits next to the grid button for
+that reason.** Everything else on that half of the bar — exposure, tone map, the
+transparency grid (K-352) — is a way of looking. The background colour is what the composite
+is actually drawn onto and what an export writes there, so it goes through a new
+`SetCompBackground` op and Ctrl+Z undoes it. The two controls answer the same question from
+opposite sides — *what is behind the picture* — and having one without the other is what
+made a black comp confusing. Black and white are offered as presets because that is nine
+uses in ten.

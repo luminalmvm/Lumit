@@ -185,6 +185,16 @@ pub enum Op {
         comp: Uuid,
         motion_blur: crate::model::MotionBlur,
     },
+    /// Set a composition's background colour (docs/07 §2.2 item 10, K-357).
+    ///
+    /// A document edit, unlike the Viewer's transparency grid (K-352) which
+    /// only decides whether the backdrop is *drawn*: this is what colour it is
+    /// when it is, and it reaches the export. Scene-linear, exactly
+    /// invertible.
+    SetCompBackground {
+        comp: Uuid,
+        background: crate::model::LinearColour,
+    },
     /// Toggle a Precomp layer's collapse-transformations switch (docs/06 §1.4).
     SetLayerCollapse {
         comp: Uuid,
@@ -806,6 +816,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetCompMotionBlur {
                 comp: *comp,
                 motion_blur: previous,
+            })
+        }
+        Op::SetCompBackground { comp, background } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.background, *background);
+            Ok(Op::SetCompBackground {
+                comp: *comp,
+                background: previous,
             })
         }
         Op::SetTextDocument {

@@ -362,6 +362,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::RemoveLayer { comp, .. }
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
+        | Op::SetCompBackground { comp, .. }
         | Op::SetWorkArea { comp, .. }
         | Op::SetCompMarkers { comp, .. } => (Some(*comp), None, false),
 

@@ -10,6 +10,7 @@ import 'effect.dart';
 import 'export.dart';
 import 'footage.dart';
 import 'layer.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
@@ -424,6 +425,15 @@ class CompositionReference {
   /// something — is recognised by a signature and costs nothing.
   void audioPrepare() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAudioPrepare(
+        that: this,
+      );
+
+  /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
+  /// item 10). What the composite is drawn onto where nothing covers it, and
+  /// what an export writes there — distinct from the Viewer's transparency
+  /// grid (K-352), which only decides whether that backdrop is *drawn*.
+  F32Array4 background() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceBackground(
         that: this,
       );
 
@@ -887,6 +897,13 @@ class CompositionReference {
               scale: scale,
               layer: layer);
 
+  /// Set this composition's background colour — one op, one undo step
+  /// (K-357). A document edit that reaches the export, unlike the Viewer's
+  /// preview-only grid.
+  void setBackground({required F32Array4 rgba}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetBackground(
+          that: this, rgba: rgba);
+
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
@@ -983,4 +1000,18 @@ class CompositionReference {
           runtimeType == other.runtimeType &&
           internalproject == other.internalproject &&
           internalid == other.internalid;
+}
+
+class F32Array4 extends NonGrowableListView<double> {
+  static const arraySize = 4;
+
+  @internal
+  Float32List get inner => _inner;
+  final Float32List _inner;
+
+  F32Array4(this._inner)
+      : assert(_inner.length == arraySize),
+        super(_inner);
+
+  F32Array4.init() : this(Float32List(arraySize));
 }

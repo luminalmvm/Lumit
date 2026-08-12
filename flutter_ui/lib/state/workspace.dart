@@ -43,6 +43,13 @@ class SavedSession {
   /// project dirty. Comps looking at neutral are simply absent.
   final Map<String, ViewerLook> viewerLooks;
 
+  /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
+  /// item 2), as the enum's name. Session state for the same reason the looks
+  /// are: choosing how coarsely to preview a shot is a way of working on it,
+  /// not an edit to it, and it must never reach an export (glossary §5).
+  /// Comps previewing at Auto — the default — are simply absent.
+  final Map<String, String> previewResolutions;
+
   /// How the panels were arranged for this project, as [DockSplit.toJson]
   /// (K-245) — the arrangement itself, not the name of a preset, because the
   /// sizes and positions a user drags to are the arrangement.
@@ -61,6 +68,7 @@ class SavedSession {
     this.selectedLayer,
     this.dock,
     this.viewerLooks = const {},
+    this.previewResolutions = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -73,7 +81,21 @@ class SavedSession {
           for (final e in viewerLooks.entries)
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
         },
+        'preview_resolutions': previewResolutions,
       };
+
+  /// The per-comp resolutions out of a session's JSON, dropping anything that
+  /// is not a plain string — a name this build has never heard of is left for
+  /// the caller to resolve, so a project from a newer build opens rather than
+  /// failing.
+  static Map<String, String> _resolutionsFromJson(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final e in raw.entries)
+        if (e.key is String && e.value is String)
+          e.key as String: e.value as String,
+    };
+  }
 
   /// The looks out of a session's JSON, dropping any entry that is not the
   /// shape this build writes — a project from another build must open, looking
@@ -109,6 +131,7 @@ class SavedSession {
             ? (j['dock'] as Map).cast<String, dynamic>()
             : null,
         viewerLooks: _looksFromJson(j['viewer_looks']),
+        previewResolutions: _resolutionsFromJson(j['preview_resolutions']),
       );
 
   /// The arrangement compared by value. Encoding is the cheap deep compare
@@ -124,6 +147,7 @@ class SavedSession {
       other.selectedLayer == selectedLayer &&
       other._dockKey == _dockKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
+      mapEquals(other.previewResolutions, previewResolutions) &&
       listEquals(other.openComps, openComps);
 
   @override
@@ -135,6 +159,10 @@ class SavedSession {
         Object.hashAll(openComps),
         Object.hashAll([
           for (final e in viewerLooks.entries) Object.hash(e.key, e.value),
+        ]),
+        Object.hashAll([
+          for (final e in previewResolutions.entries)
+            Object.hash(e.key, e.value),
         ]),
       );
 }

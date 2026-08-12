@@ -2202,6 +2202,10 @@
   "@menuAnimateText": {
     "description": "Menu item."
   },
+  "menuAuto": "Auto",
+  "@menuAuto": {
+    "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
+  },
   "menuAnimation": "Animation",
   "@menuAnimation": {
     "description": "Menu item."
@@ -4002,6 +4006,10 @@
   "tipPlayheadTime": "Playhead time",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. Under five words."
+  },
+  "tipCompBackground": "Composition background",
+  "@tipCompBackground": {
+    "description": "Tooltip on the Viewer bar's background colour swatch. Under five words."
   },
   "tipPreviewResolution": "Preview resolution",
   "@tipPreviewResolution": {

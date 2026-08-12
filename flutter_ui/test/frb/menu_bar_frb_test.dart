@@ -657,18 +657,34 @@ void main() {
     testWidgets('View ▸ Resolution changes what the engine is asked for',
         (tester) async {
       final p = await mount(tester);
-      expect(p.uiState.previewResolution, PreviewResolution.full);
-      final full = p.uiState.viewerScale;
+      // The tier is per composition since K-357, so there has to be one.
+      await makeComp(tester);
+      expect(p.uiState.previewResolution, PreviewResolution.auto,
+          reason: 'Auto is the default — it renders what the panel can show');
+
+      // A panel showing a quarter of the comp: Auto follows it, and the fixed
+      // tiers do not. That difference is the point of having both.
+      p.uiState.reportViewerScale(0.25);
+      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9));
 
       await choose(tester, 'View', 'Half', under: 'Resolution');
       expect(p.uiState.previewResolution, PreviewResolution.half);
-      expect(p.uiState.viewerScale, closeTo(full / 2, 1e-9));
+      expect(p.uiState.viewerScale, closeTo(0.5, 1e-9),
+          reason: 'Half is half of the composition, not of the panel');
 
       await choose(tester, 'View', 'Quarter', under: 'Resolution');
-      expect(p.uiState.viewerScale, closeTo(full / 4, 1e-9));
+      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9));
 
       await choose(tester, 'View', 'Full', under: 'Resolution');
-      expect(p.uiState.viewerScale, closeTo(full, 1e-9));
+      expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
+          reason: 'Full is comp resolution whatever the panel is showing');
+
+      await choose(tester, 'View', 'Third', under: 'Resolution');
+      expect(p.uiState.viewerScale, closeTo(1.0 / 3.0, 1e-9));
+
+      await choose(tester, 'View', 'Auto', under: 'Resolution');
+      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
+          reason: 'and Auto is back to following the panel');
     });
 
     /// The magnification rows *ask* the Viewer rather than doing it here:

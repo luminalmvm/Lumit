@@ -740,6 +740,8 @@ List<MenuSection> lumitMenus(
             MenuEntry(
               resolution.title,
               () => ui.setPreviewResolution(resolution),
+              // Only three of the five have a chord of their own (§15);
+              // Auto and Third are menu and bar only.
               action: resolution.action,
               checked: ui.previewResolution == resolution,
             ),

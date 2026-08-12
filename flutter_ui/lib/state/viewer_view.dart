@@ -44,34 +44,55 @@ enum ViewerZoomCommand {
       };
 }
 
-/// The fraction of composition resolution a preview frame is rendered at.
+/// The fraction of composition resolution a preview frame is rendered at
+/// (docs/07 §2.2 item 2, §15).
 ///
-/// Full / Half / Quarter are the three the View menu and the keymap carry
-/// (docs/07 §15). §2.2's dropdown also offers Third and Auto and stores the
-/// choice per composition; neither is built yet — see docs/TODO.md.
+/// **Auto is not "Full by another name", and the difference is the point.**
+/// Auto renders only the pixels the current magnification can actually
+/// display — a Viewer in a small panel decodes and composites small — while
+/// Full means composition resolution whatever the panel is showing, which is
+/// what you want when judging detail at 100 %. Auto is the default because it
+/// is what the Viewer has always in fact done; before K-357 the tier called
+/// "Full" was silently Auto, and there was no way to ask for the real thing.
 enum PreviewResolution {
+  auto,
   full,
   half,
+  third,
   quarter;
 
-  /// What the engine's render scale is multiplied by.
-  double get scale => switch (this) {
+  /// The fraction of comp resolution this tier asks for, or null for Auto,
+  /// which takes whatever the panel implies instead.
+  double? get fraction => switch (this) {
+        PreviewResolution.auto => null,
         PreviewResolution.full => 1.0,
         PreviewResolution.half => 0.5,
+        PreviewResolution.third => 1.0 / 3.0,
         PreviewResolution.quarter => 0.25,
       };
 
-  /// The keymap action id this resolution answers.
-  String get action => switch (this) {
+  /// The scale a render request carries, given what the panel can show.
+  ///
+  /// A fixed tier is a real raster reduction and is taken as asked — Half
+  /// renders a quarter of the pixels — so that what you see is the tier you
+  /// chose rather than whichever of the two happened to be smaller.
+  double scaleFor(double panelScale) => fraction ?? panelScale;
+
+  /// The keymap action id this resolution answers, or null for the tiers
+  /// with no chord of their own (docs/07 §15 names three).
+  String? get action => switch (this) {
         PreviewResolution.full => 'viewer.res.full',
         PreviewResolution.half => 'viewer.res.half',
         PreviewResolution.quarter => 'viewer.res.quarter',
+        _ => null,
       };
 
-  /// What the View ▸ Resolution row reads.
+  /// What the View ▸ Resolution row and the bar dropdown read.
   String get title => switch (this) {
+        PreviewResolution.auto => l10n.menuAuto,
         PreviewResolution.full => l10n.menuFull,
         PreviewResolution.half => l10n.menuHalf,
+        PreviewResolution.third => l10n.resolutionThird,
         PreviewResolution.quarter => l10n.menuQuarter,
       };
 }

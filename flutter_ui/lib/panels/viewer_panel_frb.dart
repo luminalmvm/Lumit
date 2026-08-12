@@ -28,6 +28,7 @@
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -57,6 +58,7 @@ import '../state/timecode.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/dropper_overlay.dart';
 import '../widgets/time_readout.dart';
@@ -1647,6 +1649,8 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
+          _BackgroundSwatch(comp: comp),
+          const SizedBox(width: 6),
           LumitTooltip(
             message: l10n.tipTransparencyGrid,
             child: HouseButton(
@@ -1951,6 +1955,87 @@ String get _transportName => switch (_transport) {
       BridgeViewerTransport.dmaBuf => l10n.transportDmaBuf,
       BridgeViewerTransport.readBack => l10n.transportReadBack,
     };
+
+/// The composition's background colour, on the bar (docs/07 §2.2 item 10,
+/// K-357).
+///
+/// **A document edit, unlike everything else on this half of the bar.** The
+/// exposure, the tone map and the transparency grid are ways of *looking*;
+/// this is what the comp is actually drawn onto and what an export writes
+/// there, so it goes through an op and Ctrl+Z undoes it. It sits beside the
+/// grid button because the two answer the same question from opposite sides —
+/// what is behind the picture — and finding one without the other is what
+/// makes a black comp confusing.
+class _BackgroundSwatch extends StatelessWidget {
+  final CompositionReference comp;
+  const _BackgroundSwatch({required this.comp});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final state = Provider.of<LumitState>(context, listen: false);
+    // Read once per build off the reference, not through a listener: the bar
+    // rebuilds when the document changes anyway, and the colour is one field.
+    List<double> rgba;
+    try {
+      rgba = comp.background();
+    } catch (_) {
+      rgba = const [0.0, 0.0, 0.0, 1.0];
+    }
+    int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
+    final shown = documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
+
+    return LumitTooltip(
+      message: l10n.tipCompBackground,
+      child: GestureDetector(
+        key: const ValueKey('viewer-background'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          final box = context.findRenderObject();
+          if (box is! RenderBox) return;
+          await showColourPicker(
+            context: context,
+            position: box.localToGlobal(Offset(0, box.size.height + 6)),
+            initial: PickedColour.of(shown),
+            // Chosen as a display colour, like a solid's, so the fields read
+            // 0–255 rather than scene-linear floats.
+            scale: ColourScale.bytes,
+            // Black and white are what this control is reached for nine times
+            // in ten, so they are one click rather than a trip round the wheel.
+            presets: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+            onCommit: (picked) {
+              try {
+                comp.setBackground(
+                  rgba: F32Array4(Float32List.fromList([
+                    picked.r.toDouble(),
+                    picked.g.toDouble(),
+                    picked.b.toDouble(),
+                    1.0,
+                  ])),
+                );
+              } catch (_) {
+                return;
+              }
+              state.notifyDocumentChanged();
+            },
+          );
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: 22,
+            height: 14,
+            decoration: BoxDecoration(
+              color: shown,
+              border: Border.all(color: t.hairlineStrong),
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The preview resolution, on the bar (docs/07 §2.2 item 2).
 ///
