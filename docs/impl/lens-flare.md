@@ -82,7 +82,9 @@ A `.lens` file gives a layer *count*, never the recipe (real designs are trade s
 the literature is unanimous that coatings can only be measured), so `coating_stack` maps the
 count to that order's textbook design: MgF₂ quarter, V-coat, the classic broadband
 quarter/half/quarter W, then alternating quarter-wave pairs. The shape is the point, not the
-recipe; per-lens calibration is Phase E of NEXT-FEATURES entry 1 and out of scope here.
+recipe; per-lens calibration (fitting spacings and coating stacks to photographed
+flares) was considered and deliberately not scheduled — the owner dropped it with the
+rest of the removal-oriented work when the accuracy programme closed (K-364..K-369).
 
 One trap worth recording: **do not benchmark coatings on n ≈ 1.9 glass.** MgF₂ is very
 nearly the ideal single layer there (1.38² = 1.904), so a single layer beats any stack at
