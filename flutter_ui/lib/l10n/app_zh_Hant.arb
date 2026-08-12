@@ -204,6 +204,15 @@
       }
     }
   },
+  "couldNotOpenLink": "Could not open {url}",
+  "@couldNotOpenLink": {
+    "description": "Bottom-strip notice when a Help menu link could not be handed to the machine's browser. {url} is a web address and is not translated.",
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
   "couldNotSaveProject": "Could not save the project",
   "@couldNotSaveProject": {
     "description": "Bottom-strip notice when a save failed."
@@ -288,6 +297,10 @@
   "@easeBezier": {
     "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
   },
+  "easeCustom": "Easing…",
+  "@easeCustom": {
+    "description": "Button opening the easing editor, where a curve is shaped and applied to the selected keyframes. The ellipsis marks that it opens something."
+  },
   "easeEasy": "Easy ease",
   "@easeEasy": {
     "description": "Keyframe easing: slow out of one key and into the next."
@@ -295,6 +308,34 @@
   "easeHold": "Hold",
   "@easeHold": {
     "description": "Keyframe easing: no change at all until the next key."
+  },
+  "easingAnticipate": "Anticipate",
+  "@easingAnticipate": {
+    "description": "Easing preset: the move pulls back a little before it sets off."
+  },
+  "easingHeavy": "Heavy ease",
+  "@easingHeavy": {
+    "description": "Easing preset: slow at both ends, more strongly than Easy ease."
+  },
+  "easingNeedsTheValueLens": "Shapes apply in the value lens.",
+  "@easingNeedsTheValueLens": {
+    "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
+  },
+  "easingOvershoot": "Overshoot",
+  "@easingOvershoot": {
+    "description": "Easing preset: the move goes past its end and settles back."
+  },
+  "easingSlowFinish": "Slow finish",
+  "@easingSlowFinish": {
+    "description": "Easing preset: sets off at full speed and slows into the end. Name the end that is slow, not a keyframe side — 'in' and 'out' mean sides here."
+  },
+  "easingSlowStart": "Slow start",
+  "@easingSlowStart": {
+    "description": "Easing preset: eases away from the start and arrives at full speed. Name the end that is slow, not a keyframe side — 'in' and 'out' mean sides here."
+  },
+  "easingSnap": "Snap",
+  "@easingSnap": {
+    "description": "Easing preset: away very fast, then a long glide into the end."
   },
   "easeLinear": "Linear",
   "@easeLinear": {
@@ -2635,6 +2676,10 @@
   "@panelDebug": {
     "description": "The name of the developer panel, shown only when the debug panel is enabled."
   },
+  "panelEasing": "Easing",
+  "@panelEasing": {
+    "description": "The name of the panel holding the easing editor, where a curve is shaped and applied to selected keyframes. A panel name, so a noun."
+  },
   "panelEffectsAndPresets": "Effects & presets",
   "@panelEffectsAndPresets": {
     "description": "The name of the panel listing every effect and saved preset."
@@ -3230,6 +3275,10 @@
   "@settingsHelpTransformInEffectControls": {
     "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
   },
+  "settingsHelpShapeEasesInAPopup": "The graph editor's Easing button opens the shape editor in a small floating box instead of the Easing panel. The box closes whenever you click outside it — and choosing different keyframes is a click outside — so one drawn shape can only be tried on the selection that was live when it opened. Turn it on to save the screen space.",
+  "@settingsHelpShapeEasesInAPopup": {
+    "description": "Settings window: the sentence under the settingsShapeEasesInAPopup setting."
+  },
   "settingsHelpUseThemeColours": "Off, a scope reads on the standard near-black graticule whatever the chrome — which is how a signal is measured. On, it takes the theme's colours instead.",
   "@settingsHelpUseThemeColours": {
     "description": "Settings window: the sentence under the settingsUseThemeColours setting."
@@ -3407,6 +3456,10 @@
       }
     }
   },
+  "settingsShapeEasesInAPopup": "Shape eases in a popup",
+  "@settingsShapeEasesInAPopup": {
+    "description": "Settings window: the name of one setting."
+  },
   "settingsVideoArrivesAsASequence": "Video arrives as a Sequence layer",
   "@settingsVideoArrivesAsASequence": {
     "description": "Settings window: the name of one setting."
@@ -3477,7 +3530,7 @@
   },
   "splashSubtitle": "Flutter frontend",
   "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen."
+    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
   },
   "switchAudible": "Audible",
   "@switchAudible": {
@@ -3772,6 +3825,14 @@
   "@tipDisable": {
     "description": "Tooltip on the checkbox that switches an effect off. Under five words."
   },
+  "tipDisplayTransform": "Display transform",
+  "@tipDisplayTransform": {
+    "description": "Tooltip on the Viewer bar's colour-management badge, which reads the display transform the picture is shown through. Under five words."
+  },
+  "tipEasingEditor": "Easing editor",
+  "@tipEasingEditor": {
+    "description": "Tooltip on the graph editor's Easing button, which opens the curve editor. Under five words."
+  },
   "tipEasyEase": "Easy ease (F9)",
   "@tipEasyEase": {
     "description": "Tooltip on the graph editor's Bezier button. F9 is a key name and stays as it is."
@@ -4014,6 +4075,10 @@
   "tipViewerExposure": "Exposure — preview only",
   "@tipViewerExposure": {
     "description": "Tooltip on the Viewer's exposure box. It brightens or darkens the picture on screen and never the export. \"Stop\" is the photographic unit — one stop is a doubling of light."
+  },
+  "tipViewerPreviewView": "The Viewer's exposure and tone mapping change this picture only, never the export. Tone mapping rolls bright highlights back under 1.",
+  "@tipViewerPreviewView": {
+    "description": "Tooltip on the Viewer bar's colour-management badge while the exposure or the tone map is engaged. Longer than a name on purpose: it is the only place either control is explained. \"Rolls back under 1\" means very bright values are folded down rather than clipping flat."
   },
   "tipViewerToneMap": "Tone mapping — preview only",
   "@tipViewerToneMap": {
@@ -4781,6 +4846,19 @@
       }
     }
   },
+  "viewerDisplayTransform": "Linear → sRGB",
+  "@viewerDisplayTransform": {
+    "description": "Colour-management badge on the Viewer bar: the display transform, written as working space then an arrow then the display's space. \"Linear\" and \"sRGB\" are colour-space names and are not translated."
+  },
+  "viewerDisplayTransformPreview": "{transform} · preview",
+  "@viewerDisplayTransformPreview": {
+    "description": "The same badge while the Viewer's exposure or tone map is engaged, saying the picture is not the export. {transform} is viewerDisplayTransform. Must stay short: the badge sits in a fixed slot on a one-row bar.",
+    "placeholders": {
+      "transform": {
+        "type": "String"
+      }
+    }
+  },
   "viewerGrid": "Grid",
   "@viewerGrid": {
     "description": "Button in the Viewer that shows the chequerboard behind transparent areas."
@@ -4820,5 +4898,9 @@
   "workspaceEffects": "Effects",
   "@workspaceEffects": {
     "description": "The name of a panel arrangement, tuned for working on effects."
+  },
+  "workspaceRetiming": "Retiming",
+  "@workspaceRetiming": {
+    "description": "The name of a panel arrangement, tuned for shaping how things move: the Easing panel down the right and a tall Timeline. 'Retiming' is the gerund of the Lumit term Retime — keep it a noun for the kind of work."
   }
 }
