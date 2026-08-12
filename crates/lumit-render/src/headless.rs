@@ -3061,6 +3061,8 @@ mod tests {
                 starburst: Vec::new(),
                 sb_res: 1,
                 sb_fields: 1,
+                ring_masks: Vec::new(),
+                ring_slice: Vec::new(),
             }) as lumit_gpu::fx::FlareBake;
             parts.fx.warm_flare_bake(0xfeed_face, &bake)
         };
@@ -3111,6 +3113,8 @@ mod tests {
                 starburst: Vec::new(),
                 sb_res: 1,
                 sb_fields: 1,
+                ring_masks: Vec::new(),
+                ring_slice: Vec::new(),
             }) as lumit_gpu::fx::FlareBake;
             parts.fx.warm_flare_bake(0xdead_beef, &bake)
         };

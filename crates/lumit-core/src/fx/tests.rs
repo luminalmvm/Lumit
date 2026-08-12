@@ -4925,6 +4925,12 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
         "the sprite is the field slices concatenated, slice-major"
     );
     assert_eq!(a.energy_gain, b.energy_gain);
+    // The K-369 ring masks are baked in parallel the same way, and the slice
+    // each path picks comes off the spreads — both must be bit-equal too, or
+    // two identical projects would draw different ghost edges.
+    assert_eq!(a.ring_masks, b.ring_masks);
+    assert_eq!(a.ring_slice, b.ring_slice);
+    assert_eq!(a.ring_slice.len(), a.pairs.len());
     assert!(!a.pairs.is_empty());
     for path in &a.pairs {
         assert!(path[0] < path[1]);
@@ -4939,6 +4945,144 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
             assert_eq!(path[3], NO_BOUNCE);
         }
     }
+}
+
+/// **Ghost edges are Fresnel** (K-369, entry C2): the ring-mask ladder is a
+/// real near-field propagation — energy-preserving, monotone in defocus, and
+/// carrying the rim ringing that is the whole reason it exists — and the
+/// paths that use it are the top [`RING_GHOSTS`] alone.
+///
+/// The normalised L1 difference against the analytic iris mask is the
+/// ladder's handle: the highest Fresnel number is nearly the aperture
+/// itself, and the lowest has spread into a wash.
+#[test]
+fn lens_flare_ring_masks_are_fresnel_energy_preserving_and_ranked() {
+    use crate::fx::lens_flare::*;
+    let p = default_flare_params();
+    let baked = bake(&p);
+    assert_eq!(
+        baked.ring_masks.len(),
+        RING_SLICES * RING_RES * RING_RES,
+        "the slices are concatenated, slice-major"
+    );
+    let analytic = analytic_ring_mask(&p, baked.native_fstop);
+    let ref_total = ring_disc_energy(&analytic);
+    assert!(ref_total > 0.0, "the reference aperture must pass light");
+
+    let mut diffs = Vec::new();
+    for k in 0..RING_SLICES {
+        let slice = &baked.ring_masks[k * RING_RES * RING_RES..(k + 1) * RING_RES * RING_RES];
+        // Flux preservation (the normalisation pin): a ringed ghost must be
+        // neither brighter nor dimmer than the hard-edged one it replaces —
+        // measured over the pupil disc, which is where the trace sprays its
+        // rays and so the only place the flux can be collected.
+        let ratio = ring_disc_energy(slice) / ref_total;
+        assert!(
+            (0.99..=1.01).contains(&ratio),
+            "slice {k} (F {}) carries {ratio} of the analytic energy",
+            ring_fresnel(k)
+        );
+        let l1: f64 = slice
+            .iter()
+            .zip(&analytic)
+            .map(|(a, b)| (*a as f64 - *b as f64).abs())
+            .sum::<f64>()
+            / ref_total;
+        diffs.push(l1);
+    }
+    assert!(
+        diffs[0] < 0.35,
+        "the highest Fresnel number must still be recognisably the aperture: L1 {}",
+        diffs[0]
+    );
+    assert!(
+        diffs[RING_SLICES - 1] > diffs[0],
+        "the ladder must be monotone in defocus: F {} differs by {}, F {} by {}",
+        ring_fresnel(0),
+        diffs[0],
+        ring_fresnel(RING_SLICES - 1),
+        diffs[RING_SLICES - 1]
+    );
+
+    // **The ringing is real.** Along a radial line out through the blade
+    // edge, the analytic mask falls monotonically from its plateau — it is a
+    // smoothstep, it cannot do otherwise — while the near-field slice
+    // overshoots it: the Gibbs fringe, brighter than the middle of the ghost.
+    let plateau: f32 = (0..16)
+        .map(|i| ring_mask_sample(&baked.ring_masks, 0, i as f32 / 64.0, 0.0))
+        .sum::<f32>()
+        / 16.0;
+    assert!(plateau > 0.1, "the slice must have an interior: {plateau}");
+    let profile: Vec<f32> = (0..256)
+        .map(|i| ring_mask_sample(&baked.ring_masks, 0, i as f32 / 255.0, 0.0))
+        .collect();
+    let overshoot = profile
+        .windows(3)
+        .enumerate()
+        .filter(|(_, w)| w[1] > w[0] && w[1] >= w[2])
+        .map(|(i, w)| (i, w[1]))
+        .find(|&(_, v)| v > plateau * 1.02);
+    assert!(
+        overshoot.is_some(),
+        "the near-field slice must ring above its own plateau ({plateau}); \
+         profile peak {}",
+        profile.iter().fold(0.0_f32, |m, &v| m.max(v))
+    );
+    // The analytic mask it replaces is monotone by construction, which is
+    // exactly what a real ghost edge is not.
+    let analytic_profile: Vec<f32> = (0..256)
+        .map(|i| {
+            pupil_mask(
+                i as f32 / 255.0,
+                0.0,
+                p.blades,
+                p.aperture_rotation_deg.to_radians(),
+                effective_roundness(p.roundness, p.fstop, baked.native_fstop),
+                p.aperture_softness,
+            )
+        })
+        .collect();
+    assert!(
+        analytic_profile.windows(2).all(|w| w[1] <= w[0] + 1e-6),
+        "the analytic mask is monotone by construction"
+    );
+
+    // Selection: the top RING_GHOSTS ring, nothing below does.
+    assert!(
+        baked.pairs.len() > RING_GHOSTS,
+        "this lens must have more paths than the ring budget"
+    );
+    for (rank, &slice) in baked.ring_slice.iter().enumerate() {
+        if rank < RING_GHOSTS {
+            assert!(
+                (0..RING_SLICES as i32).contains(&slice),
+                "rank {rank} must ring, got slice {slice}"
+            );
+        } else {
+            assert_eq!(slice, -1, "rank {rank} is past the ring budget");
+        }
+    }
+    // The proxy's shape: tighter ghost, higher Fresnel number, lower slice.
+    assert_eq!(
+        ring_slice_for(0, 0.001),
+        0,
+        "a pinpoint ghost keeps its edge"
+    );
+    assert_eq!(
+        ring_slice_for(0, 4.0),
+        (RING_SLICES - 1) as i32,
+        "a frame-filling wash rings broadly"
+    );
+    assert_eq!(ring_slice_for(RING_GHOSTS, 0.05), -1);
+    // The ladder must actually be a ladder on a real lens: if every path
+    // landed on one rung, C2 would be a single global blur wearing six
+    // slices' clothing (which is what the plan's first calibration did).
+    let used: std::collections::BTreeSet<i32> =
+        baked.ring_slice.iter().take(RING_GHOSTS).copied().collect();
+    assert!(
+        used.len() >= 3,
+        "the spread proxy collapsed the ladder to {used:?}"
+    );
 }
 
 /// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the

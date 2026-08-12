@@ -226,6 +226,48 @@ pub const STARBURST_SAMPLES: u32 = 100;
 /// Aperture-image side for the starburst FFT.
 pub const APERTURE_RES: u32 = 256;
 
+/// The iris radius as a fraction of the aperture image's half-extent: the
+/// polygon sits at 0.75, leaving rim room for the diffraction spread. It is
+/// also the conversion between the aperture image's own frame and the
+/// **pupil** coordinates [`pupil_mask`] takes — pupil `u = 1` is aperture
+/// ndc 0.75 — which the K-369 ring masks must get exactly right.
+pub const APERTURE_SIZE: f32 = 0.75;
+
+/// Defocus rungs the K-369 ghost-edge ring masks are baked at.
+///
+/// In plain terms: a ghost's edge is not the hard iris polygon the ray trace
+/// draws. Each ghost image is out of focus by its OWN amount, and a
+/// defocused aperture edge carries near-field (Fresnel) diffraction ringing
+/// whose scale is set by that defocus. Six rungs of Fresnel number — 64, 32,
+/// 16, 8, 4, 2 — bracket the range the bundled prescriptions produce, and a
+/// path picks its rung from its measured image spread.
+pub const RING_SLICES: usize = 6;
+
+/// Ring-mask side. The mask is *sampled* per ray rather than stamped as a
+/// sprite, so it does not need the starburst's [`STARBURST_RES`]; the
+/// propagation itself still runs at [`APERTURE_RES`] (see
+/// [`bake_ring_masks`] — the single-FFT propagator's output window narrows
+/// as the Fresnel number rises, and 128 aperture samples cannot reach F 64).
+pub const RING_RES: usize = 128;
+
+/// How many of the ranked paths get a ringed mask (K-369): the top 32, the
+/// budget the flare-accuracy plan set. Everything below keeps the analytic
+/// iris mask — a ghost that faint contributes no visible edge.
+pub const RING_GHOSTS: usize = 32;
+
+/// The image spread, as a fraction of the sensor diagonal, that
+/// [`ring_slice_for`] reads as Fresnel number 1 — the numerator of its
+/// `F ≈ REF / spread` proxy.
+///
+/// **This is a calibration, not a derivation, and it is the knob to turn.**
+/// It is set by what the bundled prescriptions actually measure: the top-32
+/// paths' spreads run from about 0.05 to 8 of the sensor diagonal, and 3.2
+/// puts the ladder's six rungs across 0.05 … 1.6 of that range, so tight
+/// ghosts land near F 64 (a crisp edge with fine ringing) and washes bottom
+/// out at F 2. At the plan's original 0.5 every ranked path on every bundled
+/// lens landed on the bottom rung and the ladder had one step.
+pub const RING_SPREAD_REF: f32 = 3.2;
+
 /// Field-angle slices the starburst is baked at (K-365).
 ///
 /// Off-axis the diffracting hole is not the iris alone: the front and rear
@@ -791,6 +833,17 @@ pub struct FlareBaked {
     /// each peak-normalised. One azimuth only (the cat's-eye leans along
     /// +x); the combine rotates the sprite to the light's own azimuth.
     pub starburst: Vec<f32>,
+    /// The ghost-edge ring masks (K-369): [`RING_SLICES`] slices of
+    /// `RING_RES²`, slice-major, each the aperture's **near-field** intensity
+    /// at that slice's Fresnel number, resampled onto pupil coordinates
+    /// `u, v ∈ [−1, 1]` and normalised to the analytic iris mask's total
+    /// energy. Read by [`ring_mask_sample`] in place of [`pupil_mask`] for
+    /// the paths `ring_slice` names. Empty on a bake with no aperture.
+    pub ring_masks: Vec<f32>,
+    /// Which ring slice each ranked path uses, parallel to `pairs` (K-369):
+    /// `−1` for the analytic iris mask, otherwise a slice index into
+    /// `ring_masks`. Only the top [`RING_GHOSTS`] paths get one.
+    pub ring_slice: Vec<i32>,
 }
 
 /// A parsed .lens prescription before flattening.
@@ -2002,6 +2055,8 @@ pub fn frame_grid_needs_from_rows(
         spreads: Vec::new(),
         energy_gain: 0.0,
         starburst: Vec::new(),
+        ring_masks: Vec::new(),
+        ring_slice: Vec::new(),
         reflectance: Vec::new(),
     };
     frame_grid_needs(&view, pair_count, dir, coating, stop_scale, sensor_shift_mm)
@@ -2122,7 +2177,7 @@ pub(crate) fn bake_aperture_field(
     let rot = p.aperture_rotation_deg.to_radians();
     let roundness = effective_roundness(p.roundness, p.fstop, native_fstop);
     let softness = (p.aperture_softness * 0.25).max(0.004);
-    let size = 0.75_f32;
+    let size = APERTURE_SIZE;
     let half_diag = 0.5 * (SENSOR_MM[0] * SENSOR_MM[0] + SENSOR_MM[1] * SENSOR_MM[1]).sqrt();
     let theta = field_frac.clamp(0.0, 1.0) * (half_diag / baked.focal_mm.max(1e-3)).atan();
     let dir = [theta.sin(), 0.0, theta.cos()];
@@ -2268,6 +2323,225 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// Ghost-edge Fresnel ringing (K-369): the ring masks.
+// ---------------------------------------------------------------------------
+
+/// One ring slice's pupil coordinate, `−1 … 1` across [`RING_RES`] samples.
+fn ring_unit(i: usize) -> f32 {
+    2.0 * (i as f32 / (RING_RES - 1) as f32) - 1.0
+}
+
+/// The Fresnel number of ring slice `k` (K-369): 64, 32, 16, 8, 4, 2 — a
+/// tight, near-focus ghost at the top, a defocused wash at the bottom.
+pub fn ring_fresnel(k: usize) -> f32 {
+    (1u32 << (RING_SLICES - k.min(RING_SLICES - 1))) as f32
+}
+
+/// The analytic iris mask on the ring grid: exactly what the trace samples
+/// per corner today, evaluated at the same pupil coordinates the ring masks
+/// are indexed by. It is the ring bake's **energy reference** (a ringed ghost
+/// must be neither brighter nor dimmer than a hard-edged one) and the tests'
+/// point of comparison.
+pub fn analytic_ring_mask(p: &LensFlareParams, native_fstop: f32) -> Vec<f32> {
+    let roundness = effective_roundness(p.roundness, p.fstop, native_fstop);
+    let rot = p.aperture_rotation_deg.to_radians();
+    let mut out = vec![0.0_f32; RING_RES * RING_RES];
+    for j in 0..RING_RES {
+        let v = ring_unit(j);
+        for i in 0..RING_RES {
+            out[j * RING_RES + i] = pupil_mask(
+                ring_unit(i),
+                v,
+                p.blades,
+                rot,
+                roundness,
+                p.aperture_softness,
+            );
+        }
+    }
+    out
+}
+
+/// The ghost-edge ring masks (K-369), [`RING_SLICES`] slices of `RING_RES²`.
+///
+/// # In plain terms
+///
+/// A ghost is an out-of-focus image of the iris, and an out-of-focus edge is
+/// not a clean cut: light bends round the blade and lays down a set of fine
+/// bright and dark rings just inside the rim, brighter than the middle of the
+/// ghost. How coarse those rings are depends on how far out of focus that
+/// particular ghost is. Every real-time flare drops this, which is why
+/// real-time ghosts have stencil edges. This is the same near-field maths
+/// the starburst already runs, at a ladder of defocus amounts.
+///
+/// # The maths
+///
+/// [`bake_starburst`] multiplies the aperture by the quadratic phase
+/// `e^{iπ(x²+y²)/(λd)}` and takes one FFT — that IS Fresnel propagation to
+/// distance `d` (the single-FFT propagator). Writing `a` for the aperture's
+/// half-extent and folding the **Fresnel number** `F = a²/(λd)` into
+/// coordinates normalised so the aperture frame is `x, y ∈ [−1, 1]`, the
+/// chirp phase is exactly `π·F·(x² + y²)`. High `F` is a nearly-in-focus
+/// edge with fine ripples; low `F` spreads.
+///
+/// The propagator's output lands in its own frame, and where it lands is
+/// what the resample below has to undo. A DFT bin `m` (from the shifted
+/// centre) carries spatial frequency `m/(N·Δx)`; the propagator's kernel is
+/// `e^{−2πi·x·x'·F}`, so bin `m` sits at output coordinate
+/// `x' = m/(N·Δx·F)` in the aperture's own units. Two consequences, both
+/// load-bearing:
+///
+/// * The output window is `±1/(2·Δx·F)` wide — it **narrows** as `F` rises.
+///   With the aperture's `Δx = 2/(N−1)` that is `±(N−1)/(4F)`, so reaching
+///   `F = 64` at all needs `N ≥ 256`: the propagation therefore runs at
+///   [`APERTURE_RES`] and only the resampled mask is [`RING_RES`].
+/// * The same bound is the chirp's Nyquist limit (its local frequency at the
+///   aperture rim is `F·r`), so a window that covers the aperture is also a
+///   chirp that is sampled, not aliased. One condition, not two.
+///
+/// The intensity `|·|²` is then resampled bilinearly onto pupil coordinates
+/// (`u = 1` is aperture ndc [`APERTURE_SIZE`]), zero outside the window, and
+/// each slice is scaled so its energy equals `reference`'s. Nothing is
+/// clamped: the overshoot above 1 at the rim is the Gibbs ringing, and it is
+/// the whole point.
+///
+/// **The energy is matched over the pupil DISC, not the square.** Fresnel
+/// diffraction genuinely throws light beyond the geometric aperture, and at
+/// the low Fresnel numbers a good deal of it lands past `r = 1` — where the
+/// trace does not spray rays at all (`cpu_flare` skips a corner more than
+/// one cell outside the unit disc). Normalising over the whole square would
+/// therefore hand the widest, most defocused ghosts a mask whose flux mostly
+/// falls outside the sampled pupil, and they would quietly dim by half. The
+/// analytic mask is zero outside the disc anyway, so restricting both sides
+/// is the same statement as "the ghost must not brighten or dim from
+/// ringing" — measured where the rays actually are.
+pub(crate) fn bake_ring_masks(aperture: &[f32], ap_res: u32, reference: &[f32]) -> Vec<f32> {
+    let n = ap_res as usize;
+    if aperture.len() < n * n || n < 4 || !n.is_power_of_two() {
+        return Vec::new();
+    }
+    let ref_total: f64 = ring_disc_energy(reference);
+    if ref_total <= 0.0 {
+        return Vec::new();
+    }
+    use rayon::prelude::*;
+    // One FFT a slice, independent, and `collect` restores slice order
+    // whatever order the pool finished in (determinism, docs/14).
+    let slices: Vec<Vec<f32>> = (0..RING_SLICES)
+        .into_par_iter()
+        .map(|k| {
+            let fresnel = ring_fresnel(k) as f64;
+            let mut cx = vec![Cx::ZERO; n * n];
+            for y in 0..n {
+                let ny = 2.0 * (y as f64 / (n - 1) as f64) - 1.0;
+                for x in 0..n {
+                    let nx = 2.0 * (x as f64 / (n - 1) as f64) - 1.0;
+                    let arg = std::f64::consts::PI * fresnel * (nx * nx + ny * ny);
+                    cx[y * n + x] = Cx::cis(arg).scale(aperture[y * n + x] as f64);
+                }
+            }
+            fft2_inplace(&mut cx, n, n, false);
+            fftshift2(&mut cx, n, n);
+            // Output samples per unit of aperture-frame coordinate, from the
+            // bin mapping above: `m = x' · N · Δx · F`.
+            let dx = 2.0 / (n as f64 - 1.0);
+            let per_unit = n as f64 * dx * fresnel;
+            let centre = (n / 2) as f64;
+            let mut out = vec![0.0_f32; RING_RES * RING_RES];
+            for j in 0..RING_RES {
+                let fy = centre + APERTURE_SIZE as f64 * ring_unit(j) as f64 * per_unit;
+                for i in 0..RING_RES {
+                    let fx = centre + APERTURE_SIZE as f64 * ring_unit(i) as f64 * per_unit;
+                    // Bilinear over |·|², zero outside the propagated window.
+                    let v = if fx < 0.0 || fy < 0.0 || fx > (n - 1) as f64 || fy > (n - 1) as f64 {
+                        0.0
+                    } else {
+                        let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
+                        let (x1, y1) = ((x0 + 1).min(n - 1), (y0 + 1).min(n - 1));
+                        let (tx, ty) = (fx - x0 as f64, fy - y0 as f64);
+                        let at = |x: usize, y: usize| cx[y * n + x].norm_sq();
+                        let a = at(x0, y0) * (1.0 - tx) + at(x1, y0) * tx;
+                        let b = at(x0, y1) * (1.0 - tx) + at(x1, y1) * tx;
+                        a * (1.0 - ty) + b * ty
+                    };
+                    out[j * RING_RES + i] = v as f32;
+                }
+            }
+            // Flux preservation: the ringing redistributes light across the
+            // rim, it does not add or remove any.
+            let scale = (ref_total / ring_disc_energy(&out).max(1e-30)) as f32;
+            for v in out.iter_mut() {
+                *v *= scale;
+            }
+            out
+        })
+        .collect();
+    slices.concat()
+}
+
+/// One ring-grid image's energy over the **pupil disc** — the region the
+/// trace actually sprays rays through, and so the region flux preservation
+/// has to be measured over. See [`bake_ring_masks`].
+pub fn ring_disc_energy(mask: &[f32]) -> f64 {
+    let mut total = 0.0_f64;
+    for j in 0..RING_RES.min(mask.len() / RING_RES.max(1)) {
+        let v = ring_unit(j);
+        for i in 0..RING_RES {
+            let u = ring_unit(i);
+            if u * u + v * v <= 1.0 {
+                total += mask[j * RING_RES + i] as f64;
+            }
+        }
+    }
+    total
+}
+
+/// Which ring slice a path uses, from its measured image spread (K-369), or
+/// `−1` for the analytic iris mask.
+///
+/// Joo et al. (2016) derive each ghost's fractional-Fourier order from the
+/// ABCD matrix chain of the path — the exact answer, and the recorded upgrade
+/// path. This proxy buys the same monotone relationship without the matrix
+/// plumbing: a tight ghost (small image spread) is near its own focus, so it
+/// keeps a crisp edge with fine ringing; a frame-filling wash is far from it
+/// and rings broadly.
+pub fn ring_slice_for(rank: usize, spread: f32) -> i32 {
+    if rank >= RING_GHOSTS {
+        return -1;
+    }
+    let f_proxy = (RING_SPREAD_REF / spread.max(0.004)).clamp(2.0, 64.0);
+    (ring_fresnel(0) / f_proxy)
+        .log2()
+        .round()
+        .clamp(0.0, (RING_SLICES - 1) as f32) as i32
+}
+
+/// One bilinear tap into a ring slice at pupil coordinates — the exact
+/// arithmetic `fx_lens_flare_trace.wgsl`'s `ring_mask_sample` mirrors, so the
+/// two twins read the same number for the same ray. Outside the unit square
+/// (and on a slice that is not there) the mask is 0.
+pub fn ring_mask_sample(masks: &[f32], slice: usize, u: f32, v: f32) -> f32 {
+    if !(-1.0..=1.0).contains(&u) || !(-1.0..=1.0).contains(&v) {
+        return 0.0;
+    }
+    let base = slice * RING_RES * RING_RES;
+    if masks.len() < base + RING_RES * RING_RES {
+        return 0.0;
+    }
+    let fx = (u * 0.5 + 0.5) * (RING_RES - 1) as f32;
+    let fy = (v * 0.5 + 0.5) * (RING_RES - 1) as f32;
+    let x0 = (fx.floor() as usize).min(RING_RES - 1);
+    let y0 = (fy.floor() as usize).min(RING_RES - 1);
+    let x1 = (x0 + 1).min(RING_RES - 1);
+    let y1 = (y0 + 1).min(RING_RES - 1);
+    let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
+    let at = |x: usize, y: usize| masks[base + y * RING_RES + x];
+    let a = at(x0, y0) * (1.0 - tx) + at(x1, y0) * tx;
+    let b = at(x0, y1) * (1.0 - tx) + at(x1, y1) * tx;
+    a * (1.0 - ty) + b * ty
 }
 
 /// The mean flare-buffer brightness the auto-exposure steers every lens
@@ -2451,6 +2725,8 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         spreads: Vec::new(),
         energy_gain: 1.0,
         starburst: Vec::new(),
+        ring_masks: Vec::new(),
+        ring_slice: Vec::new(),
     };
 
     // Enumerate every a<b pair where both surfaces actually change medium
@@ -2584,16 +2860,45 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     }
     baked.spreads = spreads;
 
-    // The starburst, once per field-angle slice (K-365) — the slices are
-    // independent FFTs, so they go wide, and `collect` puts them back in
-    // slice order whatever order the pool finished them in (determinism).
-    let mut slices: Vec<Vec<f32>> = (0..STARBURST_FIELDS)
+    // Each path's ring slice (K-369), from the spread just measured. Beyond
+    // `RING_GHOSTS` the answer is −1 and the trace keeps the analytic mask.
+    baked.ring_slice = baked
+        .spreads
+        .iter()
+        .enumerate()
+        .map(|(rank, &spread)| ring_slice_for(rank, spread))
+        .collect();
+
+    // The aperture image per field angle (K-365). This is the expensive half
+    // of the starburst — one traced ray per texel through the whole
+    // prescription — and slice 0 is ALSO what the K-369 ring masks
+    // propagate, so it is computed once and read twice rather than traced
+    // again.
+    let apertures: Vec<Vec<f32>> = (0..STARBURST_FIELDS)
         .into_par_iter()
         .map(|f| {
             let frac = f as f32 / (STARBURST_FIELDS - 1) as f32;
-            let aperture = bake_aperture_field(p, native_fstop, APERTURE_RES, &baked, frac);
-            bake_starburst(&aperture, STARBURST_RES)
+            bake_aperture_field(p, native_fstop, APERTURE_RES, &baked, frac)
         })
+        .collect();
+    if let Some(on_axis) = apertures.first() {
+        baked.ring_masks =
+            bake_ring_masks(on_axis, APERTURE_RES, &analytic_ring_mask(p, native_fstop));
+    }
+    if baked.ring_masks.is_empty() {
+        // A degenerate aperture (nothing gets through) has no ring masks, and
+        // a path pointing at a slice that is not there would render as
+        // nothing at all. One place to say "then nobody rings", so neither
+        // twin has to carry the check per ray.
+        baked.ring_slice.iter_mut().for_each(|s| *s = -1);
+    }
+
+    // The starburst, once per field-angle slice (K-365) — the slices are
+    // independent FFTs, so they go wide, and `collect` puts them back in
+    // slice order whatever order the pool finished them in (determinism).
+    let mut slices: Vec<Vec<f32>> = apertures
+        .par_iter()
+        .map(|aperture| bake_starburst(aperture, STARBURST_RES))
         .collect();
     // A lens that does not cover the full frame — the bundled 7Artisans is
     // an APS-C design, and a user file may be anything — passes NOTHING at
@@ -3160,18 +3465,22 @@ pub fn cpu_flare(
             // recomputed inside the wavelength loop, so every corner paid for
             // an `atan2` and a `cos` three to thirty-two times over depending
             // on the Quality tier. Same numbers, computed once.
+            //
+            // For the top-ranked paths that carry a K-369 ring slice, that
+            // shape is not the analytic polygon: it is the aperture's
+            // near-field diffraction pattern at this ghost's own defocus,
+            // rim ringing and all.
+            let slice = baked.ring_slice.get(pi).copied().unwrap_or(-1);
             masks.clear();
             masks.resize(side * side, 0.0);
             for j in 0..side {
                 for i in 0..side {
-                    masks[j * side + i] = pupil_mask(
-                        unit(i),
-                        unit(j),
-                        p.blades,
-                        rot,
-                        roundness,
-                        p.aperture_softness,
-                    );
+                    let (u, v) = (unit(i), unit(j));
+                    masks[j * side + i] = if slice >= 0 {
+                        ring_mask_sample(&baked.ring_masks, slice as usize, u, v)
+                    } else {
+                        pupil_mask(u, v, p.blades, rot, roundness, p.aperture_softness)
+                    };
                 }
             }
             for band in &bands {

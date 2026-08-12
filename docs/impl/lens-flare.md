@@ -403,6 +403,55 @@ fraction and azimuth with `starburst_field`, rotates the sprite-relative pixel b
 so no slice bleeds into its neighbour. The shader spells `STARBURST_FIELDS` itself and
 a test pins the two spellings together.
 
+### 5b. Ghost edges are Fresnel: the ring masks (K-369)
+
+The starburst above is the aperture's **far** field. A ghost is its **near** field. Each
+ghost image is defocused by its own amount, and a defocused aperture edge is not a clean
+cut: it carries diffraction fringes just inside the rim, brighter than the middle of the
+ghost, at a scale set by that ghost's defocus. The bake therefore produces a second FFT
+product beside the sprite — `FlareBaked::ring_masks`, `RING_SLICES` (6) slices of
+`RING_RES`² (128²) — and the trace samples one of them **in place of `pupil_mask`** for the
+paths that carry a slice.
+
+It is the same propagator. Multiplying the aperture by `e^{iπ(x²+y²)/(λd)}` and taking one
+FFT is Fresnel propagation to distance `d`; folding the Fresnel number `F = a²/(λd)` into
+coordinates normalised so the aperture frame is `x, y ∈ [−1, 1]` makes the chirp phase
+exactly `π·F·(x² + y²)`. The ladder is `F = 64, 32, 16, 8, 4, 2` — nearly-focused edge with
+fine ripples at the top, spread wash at the bottom. The propagated aperture is the **same
+on-axis image slice 0 of the starburst uses**, computed once and read twice, so the ring
+masks rebake with blades, rotation, roundness and f-stop exactly when the sprite does.
+
+Three things about the maths that are easy to get wrong and are pinned by test:
+
+- **the output frame is not the input frame.** DFT bin `m` lands at `x' = m/(N·Δx·F)` in
+  the aperture's own units, so the propagated window is `±1/(2·Δx·F)` wide and *narrows*
+  as `F` rises. At `RING_RES` = 128 samples the window at `F` 64 does not even reach the
+  iris, so the propagation runs at `APERTURE_RES` (256) and only the resampled mask is
+  128². The same bound is the chirp's Nyquist limit (its local frequency at radius `r` is
+  `F·r`), so a window that covers the aperture is also a chirp that is sampled rather than
+  aliased — one condition, not two;
+- **the resample lands on pupil coordinates**, where `u = 1` is aperture ndc
+  `APERTURE_SIZE` (0.75). That makes a mask lookup at a traced ray's own `(u, v)` a direct
+  bilinear tap — `ring_mask_sample`, whose arithmetic the trace WGSL mirrors op for op with
+  `RING_RES` and `RING_SLICES` spelled in both languages and pinned together;
+- **energy is matched over the pupil DISC, not the square.** Fresnel diffraction really
+  does throw light past the geometric aperture, and at the low Fresnel numbers a good deal
+  of it lands beyond `r = 1` — where the trace sprays no rays at all. Normalising over the
+  square would hand the widest ghosts a mask whose flux mostly falls outside the sampled
+  pupil and dim them by half. Nothing is clamped: the overshoot above 1 at the rim (peak
+  ≈ 1.50 against a plateau of ≈ 0.98 at `F` 64) is the Gibbs ringing, and it is the point.
+
+Which ghost gets which rung is the one **approximation** here, and it is deliberate. The
+top `RING_GHOSTS` (32) ranked paths carry a slice — below that a ghost contributes no
+visible edge — and the slice comes from the path's already-measured image spread,
+`F ≈ RING_SPREAD_REF / spread` clamped to the ladder. Joo et al. (2016) derive each ghost's
+fractional-Fourier order from the ABCD matrix chain of its own path; that is the exact
+answer and the recorded upgrade. `RING_SPREAD_REF` = 3.2 is a calibration measured against
+the bundled library (whose top-32 spreads run 0.05 … 8 of the sensor diagonal) and is the
+knob to turn — a regression test asserts the ladder actually spans at least three rungs on
+a real lens, because at the first value tried every path on every bundled lens landed on
+the bottom rung.
+
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)
 with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). The gain ceiling is

@@ -9050,3 +9050,68 @@ glass. Bakes stay inside the budget (118–208 ms across the library, the cap's 
 included).
 
 **Existing projects gain ghosts, so the effect's version goes 8 → 9.**
+
+## K-369 — Ghost edges are Fresnel: a baked near-field ring mask per defocus rung
+
+**DECIDED** (2026-08-12). Entry C2 of the flare accuracy programme.
+
+The starburst is **Fraunhofer** diffraction — the far field of the aperture — and it has
+been right since K-256. The ghosts are **Fresnel**. Each ghost image is defocused by its
+own amount, so its edge is not the hard iris polygon the ray trace draws: it carries
+near-field diffraction ringing, a set of fringes just inside the rim brighter than the
+middle of the ghost, at a scale set by that ghost's own defocus. Every real-time flare
+drops this, which is exactly why real-time ghosts have stencil edges and photographed ones
+shimmer.
+
+**The propagator was already in the file.** `bake_starburst` multiplies the aperture by
+the quadratic phase `e^{iπ(x²+y²)/(λd)}` and takes one FFT — that IS Fresnel propagation to
+distance `d` (the single-FFT propagator). Joo et al. (2016, CGF 35(4)) parameterise the
+family of ghost images by the fractional Fourier transform; the computable member of that
+family, at each order, is this same propagator at a different distance. C2 is therefore the
+machinery the file already contains, run at a ladder of distances, and applied as the
+**iris mask** of the brightest ghosts rather than as a sprite.
+
+**The ladder.** `RING_SLICES` = 6 slices of `RING_RES`² = 128², at Fresnel numbers
+`F = 64, 32, 16, 8, 4, 2`. Folding `F = a²/(λd)` into coordinates normalised so the
+aperture frame is `x, y ∈ [−1, 1]` makes the chirp phase exactly `π·F·(x² + y²)`, which is
+the whole parameterisation: high `F` is a nearly-focused edge with fine ripples, low `F`
+spreads. The slices are baked from the **same on-axis aperture image the starburst's slice
+0 uses** — computed once and read twice — so the ring masks rebake with blades, rotation,
+roundness and f-stop exactly when the starburst does, under the same `bake_key`.
+
+Two details are load-bearing and were derived rather than guessed. First, the propagator's
+output lands in its own frame: DFT bin `m` sits at `x' = m/(N·Δx·F)` in the aperture's
+units, so the output window is `±1/(2·Δx·F)` wide and **narrows as `F` rises**. Reaching
+`F = 64` at all needs `N ≥ 256`, which is why the propagation runs at `APERTURE_RES` and
+only the resampled mask is `RING_RES`; the same bound is the chirp's Nyquist limit, so one
+condition covers both. Second, the intensity is resampled back onto **pupil** coordinates
+(`u = 1` is aperture ndc `APERTURE_SIZE`), so a mask lookup at a traced ray's `(u, v)` is a
+direct bilinear tap — `ring_mask_sample`, mirrored op-for-op in the trace WGSL with
+`RING_RES`/`RING_SLICES` pinned by the constants test.
+
+**Energy is preserved, over the pupil DISC.** Each slice is scaled so its energy equals the
+analytic iris mask's — a ringed ghost must be neither brighter nor dimmer than the
+hard-edged one it replaces — and nothing is clamped: the overshoot above 1 at the rim
+(measured peak ≈ 1.50 against a plateau of ≈ 0.98 at `F` 64) is the Gibbs ringing and is the
+entire point. The disc rather than the square matters: Fresnel diffraction genuinely throws
+light past the geometric aperture, and the trace does not spray rays out there, so
+normalising over the square would quietly halve the widest ghosts.
+
+**Which ghost gets which rung, and the honest limits of that.** The top `RING_GHOSTS` = 32
+ranked paths carry a slice; everything below keeps the analytic mask, because a ghost that
+faint contributes no visible edge. The slice comes from the path's already-measured image
+spread: `F ≈ RING_SPREAD_REF / spread`, clamped to the ladder. Joo et al. derive each
+ghost's order from the ABCD matrix chain of its own path — the exact answer, and **the
+recorded upgrade path**; the spread proxy buys the same monotone relationship (tight ghost
+→ near its focus → crisp edge with fine ringing; frame-filling wash → broad ringing)
+without the matrix plumbing. `RING_SPREAD_REF` = 3.2 is a **calibration, not a derivation**:
+the bundled library's top-32 spreads run 0.05 … 8 of the sensor diagonal, and 3.2 lays the
+six rungs across 0.05 … 1.6 of that. It is the knob to turn, and it earns its own
+regression test — at the plan's first value of 0.5 every ranked path on every bundled lens
+landed on the bottom rung and the ladder had one step.
+
+The bake cost is the six FFTs alone: the aperture image they propagate is one the starburst
+was already tracing, so the added time is single-digit milliseconds against a bake of
+hundreds.
+
+**Existing projects' ghost edges change, so the effect's version goes 9 → 10.**

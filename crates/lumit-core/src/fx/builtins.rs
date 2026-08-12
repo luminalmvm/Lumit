@@ -3232,10 +3232,11 @@ pub const BUILTINS: &[EffectSchema] = &[
         enabled_when: &[],
         match_name: "lens_flare",
         label: "Lens flare",
-        // 9 since K-368: four-bounce ghost paths are enumerated and ranked
-        // beside the two-bounce ones, so an existing project gains ghosts it
-        // did not have — plainly on vintage uncoated glass.
-        version: 9,
+        // 10 since K-369: the brightest ghosts take their iris mask from a
+        // baked near-field diffraction pattern instead of the analytic
+        // polygon, so an existing project's ghost edges gain Fresnel ringing
+        // and soften by their own defocus.
+        version: 10,
         category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Heavy,

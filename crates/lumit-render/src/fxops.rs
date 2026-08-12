@@ -1130,6 +1130,8 @@ pub fn run_ops(
                             starburst: b.starburst,
                             sb_res: lf::STARBURST_RES,
                             sb_fields: lf::STARBURST_FIELDS as u32,
+                            ring_masks: b.ring_masks,
+                            ring_slice: b.ring_slice,
                         }
                     }) as lumit_gpu::fx::FlareBake),
                     &probe,

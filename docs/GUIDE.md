@@ -592,6 +592,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the shape of the hole at eight angles across the frame when you pick a lens, and each
   light in the shot reads the two that bracket where it actually sits, turned to point
   the right way. A light dead centre gets exactly the star it always got.
+  The ghosts have an edge problem of their own, and it is the opposite kind of
+  physics. If you cut a hole in card and shine a torch through it, the patch of
+  light on the wall does not have a clean border: right at the rim there is a
+  set of fine bright and dark rings, and the brightest of them is brighter than
+  the middle of the patch. That is light bending round the edge of the hole,
+  and a real ghost — which is just an out-of-focus picture of the iris — has
+  exactly the same shimmer at its rim. Almost every flare in software draws
+  ghosts with a stencil edge instead, which is a large part of why they read as
+  fake. Lumit works the rings out properly, using the same Fourier maths the
+  starburst uses, and paints them onto the brightest ghosts. The amount differs
+  per ghost, and that is not a stylistic choice: how far out of focus a ghost is
+  decides how coarse its rings are. A tight, almost-focused ghost keeps a sharp
+  edge with very fine ringing; a big soft one that fills the frame rings slowly
+  and its edge fades away instead. So the ghosts in a train do not all have the
+  same kind of edge, which is what a photograph shows and a stencil cannot.
+  The brightness is kept honest while this happens — the ringing moves light
+  around the rim, it never adds or removes any — so turning it on changed the
+  look of the edges without changing how bright anything is.
   The expensive maths (the Fourier transforms, the iris image) runs once on the CPU when
   you change a parameter and is remembered; only the ray shooting and drawing happen per
   frame, which is what keeps it scrubbable. When it's doing too much, the dials to reach

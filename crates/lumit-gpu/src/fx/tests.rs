@@ -3306,6 +3306,8 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
         starburst: b.starburst,
         sb_res: lf::STARBURST_RES,
         sb_fields: lf::STARBURST_FIELDS as u32,
+        ring_masks: b.ring_masks,
+        ring_slice: b.ring_slice,
     }
 }
 
@@ -3322,6 +3324,11 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
         ("REFL_LAMBDA_BINS", lf::REFL_LAMBDA_BINS),
         ("REFL_COS_BINS", lf::REFL_COS_BINS),
         ("SPECTRAL_SUB", lf::SPECTRAL_SUB),
+        // The K-369 ring-mask grid: the shader indexes the baked slices by
+        // hand, so a drift here would sample the wrong slice at the wrong
+        // pitch and every ringed ghost edge would differ from the CPU's.
+        ("RING_RES", lf::RING_RES),
+        ("RING_SLICES", lf::RING_SLICES),
     ] {
         let want = format!("const {name}: u32 = {want}u;");
         assert!(
@@ -3992,12 +3999,16 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let (grid, lambda_count, _) = lf::quality_ladder(p.quality);
             let bands = lf::spectral_bands(lambda_count, p.dispersion);
             let mut combos = Vec::new();
-            'outer: for &pair in baked.pairs.iter().take(p.max_ghosts as usize) {
+            // Which ranked path each combo came from — the K-369 ring slice
+            // is a property of the path, not of the band.
+            let mut pair_of = Vec::new();
+            'outer: for (pi, &pair) in baked.pairs.iter().take(p.max_ghosts as usize).enumerate() {
                 for band in &bands {
                     if combos.len() >= combo_limit as usize {
                         break 'outer;
                     }
                     combos.push((pair, band));
+                    pair_of.push(pi);
                 }
             }
             let ray_count = (grid * grid) as usize;
@@ -4016,6 +4027,8 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             // Rays compared on a four-bounce path (K-368): the phases the
             // other two lenses never reach.
             let mut four_live = 0u32;
+            // Rays compared on a path whose iris mask is a K-369 ring slice.
+            let mut ringed_live = 0u32;
             let mut sum_pos = 0.0f32;
             let mut pos_errs: Vec<f32> = Vec::new();
             let mut weight_errs: Vec<f32> = Vec::new();
@@ -4036,8 +4049,15 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                         // hold light and both twins skip the trace.
                         let g1f = (grid.max(2) - 1) as f32;
                         let lim = 1.0 + 1.5 * (2.0 / g1f);
-                        let mask =
-                            lf::pupil_mask(u, v, p.blades, rot, roundness, p.aperture_softness);
+                        // The iris mask, and for a path that carries a
+                        // K-369 ring slice the near-field mask that replaces
+                        // it — the branch the shader takes, taken here too.
+                        let slice = baked.ring_slice[pair_of[ci]];
+                        let mask = if slice >= 0 {
+                            lf::ring_mask_sample(&baked.ring_masks, slice as usize, u, v)
+                        } else {
+                            lf::pupil_mask(u, v, p.blades, rot, roundness, p.aperture_softness)
+                        };
                         let cpu = if u * u + v * v > lim * lim {
                             None
                         } else {
@@ -4107,6 +4127,9 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                 if pair[2] != lf::NO_BOUNCE {
                                     four_live += 1;
                                 }
+                                if slice >= 0 {
+                                    ringed_live += 1;
+                                }
                                 let pos_err = (g[0] - pos[0]).abs().max((g[1] - pos[1]).abs());
                                 sum_pos += pos_err;
                                 pos_errs.push(pos_err);
@@ -4155,6 +4178,13 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                 "lens {lens}: {mismatched_liveness}/{total} rays flipped live/dead"
             );
             assert!(live > 100, "too few live rays ({live}) to mean anything");
+            // Without this the ring branch could be wrong in the shader and
+            // every bound above would still pass, because nothing would have
+            // taken it (K-369).
+            assert!(
+                ringed_live > 0,
+                "no ringed-mask ray was compared — the K-369 branch went unchecked"
+            );
             if lens == 17 {
                 // Without this the extra phases could be wrong in the
                 // shader and every bound above would still pass, because

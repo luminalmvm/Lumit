@@ -44,6 +44,10 @@ struct Surface {
 // were all this struct carried before, and they walk exactly the phases they
 // always did. The two fields took two of the padding slots, so the layout
 // mirrors lumit-gpu's `GpuCombo` at the size it always had.
+//
+// `ring_slice` names the K-369 ghost-edge ring mask this path's iris mask is
+// sampled from, or -1 for the analytic polygon; it took the struct's last
+// padding slot, so the layout is again unchanged.
 struct Combo {
     bounce_a: u32,
     bounce_b: u32,
@@ -52,7 +56,7 @@ struct Combo {
     band: u32,
     bounce_c: u32,
     bounce_d: u32,
-    _pad4: f32,
+    ring_slice: i32,
 };
 
 // The empty bounce slot — lumit_core's `NO_BOUNCE`.
@@ -163,6 +167,9 @@ struct TraceParams {
 // `FlareBaked::reflectance`.
 @group(0) @binding(7) var<storage, read> reflectance: array<f32>;
 @group(0) @binding(8) var<storage, read> band_subs: array<BandSub>;
+// The baked ghost-edge ring masks (K-369), RING_SLICES slices of RING_RES^2
+// in pupil coordinates — see lumit_core's `FlareBaked::ring_masks`.
+@group(0) @binding(9) var<storage, read> ring_masks: array<f32>;
 
 // The light direction for a source at raster fraction (px, py) — the exact
 // WGSL twin of lumit_core's `light_direction` (sensor y up, so the y
@@ -227,6 +234,38 @@ fn pupil_mask(u: f32, v: f32) -> f32 {
     let soft = max(clamp(tp.softness, 0.0, 1.0) * bound, 1e-4);
     let t = clamp((r - (bound - soft)) / soft, 0.0, 1.0);
     return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+
+// The ring-mask side and slice count (K-369), spelled here because a shader
+// cannot import a Rust constant — pinned against lumit-core by test.
+const RING_RES: u32 = 128u;
+const RING_SLICES: u32 = 6u;
+
+// One bilinear tap into a ring slice at pupil coordinates — the op-for-op
+// twin of lumit_core's `ring_mask_sample`. Outside the unit square, and on a
+// slice the bake did not produce, the mask is 0.
+fn ring_mask_sample(slice: i32, u: f32, v: f32) -> f32 {
+    if (u < -1.0 || u > 1.0 || v < -1.0 || v > 1.0) {
+        return 0.0;
+    }
+    let base = u32(max(slice, 0)) * RING_RES * RING_RES;
+    if (arrayLength(&ring_masks) < base + RING_RES * RING_RES) {
+        return 0.0;
+    }
+    let last = RING_RES - 1u;
+    let fx = (u * 0.5 + 0.5) * f32(last);
+    let fy = (v * 0.5 + 0.5) * f32(last);
+    let x0 = min(u32(floor(fx)), last);
+    let y0 = min(u32(floor(fy)), last);
+    let x1 = min(x0 + 1u, last);
+    let y1 = min(y0 + 1u, last);
+    let tx = fx - f32(x0);
+    let ty = fy - f32(y0);
+    let a = ring_masks[base + y0 * RING_RES + x0] * (1.0 - tx)
+          + ring_masks[base + y0 * RING_RES + x1] * tx;
+    let b = ring_masks[base + y1 * RING_RES + x0] * (1.0 - tx)
+          + ring_masks[base + y1 * RING_RES + x1] * tx;
+    return a * (1.0 - ty) + b * ty;
 }
 
 // Unpolarised Fresnel by incidence cosine (lumit_core `fresnel_cos`).
@@ -451,7 +490,14 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         rays[slot] = dead;
         return;
     }
-    let mask = pupil_mask(u, v);
+    // The shape of the hole the light comes through. For the top-ranked
+    // paths that carry a ring slice (K-369) that is not the analytic polygon
+    // but the aperture's near-field diffraction pattern at this ghost's own
+    // defocus — rim ringing and all.
+    var mask = pupil_mask(u, v);
+    if (combo.ring_slice >= 0) {
+        mask = ring_mask_sample(combo.ring_slice, u, v);
+    }
 
     var pos = vec3<f32>(u * tp.pupil_mm, v * tp.pupil_mm, tp.start_z_mm);
     // The ray's own point of the source (K-367): a point source jitters by
