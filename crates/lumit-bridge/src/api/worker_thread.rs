@@ -1297,6 +1297,12 @@ pub enum WorkerRequest {
         stops: f64,
         tone_map: bool,
         transparent_background: bool,
+        /// The region of interest as comp fractions `[u0, v0, u1, v1]`
+        /// (K-362), or `None` for the whole frame. It rides the look message
+        /// rather than getting one of its own for the same reason the
+        /// background flag does: the renderer must never hold half a look, and
+        /// this is a way of viewing like the rest of it.
+        region: Option<[f32; 4]>,
     },
 }
 
@@ -2626,6 +2632,7 @@ fn handle_requests(
                     stops,
                     tone_map,
                     transparent_background,
+                    region,
                 } => {
                     state
                         .renderer
@@ -2633,6 +2640,7 @@ fn handle_requests(
                     state
                         .renderer
                         .set_transparent_background(transparent_background);
+                    state.renderer.set_region(region);
                     Ok(())
                 }
             };

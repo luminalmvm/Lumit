@@ -1583,7 +1583,63 @@ class LumitUiState extends ChangeNotifier {
   /// nothing yet. One record for the three, because they travel as one
   /// message ([pushViewerLook]) and a push can be skipped only when *all* of
   /// it is already in force.
-  ({double stops, bool toneMap, bool grid})? _pushedView;
+  ({double stops, bool toneMap, bool grid, String roi})? _pushedView;
+
+  /// The Viewer's **region of interest** per comp (K-362): the sub-rectangle
+  /// the engine composites, as comp fractions `[u0, v0, u1, v1]`. Rides the
+  /// session beside [previewResolutions] rather than the document, for the
+  /// same reason — choosing where to look is not an edit, and must never reach
+  /// an export.
+  final Map<String, List<double>> regionsOfInterest = {};
+
+  /// Whether the next drag on the picture sweeps out a region of interest
+  /// (K-362). View state rather than panel state only because two widgets need
+  /// it — the bar that arms it and the layer that takes the drag — and
+  /// threading a transient flag between them through the stage is more
+  /// machinery than the flag is worth. Never saved: arming is a thing you are
+  /// in the middle of.
+  bool _armingRegion = false;
+  bool get armingRegion => _armingRegion;
+  set armingRegion(bool on) {
+    if (_armingRegion == on) return;
+    _armingRegion = on;
+    notifyListeners();
+  }
+
+  /// The fronted comp's region, or null for the whole frame.
+  List<double>? get regionOfInterest {
+    final id = _selectedComp?.internalid.toString();
+    return id == null ? null : regionsOfInterest[id];
+  }
+
+  /// Set (or with null, clear) the fronted comp's region and re-render. A
+  /// region that is not four numbers, is inside-out, or covers everything is
+  /// no region — the engine says the same, and agreeing here keeps the button's
+  /// lit state honest.
+  void setRegionOfInterest(List<double>? region) {
+    final id = _selectedComp?.internalid.toString();
+    if (id == null) return;
+    final ok = region != null &&
+        region.length == 4 &&
+        region.every((v) => v.isFinite) &&
+        region[2] - region[0] > 0.001 &&
+        region[3] - region[1] > 0.001 &&
+        (region[0] > 0 || region[1] > 0 || region[2] < 1 || region[3] < 1);
+    if (ok) {
+      regionsOfInterest[id] = [
+        region[0].clamp(0.0, 1.0),
+        region[1].clamp(0.0, 1.0),
+        region[2].clamp(0.0, 1.0),
+        region[3].clamp(0.0, 1.0),
+      ];
+    } else {
+      regionsOfInterest.remove(id);
+    }
+    _armingRegion = false;
+    notifyListeners();
+    rememberSession();
+    pushViewerLook();
+  }
 
   /// Whether the Viewer's transparency grid is up (K-352). While it is, the
   /// engine leaves the comp's background colour out of the composite, so
@@ -1646,13 +1702,22 @@ class LumitUiState extends ChangeNotifier {
     final comp = selectedComp;
     if (comp == null) return;
     final look = viewerLook;
-    final target = (stops: look.stops, toneMap: look.toneMap, grid: viewerGrid);
+    final roi = regionOfInterest;
+    final target = (
+      stops: look.stops,
+      toneMap: look.toneMap,
+      grid: viewerGrid,
+      // Compared as text: a record holding a list compares by identity, so two
+      // equal regions would look different and re-push on every fronting.
+      roi: roi?.join(',') ?? '',
+    );
     if (target == _pushedView) return;
     try {
       comp.setViewerLook(
         stops: target.stops,
         toneMap: target.toneMap,
         transparentBackground: target.grid,
+        region: roi == null ? null : Float32List.fromList(roi),
       );
     } catch (_) {
       // No worker yet, or a comp that has gone. The next change asks again —
@@ -1702,6 +1767,9 @@ class LumitUiState extends ChangeNotifier {
         viewerLooks: Map.of(viewerLooks),
         previewResolutions: {
           for (final e in previewResolutions.entries) e.key: e.value.name,
+        },
+        regionsOfInterest: {
+          for (final e in regionsOfInterest.entries) e.key: List.of(e.value),
         },
       );
 
@@ -1803,6 +1871,11 @@ class LumitUiState extends ChangeNotifier {
             previewResolutions[e.key] = r;
           }
         }
+      }
+      // The regions, checked against the comps that actually loaded — the
+      // same rule every other id in a session gets (K-362).
+      for (final e in session.regionsOfInterest.entries) {
+        if (known.containsKey(e.key)) regionsOfInterest[e.key] = List.of(e.value);
       }
       for (final id in session.openComps) {
         final comp = known[id];

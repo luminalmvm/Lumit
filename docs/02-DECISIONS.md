@@ -8689,3 +8689,59 @@ so nothing else in that walk would notice one moving), and only when the comp ha
 `accepts_lights` is hashed only when it is *off* and a light exists — the default is on, so
 off is the state that departs from what a pre-lighting key described. Every key made before
 this stays valid.
+
+---
+
+## K-362 — The region of interest is a window on the composite, and a frame rendered through one takes its own name
+
+**DECIDED** (2026-08-12). Closes docs/07 §2.2 item 7 and NEXT-FEATURES entry 7.
+
+Drag a rectangle on the picture and the Viewer composites only that window of the
+composition. Preview only: the export renderer is never sent one, which is the same
+construction that keeps the preview scale out of files (K-186) and the Viewer's exposure out
+of them (K-346).
+
+**It is a window, not a crop of a finished frame.** `Realiser::realise_region` shifts the
+comp-pixels-to-NDC mapping and sizes the target to the region, so the composite writes only
+the pixels asked for. The camera matrix is untouched — it projects comp space, and the region
+maps a window onto the result, which is why a region cannot change perspective. Pixel density
+is unchanged: a region half as wide renders half as many pixels of the same size, so every
+px-dimensioned parameter in the frame still means what it meant.
+
+**Two stagings refuse the window, and the frame is composited whole and cropped instead.** An
+**adjustment layer** runs its effects on the composite of everything below it, and a
+**motion-blurring layer** averages sub-frame copies into a comp-sized texture first. Both are
+written against the comp raster, and windowing either halfway would give a wrong picture
+rather than a fast one. Refusing is silent by design *because it cannot be noticed*: the
+returned texture is the region's size either way, so the picture is identical and only the
+work differs. A regression test asserts a windowed composite is the same pixels the full
+frame has there — that equivalence is the whole promise, and without it working inside a
+region is working on a lie.
+
+That is the honest form of the warning NEXT-FEATURES recorded against this entry. A region
+saves the composite, the display encode and the publish; it does **not** save the effect
+stack, which runs per layer at the layer's own size and is untouched. Culling layers whose
+placement misses the region would save that too, and is the upgrade path — it is not here
+because a layer that appears not to touch the region can still reach it through an adjustment
+layer's blur, and getting that wrong is a missing element rather than a slow frame.
+
+**The frame name folds the region in** (`named_under_view`, joining K-346's view and K-352's
+transparent background). The alternative the plan floated — refusing to name frames while a
+region is set — would make the cache useless exactly when it is wanted, since scrubbing
+inside a region is the use case. A region covering the whole comp is refused as no region at
+all, so the common case keeps sharing the full frame's names and nothing already banked is
+orphaned.
+
+**The rectangle crosses every boundary as fractions**, never pixels: which pixel a point is
+depends on the raster the engine settles on, and it settles on different ones at different
+preview resolutions. Fractions mean the same thing at all of them. Degenerate input —
+inverted, empty, out of range, not finite — clears the region rather than faulting, on both
+sides: a drag that ends where it began is a gesture, not an error.
+
+**One button, both states.** Set a region and the same control clears it; "look at a corner"
+and "stop looking at a corner" are one decision, not two. The region is outlined whenever it
+is in force, so it is never possible to be looking at part of a shot without being told —
+the failure mode this feature would otherwise introduce.
+
+Per comp, in the session beside the preview resolution (K-357), for the same reason: choosing
+where to look is a way of working, not an edit.

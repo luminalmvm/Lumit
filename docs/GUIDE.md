@@ -3977,6 +3977,38 @@ into it.
 Move the light, and the flare follows. Animate it, and the flare animates. That
 is the point of making a light a layer rather than a number inside an effect.
 
+### The region of interest — working on one corner (K-362)
+
+On a heavy shot every preview frame costs the whole frame, even when you are
+fiddling with one corner of it. The **region of interest** lets you say: just
+this rectangle, please.
+
+Click the rectangle button on the Viewer bar, drag a box on the picture, and
+that is all the engine composites until you clear it — click the same button
+again. The region stays outlined the whole time it is in force, because the one
+genuinely bad outcome here is forgetting you set one and wondering why the rest
+of the shot has gone.
+
+**What it saves, honestly.** The composite, the display encode and the handover
+to the screen — the per-frame costs that scale with how many pixels there are.
+It does **not** save the effect stack. Effects run on each layer at that
+layer's own size, before the layers are combined, and none of them knows or
+cares which part of the result you are looking at. So a region helps most where
+the frame is large and the layers are many; it helps least where one layer has
+an expensive blur on it.
+
+Two situations quietly opt out: a composition with an **adjustment layer**, and
+a layer with **motion blur** on. Both work by building a full-size intermediate
+picture first, and cutting a window out of that halfway through would give a
+wrong result rather than a fast one. In those cases the frame is made whole and
+the region is cut from it afterwards — you see exactly the same picture, it
+just did not save anything. Nothing tells you, because there is nothing to tell:
+the picture is identical either way.
+
+The region belongs to the composition, not the project. It rides the session
+alongside the preview resolution, so it is where you left it when you come back
+and it can never end up in an exported file.
+
 ### Lights that actually light things (K-361)
 
 A Light layer used to be something the Lens flare read. Now it is also

@@ -962,13 +962,15 @@ class CompositionReference {
   void setViewerLook(
           {required double stops,
           required bool toneMap,
-          required bool transparentBackground}) =>
+          required bool transparentBackground,
+          Float32List? region}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetViewerLook(
               that: this,
               stops: stops,
               toneMap: toneMap,
-              transparentBackground: transparentBackground);
+              transparentBackground: transparentBackground,
+              region: region);
 
   /// Set the work area, or clear it with `None`.
   void setWorkArea({BridgeSpan? span}) =>

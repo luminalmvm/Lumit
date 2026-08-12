@@ -74,6 +74,7 @@ import 'viewer_camera.dart';
 import 'viewer_paint.dart';
 import 'viewer_progress_bar.dart';
 import 'viewer_type.dart';
+import 'viewer_region.dart';
 import 'viewer_zoom.dart';
 
 /// The magnifications the picker offers. `null` means fit-to-panel, which is
@@ -929,6 +930,17 @@ class _Stage extends StatelessWidget {
               accent: t.accent,
               onChanged: onChanged,
             ),
+            // The region of interest (K-362): the outline whenever one is set,
+            // and — only while armed — the drag that sweeps a new one. Above
+            // the layer controls for the same reason the Zoom tool is: while a
+            // region is being swept, the whole picture is the target.
+            ViewerRegionLayer(
+              arming: uiState.armingRegion,
+              fitted: fitted,
+              region: uiState.regionOfInterest,
+              accent: t.accent,
+              onRegion: uiState.setRegionOfInterest,
+            ),
             // Over the layer controls, and inert unless the Zoom tool is
             // armed: while it is, the whole picture is its target and no
             // handle underneath may take a click meant for a magnification.
@@ -1537,6 +1549,7 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<ViewerChannel> onChannel;
   final VoidCallback onGrid;
   final VoidCallback onWireframes;
+
   final ValueChanged<double> onStops;
   final VoidCallback onToneMap;
   final VoidCallback onPlayPause;
@@ -1637,6 +1650,38 @@ class _Toolbar extends StatelessWidget {
             width: 76,
             child: _ResolutionDropdown(),
           ),
+          const SizedBox(width: 6),
+          // Region of interest (K-362). Lit while a region is in force or a
+          // drag is armed for one, so working on a corner of a shot is never
+          // a state you can be in without being told; the same click clears a
+          // region that exists.
+          Builder(builder: (context) {
+            final ui = context.watch<LumitUiState>();
+            final set = ui.regionOfInterest != null;
+            final arming = ui.armingRegion;
+            return LumitTooltip(
+              message: set
+                  ? l10n.tipClearRegionOfInterest
+                  : arming
+                      ? l10n.tipDragRegionOfInterest
+                      : l10n.tipRegionOfInterest,
+              child: HouseButton(
+                key: const ValueKey('viewer-region'),
+                small: true,
+                frameless: true,
+                // A region that exists is cleared; otherwise the next drag on
+                // the picture is armed to sweep one out.
+                onPressed: () => set
+                    ? ui.setRegionOfInterest(null)
+                    : ui.armingRegion = !arming,
+                child: lumitIcon(
+                  LumitIcon.rectangle,
+                  size: iconSize,
+                  color: set || arming ? t.accent : t.textSecondary,
+                ),
+              ),
+            );
+          }),
           const SizedBox(width: 6),
           SizedBox(
             width: 76,

@@ -245,6 +245,34 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
     ) -> wgpu::Texture {
+        self.realise_region(camera, width, height, background, layers, None)
+    }
+
+    /// As [`Self::realise`], but compositing only `region` of the composition
+    /// — the Viewer's region of interest (K-362). The returned texture is the
+    /// region's size, not the comp's, and every layer lands where it would
+    /// have, simply windowed.
+    ///
+    /// **A region is refused, and the whole frame composited, when the draw
+    /// list holds an adjustment layer or a motion-blurring layer.** Both stage
+    /// through a comp-sized intermediate whose maths is written against the
+    /// comp raster, and a half-applied window there would be a wrong picture
+    /// rather than a slow one. The caller crops the result instead, so what it
+    /// gets back is the same picture either way — a region never changes the
+    /// image, only how much of it is computed. `realise` itself is the
+    /// no-region entry, which is also what the nested-comp recursion below
+    /// calls: a Precomp renders itself entire, and this comp's window applies
+    /// once, to the finished thing.
+    pub fn realise_region(
+        &self,
+        camera: Option<lumit_core::model::CameraPose>,
+        width: u32,
+        height: u32,
+        background: [f64; 4],
+        layers: &[CompLayerDraw],
+        region: Option<lumit_gpu::Region>,
+    ) -> wgpu::Texture {
+        let region = region.filter(|_| region_is_safe(layers));
         // Depth is what tells the profiler which layers are rows of the
         // composition being rendered and which are inside a Precomp (see
         // crate::profile). Paired around the whole walk, recursion included, so
@@ -258,7 +286,7 @@ impl Realiser<'_> {
         // per layer and per effect. `begin_frame` nests, which is what lets this
         // sit on the recursive entry point rather than being threaded by hand.
         self.ctx.begin_frame();
-        let out = self.realise_at_depth(camera, width, height, background, layers);
+        let out = self.realise_at_depth(camera, width, height, background, layers, region);
         self.ctx.end_frame();
         if let Some(p) = self.profiler {
             p.leave_comp();
@@ -273,6 +301,7 @@ impl Realiser<'_> {
         height: u32,
         background: [f64; 4],
         layers: &[CompLayerDraw],
+        region: Option<lumit_gpu::Region>,
     ) -> wgpu::Texture {
         // The actual raster this comp's composites land on; all geometry
         // below stays in the logical `width`×`height` comp pixels.
@@ -283,8 +312,15 @@ impl Realiser<'_> {
             if !matches!(l.source, DrawSource::Adjust) {
                 continue;
             }
-            let below =
-                self.realise_segment(camera, width, height, background, &layers[start..i], &acc);
+            let below = self.realise_segment(
+                camera,
+                width,
+                height,
+                background,
+                &layers[start..i],
+                &acc,
+                region,
+            );
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames — temporal effects on an adjustment
             // layer are a later refinement, so no neighbours here. Its LUT and
@@ -362,7 +398,15 @@ impl Realiser<'_> {
             self.layer_done(l, started, fx_ms);
             start = i + 1;
         }
-        self.realise_segment(camera, width, height, background, &layers[start..], &acc)
+        self.realise_segment(
+            camera,
+            width,
+            height,
+            background,
+            &layers[start..],
+            &acc,
+            region,
+        )
     }
 
     /// Accumulation motion blur (docs/08 §3.26, docs/impl/temporal-rerender.md
@@ -459,9 +503,15 @@ impl Realiser<'_> {
             None,
             self.render_scale,
             self.samples,
+            // Coverage is only asked for by an adjustment layer, and a region
+            // is refused whenever the comp has one — see `realise_region`.
+            None,
         )
     }
 
+    // One more argument than clippy likes. The alternative is a struct that
+    // exists only to be unpacked at the single call site.
+    #[allow(clippy::too_many_arguments)]
     /// Composite one adjustment-free run of draws; `seed` (a previous
     /// stage's output) replaces the cleared background when present.
     fn realise_segment(
@@ -472,6 +522,7 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
         seed: &Option<wgpu::Texture>,
+        region: Option<lumit_gpu::Region>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         for l in layers {
@@ -749,6 +800,7 @@ impl Realiser<'_> {
             seed.as_ref(),
             self.render_scale,
             self.samples,
+            region,
         )
     }
 }
@@ -809,4 +861,20 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
         a[2] * b[0] - a[0] * b[2],
         a[0] * b[1] - a[1] * b[0],
     ]
+}
+
+/// Whether a region of interest can be applied to this draw list (K-362), or
+/// whether the whole frame has to be composited and cropped instead.
+///
+/// Two stagings are written against a comp-sized intermediate: an **adjustment
+/// layer**, whose effect stack runs on the composite of everything below it,
+/// and a **motion-blurring layer**, whose sub-frame copies are averaged into a
+/// comp-sized texture first. Windowing either of them halfway would produce a
+/// wrong picture rather than a fast one, so the region steps aside and the
+/// caller crops. Nothing about the image changes — only how much of it was
+/// computed to get there.
+fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
+    !layers
+        .iter()
+        .any(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
 }

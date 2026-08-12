@@ -198,6 +198,36 @@ pub fn concat_place(outer: [[f32; 4]; 4], inner: [[f32; 4]; 4]) -> [[f32; 4]; 4]
     (Mat4::from_cols_array_2d(&outer) * Mat4::from_cols_array_2d(&inner)).to_cols_array_2d()
 }
 
+/// A **region of interest** (K-362): the sub-rectangle of a composition the
+/// preview is asked to composite, in logical comp pixels. Never reaches the
+/// export renderer, exactly as the preview scale never does.
+///
+/// The region changes only which window of comp space the target covers. Pixel
+/// density is unchanged — a region half as wide renders half as many pixels of
+/// the same size, not the same pixels at double size — so every px-dimensioned
+/// parameter in the frame keeps meaning what it meant.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Region {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl Region {
+    /// The region's own pixel size at a render `scale`, rounded through the
+    /// same [`scaled_size`] every other target uses so nothing can disagree
+    /// about what "half size" means.
+    #[must_use]
+    pub fn target_size(&self, scale: f32) -> (u32, u32) {
+        scaled_size(
+            (self.w.round().max(1.0)) as u32,
+            (self.h.round().max(1.0)) as u32,
+            scale,
+        )
+    }
+}
+
 /// The pixel size a `width`×`height` frame takes at a render `scale` — the ONE
 /// rounding used both for the compositor's scaled render target and for the
 /// preview's final blit, so the two can never disagree about what "half size"
@@ -217,9 +247,29 @@ impl CompositeLayer<'_> {
     /// comp pixel space → NDC, with the layer transform applied.
     /// Full 4×4 (K-023). Order: quad(0..1) → layer px → −anchor → scale →
     /// rotate → +position → (parent `pre`, when collapsed) → NDC.
-    fn matrix(&self, comp_w: f32, comp_h: f32, camera: Option<&Mat4>) -> Mat4 {
-        let ndc_from_comp = Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
-            * Mat4::from_scale(glam::vec3(2.0 / comp_w, -2.0 / comp_h, 1.0));
+    fn matrix(
+        &self,
+        comp_w: f32,
+        comp_h: f32,
+        camera: Option<&Mat4>,
+        region: Option<Region>,
+    ) -> Mat4 {
+        // Comp pixels → NDC. With a region of interest (K-362) the target
+        // covers only that sub-rectangle, so the mapping shifts its origin and
+        // divides by the region's size rather than the comp's. The camera
+        // matrix is untouched: it projects comp space, and this maps a window
+        // onto the result — which is why a region cannot change perspective.
+        let ndc_from_comp = match region {
+            Some(r) => {
+                Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
+                    * Mat4::from_scale(glam::vec3(2.0 / r.w, -2.0 / r.h, 1.0))
+                    * Mat4::from_translation(glam::vec3(-r.x, -r.y, 0.0))
+            }
+            None => {
+                Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
+                    * Mat4::from_scale(glam::vec3(2.0 / comp_w, -2.0 / comp_h, 1.0))
+            }
+        };
         let mut place = Mat4::from_cols_array_2d(&place_matrix(
             self.position,
             self.anchor,
@@ -717,7 +767,7 @@ impl Compositor {
             layer_mask: None,
             pre: None,
         }
-        .matrix(width as f32, height as f32, None)
+        .matrix(width as f32, height as f32, None, None)
         .to_cols_array_2d()
     }
 
@@ -766,7 +816,9 @@ impl Compositor {
         layers: &[CompositeLayer<'_>],
         camera: Option<Mat4>,
     ) -> wgpu::Texture {
-        self.composite_seeded(ctx, width, height, background, layers, camera, None, 1.0, 1)
+        self.composite_seeded(
+            ctx, width, height, background, layers, camera, None, 1.0, 1, None,
+        )
     }
 
     /// As [`Self::composite_with_camera`], but when `seed` is given the
@@ -811,8 +863,12 @@ impl Compositor {
         seed: Option<&wgpu::Texture>,
         render_scale: f32,
         samples: u32,
+        region: Option<Region>,
     ) -> wgpu::Texture {
-        let (tw, th) = scaled_size(width, height, render_scale);
+        let (tw, th) = match region {
+            Some(r) => r.target_size(render_scale),
+            None => scaled_size(width, height, render_scale),
+        };
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("comp-frame"),
             size: wgpu::Extent3d {
@@ -905,7 +961,7 @@ impl Compositor {
             .map(|layer| {
                 let uniform = LayerUniform {
                     matrix: layer
-                        .matrix(width as f32, height as f32, camera.as_ref())
+                        .matrix(width as f32, height as f32, camera.as_ref(), region)
                         .to_cols_array_2d(),
                     params: [
                         (layer.opacity / 100.0).clamp(0.0, 1.0),
@@ -1258,7 +1314,10 @@ impl Compositor {
                 };
                 let uniform = LayerUniform {
                     matrix: layer
-                        .matrix(width as f32, height as f32, camera.as_ref())
+                        // No region: a motion-blur sub-copy is averaged into a
+                        // comp-sized texture and the caller composites THAT,
+                        // where the region applies once.
+                        .matrix(width as f32, height as f32, camera.as_ref(), None)
                         .to_cols_array_2d(),
                     // No matte on a sub-copy: the layer's matte applies to the
                     // averaged result at the caller's 1:1 composite. Full alpha —
@@ -2679,6 +2738,7 @@ mod tests {
             Some(&first),
             1.0,
             1,
+            None,
         );
         let a = crate::fx::readback_linear_f32(&ctx, &both, 16, 16).unwrap();
         let b = crate::fx::readback_linear_f32(&ctx, &seeded, 16, 16).unwrap();
@@ -2728,6 +2788,7 @@ mod tests {
             None,
             0.5,
             1,
+            None,
         );
         assert_eq!((out.width(), out.height()), (8, 8), "target is scaled");
         let px = crate::fx::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
@@ -3083,6 +3144,7 @@ mod tests {
                 None,
                 1.0,
                 samples,
+                None,
             );
             crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap()
         };
@@ -3147,6 +3209,7 @@ mod tests {
                 None,
                 1.0,
                 samples,
+                None,
             );
             crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap()
         };
@@ -3191,6 +3254,7 @@ mod tests {
                 None,
                 1.0,
                 samples,
+                None,
             );
             crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap()
         };
@@ -3292,6 +3356,7 @@ mod tests {
             None,
             1.0,
             got,
+            None,
         );
         let px = crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap();
         assert!(
@@ -3327,9 +3392,10 @@ mod tests {
             None,
             1.0,
             4,
+            None,
         );
         let continued =
-            compositor.composite_seeded(&ctx, w, h, [0.0; 4], &[], None, Some(&seed), 1.0, 4);
+            compositor.composite_seeded(&ctx, w, h, [0.0; 4], &[], None, Some(&seed), 1.0, 4, None);
         assert_eq!(
             crate::fx::readback_linear_f32(&ctx, &seed, w, h).unwrap(),
             crate::fx::readback_linear_f32(&ctx, &continued, w, h).unwrap(),

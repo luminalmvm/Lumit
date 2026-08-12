@@ -1576,11 +1576,17 @@ impl CompositionReference {
         stops: f64,
         tone_map: bool,
         transparent_background: bool,
+        region: Option<Vec<f32>>,
     ) -> Result<(), BridgeError> {
+        // A region arrives as a list because that is what crosses the bridge
+        // cleanly; anything that is not four numbers is no region, which is
+        // also how "cleared" is said.
+        let region = region.and_then(|r| <[f32; 4]>::try_from(r.as_slice()).ok());
         self.dispatch(WorkerRequest::SetViewerLook {
             stops,
             tone_map,
             transparent_background,
+            region,
         })
     }
 

@@ -374,7 +374,8 @@ abstract class BridgeLibApi extends BaseApi {
       {required CompositionReference that,
       required double stops,
       required bool toneMap,
-      required bool transparentBackground});
+      required bool transparentBackground,
+      Float32List? region});
 
   void crateApiCompositionCompositionReferenceSetWorkArea(
       {required CompositionReference that, BridgeSpan? span});
@@ -2989,7 +2990,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       {required CompositionReference that,
       required double stops,
       required bool toneMap,
-      required bool transparentBackground}) {
+      required bool transparentBackground,
+      Float32List? region}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -2997,6 +2999,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_f_64(stops, serializer);
         sse_encode_bool(toneMap, serializer);
         sse_encode_bool(transparentBackground, serializer);
+        sse_encode_opt_list_prim_f_32_strict(region, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
       },
       codec: SseCodec(
@@ -3005,7 +3008,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceSetViewerLookConstMeta,
-      argValues: [that, stops, toneMap, transparentBackground],
+      argValues: [that, stops, toneMap, transparentBackground, region],
       apiImpl: this,
     ));
   }
@@ -3014,7 +3017,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceSetViewerLookConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_set_viewer_look",
-            argNames: ["that", "stops", "toneMap", "transparentBackground"],
+            argNames: [
+              "that",
+              "stops",
+              "toneMap",
+              "transparentBackground",
+              "region"
+            ],
           );
 
   @override
@@ -9573,6 +9582,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_prim_f_32_strict(raw);
+  }
+
+  @protected
   ProjectReference dco_decode_project_reference(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -12069,6 +12084,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  Float32List? sse_decode_opt_list_prim_f_32_strict(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_prim_f_32_strict(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_internalid = sse_decode_Uuid(deserializer);
@@ -14162,6 +14189,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_project_reference(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_prim_f_32_strict(
+      Float32List? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_prim_f_32_strict(self, serializer);
     }
   }
 

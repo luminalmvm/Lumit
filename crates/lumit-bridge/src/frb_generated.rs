@@ -2640,6 +2640,7 @@ fn wire__crate__api__composition__composition_reference_set_viewer_look_impl(
             let api_stops = <f64>::sse_decode(&mut deserializer);
             let api_tone_map = <bool>::sse_decode(&mut deserializer);
             let api_transparent_background = <bool>::sse_decode(&mut deserializer);
+            let api_region = <Option<Vec<f32>>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::set_viewer_look(
@@ -2647,6 +2648,7 @@ fn wire__crate__api__composition__composition_reference_set_viewer_look_impl(
                     api_stops,
                     api_tone_map,
                     api_transparent_background,
+                    api_region,
                 )?;
                 Ok(output_ok)
             })())
@@ -10650,6 +10652,17 @@ impl SseDecode for Option<crate::api::project::ProjectReference> {
     }
 }
 
+impl SseDecode for Option<Vec<f32>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<f32>>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::project::ProjectReference {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -15376,6 +15389,16 @@ impl SseEncode for Option<crate::api::project::ProjectReference> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::project::ProjectReference>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<f32>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<f32>>::sse_encode(value, serializer);
         }
     }
 }

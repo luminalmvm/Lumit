@@ -322,8 +322,13 @@ A single compact bar at the bottom of the Viewer holds, left to right:
    and a full wireframe display mode (outlines only, no raster) for heavy comps.
 6. **Guides menu**: rulers (`Ctrl+R`), guides (drag out of rulers; lock/clear), grid,
    title/action safe overlays, snapping-to-guides toggle.
-7. **Region of interest**: drag a rectangle; the engine renders only that region for
-   preview. MUST be clearable in one click and MUST never affect export.
+7. **Region of interest** (K-362, landed): drag a rectangle; the engine renders only that
+   region for preview. MUST be clearable in one click and MUST never affect export. Armed
+   from the Viewer bar, swept on the picture, and outlined whenever it is in force. It is a
+   window on the composite rather than a crop of a finished frame, so it saves the composite,
+   the display encode and the publish — but not the effect stack, which runs per layer at the
+   layer's own size. Frames rendered through a region take their own names, so scrubbing
+   inside one still uses the cache. Per comp, in the session beside the preview resolution.
 8. **Colour management indicator**: the current display transform (e.g. working space →
    display). Read-only badge; clicking opens colour settings. Always visible so "what am I
    looking at" is never ambiguous.

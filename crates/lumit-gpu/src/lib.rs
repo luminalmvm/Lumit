@@ -1580,6 +1580,6 @@ pub mod shared_linux;
 pub mod shared_metal;
 pub use composite::{
     camera_matrix, concat_place, place_matrix, scaled_size, Blend, CompositeLayer, Compositor,
-    MatteInput, MbSample,
+    MatteInput, MbSample, Region,
 };
 pub use glam::Mat4;

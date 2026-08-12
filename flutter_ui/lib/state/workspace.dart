@@ -50,6 +50,13 @@ class SavedSession {
   /// Comps previewing at Auto — the default — are simply absent.
   final Map<String, String> previewResolutions;
 
+  /// The region of interest of each composition, by id (K-362, docs/07 §2.2
+  /// item 7), as comp fractions `[u0, v0, u1, v1]`. Session state for the same
+  /// reason the resolutions are: choosing which corner to work on is a way of
+  /// working, not an edit, and it must never reach an export. Comps looking at
+  /// the whole frame — the default — are simply absent.
+  final Map<String, List<double>> regionsOfInterest;
+
   /// How the panels were arranged for this project, as [DockSplit.toJson]
   /// (K-245) — the arrangement itself, not the name of a preset, because the
   /// sizes and positions a user drags to are the arrangement.
@@ -69,6 +76,7 @@ class SavedSession {
     this.dock,
     this.viewerLooks = const {},
     this.previewResolutions = const {},
+    this.regionsOfInterest = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -82,6 +90,7 @@ class SavedSession {
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
         },
         'preview_resolutions': previewResolutions,
+        'regions_of_interest': regionsOfInterest,
       };
 
   /// The per-comp resolutions out of a session's JSON, dropping anything that
@@ -132,6 +141,7 @@ class SavedSession {
             : null,
         viewerLooks: _looksFromJson(j['viewer_looks']),
         previewResolutions: _resolutionsFromJson(j['preview_resolutions']),
+        regionsOfInterest: _regionsFromJson(j['regions_of_interest']),
       );
 
   /// The arrangement compared by value. Encoding is the cheap deep compare
@@ -148,6 +158,7 @@ class SavedSession {
       other._dockKey == _dockKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
+      other._regionKey == _regionKey &&
       listEquals(other.openComps, openComps);
 
   @override
@@ -164,7 +175,34 @@ class SavedSession {
           for (final e in previewResolutions.entries)
             Object.hash(e.key, e.value),
         ]),
+        _regionKey,
       );
+
+  /// The regions compared (and hashed) as text: a map of *lists* compares by
+  /// identity under `mapEquals`, so two equal regions would read as different
+  /// and the session would rewrite itself on every frame.
+  String get _regionKey => regionsOfInterest.isEmpty
+      ? ''
+      : jsonEncode({
+          for (final e in regionsOfInterest.entries) e.key: e.value,
+        });
+}
+
+/// The per-comp regions out of a session's JSON, keeping only entries that are
+/// four finite numbers. Anything else is no region, which is also what a
+/// hand-edited or truncated session file gets: the whole frame, and an app that
+/// opens.
+Map<String, List<double>> _regionsFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, List<double>>{};
+  for (final e in raw.entries) {
+    final k = e.key;
+    final v = e.value;
+    if (k is! String || v is! List || v.length != 4) continue;
+    final nums = [for (final n in v) if (n is num) n.toDouble()];
+    if (nums.length == 4 && nums.every((n) => n.isFinite)) out[k] = nums;
+  }
+  return out;
 }
 
 /// Where a floating window was left (K-242): how far it was dragged from the
