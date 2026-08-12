@@ -4,6 +4,12 @@ use super::{MatteKeyParams, MbView, Resolved, MAX_BLADES};
 /// linear light), in place.
 pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
     match fx {
+        // Light wrap needs a second picture — the Background layer — which
+        // this single-image entry point has no way to receive, exactly as
+        // Depth of field's depth pass does not. Both are driven through their
+        // own functions by the callers that hold the extra texture; here they
+        // are the passthrough rather than a silent half-effect.
+        Resolved::LightWrap { .. } => {}
         Resolved::Blur {
             radius_px,
             edge,
@@ -2126,6 +2132,82 @@ pub fn blur_radial(
                 let v = acc[c] / nf;
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
             }
+        }
+    }
+}
+
+/// **Light wrap** (docs/08 §3.28, K-358): spill the background's light around
+/// the edge of a foreground so a cut-out sits *in* the plate instead of on it.
+///
+/// # In plain terms
+///
+/// A keyed subject looks pasted on because in a real camera the light behind
+/// it would spill round its edges — off the hair, along the shoulders. This
+/// takes the background, blurs it, and adds that blur back only where the
+/// foreground's own edge is: strongest right at the outline, fading inwards
+/// over `width` pixels, and nothing at all out where the foreground is
+/// transparent or deep inside where it is solid.
+///
+/// The edge is found from the foreground's own alpha, which is why the effect
+/// needs no mask of its own: blur the alpha, and `blurred × (1 − alpha)` is
+/// large exactly in the band just inside the outline. That band is the wrap.
+///
+/// `bg` is the background layer, premultiplied and the same size as `rgba`.
+/// The wrap is **screened** on rather than added, so a bright background
+/// cannot blow the edge past white; `intensity` scales it and `mix` fades the
+/// whole effect. Both zero are the bit-exact identity, and so is a zero
+/// `width` — there is no band to fill.
+pub fn light_wrap(
+    rgba: &mut [f32],
+    bg: &[f32],
+    w: u32,
+    h: u32,
+    width_px: f32,
+    intensity: f32,
+    mix: f32,
+) {
+    if width_px <= 0.0 || intensity <= 0.0 || mix <= 0.0 {
+        return;
+    }
+    let n = (w as usize) * (h as usize) * 4;
+    if rgba.len() < n || bg.len() < n {
+        return;
+    }
+    // The background, softened over the wrap's width: this is the light that
+    // spills. Edge policy 1 (repeat the edge pixel), so a subject touching the
+    // frame border wraps with the plate rather than with black.
+    let mut spill = bg[..n].to_vec();
+    blur_gaussian(&mut spill, w, h, width_px, 1, 1.0);
+    // The foreground softened by the same gaussian. Only its ALPHA is wanted —
+    // blurring the matte and taking what lies under the original alpha is the
+    // edge band — and blurring the whole texture gets it for free, which is
+    // also what lets the GPU twin reuse the ordinary blur kernel twice
+    // instead of needing one of its own.
+    let mut soft = rgba[..n].to_vec();
+    blur_gaussian(&mut soft, w, h, width_px, 1, 1.0);
+
+    for i in (0..n).step_by(4) {
+        let a = rgba[i + 3];
+        // **The band is where the matte has been softened AWAY from solid.**
+        // Blurring a solid subject's alpha leaves 1 deep inside, about a half
+        // right at the outline, and less beyond it — so `1 − soft.a` is zero
+        // in the middle and rises toward the edge, which is the wrap. The
+        // doubling brings it to full strength at the outline rather than a
+        // half. `a` gates it, so the wrap never paints on transparent pixels,
+        // which would grow a halo *outside* the matte — the classic way to
+        // get this effect wrong.
+        let band = ((1.0 - soft[i + 3]) * 2.0).clamp(0.0, 1.0) * a;
+        let k = band * intensity;
+        if k <= 0.0 {
+            continue;
+        }
+        for c in 0..3 {
+            let base = rgba[i + c];
+            // Screen: 1 − (1 − base)(1 − spill·k), which cannot exceed the
+            // brighter of the two and so cannot blow the edge out.
+            let s = (spill[i + c] * k).max(0.0);
+            let screened = 1.0 - (1.0 - base) * (1.0 - s);
+            rgba[i + c] = base * (1.0 - mix) + screened * mix;
         }
     }
 }

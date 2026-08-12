@@ -4011,6 +4011,116 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     }
 }
 
+/// **Light wrap** (docs/08 §3.28, K-358): the WGSL agrees with the CPU
+/// reference, the neutral points pass the input through bit-exactly, and the
+/// wrap lands where it should — inside the foreground's edge, nowhere else.
+#[test]
+fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 32u32);
+
+    // A foreground: an opaque square in the middle of an empty frame, so it
+    // has a real edge with transparency on both sides of it.
+    let mut fg = vec![0.0f32; (w * h * 4) as usize];
+    for y in 8..24u32 {
+        for x in 12..36u32 {
+            let i = ((y * w + x) * 4) as usize;
+            fg[i] = 0.1;
+            fg[i + 1] = 0.1;
+            fg[i + 2] = 0.1;
+            fg[i + 3] = 1.0;
+        }
+    }
+    let fg: Vec<f32> = fg.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    // A background bright enough that its spill is unmistakable.
+    let bg: Vec<f32> = (0..(w * h) as usize)
+        .flat_map(|_| [2.0f32, 0.5, 0.25, 1.0])
+        .map(|v| f16_to_f32(f16_bits(v)))
+        .collect();
+
+    let fg_tex = upload_linear_f32(&ctx, &fg, w, h);
+    let bg_tex = upload_linear_f32(&ctx, &bg, w, h);
+
+    for (width, intensity, mix) in [(6.0f32, 1.0f32, 1.0f32), (3.0, 0.5, 0.75)] {
+        let mut cpu = fg.clone();
+        lumit_core::fx::cpu::light_wrap(&mut cpu, &bg, w, h, width, intensity, mix);
+
+        let out = fx.light_wrap(
+            &ctx,
+            &fg_tex,
+            w,
+            h,
+            &bg_tex,
+            &crate::fx::LightWrapOp {
+                width_px: width,
+                intensity,
+                mix,
+            },
+        );
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        // The effect must actually do something, or the bound below passes
+        // by rendering nothing.
+        let added: f32 = gpu.iter().zip(&fg).map(|(a, b)| (a - b).abs()).sum();
+        assert!(added > 1e-2, "width {width}: no wrap was drawn ({added})");
+
+        let worst = worst_diff(&cpu, &gpu);
+        eprintln!("light_wrap w={width} i={intensity} mix={mix}: worst {worst:.2e}");
+        assert!(worst < 5e-3, "width {width}: worst |Δ| {worst}");
+
+        // **Nowhere outside the matte.** A wrap that painted on transparent
+        // pixels would grow a halo round the subject, which is the classic way
+        // to get this wrong.
+        for i in (0..gpu.len()).step_by(4) {
+            if fg[i + 3] == 0.0 {
+                for c in 0..3 {
+                    assert_eq!(
+                        gpu[i + c],
+                        fg[i + c],
+                        "the wrap leaked outside the matte at texel {}",
+                        i / 4
+                    );
+                }
+            }
+        }
+
+        // And it is the same picture every time (docs/14 §2.4).
+        let again = fx.light_wrap(
+            &ctx,
+            &fg_tex,
+            w,
+            h,
+            &bg_tex,
+            &crate::fx::LightWrapOp {
+                width_px: width,
+                intensity,
+                mix,
+            },
+        );
+        assert_eq!(
+            gpu,
+            readback_linear_f32(&ctx, &again, w, h).unwrap(),
+            "light wrap must be bit-stable"
+        );
+    }
+
+    // Deep inside the subject, far from any edge, nothing changes: the wrap is
+    // an EDGE treatment, not a grade.
+    let mut cpu = fg.clone();
+    lumit_core::fx::cpu::light_wrap(&mut cpu, &bg, w, h, 4.0, 1.0, 1.0);
+    let middle = (((16 * w) + 24) * 4) as usize;
+    for c in 0..3 {
+        assert!(
+            (cpu[middle + c] - fg[middle + c]).abs() < 1e-6,
+            "the middle of the subject must be untouched"
+        );
+    }
+}
+
 /// **An area light flares like an area, not like a point** (K-355).
 ///
 /// Source size gives the light a real emitting area, and the flare of one is

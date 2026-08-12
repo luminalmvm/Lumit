@@ -371,6 +371,72 @@ pub const BUILTINS: &[EffectSchema] = &[
             MIX_PARAM,
         ],
     },
+    // Light wrap (docs/08 §3.28, K-358): the oldest trick in compositing and
+    // one Lumit had no answer for. A keyed subject reads as pasted on because
+    // in a real camera the light behind it spills round its edges; this takes
+    // the referenced Background layer, blurs it over Width, and screens that
+    // blur back only into the band just inside the foreground's own outline —
+    // found from the foreground's alpha, so the effect needs no mask of its
+    // own. Screened rather than added, so a bright plate brightens the edge
+    // toward itself rather than past white. Width 0 is the bit-exact
+    // passthrough, as is an unset Background (the labelled-no-op rule every
+    // layer-input effect follows).
+    EffectSchema {
+        groups: &[],
+        enabled_when: &[],
+        match_name: "light_wrap",
+        label: "Light wrap",
+        version: 1,
+        category: FxCategory::Stylise,
+        traits: EffectTraits {
+            cost: CostClass::Moderate,
+            // The wrap reaches Width inside the edge and the blur reads Width
+            // out; 10 % of the diagonal covers any sane setting.
+            roi: Roi::PaddedPctDiag(10.0),
+            temporal: &[0],
+            // The band is read off the foreground's own alpha, which only
+            // means anything premultiplied.
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "background",
+                label: "Background",
+                // Unset until the owner picks one — a labelled no-op. No
+                // self_default (K-288): a layer is never its own background,
+                // so starting pointed at itself would be a wrap of nothing.
+                kind: ParamKind::Layer {
+                    self_default: false,
+                },
+            },
+            ParamSchema {
+                id: "width",
+                label: "Width",
+                // px@comp (K-260), and the same distance twice: how far the
+                // wrap reaches inside the edge, and the radius the background
+                // is softened by.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 200.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "intensity",
+                label: "Intensity",
+                // Gain on the spill before it is screened on. Open above
+                // (K-090) for a deliberately hot wrap.
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 3.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
     // Chromatic aberration (docs/08 §3.6): R and B sample offset positions,
     // G stays put, alpha follows the green channel so mattes never fringe.
     // Operates premultiplied. Per-channel scales (FX-9) let each channel

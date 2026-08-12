@@ -140,6 +140,29 @@ struct SharpenSimpleParams {
     _pad: [f32; 1],
 }
 
+/// One resolved light wrap (docs/08 §3.28, K-358): the background's light
+/// spilled around the foreground's edge. A zero width, intensity or mix is the
+/// bit-exact passthrough — there is no band to fill.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightWrapOp {
+    /// How far the wrap reaches inside the edge, raster pixels — and the
+    /// radius the background is softened by, which are the same distance.
+    pub width_px: f32,
+    /// Gain on the spill before it is screened on.
+    pub intensity: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightWrapParams {
+    w: u32,
+    h: u32,
+    intensity: f32,
+    mix_amt: f32,
+}
+
 /// One resolved glow (docs/08 §3.3, v1 core): bright-pass with a soft knee,
 /// the shared gaussian on the leftover light, additive recombine. The
 /// radius is already in raster pixels; intensity 0 is the neutral point
@@ -350,6 +373,69 @@ impl FxEngine {
             &self.sharpen_combine,
             &blurred,
             src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        out
+    }
+
+    /// **Light wrap** (docs/08 §3.28, K-358): spill the background's light
+    /// around the foreground's edge, so a keyed subject sits *in* the plate
+    /// rather than on it.
+    ///
+    /// Four passes, of which two are the ordinary gaussian: blur the
+    /// background over the wrap's width to get the spill, blur the foreground
+    /// over the same width to get its softened matte (only the alpha is
+    /// wanted, and blurring the whole thing gets it for nothing), fold the two
+    /// into one texture, then screen the spill onto the edge band. The
+    /// `lumit_core::fx::cpu::light_wrap` reference does the same four steps in
+    /// the same order.
+    ///
+    /// A zero width, intensity or mix is the bit-exact passthrough — there is
+    /// no band to fill — and the caller short-circuits before reaching here.
+    pub fn light_wrap(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        background: &wgpu::Texture,
+        op: &LightWrapOp,
+    ) -> wgpu::Texture {
+        let blur = BlurOp {
+            radius_px: op.width_px,
+            // Repeat the edge pixel, so a subject touching the frame border
+            // wraps with the plate rather than with black.
+            edge: 1,
+            mix: 1.0,
+        };
+        let spill = self.blur(ctx, background, w, h, &blur);
+        let soft = self.blur(ctx, src, w, h, &blur);
+        let params = LightWrapParams {
+            w,
+            h,
+            intensity: op.intensity,
+            mix_amt: op.mix,
+        };
+        let packed = work_texture(ctx, w, h, "fx-light-wrap-packed");
+        self.dispatch(
+            ctx,
+            &self.light_wrap_pack,
+            &spill,
+            &soft,
+            &packed,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        let out = work_texture(ctx, w, h, "fx-light-wrap-out");
+        self.dispatch(
+            ctx,
+            &self.light_wrap_combine,
+            src,
+            &packed,
             &out,
             w,
             h,

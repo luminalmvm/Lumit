@@ -249,6 +249,17 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
+    /// Light wrap (docs/08 §3.28, K-358): the background's light spilled
+    /// around the foreground's edge. Consumes a layer-input slot — the
+    /// referenced Background layer — exactly as Depth of field's depth does.
+    LightWrap {
+        /// How far the wrap reaches inside the edge, raster pixels.
+        width_px: f32,
+        /// Gain on the spill before it is screened on.
+        intensity: f32,
+        /// 0..1.
+        mix: f32,
+    },
     RgbSplit {
         /// Peak tap offset in raster pixels.
         amount_px: f32,
@@ -765,6 +776,7 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
             Resolved::Sharpen { radius_px, .. } => *radius_px *= f,
             // SharpenSimple's radius is a fixed 3x3 kernel scale, not px.
             Resolved::SharpenSimple { .. } => {}
+            Resolved::LightWrap { width_px, .. } => *width_px *= f,
             Resolved::RgbSplit { amount_px, .. } => *amount_px *= f,
             Resolved::SpectralSplit { amount_px, .. } => *amount_px *= f,
             Resolved::ChromaticAberration { amount_px, .. } => *amount_px *= f,
@@ -1011,6 +1023,19 @@ fn resolve_one(
             Some(Resolved::SharpenSimple {
                 amount,
                 radius,
+                mix,
+            })
+        }
+        "light_wrap" => {
+            // px@comp like every distance parameter (K-260), through the
+            // §2.3 preview factor so a half-resolution preview wraps by the
+            // same visible width the export will.
+            let width_px = (fl("width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
+            let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
+            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            Some(Resolved::LightWrap {
+                width_px,
+                intensity,
                 mix,
             })
         }

@@ -3949,6 +3949,30 @@ half of one. Folded into the frame's cache name like the rest (an opaque frame
 and a see-through frame are two different pictures), and never sent to an
 export, which always draws the backdrop.
 
+### Light wrap — why a cut-out looks pasted on, and the fix (K-358)
+
+Key a person off a green screen, drop them on a new background, and something
+is wrong even when the matte is perfect. The reason is light. In a real shot
+the background is *behind* them, and its light spills round the edges of them —
+catching the hair, grazing a shoulder, softening the outline. A matte cut in
+software has none of that. The edge is a clean line where two pictures meet,
+and the eye reads it instantly as two pictures.
+
+**Light wrap** puts the spill back. You point it at the background layer and
+give it a **Width** — how far, in pixels, the light should creep in from the
+edge. It blurs the background over that distance and lays that glow into a band
+just inside the subject's outline: strongest right at the edge, gone a few
+pixels in, and nothing at all out where the subject isn't.
+
+Two details make it behave rather than fight you. It finds the edge from the
+subject's own matte, so there is no mask to draw. And it *screens* the light on
+rather than adding it, which means a very bright background brightens the edge
+towards itself and stops — it cannot blow out to white, which is what makes a
+naive version look radioactive.
+
+It is deliberately a small effect. Width and **Intensity** are the two dials
+worth touching; leave Width at zero and nothing happens at all.
+
 **Auto, Full, and the difference between them (K-357).** The Viewer bar's
 resolution dropdown says how many pixels the engine is asked to *make* — which
 is not the same as how big the picture is drawn. **Auto** makes only the pixels

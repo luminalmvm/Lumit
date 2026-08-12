@@ -733,6 +733,10 @@
   "@fxAspectRatio": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxBackground": "Background",
+  "@fxBackground": {
+    "description": "Effect controls — a control on Light wrap. Picks the layer whose light spills round the foreground's edge; normally the plate the subject was keyed onto."
+  },
   "fxBehind": "Behind",
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
@@ -1140,6 +1144,10 @@
   "fxLightTint": "Light tint",
   "@fxLightTint": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLightWrap": "Light wrap",
+  "@fxLightWrap": {
+    "description": "Effect name in the Effects list. Spills the background's light round the edge of a keyed foreground so it sits in the shot rather than on top of it."
   },
   "fxLightX": "Light x",
   "@fxLightX": {
@@ -1556,6 +1564,10 @@
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxWidth": "Width",
+  "@fxWidth": {
+    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
   },
   "fxXAmount": "X amount",
   "@fxXAmount": {

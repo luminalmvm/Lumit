@@ -859,6 +859,36 @@ pub fn run_ops(
                     );
                 }
             }
+            Resolved::LightWrap {
+                width_px,
+                intensity,
+                mix,
+            } => {
+                // Shares the layer-input counter with Dof (K-358): both are
+                // enumerated by `build.rs`'s one `layer_input_param`
+                // predicate, so one counter keeps the slots and the ops in
+                // step. An absent Background — unset, missing or cyclic — is
+                // the passthrough, the labelled no-op every layer-input
+                // effect follows.
+                let background = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
+                dof_i += 1;
+                if let Some(background) = background {
+                    if *width_px > 0.0 && *intensity > 0.0 && *mix > 0.0 {
+                        tex = fx.light_wrap(
+                            ctx,
+                            &tex,
+                            w,
+                            h,
+                            background,
+                            &lumit_gpu::fx::LightWrapOp {
+                                width_px: *width_px,
+                                intensity: *intensity,
+                                mix: *mix,
+                            },
+                        );
+                    }
+                }
+            }
             Resolved::Dof {
                 focus,
                 range,

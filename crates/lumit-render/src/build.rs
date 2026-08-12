@@ -473,6 +473,9 @@ pub fn build_comp_draws_at(
     fn layer_input_param(match_name: &str) -> Option<&'static str> {
         match match_name {
             "dof" => Some("depth"),
+            // Light wrap's Background (K-358) — the plate whose light spills
+            // round the foreground's edge.
+            "light_wrap" => Some("background"),
             _ => None,
         }
     }

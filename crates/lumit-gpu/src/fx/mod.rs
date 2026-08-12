@@ -48,6 +48,10 @@ pub struct FxEngine {
     /// convolution, the radius-free sibling of the Unsharp mask's two-entry
     /// kernel above.
     sharpen_simple: wgpu::ComputePipeline,
+    /// Light wrap (docs/08 §3.28, K-358): the two passes that fold the
+    /// background's blur and the foreground's softened matte into the edge.
+    light_wrap_pack: wgpu::ComputePipeline,
+    light_wrap_combine: wgpu::ComputePipeline,
     rgb_split: wgpu::ComputePipeline,
     spectral_split: wgpu::ComputePipeline,
     chromatic_aberration: wgpu::ComputePipeline,

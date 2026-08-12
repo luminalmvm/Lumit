@@ -1730,6 +1730,38 @@ aperture **dirt / scratches** overlays and an **image aperture**; the
 layers); an **Occlusion layer** reference. Every shipped parameter is
 stable when they land.
 
+### 3.28 Light wrap — the background's light spilled round a keyed edge
+
+The oldest trick in compositing, and the cheapest way to make a keyed subject stop looking
+pasted on. In a real camera the light behind a subject spills round its edges — off the
+hair, along the shoulders — and a matte cut in software has none of it, which is most of
+what makes a composite read as fake.
+
+**Background** names the layer whose light spills (normally the plate the subject was keyed
+onto — a layer-input parameter, the same machinery as Depth of field's depth pass and the
+Lens flare's matte, [impl/layer-input.md](impl/layer-input.md)). **Width** is how far the
+wrap reaches inside the edge, in px@comp, and is also the radius the background is softened
+by — they are the same distance. **Intensity** gains the spill; **Mix** fades the whole
+effect.
+
+**How it finds the edge, and why it needs no mask.** The foreground's own alpha is the
+edge. Blurring a solid matte leaves it 1 deep inside, about a half right at the outline and
+less beyond it, so `1 − blurred` is zero in the middle and rises toward the edge — that is
+the band, doubled to reach full strength at the outline and multiplied by the original
+alpha so it can never paint on transparent pixels. Painting outside the matte would grow a
+halo round the subject, which is the classic way to get this effect wrong, and the oracle
+asserts against it directly.
+
+The spill is **screened** on rather than added, so a bright plate brightens the edge toward
+itself rather than past white. Width 0, Intensity 0, Mix 0 and an unset Background are each
+the bit-exact passthrough (the labelled-no-op rule every layer-input effect follows).
+
+Implementation: four passes, two of which are the ordinary gaussian — blur the background
+for the spill, blur the foreground for its softened matte (only the alpha is wanted, and
+blurring the whole thing gets it for nothing), fold the two into one texture, screen. The
+CPU reference does the same four steps in the same order, so the twins agree by
+construction rather than by resemblance.
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)
