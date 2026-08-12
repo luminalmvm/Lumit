@@ -352,6 +352,11 @@ pub fn detect_lights(
     // spanning many tiles finally weighs as its whole lit area instead of
     // one pixel.
     let mut acc = vec![[0.0_f32; 3]; anchors.len()];
+    // The flux-weighted centroid of each anchor's contributing tiles, as
+    // (Σ w·x, Σ w·y, Σ w) — see where it is applied below. f32 throughout and
+    // in the fixed tile order, because the WGSL twin must add the same
+    // numbers in the same order.
+    let mut centroid = vec![[0.0_f32; 3]; anchors.len()];
     if !anchors.is_empty() {
         for (t, &(luma, idx)) in tiles.iter().enumerate() {
             if luma <= 0.0 {
@@ -385,15 +390,34 @@ pub fn detect_lights(
             for c in 0..3 {
                 acc[nearest][c] += src[c] * weight;
             }
+            let flux = luma * weight;
+            centroid[nearest][0] += (idx % w) as f32 * flux;
+            centroid[nearest][1] += (idx / w) as f32 * flux;
+            centroid[nearest][2] += flux;
         }
     }
     anchors
         .iter()
-        .zip(&acc)
-        .map(|(&(_, idx), rgb)| {
-            let (px, py) = (idx % w, idx / w);
+        .zip(acc.iter().zip(&centroid))
+        .map(|(&(_, idx), (rgb, cen))| {
+            // **Where the light IS, is the centre of its light** (K-354) —
+            // not whichever pixel happened to be brightest this frame.
+            //
+            // Pinning the anchor to its brightest pixel quantises the light's
+            // position to one pixel of a source that may span hundreds, and on
+            // FOOTAGE that pixel wanders: sensor noise and specular sparkle
+            // move it frame to frame, so the whole flare jitters even though
+            // the practical has not moved. The flux-weighted centroid of the
+            // tiles feeding this anchor is steady under exactly that noise,
+            // and for a one-tile point source it is that tile's own pixel, so
+            // nothing about a point light changes.
+            let (px, py) = if cen[2] > 0.0 {
+                (cen[0] / cen[2], cen[1] / cen[2])
+            } else {
+                ((idx % w) as f32, (idx / w) as f32)
+            };
             FlareLight {
-                pos: [(px as f32 + 0.5) / w as f32, (py as f32 + 0.5) / h as f32],
+                pos: [(px + 0.5) / w as f32, (py + 0.5) / h as f32],
                 rgb: [rgb[0] * tint[0], rgb[1] * tint[1], rgb[2] * tint[2]],
             }
         })

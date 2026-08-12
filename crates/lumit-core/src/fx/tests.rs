@@ -5890,6 +5890,73 @@ fn lens_flare_detects_matte_sources_deterministically() {
     assert!((threshold_gate(1.0, 1.0, 0.5) - 0.5).abs() < 1e-6);
 }
 
+/// **A source spanning several tiles is found at the centre of its light, not
+/// at one arbitrary pixel of it** (K-354).
+///
+/// The anchor used to be pinned to the brightest pixel of the brightest tile.
+/// For a point source that is exactly right, and this test pins that it still
+/// is. For a *practical* — a softbox, a window, a lamp with a visible bulb —
+/// it put the light at whichever corner of the source the tile scan happened
+/// to reach first, so a flare fired from a large soft source came out of its
+/// edge rather than its middle.
+///
+/// **What this does not fix, stated so nobody assumes it does:** the weight is
+/// flux, and each tile is still represented by its single brightest pixel, so
+/// one very hot pixel still pulls the centroid toward itself. Suppressing that
+/// needs each tile to carry its whole flux and its own centroid rather than one
+/// pixel's — the rework in NEXT-FEATURES entry 1 Phase D, where real source
+/// regions replace tile-max detection altogether.
+#[test]
+fn lens_flare_centres_an_area_source_on_its_light() {
+    use crate::fx::lens_flare::*;
+    let (w, h) = (128u32, 128u32);
+    let mut matte = vec![0.0f32; (w * h * 4) as usize];
+    // A uniform square filling four whole 32-px tiles: x and y both 32..=95,
+    // so its true centre is (63.5, 63.5).
+    for y in 32..96u32 {
+        for x in 32..96u32 {
+            let i = ((y * w + x) * 4) as usize;
+            matte[i] = 2.0;
+            matte[i + 1] = 2.0;
+            matte[i + 2] = 2.0;
+            matte[i + 3] = 1.0;
+        }
+    }
+    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(lights.len(), 1, "one source: {lights:?}");
+
+    // The four tiles each contribute their own top-left covered pixel —
+    // (32,32), (64,32), (32,64), (64,64) — at equal flux, so the centroid is
+    // (48, 48) and the reported position is its pixel centre.
+    let px = lights[0].pos[0] * w as f32 - 0.5;
+    let py = lights[0].pos[1] * h as f32 - 0.5;
+    assert!((px - 48.0).abs() < 1e-3, "x {px}");
+    assert!((py - 48.0).abs() < 1e-3, "y {py}");
+
+    // The point of it: closer to the middle of the light than the brightest
+    // pixel of the brightest tile, which is where this used to land.
+    let centre = 63.5f32;
+    let was = 32.0f32;
+    assert!(
+        (px - centre).abs() < (was - centre).abs(),
+        "the anchor must move toward the centre of the source, not stay at \
+         its corner: {px} vs {was}, centre {centre}"
+    );
+
+    // A one-pixel source has only itself to average, so point lights are
+    // exactly where they always were.
+    let mut dot = vec![0.0f32; (w * h * 4) as usize];
+    let i = ((70 * w + 20) * 4) as usize;
+    dot[i] = 4.0;
+    dot[i + 1] = 4.0;
+    dot[i + 2] = 4.0;
+    dot[i + 3] = 1.0;
+    let point = detect_lights(&dot, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(point.len(), 1);
+    assert!((point[0].pos[0] - 20.5 / w as f32).abs() < 1e-6);
+    assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);
+}
+
 #[test]
 fn zz_debug_cells() {
     use crate::fx::lens_flare::*;

@@ -8429,3 +8429,24 @@ Also gone with the multisample target: the largest allocation the effect made, ~
 
 Not fixed here, and still open: the flare's raster still draws the cells it culled, which
 remains in TODO.
+
+**K-354 · DECIDED · A detected flare source sits at the centre of its light, not at one
+arbitrary pixel of it.** Matte mode pinned each light to the brightest pixel of its
+brightest tile. For a point source that is exactly right and still is. For a *practical* —
+a softbox, a window, a lamp with a visible bulb — it put the light wherever the tile scan
+happened to reach a maximum first, so a flare fired from a large soft source came out of
+its edge rather than its middle. Each anchor now takes the flux-weighted centroid of the
+tiles that feed it, in the same fixed tile order both twins already used, so the change
+costs nothing and stays deterministic. A one-tile source has only itself to average and is
+untouched.
+
+**What this deliberately does NOT fix, so it is not assumed.** The weight is flux and each
+tile is still represented by its single brightest pixel, so one very hot pixel — a sensor
+sparkle, a specular glint — still pulls the centroid toward itself and still flickers frame
+to frame on real footage. Suppressing that needs each tile to carry its whole flux and its
+own centroid rather than one pixel's, which is a change to the tile reduction in both twins
+and is folded into the source-region rework
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase D), where real segmented source regions
+with recovered flux replace tile-max detection altogether. The earlier plan's "firefly
+suppression by 1/(1+luma) weighting" assumed a per-pixel sum that this detector does not
+have; it is not applicable as written, and Phase D is where it actually belongs.

@@ -311,15 +311,20 @@ Matte mode already has half of what the literature asks for: the luma gate is so
 summing already weighs an area source by its area rather than one pixel. What still
 flickers on video, and the fixes:
 
-1. **Fireflies** — a single hot pixel (sensor sparkle, a specular glint) rides the tile sum
-   and pops a source for one frame. Adapt the Karis-average idea to the detector: weight
-   each pixel's contribution to its tile's flux by `1/(1+luma)`, so one outlier cannot own
-   the anchor. The same formula must land in `detect_lights` (the CPU twin) and the WGSL
-   reduction, or the matte-mode frame oracle fails — which is the test.
-2. **Anchor jumping** — a source's anchor quantises to its brightest pixel, which wanders
-   inside the practical frame to frame. A flux-weighted centroid over the anchor's tiles
-   (still deterministic, still index-ordered summation per §2.4) steadies it without any
-   cross-frame state.
+1. ~~**Anchor jumping**~~ — **landed as K-354.** Each anchor now takes the flux-weighted
+   centroid of the tiles feeding it, so a source spanning several tiles is found at the
+   centre of its light rather than at whichever corner the tile scan reached first. Point
+   sources are untouched.
+2. **Fireflies — still open, and the first plan for it was wrong.** A single hot pixel
+   (sensor sparkle, a specular glint) still owns its tile and so still pulls both the flux
+   and the K-354 centroid toward itself, frame to frame. The draft here proposed a Karis
+   `1/(1+luma)` weighting, which assumes a per-pixel *sum* the detector does not have: a
+   tile is represented by its single brightest pixel, for position and for flux. The real
+   fix is to make each tile carry **its whole gated flux and its own centroid** instead of
+   one pixel's — a change to the tile reduction in both twins (the workgroup merge stays a
+   fixed-order sum, so determinism is unaffected). That is the same information Phase D's
+   source regions need, so **do it there rather than twice**: it is listed here only so the
+   gap is not mistaken for a fixed one.
 
 **Temporal smoothing is a recorded non-option**, not an oversight: a frame must be a
 function of the document and the frame alone (docs/14 determinism; the caches name frames

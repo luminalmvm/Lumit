@@ -146,6 +146,11 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
     var acc_r: array<f32, 16>;
     var acc_g: array<f32, 16>;
     var acc_b: array<f32, 16>;
+    // The flux-weighted centroid of each anchor's contributing tiles, as
+    // (sum w*x, sum w*y, sum w) — see where it is applied at the bottom.
+    var cen_x: array<f32, 16>;
+    var cen_y: array<f32, 16>;
+    var cen_w: array<f32, 16>;
     var picked_count = 0u;
     // Anchor picks: top-K by luma with Chebyshev suppression.
     for (var k = 0u; k < MAX_LIGHTS; k = k + 1u) {
@@ -183,6 +188,9 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             acc_r[picked_count] = 0.0;
             acc_g[picked_count] = 0.0;
             acc_b[picked_count] = 0.0;
+            cen_x[picked_count] = 0.0;
+            cen_y[picked_count] = 0.0;
+            cen_w[picked_count] = 0.0;
             picked_count = picked_count + 1u;
         }
     }
@@ -222,6 +230,10 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             acc_r[nearest] = acc_r[nearest] + src.r * weight;
             acc_g[nearest] = acc_g[nearest] + src.g * weight;
             acc_b[nearest] = acc_b[nearest] + src.b * weight;
+            let flux = tl.luma * weight;
+            cen_x[nearest] = cen_x[nearest] + f32(px) * flux;
+            cen_y[nearest] = cen_y[nearest] + f32(py) * flux;
+            cen_w[nearest] = cen_w[nearest] + flux;
         }
     }
     for (var k = 0u; k < MAX_LIGHTS; k = k + 1u) {
@@ -235,8 +247,19 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
         out._pad1 = 0.0;
         out._pad2 = 0.0;
         if (k < picked_count) {
-            out.pos_x = (f32(anchor_px[k]) + 0.5) / f32(dp.w);
-            out.pos_y = (f32(anchor_py[k]) + 0.5) / f32(dp.h);
+            // Where the light IS, is the centre of its light (K-354) — not
+            // whichever pixel happened to be brightest this frame. On footage
+            // that pixel wanders with sensor noise and specular sparkle, and
+            // the whole flare jitters with it. A one-tile point source has
+            // only its own pixel to average, so point lights are unchanged.
+            var px = f32(anchor_px[k]);
+            var py = f32(anchor_py[k]);
+            if (cen_w[k] > 0.0) {
+                px = cen_x[k] / cen_w[k];
+                py = cen_y[k] / cen_w[k];
+            }
+            out.pos_x = (px + 0.5) / f32(dp.w);
+            out.pos_y = (py + 0.5) / f32(dp.h);
             out.r = acc_r[k] * dp.tint_r;
             out.g = acc_g[k] * dp.tint_g;
             out.b = acc_b[k] * dp.tint_b;
