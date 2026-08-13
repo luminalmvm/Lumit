@@ -620,42 +620,43 @@ Recorded so they are not re-proposed as gaps:
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
     longer match (`state/workspace.dart`).
-- **The padded-anamorphic flare oracle has a standing 1.2% energy gap.**
-    `wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge` asserts the GPU
-    and CPU frames agree in total energy to within 1%, and the GPU comes in low.
-    It is **not** a K-370 regression: the same test failed at **0.9852** on the
-    flare-accuracy branch head (a9ee807, run 31641836700) before any of that work,
-    and K-370 moved it to **0.9876**. The claim in PR #96 that it passed was wrong.
-    What is known, from the diagnostic the test now prints on every run:
-    - **the deficit tracks local brightness.** By zone: the middle of the frame is
-      down **1.30%**, the border ring 0.70%, and the outer fifths only **0.11%** —
-      so it is not a uniform scale (an earlier note here said it was; that was
-      read off the total before the zones were measured) and not an edge clip.
-      It is largest exactly where the flux density is highest;
-    - it is nonetheless **smooth**: the worst single sample differs by 0.0024 and
-      *no* sample of 36864 differs by more than the mean sample (0.0053). Nothing
-      is being dropped in lumps;
-    - the per-ray trace oracle passes, so the ray landings and weights agree — but
-      its bound is a p99 *relative* one, which a ~1.3% would clear;
-    - the unpadded frame oracle passes, so it is specific to the **padded** path
-      (K-267) — and padding changes the flare buffer's pixel scale, hence which
-      splats meet the sub-pixel floor and the caustic density cap.
-    Those three together point at **K-366's density cap** (`MIN_AREA_FRAC`) and the
-    anti-alias floor (`MIN_SPLAT_AXIS_PX`): that is the one place the pipeline
-    deliberately *sheds* energy, it bites hardest where flux density is highest,
-    and how often it bites depends on the pixel scale that padding changes. Two
-    twins shedding slightly different amounts there would produce exactly this
-    profile.
-    Ruled out by inspection: `cell_mm` (both `(grid-1)`), `screen_transform` (both
-    the flare buffer's own width over 36), the splat-axis conventions including
-    how each treats a dead or zero-weight neighbour, the near-parallel push and the
-    cap arithmetic (line for line the same), the combine's padded tap formula, the
-    roundness derivation, the Fresnel-number derivation, and fp16 accumulation
-    (the flare buffer is `Rgba32Float`).
-    What is left is what a reader cannot check: whether the GPU's quad
-    rasterisation selects the same pixels as the CPU's bounding-box walk with
-    `|u|, |v| < 1` for footprints near the sub-pixel floor. Needs a machine with an
-    adapter — every round against CI is ten minutes and a guess.
+- **The GPU accumulates the flare in fp16 and the CPU reference in f32, and the
+    padded-anamorphic oracle measures the difference.** `wgsl_lens_flare_padded_
+    anamorphic_matches_and_fills_the_edge` wants the two frames' total energy within
+    1%; the GPU comes in low. **0.9852** on the flare-accuracy branch head (a9ee807)
+    before any follow-up, **0.9876** after K-370, and **0.9565** after K-373 widened
+    every splat's footprint fourfold.
+    **The mechanism, which the numbers now pin down.** The splat raster target is a
+    `work_texture`, and `WORKING_FORMAT` is `Rgba16Float`; the CPU reference sums in
+    f32. Additive blending into an fp16 accumulator loses any increment smaller than
+    half an ULP of the running sum — a *systematic* downward bias, not the unbiased
+    jitter that would cancel. It therefore:
+    - concentrates where many splats overlap, which is where the sum is largest: the
+      middle of the frame is down **4.53%**, the border ring 0.70%, the outer fifths
+      0.11%;
+    - stays smooth — no sample differs from the CPU by more than the mean sample —
+      because it is a per-add rounding, not a dropped feature;
+    - scales with footprint area. K-373 quadrupled the fragments per splat, so each
+      pixel now takes ~4x as many increments each ~4x smaller, and the deficit grew
+      by ~3.5x. That proportionality is what identified it.
+    An earlier version of this entry said fp16 was ruled out. That was wrong: the
+    format checked was the starburst's `float_texture` (`Rgba32Float`), not the flare
+    buffer's.
+    **What it would take to fix**, none of it small, and the choice is the owner's:
+    - render the flare buffer at `Rgba32Float`. Blending into it needs the
+      `FLOAT32_BLENDABLE` device feature, which this build does not request (only
+      `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`) and which is not universally
+      available — so it would either raise the hardware floor or make the picture
+      differ by machine, which is the determinism K-353 fought for;
+    - accumulate through a compute pass with f32 storage instead of the blender,
+      which is a rewrite of the splat stage;
+    - accept it, and restate the oracle's bound as what fp16 accumulation can hold,
+      with the reasoning recorded.
+    Also ruled out along the way, and worth not re-checking: `cell_mm`,
+    `screen_transform`, the splat-axis conventions including dead and zero-weight
+    neighbours, the near-parallel push and cap arithmetic, the combine's padded tap
+    formula, the quad's corner winding, the roundness derivation, and the
+    Fresnel-number derivation.
 - **The idle cache fill is not interruptible.** It composites one frame per turn,
     so a scrub arriving mid-frame waits for that composite to finish - up to a
     couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for
