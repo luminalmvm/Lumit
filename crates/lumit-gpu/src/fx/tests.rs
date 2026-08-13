@@ -4851,6 +4851,61 @@ fn wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge() {
     let e_cpu: f32 = cpu.iter().sum();
     let e_gpu: f32 = gpu.iter().sum();
     let ratio = e_gpu / e_cpu.max(1e-9);
+    // Where any shortfall sits, since the machine this was written on has no
+    // adapter and cannot ask. Split three ways: the outermost ring of the
+    // padded buffer (a clipping difference lives there), the edge fifths the
+    // assertion above is about, and the middle.
+    {
+        let (mut ec, mut eg) = ([0.0f64; 3], [0.0f64; 3]);
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let border = x == 0 || y == 0 || x + 1 == w as usize || y + 1 == h as usize;
+                let zone = if border {
+                    0
+                } else if x < fifth || x >= w as usize - fifth {
+                    1
+                } else {
+                    2
+                };
+                for c in 0..3 {
+                    let i = (y * w as usize + x) * 4 + c;
+                    ec[zone] += f64::from(cpu[i]);
+                    eg[zone] += f64::from(gpu[i]);
+                }
+            }
+        }
+        for (zone, name) in ["border ring", "edge fifths", "middle"].iter().enumerate() {
+            eprintln!(
+                "energy {name}: cpu {:.4} gpu {:.4} delta {:.4} ({:.3}%)",
+                ec[zone],
+                eg[zone],
+                eg[zone] - ec[zone],
+                100.0 * (eg[zone] - ec[zone]) / ec[zone].max(1e-9)
+            );
+        }
+        let mut worst = (0.0f32, 0usize);
+        for (i, (a, b)) in cpu.iter().zip(&gpu).enumerate() {
+            let d = (a - b).abs();
+            if d > worst.0 {
+                worst = (d, i);
+            }
+        }
+        let px = worst.1 / 4;
+        let avg = e_cpu / cpu.len() as f32;
+        eprintln!(
+            "worst sample at pixel {:?}: delta {} (cpu {} gpu {}); {} of {} samples differ by more than the mean sample {}",
+            (px % w as usize, px / w as usize),
+            worst.0,
+            cpu[worst.1],
+            gpu[worst.1],
+            cpu.iter()
+                .zip(&gpu)
+                .filter(|(a, b)| (*a - *b).abs() > avg)
+                .count(),
+            cpu.len(),
+            avg
+        );
+    }
     assert!(
         (0.99..=1.01).contains(&ratio),
         "energy ratio {ratio} ({e_gpu} vs {e_cpu})"
