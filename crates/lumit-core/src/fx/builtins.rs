@@ -3232,11 +3232,11 @@ pub const BUILTINS: &[EffectSchema] = &[
         enabled_when: &[],
         match_name: "lens_flare",
         label: "Lens flare",
-        // 10 since K-369: the brightest ghosts take their iris mask from a
-        // baked near-field diffraction pattern instead of the analytic
-        // polygon, so an existing project's ghost edges gain Fresnel ringing
-        // and soften by their own defocus.
-        version: 10,
+        // 11 since K-370: the ghost-edge diffraction is the knife-edge
+        // asymptotic at each ghost's own (derived, and far higher) Fresnel
+        // number, so the rim ringing hugs the rim and the broad interference
+        // pattern K-369's mask ladder painted across the frame is gone.
+        version: 11,
         category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Heavy,

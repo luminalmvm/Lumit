@@ -9115,3 +9115,98 @@ was already tracing, so the added time is single-digit milliseconds against a ba
 hundreds.
 
 **Existing projects' ghost edges change, so the effect's version goes 9 → 10.**
+
+## K-370 — Ghost-edge diffraction is the knife-edge asymptotic at the real Fresnel numbers, not a propagated mask ladder
+
+**DECIDED** (2026-08-13). **Supersedes the implementation of [K-369](#k-369--ghost-edges-are-fresnel-a-baked-near-field-ring-mask-per-defocus-rung)**; K-369's intent — a ghost's rim carries near-field diffraction, and stencil edges are wrong — stands unchanged.
+
+**What the owner saw.** "The output from the lens flare effect feels like it has a Fresnel
+interference pattern which can be distracting across the whole screen where the effect is
+applied." That is exactly what it was, and the measurement is unambiguous. Dumping the
+K-369 ring masks' radial profiles on the bundled default:
+
+| slice | F | interior ripple | interior mean vs the flat mask |
+|---|---|---|---|
+| 0 | 64 | 6.3% | 0.99 |
+| 3 | 8 | 23.6% | 1.20 |
+| 4 | 4 | 36.4% | 1.26 |
+| 5 | 2 | **44.0%** | **2.39** (4.7× at the centre, 0.3 at the rim) |
+
+and every one of the top-32 paths landed on slices 3, 4 or 5. So each visible ghost carried
+a broad concentric brightness gradient across its **whole area**, not a rim effect — and the
+ghosts that fill the frame painted that over the whole picture.
+
+**Why the ladder could only ever land there.** The Fresnel number of a ghost is derivable,
+and K-369 never derived it. The ghost patch *is* the defocused aperture, so its radius on
+the sensor is `a`; the cone forming it leaves the pupil at the marginal-ray angle, which the
+working f-number fixes at `1/(2N)`, so the defocus is `z ≈ 2Na`. One power of `a` cancels:
+
+```text
+F = a²/(λz) = a/(2Nλ)
+```
+
+Put real numbers in. A 5%-of-frame ghost at f/2.8 is `F ≈ 350`; a frame-filling one `F ≈
+7000`; the widest washes on the bundled lenses reach `F ≈ 50 000`. K-369 baked at `F` of 2
+to 64 — **two to three orders of magnitude low** — because that is the ceiling a 256²
+single-FFT propagator can reach: its output window is `±(N−1)/(4F)` aperture units and has
+to cover the aperture, so `F ≤ (N−1)/3`. Reaching `F = 1000` would need a 4096² transform.
+The calibration `RING_SPREAD_REF` was then tuned to spread real ghosts across the rungs the
+propagator *could* reach, which guaranteed they all sat in the regime where the near field
+is a whole-aperture pattern rather than an edge one. K-369's own entry called that constant
+"a calibration, not a derivation, and the knob to turn"; the knob had no setting that worked,
+because the mechanism was wrong for the regime.
+
+**The replacement.** At `F` in the hundreds and up, the fringes are a rim effect a few
+percent of the pupil wide and the blade is locally straight, so the correct model is the
+**knife-edge asymptotic** — a closed form of one variable, the perpendicular distance to the
+blade:
+
+```text
+I(v) = ½[(C(v) + ½)² + (S(v) + ½)²],   v = s·√(2F)
+```
+
+with `C`, `S` the Fresnel integrals (`π/2` convention, by the standard auxiliary-function
+rational approximation, error < 2e-3). It is 1 deep inside, exactly ¼ on the geometric edge,
+peaks at ≈ 1.37 at `v ≈ 1.22`, and decays to nothing outside — the light real diffraction
+throws past the blade, which the old bake had to normalise away. `s` is `(bound − r)` from
+the same polygon bound `pupil_mask` already computes, times the cosine that turns a radial
+gap into a perpendicular one (exact for the polygon, 1 for a round iris).
+
+**The interior of a ghost is now flat by construction.** Whatever else this profile does, it
+cannot shade or tint the middle of a ghost — that is the property the regression test pins,
+and the one K-369 could not have passed.
+
+**Fringes nobody can sample are averaged, not drawn.** A fringe train finer than the pupil
+ray grid does not appear; it **aliases**, and an aliased fringe train is a beat pattern
+spread across the whole ghost — the other half of what was on screen. The honest answer when
+they cannot be resolved is their average, and a diffraction profile averages to the geometric
+edge it surrounds. So the mask crosses from the ringed profile to the plain one over
+`blur_v` of 0.5 … 2, where `blur_v` is the wider of the ray-grid step and the Softness
+feather, in `v` units. A soft blade smears its own fringes exactly as a coarse grid does, so
+the two enter the same way.
+
+The practical consequence is worth stating plainly: **the big frame-filling ghosts now show
+essentially the plain iris edge**, because their fringes are far finer than any grid the
+effect traces, and the tight bright ones — where a real photograph shows ringed rims — keep
+theirs. That is the opposite of what K-369 did, and it is the right way round.
+
+**What this deletes.** `RING_SLICES`, `RING_RES`, `RING_GHOSTS`, `RING_SPREAD_REF`,
+`bake_ring_masks`, `analytic_ring_mask`, `ring_disc_energy`, `ring_slice_for`,
+`ring_mask_sample`, the six FFTs and the `RING_SLICES × RING_RES²` float table, the
+`FlareBaked::ring_masks`/`ring_slice` fields, the GPU-side buffer and its trace-kernel
+binding 9. A `f32` Fresnel number per combo replaces the `i32` slice index in the same
+padding slot, so the struct layout is again unchanged. There is no per-path budget any more:
+the closed form costs the same as the polygon it replaces, so every ranked path rings.
+
+**The Fresnel number is computed per frame, not baked.** It moves with the working stop —
+stopping down shrinks the ghost and the pupil together, so `F ∝ stop_scale²` — and both twins
+derive it from the bake's measured spread by `ghost_fresnel_number`, mirrored in lumit-gpu as
+`ghost_fresnel_of` under the usual twin rule.
+
+**Recorded limits.** The fringes are computed at one wavelength (`RING_LAMBDA_UM` = 0.55):
+their spacing goes as `√λ`, so across the visible band it varies by ±15%, far under the blur
+they are already averaged by. They are uniform round the rim, which is right along a blade
+and wrong at a corner, where two edges' diffraction would add. Neither is worth six times the
+per-ray arithmetic; both are the recorded upgrade path if a corner ever shows.
+
+**Existing projects' ghost edges change, so the effect's version goes 10 → 11.**

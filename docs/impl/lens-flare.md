@@ -405,54 +405,79 @@ fraction and azimuth with `starburst_field`, rotates the sprite-relative pixel b
 so no slice bleeds into its neighbour. The shader spells `STARBURST_FIELDS` itself and
 a test pins the two spellings together.
 
-### 5b. Ghost edges are Fresnel: the ring masks (K-369)
+### 5b. Ghost edges are Fresnel: the knife-edge rim (K-369, re-derived K-370)
 
 The starburst above is the aperture's **far** field. A ghost is its **near** field. Each
 ghost image is defocused by its own amount, and a defocused aperture edge is not a clean
 cut: it carries diffraction fringes just inside the rim, brighter than the middle of the
-ghost, at a scale set by that ghost's defocus. The bake therefore produces a second FFT
-product beside the sprite — `FlareBaked::ring_masks`, `RING_SLICES` (6) slices of
-`RING_RES`² (128²) — and the trace samples one of them **in place of `pupil_mask`** for the
-paths that carry a slice.
+ghost, at a scale set by that ghost's defocus.
 
-It is the same propagator. Multiplying the aperture by `e^{iπ(x²+y²)/(λd)}` and taking one
-FFT is Fresnel propagation to distance `d`; folding the Fresnel number `F = a²/(λd)` into
-coordinates normalised so the aperture frame is `x, y ∈ [−1, 1]` makes the chirp phase
-exactly `π·F·(x² + y²)`. The ladder is `F = 64, 32, 16, 8, 4, 2` — nearly-focused edge with
-fine ripples at the top, spread wash at the bottom. The propagated aperture is the **same
-on-axis image slice 0 of the starburst uses**, computed once and read twice, so the ring
-masks rebake with blades, rotation, roundness and f-stop exactly when the sprite does.
+**How fine those fringes are is derivable, and deriving it is the whole of K-370.** The
+ghost patch *is* the defocused aperture, so its radius on the sensor is `a`; the cone that
+forms it leaves the pupil at the marginal-ray angle, which the working f-number fixes at
+`1/(2N)`, so the defocus is `z ≈ 2Na`. One power of `a` cancels out of `F = a²/(λz)`:
 
-Three things about the maths that are easy to get wrong and are pinned by test:
+```text
+F = a / (2Nλ)
+```
 
-- **the output frame is not the input frame.** DFT bin `m` lands at `x' = m/(N·Δx·F)` in
-  the aperture's own units, so the propagated window is `±1/(2·Δx·F)` wide and *narrows*
-  as `F` rises. At `RING_RES` = 128 samples the window at `F` 64 does not even reach the
-  iris, so the propagation runs at `APERTURE_RES` (256) and only the resampled mask is
-  128². The same bound is the chirp's Nyquist limit (its local frequency at radius `r` is
-  `F·r`), so a window that covers the aperture is also a chirp that is sampled rather than
-  aliased — one condition, not two;
-- **the resample lands on pupil coordinates**, where `u = 1` is aperture ndc
-  `APERTURE_SIZE` (0.75). That makes a mask lookup at a traced ray's own `(u, v)` a direct
-  bilinear tap — `ring_mask_sample`, whose arithmetic the trace WGSL mirrors op for op with
-  `RING_RES` and `RING_SLICES` spelled in both languages and pinned together;
-- **energy is matched over the pupil DISC, not the square.** Fresnel diffraction really
-  does throw light past the geometric aperture, and at the low Fresnel numbers a good deal
-  of it lands beyond `r = 1` — where the trace sprays no rays at all. Normalising over the
-  square would hand the widest ghosts a mask whose flux mostly falls outside the sampled
-  pupil and dim them by half. Nothing is clamped: the overshoot above 1 at the rim (peak
-  ≈ 1.50 against a plateau of ≈ 0.98 at `F` 64) is the Gibbs ringing, and it is the point.
+`ghost_fresnel_number(spread, fstop)` is that line, with `spread` the bake's measured image
+diameter as a fraction of the sensor diagonal and the working stop's `stop_scale` already
+folded in — the number moves with the iris, because stopping down shrinks the ghost and the
+pupil together (`F ∝ stop_scale²`), so it is computed **per frame** rather than baked.
 
-Which ghost gets which rung is the one **approximation** here, and it is deliberate. The
-top `RING_GHOSTS` (32) ranked paths carry a slice — below that a ghost contributes no
-visible edge — and the slice comes from the path's already-measured image spread,
-`F ≈ RING_SPREAD_REF / spread` clamped to the ladder. Joo et al. (2016) derive each ghost's
-fractional-Fourier order from the ABCD matrix chain of its own path; that is the exact
-answer and the recorded upgrade. `RING_SPREAD_REF` = 3.2 is a calibration measured against
-the bundled library (whose top-32 spreads run 0.05 … 8 of the sensor diagonal) and is the
-knob to turn — a regression test asserts the ladder actually spans at least three rungs on
-a real lens, because at the first value tried every path on every bundled lens landed on
-the bottom rung.
+Real values: a 5%-of-frame ghost at f/2.8 is `F ≈ 350`, a frame-filling one `F ≈ 7000`, the
+widest washes on the bundled lenses `F ≈ 50 000`. **That range is why the propagated ring
+masks K-369 shipped had to go**: a single-FFT propagator's output window is `±(N−1)/(4F)`
+aperture units and must cover the aperture, so `F ≤ (N−1)/3` — 85 at a 256² transform, and a
+4096² one to reach 1000. K-369's ladder therefore ran `F = 64 … 2`, two to three orders low,
+and its spread calibration spread real ghosts across rungs where the near field is not an
+edge effect at all but a whole-aperture pattern: measured on the bundled default, the `F 2`
+slice's interior ran 2.4× the flat mask on average and 4.7× at the very centre. Painted
+across ghosts that fill the frame, that is a broad concentric interference pattern over the
+whole picture — which is what it looked like, and what the owner reported.
+
+At the real Fresnel numbers the blade is locally straight and the fringes hug the rim, so
+the model is the **knife-edge asymptotic**, a closed form of one variable:
+
+```text
+I(v) = ½[(C(v) + ½)² + (S(v) + ½)²],   v = s·√(2F)
+```
+
+`C` and `S` are the Fresnel integrals in the `π/2` convention (`fresnel_cs`, by the standard
+auxiliary-function rational approximation, error under 2e-3, odd in `v` so one evaluation
+serves both sides of the edge). The profile is 1 deep inside, exactly ¼ on the geometric
+edge, peaks at ≈ 1.37 at `v ≈ 1.22` with a fringe train decaying as `2/(πv)`, and falls to
+nothing outside — the light real diffraction throws past the blade, which the propagated bake
+had to normalise away instead. `s` is the **perpendicular** distance to the blade: the same
+polygon `bound` `pupil_mask` computes, less `r`, times `cos α` (exact for the polygon, 1 for
+a fully round iris).
+
+Two properties are load-bearing, and both are pinned by test:
+
+- **the interior of a ghost is flat by construction.** Whatever the rim does, this profile
+  cannot shade or tint the middle of a ghost. That is the regression, stated as a property
+  rather than a tolerance;
+- **fringes nobody can sample are averaged, not drawn.** A fringe train finer than the pupil
+  ray grid does not appear, it *aliases*, and an aliased train is a beat pattern smeared over
+  the whole ghost — the other half of the artefact. A diffraction profile averages to the
+  geometric edge it surrounds, so `ghost_mask` crosses from the ringed profile to the plain
+  one over `blur_v` of 0.5 … 2, `blur_v` being the wider of the ray-grid step and the
+  Softness feather in `v` units. A soft blade smears its own fringes exactly as a coarse grid
+  does, so both enter the same way.
+
+The practical consequence, stated plainly: **the big frame-filling ghosts now show
+essentially the plain iris edge** — their fringes are far finer than any grid the effect
+traces — and the tight bright ones, where a photograph does show a ringed rim, keep theirs.
+There is no per-path budget any more: the closed form costs what the polygon it replaces
+costs, so every ranked path carries its own `F` in the combo (a `f32` in the padding slot
+K-369's `i32` slice index used), and the trace WGSL mirrors `fresnel_cs`,
+`knife_edge_intensity` and `ghost_mask` op for op.
+
+Recorded limits: the fringes are computed at one wavelength (`RING_LAMBDA_UM` = 0.55 µm —
+their spacing goes as `√λ`, so ±15% across the visible band, far under the blur they are
+already averaged by), and they are uniform round the rim, which is right along a blade and
+wrong at a corner where two edges' diffraction would add. Both are the recorded upgrade path.
 
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)

@@ -4928,9 +4928,6 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     // The K-369 ring masks are baked in parallel the same way, and the slice
     // each path picks comes off the spreads — both must be bit-equal too, or
     // two identical projects would draw different ghost edges.
-    assert_eq!(a.ring_masks, b.ring_masks);
-    assert_eq!(a.ring_slice, b.ring_slice);
-    assert_eq!(a.ring_slice.len(), a.pairs.len());
     assert!(!a.pairs.is_empty());
     for path in &a.pairs {
         assert!(path[0] < path[1]);
@@ -4947,142 +4944,192 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
-/// **Ghost edges are Fresnel** (K-369, entry C2): the ring-mask ladder is a
-/// real near-field propagation — energy-preserving, monotone in defocus, and
-/// carrying the rim ringing that is the whole reason it exists — and the
-/// paths that use it are the top [`RING_GHOSTS`] alone.
+/// **Ghost edges are Fresnel, and only their edges are** (K-369, re-derived
+/// K-370).
 ///
-/// The normalised L1 difference against the analytic iris mask is the
-/// ladder's handle: the highest Fresnel number is nearly the aperture
-/// itself, and the lowest has spread into a wash.
+/// The rim carries the knife-edge diffraction profile a real defocused
+/// aperture casts; the interior of a ghost is left exactly as flat as the
+/// plain iris mask. That second half is the regression: K-369's propagated
+/// masks ran at Fresnel numbers of 2 to 64, two to three orders below what a
+/// real ghost has, and at those the near field is a whole-aperture pattern —
+/// the bundled default measured 2.4× the flat mask's interior on the bottom
+/// rung, 4.7× at the very centre — so every frame-filling ghost painted a
+/// broad concentric interference pattern across the picture.
 #[test]
-fn lens_flare_ring_masks_are_fresnel_energy_preserving_and_ranked() {
+fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
     use crate::fx::lens_flare::*;
     let p = default_flare_params();
     let baked = bake(&p);
-    assert_eq!(
-        baked.ring_masks.len(),
-        RING_SLICES * RING_RES * RING_RES,
-        "the slices are concatenated, slice-major"
-    );
-    let analytic = analytic_ring_mask(&p, baked.native_fstop);
-    let ref_total = ring_disc_energy(&analytic);
-    assert!(ref_total > 0.0, "the reference aperture must pass light");
+    let rot = p.aperture_rotation_deg.to_radians();
+    let roundness = effective_roundness(p.roundness, p.fstop, baked.native_fstop);
 
-    let mut diffs = Vec::new();
-    for k in 0..RING_SLICES {
-        let slice = &baked.ring_masks[k * RING_RES * RING_RES..(k + 1) * RING_RES * RING_RES];
-        // Flux preservation (the normalisation pin): a ringed ghost must be
-        // neither brighter nor dimmer than the hard-edged one it replaces —
-        // measured over the pupil disc, which is where the trace sprays its
-        // rays and so the only place the flux can be collected.
-        let ratio = ring_disc_energy(slice) / ref_total;
+    // The derivation, at the sizes real ghosts come in: a 5%-of-frame ghost
+    // and a frame-filling wash are both hundreds to thousands, never the
+    // handful the propagated ladder could reach.
+    let tight = ghost_fresnel_number(0.05, 2.8);
+    let wash = ghost_fresnel_number(1.0, 2.8);
+    assert!(
+        (300.0..500.0).contains(&tight),
+        "a 5% ghost at f/2.8 is a few hundred, got {tight}"
+    );
+    assert!(
+        (6000.0..8000.0).contains(&wash),
+        "a frame-filling ghost at f/2.8 is thousands, got {wash}"
+    );
+    assert!(wash > tight, "a bigger ghost has the higher Fresnel number");
+    // Stopping down shrinks the ghost and the pupil together, so the fringes
+    // coarsen as F ∝ scale²; and a degenerate stop rings not at all.
+    assert!(ghost_fresnel_number(0.05 * 0.35, 8.0) < tight);
+    assert_eq!(ghost_fresnel_number(0.0, 2.8), 0.0);
+    assert_eq!(ghost_fresnel_number(0.05, 0.0), 0.0);
+
+    // The knife-edge profile itself: 1 deep inside, ¼ on the edge, a first
+    // fringe above 1 just inside it, nothing far outside.
+    // Deep inside it settles on 1, approached through a fringe train whose
+    // amplitude decays as 1/(πv) — so "flat" is a limit, and the tolerance
+    // has to be that decay rather than zero.
+    for v in [40.0_f32, 80.0, 160.0] {
+        let ripple = (knife_edge_intensity(v) - 1.0).abs();
         assert!(
-            (0.99..=1.01).contains(&ratio),
-            "slice {k} (F {}) carries {ratio} of the analytic energy",
-            ring_fresnel(k)
+            ripple < 2.5 / (std::f32::consts::PI * v),
+            "at v {v} the profile is {ripple} off 1"
         );
-        let l1: f64 = slice
-            .iter()
-            .zip(&analytic)
-            .map(|(a, b)| (*a as f64 - *b as f64).abs())
-            .sum::<f64>()
-            / ref_total;
-        diffs.push(l1);
+    }
+    assert!((knife_edge_intensity(0.0) - 0.25).abs() < 0.01);
+    assert!(knife_edge_intensity(-6.0) < 0.02);
+    let first = knife_edge_intensity(1.217);
+    assert!(
+        (1.3..1.45).contains(&first),
+        "the first fringe peaks near 1.37, got {first}"
+    );
+    // Monotone it is not — which is the whole point, and what the analytic
+    // mask can never be.
+    let profile: Vec<f32> = (0..400)
+        .map(|i| knife_edge_intensity(i as f32 * 0.05 - 2.0))
+        .collect();
+    let peaks = profile
+        .windows(3)
+        .filter(|w| w[1] > w[0] && w[1] >= w[2] && w[1] > 1.0)
+        .count();
+    assert!(peaks >= 3, "the fringe train must have several peaks");
+
+    // **The interior is flat.** Along a radial line through the inner 60% of
+    // the pupil, a ringed mask must not deviate from the plain one by more
+    // than a whisper — the check K-369 could not have passed.
+    let f = ghost_fresnel_number(1.0, p.fstop);
+    let grid = 2.0 / 63.0;
+    let mut worst = 0.0_f32;
+    for i in 0..38 {
+        let u = i as f32 / 63.0 * 0.98;
+        let ringed = ghost_mask(
+            u,
+            0.0,
+            p.blades,
+            rot,
+            roundness,
+            p.aperture_softness,
+            f,
+            grid,
+        );
+        let plain = pupil_mask(u, 0.0, p.blades, rot, roundness, p.aperture_softness);
+        worst = worst.max((ringed - plain).abs());
     }
     assert!(
-        diffs[0] < 0.35,
-        "the highest Fresnel number must still be recognisably the aperture: L1 {}",
-        diffs[0]
-    );
-    assert!(
-        diffs[RING_SLICES - 1] > diffs[0],
-        "the ladder must be monotone in defocus: F {} differs by {}, F {} by {}",
-        ring_fresnel(0),
-        diffs[0],
-        ring_fresnel(RING_SLICES - 1),
-        diffs[RING_SLICES - 1]
+        worst < 0.02,
+        "the ghost interior must not be shaded by its rim: worst |Δ| {worst}"
     );
 
-    // **The ringing is real.** Along a radial line out through the blade
-    // edge, the analytic mask falls monotonically from its plateau — it is a
-    // smoothstep, it cannot do otherwise — while the near-field slice
-    // overshoots it: the Gibbs fringe, brighter than the middle of the ghost.
-    let plateau: f32 = (0..16)
-        .map(|i| ring_mask_sample(&baked.ring_masks, 0, i as f32 / 64.0, 0.0))
-        .sum::<f32>()
-        / 16.0;
-    assert!(plateau > 0.1, "the slice must have an interior: {plateau}");
-    let profile: Vec<f32> = (0..256)
-        .map(|i| ring_mask_sample(&baked.ring_masks, 0, i as f32 / 255.0, 0.0))
-        .collect();
-    let overshoot = profile
-        .windows(3)
-        .enumerate()
-        .filter(|(_, w)| w[1] > w[0] && w[1] >= w[2])
-        .map(|(i, w)| (i, w[1]))
-        .find(|&(_, v)| v > plateau * 1.02);
-    assert!(
-        overshoot.is_some(),
-        "the near-field slice must ring above its own plateau ({plateau}); \
-         profile peak {}",
-        profile.iter().fold(0.0_f32, |m, &v| m.max(v))
-    );
-    // The analytic mask it replaces is monotone by construction, which is
-    // exactly what a real ghost edge is not.
-    let analytic_profile: Vec<f32> = (0..256)
-        .map(|i| {
-            pupil_mask(
-                i as f32 / 255.0,
-                0.0,
+    // At zero the mask IS the plain one, byte for byte — the path every
+    // unmeasurable ghost takes.
+    for i in 0..64 {
+        let u = i as f32 / 63.0 * 1.2 - 0.6;
+        assert_eq!(
+            ghost_mask(
+                u,
+                0.3,
                 p.blades,
-                p.aperture_rotation_deg.to_radians(),
-                effective_roundness(p.roundness, p.fstop, baked.native_fstop),
+                rot,
+                roundness,
                 p.aperture_softness,
-            )
+                0.0,
+                grid
+            ),
+            pupil_mask(u, 0.3, p.blades, rot, roundness, p.aperture_softness),
+        );
+    }
+
+    // **The rim does ring** where the grid is fine enough to carry it: with
+    // softness off and a dense grid, the profile overshoots the plateau just
+    // inside the edge.
+    let fine = 0.002;
+    let sharp: Vec<f32> = (0..600)
+        .map(|i| {
+            let u = i as f32 / 599.0;
+            ghost_mask(u, 0.0, p.blades, rot, roundness, 0.0, tight, fine)
         })
         .collect();
+    let plateau: f32 = sharp[..100].iter().sum::<f32>() / 100.0;
     assert!(
-        analytic_profile.windows(2).all(|w| w[1] <= w[0] + 1e-6),
-        "the analytic mask is monotone by construction"
+        sharp.iter().any(|&v| v > plateau * 1.15),
+        "the rim must overshoot its own plateau ({plateau}); peak {}",
+        sharp.iter().fold(0.0_f32, |m, &v| m.max(v))
+    );
+    // …and the fringes GROW towards the rim rather than washing over the
+    // ghost. The train does reach inwards — a Fresnel edge is not a local
+    // effect and pretending otherwise would be the same lie in the other
+    // direction — but its envelope decays as 2/(πv), so the outer tenth of
+    // the radius must ripple several times harder than the inner half. This
+    // is the shape K-369's bottom rungs had exactly backwards: theirs peaked
+    // at the CENTRE.
+    let ripple = |lo: usize, hi: usize| {
+        sharp[lo..hi]
+            .iter()
+            .fold(0.0_f32, |m, &v| m.max((v - plateau).abs()))
+    };
+    let (inner, rim) = (ripple(0, 300), ripple(540, 600));
+    assert!(
+        rim > inner * 3.0,
+        "the fringes must gather at the rim: inner {inner}, rim {rim}"
+    );
+    assert!(
+        inner < 0.1,
+        "the inner half must stay within a tenth of its plateau, got {inner}"
     );
 
-    // Selection: the top RING_GHOSTS ring, nothing below does.
-    assert!(
-        baked.pairs.len() > RING_GHOSTS,
-        "this lens must have more paths than the ring budget"
-    );
-    for (rank, &slice) in baked.ring_slice.iter().enumerate() {
-        if rank < RING_GHOSTS {
-            assert!(
-                (0..RING_SLICES as i32).contains(&slice),
-                "rank {rank} must ring, got slice {slice}"
-            );
-        } else {
-            assert_eq!(slice, -1, "rank {rank} is past the ring budget");
-        }
+    // **Fringes nobody can sample are averaged, not aliased.** A grid far
+    // coarser than the fringe spacing gets the plain mask back; that is the
+    // band limit, and it is what stops an aliased fringe train from beating
+    // across the whole ghost.
+    let coarse = 2.0 / 15.0;
+    for i in 0..64 {
+        let u = i as f32 / 63.0 * 1.1;
+        let ringed = ghost_mask(u, 0.0, p.blades, rot, roundness, 0.0, wash, coarse);
+        let plain = pupil_mask(u, 0.0, p.blades, rot, roundness, 0.0);
+        assert!(
+            (ringed - plain).abs() < 1e-6,
+            "unresolvable fringes must average to the plain edge at u {u}"
+        );
     }
-    // The proxy's shape: tighter ghost, higher Fresnel number, lower slice.
-    assert_eq!(
-        ring_slice_for(0, 0.001),
-        0,
-        "a pinpoint ghost keeps its edge"
-    );
-    assert_eq!(
-        ring_slice_for(0, 4.0),
-        (RING_SLICES - 1) as i32,
-        "a frame-filling wash rings broadly"
-    );
-    assert_eq!(ring_slice_for(RING_GHOSTS, 0.05), -1);
-    // The ladder must actually be a ladder on a real lens: if every path
-    // landed on one rung, C2 would be a single global blur wearing six
-    // slices' clothing (which is what the plan's first calibration did).
-    let used: std::collections::BTreeSet<i32> =
-        baked.ring_slice.iter().take(RING_GHOSTS).copied().collect();
-    assert!(
-        used.len() >= 3,
-        "the spread proxy collapsed the ladder to {used:?}"
-    );
+
+    // The Fresnel integrals themselves, against their limits and their known
+    // value at the first fringe.
+    // Both tend to ½, oscillating in with amplitude ~1/(πv).
+    let (c, s) = fresnel_cs(100.0);
+    assert!((c - 0.5).abs() < 0.005 && (s - 0.5).abs() < 0.005);
+    let (cn, sn) = fresnel_cs(-1.5);
+    let (cp, sp) = fresnel_cs(1.5);
+    assert!((cn + cp).abs() < 1e-6 && (sn + sp).abs() < 1e-6, "odd in v");
+    let (c1, s1) = fresnel_cs(1.0);
+    assert!((c1 - 0.7799).abs() < 3e-3, "C(1) = 0.7799, got {c1}");
+    assert!((s1 - 0.4383).abs() < 3e-3, "S(1) = 0.4383, got {s1}");
+
+    // Every ranked path can ring now — the closed form costs the same as the
+    // polygon, so there is no budget to fall off the end of.
+    assert!(!baked.spreads.is_empty());
+    assert!(baked
+        .spreads
+        .iter()
+        .all(|&s| ghost_fresnel_number(s, baked.native_fstop) > 0.0));
 }
 
 /// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the

@@ -3306,8 +3306,6 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
         starburst: b.starburst,
         sb_res: lf::STARBURST_RES,
         sb_fields: lf::STARBURST_FIELDS as u32,
-        ring_masks: b.ring_masks,
-        ring_slice: b.ring_slice,
     }
 }
 
@@ -3324,11 +3322,6 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
         ("REFL_LAMBDA_BINS", lf::REFL_LAMBDA_BINS),
         ("REFL_COS_BINS", lf::REFL_COS_BINS),
         ("SPECTRAL_SUB", lf::SPECTRAL_SUB),
-        // The K-369 ring-mask grid: the shader indexes the baked slices by
-        // hand, so a drift here would sample the wrong slice at the wrong
-        // pitch and every ringed ghost edge would differ from the CPU's.
-        ("RING_RES", lf::RING_RES),
-        ("RING_SLICES", lf::RING_SLICES),
     ] {
         let want = format!("const {name}: u32 = {want}u;");
         assert!(
@@ -4049,15 +4042,24 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                         // hold light and both twins skip the trace.
                         let g1f = (grid.max(2) - 1) as f32;
                         let lim = 1.0 + 1.5 * (2.0 / g1f);
-                        // The iris mask, and for a path that carries a
-                        // K-369 ring slice the near-field mask that replaces
-                        // it — the branch the shader takes, taken here too.
-                        let slice = baked.ring_slice[pair_of[ci]];
-                        let mask = if slice >= 0 {
-                            lf::ring_mask_sample(&baked.ring_masks, slice as usize, u, v)
-                        } else {
-                            lf::pupil_mask(u, v, p.blades, rot, roundness, p.aperture_softness)
-                        };
+                        // The iris mask with this ghost's own edge
+                        // diffraction on it (K-370) — the same call the
+                        // shader makes, with the same Fresnel number and the
+                        // same ray-grid step.
+                        let fresnel = lf::ghost_fresnel_number(
+                            baked.spreads[pair_of[ci]] * stop_scale,
+                            p.fstop,
+                        );
+                        let mask = lf::ghost_mask(
+                            u,
+                            v,
+                            p.blades,
+                            rot,
+                            roundness,
+                            p.aperture_softness,
+                            fresnel,
+                            2.0 / g1f,
+                        );
                         let cpu = if u * u + v * v > lim * lim {
                             None
                         } else {
@@ -4127,7 +4129,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                 if pair[2] != lf::NO_BOUNCE {
                                     four_live += 1;
                                 }
-                                if slice >= 0 {
+                                if fresnel > 0.0 {
                                     ringed_live += 1;
                                 }
                                 let pos_err = (g[0] - pos[0]).abs().max((g[1] - pos[1]).abs());

@@ -170,16 +170,6 @@ pub struct FlareBakeData {
     /// bracketing each light. Uploaded as one atlas `sb_res` wide by
     /// `sb_res × sb_fields` tall; 0 is read as 1 (a single on-axis slice).
     pub sb_fields: u32,
-    /// The ghost-edge ring masks (K-369): `RING_SLICES × RING_RES²` floats,
-    /// slice-major, the aperture's near-field intensity at a ladder of
-    /// Fresnel numbers. A path whose `ring_slice` is ≥ 0 takes its iris mask
-    /// from here instead of from the analytic polygon, so its edge carries
-    /// the diffraction ringing a real defocused ghost has. Empty is allowed
-    /// and means every path falls back to the analytic mask.
-    pub ring_masks: Vec<f32>,
-    /// Which ring slice each ranked path uses, parallel to `ghosts` (K-369);
-    /// `−1` for the analytic mask.
-    pub ring_slice: Vec<i32>,
 }
 
 /// What the frame-time spread probe (K-267) reads from a cached bake,
@@ -227,10 +217,6 @@ struct GpuBaked {
     start_z_mm: f32,
     energy_gain: f32,
     starburst: wgpu::Texture,
-    /// The K-369 ring masks as the trace kernel's binding 9, and which slice
-    /// each ranked path reads (parallel to `ghosts`, `−1` = analytic mask).
-    ring_masks: wgpu::Buffer,
-    ring_slice: Vec<i32>,
 }
 
 /// The per-frame scratch one flare render works through: the ray landings and
@@ -608,10 +594,11 @@ struct GpuCombo {
     /// every stride around it — is unchanged.
     bounce3: u32,
     bounce4: u32,
-    /// Which K-369 ring-mask slice this path's iris mask comes from, or `−1`
-    /// for the analytic polygon. It took the struct's last padding slot, so
-    /// the layout — and every stride around it — is again unchanged.
-    ring_slice: i32,
+    /// This ghost's own **Fresnel number** (K-369, re-derived K-370), which
+    /// sets how fine the diffraction fringes on its rim are; `0` leaves the
+    /// plain analytic polygon. It took the struct's last padding slot, so the
+    /// layout — and every stride around it — is again unchanged.
+    ring_fresnel: f32,
 }
 
 /// One radiometric sub-sample in the WGSL `BandSub` layout (K-364), at
@@ -1275,6 +1262,29 @@ pub fn pair_grid_of(base: u32, spread: f32) -> u32 {
     ((base as f32 * mult).round() as u32).clamp(8, 512)
 }
 
+/// One ghost's Fresnel number from its image spread and the working stop —
+/// the exact twin of `lumit_core::fx::lens_flare::ghost_fresnel_number`
+/// (K-370), pinned by test.
+///
+/// `spread` is the bake's measured spread already scaled by the frame's
+/// `stop_scale`, since stopping down shrinks the ghost as well as the pupil.
+pub fn ghost_fresnel_of(spread: f32, fstop: f32) -> f32 {
+    if !(spread.is_finite() && fstop.is_finite()) || spread <= 0.0 || fstop <= 0.0 {
+        return 0.0;
+    }
+    let sensor_diag = (SENSOR_MM[0] * SENSOR_MM[0] + SENSOR_MM[1] * SENSOR_MM[1]).sqrt();
+    let a_um = spread * sensor_diag * 0.5 * 1000.0;
+    (a_um / (2.0 * fstop * RING_LAMBDA_UM)).clamp(0.0, 1.0e6)
+}
+
+/// The full-frame sensor the trace projects onto, mm — the twin of
+/// `lumit_core::fx::lens_flare::SENSOR_MM`.
+pub const SENSOR_MM: [f32; 2] = [36.0, 24.0];
+
+/// The wavelength the ghost-edge ringing is scaled at, µm — the twin of
+/// `lumit_core::fx::lens_flare::RING_LAMBDA_UM` (K-370).
+pub const RING_LAMBDA_UM: f32 = 0.55;
+
 /// The flare buffer's padded dimensions for Squeeze/Scale under 1 — the
 /// exact twin of `lumit_core::fx::lens_flare::flare_pad_dims` (K-267),
 /// pinned by test.
@@ -1432,21 +1442,6 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
             contents: bytemuck::cast_slice(table),
             usage: wgpu::BufferUsages::STORAGE,
         });
-    // The K-369 ring masks, same empty-buffer dance as the table above: a
-    // bake with no masks binds one zero, and every path's `ring_slice` is
-    // −1 anyway, so nothing reads it.
-    let rings: &[f32] = if data.ring_masks.is_empty() {
-        &[0.0]
-    } else {
-        &data.ring_masks
-    };
-    let ring_masks = ctx
-        .device
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("fx-lens-flare-ring-masks"),
-            contents: bytemuck::cast_slice(rings),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
     let float_texture = |label: &str, w: u32, h: u32, format: wgpu::TextureFormat, bytes: &[u8]| {
         ctx.device.create_texture_with_data(
             &ctx.queue,
@@ -1498,8 +1493,6 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
         start_z_mm: data.start_z_mm,
         energy_gain: data.energy_gain,
         starburst,
-        ring_masks,
-        ring_slice: data.ring_slice.clone(),
     }
 }
 
@@ -1748,6 +1741,11 @@ impl FxEngine {
             // (K-262, mirroring `lumit_core::fx::lens_flare::pair_grid`), so
             // combos are sorted grid-major: a run of equal-grid combos is one
             // dispatch batch, and the scratch is sized for the widest grid.
+            // The working stop shrinks the pupil, and with it every ghost —
+            // which is what each path's rim-fringe scale is derived from
+            // (K-370).
+            let stop_scale =
+                frame_optics(baked.native_fstop, baked.focal_mm, op.fstop, op.focus_m).stop_scale;
             let mut tagged: Vec<(u32, GpuCombo)> = Vec::with_capacity(ghost_count * op.bands.len());
             for (gi, ghost) in baked.ghosts.iter().take(ghost_count).enumerate() {
                 let spread = baked.spreads.get(gi).copied().unwrap_or(1.0);
@@ -1764,7 +1762,7 @@ impl FxEngine {
                             band: bi as u32,
                             bounce3: ghost[2],
                             bounce4: ghost[3],
-                            ring_slice: baked.ring_slice.get(gi).copied().unwrap_or(-1),
+                            ring_fresnel: ghost_fresnel_of(spread * stop_scale, op.fstop),
                         },
                     ));
                 }
@@ -1930,10 +1928,6 @@ impl FxEngine {
                             wgpu::BindGroupEntry {
                                 binding: 8,
                                 resource: bands_buf.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 9,
-                                resource: baked.ring_masks.as_entire_binding(),
                             },
                         ],
                     });
@@ -2175,6 +2169,8 @@ impl FxEngine {
             return Vec::new();
         };
         let ghost_count = (op.max_ghosts as usize).min(baked.ghosts.len());
+        let stop_scale =
+            frame_optics(baked.native_fstop, baked.focal_mm, op.fstop, op.focus_m).stop_scale;
         let mut combos: Vec<GpuCombo> = Vec::new();
         'outer: for (gi, ghost) in baked.ghosts.iter().take(ghost_count).enumerate() {
             for (bi, band) in op.bands.iter().enumerate() {
@@ -2189,7 +2185,10 @@ impl FxEngine {
                     band: bi as u32,
                     bounce3: ghost[2],
                     bounce4: ghost[3],
-                    ring_slice: baked.ring_slice.get(gi).copied().unwrap_or(-1),
+                    ring_fresnel: ghost_fresnel_of(
+                        baked.spreads.get(gi).copied().unwrap_or(1.0) * stop_scale,
+                        op.fstop,
+                    ),
                 });
             }
         }
@@ -2326,10 +2325,6 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 8,
                     resource: bands_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 9,
-                    resource: baked.ring_masks.as_entire_binding(),
                 },
             ],
         });

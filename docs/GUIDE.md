@@ -600,16 +600,27 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   and a real ghost — which is just an out-of-focus picture of the iris — has
   exactly the same shimmer at its rim. Almost every flare in software draws
   ghosts with a stencil edge instead, which is a large part of why they read as
-  fake. Lumit works the rings out properly, using the same Fourier maths the
-  starburst uses, and paints them onto the brightest ghosts. The amount differs
-  per ghost, and that is not a stylistic choice: how far out of focus a ghost is
-  decides how coarse its rings are. A tight, almost-focused ghost keeps a sharp
-  edge with very fine ringing; a big soft one that fills the frame rings slowly
-  and its edge fades away instead. So the ghosts in a train do not all have the
-  same kind of edge, which is what a photograph shows and a stencil cannot.
-  The brightness is kept honest while this happens — the ringing moves light
-  around the rim, it never adds or removes any — so turning it on changed the
-  look of the edges without changing how bright anything is.
+  fake. Lumit works the rings out properly, and how coarse they are is not a
+  stylistic choice: it follows from how big that particular ghost is and how open
+  the iris is, by one line of arithmetic.
+  The first attempt at this got the *scale* badly wrong, and it is worth
+  recording why, because the mistake was visible from across the room. The rings
+  were produced by running the same Fourier maths the starburst uses, at a ladder
+  of six settings. That machinery has a hard ceiling — reaching finer rings needs
+  a transform sixteen times bigger — and real ghost rings are hundreds of times
+  finer than the ceiling. So every ghost was drawn with rings far too coarse, and
+  rings coarse enough are not a rim effect at all: they are broad bright and dark
+  bands across the *whole* ghost. With big ghosts filling the frame, the picture
+  picked up a faint concentric pattern over the entire shot. The fix was to stop
+  computing the whole pattern and use the textbook formula for what happens at
+  the *edge* alone, which is exact at the scales real ghosts actually have, costs
+  nothing, and cannot touch the middle of a ghost at all — the interior is flat
+  by construction now, not by luck.
+  One honest consequence: a big soft ghost's rings are so fine that the effect
+  cannot draw them without them turning into a moiré pattern, so it doesn't try —
+  it draws their average, which is a plain soft edge. Tight bright ghosts, which
+  is where a photograph actually shows a ringed rim, keep theirs. That is the
+  right way round, and the previous behaviour was precisely the wrong way round.
   The expensive maths (the Fourier transforms, the iris image) runs once on the CPU when
   you change a parameter and is remembered; only the ray shooting and drawing happen per
   frame, which is what keeps it scrubbable. When it's doing too much, the dials to reach

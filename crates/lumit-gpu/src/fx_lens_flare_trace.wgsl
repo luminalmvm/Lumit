@@ -45,9 +45,10 @@ struct Surface {
 // always did. The two fields took two of the padding slots, so the layout
 // mirrors lumit-gpu's `GpuCombo` at the size it always had.
 //
-// `ring_slice` names the K-369 ghost-edge ring mask this path's iris mask is
-// sampled from, or -1 for the analytic polygon; it took the struct's last
-// padding slot, so the layout is again unchanged.
+// `ring_fresnel` is this ghost's own Fresnel number (K-369, re-derived
+// K-370), which sets how fine the diffraction fringes on its rim are; 0
+// leaves the plain analytic polygon. It took the struct's last padding slot,
+// so the layout is again unchanged.
 struct Combo {
     bounce_a: u32,
     bounce_b: u32,
@@ -56,7 +57,7 @@ struct Combo {
     band: u32,
     bounce_c: u32,
     bounce_d: u32,
-    ring_slice: i32,
+    ring_fresnel: f32,
 };
 
 // The empty bounce slot — lumit_core's `NO_BOUNCE`.
@@ -167,9 +168,6 @@ struct TraceParams {
 // `FlareBaked::reflectance`.
 @group(0) @binding(7) var<storage, read> reflectance: array<f32>;
 @group(0) @binding(8) var<storage, read> band_subs: array<BandSub>;
-// The baked ghost-edge ring masks (K-369), RING_SLICES slices of RING_RES^2
-// in pupil coordinates — see lumit_core's `FlareBaked::ring_masks`.
-@group(0) @binding(9) var<storage, read> ring_masks: array<f32>;
 
 // The light direction for a source at raster fraction (px, py) — the exact
 // WGSL twin of lumit_core's `light_direction` (sensor y up, so the y
@@ -236,36 +234,78 @@ fn pupil_mask(u: f32, v: f32) -> f32 {
     return 1.0 - t * t * (3.0 - 2.0 * t);
 }
 
-// The ring-mask side and slice count (K-369), spelled here because a shader
-// cannot import a Rust constant — pinned against lumit-core by test.
-const RING_RES: u32 = 128u;
-const RING_SLICES: u32 = 6u;
+// Ghost-edge diffraction (K-369, re-derived K-370) — the op-for-op twins of
+// lumit_core's `fresnel_cs`, `knife_edge_intensity` and `ghost_mask`.
+//
+// A ghost's rim is not a clean cut: light bends round the blade and lays down
+// fine fringes just inside it. At the Fresnel numbers real ghosts have — the
+// hundreds to tens of thousands, see `ghost_fresnel_number` — that is a
+// straight-edge problem, so it is a closed form of ONE number (the
+// perpendicular distance to the blade) rather than a propagated aperture
+// image. The interior of a ghost is therefore flat by construction.
 
-// One bilinear tap into a ring slice at pupil coordinates — the op-for-op
-// twin of lumit_core's `ring_mask_sample`. Outside the unit square, and on a
-// slice the bake did not produce, the mask is 0.
-fn ring_mask_sample(slice: i32, u: f32, v: f32) -> f32 {
-    if (u < -1.0 || u > 1.0 || v < -1.0 || v > 1.0) {
-        return 0.0;
+// Fresnel integrals C(v), S(v) in the pi/2 convention, by the standard
+// auxiliary-function rational approximation. Odd in v, so one evaluation
+// serves both sides of the edge.
+fn fresnel_cs(v: f32) -> vec2<f32> {
+    let x = abs(v);
+    let f = (1.0 + 0.926 * x) / (2.0 + 1.792 * x + 3.104 * x * x);
+    let g = 1.0 / (2.0 + 4.142 * x + 3.492 * x * x + 6.670 * x * x * x);
+    let arg = 1.5707963267948966 * x * x;
+    let sc = vec2<f32>(cos(arg), sin(arg));
+    let cc = 0.5 + f * sc.y - g * sc.x;
+    let ss = 0.5 - f * sc.x - g * sc.y;
+    if (v < 0.0) {
+        return vec2<f32>(-cc, -ss);
     }
-    let base = u32(max(slice, 0)) * RING_RES * RING_RES;
-    if (arrayLength(&ring_masks) < base + RING_RES * RING_RES) {
-        return 0.0;
+    return vec2<f32>(cc, ss);
+}
+
+// The knife-edge intensity: 1 deep inside, 1/4 on the geometric edge, a first
+// fringe of about 1.37 just inside it, decaying to 0 outside.
+fn knife_edge_intensity(v: f32) -> f32 {
+    let cs = fresnel_cs(v) + vec2<f32>(0.5, 0.5);
+    return 0.5 * dot(cs, cs);
+}
+
+// Where the fringes fade into their own average, in v units — pinned against
+// lumit_core's RING_WASH by test.
+const RING_WASH_LO: f32 = 0.5;
+const RING_WASH_HI: f32 = 2.0;
+
+// The iris mask one ray sees, with this ghost's edge diffraction on it.
+// `blur` is the ray grid's step in pupil units: fringes finer than that
+// cannot be drawn, only aliased, so they cross over to their average — which
+// is the plain iris edge.
+fn ghost_mask(u: f32, v: f32, fresnel: f32, blur: f32) -> f32 {
+    let analytic = pupil_mask(u, v);
+    if (fresnel <= 0.0) {
+        return analytic;
     }
-    let last = RING_RES - 1u;
-    let fx = (u * 0.5 + 0.5) * f32(last);
-    let fy = (v * 0.5 + 0.5) * f32(last);
-    let x0 = min(u32(floor(fx)), last);
-    let y0 = min(u32(floor(fy)), last);
-    let x1 = min(x0 + 1u, last);
-    let y1 = min(y0 + 1u, last);
-    let tx = fx - f32(x0);
-    let ty = fy - f32(y0);
-    let a = ring_masks[base + y0 * RING_RES + x0] * (1.0 - tx)
-          + ring_masks[base + y0 * RING_RES + x1] * tx;
-    let b = ring_masks[base + y1 * RING_RES + x0] * (1.0 - tx)
-          + ring_masks[base + y1 * RING_RES + x1] * tx;
-    return a * (1.0 - ty) + b * ty;
+    let r = sqrt(u * u + v * v);
+    let blades = f32(clamp(tp.blades, 3u, 16u));
+    let tau = 6.283185307179586;
+    let sector = tau / blades;
+    let apothem = cos(3.141592653589793 / blades);
+    let angle = atan2(v, u) - tp.rot_rad;
+    var a = angle % sector;
+    if (a < 0.0) {
+        a = a + sector;
+    }
+    // The radial bound `pupil_mask` uses, and the cosine that turns a radial
+    // gap into the perpendicular distance to the blade.
+    let cos_a = cos(a - sector * 0.5);
+    let poly_bound = apothem / cos_a;
+    let roundness = clamp(tp.roundness, 0.0, 1.0);
+    let bound = poly_bound + (1.0 - poly_bound) * roundness;
+    let cos_fac = cos_a + (1.0 - cos_a) * roundness;
+    let scale = sqrt(2.0 * fresnel);
+    let ringed = knife_edge_intensity((bound - r) * cos_fac * scale);
+    let soft = max(clamp(tp.softness, 0.0, 1.0) * bound, 1e-4);
+    let blur_v = max(max(blur, 0.0), soft) * scale;
+    let t = clamp((blur_v - RING_WASH_LO) / (RING_WASH_HI - RING_WASH_LO), 0.0, 1.0);
+    let wash = t * t * (3.0 - 2.0 * t);
+    return ringed + (analytic - ringed) * wash;
 }
 
 // Unpolarised Fresnel by incidence cosine (lumit_core `fresnel_cos`).
@@ -490,14 +530,12 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         rays[slot] = dead;
         return;
     }
-    // The shape of the hole the light comes through. For the top-ranked
-    // paths that carry a ring slice (K-369) that is not the analytic polygon
-    // but the aperture's near-field diffraction pattern at this ghost's own
-    // defocus — rim ringing and all.
-    var mask = pupil_mask(u, v);
-    if (combo.ring_slice >= 0) {
-        mask = ring_mask_sample(combo.ring_slice, u, v);
-    }
+    // The shape of the hole the light comes through, with this ghost's own
+    // edge diffraction ringing its rim (K-369, re-derived K-370). `spacing`
+    // is the ray grid's step, and it is what decides whether fringes this
+    // fine can be drawn at all rather than aliased into a pattern across the
+    // whole ghost.
+    let mask = ghost_mask(u, v, combo.ring_fresnel, spacing);
 
     var pos = vec3<f32>(u * tp.pupil_mm, v * tp.pupil_mm, tp.start_z_mm);
     // The ray's own point of the source (K-367): a point source jitters by
