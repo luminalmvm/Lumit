@@ -627,22 +627,35 @@ Recorded so they are not re-proposed as gaps:
     flare-accuracy branch head (a9ee807, run 31641836700) before any of that work,
     and K-370 moved it to **0.9876**. The claim in PR #96 that it passed was wrong.
     What is known, from the diagnostic the test now prints on every run:
-    - the shortfall is **diffuse**, not clipped: the worst single sample differs by
-      0.0033 and *no* sample differs by more than the mean sample (0.0053), while
-      the middle of the frame is down 1.29%, the border ring 0.69% and the edge
-      fifths 0.10%. That is the shape of a uniform multiplicative difference;
+    - **the deficit tracks local brightness.** By zone: the middle of the frame is
+      down **1.30%**, the border ring 0.70%, and the outer fifths only **0.11%** —
+      so it is not a uniform scale (an earlier note here said it was; that was
+      read off the total before the zones were measured) and not an edge clip.
+      It is largest exactly where the flux density is highest;
+    - it is nonetheless **smooth**: the worst single sample differs by 0.0024 and
+      *no* sample of 36864 differs by more than the mean sample (0.0053). Nothing
+      is being dropped in lumps;
     - the per-ray trace oracle passes, so the ray landings and weights agree — but
-      its bound is a p99 *relative* one, which a uniform ~1.3% would clear, so the
-      mask is not cleared by it;
-    - the ordinary frame oracle passes, so it is specific to the **padded** path
-      (K-267), not to the flare generally;
-    - ruled out by inspection: `cell_mm` (both `(grid-1)`), `screen_transform`
-      (both the flare buffer's own width over 36), the splat-axis conventions
-      including how each twin treats a dead or zero-weight neighbour, the
-      roundness derivation, and the Fresnel-number derivation.
-    The remaining suspects are the padded buffer's sampling in the combine and the
-    centring offset K-267 introduced. Needs a machine with an adapter; every round
-    against CI is ten minutes and a guess.
+      its bound is a p99 *relative* one, which a ~1.3% would clear;
+    - the unpadded frame oracle passes, so it is specific to the **padded** path
+      (K-267) — and padding changes the flare buffer's pixel scale, hence which
+      splats meet the sub-pixel floor and the caustic density cap.
+    Those three together point at **K-366's density cap** (`MIN_AREA_FRAC`) and the
+    anti-alias floor (`MIN_SPLAT_AXIS_PX`): that is the one place the pipeline
+    deliberately *sheds* energy, it bites hardest where flux density is highest,
+    and how often it bites depends on the pixel scale that padding changes. Two
+    twins shedding slightly different amounts there would produce exactly this
+    profile.
+    Ruled out by inspection: `cell_mm` (both `(grid-1)`), `screen_transform` (both
+    the flare buffer's own width over 36), the splat-axis conventions including
+    how each treats a dead or zero-weight neighbour, the near-parallel push and the
+    cap arithmetic (line for line the same), the combine's padded tap formula, the
+    roundness derivation, the Fresnel-number derivation, and fp16 accumulation
+    (the flare buffer is `Rgba32Float`).
+    What is left is what a reader cannot check: whether the GPU's quad
+    rasterisation selects the same pixels as the CPU's bounding-box walk with
+    `|u|, |v| < 1` for footprints near the sub-pixel floor. Needs a machine with an
+    adapter — every round against CI is ten minutes and a guess.
 - **The idle cache fill is not interruptible.** It composites one frame per turn,
     so a scrub arriving mid-frame waits for that composite to finish - up to a
     couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for
