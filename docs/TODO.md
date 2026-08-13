@@ -43,6 +43,30 @@ These sit above everything else: they are what the editor feels like in the hand
 
 ---
 
+## Now - the effect registry migration (K-373, docs/impl/effect-registry.md §6)
+
+The refactor is landing in batches; these are the batches that have not landed. Delete each
+line as its batch lands.
+
+- **Migrate the remaining colour family** - `temperature`, `hue_shift`, `vibrancy`, `tint`,
+    `colour_balance`, `vignette`. Mechanical: schema, resolve arm, CPU arm, `run_ops` arm.
+- **Rewire the render path to `ResolvedStack`** - `build.rs`, `draw.rs`, `realise.rs` and
+    `fxops.rs` carry `Vec<Resolved>` today. Until this lands, a migrated effect's declaration
+    is generated but its frame still resolves through the old enum, so the two paths must
+    keep agreeing (the generated-schema test is the guard).
+- **Migrate the blur, stylise and temporal families**, then the awkward six on their own:
+    `dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`, `datamosh`.
+- **Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body**,
+    and with them the migration-only `the_generated_schema_matches_the_hand_written_one`.
+- **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
+    inputs; then **spare parameters**, the user's own sliders for expressions to read. The
+    rules are settled (§4 of the note); the panel affordances are not built.
+- **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
+    follow for free - except for dynamic parameters, which are per *instance* rather than per
+    effect and need a bridge call that takes an instance id.
+
+---
+
 ## Now - Flutter frontend parity and regressions
 
 Flutter is the only frontend (K-174, K-182); git history is the parity reference.

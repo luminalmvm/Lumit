@@ -2,6 +2,10 @@
 //! snapshot store. Engine root — depends on nothing above it
 //! (docs/05-ARCHITECTURE.md dependency rules).
 
+// The `#[derive(Effect)]` macro writes `::lumit_core::…` paths, which have to
+// resolve inside this crate as well as outside it (docs/impl/effect-registry.md).
+extern crate self as lumit_core;
+
 pub mod anim;
 pub mod expression;
 pub mod fx;

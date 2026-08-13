@@ -32,6 +32,16 @@ effect consists of exactly four parts, and an effect is not mergeable until all 
 Effects are versioned. The version participates in the cache key (K-016), so changing an
 effect's maths in a release invalidates stale cached frames rather than mixing generations.
 
+The four parts are **declared once**, in the effect's own file (K-381): the parameter set is
+a struct whose fields are the parameters, the schema below is generated from it, and the
+effect registers itself by one line of a written list. An effect is therefore *not* a variant
+of a closed enum, and one that this build has never heard of — an OFX plugin, in time a
+user's own — is an ordinary member of the catalogue rather than an impossibility. See
+[impl/effect-registry.md](impl/effect-registry.md) for the shape, the parameter bag a frame
+resolves to, and the rules for parameters that are not in the schema at all (§4 there:
+derived parameters read out of a shader or a node graph, and the user's own spare
+parameters).
+
 ### 1.2 Parameter conventions
 
 - **Names** are sentence case in the UI, stable snake_case identifiers in the schema.

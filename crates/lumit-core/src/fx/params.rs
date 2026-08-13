@@ -1,0 +1,457 @@
+//! Resolved effect parameters: the key/value form a frame renders from
+//! (docs/impl/effect-registry.md §2.3).
+//!
+//! **In plain terms.** An effect's controls are stored in the project as
+//! animatable properties. Once a frame knows what time it is, those properties
+//! become plain numbers — and this module is the shape those numbers take on the
+//! way to the GPU. It is a small list of `(which control, what number)` pairs
+//! rather than a variant of one giant enum listing every effect there will ever
+//! be, which is what lets an effect carry controls nobody wrote down when Lumit
+//! was compiled: a slider the user added, a uniform read out of a shader they
+//! typed.
+//!
+//! Two properties are load-bearing and are the reason this is not simply a
+//! `HashMap<String, f32>`:
+//!
+//! - **No allocation per effect.** One layer's whole stack resolves into a
+//!   single [`ResolvedStack`] with one allocation for its parameters — one fewer
+//!   than the `Vec<Resolved>` it replaces. A [`ResolvedFx`] borrows a run of it
+//!   and is `Copy`, so it is passed around like the old plain-old-data enum was.
+//! - **Determinism.** The resolved stack feeds the frame key (K-143), so it is
+//!   hashed field by field through [`ResolvedStack::feed_hash`] — never
+//!   byte-wise, because [`Value`] has padding and a padding byte in a cache key
+//!   is a wrong picture that reproduces on one machine only.
+
+use std::ops::Range;
+
+use uuid::Uuid;
+
+/// A parameter's identity: the FNV-1a 64 hash of its stable snake_case id.
+///
+/// Hashing the id rather than storing it keeps [`Value`] lookups to a comparison
+/// of two `u64`s, and keeps the resolved form free of borrowed strings — a
+/// dynamic parameter's id is owned by the document, not by `'static` schema
+/// data, so `&'static str` was never an option for the general case.
+///
+/// The hash is computed in a `const fn`, so a built-in's ids are compile-time
+/// constants: the derive macro emits one `const` per parameter and a lookup
+/// never hashes at run time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ParamId(pub u64);
+
+impl ParamId {
+    /// The id of the parameter named `id`.
+    ///
+    /// FNV-1a 64. Chosen over a cryptographic hash because it is `const`-able in
+    /// a few lines and the input space is one effect's ~50 snake_case ASCII ids;
+    /// the catalogue test checks every built-in for pairwise-distinct hashes, and
+    /// the edit path refuses a dynamic parameter whose id collides on its
+    /// instance (docs/impl/effect-registry.md §5).
+    pub const fn new(id: &str) -> Self {
+        let bytes = id.as_bytes();
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut i = 0;
+        while i < bytes.len() {
+            hash ^= bytes[i] as u64;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            i += 1;
+        }
+        Self(hash)
+    }
+}
+
+/// The unit a numeric parameter is declared in (docs/08 §2.3, docs/impl/
+/// effect-registry.md §2.2).
+///
+/// This is what lets the preview-raster rescale be one generic pass instead of a
+/// match that has to know which field of which effect holds a pixel count. An
+/// effect cannot forget to be rescaled, which was possible when the knowledge
+/// lived in `rescale_px`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unit {
+    /// A plain number: a mix, a gamma, a count, a threshold.
+    Raw,
+    /// A percentage of the composition diagonal — the resolution-independent
+    /// form docs/08 §2.3 requires of anything spatial.
+    PctDiag,
+    /// Pixels at composition size (px@comp), converted to the raster in play by
+    /// the resolve step. Never "pixels of whatever buffer I was handed", which
+    /// §2.3 forbids.
+    Px,
+    /// Degrees. Unbounded: an angle animates through full turns.
+    Degrees,
+    /// Seconds of layer time.
+    Seconds,
+}
+
+impl Unit {
+    /// Whether a value in this unit follows the raster the frame renders at, and
+    /// so is scaled by the preview factor and rescaled when a resolved stack is
+    /// reused at another size.
+    pub const fn is_spatial(self) -> bool {
+        matches!(self, Unit::PctDiag | Unit::Px)
+    }
+}
+
+/// One parameter, resolved to plain numbers at a frame.
+///
+/// Deliberately small and `Copy`: no owned allocations, nothing borrowed from the
+/// document. A layer reference resolves to *whether* it is bound and a file
+/// reference to a slot, because the texture and the path ride beside the op
+/// exactly as they do today (docs/impl/layer-input.md).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Value {
+    Float(f32),
+    Int(i32),
+    Bool(bool),
+    /// A Choice option index.
+    Choice(u32),
+    /// Scene-linear RGBA.
+    Colour([f32; 4]),
+    /// Whether the layer reference names a layer that was rendered for it.
+    Layer(bool),
+    /// The op's slot in the stack's file table, or `u32::MAX` for unset.
+    File(u32),
+}
+
+impl Value {
+    /// This value as a float, whatever kind it is — the accessor the maths
+    /// actually want. Bools are 0/1 and Choices are their index, matching the
+    /// wire form every WGSL kernel already reads.
+    pub fn as_f32(self) -> f32 {
+        match self {
+            Value::Float(v) => v,
+            Value::Int(v) => v as f32,
+            Value::Bool(v) => {
+                if v {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Value::Choice(v) => v as f32,
+            Value::Colour([r, ..]) => r,
+            Value::Layer(v) => {
+                if v {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Value::File(v) => v as f32,
+        }
+    }
+
+    /// The tag byte fed to the frame key, so two kinds holding the same number
+    /// cannot hash alike.
+    const fn tag(self) -> u8 {
+        match self {
+            Value::Float(_) => 0,
+            Value::Int(_) => 1,
+            Value::Bool(_) => 2,
+            Value::Choice(_) => 3,
+            Value::Colour(_) => 4,
+            Value::Layer(_) => 5,
+            Value::File(_) => 6,
+        }
+    }
+}
+
+/// A borrowed run of resolved parameters: one effect's worth.
+///
+/// `Copy`, because it borrows the stack's arena rather than owning anything —
+/// which is what lets it be passed by value everywhere the old `Resolved` enum
+/// was, without the enum's compile-time closed set.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Params<'a> {
+    entries: &'a [(ParamId, Value)],
+}
+
+impl<'a> Params<'a> {
+    /// A view over an explicit slice — the shape tests and the CPU oracle build
+    /// directly.
+    pub const fn new(entries: &'a [(ParamId, Value)]) -> Self {
+        Self { entries }
+    }
+
+    /// The empty set (an effect with no parameters, such as Invert).
+    pub const EMPTY: Params<'static> = Params { entries: &[] };
+
+    /// Every parameter, in schema order. The order is a promise: the panel, the
+    /// bridge and the cache key all read it (docs/impl/effect-registry.md §5).
+    pub fn iter(&self) -> impl Iterator<Item = (ParamId, Value)> + 'a {
+        self.entries.iter().copied()
+    }
+
+    /// How many parameters this effect resolved to.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the effect resolved to no parameters at all.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// The value of `id`, or `None` if this instance does not carry it — which
+    /// is an ordinary state, not a fault: a project saved before a parameter was
+    /// added simply has no entry, and the typed reader supplies the declared
+    /// default (K-258).
+    ///
+    /// A short linear scan over adjacent memory. An effect has at most ~50
+    /// parameters and almost always fewer than ten, so this beats hashing into a
+    /// map, and it keeps the arena contiguous.
+    pub fn get(&self, id: ParamId) -> Option<Value> {
+        self.entries.iter().find(|(k, _)| *k == id).map(|(_, v)| *v)
+    }
+
+    /// `id` as a float, or `default` when absent or of another kind.
+    pub fn float(&self, id: ParamId, default: f32) -> f32 {
+        match self.get(id) {
+            Some(Value::Float(v)) => v,
+            Some(Value::Int(v)) => v as f32,
+            _ => default,
+        }
+    }
+
+    /// `id` as a whole number, or `default` when absent or of another kind.
+    pub fn int(&self, id: ParamId, default: i32) -> i32 {
+        match self.get(id) {
+            Some(Value::Int(v)) => v,
+            Some(Value::Float(v)) => v.round() as i32,
+            _ => default,
+        }
+    }
+
+    /// `id` as a switch, or `default` when absent or of another kind.
+    pub fn bool(&self, id: ParamId, default: bool) -> bool {
+        match self.get(id) {
+            Some(Value::Bool(v)) => v,
+            _ => default,
+        }
+    }
+
+    /// `id` as a Choice option index, or `default` when absent or of another
+    /// kind. Unknown indices are the caller's business to clamp — an effect
+    /// reads its own choices through its generated enum, which does exactly that.
+    pub fn choice(&self, id: ParamId, default: u32) -> u32 {
+        match self.get(id) {
+            Some(Value::Choice(v)) => v,
+            _ => default,
+        }
+    }
+
+    /// `id` as scene-linear RGBA, or `default` when absent or of another kind.
+    pub fn colour(&self, id: ParamId, default: [f32; 4]) -> [f32; 4] {
+        match self.get(id) {
+            Some(Value::Colour(v)) => v,
+            _ => default,
+        }
+    }
+
+    /// Whether the layer reference `id` is bound to a picture this frame.
+    pub fn layer_bound(&self, id: ParamId) -> bool {
+        matches!(self.get(id), Some(Value::Layer(true)))
+    }
+
+    /// The file-table slot for `id`, or `None` when unset — which resolves to
+    /// identity, never a fault (docs/08 §1.2).
+    pub fn file_slot(&self, id: ParamId) -> Option<u32> {
+        match self.get(id) {
+            Some(Value::File(slot)) if slot != u32::MAX => Some(slot),
+            _ => None,
+        }
+    }
+}
+
+/// One resolved effect: which effect it is, which instance it came from, and its
+/// parameters.
+///
+/// `Copy`. The definition is a `'static` trait object from the registry, so
+/// dispatch is a virtual call rather than a match over a closed set — the whole
+/// point of the exercise (docs/impl/effect-registry.md §2.4).
+#[derive(Clone, Copy)]
+pub struct ResolvedFx<'a> {
+    /// The effect's definition, from the registry.
+    pub def: &'static dyn EffectDef,
+    /// The instance this resolved from, so a diagnostic can name the row and the
+    /// auxiliary inputs can be matched up one-for-one.
+    pub instance: Uuid,
+    /// The resolved parameters, in schema order.
+    pub params: Params<'a>,
+}
+
+impl std::fmt::Debug for ResolvedFx<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedFx")
+            .field("match_name", &self.def.schema().match_name)
+            .field("instance", &self.instance)
+            .field("params", &self.params)
+            .finish()
+    }
+}
+
+/// One effect's entry in the arena: which effect, and where its parameters sit.
+#[derive(Clone)]
+struct Op {
+    def: &'static dyn EffectDef,
+    instance: Uuid,
+    span: Range<u32>,
+}
+
+/// Everything one layer's effect stack resolved to at one frame.
+///
+/// The parameters of every op live contiguously in one `Vec`; an op holds the
+/// range of it that is its own. That is one allocation for a whole stack, and
+/// borrowing a run of it is what makes [`ResolvedFx`] `Copy`.
+#[derive(Clone, Default)]
+pub struct ResolvedStack {
+    ops: Vec<Op>,
+    entries: Vec<(ParamId, Value)>,
+}
+
+impl ResolvedStack {
+    /// An empty stack.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Start a new op. Parameters pushed after this belong to it, until the next
+    /// `begin` or the end of the stack.
+    pub fn begin(&mut self, def: &'static dyn EffectDef, instance: Uuid) {
+        let start = self.entries.len() as u32;
+        self.ops.push(Op {
+            def,
+            instance,
+            span: start..start,
+        });
+    }
+
+    /// Add a resolved parameter to the op most recently begun. Silently ignored
+    /// before the first `begin` — engine code does not panic on a caller's
+    /// ordering mistake (14-ENGINEERING-RULES §4), and the catalogue tests are
+    /// what catch it.
+    pub fn push(&mut self, id: ParamId, value: Value) {
+        if let Some(op) = self.ops.last_mut() {
+            self.entries.push((id, value));
+            op.span.end = self.entries.len() as u32;
+        }
+    }
+
+    /// Drop the op most recently begun, and its parameters with it — how an
+    /// effect that resolves to nothing this frame (an unset file, a zero mix) is
+    /// withdrawn after the fact.
+    pub fn drop_last(&mut self) {
+        if let Some(op) = self.ops.pop() {
+            self.entries.truncate(op.span.start as usize);
+        }
+    }
+
+    /// How many ops the stack resolved to.
+    pub fn len(&self) -> usize {
+        self.ops.len()
+    }
+
+    /// Whether the stack resolved to nothing at all.
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
+    }
+
+    /// The op at `index`, in stack order.
+    pub fn get(&self, index: usize) -> Option<ResolvedFx<'_>> {
+        let op = self.ops.get(index)?;
+        let entries = self
+            .entries
+            .get(op.span.start as usize..op.span.end as usize)?;
+        Some(ResolvedFx {
+            def: op.def,
+            instance: op.instance,
+            params: Params::new(entries),
+        })
+    }
+
+    /// Every op, in stack order.
+    pub fn iter(&self) -> impl Iterator<Item = ResolvedFx<'_>> + '_ {
+        (0..self.ops.len()).filter_map(|i| self.get(i))
+    }
+
+    /// Rescale every spatial value by `factor`.
+    ///
+    /// This is the generic replacement for the old per-variant `rescale_px`: a
+    /// resolved stack made against one raster, reused at another (a precomp
+    /// realised at a wider size), needs its pixel quantities moved with it. The
+    /// unit is declared on the schema, so no effect can be forgotten here.
+    pub fn rescale_spatial(&mut self, factor: f32) {
+        if factor == 1.0 {
+            return;
+        }
+        for op in &self.ops {
+            let schema = op.def.schema();
+            for slot in self
+                .entries
+                .get_mut(op.span.start as usize..op.span.end as usize)
+                .unwrap_or(&mut [])
+            {
+                let spatial = schema
+                    .params
+                    .iter()
+                    .find(|p| ParamId::new(p.id) == slot.0)
+                    .is_some_and(|p| p.unit.is_spatial());
+                if spatial {
+                    if let Value::Float(v) = slot.1 {
+                        slot.1 = Value::Float(v * factor);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Feed the whole stack into a frame key, field by field.
+    ///
+    /// Never byte-wise: [`Value`] has padding, and an uninitialised byte in a
+    /// cache key is a wrong picture that reproduces on one machine only
+    /// (docs/impl/effect-registry.md §5).
+    ///
+    /// Takes the sink rather than a hasher so the engine root does not gain a
+    /// hashing dependency for one method; `lumit-eval` passes its blake3 hasher.
+    pub fn feed_hash(&self, feed: &mut dyn FnMut(&[u8])) {
+        for fx in self.iter() {
+            feed(fx.def.schema().match_name.as_bytes());
+            feed(b"/");
+            feed(&fx.def.schema().version.to_le_bytes());
+            for (id, value) in fx.params.iter() {
+                feed(&id.0.to_le_bytes());
+                feed(&[value.tag()]);
+                match value {
+                    Value::Float(v) => feed(&v.to_le_bytes()),
+                    Value::Int(v) => feed(&v.to_le_bytes()),
+                    Value::Bool(v) | Value::Layer(v) => feed(&[u8::from(v)]),
+                    Value::Choice(v) | Value::File(v) => feed(&v.to_le_bytes()),
+                    Value::Colour(c) => {
+                        for ch in c {
+                            feed(&ch.to_le_bytes());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+use super::registry::EffectDef;
+
+impl std::fmt::Debug for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Op")
+            .field("match_name", &self.def.schema().match_name)
+            .field("instance", &self.instance)
+            .field("span", &self.span)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for ResolvedStack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}

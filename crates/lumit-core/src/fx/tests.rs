@@ -8683,3 +8683,233 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
     );
     assert_eq!(a, b);
 }
+
+// ---------------------------------------------------------------------------
+// The effect registry (docs/impl/effect-registry.md §7)
+// ---------------------------------------------------------------------------
+
+use uuid::Uuid;
+
+/// Test 5 of the note's plan, and the one that makes the migration mechanical
+/// rather than a rewrite: for every effect that has moved to a generated
+/// declaration, the generated `EffectSchema` is field-for-field the literal it
+/// replaced. It is deleted with the last batch, when there is no hand-written
+/// literal left to compare against.
+#[test]
+fn the_generated_schema_matches_the_hand_written_one() {
+    for def in BUILTIN_DEFS.iter() {
+        let generated = def.schema();
+        let hand_written = BUILTINS
+            .iter()
+            .find(|s| s.match_name == generated.match_name)
+            .unwrap_or_else(|| panic!("{} has no hand-written entry", generated.match_name));
+        assert_eq!(
+            generated, hand_written,
+            "the generated declaration for {} differs from the catalogue literal",
+            generated.match_name
+        );
+    }
+}
+
+/// A name is how a saved project finds its effect again, so two effects sharing
+/// one is a project-corrupting defect rather than a mere mistake.
+#[test]
+fn every_builtin_declares_a_unique_match_name() {
+    let mut seen: Vec<&str> = Vec::new();
+    for s in BUILTINS {
+        assert!(
+            !seen.contains(&s.match_name),
+            "two effects answer to {}",
+            s.match_name
+        );
+        seen.push(s.match_name);
+    }
+}
+
+/// `ParamId` is a hash, so a collision inside one effect would silently make two
+/// controls one control. The input space is small and the risk is theoretical —
+/// which is exactly why it needs a test rather than an argument.
+#[test]
+fn no_effects_parameters_share_an_id_hash() {
+    for s in BUILTINS {
+        let mut seen: Vec<(ParamId, &str)> = Vec::new();
+        for p in s.params {
+            let id = ParamId::new(p.id);
+            if let Some((_, other)) = seen.iter().find(|(k, _)| *k == id) {
+                panic!("{}: {} and {} hash alike", s.match_name, p.id, other);
+            }
+            seen.push((id, p.id));
+        }
+    }
+}
+
+/// Every migrated effect must be reachable both ways: the catalogue knows it by
+/// name, and the name it answers to is the one it declares.
+#[test]
+fn a_registered_effect_is_found_by_its_own_name() {
+    for def in BUILTIN_DEFS.iter() {
+        let name = def.schema().match_name;
+        let found = BUILTIN_DEFS
+            .get(name)
+            .unwrap_or_else(|| panic!("{name} is registered but cannot be looked up"));
+        assert_eq!(found.schema().match_name, name);
+    }
+    assert!(BUILTIN_DEFS.get("no_such_effect").is_none());
+}
+
+/// A project saved before a parameter existed carries no entry for it, and must
+/// render — reading the declared default, never panicking (K-258).
+#[test]
+fn a_missing_parameter_reads_its_default() {
+    let empty = Params::EMPTY;
+    let v = effects::saturation::Saturation::read(empty);
+    assert_eq!(v.saturation, 100.0);
+    assert_eq!(v.mix, 100.0);
+
+    // And a parameter that *is* present wins over the default.
+    let entries = [(
+        effects::saturation::Saturation::SATURATION,
+        Value::Float(50.0),
+    )];
+    let v = effects::saturation::Saturation::read(Params::new(&entries));
+    assert_eq!(v.saturation, 50.0);
+    assert_eq!(v.mix, 100.0);
+}
+
+/// A parameter the effect does not declare is ignored rather than mistaken for
+/// one it does — the shape a preset from a newer build arrives in (docs/08 §5).
+#[test]
+fn an_unknown_parameter_is_ignored() {
+    let entries = [
+        (ParamId::new("not_a_parameter"), Value::Float(7.0)),
+        (effects::exposure::Exposure::STOPS, Value::Float(2.0)),
+    ];
+    let v = effects::exposure::Exposure::read(Params::new(&entries));
+    assert_eq!(v.stops, 2.0);
+}
+
+/// The generated ids are the hashes of the declared ids, so a rename of a field
+/// without a rename of the stored parameter cannot pass unnoticed.
+#[test]
+fn a_generated_id_is_the_hash_of_the_declared_name() {
+    assert_eq!(
+        effects::exposure::Exposure::STOPS,
+        ParamId::new("stops"),
+        "the generated const must address the same parameter the schema declares"
+    );
+}
+
+/// The stack is an arena: each op sees its own run of parameters and no other's.
+#[test]
+fn a_resolved_stack_keeps_each_ops_parameters_to_itself() {
+    let mut stack = ResolvedStack::new();
+    stack.begin(&effects::exposure::ExposureDef, Uuid::now_v7());
+    stack.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
+    stack.push(effects::exposure::Exposure::MIX, Value::Float(100.0));
+    stack.begin(&effects::invert::InvertDef, Uuid::now_v7());
+    stack.push(effects::invert::Invert::MIX, Value::Float(50.0));
+
+    assert_eq!(stack.len(), 2);
+    let first = stack.get(0).expect("first op");
+    assert_eq!(first.def.schema().match_name, "exposure");
+    assert_eq!(first.params.len(), 2);
+    assert_eq!(
+        first.params.float(effects::exposure::Exposure::STOPS, 0.0),
+        1.0
+    );
+
+    let second = stack.get(1).expect("second op");
+    assert_eq!(second.def.schema().match_name, "invert");
+    assert_eq!(second.params.len(), 1);
+    // The Invert's Mix is its own, not the Exposure's.
+    assert_eq!(second.params.float(effects::invert::Invert::MIX, 0.0), 50.0);
+}
+
+/// Withdrawing an op takes its parameters with it, leaving the arena as it was —
+/// how an effect that resolves to nothing this frame is dropped after the fact.
+#[test]
+fn withdrawing_an_op_leaves_no_parameters_behind() {
+    let mut stack = ResolvedStack::new();
+    stack.begin(&effects::exposure::ExposureDef, Uuid::now_v7());
+    stack.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
+    stack.begin(&effects::invert::InvertDef, Uuid::now_v7());
+    stack.push(effects::invert::Invert::MIX, Value::Float(50.0));
+    stack.drop_last();
+
+    assert_eq!(stack.len(), 1);
+    let only = stack.get(0).expect("the surviving op");
+    assert_eq!(only.params.len(), 1);
+    assert_eq!(
+        only.params.float(effects::exposure::Exposure::STOPS, 0.0),
+        1.0
+    );
+}
+
+/// The generic rescale moves the values whose declared unit follows the raster,
+/// and only those — the replacement for the per-variant `rescale_px` match.
+#[test]
+fn only_spatial_values_rescale() {
+    // The colour family declares no spatial parameters, so a rescale is a no-op
+    // for it. (The batch that migrates the blur family extends this with the
+    // radius that *does* move — docs/impl/effect-registry.md §7 test 4.)
+    let mut stack = ResolvedStack::new();
+    stack.begin(&effects::exposure::ExposureDef, Uuid::now_v7());
+    stack.push(effects::exposure::Exposure::STOPS, Value::Float(2.0));
+    stack.rescale_spatial(0.5);
+    let op = stack.get(0).expect("the op");
+    assert_eq!(
+        op.params.float(effects::exposure::Exposure::STOPS, 0.0),
+        2.0,
+        "stops are not a length and must not follow the raster"
+    );
+    assert!(BUILTIN_DEFS
+        .iter()
+        .flat_map(|d| d.schema().params)
+        .all(|p| !p.unit.is_spatial()));
+}
+
+/// Two kinds holding the same number must not hash alike, or a Choice of 1 and a
+/// Bool of true would share a cache entry.
+#[test]
+fn the_frame_key_separates_a_value_from_its_number() {
+    let hash = |value: Value| {
+        let mut stack = ResolvedStack::new();
+        stack.begin(&effects::invert::InvertDef, Uuid::nil());
+        stack.push(ParamId::new("x"), value);
+        let mut bytes: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| bytes.extend_from_slice(b));
+        bytes
+    };
+    assert_ne!(hash(Value::Choice(1)), hash(Value::Bool(true)));
+    assert_ne!(hash(Value::Float(1.0)), hash(Value::Int(1)));
+    // And the same value hashes the same way twice: the determinism the frame
+    // key rests on (K-143).
+    assert_eq!(hash(Value::Float(0.25)), hash(Value::Float(0.25)));
+}
+
+/// The CPU reference reached through the registry is the same picture as the one
+/// reached through the old dispatch — the acceptance test for a migrated effect.
+#[test]
+fn a_registered_effect_renders_what_the_old_dispatch_rendered() {
+    let source: Vec<f32> = (0..16).map(|i| i as f32 / 16.0).collect();
+
+    let mut through_registry = source.clone();
+    let entries = [
+        (effects::exposure::Exposure::STOPS, Value::Float(1.0)),
+        (effects::exposure::Exposure::MIX, Value::Float(100.0)),
+    ];
+    effects::exposure::ExposureDef.apply_cpu(&mut through_registry, 2, 2, Params::new(&entries));
+
+    let mut through_the_enum = source.clone();
+    cpu::apply(
+        &mut through_the_enum,
+        2,
+        2,
+        &Resolved::Exposure {
+            factor: 2.0,
+            mix: 1.0,
+        },
+    );
+
+    assert_eq!(through_registry, through_the_enum);
+}

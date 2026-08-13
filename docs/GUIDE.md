@@ -3490,6 +3490,31 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   one edit, undo). They run when a developer asks (`cargo bench`), and they'll later become
   pass/fail speed budgets in the automated checks.
 
+- **How an effect is written down (`crates/lumit-core/src/fx/effects/`, K-373)** — adding an
+  effect used to mean writing the same effect out five times in five files, and keeping the
+  five copies in step by hand: the list of its controls, a slot in one giant list of every
+  effect there is, the code that fills that slot in, the code that turns it into work for the
+  graphics card, and the plain version the tests check the graphics card against. Nothing
+  noticed when the copies drifted apart, and adding one control to one effect meant touching
+  all five. Now an effect is **one file**: a small block that names its controls, with each
+  control's slider range and starting value written beside it, and the catalogue entry is
+  generated from that block rather than typed out again. One line in `catalogue.rs` says the
+  effect exists; that line's position is the order it appears in the Add-effect menu.
+
+  Two knock-on changes are worth knowing about. First, when a frame is rendered the effect's
+  controls become a small **list of (which control, what number)** rather than a slot in a
+  fixed list of every effect — which is what will let an effect have controls nobody wrote
+  down when Lumit was built: a slider you added yourself, or one read out of a shader you
+  typed. Second, each control now says what its number *means* — a plain number, a
+  percentage of the picture's diagonal, a length in pixels — so the step that shrinks
+  everything for a draft-quality preview can do it for every effect at once, instead of
+  needing a line of code per effect that somebody could forget to write. A preview that
+  disagreed with the export used to be one forgotten line away.
+
+  The move is happening in batches, simplest effects first, and while it runs a test holds
+  each generated entry against the hand-written one it replaces and fails if they differ by
+  so much as a default value — which is what makes it a move rather than a rewrite.
+
 ## 5. Making a change safely (the recipe)
 
 1. **Find the doc first.** Specs (`docs/00–16`) say what the behaviour should be; impl

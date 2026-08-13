@@ -9671,3 +9671,71 @@ vectors (the resolve taps whole `vec3`s). Both failures presented as a silently 
 garbage flare with the validation error only visible on stderr. The accumulator's old
 clamp to the scratch budget is also gone: level 0 must hold every pixel of the flare
 buffer, and the clamp was silently truncating it past 2K rasters.
+
+## K-381 — An effect is declared once, and the catalogue is a list of values rather than a variant of an enum
+
+**DECIDED** (2026-08-13). Adopts the substance of issue #16 (Airyzz, "Proposed change to how
+effects are stored") and supersedes the build pattern [K-099](#k-099) names — "the usual four
+sites (schema in `lumit-core`, WGSL kernel + `FxEngine` method in `lumit-gpu`, `run_ops`
+arm)". The four sites become two: the effect's own file, and one line of a list. Nothing
+about an effect's *maths* changes; K-099's parity requirement (§1.6's CPU oracle) is
+untouched and is what proves each migrated effect still renders the same picture.
+
+**The complaint, and it is fair.** An effect was written down five times: a schema literal in
+`builtins.rs`, a variant of `fx::Resolved`, an arm of `resolve_one`, an arm of `cpu::apply`,
+an arm of `run_ops` — six with `rescale_px`, for anything holding a length. Three of those
+matches were exhaustive, so `Resolved` was a compile-time chokepoint: every effect in
+existence had to be known to `lumit-core` when it was built, which is a strange property for
+a program that intends to host OFX plugins (docs/12) and, in time, effects the user writes.
+The sets had already drifted — `spectral_split` had a variant and no schema entry;
+`posterize_time` and `accumulation_mb` had entries and no variant — and nothing caught it.
+
+**What was disagreed, and how it resolved.** The owner's objection to the original sketch was
+performance and determinism: `Resolved` is `Copy` plain-old-data, built once per effect per
+frame, and replacing it with `serde_json` would allocate on every frame and look up every
+parameter by string. That objection stands and is met, not overruled. The resolved form is a
+**bag of key/value pairs** as the issue asked, but the key is a `ParamId` — a `u64` FNV-1a
+hash of the stable id, computed in a `const fn`, so a built-in's ids are compile-time
+constants and a lookup compares two integers. The pairs live in a **per-stack arena**: one
+allocation for a whole layer's stack, which is one *fewer* than the `Vec<Resolved>` it
+replaces, and `ResolvedFx` borrows a run of it and stays `Copy`.
+
+The fixed-size stack array the thread landed on was tried and rejected on the numbers: the
+Lens flare declares 50 parameters, so the array would be sized for it, and a one-parameter
+Blur would carry 1.2 kB of unused slots — while a user-added spare parameter could still
+overflow it. The arena has no cap, which is the property the dynamic half of the issue needs.
+
+**Determinism.** `Resolved` fed the frame key byte-wise (K-143). `Value` has padding, so the
+arena is hashed **field by field** instead — tag, then live bytes, in stack order. That is
+stronger than what it replaces: a byte-wise hash silently changes meaning when a variant
+grows a field, and this one cannot.
+
+**Registration is a written list, not a `ctor`.** The issue proposed self-registration before
+`main`; the thread withdrew it and this confirms the withdrawal, for a reason that is not
+start-up time: the Add-effect menu, the command palette and the preset browser are all
+catalogue-order-driven (K-137), and a `ctor` makes that order depend on link order. One file
+lists the effects, one line each, in menu order. Effects that are *not* known at compile time
+arrive through the same `EffectDef` trait object at run time — which is the whole point, and
+is the seam OFX will use.
+
+**Units are declared.** Every numeric parameter says what its number means (`Raw`, `PctDiag`,
+`Px`, `Degrees`, `Seconds`), which turns `rescale_px` from a match that had to know which
+field of which variant held a length into one generic pass. An effect can no longer forget to
+be rescaled — a preview raster and a full-size export disagreeing was previously one
+forgotten match arm away. docs/08 §2.3 is unchanged: `Px` means px@comp, and "pixels of
+whatever buffer I was handed" is still forbidden.
+
+**Dynamic and spare parameters** (the issue's second and third parts) are what the bag is
+*for*, and their rules are recorded in docs/impl/effect-registry.md §4: nothing is added or
+removed automatically, keyframes outlive their parameter (K-065's "keep what you do not
+understand"), and the cache key feeds the derived *shape* — ids and kinds, in order — as well
+as the values it already fed, because a shader edit that changes which uniforms exist is a
+different effect at the same version.
+
+**Migration.** Batch by batch, simplest family first, each batch a commit that leaves CI
+green, the awkward ones (`dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`,
+`datamosh`) each on their own. While it runs, a test holds every generated declaration to be
+field-for-field identical to the hand-written literal it replaces, which is what makes the
+port mechanical and checkable rather than a rewrite; it is deleted with the last batch. A
+commit that migrates an effect and changes its output is two commits, and the second one
+needs an entry here.

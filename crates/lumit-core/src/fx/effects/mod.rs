@@ -1,0 +1,21 @@
+//! One file per built-in effect: its declaration, and its behaviour
+//! (docs/impl/effect-registry.md §2.1).
+//!
+//! **In plain terms.** This is where an effect lives now. Everything that used
+//! to be spread over a catalogue entry, an enum variant, a resolve arm and a CPU
+//! arm sits in one file, and the file is the only place that has to be right.
+//!
+//! Each module declares a parameter struct with `#[derive(Effect)]` — the fields
+//! *are* the controls, the attributes on them *are* the sliders and defaults —
+//! and a small companion type carrying the behaviour: the host-side maths, and
+//! the CPU reference the GPU kernel is checked against (docs/08 §1.6).
+//!
+//! The migration is in progress: effects that have not moved yet still live in
+//! `builtins.rs` and `resolved.rs` and are listed there. `catalogue.rs` names
+//! the ones that have.
+
+pub mod contrast;
+pub mod exposure;
+pub mod gamma;
+pub mod invert;
+pub mod saturation;

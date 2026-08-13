@@ -1,3 +1,5 @@
+use super::params::Unit;
+
 /// Cost class (docs/08 §1.3) — consumed by degradation ordering and budgets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CostClass {
@@ -39,6 +41,17 @@ pub struct ParamSchema {
     /// Sentence-case UI label.
     pub label: &'static str,
     pub kind: ParamKind,
+    /// What the number *means* (docs/impl/effect-registry.md §2.2): a plain
+    /// number, a percentage of the comp diagonal, pixels at comp size, degrees,
+    /// seconds.
+    ///
+    /// Declaring it is what lets the preview-raster rescale be one generic pass
+    /// rather than a match that has to know which field of which effect holds a
+    /// pixel count — an effect cannot forget to be rescaled. Parameters whose
+    /// effect has not yet moved to the generated schema declare [`Unit::Raw`]
+    /// and are rescaled by the old per-variant path until they do, so the two
+    /// never both act on the same value.
+    pub unit: Unit,
 }
 
 /// Parameter type + defaults/ranges (docs/08 §1.2: sliders may be exceeded

@@ -1,0 +1,17 @@
+[package]
+name = "lumit-fx-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The #[derive(Effect)] macro: one declaration per built-in effect (docs/impl/effect-registry.md)"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+[lints]
+workspace = true

@@ -64,6 +64,7 @@ const SHAKE_GROUPS: &[ParamGroup] = &[
 /// The host-uniform Mix parameter every effect ends with (docs/08 §1.5),
 /// in per cent, blending processed over unprocessed input.
 const MIX_PARAM: ParamSchema = ParamSchema {
+    unit: Unit::Raw,
     id: "mix",
     label: "Mix",
     kind: ParamKind::Float {
@@ -111,6 +112,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radius",
                 label: "Radius",
                 // % of the comp diagonal (§2.3), so half-res preview matches.
@@ -148,6 +150,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "length",
                 label: "Length",
                 // The full streak length, % diag (§2.3). Unbounded above
@@ -159,6 +162,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "angle",
                 label: "Angle",
                 // Streak direction, degrees (0° = +x).
@@ -203,6 +207,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // Peak tap spread, % diag (§2.3), reached at the farthest
@@ -214,6 +219,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "centre_x",
                 label: "Centre X",
                 // % of comp width. resolve_stack only carries diag_px (no
@@ -227,6 +233,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "centre_y",
                 label: "Centre Y",
                 // % of comp height (see centre_x).
@@ -237,6 +244,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radial_type",
                 label: "Type",
                 kind: ParamKind::Choice {
@@ -246,6 +254,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "edge",
                 label: "Edges",
                 kind: ParamKind::Choice {
@@ -279,6 +288,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // Per cent of the detail signal added back (§3.9: 0–300%).
@@ -289,6 +299,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radius",
                 label: "Radius",
                 // % of the comp diagonal (§2.3) — the width of the detail
@@ -300,6 +311,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "threshold",
                 label: "Threshold",
                 // Linear-light contrast below which detail is left alone,
@@ -311,6 +323,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "luminance_only",
                 label: "Luminance only",
                 // Sharpen the luma signal only — avoids chroma fringing on
@@ -348,6 +361,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // High-pass strength: 1 is the classic 5/−1 sharpen kernel, 0
@@ -360,6 +374,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radius",
                 label: "Radius",
                 // Neighbour distance in raster pixels (T15): 1 = the classic 3×3
@@ -421,6 +436,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "light_x",
                 label: "Light x",
                 // px@comp (K-260), like the physical flare's light. Open both
@@ -433,6 +449,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "light_y",
                 label: "Light y",
                 kind: ParamKind::Float {
@@ -442,6 +459,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 kind: ParamKind::Float {
@@ -451,6 +469,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "tint",
                 label: "Tint",
                 // Scene-linear, and open above so an HDR tint can push the
@@ -461,6 +480,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "glow_size",
                 label: "Glow size",
                 kind: ParamKind::Float {
@@ -470,6 +490,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "glow_intensity",
                 label: "Glow intensity",
                 kind: ParamKind::Float {
@@ -479,6 +500,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghosts",
                 label: "Ghosts",
                 // How many discs march along the axis; 0 is none of them.
@@ -489,6 +511,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghost_spacing",
                 label: "Ghost spacing",
                 // A fraction of the light→centre distance, so the train
@@ -501,6 +524,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghost_size",
                 label: "Ghost size",
                 kind: ParamKind::Float {
@@ -510,6 +534,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghost_intensity",
                 label: "Ghost intensity",
                 kind: ParamKind::Float {
@@ -519,6 +544,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "streak_length",
                 label: "Streak length",
                 kind: ParamKind::Float {
@@ -528,6 +554,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "streak_intensity",
                 label: "Streak intensity",
                 kind: ParamKind::Float {
@@ -537,6 +564,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "streak_angle",
                 label: "Streak angle",
                 // 0 is horizontal — the anamorphic look.
@@ -580,6 +608,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "background",
                 label: "Background",
                 // Unset until the owner picks one — a labelled no-op. No
@@ -590,6 +619,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "width",
                 label: "Width",
                 // px@comp (K-260), and the same distance twice: how far the
@@ -602,6 +632,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // Gain on the spill before it is screened on. Open above
@@ -641,6 +672,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // % of the comp diagonal (§2.3); the impact-frame staple is
@@ -652,6 +684,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "angle",
                 label: "Angle",
                 // Degrees, linear mode: the direction R shifts (B mirrors).
@@ -672,6 +705,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // ceiling on how far a tap may fringe. Labelled Red / Green / Blue
             // for the classic case; each really scales its like-numbered tint.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "red_amount",
                 label: "Red",
                 kind: ParamKind::Float {
@@ -681,6 +715,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "green_amount",
                 label: "Green",
                 kind: ParamKind::Float {
@@ -690,6 +725,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "blue_amount",
                 label: "Blue",
                 kind: ParamKind::Float {
@@ -706,6 +742,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // fringe. Named `channel_colour_1/2/3` so the picker widget groups
             // them into one swatch row.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_1",
                 label: "Colour 1",
                 kind: ParamKind::Colour {
@@ -714,6 +751,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_2",
                 label: "Colour 2",
                 kind: ParamKind::Colour {
@@ -722,6 +760,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_3",
                 label: "Colour 3",
                 kind: ParamKind::Colour {
@@ -730,6 +769,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "wavelength",
                 label: "Wavelength",
                 // K-090 quality tier: off = the classic three-tap split
@@ -743,6 +783,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "samples",
                 label: "Samples",
                 // Wavelength mode's tap count (FX-9/K-144): more taps fill the
@@ -791,6 +832,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // px@comp (§2.3): peak channel offset, reached at the
@@ -810,6 +852,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // Named `channel_colour_1/2/3` by convention so the picker widget
             // finds the group; any future three-tinted-channel effect reuses it.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_1",
                 label: "Colour 1",
                 kind: ParamKind::Colour {
@@ -818,6 +861,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_2",
                 label: "Colour 2",
                 kind: ParamKind::Colour {
@@ -826,6 +870,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_colour_3",
                 label: "Colour 3",
                 kind: ParamKind::Colour {
@@ -834,6 +879,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "wavelength",
                 label: "Wavelength",
                 // K-144 quality tier, reusing RGB split's own spectral
@@ -844,6 +890,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "samples",
                 label: "Samples",
                 // Wavelength mode's tap count (K-144): the same control RGB
@@ -883,6 +930,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "mode",
                 label: "Mode",
                 // Manual = keyframed hits on Trigger (the original form);
@@ -895,6 +943,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "trigger",
                 label: "Trigger",
                 kind: ParamKind::Float {
@@ -904,6 +953,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "duration",
                 label: "Duration",
                 // Frames (comp-rate, §2.3) a marker-driven flash lasts.
@@ -917,6 +967,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "shape",
                 label: "Shape",
                 // Hard holds full strength for Duration then cuts; Fade
@@ -928,6 +979,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "every_nth",
                 label: "Every Nth beat",
                 // Strobe mode: fire beats 0, N, 2N, … of the comp's beat
@@ -940,6 +992,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "phase",
                 label: "Phase offset",
                 // Frames a marker-driven flash trails (> 0) or leads (< 0)
@@ -951,6 +1004,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // Per cent scale on the trigger envelope.
@@ -961,6 +1015,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "colour",
                 label: "Colour",
                 kind: ParamKind::Colour {
@@ -969,6 +1024,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "decay",
                 label: "Decay",
                 // Milliseconds for a hit to fall to 1/e.
@@ -1003,6 +1059,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "lift",
                 label: "Lift",
                 // Added after gain: raises (or crushes, negative) the blacks.
@@ -1012,6 +1069,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "gamma",
                 label: "Gamma",
                 // Mid-tone curve per channel; 1 is neutral.
@@ -1021,6 +1079,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "gain",
                 label: "Gain",
                 // Linear multiplier per channel; 1 is neutral.
@@ -1053,6 +1112,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "saturation",
                 label: "Saturation",
                 // Per cent about Rec. 709 luma: 0 = greyscale, 100 = neutral,
@@ -1091,6 +1151,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // Per cent: 0 = neutral (bit-exact identity), higher lifts the
@@ -1129,6 +1190,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amount",
                 label: "Amount",
                 // 0..1: the darkening strength; 0 is the neutral point
@@ -1140,6 +1202,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radius",
                 label: "Radius",
                 // 0..1: how far from centre the clear area reaches, in the
@@ -1152,6 +1215,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "softness",
                 label: "Softness",
                 // Feather width beyond Radius, in the same normalised metric.
@@ -1166,6 +1230,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "roundness",
                 label: "Roundness",
                 // 1 = circular (both axes read equal pixel distances as
@@ -1178,6 +1243,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ramp",
                 label: "Ramp",
                 // Gamma on the black↔clear falloff (T16): 1 = the plain
@@ -1214,6 +1280,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "stops",
                 label: "Stops",
                 // Photographic stops; each +1 doubles the light. 0 is neutral.
@@ -1254,6 +1321,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "angle",
                 label: "Angle",
                 // Degrees on a dial (docs/07 §6): a hue shift is a rotation
@@ -1266,6 +1334,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // On (default): the constant-luminance rotation (Rec.709 luma
                 // held). Off: a plain-RGB spin about the grey axis, brightness
                 // free to change with the hue. Absent on projects saved before
@@ -1303,6 +1372,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "contrast",
                 label: "Contrast",
                 // Per cent about mid-grey: 0 = flat grey, 100 = neutral,
@@ -1344,6 +1414,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "gamma",
                 label: "Gamma",
                 // The power curve raises to 1/gamma. 1 is neutral; hard floor
@@ -1389,6 +1460,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "temperature",
                 label: "Temperature",
                 // A plain number: negative cools (blue up, red down), positive
@@ -1434,6 +1506,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "file",
                 label: "File",
                 // A `.cube` LUT chosen from a dialog (K-111); the value steps
@@ -1580,6 +1653,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "depth",
                 label: "Depth layer",
                 // The layer whose depth channel is the depth pass (0 = near,
@@ -1600,6 +1674,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // K-125's `depth_after_effects` bool still loads — `layer_source`
             // falls back to it. Replaces the old "Depth after effects" checkbox.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "focus",
                 label: "Focus distance",
                 // The in-focus depth, 0..1. Mid-depth by default so a typical
@@ -1612,6 +1687,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Focus by clicking the thing you want sharp rather than by
                 // hunting for a number. Off by default: it changes what Focus
                 // distance means, and a saved project must keep meaning what it
@@ -1621,6 +1697,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Where to read the focus depth, px@comp (K-260: point
                 // parameters are PIXELS, never % of frame). Pairs with
                 // `focus_point_y` into one point row with a crosshair pick
@@ -1638,6 +1715,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "focus_point_y",
                 label: "Focus point y",
                 kind: ParamKind::Float {
@@ -1647,6 +1725,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "range",
                 label: "Focus range",
                 // Half-width of the sharp band around Focus, 0..1: depths
@@ -1658,6 +1737,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "aperture",
                 label: "Aperture",
                 // The master maximum circle-of-confusion radius in px@comp
@@ -1675,6 +1755,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Per-side circle-of-confusion for the near side — depths in
                 // front of focus (`d < focus`). px@comp, scaled by the Aperture
                 // master. Owner's "adjust close/far blur separately". Absent on
@@ -1688,6 +1769,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Per-side circle-of-confusion for the far side — depths behind
                 // focus (`d >= focus`). px@comp, scaled by the Aperture master.
                 // Absent on pre-feature projects, where it falls back to
@@ -1702,6 +1784,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // ---- The Iris twirl ----
             ParamSchema {
+                unit: Unit::Raw,
                 // The iris's blade count — the shape a defocused highlight is
                 // smeared into. Inert at Roundness 1 (a circle has no blades),
                 // which is why the schema needs no Circle entry beside it. The
@@ -1717,6 +1800,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Bows the blades. 0 is a straight-edged polygon, 1 is the
                 // circle, and **negative goes concave** — five blades at −1 is a
                 // star. 1 by default: that is the plain disc this effect has
@@ -1731,6 +1815,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Turns the iris. Degrees on a dial (docs/07 §6), unbounded, so
                 // it winds through full turns rather than stopping at 360.
                 // Inert at Roundness 1, like Blades.
@@ -1742,6 +1827,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // The aperture's aspect: 0 is round, positive stretches the
                 // highlights wide and negative stretches them tall — the oval
                 // an anamorphic scope lens throws. Not a ratio in the
@@ -1756,6 +1842,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // **Where the light sits inside each ball.** A real lens does
                 // not throw a flat disc: an under-corrected one rings the edge
                 // bright (the "soap bubble" bokeh), an over-corrected one pools
@@ -1774,6 +1861,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // ---- The Highlights twirl ----
             ParamSchema {
+                unit: Unit::Raw,
                 // The linear level each tap is split at before the power mean:
                 // everything below it averages flat, everything above expands.
                 // 1.0 is scene white, so only genuinely over-range highlights
@@ -1788,6 +1876,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // How hard the over-threshold part of each tap blooms, in stops.
                 // The gather's mean becomes a *power* mean, so a small bright
                 // area survives being averaged with its dark surroundings
@@ -1812,6 +1901,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // ---- The Depth map twirl ----
             ParamSchema {
+                unit: Unit::Raw,
                 // Which channel of the depth layer carries depth. Red by
                 // default — the channel this effect has always read, and the
                 // one a depth pass conventionally arrives in — but a pass that
@@ -1826,6 +1916,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Invert the depth pass (d' = 1 - d) before the circle-of-
                 // confusion, swapping near and far — the owner's "tick to
                 // invert the depth" box (Frischluft / DOF PRO both offer it).
@@ -1836,6 +1927,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // **The gamma on the depth axis** — the depth distance rescaled
                 // before the ramp, which decides how hard the blur answers to a
                 // small change in depth, and is what stops focus being
@@ -1866,6 +1958,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Sharp foreground colour bleeding into the defocused
                 // background is the standard artefact of gathering across a
                 // depth discontinuity; this pulls back taps that sit across one
@@ -1882,6 +1975,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // How big a depth jump counts as an edge for the row above.
                 id: "detect_edge_threshold",
                 label: "Detect edge threshold",
@@ -1893,6 +1987,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // ---- Back out of the twirls ----
             ParamSchema {
+                unit: Unit::Raw,
                 // On by default, which is what this effect has always done: a
                 // gather running off the frame holds the border pixel outward
                 // instead of pulling in transparency, so a bright edge does not
@@ -1906,6 +2001,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: true },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // Diagnostic views (the realistic subset the reference plugins
                 // ship). Rendered is the normal blurred output; Depth map shows
                 // the post-invert depth as greyscale — after the channel pick,
@@ -1952,6 +2048,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "anchor_x",
                 label: "Anchor x",
                 // Pixels at full comp resolution (px@comp, §2.3), exactly
@@ -1963,6 +2060,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "anchor_y",
                 label: "Anchor y",
                 kind: ParamKind::Float {
@@ -1972,6 +2070,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "position_x",
                 label: "Position x",
                 // px@comp; the anchor point lands here. Defaults equal the
@@ -1983,6 +2082,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "position_y",
                 label: "Position y",
                 kind: ParamKind::Float {
@@ -1992,6 +2092,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scale_x",
                 label: "Scale x %",
                 // Per cent, 100 = natural size; negative flips (like the
@@ -2003,6 +2104,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scale_y",
                 label: "Scale y %",
                 kind: ParamKind::Float {
@@ -2012,6 +2114,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "rotation",
                 label: "Rotation",
                 // Degrees on a dial (docs/07 §6), unbounded — whip transitions
@@ -2022,6 +2125,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "opacity",
                 label: "Opacity %",
                 kind: ParamKind::Float {
@@ -2063,6 +2167,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "threshold",
                 label: "Threshold",
                 // Linear-light value above which pixels bloom. The K-090
@@ -2077,6 +2182,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 // The id stays "knee" (stable identifier, addressed by
                 // expressions and saved projects); only the UI label reads
                 // "Softness", the plainer word for the same soft-knee width.
@@ -2092,6 +2198,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "radius",
                 label: "Radius",
                 // px@comp (§2.3, K-135): the halo gaussian's half-width in
@@ -2106,6 +2213,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // Gain on the added halo; 0 is the effect's neutral point
@@ -2117,6 +2225,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "tint",
                 label: "Tint",
                 kind: ParamKind::Colour {
@@ -2154,6 +2263,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "amplitude",
                 label: "Amplitude",
                 // % of the comp diagonal (§2.3): how far the wobble roams.
@@ -2164,6 +2274,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "frequency",
                 label: "Frequency",
                 // Hz — how fast the wobble wanders; the noise samples at
@@ -2176,6 +2287,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "rotation",
                 label: "Rotation amount",
                 // Degrees of twist wobble either way.
@@ -2191,6 +2303,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // z is the depth/scale shake — z amount is a scale-pump per cent
             // (the old Zoom pump, same range) and z frequency a rate multiplier.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "x_amp",
                 label: "X amount",
                 // × the master Amplitude (0 stills this axis).
@@ -2201,6 +2314,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "x_freq",
                 label: "X frequency",
                 // × the master Frequency.
@@ -2211,6 +2325,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "y_amp",
                 label: "Y amount",
                 kind: ParamKind::Float {
@@ -2220,6 +2335,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "y_freq",
                 label: "Y frequency",
                 kind: ParamKind::Float {
@@ -2229,6 +2345,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "z_amp",
                 label: "Z amount",
                 // Depth/scale shake, % of scale wobble about natural size —
@@ -2240,6 +2357,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "z_freq",
                 label: "Z frequency",
                 kind: ParamKind::Float {
@@ -2254,11 +2372,13 @@ pub const BUILTINS: &[EffectSchema] = &[
             // shutter-like 0..1 fraction (a genuine ratio, so a 0..1 range is
             // the natural unit, P5/K-135).
             ParamSchema {
+                unit: Unit::Raw,
                 id: "motion_blur",
                 label: "Motion blur",
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "mb_amount",
                 label: "Shutter",
                 // 0..1 shutter fraction: how far across the shutter window the
@@ -2272,6 +2392,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "edge",
                 label: "Edges",
                 // How the resample treats the border the wobble reveals (P3,
@@ -2285,6 +2406,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "seed",
                 label: "Seed",
                 kind: ParamKind::Seed,
@@ -2347,6 +2469,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // The master dial (§1.2): scales every hashed quantity.
@@ -2358,6 +2481,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "block_size",
                 label: "Block size",
                 // px@comp (§2.3): a deliberately pixel-scale look.
@@ -2368,6 +2492,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "block_jitter",
                 label: "Rows/columns jitter",
                 // % of Block size (status note above): a hashed offset to
@@ -2379,6 +2504,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "block_amount",
                 label: "Displacement",
                 // % diag (§2.3), the same currency as Blur's Radius/Length.
@@ -2389,6 +2515,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "channel_offset",
                 label: "Channel offset",
                 // % diag: a per-block hashed RGB split (status note above).
@@ -2399,6 +2526,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "slice_repeat",
                 label: "Slice repeat",
                 // % odds (× Intensity) a block folds to a repeating strip.
@@ -2412,6 +2540,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // for seeded effects: the "which roll of the dice" dial lives at the
             // bottom of the stack of look controls).
             ParamSchema {
+                unit: Unit::Raw,
                 id: "seed",
                 label: "Seed",
                 kind: ParamKind::Seed,
@@ -2445,6 +2574,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // The single dial (FX-13, K-147): 0..1 is how dark the dark
@@ -2459,6 +2589,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scanline_period",
                 label: "Line period",
                 // px@comp: the deliberately pixel-scale scanline pitch.
@@ -2469,6 +2600,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scanline_roll",
                 label: "Roll speed",
                 // Lines (periods) per second; either direction (K-090).
@@ -2479,6 +2611,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scanline_interlace",
                 label: "Interlace offset",
                 kind: ParamKind::Bool { default: false },
@@ -2531,6 +2664,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // Blends between the ordinary frame and the moshed one. 0 is
@@ -2546,6 +2680,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "displacement",
                 label: "Displacement",
                 // Frames of predicted motion the streamline walk reaches
@@ -2561,6 +2696,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "bloom",
                 label: "Bloom",
                 // How much of the reach accumulates into the smear: 0 keeps
@@ -2574,6 +2710,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "reset_interval",
                 label: "Reset interval",
                 // Seconds between simulated I-frames: the melt ramps from a
@@ -2626,6 +2763,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "echoes",
                 label: "Echoes",
                 // Count of trailing frames; each is one comp frame further
@@ -2638,6 +2776,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "decay",
                 label: "Decay",
                 // Per-echo intensity falloff: echo k has intensity decay^k.
@@ -2648,6 +2787,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "mode",
                 label: "Mode",
                 // Two effect-only compositing ORDERS first, then a divider (T21),
@@ -2714,6 +2854,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "rate",
                 label: "Frame rate",
                 // The posterised grid in fps: the animation updates only this
@@ -2725,6 +2866,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "phase",
                 label: "Phase",
                 // Comp seconds: shifts where the steps land, so the hold can be
@@ -2784,6 +2926,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "samples",
                 label: "Samples",
                 // Sub-frame renders of the scene below across the open shutter
@@ -2798,6 +2941,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "shutter_angle",
                 label: "Shutter angle",
                 // Degrees: the fraction of the frame interval the shutter is open
@@ -2810,6 +2954,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "shutter_phase",
                 label: "Shutter phase",
                 // Degrees: where the open interval sits relative to the frame
@@ -2822,6 +2967,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "force_all",
                 label: "Force on all layers",
                 // Force per-layer motion blur (K-120) on every layer during the
@@ -2882,6 +3028,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "shutter_angle",
                 label: "Shutter angle",
                 // Degrees (§3.2: 0–720, default 180): the fraction of the
@@ -2895,6 +3042,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "samples",
                 label: "Samples",
                 // Taps along the streak (§3.2). The spec's integer, carried
@@ -2908,6 +3056,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "view",
                 label: "View",
                 // Diagnostic outputs (FX-19): the blurred picture, the flow
@@ -2969,6 +3118,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "view",
                 label: "View",
                 // Final result (the keyed picture), Screen matte (the alpha as
@@ -2981,6 +3131,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "key",
                 label: "Screen colour",
                 // Scene-linear RGBA; alpha ignored. Default a saturated green, the
@@ -2992,6 +3143,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "screen_gain",
                 label: "Screen gain",
                 // Per cent → a 0.. multiplier on the matte fall-off. 100 % keys
@@ -3003,6 +3155,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "screen_balance",
                 label: "Screen balance",
                 // Per cent → 0..1: how the two non-screen channels are weighted
@@ -3014,6 +3167,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "despill_bias",
                 label: "Despill bias",
                 // Scene-linear RGBA; shifts the reference the despill clamps the
@@ -3024,6 +3178,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "alpha_bias",
                 label: "Alpha bias",
                 // Scene-linear RGBA; shifts what colour counts as neutral for the
@@ -3034,6 +3189,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "spill",
                 label: "Despill amount",
                 // Per cent of the primary's screen excess drained from kept pixels
@@ -3047,6 +3203,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // Screen matte twirl (the K-145 collapsible group above).
             ParamSchema {
+                unit: Unit::Raw,
                 id: "clip_black",
                 label: "Clip black",
                 // Per cent → 0..1: matte at/below this maps to 0 (fully keyed),
@@ -3058,6 +3215,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "clip_white",
                 label: "Clip white",
                 // Per cent → 0..1: matte at/above this maps to 1 (fully kept),
@@ -3069,6 +3227,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "clip_rollback",
                 label: "Clip rollback",
                 // Per cent → 0..1: eases the clips back toward the un-clipped
@@ -3080,6 +3239,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "replace_method",
                 label: "Replace method",
                 // How despilled areas are recoloured. Default Soft colour, as
@@ -3091,6 +3251,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "replace_colour",
                 label: "Replace colour",
                 // Scene-linear RGBA used by the Hard/Soft replace methods; a
@@ -3158,6 +3319,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "black",
                 label: "Map black to",
                 // Scene-linear RGBA (alpha ignored): the colour dark input maps to.
@@ -3167,6 +3329,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "white",
                 label: "Map white to",
                 // Scene-linear RGBA (alpha ignored): the colour bright input maps to.
@@ -3404,6 +3567,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
+                unit: Unit::Raw,
                 id: "light_x",
                 label: "Light x",
                 // px@comp (K-260: point parameters are PIXELS, the
@@ -3419,6 +3583,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "light_y",
                 label: "Light y",
                 kind: ParamKind::Float {
@@ -3428,6 +3593,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "source_width",
                 label: "Source width",
                 // px@comp like the position (K-260), and the HALF-width of the
@@ -3442,6 +3608,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "source_height",
                 label: "Source height",
                 kind: ParamKind::Float {
@@ -3451,6 +3618,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "intensity",
                 label: "Intensity",
                 // Master gain on everything the effect adds; 0 is the
@@ -3462,6 +3630,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "fstop",
                 label: "F-stop",
                 // Wider (smaller number) grows the ghost discs and softens
@@ -3473,6 +3642,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "lens_model",
                 label: "Lens",
                 // The embedded prescription library (K-261, curated to
@@ -3488,6 +3658,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "lens_file",
                 label: "Lens file",
                 // A user's own .lens prescription (K-264, the LUT File
@@ -3504,6 +3675,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // --- Lens options group ---
             ParamSchema {
+                unit: Unit::Raw,
                 id: "focus",
                 label: "Focus (m)",
                 // Focus distance in metres (K-260): shifts the sensor from
@@ -3517,6 +3689,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "anamorphic",
                 label: "Anamorphic squeeze",
                 kind: ParamKind::Float {
@@ -3526,6 +3699,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "blades",
                 label: "Blades",
                 // Iris blade count: the starburst's spike count and the
@@ -3537,6 +3711,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "aperture_rotation",
                 label: "Rotation",
                 // Degrees on a dial: turning an iris is the gesture, not typing
@@ -3547,6 +3722,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating",
                 label: "Coating",
                 // 0 = uncoated (bright neutral ghosts), 1 = full quarter-wave
@@ -3558,6 +3734,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "roundness",
                 label: "Roundness",
                 kind: ParamKind::Float {
@@ -3567,6 +3744,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "aperture_softness",
                 label: "Softness",
                 // Softens the iris edge, and with it every ghost's rim.
@@ -3583,6 +3761,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             // lens does. Left "As the lens file" — the default — a row
             // changes nothing at all.
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el1",
                 label: "Element 1",
                 kind: ParamKind::Choice {
@@ -3592,6 +3771,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el2",
                 label: "Element 2",
                 kind: ParamKind::Choice {
@@ -3601,6 +3781,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el3",
                 label: "Element 3",
                 kind: ParamKind::Choice {
@@ -3610,6 +3791,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el4",
                 label: "Element 4",
                 kind: ParamKind::Choice {
@@ -3619,6 +3801,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el5",
                 label: "Element 5",
                 kind: ParamKind::Choice {
@@ -3628,6 +3811,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el6",
                 label: "Element 6",
                 kind: ParamKind::Choice {
@@ -3637,6 +3821,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el7",
                 label: "Element 7",
                 kind: ParamKind::Choice {
@@ -3646,6 +3831,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el8",
                 label: "Element 8",
                 kind: ParamKind::Choice {
@@ -3655,6 +3841,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el9",
                 label: "Element 9",
                 kind: ParamKind::Choice {
@@ -3664,6 +3851,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el10",
                 label: "Element 10",
                 kind: ParamKind::Choice {
@@ -3673,6 +3861,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el11",
                 label: "Element 11",
                 kind: ParamKind::Choice {
@@ -3682,6 +3871,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el12",
                 label: "Element 12",
                 kind: ParamKind::Choice {
@@ -3691,6 +3881,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el13",
                 label: "Element 13",
                 kind: ParamKind::Choice {
@@ -3700,6 +3891,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el14",
                 label: "Element 14",
                 kind: ParamKind::Choice {
@@ -3709,6 +3901,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el15",
                 label: "Element 15",
                 kind: ParamKind::Choice {
@@ -3718,6 +3911,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el16",
                 label: "Element 16",
                 kind: ParamKind::Choice {
@@ -3727,6 +3921,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el17",
                 label: "Element 17",
                 kind: ParamKind::Choice {
@@ -3736,6 +3931,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el18",
                 label: "Element 18",
                 kind: ParamKind::Choice {
@@ -3745,6 +3941,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el19",
                 label: "Element 19",
                 kind: ParamKind::Choice {
@@ -3754,6 +3951,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "coating_el20",
                 label: "Element 20",
                 kind: ParamKind::Choice {
@@ -3764,6 +3962,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // --- Flare options group ---
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghost_intensity",
                 label: "Ghost intensity",
                 kind: ParamKind::Float {
@@ -3773,6 +3972,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "ghost_softness",
                 label: "Ghost softness",
                 // Box-blur radius as % of the frame diagonal (K-261,
@@ -3788,6 +3988,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "max_ghosts",
                 label: "Max ghosts",
                 // The brightest-ranked ghosts survive the cap.
@@ -3798,6 +3999,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "detail",
                 label: "Detail",
                 // Ray-budget multiplier on the Quality tier's pupil grid
@@ -3813,6 +4015,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "dispersion",
                 label: "Dispersion",
                 kind: ParamKind::Float {
@@ -3822,6 +4025,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "starburst_intensity",
                 label: "Starburst intensity",
                 kind: ParamKind::Float {
@@ -3831,6 +4035,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "scale",
                 label: "Scale",
                 // Scales the WHOLE flare about the optical centre — ghost
@@ -3843,6 +4048,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             },
             // --- Source ---
             ParamSchema {
+                unit: Unit::Raw,
                 id: "source_type",
                 label: "Source",
                 // Where the light comes from. Lights is prepared for light
@@ -3854,6 +4060,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "light_tint",
                 label: "Light tint",
                 // Multiplies every light's colour, in every source mode
@@ -3866,6 +4073,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "use_source_colour",
                 label: "Use source colour",
                 // On: a detected source's own colour tints its flare (a warm
@@ -3875,6 +4083,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: true },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "matte",
                 label: "Matte layer",
                 // The layer whose brightest sources spawn the flares (impl
@@ -3889,6 +4098,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Layer { self_default: true },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "threshold",
                 label: "Threshold",
                 // The absolute scene-linear luma a pixel must EXCEED to
@@ -3902,6 +4112,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "threshold_softness",
                 label: "Threshold softness",
                 // Half-width of the soft gate around the threshold.
@@ -3912,6 +4123,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "quality",
                 label: "Quality",
                 // The ray-grid density and traced wavelength count; Draft
@@ -3923,6 +4135,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
+                unit: Unit::Raw,
                 id: "blend",
                 label: "Blend",
                 // How the flare element combines with the layer under it

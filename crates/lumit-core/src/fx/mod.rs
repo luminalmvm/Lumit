@@ -15,8 +15,12 @@
 //! agree with the CPU" a testable promise.
 
 mod builtins;
+/// Registration: the list of effects this build has (§2.6).
+mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
+/// One module per migrated built-in: its declaration and its behaviour (§2.1).
+pub mod effects;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
 /// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
@@ -26,6 +30,11 @@ pub mod lens_flare;
 pub mod lens_library;
 mod markers;
 mod maths;
+/// The resolved key/value parameter form a frame renders from
+/// (docs/impl/effect-registry.md §2.3).
+mod params;
+/// What an effect is, as a value rather than a variant (§2.4).
+mod registry;
 mod resolved;
 mod schema;
 mod temporal;
@@ -39,8 +48,11 @@ pub mod cpu;
 mod tests;
 
 pub use builtins::*;
+pub use catalogue::*;
 pub use markers::*;
 pub use maths::*;
+pub use params::*;
+pub use registry::*;
 pub use resolved::*;
 pub use schema::*;
 pub use temporal::*;
