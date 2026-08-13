@@ -2976,6 +2976,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   resolution you've chosen (Full, Half, Auto…). The quick draft frames are shown but never
   saved into the frame cache, so the cache only ever holds full-quality frames, and the
   background pre-rendering pauses while you scrub so it doesn't compete for the disc and CPU.
+  One bug here is worth recording because the symptom pointed away from the
+  cause. Frames are filed under a *name* made from everything that went into
+  them, and the preview resolution is part of that name — a half-size frame and
+  a full-size one are two different pictures. Playback is allowed to quietly
+  drop the resolution to keep time, and that decision stuck around after
+  playback stopped. So the background filling went on making full-size frames
+  while every scrub asked for half-size ones, and the two never met: the cache
+  bar went green, and scrubbing onto a green frame still re-rendered it. The
+  resolution drop is playback's business alone now, and a still frame is made at
+  the size you asked for.
+
 - **Dragging a value — or a keyframe — updates the picture live.** When you drag a value like
   Position or Scale, the viewport follows your drag immediately, before the edit is written
   down. Dragging a keyframe in the graph editor does the same: the picture shows what the curve

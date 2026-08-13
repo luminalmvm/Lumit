@@ -9285,3 +9285,61 @@ when absent.
 
 **New strings — a Crowdin upload is owed**: the twenty `fxElement1…fxElement20` row labels
 and the seven `fxCoating*` palette options.
+
+## K-372 — The adaptive tier is playback's alone: a still frame is rendered, and named, at the scale it was asked for
+
+**DECIDED** (2026-08-13). Fixes an owner-reported slowness; narrows [K-186](#k-186) (the adaptive resolution tier) to the case it was designed for.
+
+**What the owner saw.** "After pre-rendering a bit of the comp, scrubbing the playhead to a
+different point that was pre-rendered still took time to try and render the frame again for
+some reason, which really shouldn't be happening and it makes the program feel very slow and
+sluggish." Correct on every count, including that it should not be happening: the frames
+really were there.
+
+**The cause.** `publish_zero_copy` — the display path for a **scrub**, a drag preview, and
+the republish after a lens bake — scaled the requested preview scale by the adaptive
+playback tier:
+
+```rust
+let effective = if matches!(mode, Adaptive) { scale * tier_scale(tier()) } else { scale };
+```
+
+Three facts make that a cache miss on every scrub:
+
+1. The frontend sends `Adaptive` for a **still** frame whenever the user's Playback
+   preference is Adaptive, which is the default (`requestFrame` in `main.dart`).
+2. The tier is a *playback* verdict and **survives the run that set it** — it is reset at
+   the start of the next `play`, not at its end. So a single heavy pass leaves the tier at
+   Half or Quarter for as long as the editor sits still.
+3. The idle cache fill names its frames from the raw `last_shown` scale, with no tier.
+
+So after any heavy playback pass, the fill banked frames at `scale` while every scrub asked
+for `scale × tier`. Under content keying those are **different frames** (the quality tag is
+part of the name, K-178), so the fill's copy was invisible to the scrub that wanted it and
+the picture was composited from scratch — while the cache bar showed green over it, because
+the fill's copy really was there. Both halves of the machine worked correctly and neither
+could help the other.
+
+**Why the line existed.** It predates [K-181](#k-181), which moved playback into the worker.
+Playback now has its own ring and applies the tier itself, in `play_one_frame`, read beside
+the cost it is about to explain. Nothing that reaches `publish_zero_copy` is playback any
+more, so the tier there had stopped doing its job and was only doing damage. Its comment
+still argued the old case — "the only display path" — which it had not been for some time.
+
+**The rule.** The tier buys a cheaper composite so a *run keeps time*. Nothing still is being
+paced, so a still frame is rendered at the scale it was asked for. Two named functions say
+which is which — `still_quality(scale)` and `playback_quality(scale, mode, tier)` — and the
+fill and the display path both call the first, so they cannot drift apart again. The tier is
+**passed** to the second rather than read inside it, so the distinction is visible where the
+trade is made and testable without touching the process-wide controller.
+
+A still frame also now reports `FINEST_TIER` to the frontend rather than whatever playback
+last settled on: it was made at Full, and the resolution badge should not claim otherwise.
+
+**A separate slowness is left standing, and named here so it is not rediscovered as this
+one.** The idle fill composites one frame per turn and is not interruptible, so a scrub
+arriving mid-frame waits for that composite to finish — up to a couple of seconds on a comp
+with a Lens flare. It is gated behind a 200 ms lull, so a continuous drag never meets it, but
+a pause-then-scrub does. Fixing it means cancelling work already handed to the GPU, which
+`docs/14-ENGINEERING-RULES.md` asks for in general and the flare's render pass does not yet
+offer; it is its own change with its own measurements.

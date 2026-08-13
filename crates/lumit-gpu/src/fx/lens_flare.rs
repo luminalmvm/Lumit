@@ -793,8 +793,9 @@ impl LensFlareFx {
                 // the frame's band sub-samples.
                 storage_entry(7, true, c),
                 storage_entry(8, true, c),
-                // The K-369 ghost-edge ring masks.
-                storage_entry(9, true, c),
+                // Binding 9 held the K-369 ring masks until K-370 replaced
+                // them with a closed form; the numbering is left alone so
+                // nothing else has to move.
             ],
         });
         let detect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

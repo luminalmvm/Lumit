@@ -620,6 +620,13 @@ Recorded so they are not re-proposed as gaps:
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
     longer match (`state/workspace.dart`).
+- **The idle cache fill is not interruptible.** It composites one frame per turn,
+    so a scrub arriving mid-frame waits for that composite to finish - up to a
+    couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for
+    means a continuous drag never meets it; a pause-then-scrub does. Fixing it
+    means cancelling work already handed to the GPU, which docs/14 asks for in
+    general and the flare's render pass does not yet offer. Named in K-372 so it
+    is not rediscovered as the cache-key bug that entry fixed.
 - **No progress for the idle cache fill** - it is not a frame anyone is waiting
     for, so the bar stays quiet for it.
 - The two recorded behavioural deviations (export queue-snapshot timing;
