@@ -616,6 +616,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the *edge* alone, which is exact at the scales real ghosts actually have, costs
   nothing, and cannot touch the middle of a ghost at all — the interior is flat
   by construction now, not by luck.
+  **The weave that was actually there.** Underneath all of the above sat a
+  plainer fault, and it is worth explaining because it looked like optics and
+  was not. The effect fires a grid of rays through the lens and each one lands
+  somewhere on the picture, where it deposits its light spread over a small
+  patch — brightest at the middle, fading to nothing at the patch's edge, so
+  that neighbouring patches blend into a smooth sheet. Except they didn't
+  blend: each patch faded to zero exactly where the next one *started*, so
+  every patch was an island with a hairline of darkness around it. Add up a
+  grid of those and you get a woven mesh of dark lines printed over the whole
+  picture, a bright cross where the grid's own axes run through each ghost, and
+  little stair-steps along every rim. The total amount of light was exactly
+  right, which is why every test the effect had went on passing — they all
+  measured how much light there was, and none measured whether it was smooth.
+  The fix is that each patch now reaches twice as far, out to where its
+  neighbour is at full brightness, so the two overlap and add up to an even
+  sheet. It costs four times as much drawing per ray, which is the honest price
+  of not printing the ray grid onto the picture.
+
   **Every element gets its own coating.** Look at a photograph of a real flare
   and the ghosts are not one colour: there is a blue one next to a purple one
   next to an amber one. That is the lens, not an effect. A coating works by

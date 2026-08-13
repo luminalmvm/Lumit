@@ -9351,3 +9351,80 @@ with a Lens flare. It is gated behind a 200 ms lull, so a continuous drag never 
 a pause-then-scrub does. Fixing it means cancelling work already handed to the GPU, which
 `docs/14-ENGINEERING-RULES.md` asks for in general and the flare's render pass does not yet
 offer; it is its own change with its own measurements.
+
+## K-373 — The splat tent reaches a full grid step, because a half-step tent reconstructs its own sampling grid
+
+**DECIDED** (2026-08-13). Fixes the reconstruction half of [K-366](#k-366--the-ghost-grid-is-splatted-per-ray-not-rasterised-as-quads); its per-ray splatting model is unchanged and correct.
+
+**What the owner saw**, and what the earlier fix did not touch. After K-370 removed the
+ring-mask ladder, a frame still showed "the interference pattern ... clearly visible at all
+options": a fine woven cross-hatch over the whole picture, a bright cross through the big
+ghost's centre along the two pupil axes, and stepped edges on the ghost rims. That is not
+diffraction. It is the sampling grid, printed on the image by the reconstruction filter.
+
+**The bug, in one line.** `ray_axes` returns **half**-axes — a full step between neighbouring
+rays is `2·a1` — and K-366 gave the tent a support of `±a1`. Two neighbouring tents therefore
+met exactly at the point where both had fallen to zero.
+
+A linear B-spline partitions unity only when its support is **twice** the sample spacing:
+tents at spacing `h` must reach `±h`. At `±h/2` they do not overlap at all, and the sum is a
+lattice of separate pyramids with a seam of zero along every cell boundary. Measured on a
+uniform sheet of identical rays — the case whose answer must be flat — the reconstruction ran
+from 0.0029 to 0.1436 about an expected 0.0469: a **49× peak-to-trough ripple**, 206% worst
+deviation. The regression test asserts flatness to 2% and fails at that figure without the
+fix.
+
+**Energy was conserved throughout, which is why nothing caught it.** The tent integrates to
+the parallelogram's area either way, so every flux test, every oracle mean and every
+bit-stability check passed while the artefact was plainly on screen. A conservation law is
+not a smoothness law, and the flare's test suite had the first and not the second.
+
+**The fix** is to give the tent the reach a partition of unity needs: `±2·a1`, i.e. one full
+grid step each way. The integral grows by four with it, so the peak is divided by four and
+the deposited flux is unchanged; `area`, `MIN_AREA_FRAC` and the density cap keep their K-366
+meaning in half-axis units, untouched. On the GPU the splat quad doubles and the fragment
+tent is unchanged — its `uv` still runs `±1` at the quad's corners, but that corner now sits
+on the *next ray along*, where its own tent is at full height.
+
+**It costs four times the fragments per splat**, on the effect's hottest raster. That is the
+price of a reconstruction that does not print its own sampling grid on the picture, and it is
+the sort of cost `docs/13-PERFORMANCE-RULES.md` exists to measure rather than guess at — the
+per-frame budget should be re-timed on a real card.
+
+**A test was recalibrated, and honestly.** `lens_flare_an_area_source_does_not_replicate_its_ghosts`
+asserted that an area source's ghost profile shows no more peaks than a *point* source's. That
+held only while the grid seams were flattening the profile. A bar-shaped source's ghost is a
+bar, and a cut across a bar shows both of its rims where a point's small ghost shows one
+summit — so the comparison was never of the same object. It now measures against the
+replication it was built to rule out, which is the like-for-like control the test already
+constructs.
+
+## K-374 — A group's lens-element visibility names `lens_model`, and an unreachable threshold says "never" rather than "always"
+
+**DECIDED** (2026-08-13). A defect in [K-371](#k-371) as shipped, fixed with the test that would have caught it.
+
+**What the owner saw**: "trying different lens coating options it didn't seem to do anything,
+but ... it also looked like only coating's 19/20 were available." Both halves are one bug, and
+the second explains the first.
+
+The bridge resolves each element row's threshold into the visibility rule the panel already
+has — sibling parameter plus the values it may hold — and it named that sibling **`"lens"`**.
+The Lens dropdown's id is **`lens_model`**. A sibling that does not exist fails *silently*:
+the panel looks it up, finds nothing, and hides every row that names it. The rows that
+survived were elements 19 and 20, whose threshold no bundled lens reaches (the deepest is 18)
+and whose value set was therefore **empty** — and an empty set means "always visible". So the
+only rows on screen were the two that govern elements no lens has, which is why changing them
+did nothing.
+
+Two fixes, and a test each:
+
+- the id is spelled once, as `LENS_PICK_PARAM`, and a test asserts the schema declares it —
+  along with every element row, its palette, and that each threshold governs the row it names;
+- an unreachable threshold now emits a set holding one impossible index rather than an empty
+  one, so it reads as "never" in the vocabulary the panel already has. A test pins that the
+  number of never-drawing rows is exactly the schema's ceiling less the deepest bundled lens.
+
+**The general lesson, recorded because the seam invites it**: every id crossing to the
+frontend by *name* wants a test that the name resolves. Nothing in the type system connects a
+string in `lumit-bridge` to a `ParamSchema` in `lumit-core`, and the failure mode is a control
+that quietly is not there.

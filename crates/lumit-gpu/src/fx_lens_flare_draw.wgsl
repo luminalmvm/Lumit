@@ -79,9 +79,14 @@ fn vs_flare(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
         out.pos = vec4<f32>(2.0, 2.0, 0.0, 1.0);
         return out;
     }
+    // The quad reaches a FULL grid step each way — twice the half-axes
+    // (K-373). At K-366's single half-axis, neighbouring tents met exactly
+    // where both had fallen to zero, so the reconstruction printed a woven
+    // grid of dark seams at the ray spacing over every ghost. A linear tent
+    // partitions unity only when its support is twice the sample spacing.
     let px = vec2<f32>(s.cx, s.cy)
-        + vec2<f32>(s.a1x, s.a1y) * uv.x
-        + vec2<f32>(s.a2x, s.a2y) * uv.y;
+        + vec2<f32>(s.a1x, s.a1y) * uv.x * 2.0
+        + vec2<f32>(s.a2x, s.a2y) * uv.y * 2.0;
     out.pos = vec4<f32>(
         px.x / dims.raster.x * 2.0 - 1.0,
         1.0 - px.y / dims.raster.y * 2.0,
@@ -94,8 +99,10 @@ fn vs_flare(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
 @fragment
 fn fs_flare(in: VsOut) -> @location(0) vec4<f32> {
     // The separable tent, lumit_core `splat_ray`'s kernel. Zero at the
-    // quad's edge, so neighbouring splats join without a seam and the
-    // silhouette needs no antialiasing of its own.
+    // quad's edge — and since the quad now spans a full grid step each way
+    // (K-373), that edge sits on the NEXT ray along, where its own tent is at
+    // full height. The two overlap and sum to one, which is what makes the
+    // reconstruction seamless rather than merely continuous.
     let k = (1.0 - abs(in.uv.x)) * (1.0 - abs(in.uv.y));
     let rgb = in.rgb * max(k, 0.0);
     let luma = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z;

@@ -405,6 +405,27 @@ fraction and azimuth with `starburst_field`, rotates the sprite-relative pixel b
 so no slice bleeds into its neighbour. The shader spells `STARBURST_FIELDS` itself and
 a test pins the two spellings together.
 
+### 5a-bis. The splat reconstruction must partition unity (K-366, fixed K-373)
+
+`ray_axes` returns **half**-axes: the step between neighbouring rays is `2·a1`. K-366's tent
+had a support of `±a1` — half a step — so neighbouring tents met exactly where both were zero.
+A linear B-spline partitions unity only at a support of *twice* the sample spacing, so the sum
+over the grid was a lattice of separate pyramids with a seam of zero along every cell boundary:
+a woven grid of dark lines at the ray spacing, ridges along the pupil axes through each ghost,
+and stepped rims. On a uniform sheet of identical rays the reconstruction ran 0.0029 … 0.1436
+about an expected 0.0469 — a 49x ripple.
+
+Flux was conserved the whole time (the tent integrates to the parallelogram's area either way),
+which is exactly why the suite passed: it measured how much light there was and never whether
+it was smooth. `lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux` now measures
+both.
+
+The tent reaches `±2·a1`; its integral grows by four, so the peak is divided by four and the
+flux is unchanged. `area` and the density cap keep their K-366 meaning in half-axis units. The
+GPU quad doubles; the fragment tent is untouched, because its `uv` still runs `±1` at the
+quad's corners — those corners now sit on the next ray along. Cost: four times the fragments
+per splat, on the hottest raster in the effect.
+
 ### 5b. Ghost edges are Fresnel: the knife-edge rim (K-369, re-derived K-370)
 
 The starburst above is the aperture's **far** field. A ghost is its **near** field. Each

@@ -3491,11 +3491,35 @@ pub(crate) fn ray_axes(
     }
 }
 
-/// Deposit one ray's flux over its footprint (K-366): a separable tent over
-/// the parallelogram `centre ± a1 ± a2`, so the kernel integrates to the
-/// parallelogram's area and flux is conserved exactly — except at a caustic,
-/// where the density cap (see [`MIN_AREA_FRAC`]) deliberately sheds the
-/// divergence. The WGSL splat fragment mirrors this arithmetic op for op.
+/// Deposit one ray's flux over its footprint (K-366, reconstruction fixed
+/// K-373): a separable tent centred on the ray, reaching **one full grid step**
+/// in each direction, so the tents of neighbouring rays overlap and sum to
+/// one. Flux is conserved exactly — except at a caustic, where the density cap
+/// (see [`MIN_AREA_FRAC`]) deliberately sheds the divergence. The WGSL splat
+/// quad and fragment mirror this arithmetic op for op.
+///
+/// # Why the tent reaches twice the half-axis
+///
+/// `a1` and `a2` are **half**-axes: a full step between neighbouring rays is
+/// `2·a1`. K-366 gave the tent a support of `±a1`, which is half a step — so
+/// two neighbouring tents met exactly at the point where both had fallen to
+/// zero. That is not a partition of unity; it is a lattice of separate
+/// pyramids with a seam of zero along every cell boundary. Summed over the
+/// grid it reconstructs a **woven grid of dark lines at the ray spacing**,
+/// with brighter ridges along the two pupil axes through each ghost's centre,
+/// and stepped rims where the seams cross a silhouette. Energy was still
+/// conserved, which is why every flux test passed and the artefact was
+/// visible on screen anyway.
+///
+/// A linear B-spline partitions unity when its support is **twice** the sample
+/// spacing — tents at spacing `h` reaching `±h`. Here the spacing is `2·a1`,
+/// so the reach is `±2·a1`, which is what the kernel below evaluates. The
+/// integral grows by 4 with it, so the peak is divided by 4 and the deposited
+/// flux is unchanged; `area` and the density cap keep their K-366 meaning in
+/// half-axis units, untouched.
+///
+/// It costs four times the fragments per splat, and that is the price of a
+/// reconstruction that does not print its own sampling grid on the picture.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn splat_ray(
     out: &mut [f32],
@@ -3542,15 +3566,18 @@ pub(crate) fn splat_ray(
     // capped fraction, so a fold brightens to 333× and stops (K-262's rule,
     // carried over unchanged).
     let divisor = area.max(MIN_AREA_FRAC * cell_area_px);
+    // Divided by four beside the reach doubling above: the tent over ±2 in
+    // each axis integrates to 4x the parallelogram's area, so the flux the
+    // ray deposits is exactly what it was.
     let peak = [
-        flux_rgb[0] / divisor,
-        flux_rgb[1] / divisor,
-        flux_rgb[2] / divisor,
+        flux_rgb[0] / (4.0 * divisor),
+        flux_rgb[1] / (4.0 * divisor),
+        flux_rgb[2] / (4.0 * divisor),
     ];
     let inv_det = 1.0 / det;
-    // Bounding box of the parallelogram.
-    let ext_x = a1[0].abs() + a2[0].abs();
-    let ext_y = a1[1].abs() + a2[1].abs();
+    // Bounding box of the tent's REACH, which is two half-axes each way.
+    let ext_x = 2.0 * (a1[0].abs() + a2[0].abs());
+    let ext_y = 2.0 * (a1[1].abs() + a2[1].abs());
     let x0 = ((centre[0] - ext_x).floor().max(0.0)) as i64;
     let x1 = ((centre[0] + ext_x).ceil().min(w as f32 - 1.0)) as i64;
     let y0 = ((centre[1] - ext_y).floor().max(0.0)) as i64;
@@ -3565,10 +3592,12 @@ pub(crate) fn splat_ray(
             // (u, v) in the parallelogram's own frame: solve [a1 a2]·(u,v)ᵀ = d.
             let u = (dx * a2[1] - dy * a2[0]) * inv_det;
             let v = (dy * a1[0] - dx * a1[1]) * inv_det;
-            if u.abs() >= 1.0 || v.abs() >= 1.0 {
+            // The tent reaches a full grid step, which is 2 in half-axis
+            // units — so neighbours overlap and sum to one.
+            if u.abs() >= 2.0 || v.abs() >= 2.0 {
                 continue;
             }
-            let k = (1.0 - u.abs()) * (1.0 - v.abs());
+            let k = (1.0 - u.abs() * 0.5) * (1.0 - v.abs() * 0.5);
             let idx = ((py as u32 * w + px as u32) * 3) as usize;
             if let Some(px3) = out.get_mut(idx..idx + 3) {
                 px3[0] += peak[0] * k;

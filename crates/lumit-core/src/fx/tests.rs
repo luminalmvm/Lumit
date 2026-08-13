@@ -4944,6 +4944,134 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
+/// **The splat reconstruction is a partition of unity** (K-366, fixed K-373).
+///
+/// A uniform sheet of rays on a regular grid, all with the same weight and the
+/// same footprint, must reconstruct a **flat** field — that is what "the ghost
+/// is smooth" means, and it is the property K-366 lacked. Its tent reached one
+/// half-axis while the rays sit a full step apart, so neighbouring tents met
+/// exactly where both had fallen to zero: a lattice of separate pyramids with
+/// a seam of zero along every cell boundary, which is a woven grid of dark
+/// lines printed over every ghost. Energy was conserved throughout, which is
+/// why every flux test passed while the artefact was plainly on screen.
+///
+/// This asserts both halves: the interior is flat, **and** the flux is still
+/// exactly what was put in.
+#[test]
+fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
+    use crate::fx::lens_flare::*;
+    const W: u32 = 128;
+    const H: u32 = 128;
+    // Ray spacing in pixels, and the half-axes that go with it: a1 and a2 are
+    // HALF a step, which is what `ray_axes` hands over.
+    const STEP: f32 = 8.0;
+    let a1 = [STEP * 0.5, 0.0];
+    let a2 = [0.0, STEP * 0.5];
+    let cell_area = STEP * STEP;
+    let flux = 3.0_f32;
+
+    let mut out = vec![0.0_f32; (W * H * 3) as usize];
+    // A lattice well inside the buffer, so no tent is clipped by an edge and
+    // the flux check is exact.
+    let (n, origin) = (9_usize, 32.0_f32);
+    for j in 0..n {
+        for i in 0..n {
+            splat_ray(
+                &mut out,
+                W,
+                H,
+                [origin + i as f32 * STEP, origin + j as f32 * STEP],
+                a1,
+                a2,
+                [flux, flux, flux],
+                cell_area,
+            );
+        }
+    }
+
+    // **Flux.** Every ray's deposit lands inside the buffer, so the total is
+    // exactly what went in.
+    let total: f64 = out.iter().step_by(3).map(|v| f64::from(*v)).sum();
+    let want = f64::from(flux) * (n * n) as f64;
+    assert!(
+        (total - want).abs() / want < 1e-4,
+        "flux must be conserved: {total} vs {want}"
+    );
+
+    // **Flatness.** Inside the lattice — a step in from its outermost rays, so
+    // every sample sees a full set of neighbours — the field must be constant.
+    // The value is the flux of one ray spread over one cell.
+    let expect = flux / (STEP * STEP);
+    let (lo, hi) = (origin + STEP, origin + (n - 2) as f32 * STEP);
+    let mut worst = 0.0_f32;
+    let mut ripple_min = f32::MAX;
+    let mut ripple_max = 0.0_f32;
+    for y in (lo as u32)..(hi as u32) {
+        for x in (lo as u32)..(hi as u32) {
+            let v = out[((y * W + x) * 3) as usize];
+            worst = worst.max((v - expect).abs() / expect);
+            ripple_min = ripple_min.min(v);
+            ripple_max = ripple_max.max(v);
+        }
+    }
+    assert!(
+        worst < 0.02,
+        "the interior must be flat: worst deviation {:.1}% (min {ripple_min}, \
+         max {ripple_max}, expected {expect})",
+        100.0 * worst
+    );
+    // Said the other way round, because this is the number that was wrong: the
+    // peak-to-trough ripple across the sheet. K-366 reached zero at every cell
+    // boundary, which is 100%.
+    let ripple = (ripple_max - ripple_min) / ripple_max.max(1e-9);
+    assert!(
+        ripple < 0.05,
+        "peak-to-trough ripple across a uniform sheet must be nothing: {:.1}%",
+        100.0 * ripple
+    );
+
+    // And the same for a sheared footprint, since a ghost's cells are rarely
+    // axis-aligned: the tent's frame is the parallelogram's, not the pixel's.
+    let sh1 = [STEP * 0.5, STEP * 0.25];
+    let sh2 = [-STEP * 0.2, STEP * 0.5];
+    let mut sheared = vec![0.0_f32; (W * H * 3) as usize];
+    for j in 0..n {
+        for i in 0..n {
+            let (fi, fj) = (i as f32, j as f32);
+            splat_ray(
+                &mut sheared,
+                W,
+                H,
+                [
+                    origin + fi * 2.0 * sh1[0] + fj * 2.0 * sh2[0],
+                    origin + fi * 2.0 * sh1[1] + fj * 2.0 * sh2[1],
+                ],
+                sh1,
+                sh2,
+                [flux, flux, flux],
+                cell_area,
+            );
+        }
+    }
+    let det = (sh1[0] * sh2[1] - sh1[1] * sh2[0]).abs() * 4.0;
+    let expect_sh = flux / det;
+    let mut worst_sh = 0.0_f32;
+    for j in 2..(n - 2) {
+        for i in 2..(n - 2) {
+            let (fi, fj) = (i as f32, j as f32);
+            let x = (origin + fi * 2.0 * sh1[0] + fj * 2.0 * sh2[0]).round() as u32;
+            let y = (origin + fi * 2.0 * sh1[1] + fj * 2.0 * sh2[1]).round() as u32;
+            let v = sheared[((y * W + x) * 3) as usize];
+            worst_sh = worst_sh.max((v - expect_sh).abs() / expect_sh);
+        }
+    }
+    assert!(
+        worst_sh < 0.05,
+        "a sheared sheet must reconstruct flat too: worst {:.1}%",
+        100.0 * worst_sh
+    );
+}
+
 /// **Ghost edges are Fresnel, and only their edges are** (K-369, re-derived
 /// K-370).
 ///
@@ -5130,6 +5258,101 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         .spreads
         .iter()
         .all(|&s| ghost_fresnel_number(s, baked.native_fstop) > 0.0));
+}
+
+/// **The element-coating rows name parameters that exist** (K-371).
+///
+/// Their visibility is resolved in the panel against a *sibling by id*, and a
+/// sibling that does not exist fails silently: the panel finds nothing, hides
+/// every row that names it, and leaves only the rows whose threshold no lens
+/// reaches — whose value set is empty, which means "always visible". That is
+/// precisely what shipping `"lens"` for the Lens dropdown did, and what it
+/// looked like from the outside was "only elements 19 and 20 are there, and
+/// changing them does nothing" (no lens has nineteen elements, so those rows
+/// governed nothing at all). Nothing in the type system connects the id in the
+/// bridge to the id in the schema, so this is the connection.
+#[test]
+fn lens_flare_element_rows_and_the_lens_pick_line_up() {
+    use crate::fx::lens_flare::*;
+    let flare = crate::fx::BUILTINS
+        .iter()
+        .find(|s| s.match_name == "lens_flare")
+        .expect("the Lens flare is a builtin");
+
+    // The sibling the coating rows' visibility is resolved against. The
+    // bridge spells this id too (`LENS_PICK_PARAM`); if it ever moves, this
+    // fails here rather than silently emptying the panel.
+    let lens = flare
+        .params
+        .iter()
+        .find(|p| p.id == "lens_model")
+        .expect("the Lens dropdown is `lens_model`");
+    match lens.kind {
+        ParamKind::Choice { options, .. } => assert_eq!(
+            options.len(),
+            crate::fx::lens_library::LENS_LIBRARY.len(),
+            "the dropdown must offer every bundled lens, since the row \
+             thresholds are indices into that same library"
+        ),
+        _ => panic!("the visibility rule needs a Choice to read"),
+    }
+
+    // Every element row exists, in order, and offers the whole palette.
+    for (i, id) in COATING_ELEMENT_IDS.iter().enumerate() {
+        let row = flare
+            .params
+            .iter()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("element row {} (`{id}`) is missing", i + 1));
+        match row.kind {
+            ParamKind::Choice {
+                options, default, ..
+            } => {
+                assert_eq!(options.len(), COATING_DESIGNS as usize);
+                assert_eq!(default, COATING_AS_FILE, "a row starts as the file");
+            }
+            _ => panic!("`{id}` must be a Choice"),
+        }
+    }
+
+    // Each row is its own group, carrying its own element threshold, and the
+    // thresholds run 1..=MAX_COATING_ELEMENTS with none missing or doubled.
+    let mut thresholds: Vec<u32> = Vec::new();
+    for g in flare.groups {
+        if let Some(n) = g.visible_when_lens_elements {
+            assert_eq!(
+                g.params.len(),
+                1,
+                "an element threshold governs exactly one row"
+            );
+            assert_eq!(
+                g.params[0],
+                COATING_ELEMENT_IDS[n as usize - 1],
+                "threshold {n} must govern element {n}"
+            );
+            assert!(
+                g.visible_when.is_none(),
+                "the two visibility rules are mutually exclusive: the bridge \
+                 reads one or the other"
+            );
+            thresholds.push(n);
+        }
+    }
+    thresholds.sort_unstable();
+    assert_eq!(
+        thresholds,
+        (1..=MAX_COATING_ELEMENTS as u32).collect::<Vec<_>>()
+    );
+
+    // And the thresholds a bundled lens can actually reach are the ones the
+    // panel will ever draw: the library tops out well under the schema's
+    // ceiling, so the rows past it must resolve to "never", not "always".
+    let reachable = library_element_counts()
+        .into_iter()
+        .max()
+        .expect("a library");
+    assert!(reachable < MAX_COATING_ELEMENTS as u32);
+    assert!(lenses_with_at_least(reachable + 1).is_empty());
 }
 
 /// **A coating is per glass element, and different coatings make differently
@@ -6842,10 +7065,23 @@ fn lens_flare_an_area_source_does_not_replicate_its_ghosts() {
         "the test's own replication must actually replicate, or it proves \
          nothing: {rp} peaks against a point's {pp}"
     );
+    // **Measured against the replication, not against the point.** The
+    // comparison that matters is with the mechanism K-367 replaced, and it is
+    // the only one of the three that is like-for-like: the same source, the
+    // same extent, rendered the old way. An area source must carry no more
+    // structure through this window than 25 stamped copies do.
+    //
+    // It used to read `ap <= pp`, against the POINT render, and that held only
+    // while K-366's reconstruction was printing its sampling grid over
+    // everything (K-373). With the grid gone, a bar source's ghost is a bar,
+    // and a cut across a bar shows both of its rims where a point's small
+    // ghost shows one summit — so the area render legitimately counts two
+    // peaks to the point's one, and comparing the two was never comparing the
+    // same object.
     assert!(
-        ap <= pp,
+        ap <= rp,
         "an area source must smear its ghost, not stamp copies of it: \
-         {ap} peaks against a point's {pp} and the old replication's {rp}"
+         {ap} peaks against the old replication's {rp} (a point's is {pp})"
     );
 }
 

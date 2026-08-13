@@ -950,8 +950,11 @@ fn build_splats(@builtin(global_invocation_id) gid: vec3<u32>) {
     // with nothing to do but the tent.
     let light = lights[tp.light_offset + gid.z];
     let flux = ray.weight * tp.cell_area_px;
+    // Divided by four beside the quad's doubled reach (K-373): the tent over
+    // a full step each way integrates to 4x the parallelogram's area, so the
+    // flux the ray deposits is exactly what it was.
     let peak = (flux * vec3<f32>(ray.r, ray.g, ray.b) * vec3<f32>(light.r, light.g, light.b))
-        / divisor;
+        / (4.0 * divisor);
 
     s.cx = here.x;
     s.cy = here.y;
