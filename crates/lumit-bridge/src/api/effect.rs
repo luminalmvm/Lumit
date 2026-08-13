@@ -452,12 +452,13 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
 /// conditional run of parameters takes. `visible_when_param` with a
 /// non-empty `visible_when_values` shows the group only while that sibling
 /// Choice parameter holds one of those indices.
-///
-/// A group whose schema says its rows are per **glass element** of a lens
-/// (K-371) arrives as exactly that same shape: `visible_when_param` is the
-/// Lens dropdown and `visible_when_values` lists the lenses whose
-/// prescription has enough elements for the row. The panel therefore has one
-/// visibility rule to implement, not two, and learns nothing about optics.
+// A group whose schema says its rows are per glass element of a lens (K-371)
+// arrives as exactly that same shape: `visible_when_param` is the Lens
+// dropdown and `visible_when_values` lists the lenses whose prescription has
+// enough elements for the row. The panel therefore has one visibility rule to
+// implement, not two, and learns nothing about optics. Deliberately NOT a doc
+// comment: frb mirrors those into the generated Dart, and this note is about
+// how the Rust side fills the fields in, which the frontend need not read.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeParamGroup {
