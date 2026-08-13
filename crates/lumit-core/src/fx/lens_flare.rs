@@ -2657,7 +2657,17 @@ pub fn fresnel_cs(v: f32) -> (f32, f32) {
     // Abramowitz & Stegun 7.3.32/7.3.33's auxiliary functions.
     let f = (1.0 + 0.926 * x) / (2.0 + 1.792 * x + 3.104 * x * x);
     let g = 1.0 / (2.0 + 4.142 * x + 3.492 * x * x + 6.670 * x * x * x);
-    let arg = std::f32::consts::FRAC_PI_2 * x * x;
+    // **The argument is reduced by hand, and it has to be.** `x` reaches the
+    // low hundreds deep inside a ghost, so `x²` reaches five figures and the
+    // phase `πx²/2` runs to tens of thousands of radians. A CPU `sin` reduces
+    // that properly; a GPU one is not required to, and on real hardware does
+    // not — the two twins then disagreed by 1.25% of the frame's total energy,
+    // spread over every ghost interior, which is exactly the shape of a
+    // range-reduction failure. `x²` mod 4 is one f32 multiply and a floor,
+    // identical on both sides by IEEE, and leaves both asking for a sine of
+    // something under 2π.
+    let t = x * x;
+    let arg = std::f32::consts::FRAC_PI_2 * (t - 4.0 * (t * 0.25).floor());
     let (s, c) = arg.sin_cos();
     let cc = 0.5 + f * s - g * c;
     let ss = 0.5 - f * c - g * s;

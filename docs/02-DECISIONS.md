@@ -9203,6 +9203,14 @@ stopping down shrinks the ghost and the pupil together, so `F ∝ stop_scale²` 
 derive it from the bake's measured spread by `ghost_fresnel_number`, mirrored in lumit-gpu as
 `ghost_fresnel_of` under the usual twin rule.
 
+**The phase argument is reduced by hand, and it has to be.** `v` reaches the low hundreds
+deep inside a ghost, so `v²` reaches five figures and the phase `πv²/2` runs to tens of
+thousands of radians. A CPU `sin` reduces that properly; a GPU one is not required to, and on
+CI's real hardware does not — the twins disagreed by **1.25% of the frame's total energy**,
+spread over every ghost interior, which is the shape of a range-reduction failure rather than
+of a maths error. Both twins now take `v²` mod 4 first: one f32 multiply and a floor,
+identical on both sides by IEEE, leaving each to ask for a sine of something under 2π.
+
 **Recorded limits.** The fringes are computed at one wavelength (`RING_LAMBDA_UM` = 0.55):
 their spacing goes as `√λ`, so across the visible band it varies by ±15%, far under the blur
 they are already averaged by. They are uniform round the rim, which is right along a blade

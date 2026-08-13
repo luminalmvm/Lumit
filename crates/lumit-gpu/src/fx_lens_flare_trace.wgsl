@@ -251,7 +251,11 @@ fn fresnel_cs(v: f32) -> vec2<f32> {
     let x = abs(v);
     let f = (1.0 + 0.926 * x) / (2.0 + 1.792 * x + 3.104 * x * x);
     let g = 1.0 / (2.0 + 4.142 * x + 3.492 * x * x + 6.670 * x * x * x);
-    let arg = 1.5707963267948966 * x * x;
+    // x^2 mod 4 before the sine — see lumit_core's `fresnel_cs`. Deep inside a
+    // ghost the unreduced phase runs to tens of thousands of radians, which a
+    // GPU sine is not required to handle and measurably does not.
+    let t = x * x;
+    let arg = 1.5707963267948966 * (t - 4.0 * floor(t * 0.25));
     let sc = vec2<f32>(cos(arg), sin(arg));
     let cc = 0.5 + f * sc.y - g * sc.x;
     let ss = 0.5 - f * sc.x - g * sc.y;
