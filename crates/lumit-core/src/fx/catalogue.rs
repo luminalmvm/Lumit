@@ -19,8 +19,19 @@
 //! one to be identical for every effect that has moved.
 
 use super::effects::{
-    contrast::ContrastDef, exposure::ExposureDef, gamma::GammaDef, invert::InvertDef,
-    saturation::SaturationDef,
+    contrast::ContrastDef, exposure::ExposureDef, gamma::GammaDef, hue_shift::HueShiftDef,
+    invert::InvertDef, saturation::SaturationDef, temperature::TemperatureDef, tint::TintDef,
+    vibrancy::VibrancyDef,
 };
 
-crate::catalogue![SaturationDef, ExposureDef, ContrastDef, GammaDef, InvertDef,];
+crate::catalogue![
+    SaturationDef,
+    VibrancyDef,
+    ExposureDef,
+    HueShiftDef,
+    ContrastDef,
+    GammaDef,
+    TemperatureDef,
+    InvertDef,
+    TintDef,
+];

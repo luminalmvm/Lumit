@@ -17,5 +17,9 @@
 pub mod contrast;
 pub mod exposure;
 pub mod gamma;
+pub mod hue_shift;
 pub mod invert;
 pub mod saturation;
+pub mod temperature;
+pub mod tint;
+pub mod vibrancy;

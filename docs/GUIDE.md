@@ -3490,7 +3490,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   one edit, undo). They run when a developer asks (`cargo bench`), and they'll later become
   pass/fail speed budgets in the automated checks.
 
-- **How an effect is written down (`crates/lumit-core/src/fx/effects/`, K-373)** — adding an
+- **How an effect is written down (`crates/lumit-core/src/fx/effects/`, K-381)** — adding an
   effect used to mean writing the same effect out five times in five files, and keeping the
   five copies in step by hand: the list of its controls, a slot in one giant list of every
   effect there is, the code that fills that slot in, the code that turns it into work for the

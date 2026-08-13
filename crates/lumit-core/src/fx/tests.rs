@@ -8913,3 +8913,168 @@ fn a_registered_effect_renders_what_the_old_dispatch_rendered() {
 
     assert_eq!(through_registry, through_the_enum);
 }
+
+/// The kinds beyond a plain slider read back as themselves: a colour as four
+/// channels, a switch as a switch, a dial as its degrees. A generated reader
+/// that quietly turned one into another would still pass the schema test.
+#[test]
+fn every_parameter_kind_reads_back_as_itself() {
+    let entries = [
+        (
+            effects::tint::Tint::BLACK,
+            Value::Colour([0.1, 0.2, 0.3, 1.0]),
+        ),
+        (
+            effects::tint::Tint::WHITE,
+            Value::Colour([0.9, 0.8, 0.7, 1.0]),
+        ),
+        (effects::tint::Tint::MIX, Value::Float(50.0)),
+    ];
+    let v = effects::tint::Tint::read(Params::new(&entries));
+    assert_eq!(v.black, [0.1, 0.2, 0.3, 1.0]);
+    assert_eq!(v.white, [0.9, 0.8, 0.7, 1.0]);
+    assert_eq!(v.mix, 50.0);
+
+    let entries = [
+        (effects::hue_shift::HueShift::ANGLE, Value::Float(90.0)),
+        (
+            effects::hue_shift::HueShift::PRESERVE_LUMINANCE,
+            Value::Bool(false),
+        ),
+    ];
+    let v = effects::hue_shift::HueShift::read(Params::new(&entries));
+    assert_eq!(v.angle, 90.0);
+    assert!(!v.preserve_luminance);
+    assert_eq!(v.matrix(), hue_matrix_rgb(90.0));
+
+    // Absent on projects saved before the bool existed → true, the historical
+    // behaviour (K-136), and the constant-luminance matrix with it.
+    let v = effects::hue_shift::HueShift::read(Params::EMPTY);
+    assert!(v.preserve_luminance);
+    assert_eq!(v.matrix(), hue_matrix(0.0));
+}
+
+/// The host-side maths a resolve arm used to do now lives on the effect, and
+/// must produce the same numbers — byte for byte, since the GPU multiplies by
+/// them (docs/08 §1.6).
+#[test]
+fn the_host_side_maths_moved_without_changing() {
+    let at = |t: f32| {
+        let entries = [(
+            effects::temperature::Temperature::TEMPERATURE,
+            Value::Float(t),
+        )];
+        effects::temperature::Temperature::read(Params::new(&entries)).gains()
+    };
+    // Neutral is exactly neutral: the identity the WGSL kernel relies on.
+    assert_eq!(at(0.0), (1.0, 1.0));
+    // The old arm: k = t/100 clamped to ±2, gains 1 ± 0.75k floored at 0.
+    for t in [-300.0f32, -150.0, -20.0, 45.0, 150.0, 300.0] {
+        let k = (t / 100.0).clamp(-2.0, 2.0);
+        assert_eq!(
+            at(t),
+            ((1.0 + 0.75 * k).max(0.0), (1.0 - 0.75 * k).max(0.0))
+        );
+    }
+}
+
+/// Every migrated effect renders through the registry exactly what it rendered
+/// through the old dispatch — the acceptance criterion for a batch.
+#[test]
+fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
+    let source: Vec<f32> = (0..64).map(|i| (i % 17) as f32 / 17.0).collect();
+    let both = |def: &dyn EffectDef, entries: &[(ParamId, Value)], old: Resolved| {
+        let mut new = source.clone();
+        def.apply_cpu(&mut new, 4, 4, Params::new(entries));
+        let mut legacy = source.clone();
+        cpu::apply(&mut legacy, 4, 4, &old);
+        assert_eq!(
+            new,
+            legacy,
+            "{} renders differently through the registry",
+            def.schema().match_name
+        );
+    };
+
+    both(
+        &effects::saturation::SaturationDef,
+        &[
+            (
+                effects::saturation::Saturation::SATURATION,
+                Value::Float(250.0),
+            ),
+            (effects::saturation::Saturation::MIX, Value::Float(80.0)),
+        ],
+        Resolved::Saturation {
+            saturation: 2.5,
+            mix: 0.8,
+        },
+    );
+    both(
+        &effects::vibrancy::VibrancyDef,
+        &[
+            (effects::vibrancy::Vibrancy::AMOUNT, Value::Float(120.0)),
+            (effects::vibrancy::Vibrancy::MIX, Value::Float(100.0)),
+        ],
+        Resolved::Vibrancy {
+            amount: 1.2,
+            mix: 1.0,
+        },
+    );
+    both(
+        &effects::contrast::ContrastDef,
+        &[(effects::contrast::Contrast::CONTRAST, Value::Float(160.0))],
+        Resolved::Contrast { k: 1.6, mix: 1.0 },
+    );
+    both(
+        &effects::gamma::GammaDef,
+        &[(effects::gamma::Gamma::GAMMA, Value::Float(2.2))],
+        Resolved::Gamma {
+            gamma: 2.2,
+            mix: 1.0,
+        },
+    );
+    both(
+        &effects::temperature::TemperatureDef,
+        &[(
+            effects::temperature::Temperature::TEMPERATURE,
+            Value::Float(60.0),
+        )],
+        Resolved::Temperature {
+            gain_r: 1.0 + 0.75 * 0.6,
+            gain_b: 1.0 - 0.75 * 0.6,
+            mix: 1.0,
+        },
+    );
+    both(
+        &effects::hue_shift::HueShiftDef,
+        &[(effects::hue_shift::HueShift::ANGLE, Value::Float(120.0))],
+        Resolved::HueShift {
+            m: hue_matrix(120.0),
+            mix: 1.0,
+        },
+    );
+    both(
+        &effects::tint::TintDef,
+        &[
+            (
+                effects::tint::Tint::BLACK,
+                Value::Colour([0.05, 0.0, 0.1, 1.0]),
+            ),
+            (
+                effects::tint::Tint::WHITE,
+                Value::Colour([1.0, 0.9, 0.6, 1.0]),
+            ),
+        ],
+        Resolved::Tint {
+            black: [0.05, 0.0, 0.1],
+            white: [1.0, 0.9, 0.6],
+            mix: 1.0,
+        },
+    );
+    both(
+        &effects::invert::InvertDef,
+        &[(effects::invert::Invert::MIX, Value::Float(100.0))],
+        Resolved::Invert { mix: 1.0 },
+    );
+}

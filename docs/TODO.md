@@ -43,7 +43,7 @@ These sit above everything else: they are what the editor feels like in the hand
 
 ---
 
-## Now - the effect registry migration (K-373, docs/impl/effect-registry.md §6)
+## Now - the effect registry migration (K-381, docs/impl/effect-registry.md §6)
 
 The refactor is landing in batches; these are the batches that have not landed. Delete each
 line as its batch lands.
