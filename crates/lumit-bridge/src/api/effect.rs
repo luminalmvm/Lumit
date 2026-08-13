@@ -452,6 +452,12 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
 /// conditional run of parameters takes. `visible_when_param` with a
 /// non-empty `visible_when_values` shows the group only while that sibling
 /// Choice parameter holds one of those indices.
+///
+/// A group whose schema says its rows are per **glass element** of a lens
+/// (K-371) arrives as exactly that same shape: `visible_when_param` is the
+/// Lens dropdown and `visible_when_values` lists the lenses whose
+/// prescription has enough elements for the row. The panel therefore has one
+/// visibility rule to implement, not two, and learns nothing about optics.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeParamGroup {
@@ -485,11 +491,21 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
             label: g.label.to_owned(),
             params: g.params.iter().map(|p| (*p).to_owned()).collect(),
             collapsed: g.collapsed,
-            visible_when_param: g.visible_when.map(|(id, _)| id.to_owned()),
-            visible_when_values: g
-                .visible_when
-                .map(|(_, vs)| vs.to_vec())
-                .unwrap_or_default(),
+            // The per-element rows (K-371) become an ordinary "this sibling
+            // Choice holds one of these" rule, resolved from the lens library
+            // here so the frontend needs no new mechanism and no notion of an
+            // element. The two conditions are mutually exclusive by
+            // construction: a group declares one or the other.
+            visible_when_param: match (g.visible_when, g.visible_when_lens_elements) {
+                (Some((id, _)), _) => Some(id.to_owned()),
+                (None, Some(_)) => Some("lens".to_owned()),
+                (None, None) => None,
+            },
+            visible_when_values: match (g.visible_when, g.visible_when_lens_elements) {
+                (Some((_, vs)), _) => vs.to_vec(),
+                (None, Some(n)) => lumit_core::fx::lens_flare::lenses_with_at_least(n),
+                (None, None) => Vec::new(),
+            },
         })
         .collect()
 }

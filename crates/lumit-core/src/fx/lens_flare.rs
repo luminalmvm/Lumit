@@ -68,9 +68,18 @@ pub struct LensFlareParams {
     /// 0 = monochrome trace (no fringing), 1 = physical, 2 = doubled.
     pub dispersion: f32,
     /// 0..1: blends every reflection from plain Fresnel (uncoated, bright
-    /// neutral ghosts) toward the prescription's own anti-reflective
-    /// coating (K-261: per-surface MgF₂ layer counts from the lens file).
+    /// neutral ghosts) toward each surface's anti-reflective coating
+    /// (K-261: per-surface layer counts from the lens file; K-371: or the
+    /// palette entry that element was set to).
     pub coating: f32,
+    /// The coating on each glass element, by [`coating_design`] palette index
+    /// (K-371); [`COATING_AS_FILE`] leaves the prescription's own column
+    /// alone, which is what every element defaults to.
+    ///
+    /// Element 0 is the front piece of glass. Entries past the lens's own
+    /// element count are ignored, and a lens with more elements than
+    /// [`MAX_COATING_ELEMENTS`] keeps its file's coating on the rest.
+    pub coating_elements: [u32; MAX_COATING_ELEMENTS],
     /// Gain on the starburst alone.
     pub starburst_intensity: f32,
     /// Scale of the WHOLE flare about the optical centre (ghost train and
@@ -744,12 +753,21 @@ pub struct FlareSurface {
     pub cauchy_a: f32,
     /// Cauchy B, µm²; 0 for air.
     pub cauchy_b: f32,
-    /// AR coating layer count (as f32 for the POD mirror).
+    /// AR coating layer count from the `.lens` file's own column (as f32 for
+    /// the POD mirror).
     pub coating_layers: f32,
     /// 1.0 on the aperture-stop surface, else 0.0 (the f-stop scales it).
     pub is_stop: f32,
-    /// Padding (POD mirror alignment).
-    pub _pad: f32,
+    /// Which [`coating_design`] this surface is coated with (K-371), as f32
+    /// for the POD mirror: [`COATING_AS_FILE`] means "whatever the
+    /// prescription's own column says", which is what every surface held
+    /// before per-element coatings existed.
+    ///
+    /// It occupies the slot that used to be padding, so the WGSL mirror's
+    /// stride is unchanged — and the shader still ignores it, because the
+    /// design is already resolved into the baked reflectance table by the
+    /// time any ray is traced.
+    pub coating_design: f32,
 }
 
 /// Everything the bake produces: pure function of the bake-relevant subset
@@ -877,7 +895,7 @@ pub(crate) fn parse_lens(text: &str) -> Option<Prescription> {
             cauchy_b: b,
             coating_layers: coating.max(0.0),
             is_stop: if is_stop { 1.0 } else { 0.0 },
-            _pad: 0.0,
+            coating_design: COATING_AS_FILE as f32,
         });
         z += thickness;
     }
@@ -1037,6 +1055,259 @@ pub fn coating_stack(layers: f32) -> [(f32, f32); MAX_COATING_LAYERS] {
     out
 }
 
+/// The palette entry meaning "leave this surface's coating as the `.lens`
+/// prescription describes it" (K-371) — the default, and what every surface
+/// held before per-element coatings existed.
+pub const COATING_AS_FILE: u32 = 0;
+
+/// How many entries [`coating_design`] offers, including [`COATING_AS_FILE`].
+pub const COATING_DESIGNS: u32 = 7;
+
+/// Most glass elements a lens may have its coatings set on individually
+/// (K-371). The bundled library runs 4 to 18; a user `.lens` file with more
+/// elements than this keeps its own coating column on the rest, which is the
+/// same fallback an unset row takes.
+pub const MAX_COATING_ELEMENTS: usize = 20;
+
+/// One coating design: the layer stack, outermost first, and the wavelength
+/// its quarter waves are cut at.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoatingDesign {
+    /// `(refractive index, optical thickness in quarter waves)` per layer,
+    /// outermost first; a zero index ends the stack.
+    pub stack: [(f32, f32); MAX_COATING_LAYERS],
+    /// The wavelength the quarter waves are cut at, nm.
+    pub design_nm: f32,
+}
+
+/// The coating on one glass element (K-371), by palette index.
+///
+/// # In plain terms
+///
+/// Look at a real flare and the ghosts are not one colour: there will be a
+/// blue one, a purple one, a green one and an amber one in the same train.
+/// That is not stylisation — it is the lens. A coated surface reflects
+/// whatever its coating fails to suppress, and manufacturers cut different
+/// elements for different parts of the spectrum, so **each element's residual
+/// reflection has its own colour**. This palette is that choice, per element.
+///
+/// # Why these particular designs
+///
+/// An AR coating is a stack of quarter waves cut at some wavelength. The
+/// reflectance minimum sits there, so what the surface *does* reflect is the
+/// complement — and shifting the design wavelength is the honest way to get a
+/// differently coloured ghost, because it is what real coating runs differ in.
+/// Every entry here is a textbook design of its order (K-356: real recipes are
+/// manufacturer secrets and can only be measured), chosen by **measuring** the
+/// residual across 420–680 nm at normal incidence and keeping the ones that
+/// are both distinctly coloured and, like a real coating, dimmer than bare
+/// glass at every wavelength. Their measured band split (red/green/blue share
+/// of the reflected energy, bare crown glass being 0.04 flat) is:
+///
+/// | # | design | peak R | r / g / b |
+/// |---|---|---|---|
+/// | 1 | uncoated | 0.040 | flat |
+/// | 2 | MgF₂ quarter, 520 nm | 0.018 | 0.38 / 0.35 / 0.27 |
+/// | 3 | MgF₂ + Al₂O₃ quarters, 520 nm | 0.019 | 0.55 / 0.12 / 0.32 |
+/// | 4 | broadband W, 520 nm | 0.004 | 0.37 / 0.38 / 0.25 |
+/// | 5 | broadband W, 480 nm | 0.013 | 0.81 / 0.09 / 0.09 |
+/// | 6 | broadband W, 560 nm | 0.025 | 0.07 / 0.14 / 0.79 |
+///
+/// which is, in the words a person would use: straw, magenta, green, amber,
+/// blue. The stacks are written out rather than taken from
+/// [`coating_stack`]'s layer ladder, because that ladder's 2-, 4- and 6-layer
+/// rungs extend the W with extra quarter-wave pairs and **measure brighter
+/// than bare glass** (0.06 to 0.31 peak) — they are a plausible-looking
+/// extension rather than a real design. Nothing exercises them: every bundled
+/// prescription's coating column is 0 or 1.
+///
+/// `file_layers` is the prescription's own coating column, used by
+/// [`COATING_AS_FILE`] alone.
+#[must_use]
+pub fn coating_design(choice: u32, file_layers: f32) -> CoatingDesign {
+    let none = (0.0, 0.0);
+    let (stack, design_nm) = match choice {
+        // 1 — bare glass. Bright, neutral, uncoated: pre-war glass, and the
+        // reason old lenses flare white.
+        1 => ([none; MAX_COATING_LAYERS], COATING_DESIGN_NM),
+        // 2 — the classic single MgF₂ quarter wave: one broad shallow V, and
+        // the straw cast every coated lens of the 1950s shows.
+        2 => ([(MGF2_N, 1.0), none, none, none, none, none], 520.0),
+        // 3 — two quarters, MgF₂ over alumina: the deep magenta-purple bloom
+        // of a mid-century coated surface, seen head-on.
+        3 => (
+            [(MGF2_N, 1.0), (AL2O3_N, 1.0), none, none, none, none],
+            520.0,
+        ),
+        // 4 — the broadband W (quarter / half / quarter), cut in the green:
+        // two minima, the faintest residual of the set, and the green cast a
+        // modern multicoated surface throws.
+        5 => (
+            [
+                (MGF2_N, 1.0),
+                (ZRO2_N, 2.0),
+                (AL2O3_N, 1.0),
+                none,
+                none,
+                none,
+            ],
+            480.0,
+        ),
+        6 => (
+            [
+                (MGF2_N, 1.0),
+                (ZRO2_N, 2.0),
+                (AL2O3_N, 1.0),
+                none,
+                none,
+                none,
+            ],
+            560.0,
+        ),
+        4 => (
+            [
+                (MGF2_N, 1.0),
+                (ZRO2_N, 2.0),
+                (AL2O3_N, 1.0),
+                none,
+                none,
+                none,
+            ],
+            520.0,
+        ),
+        // 0 and anything unknown — the prescription's own column.
+        _ => (coating_stack(file_layers), COATING_DESIGN_NM),
+    };
+    CoatingDesign { stack, design_nm }
+}
+
+/// The parameter id of each element's coating row (K-371), element 0 first.
+/// Spelled out rather than formatted so the schema, the resolve step and the
+/// tests all name the same strings and a typo is a compile error.
+pub const COATING_ELEMENT_IDS: [&str; MAX_COATING_ELEMENTS] = [
+    "coating_el1",
+    "coating_el2",
+    "coating_el3",
+    "coating_el4",
+    "coating_el5",
+    "coating_el6",
+    "coating_el7",
+    "coating_el8",
+    "coating_el9",
+    "coating_el10",
+    "coating_el11",
+    "coating_el12",
+    "coating_el13",
+    "coating_el14",
+    "coating_el15",
+    "coating_el16",
+    "coating_el17",
+    "coating_el18",
+    "coating_el19",
+    "coating_el20",
+];
+
+/// How many glass elements each bundled lens has, in [`LENS_LIBRARY`] order
+/// (K-371) — what the panel turns each element row's threshold into.
+///
+/// Parsed rather than tabulated: the library is generated, and a hand-kept
+/// second table would be one import away from lying about it.
+#[must_use]
+pub fn library_element_counts() -> Vec<u32> {
+    LENS_LIBRARY
+        .iter()
+        .map(|l| {
+            parse_lens(l.text)
+                .map(|p| element_count(&p.surfaces) as u32)
+                .unwrap_or(0)
+        })
+        .collect()
+}
+
+/// Which lenses have at least `n` glass elements, as [`LENS_LIBRARY`] indices
+/// (K-371): the set an element row's group is shown for.
+#[must_use]
+pub fn lenses_with_at_least(n: u32) -> Vec<u32> {
+    library_element_counts()
+        .into_iter()
+        .enumerate()
+        .filter(|&(_, c)| c >= n)
+        .map(|(i, _)| i as u32)
+        .collect()
+}
+
+/// The palette's labels, in index order — the Choice options the per-element
+/// coating rows offer.
+pub const COATING_DESIGN_OPTIONS: &[&str] = &[
+    "As the lens file",
+    "Uncoated",
+    "Single layer, straw",
+    "Two layer, magenta",
+    "Broadband, green",
+    "Broadband, amber",
+    "Broadband, blue",
+];
+
+/// Which glass element each surface belongs to (K-371), parallel to
+/// `surfaces`; `−1` for a surface that bounds no glass (the aperture stop,
+/// and the last air gap).
+///
+/// # In plain terms
+///
+/// A `.lens` prescription is a list of *surfaces*, but what a person points at
+/// is a *piece of glass* — "the front element", "the rear group". A row whose
+/// medium is glass opens an element; the row after it closes that element.
+/// Elements are numbered front to back, which is how every lens diagram in
+/// every patent numbers them.
+///
+/// A cemented pair shares its middle surface. That surface has cement on it,
+/// not air, so it carries no anti-reflective coating in reality — it is
+/// assigned to the **earlier** element, whose choice therefore governs the
+/// pair's outer front face and the join, while the later element governs the
+/// join and its own rear face. The join is the one surface where the two
+/// choices meet, and it goes to whichever element reached it first; nothing
+/// about a cemented interface is visible enough to deserve a control of its
+/// own.
+#[must_use]
+pub fn surface_elements(surfaces: &[FlareSurface]) -> Vec<i32> {
+    let mut out = vec![-1_i32; surfaces.len()];
+    let mut element = -1_i32;
+    for (i, s) in surfaces.iter().enumerate() {
+        let glass_after = s.cauchy_a > 1.0001;
+        if glass_after {
+            // This row opens a new piece of glass.
+            element += 1;
+            out[i] = element;
+        } else if element >= 0 && i > 0 && surfaces[i - 1].cauchy_a > 1.0001 {
+            // …and this one closes the piece the row before opened.
+            out[i] = element;
+        }
+    }
+    out
+}
+
+/// How many glass elements a surface table has (K-371) — what the panel shows
+/// a coating row for.
+#[must_use]
+pub fn element_count(surfaces: &[FlareSurface]) -> usize {
+    surfaces.iter().filter(|s| s.cauchy_a > 1.0001).count()
+}
+
+/// Stamp each surface with the palette entry its element was set to (K-371).
+/// Surfaces belonging to no element, and elements past
+/// [`MAX_COATING_ELEMENTS`] or left at [`COATING_AS_FILE`], keep the
+/// prescription's own coating column.
+pub fn apply_element_coatings(surfaces: &mut [FlareSurface], choices: &[u32]) {
+    let elements = surface_elements(surfaces);
+    for (s, &element) in surfaces.iter_mut().zip(&elements) {
+        let choice = usize::try_from(element)
+            .ok()
+            .and_then(|e| choices.get(e).copied())
+            .unwrap_or(COATING_AS_FILE);
+        s.coating_design = choice.min(COATING_DESIGNS - 1) as f32;
+    }
+}
+
 /// Complex multiply, as `(re, im)` — the whole of the complex arithmetic the
 /// transfer matrix needs, spelled out rather than pulled in as a dependency.
 #[inline]
@@ -1065,9 +1336,10 @@ pub fn stack_reflectance(
     cos_i: f32,
     n1: f32,
     n2: f32,
-    stack: &[(f32, f32); MAX_COATING_LAYERS],
+    design: &CoatingDesign,
     lambda_nm: f32,
 ) -> f32 {
+    let stack = &design.stack;
     let cos_i = cos_i.abs().clamp(1e-6, 1.0);
     // Snell's invariant: n·sinθ is the same in every medium of the stack.
     let sin_i = n1 * (1.0 - cos_i * cos_i).max(0.0).sqrt();
@@ -1101,7 +1373,7 @@ pub fn stack_reflectance(
             };
             // Physical thickness from the optical one: `quarters` quarter
             // waves at the design wavelength.
-            let d_nm = quarters * COATING_DESIGN_NM / (4.0 * n);
+            let d_nm = quarters * design.design_nm.max(1.0) / (4.0 * n);
             let delta = 2.0 * std::f32::consts::PI * n * d_nm * cos_l / lambda_nm.max(1e-6);
             let eta = admittance(n, cos_l);
             let (cd, sd) = (delta.cos(), delta.sin());
@@ -1145,25 +1417,39 @@ pub fn stack_reflectance(
     (total * 0.5).clamp(0.0, 1.0)
 }
 
-/// Reflectance of one lens surface: uncoated Fresnel blended toward the
-/// prescription's AR coating by the Coating dial. `layers` is the .lens
-/// coating column, resolved to a real multi-layer design by
-/// [`coating_stack`] and evaluated by [`stack_reflectance`] (K-356,
-/// superseding the single-layer-times-a-quarter approximation).
+/// Reflectance of one lens surface: uncoated Fresnel blended toward that
+/// surface's AR coating by the Coating dial. The design comes from the
+/// surface's own [`FlareSurface::coating_design`] (K-371) — the element's
+/// palette choice, or the prescription's own column where the row is left as
+/// the file — resolved by [`coating_design`] and evaluated by
+/// [`stack_reflectance`] (K-356, superseding the single-layer-times-a-quarter
+/// approximation).
 pub fn surface_reflectance(
     cos_i: f32,
     n1: f32,
     n2: f32,
-    layers: f32,
+    design_choice: f32,
+    file_layers: f32,
     lambda_nm: f32,
     coating_mix: f32,
 ) -> f32 {
     let plain = fresnel_cos(cos_i, n1, n2);
-    if layers < 0.5 || coating_mix <= 0.0 {
+    if coating_mix <= 0.0 {
         return plain;
     }
-    let coated = stack_reflectance(cos_i, n1, n2, &coating_stack(layers), lambda_nm);
+    let design = coating_design(design_choice.round().max(0.0) as u32, file_layers);
+    if design.stack[0].0 <= 0.0 {
+        return plain;
+    }
+    let coated = stack_reflectance(cos_i, n1, n2, &design, lambda_nm);
     (plain + (coated - plain) * coating_mix.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+}
+
+/// One surface's resolved coating design (K-371) — the palette entry its
+/// element was set to, falling back to the prescription's own column.
+#[must_use]
+pub fn surface_design(s: &FlareSurface) -> CoatingDesign {
+    coating_design(s.coating_design.round().max(0.0) as u32, s.coating_layers)
 }
 
 /// Snell refraction in vector form: incidence `i` and normal `n` (opposing
@@ -1445,7 +1731,15 @@ pub fn trace_splat(
             .max((ray.pos[0] * ray.pos[0] + ray.pos[1] * ray.pos[1]) / (semi_r * semi_r));
         let n1 = ray.ior;
         let cos_i = (norm[0] * ray.dir[0] + norm[1] * ray.dir[1] + norm[2] * ray.dir[2]).abs();
-        let r = surface_reflectance(cos_i, n1, n2, s.coating_layers, lambda_nm, coating_mix);
+        let r = surface_reflectance(
+            cos_i,
+            n1,
+            n2,
+            s.coating_design,
+            s.coating_layers,
+            lambda_nm,
+            coating_mix,
+        );
         if reflect {
             ray.dir = reflect3(ray.dir, norm);
             ray.weight *= r;
@@ -2005,7 +2299,7 @@ pub fn frame_grid_needs_from_rows(
                 cauchy_b: r[4],
                 coating_layers: r[5],
                 is_stop: r[6],
-                _pad: 0.0,
+                coating_design: COATING_AS_FILE as f32,
             })
             .collect(),
         sensor_z_mm,
@@ -2090,6 +2384,11 @@ pub fn bake_key_with(p: &LensFlareParams, lens_text_hash: Option<u64>) -> u64 {
     fold(p.aperture_rotation_deg.to_bits() as u64);
     fold(p.roundness.to_bits() as u64);
     fold(p.aperture_softness.to_bits() as u64);
+    // The per-element coatings (K-371): a bake input, since the reflectance
+    // table is built from them.
+    for c in p.coating_elements {
+        fold(u64::from(c));
+    }
     if let Some(text_hash) = lens_text_hash {
         fold(1);
         fold(text_hash);
@@ -2505,10 +2804,11 @@ fn four_bounce_candidates(
                 cauchy_ior(surfs[i - 1].cauchy_a, surfs[i - 1].cauchy_b, 550.0)
             };
             let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, 550.0);
-            if s.coating_layers < 0.5 {
+            let design = surface_design(s);
+            if design.stack[0].0 <= 0.0 {
                 fresnel_cos(1.0, n1, n2)
             } else {
-                stack_reflectance(1.0, n1, n2, &coating_stack(s.coating_layers), 550.0)
+                stack_reflectance(1.0, n1, n2, &design, 550.0)
             }
         })
         .collect();
@@ -2591,7 +2891,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
                     cauchy_b: 0.004,
                     coating_layers: 0.0,
                     is_stop: 0.0,
-                    _pad: 0.0,
+                    coating_design: COATING_AS_FILE as f32,
                 },
                 FlareSurface {
                     radius_mm: 0.0,
@@ -2601,7 +2901,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
                     cauchy_b: 0.0,
                     coating_layers: 0.0,
                     is_stop: 1.0,
-                    _pad: 0.0,
+                    coating_design: COATING_AS_FILE as f32,
                 },
                 FlareSurface {
                     radius_mm: -50.0,
@@ -2611,11 +2911,17 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
                     cauchy_b: 0.0,
                     coating_layers: 0.0,
                     is_stop: 0.0,
-                    _pad: 0.0,
+                    coating_design: COATING_AS_FILE as f32,
                 },
             ],
             sensor_z_mm: 55.0,
         });
+    let mut lens = lens;
+    // The per-element coatings are a bake input (K-371): they change what
+    // every surface reflects, so they are resolved into the surface table
+    // before the reflectance table is built from it, and `bake_key` folds
+    // them in so a change here rebakes exactly as a lens change does.
+    apply_element_coatings(&mut lens.surfaces, &p.coating_elements);
     let front_semi_ap = lens.surfaces[0].semi_ap_mm;
     let native_fstop = if entry_native > 0.0 {
         entry_native
@@ -2808,6 +3114,10 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     // the mean to the target. Deterministic, and a few milliseconds.
     baked.energy_gain = 1.0;
     let probe_frame = LensFlareParams {
+        // The element coatings are already resolved into the surface table,
+        // so the probe's own copy is inert — but it is a bake-key input, and
+        // carrying the real one keeps "the probe sees the baked lens" true.
+        coating_elements: p.coating_elements,
         // Raster pixels of the 96×54 thumbnail (the 0.33/0.30 framing).
         light: [31.7, 16.2],
         // The probe is always one Manual point, whatever the frame's source
@@ -3033,7 +3343,8 @@ fn bake_reflectance(surfs: &[FlareSurface]) -> Vec<f32> {
     let step = (cie::LAMBDA_MAX - cie::LAMBDA_MIN) / (REFL_LAMBDA_BINS - 1) as f32;
     let mut out = vec![0.0_f32; surfs.len() * 2 * REFL_LAMBDA_BINS * REFL_COS_BINS];
     for (si, s) in surfs.iter().enumerate() {
-        let stack = coating_stack(s.coating_layers);
+        let design = surface_design(s);
+        let bare = design.stack[0].0 <= 0.0;
         for dir in 0..2usize {
             for li in 0..REFL_LAMBDA_BINS {
                 let nm = cie::LAMBDA_MIN + step * li as f32;
@@ -3050,10 +3361,10 @@ fn bake_reflectance(surfs: &[FlareSurface]) -> Vec<f32> {
                 };
                 for ci in 0..REFL_COS_BINS {
                     let cos_i = (ci as f32 + 0.5) / REFL_COS_BINS as f32;
-                    let r = if s.coating_layers < 0.5 {
+                    let r = if bare {
                         fresnel_cos(cos_i, n1, n2)
                     } else {
-                        stack_reflectance(cos_i, n1, n2, &stack, nm)
+                        stack_reflectance(cos_i, n1, n2, &design, nm)
                     };
                     out[((si * 2 + dir) * REFL_LAMBDA_BINS + li) * REFL_COS_BINS + ci] = r;
                 }

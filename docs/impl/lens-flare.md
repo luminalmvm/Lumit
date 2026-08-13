@@ -479,6 +479,39 @@ their spacing goes as `√λ`, so ±15% across the visible band, far under the b
 already averaged by), and they are uniform round the rim, which is right along a blade and
 wrong at a corner where two edges' diffraction would add. Both are the recorded upgrade path.
 
+### 5c. Coatings are chosen per glass element (K-356, extended K-371)
+
+K-356 made a surface's reflectance a real multi-layer stack by transfer matrix. K-371 makes
+the *choice of stack* the user's, per element.
+
+**Elements from surfaces.** `surface_elements` walks the prescription: a row whose medium is
+glass opens an element, the row after closes it, numbering front to back. A cemented pair's
+shared surface goes to the earlier element — it has cement on it, not air, so it carries no
+AR coating in reality. `element_count` is the total, 4 (Tessar) to 18 (Canon 70-200) across
+the bundled library.
+
+**The palette** (`coating_design`) is seven entries: "As the lens file" (the default, and
+byte-for-byte the pre-K-371 picture), uncoated, and five real designs whose residual
+reflection was **measured** across 420–680 nm and kept only where it is both distinctly
+coloured and dimmer than bare glass. They read as straw, magenta, green, amber and blue —
+which is the mechanism behind a blue ghost sitting next to an amber one. The stacks are
+written out rather than taken from `coating_stack`'s layer ladder: that ladder's 2-, 4- and
+6-layer rungs measure 0.06 to 0.31 peak against bare glass's 0.04, so they are brighter than
+no coating at all. Nothing exercises them (every bundled column is 0 or 1) and the palette
+avoids them; correcting the ladder is its own change.
+
+**It is a bake input.** `apply_element_coatings` stamps each surface's resolved design into
+the row's former padding slot before `bake_reflectance` reads it, and `bake_key` folds the
+choices in — so a coating change rebakes exactly as a lens change does, and the WGSL mirror's
+stride is unchanged. The shader only ever reads the baked table and needs no change.
+
+**The row count follows the lens** without teaching the frontend any optics. Twenty rows are
+declared — the ceiling — each its own single-member group carrying
+`visible_when_lens_elements`. The bridge turns that threshold into the visibility rule the
+panel already has: sibling `lens`, values being the library indices with enough elements.
+Recorded limit: a user `.lens` file overrides the dropdown, so the rows offered then follow
+the picked lens; an element with no row keeps the file's own coating.
+
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)
 with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). The gain ceiling is

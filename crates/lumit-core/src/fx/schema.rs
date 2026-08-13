@@ -215,6 +215,27 @@ pub struct ParamGroup {
     /// type: its matte rows answer to Matte alone, its source-colour toggle
     /// to Matte *and* Lights). None, or an empty set, is always visible.
     pub visible_when: Option<(&'static str, &'static [u32])>,
+    /// When set, the group is shown only while the lens in play has at least
+    /// this many glass elements (K-371).
+    ///
+    /// The Lens flare offers a coating choice per element, and lenses have
+    /// between four and eighteen of them, so the row count has to follow the
+    /// lens rather than being fixed by the schema. Each element's row is its
+    /// own single-member group carrying its own threshold, and the effect
+    /// draws exactly as many as the chosen lens has.
+    ///
+    /// **It never crosses the bridge as itself.** A group's visibility is
+    /// already resolved in the panel from a live sibling value, so the bridge
+    /// turns this into precisely that: the sibling is the Lens dropdown and
+    /// the values are the lens indices whose prescription has at least this
+    /// many elements, worked out from the library at the time the panel asks.
+    /// One mechanism in the frontend, not two.
+    ///
+    /// Recorded limit: a user's own `.lens` file overrides the dropdown, and
+    /// only the file knows its element count, so the rows offered then follow
+    /// the *picked* lens. An element with no row keeps the file's own coating,
+    /// which is what an untouched row does anyway.
+    pub visible_when_lens_elements: Option<u32>,
 }
 
 /// One parameter's availability depending on another's value: the greyed-out

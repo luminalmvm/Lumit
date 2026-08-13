@@ -50,12 +50,14 @@ const SHAKE_GROUPS: &[ParamGroup] = &[
         params: &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"],
         collapsed: true,
         visible_when: None,
+        visible_when_lens_elements: None,
     },
     ParamGroup {
         label: "Motion blur",
         params: &["motion_blur", "mb_amount"],
         collapsed: true,
         visible_when: None,
+        visible_when_lens_elements: None,
     },
 ];
 
@@ -387,18 +389,21 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["glow_size", "glow_intensity"],
                 collapsed: false,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 label: "Ghosts",
                 params: &["ghosts", "ghost_spacing", "ghost_size", "ghost_intensity"],
                 collapsed: false,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 label: "Streak",
                 params: &["streak_length", "streak_intensity", "streak_angle"],
                 collapsed: false,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
         ],
         enabled_when: &[],
@@ -1483,12 +1488,14 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["blades", "roundness", "rotation", "aspect", "rim"],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 label: "Highlights",
                 params: &["threshold", "exposure"],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 // How the depth pass is READ — which number in it is depth,
@@ -1504,6 +1511,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
         ],
         // The greyed rows: which of two controls is in charge, said in the
@@ -2944,6 +2952,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             ],
             collapsed: true,
             visible_when: None,
+            visible_when_lens_elements: None,
         }],
         enabled_when: &[],
         match_name: "matte_key",
@@ -3196,6 +3205,150 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
+            },
+            // One coating row per glass element (K-371), each headerless and
+            // drawn only when the lens in play has that element: four rows on
+            // the Tessar, eighteen on the Canon 70-200.
+            ParamGroup {
+                label: "",
+                params: &["coating_el1"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(1),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el2"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(2),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el3"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(3),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el4"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(4),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el5"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(5),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el6"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(6),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el7"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(7),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el8"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(8),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el9"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(9),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el10"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(10),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el11"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(11),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el12"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(12),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el13"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(13),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el14"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(14),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el15"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(15),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el16"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(16),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el17"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(17),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el18"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(18),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el19"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(19),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el20"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(20),
             },
             ParamGroup {
                 label: "Flare options",
@@ -3210,6 +3363,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             // The source-colour toggle: headerless, and shown for BOTH the
             // source modes that HAVE a source colour to take (Matte, and
@@ -3219,6 +3373,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["use_source_colour"],
                 collapsed: false,
                 visible_when: Some(("source_type", &[1, 2])),
+                visible_when_lens_elements: None,
             },
             // The matte rows: headerless (empty label renders them in place,
             // no twirl), shown only while Source type is Matte.
@@ -3227,6 +3382,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["matte", "threshold", "threshold_softness"],
                 collapsed: false,
                 visible_when: Some(("source_type", &[1])),
+                visible_when_lens_elements: None,
             },
         ],
         enabled_when: &[],
@@ -3418,6 +3574,192 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 0.05,
                     slider: (0.0, 1.0),
                     hard: (Some(0.0), Some(1.0)),
+                },
+            },
+            // The per-element coatings (K-371): one row per glass element,
+            // each choosing a real AR design. Twenty is the schema's ceiling;
+            // each row's own group says how many elements a lens must have
+            // for it to be drawn, so the panel offers exactly as many as the
+            // lens does. Left "As the lens file" — the default — a row
+            // changes nothing at all.
+            ParamSchema {
+                id: "coating_el1",
+                label: "Element 1",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el2",
+                label: "Element 2",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el3",
+                label: "Element 3",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el4",
+                label: "Element 4",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el5",
+                label: "Element 5",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el6",
+                label: "Element 6",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el7",
+                label: "Element 7",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el8",
+                label: "Element 8",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el9",
+                label: "Element 9",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el10",
+                label: "Element 10",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el11",
+                label: "Element 11",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el12",
+                label: "Element 12",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el13",
+                label: "Element 13",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el14",
+                label: "Element 14",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el15",
+                label: "Element 15",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el16",
+                label: "Element 16",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el17",
+                label: "Element 17",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el18",
+                label: "Element 18",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el19",
+                label: "Element 19",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el20",
+                label: "Element 20",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
                 },
             },
             // --- Flare options group ---

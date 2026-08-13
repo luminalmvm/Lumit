@@ -616,6 +616,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the *edge* alone, which is exact at the scales real ghosts actually have, costs
   nothing, and cannot touch the middle of a ghost at all — the interior is flat
   by construction now, not by luck.
+  **Every element gets its own coating.** Look at a photograph of a real flare
+  and the ghosts are not one colour: there is a blue one next to a purple one
+  next to an amber one. That is the lens, not an effect. A coating works by
+  cancelling reflections at some wavelength, so what the surface still reflects
+  is the *opposite* colour — cancel the green and you see magenta come back — and
+  a lens maker does not cut every element the same. Lumit therefore offers a
+  coating choice per piece of glass in the lens, and it shows exactly as many
+  rows as that lens has pieces: four for a Tessar, eighteen for a 70-200 zoom.
+  Each choice is a real coating design of its kind, and the colours in the menu
+  are not names somebody liked — they were measured off the maths, across the
+  visible spectrum, and only designs that come out both distinctly coloured and
+  dimmer than bare glass (as a real coating must be) made it in. Leaving a row
+  at "As the lens file" changes nothing, which is where they all start.
   One honest consequence: a big soft ghost's rings are so fine that the effect
   cannot draw them without them turning into a moiré pattern, so it doesn't try —
   it draws their average, which is a plain soft edge. Tight bright ghosts, which

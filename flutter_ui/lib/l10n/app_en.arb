@@ -801,6 +801,114 @@
   "@fxCoating": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxElement1": "Element 1",
+  "@fxElement1": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement2": "Element 2",
+  "@fxElement2": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement3": "Element 3",
+  "@fxElement3": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement4": "Element 4",
+  "@fxElement4": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement5": "Element 5",
+  "@fxElement5": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement6": "Element 6",
+  "@fxElement6": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement7": "Element 7",
+  "@fxElement7": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement8": "Element 8",
+  "@fxElement8": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement9": "Element 9",
+  "@fxElement9": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement10": "Element 10",
+  "@fxElement10": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement11": "Element 11",
+  "@fxElement11": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement12": "Element 12",
+  "@fxElement12": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement13": "Element 13",
+  "@fxElement13": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement14": "Element 14",
+  "@fxElement14": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement15": "Element 15",
+  "@fxElement15": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement16": "Element 16",
+  "@fxElement16": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement17": "Element 17",
+  "@fxElement17": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement18": "Element 18",
+  "@fxElement18": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement19": "Element 19",
+  "@fxElement19": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement20": "Element 20",
+  "@fxElement20": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxCoatingAsFile": "As the lens file",
+  "@fxCoatingAsFile": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingUncoated": "Uncoated",
+  "@fxCoatingUncoated": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingSingleStraw": "Single layer, straw",
+  "@fxCoatingSingleStraw": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingTwoMagenta": "Two layer, magenta",
+  "@fxCoatingTwoMagenta": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadGreen": "Broadband, green",
+  "@fxCoatingBroadGreen": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadAmber": "Broadband, amber",
+  "@fxCoatingBroadAmber": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadBlue": "Broadband, blue",
+  "@fxCoatingBroadBlue": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
   "fxColour": "Colour",
   "@fxColour": {
     "description": "Effect controls — a control on Flash."

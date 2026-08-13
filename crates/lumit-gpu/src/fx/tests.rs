@@ -3142,6 +3142,9 @@ fn max_blades_matches_the_core_constant() {
 /// The documented drop-on defaults (docs/08 §3.27) as a resolved bundle.
 fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
     lumit_core::fx::lens_flare::LensFlareParams {
+        // Every element left as the lens file describes it (K-371).
+        coating_elements: [lumit_core::fx::lens_flare::COATING_AS_FILE;
+            lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS],
         // Raster pixels of a 192×108 probe framing (K-260).
         light: [63.4, 32.4],
         // A point source, as the effect has always defaulted to, and no

@@ -9210,3 +9210,78 @@ and wrong at a corner, where two edges' diffraction would add. Neither is worth 
 per-ray arithmetic; both are the recorded upgrade path if a corner ever shows.
 
 **Existing projects' ghost edges change, so the effect's version goes 10 → 11.**
+
+## K-371 — A coating is chosen per glass element, from a measured palette, and the panel offers one row per element the lens has
+
+**DECIDED** (2026-08-13). Extends [K-356](#k-356) (multi-layer coatings by transfer matrix) rather than replacing it: the maths is untouched, what changes is who chooses the design.
+
+**Why.** Owner: "Irl lens flares can have very different colours for different
+ghosts. For instance it feels quite common seeing blue, purple, green and orange ghosts all
+in the same flare. So it'd be nice to be able to change the coating per glass lens in the
+lens, changing the number of them depending on lens used." That is right, and it is the
+lens, not stylisation: a coated surface reflects whatever its coating fails to suppress, and
+a manufacturer cuts different elements for different parts of the spectrum. Until now the
+whole prescription took its coating from the `.lens` file's own column and a single global
+Coating dial, so every ghost in a train was tinted by the same design.
+
+**The element model.** A `.lens` prescription is a list of *surfaces*, but what a person
+points at is a piece of glass. A row whose medium is glass opens an element; the row after
+closes it; elements number front to back, as every patent diagram does. A cemented pair's
+shared surface has cement on it rather than air, so it carries no AR coating in reality —
+it goes to the **earlier** element, and nothing about a cemented interface deserves a
+control of its own. `surface_elements` is that walk and `element_count` its total; the
+bundled library runs 4 elements (Tessar) to 18 (Canon 70-200).
+
+**The palette is measured, not asserted.** Each entry is a textbook design of its order —
+real recipes are manufacturer secrets (K-356) — and the residual was measured across
+420–680 nm at normal incidence, keeping only designs that are both distinctly coloured and,
+as a real coating is, dimmer than bare glass everywhere. Band split of the reflected energy,
+against bare crown glass at a flat 0.04:
+
+| # | design | peak R | r / g / b | reads as |
+|---|---|---|---|---|
+| 1 | uncoated | 0.040 | flat | bright neutral |
+| 2 | MgF₂ quarter, 520 nm | 0.018 | 0.38 / 0.35 / 0.27 | straw |
+| 3 | MgF₂ + Al₂O₃ quarters, 520 nm | 0.019 | 0.55 / 0.12 / 0.32 | magenta |
+| 4 | broadband W, 520 nm | 0.004 | 0.37 / 0.38 / 0.25 | green, faintest |
+| 5 | broadband W, 480 nm | 0.013 | 0.81 / 0.09 / 0.09 | amber |
+| 6 | broadband W, 560 nm | 0.025 | 0.07 / 0.14 / 0.79 | blue |
+
+Entry 0 is "As the lens file" and is the default, so an untouched panel bakes byte-for-byte
+the picture it always did.
+
+**A finding worth recording.** The palette writes its stacks out rather than reading
+K-356's `coating_stack` layer ladder, because that ladder's 2-, 4- and 6-layer rungs —
+"the same W with extra quarter-wave pairs beneath, broadening it further and lowering the
+mean" — measure **0.06 to 0.31 peak reflectance, brighter than bare glass**. They are a
+plausible-looking extension, not a real design. Nothing exercises them today: every bundled
+prescription's coating column is 0 or 1, and the palette avoids them. Correcting the ladder
+itself is left as its own change with its own measurements.
+
+**It is a bake input.** The per-element choices resolve into the surface table before the
+reflectance table is built from it, and `bake_key` folds them in, so changing one rebakes
+exactly as changing the lens does — 0.2 s release. The resolved design rides in the surface
+row's former padding slot, so the WGSL mirror's stride is unchanged and the shader, which
+only ever reads the baked table, needs no change at all.
+
+**How the row count follows the lens, without a new frontend mechanism.** The schema
+declares twenty rows — the ceiling — each in its own single-member group carrying
+`visible_when_lens_elements`. That field never crosses the bridge as itself: group
+visibility is *already* resolved in the panel from a live sibling value, so
+`list_parameter_groups` turns each threshold into exactly that shape — the sibling is the
+Lens dropdown, the values are the lenses whose prescription has enough elements. The panel
+implements one visibility rule, not two, and learns nothing about optics. A four-element
+Tessar draws four rows; the Canon 70-200 draws eighteen.
+
+**Recorded limit.** A user's own `.lens` file overrides the Lens dropdown, and only the file
+knows its element count, so the rows offered then follow the *picked* lens. An element with
+no row keeps the file's own coating, which is what an untouched row does anyway. Lifting it
+needs a per-instance schema query, which the effect-schema seam does not have and which is
+not worth inventing for one control.
+
+**No version bump.** Every row defaults to "As the lens file", so an existing project's
+picture is unchanged, and the effect's stored values gain rows that read as their default
+when absent.
+
+**New strings — a Crowdin upload is owed**: the twenty `fxElement1…fxElement20` row labels
+and the seven `fxCoating*` palette options.

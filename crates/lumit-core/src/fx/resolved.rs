@@ -1469,6 +1469,18 @@ fn resolve_one(
             let max_ghosts = (fl("max_ghosts").unwrap_or(60.0).round() as i64).clamp(0, 200);
             let dispersion = (fl("dispersion").unwrap_or(1.0) as f32).max(0.0);
             let coating = (fl("coating").unwrap_or(0.75) as f32).clamp(0.0, 1.0);
+            // The per-element coatings (K-371): one Choice row per glass
+            // element, `coating_el1` upwards. A row the panel never showed
+            // (this lens has fewer elements) reads its default and leaves the
+            // prescription's own column alone, so an unset row and a missing
+            // row are the same thing.
+            let mut coating_elements = [crate::fx::lens_flare::COATING_AS_FILE;
+                crate::fx::lens_flare::MAX_COATING_ELEMENTS];
+            for (i, slot) in coating_elements.iter_mut().enumerate() {
+                let id = crate::fx::lens_flare::COATING_ELEMENT_IDS[i];
+                *slot = (fl(id).unwrap_or(0.0).round().max(0.0) as u32)
+                    .min(crate::fx::lens_flare::COATING_DESIGNS - 1);
+            }
             let sb_intensity = (fl("starburst_intensity").unwrap_or(1.0) as f32).max(0.0);
             let scale = (fl("scale").unwrap_or(1.0) as f32).clamp(0.05, 20.0);
             let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
@@ -1517,6 +1529,7 @@ fn resolve_one(
                     aperture_rotation_deg: aperture_rotation,
                     roundness,
                     aperture_softness,
+                    coating_elements,
                     ghost_intensity,
                     ghost_softness,
                     max_ghosts: max_ghosts as u32,

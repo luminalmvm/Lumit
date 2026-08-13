@@ -4816,8 +4816,8 @@ fn lens_flare_optics_match_the_textbook() {
     // so a stack comparison there measures a coincidence rather than a
     // coating. n = 1.5 is the honest case and the common one.
     let plain = fresnel_cos(1.0, 1.0, 1.5);
-    let one = surface_reflectance(1.0, 1.0, 1.5, 1.0, 550.0, 1.0);
-    let three = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 1.0);
+    let one = surface_reflectance(1.0, 1.0, 1.5, 0.0, 1.0, 550.0, 1.0);
+    let three = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
     assert!(one < plain, "coated {one} should be below bare {plain}");
     assert!(
         three < one,
@@ -4830,7 +4830,7 @@ fn lens_flare_optics_match_the_textbook() {
     // more than others. The old single-number model could not do this.
     let across: Vec<f32> = [430.0f32, 500.0, 550.0, 620.0, 680.0]
         .iter()
-        .map(|&nm| surface_reflectance(1.0, 1.0, 1.5, 3.0, nm, 1.0))
+        .map(|&nm| surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, nm, 1.0))
         .collect();
     let lo = across.iter().copied().fold(f32::MAX, f32::min);
     let hi = across.iter().copied().fold(0.0f32, f32::max);
@@ -4843,8 +4843,8 @@ fn lens_flare_optics_match_the_textbook() {
     // thickness carries a cos θ — which is the observed effect that a ghost
     // changes hue as its source moves off axis. Steeply off-axis, the band
     // has moved enough that the design wavelength is no longer the minimum.
-    let straight = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 1.0);
-    let oblique = surface_reflectance(0.6, 1.0, 1.5, 3.0, 550.0, 1.0);
+    let straight = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
+    let oblique = surface_reflectance(0.6, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
     assert!(
         oblique > straight * 1.5,
         "the coating must vary with angle: {oblique} at 53° vs {straight} \
@@ -4852,13 +4852,13 @@ fn lens_flare_optics_match_the_textbook() {
     );
 
     // The Coating dial at 0 is bare glass regardless of the file layers.
-    let off = surface_reflectance(1.0, 1.0, 1.5, 3.0, 550.0, 0.0);
+    let off = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 0.0);
     assert!((off - plain).abs() < 1e-6);
 
     // A bare stack (0 layers) is exactly the uncoated interface, and the
     // transfer matrix agrees with plain Fresnel there — the degenerate case
     // that proves the chain closes correctly.
-    let empty = stack_reflectance(1.0, 1.0, 1.5, &coating_stack(0.0), 550.0);
+    let empty = stack_reflectance(1.0, 1.0, 1.5, &coating_design(0, 0.0), 550.0);
     assert!(
         (empty - plain).abs() < 1e-5,
         "an empty stack {empty} must equal bare Fresnel {plain}"
@@ -5130,6 +5130,167 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         .spreads
         .iter()
         .all(|&s| ghost_fresnel_number(s, baked.native_fstop) > 0.0));
+}
+
+/// **A coating is per glass element, and different coatings make differently
+/// coloured ghosts** (K-371).
+///
+/// A real flare shows a blue ghost beside a purple one beside an amber one,
+/// because a lens's elements are not all coated alike and what a coated
+/// surface reflects is the complement of what its coating suppresses. The
+/// palette is that choice, per element; this pins the mapping from element to
+/// surface, the colour separation the palette actually produces, and that
+/// leaving every row alone is byte-for-byte the picture before it existed.
+#[test]
+fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
+    use crate::fx::lens_flare::*;
+    let p = default_flare_params();
+
+    // The element mapping, on a lens whose own header states the answer: the
+    // Tessar is four elements over eight surfaces.
+    let tessar = parse_lens(include_str!(
+        "../../lens_files/Zeiss_100mm_F4.5_Tessar.lens"
+    ))
+    .expect("the bundled Tessar parses");
+    assert_eq!(element_count(&tessar.surfaces), 4);
+    let elements = surface_elements(&tessar.surfaces);
+    assert_eq!(elements.len(), tessar.surfaces.len());
+    // Element 0 is the front piece of glass: its own row opens it, the row
+    // after closes it. The aperture stop belongs to no element.
+    assert_eq!(elements[0], 0);
+    assert_eq!(elements[1], 0);
+    assert_eq!(elements[2], 1);
+    assert_eq!(elements[3], 1);
+    assert_eq!(elements[4], -1, "the stop bounds no glass");
+    // The cemented pair: the join goes to the earlier element, which is the
+    // documented rule.
+    assert_eq!(elements[5], 2);
+    assert_eq!(elements[6], 3);
+    assert_eq!(elements[7], 3);
+    // Elements are numbered front to back, contiguously, with no gaps.
+    let seen: Vec<i32> = elements.iter().copied().filter(|&e| e >= 0).collect();
+    assert!(seen.windows(2).all(|w| w[1] == w[0] || w[1] == w[0] + 1));
+
+    // Every bundled lens reports a sane element count, and the library
+    // spans the range the schema's twenty rows have to cover.
+    let counts = library_element_counts();
+    assert_eq!(counts.len(), 20);
+    assert!(counts
+        .iter()
+        .all(|&c| (3..=MAX_COATING_ELEMENTS as u32).contains(&c)));
+    let (lo, hi) = (
+        *counts.iter().min().expect("a library"),
+        *counts.iter().max().expect("a library"),
+    );
+    assert!(lo <= 5 && hi >= 16, "counts run {lo}..{hi}");
+    // The row thresholds: every lens has a first element, and the deepest
+    // rows belong to the few big zooms alone.
+    assert_eq!(lenses_with_at_least(1).len(), 20);
+    assert!(!lenses_with_at_least(hi).is_empty());
+    assert!(lenses_with_at_least(MAX_COATING_ELEMENTS as u32 + 1).is_empty());
+
+    // **Stamping.** An element's choice reaches both of its surfaces, and a
+    // surface belonging to no element is left as the file describes it.
+    let mut surfaces = tessar.surfaces.clone();
+    let mut choices = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
+    choices[1] = 4;
+    apply_element_coatings(&mut surfaces, &choices);
+    assert_eq!(surfaces[2].coating_design, 4.0);
+    assert_eq!(surfaces[3].coating_design, 4.0);
+    assert_eq!(surfaces[0].coating_design, COATING_AS_FILE as f32);
+    assert_eq!(surfaces[4].coating_design, COATING_AS_FILE as f32);
+    // An out-of-range palette index is clamped rather than indexing nothing.
+    let mut wild = tessar.surfaces.clone();
+    let mut mad = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
+    mad[0] = 9999;
+    apply_element_coatings(&mut wild, &mad);
+    assert_eq!(wild[0].coating_design, (COATING_DESIGNS - 1) as f32);
+
+    // **The palette really does separate colours.** Each design's residual
+    // reflection is measured at normal incidence across the visible band and
+    // reduced to the wavelength it reflects most. Real coatings differ in
+    // where their minimum sits, so the peaks must land in different parts of
+    // the spectrum — that is the whole mechanism behind a blue ghost sitting
+    // beside an amber one.
+    let peak_nm = |choice: u32| -> f32 {
+        let mut best = (0.0_f32, 550.0_f32);
+        let mut nm = 420.0_f32;
+        while nm <= 680.0 {
+            let r = surface_reflectance(1.0, 1.0, 1.5, choice as f32, 1.0, nm, 1.0);
+            if r > best.0 {
+                best = (r, nm);
+            }
+            nm += 2.0;
+        }
+        best.1
+    };
+    let blue = peak_nm(3);
+    let green = peak_nm(4);
+    let amber = peak_nm(5);
+    assert!(
+        blue < 500.0,
+        "the blue-residual design must reflect short, peaks at {blue}"
+    );
+    assert!(
+        amber > 600.0,
+        "the amber-residual design must reflect long, peaks at {amber}"
+    );
+    assert!(
+        (blue - amber).abs() > 120.0,
+        "two designs must be plainly different colours: {blue} vs {amber}"
+    );
+    let _ = green;
+
+    // Uncoated is brighter than any coating, at every wavelength tried.
+    for nm in [450.0_f32, 550.0, 650.0] {
+        let bare = surface_reflectance(1.0, 1.0, 1.5, 1.0, 1.0, nm, 1.0);
+        for design in 2..COATING_DESIGNS {
+            let coated = surface_reflectance(1.0, 1.0, 1.5, design as f32, 1.0, nm, 1.0);
+            assert!(
+                coated < bare,
+                "design {design} at {nm} nm reflects {coated}, more than bare {bare}"
+            );
+        }
+    }
+
+    // The Coating dial still governs everything: at 0 every design is bare
+    // glass, whatever the element rows say.
+    let plain = fresnel_cos(1.0, 1.0, 1.5);
+    for design in 0..COATING_DESIGNS {
+        let off = surface_reflectance(1.0, 1.0, 1.5, design as f32, 3.0, 550.0, 0.0);
+        assert!((off - plain).abs() < 1e-6, "design {design} at Coating 0");
+    }
+
+    // **An untouched panel changes nothing.** Every row at "As the lens file"
+    // must bake byte-for-byte the surfaces the prescription describes.
+    let mut untouched = tessar.surfaces.clone();
+    apply_element_coatings(&mut untouched, &[COATING_AS_FILE; MAX_COATING_ELEMENTS]);
+    for (a, b) in untouched.iter().zip(&tessar.surfaces) {
+        assert_eq!(a.coating_layers, b.coating_layers);
+        assert_eq!(a.coating_design, COATING_AS_FILE as f32);
+    }
+
+    // …and it is a BAKE input, so changing one rebakes rather than quietly
+    // serving the previous lens's optics.
+    let base = bake_key(&p);
+    let mut changed = p;
+    changed.coating_elements[0] = 5;
+    assert_ne!(base, bake_key(&changed), "an element coating must rebake");
+    let mut deeper = p;
+    deeper.coating_elements[MAX_COATING_ELEMENTS - 1] = 2;
+    assert_ne!(base, bake_key(&deeper), "the last row counts too");
+
+    // And the bake really does answer differently: uncoating the front
+    // element brightens the ghosts it takes part in.
+    let mut uncoated_front = p;
+    uncoated_front.coating_elements[0] = 1;
+    let a = bake(&p);
+    let b = bake(&uncoated_front);
+    assert_eq!(a.surfaces.len(), b.surfaces.len());
+    assert_ne!(
+        a.reflectance, b.reflectance,
+        "the reflectance table must follow the element rows"
+    );
 }
 
 /// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the
@@ -6304,6 +6465,10 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
 /// The documented drop-on defaults, shared by the lens flare tests.
 fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     crate::fx::lens_flare::LensFlareParams {
+        // Every element left as the lens file describes it (K-371) — the
+        // drop-on default, and byte-for-byte the pre-K-371 picture.
+        coating_elements: [crate::fx::lens_flare::COATING_AS_FILE;
+            crate::fx::lens_flare::MAX_COATING_ELEMENTS],
         // Raster pixels (K-260): tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
