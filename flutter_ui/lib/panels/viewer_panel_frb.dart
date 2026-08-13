@@ -2045,9 +2045,7 @@ class _BackgroundSwatch extends StatelessWidget {
             // Chosen as a display colour, like a solid's, so the fields read
             // 0–255 rather than scene-linear floats.
             scale: ColourScale.bytes,
-            // Black and white are what this control is reached for nine times
-            // in ten, so they are one click rather than a trip round the wheel.
-            presets: const [Color(0xFF000000), Color(0xFFFFFFFF)],
+            presets: t.backgroundPresets,
             onCommit: (picked) {
               try {
                 comp.setBackground(

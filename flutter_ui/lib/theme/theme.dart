@@ -757,6 +757,18 @@ class LumitTheme {
 
   /// The dimmed backdrop behind a true modal (Settings, the palette).
   Color get modalBackdrop => const Color(0x59000000);
+
+  /// The one-click presets on the comp background swatch.
+  ///
+  /// These are **content**, not chrome: a comp background of black must be
+  /// exactly black in a light theme as in a dark one, so unlike every other
+  /// entry here they are the same in every scheme and are deliberately not
+  /// mode-mirrored. They live in the theme all the same, because that is where
+  /// colour values live (docs/15-DESIGN.md §4.1) — and black and white are what
+  /// that control is reached for nine times in ten, so they are one click
+  /// rather than a trip round the wheel.
+  List<Color> get backgroundPresets =>
+      const [Color(0xFF000000), Color(0xFFFFFFFF)];
 }
 
 /// A colour that comes from the *document* (a solid's swatch, a comp
