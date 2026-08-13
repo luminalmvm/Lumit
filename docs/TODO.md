@@ -620,6 +620,29 @@ Recorded so they are not re-proposed as gaps:
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
     longer match (`state/workspace.dart`).
+- **The padded-anamorphic flare oracle has a standing 1.2% energy gap.**
+    `wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge` asserts the GPU
+    and CPU frames agree in total energy to within 1%, and the GPU comes in low.
+    It is **not** a K-370 regression: the same test failed at **0.9852** on the
+    flare-accuracy branch head (a9ee807, run 31641836700) before any of that work,
+    and K-370 moved it to **0.9876**. The claim in PR #96 that it passed was wrong.
+    What is known, from the diagnostic the test now prints on every run:
+    - the shortfall is **diffuse**, not clipped: the worst single sample differs by
+      0.0033 and *no* sample differs by more than the mean sample (0.0053), while
+      the middle of the frame is down 1.29%, the border ring 0.69% and the edge
+      fifths 0.10%. That is the shape of a uniform multiplicative difference;
+    - the per-ray trace oracle passes, so the ray landings and weights agree — but
+      its bound is a p99 *relative* one, which a uniform ~1.3% would clear, so the
+      mask is not cleared by it;
+    - the ordinary frame oracle passes, so it is specific to the **padded** path
+      (K-267), not to the flare generally;
+    - ruled out by inspection: `cell_mm` (both `(grid-1)`), `screen_transform`
+      (both the flare buffer's own width over 36), the splat-axis conventions
+      including how each twin treats a dead or zero-weight neighbour, the
+      roundness derivation, and the Fresnel-number derivation.
+    The remaining suspects are the padded buffer's sampling in the combine and the
+    centring offset K-267 introduced. Needs a machine with an adapter; every round
+    against CI is ten minutes and a guess.
 - **The idle cache fill is not interruptible.** It composites one frame per turn,
     so a scrub arriving mid-frame waits for that composite to finish - up to a
     couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for

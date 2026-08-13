@@ -4851,10 +4851,13 @@ fn wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge() {
     let e_cpu: f32 = cpu.iter().sum();
     let e_gpu: f32 = gpu.iter().sum();
     let ratio = e_gpu / e_cpu.max(1e-9);
-    // Where any shortfall sits, since the machine this was written on has no
-    // adapter and cannot ask. Split three ways: the outermost ring of the
-    // padded buffer (a clipping difference lives there), the edge fifths the
-    // assertion above is about, and the middle.
+    // **Where any shortfall sits.** This oracle has a standing 1.2-1.5%
+    // energy gap (docs/TODO.md), and the numbers below are what a session
+    // without a GPU has to work from, so they are printed on every run rather
+    // than reconstructed each time somebody picks the entry up. Split three
+    // ways: the outermost ring of the padded buffer, where a clipping
+    // difference would live; the edge fifths the assertion above is about; and
+    // the middle.
     {
         let (mut ec, mut eg) = ([0.0f64; 3], [0.0f64; 3]);
         for y in 0..h as usize {
