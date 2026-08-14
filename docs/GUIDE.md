@@ -643,9 +643,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   small to change the total at all, and simply vanishes. It vanishes more the
   brighter the pixel already is, so the effect was quietly darkening its own
   highlights by about four percent in the middle of the frame. The sum is now
-  kept in 32 bits off to one side and written into the picture once at the end
-  — one rounding instead of thousands — which costs nothing in memory worth
-  mentioning and nothing in the look except that it is now correct.
+  kept off to one side in a whole-numbers format — counting in steps of about
+  a millionth — and written into the picture once at the end. One rounding
+  instead of thousands. Whole numbers matter for a second reason: the rays are
+  added up by thousands of parallel threads in whatever order they finish, and
+  ordinary decimals give slightly different totals depending on that order,
+  which would mean the same project rendering two different pictures. Whole
+  numbers add up the same however they are shuffled. The first attempt used
+  decimals and did exactly that; the tests caught it the same day.
 
   **Every element gets its own coating.** Look at a photograph of a real flare
   and the ghosts are not one colour: there is a blue one next to a purple one

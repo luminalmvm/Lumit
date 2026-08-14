@@ -12,16 +12,34 @@
 // CPU reference the middle of the frame came out 4.5% dim, growing with the
 // number of contributions per pixel.
 //
-// So the sum is accumulated in **f32**, in a storage buffer, and written to the
-// fp16 texture once at the end. One rounding instead of thousands. The texture
+// So the sum is accumulated at far higher precision, in a storage buffer, and
+// written to the fp16 texture once at the end. One rounding instead of thousands. The texture
 // stays fp16 — a single stored value has precision to spare; it was only ever
 // the accumulation that was short.
 //
-// WGSL has no float atomics, so the add is the standard compare-and-swap loop
-// over the f32's bit pattern. That is exact f32 addition and needs no device
-// feature, which is what makes it portable — `Rgba32Float` blending would have
-// needed `FLOAT32_BLENDABLE`, which is not universally available and would have
-// made the picture differ by machine (the determinism K-353 fought for).
+// # Why the sum is fixed point, and not f32
+//
+// WGSL has no float atomics. The obvious substitute is a compare-and-swap loop
+// over the f32's bit pattern, and it is exact per add — but the *order* of the
+// adds is whatever the threads race to, and float addition is not associative,
+// so the same document renders two different pictures. K-353 exists precisely
+// to stop that, and CI caught it: "an area source must be bit-stable too".
+//
+// Integer addition IS associative and commutative, so `atomicAdd` on a u32
+// gives a sum that does not depend on the order at all. The accumulator is
+// therefore fixed point: every deposit is rounded to the nearest 1/2^18 and
+// added exactly. That is **unbiased** rounding at 3.8e-6 absolute, against the
+// fp16 blender's systematic truncation of everything under half an ULP of a
+// large running sum — better precision where it mattered, and reproducible,
+// which the float version was not.
+//
+// Radiance is never negative (a deposit is `peak * k`, both non-negative), so
+// the sign bit is spare range rather than a missing case.
+//
+// `Rgba32Float` blending would have been the other way to get f32 sums, and it
+// needs `FLOAT32_BLENDABLE` — not universally available, so it would either
+// raise the hardware floor or make the picture differ by machine, which is the
+// same determinism problem from the other end.
 //
 // `deposit` mirrors `lumit_core::fx::lens_flare::splat_ray` op for op, and is
 // now a closer twin than the raster ever was: same bounding box, same inverse
@@ -54,31 +72,39 @@ struct Dims {
 };
 
 @group(0) @binding(0) var<storage, read> splats: array<Splat>;
-// The f32 accumulator, three channels per pixel, held as bit patterns because
-// WGSL atomics are integer-only. Laid out `(y * w + x) * 3 + channel`.
+// The fixed-point accumulator, three channels per pixel, laid out
+// `(y * w + x) * 3 + channel`.
 @group(0) @binding(1) var<storage, read_write> accum: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> dims: Dims;
 @group(0) @binding(3) var out_tex: texture_storage_2d<rgba16float, write>;
 
-// Exact f32 add into an integer atomic, by compare-and-swap on the bit
-// pattern. The loop retries only when another thread won the slot in between,
-// which in a caustic — where a great many splats land on one pixel — is the
-// price of getting the sum right.
-fn add_f32(idx: u32, v: f32) {
-    // Nothing to add, and never a NaN: a NaN would never compare equal and the
-    // loop would not terminate.
-    if (!(v != 0.0) || v != v) {
+// Fixed-point steps in one unit of radiance. Spelled in the Rust twin too and
+// pinned against this text by test.
+//
+// 2^18 puts the resolution at 3.8e-6 and a channel's ceiling — where the u32
+// would wrap — at 16383.99 of scene-linear radiance. The flare buffer is
+// auto-exposure normalised to a mean near 0.01 (K-258's `TARGET_PROBE_MEAN`)
+// and the density cap bounds a caustic at 333x the launch density, so that
+// ceiling is orders above anything a frame makes; a test measures the CPU
+// reference's brightest pixel against it. **Above it the sum would wrap**, not
+// saturate: `atomicAdd` has no saturating form, and detecting the overflow
+// would need a compare-and-swap, which is the order dependence this design
+// exists to avoid.
+const ACCUM_SCALE: f32 = 262144.0;
+// The clamp on ONE deposit, which is a different job: it keeps an infinity out
+// of the cast, whose result would otherwise be an arbitrary integer.
+const ACCUM_MAX: f32 = 4294967040.0;
+
+// Order-independent by construction: integer addition is associative, so the
+// sum does not depend on which thread got there first.
+fn add_fixed(idx: u32, v: f32) {
+    // Zero, negative and NaN all leave here: `NaN > 0.0` is false, so the
+    // negation catches it, and a NaN through the cast would be nonsense.
+    if (!(v > 0.0)) {
         return;
     }
-    var old = atomicLoad(&accum[idx]);
-    loop {
-        let sum = bitcast<f32>(old) + v;
-        let res = atomicCompareExchangeWeak(&accum[idx], old, bitcast<u32>(sum));
-        if (res.exchanged) {
-            break;
-        }
-        old = res.old_value;
-    }
+    let fixed = min(round(v * ACCUM_SCALE), ACCUM_MAX);
+    atomicAdd(&accum[idx], u32(fixed));
 }
 
 @compute @workgroup_size(64)
@@ -124,15 +150,16 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
             let k = (1.0 - abs(u) * 0.5) * (1.0 - abs(v) * 0.5);
             let base = (u32(py) * dims.raster.x + u32(px)) * 3u;
-            add_f32(base, peak.x * k);
-            add_f32(base + 1u, peak.y * k);
-            add_f32(base + 2u, peak.z * k);
+            add_fixed(base, peak.x * k);
+            add_fixed(base + 1u, peak.y * k);
+            add_fixed(base + 2u, peak.z * k);
         }
     }
 }
 
-// Write the finished sum into the flare texture: the one place the value meets
-// fp16, and the alpha the combine reads is the luma of what landed.
+// Write the finished sum into the flare texture: back to floating point, the
+// one place the value meets fp16, and the alpha the combine reads is the luma
+// of what landed.
 @compute @workgroup_size(8, 8)
 fn resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= dims.raster.x || gid.y >= dims.raster.y) {
@@ -140,10 +167,10 @@ fn resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let base = (gid.y * dims.raster.x + gid.x) * 3u;
     let rgb = vec3<f32>(
-        bitcast<f32>(atomicLoad(&accum[base])),
-        bitcast<f32>(atomicLoad(&accum[base + 1u])),
-        bitcast<f32>(atomicLoad(&accum[base + 2u])),
-    );
+        f32(atomicLoad(&accum[base])),
+        f32(atomicLoad(&accum[base + 1u])),
+        f32(atomicLoad(&accum[base + 2u])),
+    ) / ACCUM_SCALE;
     let luma = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z;
     textureStore(out_tex, vec2<i32>(gid.xy), vec4<f32>(rgb, luma));
 }

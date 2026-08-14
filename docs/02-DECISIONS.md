@@ -9459,10 +9459,26 @@ rounding instead of thousands. The texture stays fp16 — a single stored value 
 spare; it was only ever the accumulation that was short, so nothing downstream (blur, combine)
 changes at all.
 
-WGSL has no float atomics, so the add is the standard compare-and-swap loop over the f32's bit
-pattern: exact f32 addition, no device feature, portable. In a caustic — many splats on one
-pixel — the loop retries, and that contention is the cost of getting the sum right. NaN is
-guarded at the top, because a NaN never compares equal and the loop would not terminate.
+**The sum is fixed point, and the first attempt at this was wrong.** WGSL has no float
+atomics, and the obvious substitute — a compare-and-swap loop over the f32's bit pattern — is
+exact per add but leaves the *order* of the adds to whichever thread wins the slot. Float
+addition is not associative, so the same document rendered two different pictures. CI caught
+it immediately (`an area source must be bit-stable too`), which is [K-353](#k-353) doing its
+job.
+
+Integer addition **is** associative and commutative, so `atomicAdd` on a u32 gives a sum
+independent of thread order. The accumulator is therefore fixed point at 2^18 steps per unit
+of radiance: every deposit is rounded to the nearest 3.8e-6 and added exactly. That is
+*unbiased* rounding against the blender's systematic truncation — better precision where it
+mattered, and reproducible, which the float version was not. Radiance is never negative, so
+the sign bit is spare range rather than a missing case.
+
+The cost is a ceiling: above 16383.99 in a channel the u32 **wraps** rather than saturating,
+because detecting the overflow would need the compare-and-swap whose order dependence this
+design exists to avoid. The margin is the safety, and it is measured rather than asserted — a
+test renders the CPU reference at four times intensity with no ghost blur and requires the
+brightest pixel to sit at least 100× under the ceiling, so the scale is revisited before a
+user ever sees a wrapped highlight.
 
 **A twin, not merely an analogue.** `deposit` mirrors `lumit_core`'s `splat_ray` op for op —
 same bounding box, same inverse 2×2, same tent, same order — which the raster could not, since

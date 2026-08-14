@@ -3312,6 +3312,53 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
     }
 }
 
+/// **The fixed-point accumulator's scale is spelled twice, and its ceiling is
+/// far above any frame** (K-375).
+///
+/// The deposit sums in fixed point because integer addition is associative and
+/// a float scatter is not — the same document has to render the same bytes
+/// (K-353). That buys determinism at the cost of a ceiling: above
+/// `ACCUM_CEILING` a channel's u32 wraps, and it wraps rather than saturates,
+/// because detecting the overflow would need the compare-and-swap whose order
+/// dependence this design exists to avoid. So the margin is the safety, and
+/// this measures it on the CPU reference rather than asserting it.
+#[test]
+fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
+    use lumit_core::fx::lens_flare as lf;
+    let src = include_str!("../fx_lens_flare_deposit.wgsl");
+    assert!(
+        src.contains(&format!("const ACCUM_SCALE: f32 = {:.1};", ACCUM_SCALE)),
+        "the deposit shader must declare the same scale as the Rust twin"
+    );
+    assert!(
+        ((u32::MAX as f32 / ACCUM_SCALE) - ACCUM_CEILING).abs() < 0.01,
+        "the ceiling is the scale's own consequence"
+    );
+
+    // The brightest pixel a bundled lens actually makes, at the settings that
+    // make it brightest: full intensity, no ghost blur to spread it, and the
+    // light in frame. If this ever approached the ceiling the scale would have
+    // to come down — and the test would say so before a user saw a wrapped
+    // highlight.
+    let p = lf::LensFlareParams {
+        ghost_softness: 0.0,
+        intensity: 4.0,
+        ghost_intensity: 4.0,
+        ..flare_params()
+    };
+    let baked = lf::bake(&p);
+    let (w, h) = (192u32, 108u32);
+    let flare = lf::cpu_flare(&p, &baked, w, h, &lf::manual_light(&p, w, h));
+    let peak = flare.iter().cloned().fold(0.0_f32, f32::max);
+    assert!(peak > 0.0, "the reference must render something to measure");
+    assert!(
+        peak < ACCUM_CEILING / 100.0,
+        "the accumulator's ceiling ({ACCUM_CEILING}) must stay orders above a \
+         real frame's brightest pixel ({peak}); at less than 100x the margin \
+         the fixed-point scale wants revisiting"
+    );
+}
+
 /// The reflectance table's grid is spelled out twice — once in lumit-core,
 /// which bakes it, once in the WGSL that reads it (K-364) — because the
 /// shader cannot import a Rust constant. A drift would silently index the

@@ -436,9 +436,13 @@ the padded-anamorphic oracle that read as the middle of the frame 4.5% dim, the 
 
 `fx_lens_flare_deposit.wgsl` replaces it with two compute entry points. `deposit` scatters each
 splat into an f32 accumulator (three channels a pixel, pooled in `Scratch`, cleared per frame)
-using the compare-and-swap float add — WGSL has no float atomics, and CAS on the bit pattern is
-exact f32 without any device feature. `resolve` writes the finished sums into the fp16 texture
-once. Everything downstream is untouched: a single stored value always had precision to spare.
+in **fixed point** at 2^18 steps per unit of radiance. WGSL has no float atomics; a
+compare-and-swap loop on the bit pattern is exact per add but order-dependent, and float
+addition is not associative, so it broke bit-stability (K-353) the moment CI ran it. Integer
+`atomicAdd` is associative, so the sum does not depend on thread order at all, and the
+rounding it does do is unbiased at 3.8e-6. Above 16383.99 a channel wraps rather than
+saturating — a test measures the reference's brightest pixel at 100x under that. `resolve`
+writes the finished sums into the fp16 texture once. Everything downstream is untouched: a single stored value always had precision to spare.
 
 `deposit` is an op-for-op twin of `splat_ray` — same bbox, same inverse 2×2, same tent, same
 order — which the raster could not be, because its pixel selection was the rasteriser's fill
