@@ -620,43 +620,14 @@ Recorded so they are not re-proposed as gaps:
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
     longer match (`state/workspace.dart`).
-- **The GPU accumulates the flare in fp16 and the CPU reference in f32, and the
-    padded-anamorphic oracle measures the difference.** `wgsl_lens_flare_padded_
-    anamorphic_matches_and_fills_the_edge` wants the two frames' total energy within
-    1%; the GPU comes in low. **0.9852** on the flare-accuracy branch head (a9ee807)
-    before any follow-up, **0.9876** after K-370, and **0.9565** after K-373 widened
-    every splat's footprint fourfold.
-    **The mechanism, which the numbers now pin down.** The splat raster target is a
-    `work_texture`, and `WORKING_FORMAT` is `Rgba16Float`; the CPU reference sums in
-    f32. Additive blending into an fp16 accumulator loses any increment smaller than
-    half an ULP of the running sum — a *systematic* downward bias, not the unbiased
-    jitter that would cancel. It therefore:
-    - concentrates where many splats overlap, which is where the sum is largest: the
-      middle of the frame is down **4.53%**, the border ring 0.70%, the outer fifths
-      0.11%;
-    - stays smooth — no sample differs from the CPU by more than the mean sample —
-      because it is a per-add rounding, not a dropped feature;
-    - scales with footprint area. K-373 quadrupled the fragments per splat, so each
-      pixel now takes ~4x as many increments each ~4x smaller, and the deficit grew
-      by ~3.5x. That proportionality is what identified it.
-    An earlier version of this entry said fp16 was ruled out. That was wrong: the
-    format checked was the starburst's `float_texture` (`Rgba32Float`), not the flare
-    buffer's.
-    **What it would take to fix**, none of it small, and the choice is the owner's:
-    - render the flare buffer at `Rgba32Float`. Blending into it needs the
-      `FLOAT32_BLENDABLE` device feature, which this build does not request (only
-      `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`) and which is not universally
-      available — so it would either raise the hardware floor or make the picture
-      differ by machine, which is the determinism K-353 fought for;
-    - accumulate through a compute pass with f32 storage instead of the blender,
-      which is a rewrite of the splat stage;
-    - accept it, and restate the oracle's bound as what fp16 accumulation can hold,
-      with the reasoning recorded.
-    Also ruled out along the way, and worth not re-checking: `cell_mm`,
-    `screen_transform`, the splat-axis conventions including dead and zero-weight
-    neighbours, the near-parallel push and cap arithmetic, the combine's padded tap
-    formula, the quad's corner winding, the roundness derivation, and the
-    Fresnel-number derivation.
+- **Re-time the flare after K-373 and K-375.** The tent now reaches a full grid
+    step, which is four times the fragments per splat, and the deposit moved from
+    the raster blender to a compute scatter with a compare-and-swap float add,
+    whose cost depends on contention (many splats on one pixel) rather than on
+    fill rate. Both are correctness fixes worth their price, but the price is
+    unmeasured on a real card: docs/13-PERFORMANCE-RULES.md budgets gate merges,
+    and the per-frame figure in docs/impl/lens-flare.md predates both. The
+    `lens_flare_frame_cost` measurement test is the place to read it.
 - **The idle cache fill is not interruptible.** It composites one frame per turn,
     so a scrub arriving mid-frame waits for that composite to finish - up to a
     couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for
