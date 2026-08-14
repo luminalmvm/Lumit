@@ -9,8 +9,8 @@ Every example is real code from `flutter_ui/`.
 **1. Widgets are not components.** A VCL control is a long-lived object you mutate
 (`Button1.Caption := 'x'`). A Flutter widget is an immutable *description*, rebuilt
 constantly and cheaply. State lives outside the widget, in a `State` object or a
-notifier. You never "set a property on a widget"; you change state and let the
-description be rebuilt.
+notifier. You never "set a property on a widget". Instead you change state and
+let the description be rebuilt.
 
 **2. Layout is a tree of nested widgets, not anchors.** There is no form designer and
 no `Align`/`Anchors`. Padding is a widget. Centring is a widget. A row is a widget.
@@ -34,10 +34,10 @@ Dart is Java-shaped with type inference and null safety.
 
 - `final` = assign once (use it by default). `var` = inferred, reassignable.
   `const` = compile-time constant.
-- **Null safety**: `String` cannot be null; `String?` can. `?.` calls only when
-  non-null; `??` supplies a default; `!` asserts non-null (and throws if wrong);
-  `late` means "non-null, assigned before first use".
-- `async`/`await` with `Future<T>`; `Stream<T>` for many values over time.
+- **Null safety**: `String` cannot be null, but `String?` can. `?.` calls only
+  when non-null. `??` supplies a default. `!` asserts non-null, and throws if
+  wrong. `late` means "non-null, assigned before first use".
+- `async`/`await` with `Future<T>`. `Stream<T>` for many values over time.
 - Arrow bodies: `int double(int x) => x * 2;`
 - Named arguments are the norm: `Text('hi', style: s)`. `required` marks the
   mandatory ones.
@@ -47,7 +47,7 @@ Dart is Java-shaped with type inference and null safety.
 ## 1. Bootstrap
 
 ```dart
-// flutter_ui/lib/main.dart:207
+// flutter_ui/lib/main.dart — `main`
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -68,7 +68,7 @@ hands the root widget to the framework.
 ## 2. The root: providers and rebuild scope
 
 ```dart
-// flutter_ui/lib/main.dart:1841
+// flutter_ui/lib/main.dart — `LumitAppNew.build`
       home: ChangeNotifierProvider.value(
         value: state,
         child: ChangeNotifierProvider.value(
@@ -83,9 +83,9 @@ hands the root widget to the framework.
               showTooltips: uiState.workspace.interface.showTooltips,
 ```
 
-Read this as: make two objects available to everything below (`Provider`), and
-rebuild this subtree whenever `uiState` notifies (`ListenableBuilder`). The `child:`
-argument nesting *is* the tree.
+Read this as two instructions. Make two objects available to everything below
+(`Provider`). Rebuild this subtree whenever `uiState` notifies
+(`ListenableBuilder`). The `child:` argument nesting *is* the tree.
 
 ## 3. State objects and lifecycle
 
@@ -93,7 +93,7 @@ A `StatefulWidget` has a `State` with `initState` and `dispose` — the Delphi
 constructor/destructor pair:
 
 ```dart
-// flutter_ui/lib/main.dart:1936
+// flutter_ui/lib/main.dart — `_LumitAppViewState.initState`
   @override
   void initState() {
     super.initState();
@@ -114,7 +114,7 @@ handlers and timers.
 `ValueNotifier<T>` holds one value and notifies listeners on change:
 
 ```dart
-// flutter_ui/lib/main.dart:254
+// flutter_ui/lib/main.dart — `LumitState.postNotice`
   /// The status bar's one-line notice: the latest quiet message or genuine
   /// error, dismissed by its close button. One current notice rather than a
   /// feed, which is what the egui shell's `app.notice` was too.
@@ -124,12 +124,12 @@ handlers and timers.
       notice.value = LumitNotice(message, error: error);
 ```
 
-Widgets listen with `ValueListenableBuilder`, which rebuilds **only** its builder —
-the key performance tool. Note `child:` here: a subtree that does not depend on the
-value is built once and passed in:
+Widgets listen with `ValueListenableBuilder`, which rebuilds **only** its builder.
+That is the key performance tool. Note `child:` here. A subtree that does not depend
+on the value is built once and passed in:
 
 ```dart
-// flutter_ui/lib/panels/timeline_panel_frb.dart:366
+// flutter_ui/lib/panels/timeline_panel_frb.dart — `LayerDragSlide.build`
     return ValueListenableBuilder<LayerDrag?>(
       valueListenable: drag,
       child: child,
@@ -147,7 +147,7 @@ value is built once and passed in:
 `Listenable.merge` subscribes to several at once:
 
 ```dart
-// flutter_ui/lib/panels/viewer_panel_frb.dart:794
+// flutter_ui/lib/panels/viewer_panel_frb.dart — `_Stage._stage`
                 listenable: Listenable.merge([
                   uiState.selectedLayers,
                   uiState.layerBounds,
@@ -162,11 +162,11 @@ value is built once and passed in:
 
 ## 5. Talking to Rust
 
-Calls are ordinary methods on generated handles. `async` ones are awaited; failures
-arrive as exceptions:
+Calls are ordinary methods on generated handles. You await the `async` ones.
+Failures arrive as exceptions:
 
 ```dart
-// flutter_ui/lib/state/keymap.dart:275
+// flutter_ui/lib/state/keymap.dart — `KeymapState.rebind`
   Future<String?> rebind(
       BridgeKeyContext context, String action, String chord) async {
     try {
@@ -183,7 +183,7 @@ Events arrive as a `Stream`. Dart 3 pattern matching over the generated sealed
 classes makes the handler exhaustive and readable:
 
 ```dart
-// flutter_ui/lib/main.dart:1381
+// flutter_ui/lib/main.dart — `LumitUiState`
     sub = state.onWorkerResponse.listen((msg) {
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
@@ -201,7 +201,7 @@ classes makes the handler exhaustive and readable:
 Records and destructuring patterns, with a nullable cache:
 
 ```dart
-// flutter_ui/lib/main.dart:414
+// flutter_ui/lib/main.dart — `LumitState.comps`
   List<(CompositionReference, String)>? _compsCache;
   List<(CompositionReference, String)> comps() {
     if (_compsCache != null) return _compsCache!;
@@ -216,7 +216,7 @@ Records and destructuring patterns, with a nullable cache:
 ```
 
 `case ItemReference_Composition(:final field0)` binds the field and names it in one
-step. Note also the nested function `walk` — Dart allows local functions, like
+step. Note also the nested function `walk`. Dart allows local functions, like
 Delphi's nested procedures.
 
 ## 6. Theme through an InheritedWidget
@@ -225,7 +225,7 @@ Delphi's nested procedures.
 changes. Lookup is by type from a `BuildContext`:
 
 ```dart
-// flutter_ui/lib/widgets/controls.dart:70
+// flutter_ui/lib/widgets/controls.dart — `ThemeScope.of`
   static ThemeScope of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ThemeScope>()!;
 
@@ -239,7 +239,7 @@ changes. Lookup is by type from a `BuildContext`:
 Widgets read semantic tokens, never a literal colour:
 
 ```dart
-// flutter_ui/lib/widgets/controls.dart:128
+// flutter_ui/lib/widgets/controls.dart — `_HouseButtonState.build`
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
@@ -262,7 +262,7 @@ This is `TPaintBox.OnPaint` with a better API. A `CustomPainter` gets a `Canvas`
 a `Size`:
 
 ```dart
-// flutter_ui/lib/panels/timeline_panel_frb.dart:7324
+// flutter_ui/lib/panels/timeline_panel_frb.dart — `_LaneKeysPainter.paint`
     const half = 4.0;
     final mid = size.height / 2;
     for (var i = 0; i < frames.length; i++) {
@@ -283,7 +283,7 @@ It replaces Delphi's `with` block, safely.
 Painters are testable with a recording canvas — no window required:
 
 ```dart
-// flutter_ui/test/waveform_test.dart:377
+// flutter_ui/test/waveform_test.dart — `_RecordingCanvas`
 class _RecordingCanvas implements Canvas {
   final List<_Stroke> lines = [];
 
@@ -305,7 +305,7 @@ Pointer positions arrive in local widget coordinates. Converting to scene coordi
 is your maths, kept pure and testable:
 
 ```dart
-// flutter_ui/lib/panels/viewer_layer_map.dart:171
+// flutter_ui/lib/panels/viewer_layer_map.dart — `ViewerLayerMap.toScreen`
   Offset toScreen(double x, double y) {
     final dx = (x - ax) * sx;
     final dy = (y - ay) * sy;
@@ -321,7 +321,7 @@ is your maths, kept pure and testable:
 Hit-testing runs the inverse map, so it stays exact under rotation:
 
 ```dart
-// flutter_ui/lib/panels/viewer_gizmo.dart:249
+// flutter_ui/lib/panels/viewer_gizmo.dart — `LayerBox.contains`
   bool contains(Offset point) {
     final p = map.layerOf(point);
     return p.dx >= 0 &&
@@ -335,7 +335,7 @@ Drags accumulate pixels and derive frames from the running total. Snapping measu
 candidates in screen pixels, so zoom controls precision:
 
 ```dart
-// flutter_ui/lib/panels/timeline_snap.dart:107
+// flutter_ui/lib/panels/timeline_snap.dart — `snapFrame`
   SnapTarget? best;
   var bestPx = slopPx;
   for (final target in targets) {
@@ -357,7 +357,7 @@ That returns a **named record** — `(frame: ..., caught: ...)`.
 `LayoutBuilder` gives you the constraints your parent offers:
 
 ```dart
-// flutter_ui/lib/panels/viewer_panel_frb.dart:357
+// flutter_ui/lib/panels/viewer_panel_frb.dart — `_ViewerPanelFrbState.build`
     final stage = Expanded(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -372,7 +372,7 @@ The engine's picture is a platform texture, not an image. Flutter draws it with 
 `Texture` widget given a texture id:
 
 ```dart
-// flutter_ui/lib/panels/viewer_panel_frb.dart:1363
+// flutter_ui/lib/panels/viewer_panel_frb.dart — `_Picture.build`
         final picture = textureId != null
             ? Texture(
                 textureId: textureId,
@@ -386,11 +386,11 @@ The engine's picture is a platform texture, not an image. Flutter draws it with 
 
 ## 11. Keyboard
 
-Lumit handles shortcuts globally rather than through the focus tree, and stands down
-when a text field has focus or a modal is open:
+Lumit handles shortcuts globally rather than through the focus tree. It does not
+handle keys when a text field has focus or a modal is open:
 
 ```dart
-// flutter_ui/lib/panels/timeline_panel_frb.dart:1566
+// flutter_ui/lib/panels/timeline_panel_frb.dart — `_TimelinePanelFrbState._onKey`
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     // A dialogue is up: its keys are its own (K-243). These commands are
@@ -408,7 +408,7 @@ when a text field has focus or a modal is open:
 Dispatch is a plain switch over action ids resolved from the engine's keymap:
 
 ```dart
-// flutter_ui/lib/main.dart:2107
+// flutter_ui/lib/main.dart — `_LumitAppViewState._onKey`
     var handled = true;
     switch (action) {
       case 'edit.redo':
@@ -429,7 +429,7 @@ Lumit does not use Material dialogs. `showLumitModal` builds an overlay entry an
 returns a `Future` that completes with the result:
 
 ```dart
-// flutter_ui/lib/widgets/controls.dart:969
+// flutter_ui/lib/widgets/controls.dart — `showLumitModal`
 Future<T?> showLumitModal<T>({
   required BuildContext context,
   required Widget Function(void Function(T?) close) builder,
@@ -445,14 +445,14 @@ Future<T?> showLumitModal<T>({
 ```
 
 `Completer` is the manual way to produce a `Future`. `late` here means "assigned
-before use" — needed because `entry` and `close` reference each other.
+before use". It is needed because `entry` and `close` reference each other.
 
 ## 13. Tests
 
 Pure logic tests need no widgets at all:
 
 ```dart
-// flutter_ui/test/window_title_test.dart:7
+// flutter_ui/test/window_title_test.dart — `main`
 void main() {
   test('no path is plain Lumit', () {
     expect(windowTitleFor(null), 'Lumit');
@@ -467,16 +467,17 @@ void main() {
 
 `r'...'` is a raw string — no escape processing, ideal for Windows paths.
 
-Widget tests pump a widget and assert on the tree; the `test/frb/` suites drive the
+Widget tests pump a widget and assert on the tree. The `test/frb/` suites drive the
 **real** Rust engine, which is why they run serially.
 
 ## Reading order in this repo
 
 1. `lib/state/timecode.dart` — pure Dart, no Flutter.
 2. `lib/panels/timeline_snap.dart` — pure maths with records.
-3. `lib/widgets/controls.dart` — the house widgets; see how tokens and state combine.
+3. `lib/widgets/controls.dart` — the house widgets. See how tokens and state
+   combine.
 4. `lib/panels/scopes_panel_frb.dart` — a complete, medium-sized panel.
-5. `lib/main.dart` — read last; it is the wiring for everything else.
+5. `lib/main.dart` — read last. It is the wiring for everything else.
 
 ## The house rules that will surprise you
 

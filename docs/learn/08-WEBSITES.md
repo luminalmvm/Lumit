@@ -44,8 +44,8 @@ web/
 
 The download page fetches
 `https://api.github.com/repos/luminalmvm/Lumit/releases/latest` in the browser and
-fills in the version, date and asset links. A failed or rate-limited fetch leaves the
-static fallback text in place, so tagging a release updates the site with **no
+inserts the version, date and asset links. A failed or rate-limited fetch leaves the
+static fallback text in place. A release tag therefore updates the site with **no
 deploy**.
 
 ## web-docs/ — the manual
@@ -63,12 +63,12 @@ web-docs/
 ```
 
 Pages are `.md` or `.mdx`. Use `.mdx` when the page needs a component such as
-`<Shot>`; plain `.md` otherwise.
+`<Shot>`. Use plain `.md` otherwise.
 
 ## Task: publish a release note
 
 Create `web/src/content/releases/<version>.md`. **The filename is the URL and the
-version**: `0.2.0.md` serves `/releases/0.2.0`. Do not add a leading `v`; do not use
+version**: `0.2.0.md` serves `/releases/0.2.0`. Do not add a leading `v`. Do not use
 any other name. `scripts/discord-release.mjs` reads exactly this path when the
 release workflow announces a build.
 
@@ -91,9 +91,9 @@ date: 2026-08-08
 | `versionNumber` | The pill on the left rail. No leading `v` — the page adds it |
 | `date` | Sorts the index, newest first |
 
-The body is plain Markdown; every element is styled by `.release-prose` in
-`global.css`, so write content, not markup. The index page and `/releases/<version>`
-appear automatically.
+The body is plain Markdown. `.release-prose` in `global.css` styles every element, so
+write content, not markup. The index page and `/releases/<version>` appear
+automatically.
 
 ## Task: add a docs page
 
@@ -117,16 +117,16 @@ If the page needs a screenshot, make it `.mdx` and import the component:
 import Shot from "../../../components/Shot.astro";
 ```
 
-Follow the app's own rules in prose: the [glossary](../01-GLOSSARY.md) terms are
-binding on the manual too, and the voice is British English, sentence case, calm.
+Follow the app's own rules in prose. The [glossary](../01-GLOSSARY.md) terms are
+binding on the manual too. The voice is British English, sentence case, calm.
 
 ## Task: add a screenshot
 
 Drop the image into `web-docs/src/assets/shots/` with the exact filename the page
 asks for. Nothing else changes — `Shot.astro` globs that directory at build time.
-Until the file exists the page shows a labelled placeholder naming what it wants, and
+Until the file exists, the page shows a labelled placeholder that names what it wants.
 `src/assets/shots/README.md` lists every outstanding screenshot with its page and
-subject. PNG, JPEG, WebP and AVIF all work; capture at the size you actually use the
+subject. PNG, JPEG, WebP and AVIF all work. Capture at the size you actually use the
 app, because the page scales down.
 
 ```
@@ -143,8 +143,8 @@ app, because the page scales down.
 | Docs page order within a section | `sidebar.order` in that page's frontmatter |
 | Docs social links, edit link, logo | the `starlight({ ... })` options in `web-docs/astro.config.mjs` |
 
-Adding a new docs *section* means adding a directory under `src/content/docs/` and
-one `{ label: "...", autogenerate: { directory: "..." } }` entry to the sidebar array.
+To add a new docs *section*, add a directory under `src/content/docs/`. Then add one
+`{ label: "...", autogenerate: { directory: "..." } }` entry to the sidebar array.
 
 ## Task: change colours, fonts or spacing
 
@@ -190,16 +190,16 @@ run `wrangler deploy` by hand in the normal flow.
 
 ## Traps
 
-- **The release filename is an interface.** `web/src/content/releases/<version>.md`
-  is read by `scripts/discord-release.mjs` during the release workflow. A renamed or
+- **The release filename is an interface.** `scripts/discord-release.mjs` reads
+  `web/src/content/releases/<version>.md` during the release workflow. A renamed or
   missing file means the announcement fails.
 - **A missing or misspelt frontmatter field fails the build.** The schema in
-  `content.config.ts` validates every entry; `date` must parse as a date.
+  `content.config.ts` validates every entry. `date` must parse as a date.
 - **Do not slugify version filenames.** The loader keeps dots deliberately, so
   `0.1.0.md` serves `/releases/0.1.0` rather than `/releases/010`.
 - **Files starting with `_` are excluded** from the releases collection. That is how
   `_template.md` stays out.
-- **Docs deploys need full git history.** Starlight's per-page dates come from git;
-  a shallow clone makes every page read as "updated today".
+- **Docs deploys need full git history.** Starlight's per-page dates come from git.
+  A shallow clone makes every page read as "updated today".
 - **Tailwind 4 has no config file.** Editing a `tailwind.config.js` does nothing —
   the theme is the `@theme` block in `global.css`.

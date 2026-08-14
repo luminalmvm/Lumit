@@ -56,8 +56,8 @@ possibly-unmounted panel to do something.
 **The performance keystone is `CompModel`** (K-184): one `getModel()` bridge call per
 committed change gives a read model that panels draw from. **Zero bridge calls per
 rebuild or repaint.** Anything not in the model (FFmpeg probes, waveform peaks, layer
-bounds) is fetched async off the build and cached in State maps keyed by document
-revision. `test/frb/bridge_call_budget_test.dart` enforces the budget.
+bounds) is fetched async off the build. The app caches it in State maps keyed by
+document revision. `test/frb/bridge_call_budget_test.dart` enforces the budget.
 
 `Workspace` persists layout, theme, settings, keymap and per-project sessions to one
 JSON file.
@@ -86,65 +86,57 @@ after committing rather than waiting for the stream round trip.
 
 **The Timeline** is not virtualised: plain `Column`s of 22 px rows inside scroll
 views. The outline half and the lane half are separate scroll views linked by
-mirrored controllers; both walk one row list, so the halves can draw differently but
-never disagree about what a layer is. Heavy visuals are `CustomPainter`s layered in
-`Stack`s, most with `hitTest => false` so gestures fall through.
+mirrored controllers. Both walk one row list. The halves can therefore draw
+differently, but they never disagree about what a layer is. Heavy visuals are
+`CustomPainter`s layered in `Stack`s, most with `hitTest => false` so gestures fall
+through.
 
 Time mapping is one object: `TimelineAxis { frames, width }` with `xOf`/`frameAt`,
 shared by lanes, ruler, graph and cache bar. Zoom is a flight where **only the lane
-half rebuilds** per tick (K-293), and the anchored offset is applied during layout so
-offset and content width never disagree.
+half rebuilds** per tick (K-293). Layout applies the anchored offset, so offset and
+content width never disagree.
 
 **The Viewer** shows the engine's frame through a platform `Texture` widget.
 `ViewerTextureController` registers the shared GPU handle over the
 `lumit/viewer_texture` channel, receives a texture id, and announces `frameReady` per
-frame. It latches itself unavailable and falls back to pixel readback if frames are
-announced but never drawn. The transport runs no clock — the engine paces playback
+frame. It latches itself unavailable and uses pixel readback instead, if frames are
+announced but never drawn. The transport runs no clock. The engine paces playback,
 and each published frame says which frame it is (K-181).
 
 Tools and gizmos are overlay layers, inert unless armed. Geometry is pure:
-`ViewerLayerMap` converts layer ↔ screen both ways; in-flight gestures preview by
+`ViewerLayerMap` converts layer ↔ screen both ways. In-flight gestures preview by
 rebuilding the box, not by re-reading the document.
 
-**The graph editor** evaluates curves in Dart (`graph_maths.dart`) — a line-for-line
-port of the engine's AE-style cubic, held to it by golden tests — so painting a curve
-crosses no bridge.
+**The graph editor** evaluates curves in Dart (`graph_maths.dart`). That code is a
+line-for-line port of the engine's AE-style cubic, and golden tests hold it to the
+engine. Painting a curve therefore crosses no bridge.
 
-**Drags** accumulate raw pixels and derive frames from the running total; rounding per
+**Drags** accumulate raw pixels and derive frames from the running total. Rounding per
 event reads as mouse acceleration. `snapFrame` measures candidates in *screen* pixels,
 so zoom is the precision control. Ctrl suspends snapping.
 
 ## Theme and strings
 
 Dark-first Aizome (K-004). `lib/theme/theme.dart` is the only Dart file allowed a hex
-literal; widgets read `ThemeScope.of(context).theme` and use semantic tokens
-(`surface0..4`, `textPrimary..Disabled`, `hairline`, one `accent`). A new theme field
-must be added to `theme_tokens.dart` — a test enforces it.
+literal. Widgets read `ThemeScope.of(context).theme` and use semantic tokens
+(`surface0..4`, `textPrimary..Disabled`, `hairline`, one `accent`). Add a new theme
+field to `theme_tokens.dart` — a test enforces it.
 
 Every string is `l10n.someKey`, backed by `app_en.arb`. Engine-sent English goes
 through `engineLabel()`.
-
-## Landing soon (PR #97)
-
-The Viewer gains a region of interest — a drag-armed sub-rectangle the engine
-composites, drawn by a new `ViewerRegionLayer` widget. The transparency grid shows
-through to nothing; preview resolution becomes per-comp; Auto becomes a real quality
-tier; the backdrop gets a colour swatch. The splash shows an "opening project" state
-now that `open_project` is async. Timeline and menus gain Light layers and the
-Accepts lights switch. About 30 new arb keys ride along.
 
 ## Traps
 
 - **No bridge calls in `build` or `paint`.** This is the recurring reviewed-out bug.
 - **Unkeyed `Stack` children kill drags.** A child appearing mid-gesture rematches
-  siblings by position and tears down the `GestureDetector` holding the pointer. Give
-  conditional children near a gesture a `ValueKey`.
+  siblings by position and destroys the `GestureDetector` that holds the pointer.
+  Give conditional children near a gesture a `ValueKey`.
 - **Background painters eat gestures.** A `CustomPainter` hit-tests its whole rect by
-  default; decoration painters need `hitTest => false` or `IgnorePointer`.
+  default. Decoration painters need `hitTest => false` or `IgnorePointer`.
 - **Bridge handles move by value.** Calls like `setEffects` consume a
-  `BridgeEffectInstance`; reusing one after the call throws mid-drag.
+  `BridgeEffectInstance`. Reuse after the call throws mid-drag.
 - **`dispose` cannot do ancestor lookups.** Capture `LumitUiState` in `initState`.
   Notifier writes from `dispose` are deferred to a post-frame callback.
 - **Shortcuts are global `HardwareKeyboard` handlers**, not focus-tree `Shortcuts`.
-  They stand down for focused text fields and while a modal is open. Any handler
-  added must be removed in `dispose`, or tests fail on the leak.
+  They become inactive for focused text fields and while a modal is open. Remove any
+  handler you add in `dispose`, or tests fail on the leak.

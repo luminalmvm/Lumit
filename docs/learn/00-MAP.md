@@ -14,12 +14,47 @@ Three programs in one repo:
    it through generated code (`flutter_rust_bridge`). The contract is
    [17-BRIDGE-CONTRACT.md](../17-BRIDGE-CONTRACT.md).
 
-Two more, off to the side: `web/` (lumitlab.com) and `web-docs/` (docs.lumitlab.com),
-small Astro sites that nothing else depends on.
+Two more sit off to the side: `web/` (lumitlab.com) and `web-docs/`
+(docs.lumitlab.com). They are small Astro sites that nothing else depends on.
+
+## Six words to learn first
+
+Defined here once. The other guides use them without re-explaining.
+
+**Comp → Layer → Clip.** A **composition** is a timeline with a fixed size, frame
+rate and duration. It holds an ordered stack of **layers**, index 0 on top. Most
+layers have one source. A **Sequence layer** is the exception: it holds an ordered
+run of **clips** cut back-to-back on its single row. "Clip" means only that. It is
+never a general word for a layer or a piece of footage.
+
+**Snapshot.** The document is immutable. An edit produces a complete new copy, and
+one atomic pointer swap publishes it. Anything mid-render keeps the copy it started
+with. Nobody ever sees a half-applied edit, so no lock sits between editing and
+rendering.
+
+**Epoch.** A generation number carried by every render request. Moving the playhead
+bumps it. Workers compare their token against it and stop at the next check. Nothing
+is force-killed. Work always stops by asking, never by interruption.
+
+**Retime.** One system that maps a layer's own time to source time. It lives on
+Footage and Precomp layers, or on each clip inside a Sequence layer. The graph
+editor shows it two ways: the value lens (After Effects time remapping) and the
+speed lens (Vegas velocity). There is no separate "time remap" feature.
+
+**Content hash.** Frames are named by what went into them, never by timeline
+position. Identical content hashes identically. Reuse therefore needs no
+invalidation logic, and an edit renames exactly the frames it changed.
+
+**Working space.** The engine's internal pixel format: scene-linear, premultiplied
+alpha, fp16. Colour maths happens in light, not in gamma-encoded values.
+
+Full terminology lives in [01-GLOSSARY.md](../01-GLOSSARY.md), which is binding on
+code, comments and commit messages.
 
 ## The crates
 
-Dependencies point down. Nothing depends on the bridge; the engine compiles without it.
+Dependencies point down. Nothing depends on the bridge, so the engine compiles
+without it.
 
 ```mermaid
 graph TD
@@ -45,28 +80,30 @@ graph TD
 ```
 
 (Exact edges from each crate's `Cargo.toml`. `lumit-bridge` also depends on
-`lumit-core` and `lumit-eval` directly; `lumit-cache`, `lumit-keymap`,
+`lumit-core` and `lumit-eval` directly. `lumit-cache`, `lumit-keymap`,
 `lumit-media` and `lumit-text` depend on no other Lumit crate at all.)
 
-| Crate | One line |
-|---|---|
-| `lumit-core` | The document model and the four rational time types. Pure data. No IO, no GPU, no threads. |
-| `lumit-eval` | "Nova": frame keys, graph compiler, cancellation epochs, worker pool, scheduler core. |
-| `lumit-render` | The pixel pass: decode planning, draw lists, compositor driving, export, the headless renderer. |
-| `lumit-gpu` | The one wgpu device, every WGSL effect kernel, colour, scopes, readback. |
-| `lumit-flow` | DIS optical flow: CPU oracle plus WGSL twin. |
-| `lumit-media` | FFmpeg (via rsmpeg) demux/decode/encode and the frame index. |
-| `lumit-audio` | "Pulsar": cpal output, the master audio clock, mixing, beat detection. |
-| `lumit-cache` | "Nebula": RAM + disk frame cache, content-hash keys, byte-budget eviction. |
-| `lumit-project` | `.lum` read/write, the operation journal, autosave, recovery. |
-| `lumit-text` | Text rasterisation. |
-| `lumit-keymap` | Chords, contexts, actions, bindings, clash resolution. |
-| `lumit-bridge` | The whole API surface Flutter calls. A frontend leaf, not an engine crate. |
+Each name links to the source. Each guide covers the crates it names.
+
+| Crate | One line | Guide |
+|---|---|---|
+| [`lumit-core`](../../crates/lumit-core/src/) | The document model and the four rational time types. Pure data. No IO, no GPU, no threads. | [01](01-CORE.md) |
+| [`lumit-eval`](../../crates/lumit-eval/src/) | "Nova": frame keys, graph compiler, cancellation epochs, worker pool, scheduler core. | [02](02-PIXELS.md) |
+| [`lumit-render`](../../crates/lumit-render/src/) | The pixel pass: decode planning, draw lists, compositor driving, export, the headless renderer. | [02](02-PIXELS.md) |
+| [`lumit-cache`](../../crates/lumit-cache/src/) | "Nebula": RAM + disk frame cache, content-hash keys, byte-budget eviction. | [02](02-PIXELS.md) |
+| [`lumit-gpu`](../../crates/lumit-gpu/src/) | The one wgpu device, every WGSL effect kernel, colour, scopes, readback. | [03](03-GPU.md) |
+| [`lumit-flow`](../../crates/lumit-flow/src/) | DIS optical flow: CPU oracle plus WGSL twin. | [03](03-GPU.md) |
+| [`lumit-media`](../../crates/lumit-media/src/) | FFmpeg (via rsmpeg) demux/decode/encode and the frame index. | [04](04-MEDIA-AUDIO.md) |
+| [`lumit-audio`](../../crates/lumit-audio/src/) | "Pulsar": cpal output, the master audio clock, mixing, beat detection. | [04](04-MEDIA-AUDIO.md) |
+| [`lumit-project`](../../crates/lumit-project/src/) | `.lum` read/write, the operation journal, autosave, recovery. | [01](01-CORE.md) |
+| [`lumit-text`](../../crates/lumit-text/src/) | Text rasterisation. | [04](04-MEDIA-AUDIO.md) |
+| [`lumit-keymap`](../../crates/lumit-keymap/src/) | Chords, contexts, actions, bindings, clash resolution. | [04](04-MEDIA-AUDIO.md) |
+| [`lumit-bridge`](../../crates/lumit-bridge/src/) | The whole API surface Flutter calls. A frontend leaf, not an engine crate. | [05](05-BRIDGE.md) |
 
 ## The threads
 
-Fixed roles; work moves between them through bounded channels and snapshots, never
-through shared mutable state.
+Threads have fixed roles. Work moves between them through bounded channels and
+snapshots, never through shared mutable state.
 
 ```mermaid
 graph LR
@@ -88,11 +125,11 @@ graph LR
 Rules that make it safe (details: [05-ARCHITECTURE.md](../05-ARCHITECTURE.md) §2):
 
 - The UI thread never evaluates, decodes or blocks on a render.
-- Edits produce a new immutable document snapshot; workers keep the one they started
+- Edits produce a new immutable document snapshot. Workers keep the one they started
   with. Publication is one atomic pointer swap.
-- Every render request carries an **epoch**; scrubbing bumps it; stale jobs stop at
+- Every render request carries an **epoch**. Scrubbing bumps it. Stale jobs stop at
   the next check.
-- The audio clock is master. Video drops frames; audio never waits.
+- The audio clock is master. Video drops frames. Audio never waits.
 
 ## From a click to pixels
 
@@ -119,7 +156,7 @@ Flutter draws it directly (K-183).
 
 ## Where do I change X
 
-Filled in per area; each row names the first file to open.
+Each row names the first file to open.
 
 | I want to change… | Start in | Doc |
 |---|---|---|
@@ -136,3 +173,41 @@ Filled in per area; each row names the first file to open.
 | Any user-facing string | `flutter_ui/lib/l10n/app_en.arb` | [07-BUILD-SHIP.md](07-BUILD-SHIP.md) |
 | CI, tests, packaging | `.github/workflows/` | [07-BUILD-SHIP.md](07-BUILD-SHIP.md) |
 | The website or the docs site | `web/` or `web-docs/` | [08-WEBSITES.md](08-WEBSITES.md) |
+
+## Never edit these by hand
+
+Four trees are machine-written. Editing one directly is always the wrong move,
+because the next build overwrites it. Change the source on the left instead.
+
+| Generated tree | Written from | Regenerate with |
+|---|---|---|
+| `flutter_ui/lib/src/rust/**` and `crates/lumit-bridge/src/frb_generated.rs` | `crates/lumit-bridge/src/api/**` | `flutter_rust_bridge_codegen generate` (from `flutter_ui/`) |
+| `flutter_ui/lib/l10n/gen/**` | `flutter_ui/lib/l10n/app_en.arb` | `flutter pub get` (from `flutter_ui/`) |
+| `flutter_ui/lib/l10n/app_<locale>.arb` (every file except `app_en.arb`) | Crowdin translators | Nothing local. Crowdin overwrites hand edits |
+| `flutter_ui/rust_builder/cargokit/**` | Vendored upstream | Nothing. Do not modify |
+
+The first two fail CI when stale. The third fails silently, which is worse: your
+translation survives until the next sync, then disappears.
+
+## Your first change, end to end
+
+The loop for a small engine change. Adjust the middle for a frontend change.
+
+1. **Find the area.** Use the table above. Read that guide's "Traps" section before
+   editing anything.
+2. **Read the spec.** Each guide names its canonical doc in `docs/`. Where code and
+   docs disagree, the docs win.
+3. **Change the code and its test together.** Near-full regression coverage is
+   policy. A bug fix lands with a test that fails without the fix.
+4. **Run the crate's tests.** `cargo test -p lumit-core`. GPU tests always need
+   `-- --test-threads=1`.
+5. **Run the gates locally.** `cargo fmt --all`, then
+   `cargo clippy --workspace --all-targets -- -D warnings`. Both block merge.
+6. **Regenerate if you touched a boundary.** See the table above.
+7. **Update the docs in the same commit.** A new concept means a new plain-English
+   section in [GUIDE.md](../GUIDE.md). A reversed decision means a new entry
+   appended to [02-DECISIONS.md](../02-DECISIONS.md). Never edit decision history.
+
+Two rules catch most newcomers. Every user-facing string goes through
+`app_en.arb`, and a string the *engine* sends also needs an `engine_labels.dart`
+entry. No colour literal may appear outside `flutter_ui/lib/theme/`.

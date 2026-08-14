@@ -13,9 +13,16 @@ Specs: [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md),
 [05-ARCHITECTURE.md](../05-ARCHITECTURE.md) §4–5. Impl notes:
 `playback-scheduler.md`, `media-io.md`, `optical-flow.md`, `temporal-rerender.md`.
 
+> **First pass:** Five steps turn a snapshot into a frame: probe, plan, decode,
+> build, realise. Cache keys name a frame by its content, not its timeline position.
+> Frames demote and promote through three tiers: VRAM, RAM and disk.
+>
+> Skip to [Nova's second half](#novas-second-half-built-but-not-yet-wired) for the
+> demand-pull executor and the playback decisions.
+
 ## The five steps of a frame
 
-`lumit-render/src/lib.rs` names them; each has a file.
+`lumit-render/src/lib.rs` names them. Each step has a file.
 
 ```mermaid
 flowchart LR
@@ -31,8 +38,8 @@ flowchart LR
    *unnameable* (rendered live, never cached).
 2. **Plan** (`plan.rs`) — pure, opens nothing. Walks layers at time t, maps layer time
    through Retime, picks source frames, decides Blend/Flow interpolation, chooses a
-   decode width from `Quality`. `same_decode` compares two plans; identical pixels
-   means decode is skipped — the value-drag fast path.
+   decode width from `Quality`. `same_decode` compares two plans. Identical pixels
+   mean the renderer skips decode, which is the value-drag fast path.
 3. **Decode** (`decode.rs`) — `DecodePool` owns per-item decoders (opened from the
    sidecar frame index), a decoded-frame `ByteLru` (512 MB default) and the flow
    cache. It decodes jobs plus temporal neighbours and runs optical flow where the
@@ -47,26 +54,26 @@ flowchart LR
 Two drivers call this. The bridge's worker thread owns a `HeadlessRenderer`
 (`headless.rs`) for preview. `export::start` spawns its own thread with its **own**
 renderer on its **own** GPU device. Both run the same walk at the same resolution
-rules, and a test matrix pins preview == export bit-for-bit (K-031).
+rules. A test matrix pins preview == export bit-for-bit (K-031).
 
 ## Naming frames: the content hash
 
 A cache must never serve a stale frame, so keys describe *content*, not timeline
 position. `lumit-render/src/cache.rs` implements `lumit_eval::SourceStamper` and
-calls `lumit_eval::comp_frame_key` (`lumit-eval/src/lib.rs`): a blake3 hash,
-truncated to a `u128`, over everything that can reach a pixel — evaluated transform
-values (never raw keyframes), the live effect stack with evaluated parameters,
-masks, mattes, camera pose, quality, source stamps (`{path}#w{decode_width}` plus
-source frame index).
+calls `lumit_eval::comp_frame_key` (`lumit-eval/src/lib.rs`). That key is a blake3
+hash, truncated to a `u128`, over everything that can reach a pixel: evaluated
+transform values (never raw keyframes), the live effect stack with evaluated
+parameters, masks, mattes, camera pose, quality, and source stamps
+(`{path}#w{decode_width}` plus source frame index).
 
 Two subtleties carry most of the bugs:
 
 - **Presence is gated, not hashed.** Visibility, in/out span and solo decide whether
-  a layer feeds the hash at all. Editing a hidden layer keeps every cached frame;
-  tests pin that keys must NOT change.
-- **The key only knows what it was taught.** A new content axis that is not fed in
-  serves stale frames silently. The fix is to feed it AND bump `ALGO_VERSION`
-  (`lib.rs:51` documents versions 1→3).
+  a layer feeds the hash at all. Editing a hidden layer keeps every cached frame.
+  Tests pin that keys must NOT change.
+- **The key only knows what it was taught.** A new content axis that the key never
+  receives serves stale frames silently. The fix is to feed it AND bump
+  `ALGO_VERSION` (`ALGO_VERSION` in `lumit-eval/src/lib.rs` documents versions 1→3).
 
 ## The cache tiers
 
@@ -77,55 +84,47 @@ Two subtleties carry most of the bugs:
 | Disk | `DiskCache` + `FrameIndex` (`lumit-cache/src/disk.rs`, `index.rs`) | `.kfr` files (LZ4 RGBA8), atomic temp-then-rename, 50 GB cap, owned by the `nebula-disk` thread (`lumit-render/src/diskio.rs`) |
 
 Frames demote down the ladder and promote back up (`upload_frame_texture`). The
-disk thread talks over mpsc channels; the render path never waits on IO bookkeeping
+disk thread talks over mpsc channels. The render path never waits on IO bookkeeping
 (`try_lock` mirrors).
 
 ## Cancellation
 
-Nothing is force-killed; everything checks and steps aside.
+The engine force-kills nothing. Every task checks for cancellation and steps aside.
 
-- **Epochs** (`lumit-eval/src/epoch.rs`) — an `Arc<AtomicU64>`; `bump()` invalidates,
-  workers call `token.check()` at ~10 ms granularity.
+- **Epochs** (`lumit-eval/src/epoch.rs`) — an `Arc<AtomicU64>`. `bump()` invalidates,
+  and workers call `token.check()` at ~10 ms granularity.
 - **Generations** (`decode.rs`) — the decode worker drains its channel latest-wins
   and skips superseded requests.
-- **`media_epoch`** — in-flight frames rendered under a stale probe state are dropped
-  at the receiver. Deliberately not the generation: background fills bump the
+- **`media_epoch`** — the receiver drops in-flight frames rendered under a stale
+  probe state. Deliberately not the generation: background fills bump the
   generation too.
-- Export checks an `AtomicBool` every frame; a queued flare bake drops the frame's
+- Export checks an `AtomicBool` every frame. A queued flare bake drops the frame's
   cache name after compositing rather than banking a lie.
 
 ## Nova's second half: built but not yet wired
 
-`lumit-eval` also contains the eventual demand-pull executor: `graph.rs` compiles a
-comp into an `EvalGraph` DAG (identity folding, source dedup), and
-`exec::render_frame` walks it against three trait sockets — `FrameSource`,
-`KernelExecutor`, `CacheStore` — so the executor unit-tests with fakes, no GPU or
-codecs. Today it drives real kernels only in `lumit-gpu/tests/exec_skeleton.rs`;
-the shipped path is the draw-list renderer above. Live from this crate today:
-`comp_frame_key` (all cache naming) and `schedule.rs` (the playback decisions).
+`lumit-eval` also contains the eventual demand-pull executor. `graph.rs` compiles a
+comp into an `EvalGraph` DAG (identity folding, source dedup).
+`exec::render_frame` walks that DAG against three trait sockets: `FrameSource`,
+`KernelExecutor` and `CacheStore`. The executor therefore unit-tests with fakes,
+with no GPU and no codecs. Today it drives real kernels only in
+`lumit-gpu/tests/exec_skeleton.rs`. The shipped path is the draw-list renderer above.
 
-`schedule.rs` is deliberately pure — no clocks, no threads — so every rule is a
-table test: `FrameRing` (the shelf of rendered frames; present the newest due
-frame), `Lookahead` (`clamp(round(2 × p95 cost × fps), 8, 16)`), and
-`RealtimeController` (EWMA cost vs budget; drop a preview tier immediately above
-0.9× budget, rise only after 12 consecutive frames under 0.4×). The bridge wraps
-`RealtimeController` as the shipped adaptive-resolution picker.
+Live from this crate today: `comp_frame_key` (all cache naming) and `schedule.rs`
+(the playback decisions).
 
-## Landing soon (PR #97)
-
-- A **lighting pass** enters the pipeline as step 4.5 — after effects, before the
-  transform — driven by Light layers; skipped entirely when a comp has no lights
-  (`build.rs` grows the wiring; `lumit-core/src/lighting.rs` is the CPU oracle).
-- Dev builds compile the four maths-heavy crates at `opt-level = 3` (the flare bake
-  was ~16× slower without it).
-- One padded-flare energy oracle stays red at 0.9876 vs 1% — known, carried in
-  `docs/TODO.md`, not a new failure.
+`schedule.rs` is deliberately pure, with no clocks and no threads. Every rule is
+therefore a table test: `FrameRing` (the shelf of rendered frames, which presents
+the newest due frame), `Lookahead` (`clamp(round(2 × p95 cost × fps), 8, 16)`), and
+`RealtimeController` (EWMA cost vs budget, which drops a preview tier immediately
+above 0.9× budget and rises only after 12 consecutive frames under 0.4×). The bridge
+wraps `RealtimeController` as the shipped adaptive-resolution picker.
 
 ## Traps
 
 - **Decode width and cache key are one policy.** Both round the display scale
   through `keyed_scale` (1% steps). When they diverged, footage got two names per
-  frame and the cache bar drew empty over a fully cached comp.
+  frame. The cache bar then drew empty over a fully cached comp.
 - **Parked disk writes need two questions**: `contains()` and `is_pending()`.
   Without the second, the idle backup re-offered the same frame forever (the 81 GB
   incident, K-277).
@@ -134,5 +133,5 @@ frame), `Lookahead` (`clamp(round(2 × p95 cost × fps), 8, 16)`), and
   anywhere silently binds LUTs to the wrong ops.
 - **Unnameable beats misnamed.** When in doubt (unprobed footage, pending bake) a
   frame renders live and banks nothing. A content-keyed lie outlives every undo.
-- Profiled renders bypass the VRAM cache and fence the GPU — measuring is opt-in
+- Profiled renders bypass the VRAM cache and fence the GPU. Measuring is opt-in
   and never on during playback.

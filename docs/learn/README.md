@@ -2,13 +2,9 @@
 
 Onboarding docs for a developer who is new to Rust, Flutter and GPU code but not new
 to programming. They teach the codebase **as built**, with real code excerpts. The
-numbered specs in `docs/` stay canonical for intent; [GUIDE.md](../GUIDE.md) stays the
-no-code-background companion. These docs sit between the two: enough code to change
-the code.
-
-Every excerpt cites `path:line`. Line numbers drift as the code moves; the path and
-the shown code are the anchor. When a doc and the code disagree, the code has moved —
-fix the doc.
+numbered specs in `docs/` stay canonical for intent. [GUIDE.md](../GUIDE.md) stays
+the no-code-background companion. These docs sit between the two: enough code to
+change the code.
 
 ## Reading order
 
@@ -28,8 +24,16 @@ First the map, then the language you need, then the area you are changing.
 | [RUST.md](RUST.md) | Rust, taught from Lumit's own code |
 | [FLUTTER.md](FLUTTER.md) | Dart and Flutter, taught from Lumit's own code |
 | [WGSL.md](WGSL.md) | GPU thinking and WGSL, taught from Lumit's own shaders |
+| [PENDING.md](PENDING.md) | What the open pull requests change. Delete the file when they merge |
+
+## How these docs cite code
+
+A citation names a **file and a symbol**, not a line number. Line numbers drift with
+every edit above them. A symbol name survives, and `grep` finds it in one step. When
+a doc and the code disagree, the code moved. Fix the doc.
 
 ## Status
 
-Living documents. Sections marked **Landing soon** describe open pull requests;
-delete each note when its pull request merges.
+Living documents. The area guides describe current `main` only. Anything not yet
+merged lives in [PENDING.md](PENDING.md), so there is one file to delete rather than
+a stale paragraph in six.
