@@ -92,10 +92,10 @@ struct Ray {
 // One ray's deposit (K-366): where it landed, the two half-axes of the
 // parallelogram footprint it spreads over, and the PEAK of the separable
 // tent — its flux already divided by the density-capped footprint area, so
-// the raster's fragment only has to evaluate (1−|u|)(1−|v|). `live` is 1.0
-// for a ray with flux and 0.0 for a dead or unlit one, which the raster
-// draws as a degenerate off-screen quad (the slot must still be written:
-// the batch's splats are one contiguous instance range).
+// the deposit only has to evaluate the tent. `live` is 1.0 for a ray with
+// flux and 0.0 for a dead or unlit one, which the deposit skips (the slot
+// must still be written: the batch's splats are one contiguous range, and
+// K-375's deposit indexes it by thread).
 struct Splat {
     cx: f32,
     cy: f32,

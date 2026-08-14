@@ -634,6 +634,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   sheet. It costs four times as much drawing per ray, which is the honest price
   of not printing the ray grid onto the picture.
 
+  **Adding up in the right precision.** One more fault sat underneath, and it
+  is a nice illustration of how a thing can be wrong while every test says it
+  is right. The light from each ray is *added* into the picture, and a bright
+  pixel might have a few thousand rays landing on it. That adding-up was done
+  in a 16-bit number format — fine for storing a colour, but when you add a
+  tiny amount to a large running total in 16 bits, the tiny amount can be too
+  small to change the total at all, and simply vanishes. It vanishes more the
+  brighter the pixel already is, so the effect was quietly darkening its own
+  highlights by about four percent in the middle of the frame. The sum is now
+  kept in 32 bits off to one side and written into the picture once at the end
+  — one rounding instead of thousands — which costs nothing in memory worth
+  mentioning and nothing in the look except that it is now correct.
+
   **Every element gets its own coating.** Look at a photograph of a real flare
   and the ghosts are not one colour: there is a blue one next to a purple one
   next to an amber one. That is the lens, not an effect. A coating works by

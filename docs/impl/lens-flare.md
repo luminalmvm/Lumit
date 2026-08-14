@@ -426,6 +426,28 @@ GPU quad doubles; the fragment tent is untouched, because its `uv` still runs `�
 quad's corners — those corners now sit on the next ray along. Cost: four times the fragments
 per splat, on the hottest raster in the effect.
 
+### 5a-ter. The deposit accumulates in f32 (K-366, fixed K-375)
+
+The splat deposit was a raster pass blending additively into `flare_tex`, which is
+`WORKING_FORMAT` = `Rgba16Float`. Adding a small increment to a large fp16 running sum drops
+anything under half an ULP of the sum — systematically, and more the brighter the pixel. On
+the padded-anamorphic oracle that read as the middle of the frame 4.5% dim, the border ring
+0.7%, the outer fifths 0.1%, growing with the contributions per pixel.
+
+`fx_lens_flare_deposit.wgsl` replaces it with two compute entry points. `deposit` scatters each
+splat into an f32 accumulator (three channels a pixel, pooled in `Scratch`, cleared per frame)
+using the compare-and-swap float add — WGSL has no float atomics, and CAS on the bit pattern is
+exact f32 without any device feature. `resolve` writes the finished sums into the fp16 texture
+once. Everything downstream is untouched: a single stored value always had precision to spare.
+
+`deposit` is an op-for-op twin of `splat_ray` — same bbox, same inverse 2×2, same tent, same
+order — which the raster could not be, because its pixel selection was the rasteriser's fill
+rule rather than the reference's `|u| < 2`.
+
+The two options not taken: `Rgba32Float` blending needs `FLOAT32_BLENDABLE`, which is not
+universally available and would make the picture machine-dependent (K-353); and restating the
+oracle's bound would have recorded the loss rather than fixed it.
+
 ### 5b. Ghost edges are Fresnel: the knife-edge rim (K-369, re-derived K-370)
 
 The starburst above is the aperture's **far** field. A ghost is its **near** field. Each

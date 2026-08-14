@@ -234,8 +234,12 @@ struct GpuBaked {
 struct Scratch {
     rays: wgpu::Buffer,
     splats: wgpu::Buffer,
+    /// The f32 splat accumulator (K-375), three channels a pixel, pooled with
+    /// the rest because it is the same shape of per-frame scratch.
+    accum: wgpu::Buffer,
     ray_bytes: u64,
     splat_bytes: u64,
+    accum_bytes: u64,
 }
 
 /// The lens flare's pipelines, its bake cache and its scratch pool, one field
@@ -245,12 +249,15 @@ pub struct LensFlareFx {
     build_splats: wgpu::ComputePipeline,
     detect_tiles: wgpu::ComputePipeline,
     detect_pick: wgpu::ComputePipeline,
-    draw: wgpu::RenderPipeline,
+    /// The splat deposit and its resolve (K-375): the accumulation moved off
+    /// the raster blender, which could only sum in the flare buffer's fp16.
+    deposit: wgpu::ComputePipeline,
+    resolve: wgpu::ComputePipeline,
     blur: wgpu::ComputePipeline,
     combine: wgpu::ComputePipeline,
     trace_layout: wgpu::BindGroupLayout,
     detect_layout: wgpu::BindGroupLayout,
-    draw_layout: wgpu::BindGroupLayout,
+    deposit_layout: wgpu::BindGroupLayout,
     blur_layout: wgpu::BindGroupLayout,
     combine_layout: wgpu::BindGroupLayout,
     /// Baked resources keyed by `bake_key`. The mutex is held only for
@@ -527,14 +534,15 @@ fn frame_optics(native_fstop: f32, focal_mm: f32, fstop: f32, focus_m: f32) -> F
     }
 }
 
-/// What the draw's vertex stage needs beyond the splats themselves: the
-/// raster it is drawing into, because a splat's centre and axes are in
-/// flare-buffer PIXELS and the quad has to reach clip space (K-366).
+/// What the deposit and resolve stages need beyond the splats: the flare
+/// buffer's size, because a splat's centre and axes are in its PIXELS
+/// (K-366), and how many splats the dispatch covers (K-375).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct DrawDims {
-    raster: [f32; 2],
-    _pad: [f32; 2],
+struct DepositDims {
+    raster: [u32; 2],
+    splat_count: u32,
+    _pad: u32,
 }
 
 #[repr(C)]
@@ -807,11 +815,24 @@ impl LensFlareFx {
                 uniform_entry(3, c),
             ],
         });
-        let draw_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("fx-lens-flare-draw-layout"),
+        let deposit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("fx-lens-flare-deposit-layout"),
             entries: &[
-                storage_entry(0, true, wgpu::ShaderStages::VERTEX),
-                uniform_entry(1, wgpu::ShaderStages::VERTEX),
+                // The splats, the f32 accumulator they scatter into, the dims,
+                // and the flare texture the resolve writes once at the end.
+                storage_entry(0, true, c),
+                storage_entry(1, false, c),
+                uniform_entry(2, c),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: c,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: WORKING_FORMAT,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
             ],
         });
         let blur_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -860,9 +881,9 @@ impl LensFlareFx {
             label: Some("fx-lens-flare-detect"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_detect.wgsl").into()),
         });
-        let draw_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("fx-lens-flare-draw"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_draw.wgsl").into()),
+        let deposit_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("fx-lens-flare-deposit"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_deposit.wgsl").into()),
         });
         let combine_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-flare-combine"),
@@ -914,57 +935,26 @@ impl LensFlareFx {
             &detect_pl,
         );
 
-        let draw_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("fx-lens-flare-draw-pl"),
-            bind_group_layouts: &[&draw_layout],
+        let deposit_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("fx-lens-flare-deposit-pl"),
+            bind_group_layouts: &[&deposit_layout],
             push_constant_ranges: &[],
         });
-        let draw = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("fx-lens-flare-draw"),
-            layout: Some(&draw_pl),
-            vertex: wgpu::VertexState {
-                module: &draw_mod,
-                entry_point: Some("vs_flare"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            // Single-sampled, and antialiased anyway (K-353, K-366): the
-            // splat's tent falls to zero at its own edge, so there is no
-            // silhouette to smooth. Hardware 4x MSAA gave the smoothing but
-            // blended fp16 into a multisample target, which this GPU does not
-            // do reproducibly (impl/lens-flare.md §2.4).
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &draw_mod,
-                entry_point: Some("fs_flare"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: WORKING_FORMAT,
-                    // Plain additive: the ghost grids accumulate light.
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
+        // Two entry points over one layout (K-375): the scatter, then the
+        // single write into the fp16 texture. There is no raster pipeline any
+        // more — the blender was the thing that could not add in f32.
+        let deposit = compute(
+            "deposit",
+            "fx-lens-flare-deposit",
+            &deposit_mod,
+            &deposit_pl,
+        );
+        let resolve = compute(
+            "resolve",
+            "fx-lens-flare-resolve",
+            &deposit_mod,
+            &deposit_pl,
+        );
         let combine_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("fx-lens-flare-combine-pl"),
             bind_group_layouts: &[&combine_layout],
@@ -988,12 +978,13 @@ impl LensFlareFx {
             build_splats,
             detect_tiles,
             detect_pick,
-            draw,
+            deposit,
+            resolve,
             blur,
             combine,
             trace_layout,
             detect_layout,
-            draw_layout,
+            deposit_layout,
             blur_layout,
             combine_layout,
             cache: Mutex::new(BakeCache::new(Self::CACHE_CAP)),
@@ -1203,7 +1194,13 @@ impl LensFlareFx {
     /// Take the pooled scratch if it is free and big enough, else build one.
     /// The lock covers the take and nothing else — never an allocation, never
     /// an encode (docs/14 §4).
-    fn take_scratch(&self, ctx: &GpuContext, ray_bytes: u64, splat_bytes: u64) -> Scratch {
+    fn take_scratch(
+        &self,
+        ctx: &GpuContext,
+        ray_bytes: u64,
+        splat_bytes: u64,
+        accum_bytes: u64,
+    ) -> Scratch {
         let held = self.scratch.lock().ok().and_then(|mut s| s.take());
         match held {
             // Big enough and not wildly oversized: reuse as is. The upper
@@ -1213,14 +1210,18 @@ impl LensFlareFx {
             Some(s)
                 if s.ray_bytes >= ray_bytes
                     && s.splat_bytes >= splat_bytes
+                    && s.accum_bytes >= accum_bytes
                     && s.ray_bytes <= ray_bytes.saturating_mul(4)
-                    && s.splat_bytes <= splat_bytes.saturating_mul(4) =>
+                    && s.splat_bytes <= splat_bytes.saturating_mul(4)
+                    && s.accum_bytes <= accum_bytes.saturating_mul(4) =>
             {
                 s
             }
             _ => Scratch {
                 rays: scratch_buffer(ctx, "fx-lens-flare-rays", ray_bytes),
                 splats: scratch_buffer(ctx, "fx-lens-flare-splats", splat_bytes),
+                accum: accum_buffer(ctx, accum_bytes),
+                accum_bytes,
                 ray_bytes,
                 splat_bytes,
             },
@@ -1235,6 +1236,17 @@ impl LensFlareFx {
             }
         }
     }
+}
+
+/// The splat accumulator (K-375). Cleared to zero each frame, so it needs
+/// `COPY_DST` beside the storage binding.
+fn accum_buffer(ctx: &GpuContext, bytes: u64) -> wgpu::Buffer {
+    ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("fx-lens-flare-accum"),
+        size: bytes.clamp(16, SCRATCH_BYTE_BUDGET),
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
 }
 
 /// A storage buffer for the trace scratch. Never zero-sized (wgpu rejects
@@ -1692,9 +1704,10 @@ impl FxEngine {
         }
 
         // Always clear the flare buffer (a zero-ghost frame must not read
-        // stale memory). A live frame clears through the multisample target
-        // and resolves, so both textures start clean; an idle one clears the
-        // flare buffer directly.
+        // stale memory). A live frame overwrites every texel in K-375's
+        // resolve, so this is what covers the idle one — and the frame that
+        // plans no batches at all, whose resolve writes the cleared
+        // accumulator's zeros.
         {
             let view = flare_tex.create_view(&Default::default());
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1806,38 +1819,14 @@ impl FxEngine {
                 let (need_rays, need_splats) = plan.iter().fold((16u64, 16u64), |(r, s), b| {
                     (r.max(b.ray_bytes), s.max(b.splat_bytes))
                 });
-                let scratch = lf.take_scratch(ctx, need_rays, need_splats);
-                // The raster's own size: a splat's centre and half-axes are
-                // in flare-buffer pixels, and the vertex stage maps its quad
-                // from there into clip space (K-366).
-                let draw_dims = ctx
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("fx-lens-flare-draw-dims"),
-                        contents: bytemuck::bytes_of(&DrawDims {
-                            raster: [fpw as f32, fph as f32],
-                            _pad: [0.0; 2],
-                        }),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
-                let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("fx-lens-flare-draw-bind"),
-                    layout: &lf.draw_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: scratch.splats.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: draw_dims.as_entire_binding(),
-                        },
-                    ],
-                });
+                // Three f32 channels a pixel of the padded flare buffer.
+                let accum_bytes = u64::from(fpw) * u64::from(fph) * 3 * 4;
+                let scratch = lf.take_scratch(ctx, need_rays, need_splats, accum_bytes);
+                // Start from nothing: the accumulator is pooled, so last
+                // frame's sums are still in it.
+                encoder.clear_buffer(&scratch.accum, 0, Some(accum_bytes));
 
-                // Straight into the flare buffer: since K-353 there is no
-                // multisample target to resolve from, and the raster
-                // antialiases itself in the fragment.
+                // The resolve writes it once, at the end (K-375).
                 let flare_view = flare_tex.create_view(&Default::default());
                 // Where the frame breaks its work into separate submissions.
                 let flushes = plan_flushes(&plan, baked.surface_count);
@@ -1932,6 +1921,46 @@ impl FxEngine {
                             },
                         ],
                     });
+                    // The deposit's own view of the frame (K-375): the flare
+                    // buffer's size, and EXACTLY how many splats this batch
+                    // filled. It has to be exact — the dispatch's last
+                    // workgroup runs a tail of up to 63 idle threads, and a
+                    // looser bound would have them deposit whatever the
+                    // previous batch left in those slots.
+                    let splats_here = light_chunk * batch * batch_rays;
+                    let deposit_dims =
+                        ctx.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("fx-lens-flare-deposit-dims"),
+                                contents: bytemuck::bytes_of(&DepositDims {
+                                    raster: [fpw, fph],
+                                    splat_count: splats_here,
+                                    _pad: 0,
+                                }),
+                                usage: wgpu::BufferUsages::UNIFORM,
+                            });
+                    let deposit_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("fx-lens-flare-deposit-bind"),
+                        layout: &lf.deposit_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: scratch.splats.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: scratch.accum.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: deposit_dims.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: wgpu::BindingResource::TextureView(&flare_view),
+                            },
+                        ],
+                    });
                     // Each stage in its own pass: the pass boundary is the
                     // write-then-read barrier between them. The splat stage
                     // reads its NEIGHBOURS' landings for the footprint
@@ -1951,23 +1980,17 @@ impl FxEngine {
                         cpass.dispatch_workgroups(x_items.div_ceil(64), batch, light_chunk);
                     }
                     {
-                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("fx-lens-flare-draw-pass"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &flare_view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            ..Default::default()
+                        // The deposit (K-375): one thread per splat, scattering
+                        // into the f32 accumulator. This is where the raster
+                        // pass used to be, and the reason it is not one any
+                        // more is that the blender could only sum in fp16.
+                        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            label: Some("fx-lens-flare-deposit-pass"),
+                            timestamp_writes: None,
                         });
-                        rpass.set_pipeline(&lf.draw);
-                        rpass.set_bind_group(0, &draw_bind, &[]);
-                        // One instanced quad per splat, over exactly this
-                        // batch's rays, contiguous from zero (K-366).
-                        rpass.draw(0..6, 0..light_chunk * batch * batch_rays);
+                        cpass.set_pipeline(&lf.deposit);
+                        cpass.set_bind_group(0, &deposit_bind, &[]);
+                        cpass.dispatch_workgroups(splats_here.div_ceil(64), 1, 1);
                     }
                     // Hand over what is encoded before it grows into a
                     // submission the operating system would kill (see
@@ -1983,6 +2006,51 @@ impl FxEngine {
                         ctx.flush();
                         encoder = ctx.encoder("fx-lens-flare-enc");
                     }
+                }
+                // One write into the fp16 texture, now that every batch has
+                // added its light in f32 (K-375). `splat_count` is nothing to
+                // the resolve, which walks the raster rather than the splats.
+                let resolve_dims =
+                    ctx.device
+                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("fx-lens-flare-resolve-dims"),
+                            contents: bytemuck::bytes_of(&DepositDims {
+                                raster: [fpw, fph],
+                                splat_count: 0,
+                                _pad: 0,
+                            }),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+                let resolve_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("fx-lens-flare-resolve-bind"),
+                    layout: &lf.deposit_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: scratch.splats.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: scratch.accum.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: resolve_dims.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(&flare_view),
+                        },
+                    ],
+                });
+                {
+                    let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("fx-lens-flare-resolve-pass"),
+                        timestamp_writes: None,
+                    });
+                    cpass.set_pipeline(&lf.resolve);
+                    cpass.set_bind_group(0, &resolve_bind, &[]);
+                    cpass.dispatch_workgroups(fpw.div_ceil(8), fph.div_ceil(8), 1);
                 }
                 lf.put_scratch(scratch);
             }

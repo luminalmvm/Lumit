@@ -9428,3 +9428,50 @@ Two fixes, and a test each:
 frontend by *name* wants a test that the name resolves. Nothing in the type system connects a
 string in `lumit-bridge` to a `ParamSchema` in `lumit-core`, and the failure mode is a control
 that quietly is not there.
+
+## K-375 — The flare's splats accumulate in f32 through a compute pass, not in fp16 through the blender
+
+**DECIDED** (2026-08-13, owner's choice between three costed options). Replaces the raster deposit half of [K-366](#k-366--the-ghost-grid-is-splatted-per-ray-not-rasterised-as-quads); the per-ray splatting model and [K-373](#k-373)'s tent are unchanged.
+
+**The defect.** Every ray's flux is deposited over a footprint, and a bright pixel takes
+contributions from thousands of them. That accumulation was done by the raster blender,
+additively, into the flare buffer — which is `WORKING_FORMAT`, `Rgba16Float`. **Adding a small
+increment to a large fp16 running sum loses everything below half an ULP of the sum**, and
+that is a systematic loss, not jitter that cancels: the brighter the pixel, the more of each
+further contribution disappears.
+
+Measured against the f32 CPU reference on the padded-anamorphic oracle: the middle of the
+frame 4.5% dim, the border ring 0.7%, the outer fifths 0.1% — tracking local brightness
+exactly as the mechanism predicts, and growing with the number of contributions per pixel
+(K-373 quadrupled that count and the deficit grew ~3.5×, which is what identified it). It had
+been there since K-366 and read as a mysterious 1.2% oracle gap.
+
+**Why this option and not the other two.** `Rgba32Float` blending needs the
+`FLOAT32_BLENDABLE` device feature, which this build does not request and which is not
+universally available — it would either raise the hardware floor or make the picture differ by
+machine, which is the determinism [K-353](#k-353) fought for. Restating the oracle's bound
+would have recorded the loss rather than fixed it, and the loss is real: the GPU was
+systematically darkening its own highlights.
+
+**The mechanism.** The sum is accumulated in **f32** in a pooled storage buffer, three channels
+a pixel, and written into the fp16 texture **once**, by a resolve pass, at the end. One
+rounding instead of thousands. The texture stays fp16 — a single stored value has precision to
+spare; it was only ever the accumulation that was short, so nothing downstream (blur, combine)
+changes at all.
+
+WGSL has no float atomics, so the add is the standard compare-and-swap loop over the f32's bit
+pattern: exact f32 addition, no device feature, portable. In a caustic — many splats on one
+pixel — the loop retries, and that contention is the cost of getting the sum right. NaN is
+guarded at the top, because a NaN never compares equal and the loop would not terminate.
+
+**A twin, not merely an analogue.** `deposit` mirrors `lumit_core`'s `splat_ray` op for op —
+same bounding box, same inverse 2×2, same tent, same order — which the raster could not, since
+its pixel selection was the rasteriser's fill rule rather than the reference's `|u| < 2` test.
+The oracle should therefore agree more closely than it ever has, and the exact figure is
+CI's to report: this machine has no adapter, and `tests/wgsl_validates.rs` (naga, no card)
+is what checked the new kernel here.
+
+**What this deletes**: the whole render pipeline, its bind group layout, its
+`fx_lens_flare_draw.wgsl`, and the additive `BlendState` that was the actual bug.
+`Scratch` gains the accumulator, pooled and size-bounded on the same rule as the rays and
+splats, and cleared per frame with `clear_buffer`.
