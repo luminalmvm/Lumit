@@ -23,7 +23,8 @@ First the map, then the language you need, then the area you are changing.
 | [04-MEDIA-AUDIO.md](04-MEDIA-AUDIO.md) | `lumit-media` + `lumit-audio` + `lumit-text`: decode, the audio clock, text |
 | [05-BRIDGE.md](05-BRIDGE.md) | `lumit-bridge` + `lumit-keymap`: how the Flutter frontend drives the engine |
 | [06-FRONTEND.md](06-FRONTEND.md) | `flutter_ui/`: shell, panels, state, theme, strings |
-| [07-BUILD-SHIP.md](07-BUILD-SHIP.md) | Building, testing, CI gates, packaging, translations, the websites |
+| [07-BUILD-SHIP.md](07-BUILD-SHIP.md) | Building, testing, CI gates, packaging, translations |
+| [08-WEBSITES.md](08-WEBSITES.md) | `web/` and `web-docs/`: how to update lumitlab.com and the docs site |
 | [RUST.md](RUST.md) | Rust, taught from Lumit's own code |
 | [FLUTTER.md](FLUTTER.md) | Dart and Flutter, taught from Lumit's own code |
 | [WGSL.md](WGSL.md) | GPU thinking and WGSL, taught from Lumit's own shaders |

@@ -109,8 +109,13 @@ sequenceDiagram
     B->>R: request frame (comp, time, epoch)
     R->>R: decode plan + draw list from snapshot
     R->>G: dispatch WGSL kernels, composite
-    G-->>P: shared texture → Viewer Texture widget
+    G-->>B: rendered texture
+    B-->>P: WorkerResponse with a GPU handle
+    P->>P: register as a Flutter Texture, draw it
 ```
+
+Pixels never cross the seam. The engine hands over a shared-texture handle and
+Flutter draws it directly (K-183).
 
 ## Where do I change X
 
@@ -130,3 +135,4 @@ Filled in per area; each row names the first file to open.
 | A menu, dialog, shortcut | `flutter_ui/lib/shell/` + `lumit-keymap` | [06-FRONTEND.md](06-FRONTEND.md) |
 | Any user-facing string | `flutter_ui/lib/l10n/app_en.arb` | [07-BUILD-SHIP.md](07-BUILD-SHIP.md) |
 | CI, tests, packaging | `.github/workflows/` | [07-BUILD-SHIP.md](07-BUILD-SHIP.md) |
+| The website or the docs site | `web/` or `web-docs/` | [08-WEBSITES.md](08-WEBSITES.md) |
