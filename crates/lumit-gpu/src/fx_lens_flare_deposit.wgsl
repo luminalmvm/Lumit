@@ -27,8 +27,9 @@
 //
 // Integer addition IS associative and commutative, so `atomicAdd` on a u32
 // gives a sum that does not depend on the order at all. The accumulator is
-// therefore fixed point: every deposit is rounded to the nearest 1/2^18 and
-// added exactly. That is **unbiased** rounding at 3.8e-6 absolute, against the
+// therefore fixed point: every deposit is rounded to the nearest step and
+// added exactly. That is **unbiased** rounding — at 6e-8, see the scale
+// below — against the
 // fp16 blender's systematic truncation of everything under half an ULP of a
 // large running sum — better precision where it mattered, and reproducible,
 // which the float version was not.
@@ -43,11 +44,11 @@
 //
 // `deposit` mirrors `lumit_core::fx::lens_flare::splat_ray` op for op, and is
 // now a closer twin than the raster ever was: same bounding box, same inverse
-// 2x2, same tent, same order of operations.
+// 2x2, same kernel, same order of operations.
 
 // One ray's footprint, as `build_splats` left it: centre and half-axes in
-// flare-buffer pixels, and the peak colour with the density cap and the tent's
-// normalisation already folded in.
+// flare-buffer pixels, and the peak colour with the density cap and the
+// kernel's normalisation already folded in.
 struct Splat {
     cx: f32,
     cy: f32,
