@@ -9491,3 +9491,62 @@ is what checked the new kernel here.
 `fx_lens_flare_draw.wgsl`, and the additive `BlendState` that was the actual bug.
 `Scratch` gains the accumulator, pooled and size-bounded on the same rule as the rays and
 splats, and cleared per frame with `clear_buffer`.
+
+## K-376 — The splat kernel is a quadratic B-spline, because a tent's creases are visible too
+
+**DECIDED** (2026-08-14). Continues [K-373](#k-373); the partition-of-unity requirement it established is unchanged, and this is about what *kind* of partition.
+
+**The owner, on a build carrying K-373**: "genuinely feels like the flares are getting worse.
+That grid pattern is still absurdly visible." K-373 was right and not sufficient, and the gap
+between those two is worth recording, because the test that passed is the reason it was missed.
+
+**Why the flat-sheet test passed while the artefact stayed.** K-373's regression test lays
+down a *uniform* lattice of identical rays and requires the reconstruction to be flat. A tent
+handles that case exactly — it is the case a tent is designed for. A real ghost's rays are
+neither uniform nor axis-aligned, and there the tent's weakness shows: a linear B-spline is
+only **C⁰**, so the reconstructed surface has a crease along every cell boundary. The eye finds
+creases; it is the same Mach-band sensitivity that makes a polygon silhouette visible in
+otherwise smooth shading. A test on the easy case proved a property that did not transfer.
+
+**Measured on a real frame** — each pixel's departure from its own 3×3 mean, relative to that
+mean, in two brightness bands:
+
+| kernel | bright | dark |
+|---|---|---|
+| K-366, tent at half a step (what the owner photographed) | 15.8% | — |
+| K-373, tent at a full step | 2.42% | 4.59% |
+| **K-376, quadratic B-spline** | **1.91%** | **3.81%** |
+| cubic B-spline, for comparison | 1.87% | 3.72% |
+
+The quadratic — `3/4 − t²` inside a half step, `(3/2 − |t|)²/2` out to one and a half — is the
+standard answer to this exact symptom in the simulation literature, where it is called grid
+imprinting or cell-crossing noise. It partitions unity like the tent and is C¹. The cubic buys
+almost nothing further for sixteen cells a splat against nine, so it is recorded here and not
+taken.
+
+**What is left is not the kernel.** The dark band settles at about 3% and **stops falling when
+the rays are multiplied eightfold**, which sampling noise would not do — so it is the flare's
+own fine detail (iris rims, overlapping faint ghost tails) being read by a metric that cannot
+tell detail from artefact, not a residual grid. The new test's thresholds sit just above the
+measured figures for that reason, and say so.
+
+**The measurement is now a test.** `lens_flare_reconstruction_does_not_imprint_its_own_grid`
+measures a real frame rather than a synthetic sheet, which is the thing K-373 failed to do.
+
+## K-377 — The accumulator's fixed-point scale is sized from what the buffer holds
+
+**DECIDED** (2026-08-14). Corrects a number in [K-375](#k-375).
+
+K-375 picked 2^18 steps per unit of radiance and justified the ceiling — 16384 — as "orders
+above anything a frame produces". It is: the flare buffer measures a **peak of 0.042** and a
+**median lit pixel of 0.0028** on the bundled default, because the auto-exposure normalises it
+there (K-258). That makes the ceiling four hundred thousand times the peak — range spent on
+headroom no frame will ever reach, and paid for in resolution exactly where the picture is
+dark and banding is most visible.
+
+2^24 keeps a ceiling of 256 — still six thousand times the measured peak, and a thousand times
+it at fourfold intensity — and drops the quantum to 6e-8, a fifty-thousandth of the median lit
+pixel. The margin is measured by the same test as before rather than argued.
+
+The lesson is the one K-375 should have taken: the range was chosen before anything was
+measured, and a measurement was a two-line print away.

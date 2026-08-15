@@ -1278,12 +1278,12 @@ pub fn pair_grid_of(base: u32, spread: f32) -> u32 {
 /// Fixed-point steps in one unit of radiance in the splat accumulator (K-375)
 /// — the twin of `ACCUM_SCALE` in `fx_lens_flare_deposit.wgsl`, pinned against
 /// the shader text by test.
-pub const ACCUM_SCALE: f32 = 262144.0;
+pub const ACCUM_SCALE: f32 = 16777216.0;
 
 /// The radiance one accumulator channel may reach before its u32 wraps
 /// (K-375): `u32::MAX / ACCUM_SCALE`. A test measures the CPU reference's
 /// brightest pixel against it.
-pub const ACCUM_CEILING: f32 = 16383.999;
+pub const ACCUM_CEILING: f32 = 255.99998;
 
 /// One ghost's Fresnel number from its image spread and the working stop —
 /// the exact twin of `lumit_core::fx::lens_flare::ghost_fresnel_number`

@@ -81,19 +81,37 @@ struct Dims {
 // Fixed-point steps in one unit of radiance. Spelled in the Rust twin too and
 // pinned against this text by test.
 //
-// 2^18 puts the resolution at 3.8e-6 and a channel's ceiling — where the u32
-// would wrap — at 16383.99 of scene-linear radiance. The flare buffer is
-// auto-exposure normalised to a mean near 0.01 (K-258's `TARGET_PROBE_MEAN`)
-// and the density cap bounds a caustic at 333x the launch density, so that
-// ceiling is orders above anything a frame makes; a test measures the CPU
-// reference's brightest pixel against it. **Above it the sum would wrap**, not
-// saturate: `atomicAdd` has no saturating form, and detecting the overflow
-// would need a compare-and-swap, which is the order dependence this design
-// exists to avoid.
-const ACCUM_SCALE: f32 = 262144.0;
+// **Sized from what the buffer actually holds, not from a guess.** Measured on
+// the bundled default, the flare buffer peaks at 0.042 and its median lit pixel
+// is 0.0028 — the auto-exposure normalises it there (K-258's
+// `TARGET_PROBE_MEAN`). K-375 first chose 2^18, whose ceiling of 16384 was four
+// hundred thousand times the peak: range spent on headroom no frame will ever
+// use, paid for in resolution exactly where the picture is dark and banding
+// shows. 2^24 keeps a ceiling of 256 — still six thousand times the measured
+// peak, and a thousand times it at four-fold intensity — while the quantum
+// falls to 6e-8, which is a fifty-thousandth of the median lit pixel.
+//
+// **Above the ceiling the sum wraps**, not saturates: `atomicAdd` has no
+// saturating form, and detecting the overflow would need a compare-and-swap,
+// which is the order dependence this design exists to avoid. A test measures
+// the reference's brightest pixel against the ceiling so the margin is watched
+// rather than assumed.
+const ACCUM_SCALE: f32 = 16777216.0;
 // The clamp on ONE deposit, which is a different job: it keeps an infinity out
 // of the cast, whose result would otherwise be an arbitrary integer.
 const ACCUM_MAX: f32 = 4294967040.0;
+
+// The quadratic B-spline in units of one grid step — lumit_core's `bspline_q`.
+// A partition of unity like the tent, but C1: no crease where one cell meets
+// the next, which is the artefact K-373's tent still left on screen (K-376).
+fn bspline_q(t: f32) -> f32 {
+    let a = abs(t);
+    if (a <= 0.5) {
+        return 0.75 - a * a;
+    }
+    let e = 1.5 - a;
+    return 0.5 * e * e;
+}
 
 // Order-independent by construction: integer addition is associative, so the
 // sum does not depend on which thread got there first.
@@ -127,8 +145,9 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     let inv_det = 1.0 / det;
     let peak = vec3<f32>(s.r, s.g, s.b);
 
-    // The tent reaches a full grid step — two half-axes — each way (K-373).
-    let ext = 2.0 * (abs(a1) + abs(a2));
+    // The quadratic B-spline reaches one and a half grid steps — three
+    // half-axes — each way (K-373 widened it to one step, K-376 to this).
+    let ext = 3.0 * (abs(a1) + abs(a2));
     let w = f32(dims.raster.x);
     let h = f32(dims.raster.y);
     let x0 = i32(max(floor(centre.x - ext.x), 0.0));
@@ -145,10 +164,10 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
             // (u, v) in the parallelogram's own frame: solve [a1 a2](u,v)^T = d.
             let u = (d.x * a2.y - d.y * a2.x) * inv_det;
             let v = (d.y * a1.x - d.x * a1.y) * inv_det;
-            if (abs(u) >= 2.0 || abs(v) >= 2.0) {
+            if (abs(u) >= 3.0 || abs(v) >= 3.0) {
                 continue;
             }
-            let k = (1.0 - abs(u) * 0.5) * (1.0 - abs(v) * 0.5);
+            let k = bspline_q(u * 0.5) * bspline_q(v * 0.5);
             let base = (u32(py) * dims.raster.x + u32(px)) * 3u;
             add_fixed(base, peak.x * k);
             add_fixed(base + 1u, peak.y * k);

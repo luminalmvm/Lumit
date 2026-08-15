@@ -5072,6 +5072,88 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
     );
 }
 
+/// **The reconstruction must not print the ray grid on the picture** (K-366,
+/// K-373, K-376) — measured on a real frame, not a synthetic sheet.
+///
+/// `lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux` proves the
+/// kernel partitions unity on a *uniform* lattice, which is the case a tent
+/// already handled. It did not catch what the owner could see, because a real
+/// ghost's rays are neither uniform nor axis-aligned, and a tent is only C⁰:
+/// it reconstructs a surface with a crease along every cell boundary, and the
+/// eye finds creases.
+///
+/// So this measures the thing itself — how far each pixel departs from its own
+/// 3×3 mean, relative to that mean — over a real flare, in two brightness
+/// bands. Where it has stood:
+///
+/// | kernel | bright | dark |
+/// |---|---|---|
+/// | K-366, tent at half a step | 15.8% | — |
+/// | K-373, tent at a full step | 2.42% | 4.59% |
+/// | K-376, quadratic B-spline | **1.91%** | **3.81%** |
+///
+/// The floor is not zero and must not be asserted to be: a flare genuinely has
+/// fine detail — iris rims, overlapping faint ghosts — and past about 3% in the
+/// dark band the measurement is reading that rather than any artefact (it stops
+/// falling when the rays are multiplied eightfold, which sampling noise would
+/// not do). The thresholds below sit just above what is measured, so a
+/// regression in the reconstruction shows up here rather than on screen.
+#[test]
+fn lens_flare_reconstruction_does_not_imprint_its_own_grid() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        // No ghost blur: a blur would hide grid imprinting rather than prevent
+        // it, and this test is about preventing it.
+        ghost_softness: 0.0,
+        starburst_intensity: 0.0,
+        quality: 1,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (256u32, 144u32);
+    let buf = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h));
+    let at = |x: usize, y: usize| buf[(y * w as usize + x) * 3];
+    let mx = buf.iter().cloned().fold(0.0_f32, f32::max);
+    assert!(mx > 0.0, "the reference must render something to measure");
+
+    let ripple = |lo: f32, hi: f32| -> f32 {
+        let (mut num, mut den) = (0.0_f64, 0.0_f64);
+        for y in 1..h as usize - 1 {
+            for x in 1..w as usize - 1 {
+                let c = at(x, y);
+                if c < mx * lo || c > mx * hi {
+                    continue;
+                }
+                let mut m = 0.0_f32;
+                for dy in 0..3 {
+                    for dx in 0..3 {
+                        m += at(x + dx - 1, y + dy - 1);
+                    }
+                }
+                m /= 9.0;
+                num += f64::from((c - m).abs());
+                den += f64::from(m);
+            }
+        }
+        (100.0 * num / den.max(1e-9)) as f32
+    };
+
+    let bright = ripple(0.02, 1.0);
+    let dark = ripple(0.0002, 0.02);
+    assert!(
+        bright < 2.5,
+        "the lit part of the frame is rippling at {bright:.2}% against the \
+         1.91% the quadratic B-spline measures — the reconstruction has \
+         regressed towards printing its sampling grid (K-366 measured 15.8%)"
+    );
+    assert!(
+        dark < 4.5,
+        "the faint part of the frame is rippling at {dark:.2}% against the \
+         3.81% the quadratic B-spline measures; the floor there is about 3%, \
+         which is the flare's own fine detail rather than an artefact"
+    );
+}
+
 /// **Ghost edges are Fresnel, and only their edges are** (K-369, re-derived
 /// K-370).
 ///

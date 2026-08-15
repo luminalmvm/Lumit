@@ -420,7 +420,11 @@ which is exactly why the suite passed: it measured how much light there was and 
 it was smooth. `lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux` now measures
 both.
 
-The tent reaches `±2·a1`; its integral grows by four, so the peak is divided by four and the
+The kernel reaches `±2·a1` (K-373) and is the **quadratic B-spline** rather than a tent
+(K-376): a tent is only C0, and the crease at every cell boundary is itself visible on a real,
+non-uniform ghost — 2.42% residual against the quadratic's 1.91% in the lit part of the frame,
+4.59% against 3.81% in the faint part. Its support is 1.5 steps, so `±3·a1`. Both partition
+unity; the integral grows by four either way, so the peak is divided by four and the
 flux is unchanged. `area` and the density cap keep their K-366 meaning in half-axis units. The
 GPU quad doubles; the fragment tent is untouched, because its `uv` still runs `±1` at the
 quad's corners — those corners now sit on the next ray along. Cost: four times the fragments

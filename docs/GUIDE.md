@@ -629,10 +629,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   little stair-steps along every rim. The total amount of light was exactly
   right, which is why every test the effect had went on passing — they all
   measured how much light there was, and none measured whether it was smooth.
-  The fix is that each patch now reaches twice as far, out to where its
-  neighbour is at full brightness, so the two overlap and add up to an even
-  sheet. It costs four times as much drawing per ray, which is the honest price
-  of not printing the ray grid onto the picture.
+  The fix is that each patch now reaches further, out past where its neighbour
+  sits, so they overlap and add up to an even sheet. That took two goes. The
+  first used a simple triangular fade, which adds up to exactly the right total
+  — but leaves a faint crease where one patch hands over to the next, and the
+  eye is remarkably good at finding creases; it is the same reason a
+  smooth-shaded model can still show its polygon edges. The second uses a
+  gently curved fade that hands over without a crease at all. Measured on a
+  real frame, the leftover texture went from about 16% of the local brightness,
+  to 2.4%, to 1.9%. It costs nine times as much drawing per ray, which is the
+  honest price of not printing the ray grid onto the picture.
+
+  A caution worth passing on: the first fix had a test, and the test passed. It
+  laid out an even grid of identical rays and checked the result came out flat
+  — which is exactly the case the simple fade handles perfectly. Real ghosts
+  are stretched and uneven, and that is where it fell down. The test now
+  measures a real flare instead.
 
   **Adding up in the right precision.** One more fault sat underneath, and it
   is a nice illustration of how a thing can be wrong while every test says it
