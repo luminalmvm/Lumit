@@ -13,9 +13,9 @@
 // number of contributions per pixel.
 //
 // So the sum is accumulated at far higher precision, in a storage buffer, and
-// written to the fp16 texture once at the end. One rounding instead of thousands. The texture
-// stays fp16 — a single stored value has precision to spare; it was only ever
-// the accumulation that was short.
+// written to the fp16 texture once at the end — one rounding instead of
+// thousands. The texture stays fp16: a single stored value has precision to
+// spare, and it was only ever the accumulation that was short.
 //
 // # Why the sum is fixed point, and not f32
 //
@@ -27,12 +27,11 @@
 //
 // Integer addition IS associative and commutative, so `atomicAdd` on a u32
 // gives a sum that does not depend on the order at all. The accumulator is
-// therefore fixed point: every deposit is rounded to the nearest step and
-// added exactly. That is **unbiased** rounding — at 6e-8, see the scale
-// below — against the
-// fp16 blender's systematic truncation of everything under half an ULP of a
-// large running sum — better precision where it mattered, and reproducible,
-// which the float version was not.
+// therefore fixed point: every deposit is rounded to the nearest step (6e-8,
+// see the scale below) and added exactly. That rounding is **unbiased**, where
+// the fp16 blender's was a systematic truncation of everything under half an
+// ULP of a large running sum — so this is better precision where it mattered,
+// as well as reproducible, which the float version was not.
 //
 // Radiance is never negative (a deposit is `peak * k`, both non-negative), so
 // the sign bit is spare range rather than a missing case.
