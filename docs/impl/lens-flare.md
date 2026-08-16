@@ -273,20 +273,25 @@ One ray's deposit is decided in three steps, spelled identically in
 `lumit_core::fx::lens_flare` and in `fx_lens_flare_trace.wgsl`:
 
 1. **The footprint** (`ray_axes`): the image of the ray's pupil cell under this ghost's
-   map, as a 2×2 Jacobian by central differences over the four neighbouring rays'
-   landings — one-sided at the grid edge or beside a dead ray, a right-angle borrow at
-   the anti-alias floor when one axis has no live neighbour at all, the floor in both
-   directions for a lone survivor. Half-axes, so the parallelogram `centre ± a1 ± a2`
-   tiles the pupil grid exactly once.
+   map, as a 2×2 Jacobian over the four neighbouring rays' landings — per axis, the
+   **longer of the two one-sided differences** (K-378; K-366 averaged them, and under an
+   area source's jitter the average cancelled toward zero wherever both neighbours
+   hopped to the same side, a collapsed splat between two wide gaps that stamped a
+   quasi-periodic mesh across every ghost; on a smooth map the two sides agree and this
+   is the central difference it was). One-sided at the grid edge or beside a dead ray, a
+   right-angle borrow at the anti-alias floor when one axis has no live neighbour at
+   all, the floor in both directions for a lone survivor. Half-axes, so the
+   parallelogram `centre ± a1 ± a2` tiles the pupil grid exactly once — over-covering,
+   never under-covering, where the two gaps disagree.
 2. **The peak** (`splat_ray` up to the divide): flux is `weight × gain × cell_area_px`
    times the ray's band-integrated rgb times the light's colour; the divisor is the
    footprint's area, floored by the density cap. On the GPU this whole step is
    `build_splats`, one thread per RAY, writing `{centre, a1, a2, peak rgb, live}` —
    48 bytes.
-3. **The deposit**: a separable tent `(1−|u|)(1−|v|)` over the parallelogram, `(u, v)`
-   from the inverse 2×2. The tent integrates to the parallelogram's area, which is what
-   the peak was divided by — so **flux is conserved exactly**, and a fold is simply
-   several splats landing on top of one another, which is the correct integral.
+3. **The deposit**: a separable quadratic B-spline (K-376, §5a-bis) over the
+   parallelogram, `(u, v)` from the inverse 2×2. The kernel integrates to what the peak
+   was divided by — so **flux is conserved exactly**, and a fold is simply several
+   splats landing on top of one another, which is the correct integral.
 
 The two guards, and nothing else:
 
@@ -676,14 +681,30 @@ rectangle by `source_jitter` and computes its own direction from there, carrying
 light's **full** colour (no flux shares — the pupil grid averages). An area source
 therefore costs exactly what a point source costs, whatever its size.
 
-The stratification is `offset_u = tri((i + ½)·PHI_U)·ext_x`, `offset_v` likewise in j with
-`PHI_V`, where `tri(x) = 2·|2·(fract(x) − ½)| − 1` is a triangle wave and `PHI_U`/`PHI_V`
-are 1/ρ and 1/ρ² of the plastic constant. Two points about that, both load-bearing:
-`fract` alone would jump the whole range at each wrap, and K-366's footprints are central
-differences over exactly the neighbours a jump would separate by the width of the source —
-one splat inflated to the source's width stamps a bar across the ghost; and one irrational
-for both axes would put every offset on a diagonal of the rectangle. Extent 0 offsets every
-ray by exactly zero, so a point source is bit-identical to what it always rendered.
+The stratification is `offset_u = tri((i + ½)·PHI_U + band·PHI_BAND)·ext_x`, `offset_v`
+likewise in j with `PHI_V`, where `tri(x) = 2·|2·(fract(x) − ½)| − 1` is a triangle wave,
+`PHI_U` is 1/ρ of the plastic constant, `PHI_V` is 1/ψ of the supergolden ratio (K-378),
+and `PHI_BAND` is the golden 0.618. Four points about that, all load-bearing:
+
+- `fract` alone would jump the whole range at each wrap, and the footprints are
+  differences over exactly the neighbours a jump would separate by the width of the
+  source — one splat inflated to the source's width stamps a bar across the ghost.
+- One irrational for both axes would put every offset on a diagonal of the rectangle,
+  sampling a line rather than an area.
+- **Each constant must be a good rotation alone** (K-378), because each drives its own
+  axis by its own index. K-367 took the plastic constant's 2D pair (1/ρ, 1/ρ²), whose
+  second number is within 0.002 of 4/7 — as a standalone 1D rotation its samples fall
+  into seven combs that drift too slowly to wash out across a pupil grid, and every
+  area source wore them as stripes. 1/ψ is the same family of cubic Pisot units,
+  rationally independent of 1/ρ, and measured cleanest of a scanned battery
+  (`lens_flare_an_area_source_renders_without_stripes` pins the metric).
+- **Each band re-samples the source at its own phase** (K-378). Bands trace and splat
+  independently and their pictures sum, so a per-band `PHI_BAND` phase multiplies the
+  effective source sampling by the band count for free and averages each band's
+  residual reconstruction ripple toward the mean.
+
+Extent 0 offsets every ray by exactly zero at every band, so a point source is
+bit-identical to what it always rendered.
 
 K-355's replication — up to `AREA_SAMPLES_MAX²` = 25 point lights per source, expanded on
 the CPU for Manual and inside `detect_pick` for Matte — is deleted, along with the

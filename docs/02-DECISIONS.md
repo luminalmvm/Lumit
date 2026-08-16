@@ -9550,3 +9550,52 @@ pixel. The margin is measured by the same test as before rather than argued.
 
 The lesson is the one K-375 should have taken: the range was chosen before anything was
 measured, and a measurement was a two-line print away.
+
+## K-378 — Area-source sampling the splat reconstruction can actually follow
+
+**DECIDED** (2026-08-16). Amends [K-367](#k-367) (per-ray source integration — the
+mechanism stands) and [K-366](#k-366)/[K-373](#k-373) (the footprint rule changes).
+
+**The owner, with matte sources on footage**: "until this is fixed (the grid looking
+stuff) the lens flare is unusable — Normal still needs to be usable and currently it is
+completely unusable even at ultra." Reproduced exactly on the CPU reference: give the
+default lens any source extent and every ghost wears a woven mesh; a point source is
+clean. K-367's integration was right about the integral and wrong about what the
+reconstruction could survive, in three separable ways, each fixed at its own site:
+
+1. **Footprints averaged where they should cover.** The source offsets hop by more than
+   the whole source between pupil neighbours — that is what equidistributes them — so a
+   ray's two neighbours regularly land on the *same side* of it, and K-366's central
+   difference (their average) cancelled toward zero: a collapsed splat sitting between
+   two wide gaps, quasi-periodically across the ghost. `ray_axes`/`build_splats` now
+   take the **longer one-sided difference** per axis. On a smooth map the sides agree
+   and this is the central difference it was; under jitter, under-coverage becomes
+   impossible and the cost is overlap, which is only blur. (A smooth low-frequency
+   jitter that central differences could follow was tried first and rejected: it
+   couples source position to pupil position, and a big softbox rendered as folded
+   zigzag sheets.)
+
+2. **1/ρ² is not a rotation.** K-367 took the plastic constant's 2D low-discrepancy
+   pair (1/ρ, 1/ρ²), but each constant drives its own axis by its own index, so each
+   must be a good **1D** rotation alone — and 1/ρ² = 0.5698 sits within 0.002 of 4/7,
+   so its samples fall into seven combs that precess too slowly to wash out across a
+   pupil grid: stripes down every ghost, on either axis it drives. `PHI_V` is now
+   **1/ψ = 0.6823278** (supergolden; ψ³ = ψ² + 1) — the same family of cubic Pisot
+   units as 1/ρ, rationally independent of it, and tied-best of a scanned battery on
+   the stripe metric. (The golden ratio, the textbook best rotation, was measured and
+   is *worse* here — the triangle wave's reflection symmetry doubles its coincidence
+   structure into a mesh. The battery beat the theory; the test pins the measurement.)
+
+3. **Every band re-traced the same source points.** Bands splat independently and sum,
+   so each now samples the source at its own phase (`PHI_BAND` = 0.618 per band):
+   band-count × the effective source sampling for free, and each band's residual
+   ripple averages toward the mean instead of reinforcing.
+
+Measured on the new `lens_flare_an_area_source_renders_without_stripes` (a 9×9
+grid-imprint metric — K-376's 3×3 provably cannot see this artefact: the mesh's period
+is the ray spacing, several pixels, and the K-367 mesh *passes* K-376's bound while
+plainly visible): **7.3% → 1.1%**; the visual mesh is gone at every quality including
+Draft. A point source is bit-identical throughout (zero extent, zero offset, every
+band). The area-flux test's floor widens 0.98 → 0.94: the wider footprints spread a
+little further, and on a 192-px test raster a few percent of the smear honestly crosses
+the frame edge — measured 1.007 on a padded buffer that catches it.

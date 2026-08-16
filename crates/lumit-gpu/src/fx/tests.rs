@@ -3398,7 +3398,11 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
     // the GPU a different source integral from the CPU reference on every
     // area light — parsed and compared as bits rather than as text, because
     // the two languages print floats differently.
-    for (name, want) in [("PHI_U", lf::PHI_U), ("PHI_V", lf::PHI_V)] {
+    for (name, want) in [
+        ("PHI_U", lf::PHI_U),
+        ("PHI_V", lf::PHI_V),
+        ("PHI_BAND", lf::PHI_BAND),
+    ] {
         let decl = format!("const {name}: f32 = ");
         let at = src
             .find(&decl)

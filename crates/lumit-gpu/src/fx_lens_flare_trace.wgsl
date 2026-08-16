@@ -184,16 +184,22 @@ fn light_dead(l: Light) -> bool {
     return l.r <= 0.0 && l.g <= 0.0 && l.b <= 0.0;
 }
 
-// Per-ray source integration (K-367) — the WGSL twin of lumit_core's
-// `source_jitter`, op for op, with the two constants pinned against it by
-// test. Each ray takes its light from its OWN point of the source's ±extent
-// rectangle, so a source of any size costs exactly the rays a point does and
-// the per-ray splat footprints (K-366) inflate to cover the spacing between
-// neighbours — which is what makes the replicated ghost copies of K-355
-// impossible rather than merely rare.
-// 1/rho and 1/rho^2 of the plastic constant, at the digits an f32 holds.
+// Per-ray source integration (K-367, re-chosen K-378) — the WGSL twin of
+// lumit_core's `source_jitter`, op for op, with the three constants pinned
+// against it by test. Each ray takes its light from its OWN point of the
+// source's ±extent rectangle, so a source of any size costs exactly the rays
+// a point does and the per-ray splat footprints (K-366/K-378) inflate to
+// cover the spacing between neighbours — which is what makes the replicated
+// ghost copies of K-355 impossible rather than merely rare. Each BAND
+// re-samples the source at its own phase (K-378), so the bands' summed
+// pictures average each other's residual ripple away.
+// 1/rho of the plastic constant and 1/psi of the supergolden ratio — two
+// rationally independent cubic units, each a good 1D rotation alone
+// (lumit_core `PHI_U`'s comment tells the K-378 story) — and the golden
+// per-band phase step, at the digits an f32 holds.
 const PHI_U: f32 = 0.7548777;
-const PHI_V: f32 = 0.5698403;
+const PHI_V: f32 = 0.6823278;
+const PHI_BAND: f32 = 0.618034;
 
 // A triangle wave, uniform on [-1, 1]. Not `fract`: `fract` jumps the whole
 // range at each wrap, and the splat footprints are central differences over
@@ -202,10 +208,11 @@ fn tri(x: f32) -> f32 {
     return 2.0 * abs(2.0 * (fract(x) - 0.5)) - 1.0;
 }
 
-fn source_jitter(i: u32, j: u32, ext: vec2<f32>) -> vec2<f32> {
+fn source_jitter(i: u32, j: u32, band: u32, ext: vec2<f32>) -> vec2<f32> {
+    let p = f32(band) * PHI_BAND;
     return vec2<f32>(
-        tri((f32(i) + 0.5) * PHI_U) * ext.x,
-        tri((f32(j) + 0.5) * PHI_V) * ext.y,
+        tri((f32(i) + 0.5) * PHI_U + p) * ext.x,
+        tri((f32(j) + 0.5) * PHI_V + p) * ext.y,
     );
 }
 
@@ -544,7 +551,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     var pos = vec3<f32>(u * tp.pupil_mm, v * tp.pupil_mm, tp.start_z_mm);
     // The ray's own point of the source (K-367): a point source jitters by
     // zero and this is bit-identical to the single direction it always had.
-    let jit = source_jitter(gi, gj, vec2<f32>(light.ext_x, light.ext_y));
+    let jit = source_jitter(gi, gj, combo.band, vec2<f32>(light.ext_x, light.ext_y));
     var dir = dir_of(light.pos_x + jit.x, light.pos_y + jit.y);
     // Per-sub-sample energy throughput (K-364): the geometry is shared, the
     // radiometry is not — the coating's reflectance swings across a band
@@ -825,11 +832,18 @@ fn landing_at(base: u32, x: u32, y: u32) -> vec3<f32> {
     return vec3<f32>(r.pos_x, r.pos_y, 1.0);
 }
 
-// One axis of the footprint by central difference over the two neighbours,
-// one-sided where only one of them survives, absent where neither does.
+// One axis of the footprint: the LONGER one-sided difference where both
+// neighbours live (K-378 — under an area source the two sides disagree by
+// design, and averaging them let a splat collapse between two wide gaps),
+// one-sided where only one survives, absent where neither does.
 fn axis_diff(lo: vec3<f32>, here: vec2<f32>, hi: vec3<f32>) -> vec3<f32> {
     if (lo.z > 0.5 && hi.z > 0.5) {
-        return vec3<f32>((hi.xy - lo.xy) / 2.0, 1.0);
+        let lov = here - lo.xy;
+        let hiv = hi.xy - here;
+        if (dot(lov, lov) > dot(hiv, hiv)) {
+            return vec3<f32>(lov, 1.0);
+        }
+        return vec3<f32>(hiv, 1.0);
     }
     if (hi.z > 0.5) {
         return vec3<f32>(hi.xy - here, 1.0);

@@ -338,23 +338,41 @@ pub struct FlareLight {
     pub extent: [f32; 2],
 }
 
-/// Irrational rotations for the two source-integration axes (K-367), driven
-/// by the ray's own pupil-grid indices.
+/// Irrational rotations for the two source-integration axes (K-367,
+/// re-chosen K-378), driven by the ray's own pupil-grid indices.
 ///
 /// **Two different irrationals, one per axis.** A single constant would put
 /// every ray's offset on one diagonal of the source rectangle, sampling a
 /// line rather than an area; an irrational RATIO between the two makes the
 /// (u, v) pairs cover the rectangle evenly and stay uncorrelated however many
-/// rays the grid has. These are the plastic constant's pair, 1/ρ and 1/ρ²,
-/// the standard low-discrepancy choice in two dimensions.
+/// rays the grid has.
 ///
-/// Written at the digits an `f32` can actually hold — 1/ρ is 0.754877666…
-/// and 1/ρ² is 0.569840290…, and rounding them by hand rather than letting
-/// the compiler do it keeps the shader's copy of the literal, which a test
-/// compares bit for bit, identical to this one.
+/// **Each must also be a good rotation ALONE** (K-378), because each drives
+/// its own axis by its own index. K-367 took the plastic constant's 2D pair
+/// (1/ρ, 1/ρ²), whose second number is what a low-discrepancy POINT SET
+/// wants — but 1/ρ² = 0.5698 is within 0.002 of 4/7, so as a 1D rotation it
+/// lays its samples into seven combs that drift too slowly to wash out
+/// across a pupil grid, and every area source wore them as stripes. The
+/// replacement is the supergolden ratio's reciprocal (1/ψ, ψ³ = ψ² + 1) —
+/// the same family of cubic Pisot units as the plastic constant, rationally
+/// independent of it, and measured cleanest of a scanned battery on the
+/// stripe metric the regression test now pins.
+///
+/// Written at the digits an `f32` can actually hold, rounded by hand rather
+/// than by the compiler, because the shader's copy of each literal is
+/// compared against this one bit for bit by test.
 pub const PHI_U: f32 = 0.754_877_7;
 /// See [`PHI_U`].
-pub const PHI_V: f32 = 0.569_840_3;
+pub const PHI_V: f32 = 0.682_327_8;
+
+/// Phase step between wavelength bands in the source rectangle (K-378): band
+/// `b` samples the source shifted by `b` golden-ratio turns. Bands trace and
+/// splat independently and their pictures sum, so giving each its own phase
+/// multiplies the effective source sampling by the band count for free and
+/// averages each band's residual reconstruction ripple toward the mean —
+/// which is what buried what remained of the K-367 stripes. A point source
+/// shifts a zero extent by any phase and stays exactly zero.
+pub const PHI_BAND: f32 = 0.618_034;
 
 /// A triangle wave of `x`, uniform on [−1, 1] — `2·|2·(fract(x) − ½)| − 1`.
 ///
@@ -369,9 +387,10 @@ fn tri(x: f32) -> f32 {
     2.0 * (2.0 * (x - x.floor() - 0.5)).abs() - 1.0
 }
 
-/// Where in its source's emitting rectangle the ray at pupil-grid `(i, j)`
-/// takes its light from (K-367), as an offset from the source centre in the
-/// same raster fractions [`FlareLight::pos`] uses.
+/// Where in its source's emitting rectangle the ray at pupil-grid `(i, j)`,
+/// tracing band `band`, takes its light from (K-367, K-378), as an offset
+/// from the source centre in the same raster fractions [`FlareLight::pos`]
+/// uses.
 ///
 /// This is what replaced K-355's replication. An area source used to be split
 /// into up to 5×5 point lights and the whole ray pipeline run once per
@@ -383,12 +402,19 @@ fn tri(x: f32) -> f32 {
 /// precisely what fills the gaps between neighbouring samples. Replicas
 /// cannot form, because no two rays share a source position.
 ///
-/// A zero extent gives a zero offset for every `(i, j)`, so a point source is
-/// bit-identical to what it rendered before this existed.
-pub(crate) fn source_jitter(i: usize, j: usize, extent: [f32; 2]) -> [f32; 2] {
+/// The offsets hop by more than the whole source between neighbouring rays —
+/// that is what equidistributes them — so the reconstruction leans on two
+/// K-378 properties: [`ray_axes`] covers the WIDER of each ray's two gaps,
+/// and each band re-samples the source at its own [`PHI_BAND`] phase so the
+/// bands' summed ripple averages out.
+///
+/// A zero extent gives a zero offset for every `(i, j)` at every band, so a
+/// point source is bit-identical to what it rendered before this existed.
+pub(crate) fn source_jitter(i: usize, j: usize, band: usize, extent: [f32; 2]) -> [f32; 2] {
+    let p = band as f32 * PHI_BAND;
     [
-        tri((i as f32 + 0.5) * PHI_U) * extent[0],
-        tri((j as f32 + 0.5) * PHI_V) * extent[1],
+        tri((i as f32 + 0.5) * PHI_U + p) * extent[0],
+        tri((j as f32 + 0.5) * PHI_V + p) * extent[1],
     ]
 }
 
@@ -3432,11 +3458,21 @@ pub const MIN_SPLAT_AXIS_PX: f32 = 0.75;
 /// mask) and band-integrated rgb (K-364); the splat path's working type.
 pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
 
-/// A ray's local footprint axes (K-366): the image of one pupil-grid step
-/// under the ghost map, by central differences over the neighbouring rays'
+/// A ray's local footprint axes (K-366, widened K-378): the image of one
+/// pupil-grid step under the ghost map, read off the neighbouring rays'
 /// landings — one-sided at the grid edge or beside a dead ray, and the
 /// anti-alias floor when no neighbour survives at all. Half-steps, so the
 /// parallelogram `centre ± a1 ± a2` tiles the grid exactly once.
+///
+/// **The LONGER of the two one-sided differences, not their average**
+/// (K-378). On a smooth map the two sides agree and this is the central
+/// difference it always was. Under an area source they do not: the source
+/// offsets hop by design, and wherever the two neighbours happened to land
+/// on the same side their average cancelled toward zero — a collapsed splat
+/// sitting between two wide gaps, quasi-periodically across the whole
+/// ghost, which is exactly the woven mesh the owner photographed. Taking
+/// the longer side makes under-coverage impossible; the cost is overlap,
+/// and overlap is only blur.
 pub(crate) fn ray_axes(
     corners: &[Option<Corner>],
     side: usize,
@@ -3446,8 +3482,14 @@ pub(crate) fn ray_axes(
     let at = |x: usize, y: usize| corners[y * side + x].map(|(p, _, _)| p);
     let axis = |lo: Option<[f32; 2]>, here: [f32; 2], hi: Option<[f32; 2]>| -> Option<[f32; 2]> {
         match (lo, hi) {
-            // Central difference over two grid steps = one step per side.
-            (Some(a), Some(b)) => Some([(b[0] - a[0]) / 2.0, (b[1] - a[1]) / 2.0]),
+            // Both neighbours live: the longer one-sided step (K-378).
+            (Some(a), Some(b)) => {
+                let lov = [here[0] - a[0], here[1] - a[1]];
+                let hiv = [b[0] - here[0], b[1] - here[1]];
+                let l2 = lov[0] * lov[0] + lov[1] * lov[1];
+                let h2 = hiv[0] * hiv[0] + hiv[1] * hiv[1];
+                Some(if l2 > h2 { lov } else { hiv })
+            }
             (None, Some(b)) => Some([b[0] - here[0], b[1] - here[1]]),
             (Some(a), None) => Some([here[0] - a[0], here[1] - a[1]]),
             (None, None) => None,
@@ -3762,7 +3804,7 @@ pub fn cpu_flare(
                     );
                 }
             }
-            for band in &bands {
+            for (bi, band) in bands.iter().enumerate() {
                 // The corner traces in parallel — this is where the bake's
                 // time actually went (the auto-exposure thumbnail traces
                 // tens of thousands of rays through the whole prescription,
@@ -3808,7 +3850,7 @@ pub fn cpu_flare(
                         // is absorbed into the pupil quadrature rather than
                         // replicating the whole pipeline per sample. A point
                         // source offsets by zero and this is a no-op.
-                        let jit = source_jitter(i, j, light.extent);
+                        let jit = source_jitter(i, j, bi, light.extent);
                         let dir = light_direction(
                             [light.pos[0] + jit[0], light.pos[1] + jit[1]],
                             aspect,
