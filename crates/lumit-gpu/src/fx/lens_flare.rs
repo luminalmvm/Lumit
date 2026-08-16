@@ -1355,6 +1355,34 @@ impl Batch {
             * u64::from(surface_count.max(1))
             * 3
     }
+
+    /// The deposit's cost for this batch, in the same step-shaped units
+    /// (K-379): the pixels its splats touch, summed from the per-combo
+    /// estimates. Independent of the ray count — the splats of a coarser
+    /// grid are individually larger, so a ghost's deposit always costs its
+    /// own image area times the kernel overlap, however it is sampled.
+    pub(super) fn deposit_px(&self, combo_costs: &[u64]) -> u64 {
+        let from = self.combo_offset as usize;
+        let to = (self.combo_offset + self.combos) as usize;
+        let per_light: u64 = combo_costs
+            .get(from..to.min(combo_costs.len()))
+            .map(|c| c.iter().sum())
+            .unwrap_or(0);
+        per_light.saturating_mul(u64::from(self.lights))
+    }
+}
+
+/// One combo's deposit cost estimate (K-379): the pixels its splats will
+/// touch, from the pair's bake-time image spread. The quadratic B-spline
+/// reaches one and a half grid steps each way, so each splat covers about
+/// nine times its own cell of the ghost — nine times the ghost's area in
+/// total, whatever the grid. `spread` is the pair's bounding measure as a
+/// fraction of the sensor diagonal; squaring the whole diagonal extent
+/// over-counts elongated ghosts, which errs the safe way for a pacing
+/// bound.
+pub(super) fn combo_deposit_cost(spread: f32, diag_px: f32) -> u64 {
+    let extent = (spread.clamp(0.0, 4.0) * diag_px.max(0.0)).min(1.0e5);
+    (9.0 * extent * extent) as u64
 }
 
 /// Which batches of a plan end a command buffer (K-263): `true` at index `i`
@@ -1365,11 +1393,20 @@ impl Batch {
 /// card — the thing it prevents (a submission long enough for the operating
 /// system to kill, taking the device with it) is precisely the thing a test
 /// cannot afford to reproduce.
-pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32) -> Vec<bool> {
+///
+/// Paced by the trace's ray–surface steps AND the deposit's pixels (K-379):
+/// through K-375 only the trace was counted, and the deposit — nine times
+/// each ghost's image area in atomic adds, per combo per light — rode along
+/// unmetered, so a frame of big defocused ghosts packed *seconds* of scatter
+/// into one submission. That is the shape of submission the watchdog kills,
+/// and a killed submission takes the device (and the session) with it.
+pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32, combo_costs: &[u64]) -> Vec<bool> {
     let mut flushes = vec![false; plan.len()];
     let mut pending = 0u64;
     for (i, batch) in plan.iter().enumerate() {
-        pending = pending.saturating_add(batch.steps(surface_count));
+        pending = pending
+            .saturating_add(batch.steps(surface_count))
+            .saturating_add(batch.deposit_px(combo_costs));
         if pending >= STEPS_PER_SUBMIT {
             flushes[i] = true;
             pending = 0;
@@ -1379,7 +1416,8 @@ pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32) -> Vec<bool> {
 }
 
 /// Cut the frame's grid-major combo table into [`Batch`]es that each fit
-/// [`SCRATCH_BYTE_BUDGET`] (K-263).
+/// [`SCRATCH_BYTE_BUDGET`] (K-263) and stay under one submission's worth of
+/// deposit work (K-379).
 ///
 /// The combo table is sorted by grid, so equal grids are contiguous: each run
 /// becomes one or more batches, split by however many (light × combo) slots
@@ -1388,7 +1426,19 @@ pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32) -> Vec<bool> {
 /// too, which is what makes the budget a real bound rather than a wish.
 /// Lights are chunked inside the combo batch so the drawn order stays
 /// light-major within a batch, exactly as it was.
-pub(super) fn plan_batches(combo_grids: &[u32], light_count: u32) -> Vec<Batch> {
+///
+/// `combo_costs` (parallel to `combo_grids`, [`combo_deposit_cost`] each) is
+/// the K-379 half: a batch is the atomic unit of encoding, so a flush
+/// between batches cannot save a frame whose ONE batch holds sixty-four
+/// frame-filling deposits. The slot count is therefore also capped so a
+/// batch's deposit stays about one [`STEPS_PER_SUBMIT`] — a batch of one
+/// combo and one light is always allowed, and is itself about that size for
+/// the biggest ghost a padded 4K buffer can hold.
+pub(super) fn plan_batches(
+    combo_grids: &[u32],
+    light_count: u32,
+    combo_costs: &[u64],
+) -> Vec<Batch> {
     let mut plan = Vec::new();
     let lights_total = light_count.max(1);
     let mut offset = 0usize;
@@ -1406,6 +1456,13 @@ pub(super) fn plan_batches(combo_grids: &[u32], light_count: u32) -> Vec<Batch> 
         // widest grid is 27 MB, inside the budget, so this floor is a
         // formality that keeps the loop total rather than a silent overrun.
         let slots = (SCRATCH_BYTE_BUDGET / per_slot.max(1)).max(1);
+        // The K-379 cap: the run's worst deposit sets how many slots one
+        // submission can afford.
+        let worst_cost = combo_costs
+            .get(offset..run_end.min(combo_costs.len()))
+            .and_then(|c| c.iter().max().copied())
+            .unwrap_or(0);
+        let slots = slots.min((STEPS_PER_SUBMIT / worst_cost.max(1)).max(1));
         let light_chunk = lights_total
             .min(slots.min(u64::from(u32::MAX)) as u32)
             .max(1);
@@ -1770,7 +1827,11 @@ impl FxEngine {
             // (K-370).
             let stop_scale =
                 frame_optics(baked.native_fstop, baked.focal_mm, op.fstop, op.focus_m).stop_scale;
-            let mut tagged: Vec<(u32, GpuCombo)> = Vec::with_capacity(ghost_count * op.bands.len());
+            // The flare buffer's diagonal scales each pair's bake spread
+            // into the deposit-cost estimate the flush pacing reads (K-379).
+            let diag_px = ((fpw * fpw + fph * fph) as f32).sqrt();
+            let mut tagged: Vec<(u32, u64, GpuCombo)> =
+                Vec::with_capacity(ghost_count * op.bands.len());
             for (gi, ghost) in baked.ghosts.iter().take(ghost_count).enumerate() {
                 let spread = baked.spreads.get(gi).copied().unwrap_or(1.0);
                 let rung = pair_grid_of(op.grid, spread);
@@ -1778,6 +1839,7 @@ impl FxEngine {
                 for (bi, band) in op.bands.iter().enumerate() {
                     tagged.push((
                         pg,
+                        combo_deposit_cost(spread * stop_scale, diag_px),
                         GpuCombo {
                             bounce1: ghost[0],
                             bounce2: ghost[1],
@@ -1793,9 +1855,10 @@ impl FxEngine {
             }
             // Stable sort: equal grids become contiguous runs and ties keep
             // the ranked pair order (determinism, §2.4).
-            tagged.sort_by_key(|&(g, _)| g);
-            let combo_grids: Vec<u32> = tagged.iter().map(|&(g, _)| g).collect();
-            let combos: Vec<GpuCombo> = tagged.into_iter().map(|(_, c)| c).collect();
+            tagged.sort_by_key(|&(g, _, _)| g);
+            let combo_grids: Vec<u32> = tagged.iter().map(|&(g, _, _)| g).collect();
+            let combo_costs: Vec<u64> = tagged.iter().map(|&(_, c, _)| c).collect();
+            let combos: Vec<GpuCombo> = tagged.into_iter().map(|(_, _, c)| c).collect();
             if !combos.is_empty() {
                 // The frame's dispatch plan (K-263). Combos are sorted
                 // grid-major, so the table falls into runs of one grid; each
@@ -1805,7 +1868,7 @@ impl FxEngine {
                 // frame — the widest grid in it — so a single frame-filling
                 // ghost made every compact ghost dispatch and draw at that
                 // ghost's ray count, tens of times the rays they own.
-                let plan = plan_batches(&combo_grids, light_count);
+                let plan = plan_batches(&combo_grids, light_count, &combo_costs);
                 let combos_buf = ctx
                     .device
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1839,7 +1902,7 @@ impl FxEngine {
                 // The resolve writes it once, at the end (K-375).
                 let flare_view = flare_tex.create_view(&Default::default());
                 // Where the frame breaks its work into separate submissions.
-                let flushes = plan_flushes(&plan, baked.surface_count);
+                let flushes = plan_flushes(&plan, baked.surface_count, &combo_costs);
                 for (bi, job) in plan.iter().enumerate() {
                     let Batch {
                         grid,

@@ -254,6 +254,14 @@ bounds hold the plan:
   keeps the drawn order light-major within a batch exactly as it was.
 - **`STEPS_PER_SUBMIT` (48 M ray–surface steps) cuts the frame into command buffers.**
   See §7's trap: an over-long submission does not cost a frame, it costs the device.
+  The count covers the trace's ray–surface steps AND the deposit's pixels (K-379,
+  `combo_deposit_cost`: nine times each pair's spread-squared image area, per combo per
+  light — a cost independent of the ray count, and for defocused ghosts more than ten
+  times the trace's). Until K-379 only the trace was metered, so a frame of
+  frame-filling ghosts packed seconds of atomic scatter into one submission — the
+  owner's machine froze whole-desktop for minutes and the device died. The same
+  estimate also caps a BATCH's slot count (`plan_batches`), because a batch is the
+  atomic unit of encoding and a flush cannot split one.
 - **The scratch is pooled, not allocated per frame** (`Scratch`, one slot deep). A driver
   recycles a dropped buffer only when the submission it belonged to retires, so a
   continuously re-rendering Viewer used to hold a rolling backlog of abandoned

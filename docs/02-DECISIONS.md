@@ -9599,3 +9599,40 @@ Draft. A point source is bit-identical throughout (zero extent, zero offset, eve
 band). The area-flux test's floor widens 0.98 → 0.94: the wider footprints spread a
 little further, and on a 192-px test raster a few percent of the smear honestly crosses
 the frame edge — measured 1.007 on a padded buffer that catches it.
+
+## K-379 — The submission pacing counts the deposit, not just the trace
+
+**DECIDED** (2026-08-16). Extends [K-263](#k-263)'s submission split and [K-375](#k-375)'s
+deposit.
+
+**The owner**: changing a flare setting "starts lagging my entire pc… it ended up
+freezing the whole pc until it crashed lumit and closed vscode with it, after the pc was
+frozen for like a good 2 minutes." That is the K-263 device-loss failure back in a new
+coat: the frame IS split into submissions, but the split is paced by
+`Batch::steps` — the trace's ray–surface count — and since K-375 the deposit is a
+compute scatter whose cost the trace count cannot see. A splat deposits over its own
+footprint, so a ghost's deposit costs about **nine times its image area in atomic
+adds, per combo per light, however many rays sample it** (kernel support of 1.5 grid
+steps each way = ~9 cells of overlap). For a frame-filling defocused ghost on a 1080p
+buffer that is ~40 M atomics per combo-light — and a Normal frame of sixty ghosts,
+eight bands and a handful of matte sources packs *tens of seconds* of scatter into
+submissions the step model priced as milliseconds. The watchdog kills one, the device
+dies, the session is over; until it dies, the saturated queue starves the desktop
+compositor, which is the whole-PC freeze.
+
+Two changes, both in the plan (testable without a card, like the rest of it):
+
+- `combo_deposit_cost(spread × stop_scale, flare diagonal px)` estimates each combo's
+  deposit pixels from its bake spread — over-counting elongated ghosts, which errs the
+  safe way — and `plan_flushes` paces on trace steps + deposit pixels, treating one
+  deposited pixel as one step (both are a few dozen operations).
+- `plan_batches` caps a batch's (combo × light) slot count so one batch's deposit
+  stays about one `STEPS_PER_SUBMIT`, because a batch is the atomic unit of encoding
+  and a flush between batches cannot split the inside of one. A batch of one combo and
+  one light is always allowed — it is itself about that size for the biggest ghost a
+  padded 4K buffer holds, which is the floor the bound rests on.
+
+This bounds every submission; it does not make the work smaller. The deposit's total
+cost — 9 × ghost area × combos × lights, independent of ray count — is the recorded
+follow-up: deposit large splats into coarser accumulator levels and upsample at
+resolve, so a splat's cost is capped whatever its size.

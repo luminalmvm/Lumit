@@ -3494,7 +3494,10 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
 /// ends up taking the graphics device down with it.
 #[test]
 fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
-    use crate::fx::lens_flare::{plan_batches, RAY_BYTES, SCRATCH_BYTE_BUDGET, SPLAT_BYTES};
+    use crate::fx::lens_flare::{
+        combo_deposit_cost, plan_batches, RAY_BYTES, SCRATCH_BYTE_BUDGET, SPLAT_BYTES,
+        STEPS_PER_SUBMIT,
+    };
     // Grid-major tables as the frame builds them, including the worst case
     // (every combo at the widest grid) and a mixed one.
     let tables: Vec<Vec<u32>> = vec![
@@ -3511,7 +3514,13 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
     ];
     for lights in [1u32, 8] {
         for table in &tables {
-            let plan = plan_batches(table, lights);
+            // A mix of compact and frame-filling ghosts on a padded 1080p
+            // buffer, so the K-379 deposit cap is exercised alongside the
+            // scratch budget; the coverage invariants must hold under both.
+            let costs: Vec<u64> = (0..table.len())
+                .map(|i| combo_deposit_cost(if i % 3 == 0 { 1.5 } else { 0.1 }, 2203.0))
+                .collect();
+            let plan = plan_batches(table, lights, &costs);
             // Every (combo, light) appears exactly once.
             let mut seen = vec![0u32; table.len() * lights as usize];
             for b in &plan {
@@ -3531,6 +3540,16 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                     b.combos,
                     b.lights,
                     b.ray_bytes + b.splat_bytes
+                );
+                // The K-379 bound: no batch asks for more than about one
+                // submission of deposit work, down to the one-slot floor.
+                assert!(
+                    b.deposit_px(&costs) <= STEPS_PER_SUBMIT || (b.combos == 1 && b.lights == 1),
+                    "batch at grid {} × {} combos × {} lights deposits {} px",
+                    b.grid,
+                    b.combos,
+                    b.lights,
+                    b.deposit_px(&costs)
                 );
                 for c in b.combo_offset..b.combo_offset + b.combos {
                     assert_eq!(
@@ -3792,11 +3811,13 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
 /// session and re-opening the project does not help.
 #[test]
 fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
-    use crate::fx::lens_flare::{plan_batches, plan_flushes, STEPS_PER_SUBMIT};
+    use crate::fx::lens_flare::{combo_deposit_cost, plan_batches, plan_flushes, STEPS_PER_SUBMIT};
     let surfaces = 20u32;
-    // A working-tier frame: Normal's base grid across a default ghost count.
-    let heavy = plan_batches(&vec![64u32; 480], 1);
-    let flushes = plan_flushes(&heavy, surfaces);
+    // A working-tier frame: Normal's base grid across a default ghost count,
+    // compact ghosts (5% of the diagonal), so the trace dominates the cost.
+    let compact = vec![combo_deposit_cost(0.05, 2203.0); 480];
+    let heavy = plan_batches(&vec![64u32; 480], 1, &compact);
+    let flushes = plan_flushes(&heavy, surfaces, &compact);
     assert!(
         flushes.iter().filter(|f| **f).count() >= 2,
         "a default Normal frame must not be one giant submission"
@@ -3805,12 +3826,12 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
     // crossed it — the bound the watchdog guard rests on.
     let biggest_batch = heavy
         .iter()
-        .map(|b| b.steps(surfaces))
+        .map(|b| b.steps(surfaces) + b.deposit_px(&compact))
         .max()
         .unwrap_or_default();
     let mut run = 0u64;
     for (b, flush) in heavy.iter().zip(&flushes) {
-        run += b.steps(surfaces);
+        run += b.steps(surfaces) + b.deposit_px(&compact);
         assert!(
             run <= STEPS_PER_SUBMIT + biggest_batch,
             "a submission grew to {run} steps"
@@ -3821,10 +3842,27 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
     }
     // A small frame stays a single submission: the split must not cost
     // ordinary work extra queue round trips.
-    let light = plan_batches(&[32u32; 24], 1);
+    let light_costs = vec![combo_deposit_cost(0.05, 550.0); 24];
+    let light = plan_batches(&[32u32; 24], 1, &light_costs);
     assert!(
-        plan_flushes(&light, surfaces).iter().all(|f| !f),
+        plan_flushes(&light, surfaces, &light_costs)
+            .iter()
+            .all(|f| !f),
         "a light frame should submit once"
+    );
+
+    // The K-379 case the trace steps cannot see: a few combos of coarse
+    // grid whose ghosts FILL a 1080p flare buffer. The trace is a rounding
+    // error — 24 combos × 32² rays — but the deposit is nine times the
+    // frame per combo, seconds of atomic scatter, and it was exactly this
+    // shape of frame that froze the owner's machine and took the device
+    // with it. It must flush, repeatedly.
+    let full_frame = vec![combo_deposit_cost(1.5, 2203.0); 24];
+    let defocused = plan_batches(&[32u32; 24], 1, &full_frame);
+    let flushes = plan_flushes(&defocused, surfaces, &full_frame);
+    assert!(
+        flushes.iter().filter(|f| **f).count() >= 2,
+        "a frame of frame-filling ghosts must split by its deposit cost"
     );
 }
 
