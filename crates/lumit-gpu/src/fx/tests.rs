@@ -3334,6 +3334,20 @@ fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
         ((u32::MAX as f32 / ACCUM_SCALE) - ACCUM_CEILING).abs() < 0.01,
         "the ceiling is the scale's own consequence"
     );
+    // The K-380 pyramid's two spellings: the level-changeover span and the
+    // uniform's level-table capacity.
+    assert!(
+        src.contains(&format!(
+            "const DEPOSIT_SPAN_PX: f32 = {:.1};",
+            lf::DEPOSIT_SPAN_PX
+        )),
+        "the deposit shader must declare lumit-core's DEPOSIT_SPAN_PX"
+    );
+    assert_eq!(
+        crate::fx::lens_flare::MAX_DEPOSIT_LEVELS,
+        lf::MAX_DEPOSIT_LEVELS,
+        "the two crates' level caps must agree"
+    );
 
     // The brightest pixel a bundled lens actually makes, at the settings that
     // make it brightest: full intensity, no ghost blur to spread it, and the
@@ -3464,6 +3478,24 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
                 "base {base} spread {spread}"
             );
         }
+    }
+    // The K-380 deposit pyramid's level table is mirrored the same way: a
+    // drift would put the two twins' levels at different offsets and every
+    // coarse splat in the wrong place.
+    for (w, h) in [
+        (1u32, 1u32),
+        (33, 20),
+        (192, 108),
+        (960, 540),
+        (1920, 1080),
+        (3840, 2160),
+        (8192, 4320),
+    ] {
+        assert_eq!(
+            crate::fx::lens_flare::deposit_levels_of(w, h),
+            lumit_core::fx::lens_flare::deposit_levels(w, h),
+            "w {w} h {h}"
+        );
     }
     // The K-267 padded-buffer dims are mirrored the same way.
     for (fw, fh) in [(960u32, 540u32), (480, 270), (1, 1), (1920, 1080)] {

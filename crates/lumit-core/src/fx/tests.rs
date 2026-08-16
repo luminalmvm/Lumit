@@ -4944,6 +4944,82 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
+/// One splat through the full K-380 deposit — pyramid, then resolve — into a
+/// flat `w × h × 3` buffer, which is the shape every kernel test below reads.
+/// Splats small enough for level 0 land bit-exactly as they always did (the
+/// level-0 resolve is the identity); a splat past [`DEPOSIT_SPAN_PX`] takes
+/// the coarser path the production frame takes.
+#[allow(clippy::too_many_arguments)]
+fn splat_flat(
+    out: &mut [f32],
+    w: u32,
+    h: u32,
+    centre: [f32; 2],
+    a1: [f32; 2],
+    a2: [f32; 2],
+    rgb: [f32; 3],
+    cell_area: f32,
+) {
+    use crate::fx::lens_flare::{splat_ray, DepositLevels};
+    let mut levels = DepositLevels::new(w, h);
+    splat_ray(&mut levels, centre, a1, a2, rgb, cell_area);
+    levels.resolve(out);
+}
+
+/// **A splat too big for full resolution keeps its flux and its place**
+/// (K-380). The pyramid is an optimisation: a coarse level's kernel is the
+/// same kernel sampled at wider texels and read back through a bilinear
+/// upsample, so the deposited energy, its centre and its extent must all
+/// survive the trip — this is the test that fails if a level's offset,
+/// scale or upsample is wrong by even one texel.
+#[test]
+fn lens_flare_a_large_splat_deposits_coarse_and_keeps_its_flux() {
+    use crate::fx::lens_flare::*;
+    let (w, h) = (512u32, 512u32);
+    // Span ~420 px: several levels down at DEPOSIT_SPAN_PX = 48.
+    let (a1, a2) = ([35.0, 0.0], [0.0, 35.0]);
+    let ext = 3.0 * (a1[0] + a2[0] + a1[1] + a2[1]);
+    let level = deposit_level(ext, ext, 12);
+    assert!(
+        level >= 2,
+        "this splat must actually take the coarse path, got level {level}"
+    );
+    let mut out = vec![0.0_f32; (w * h * 3) as usize];
+    let flux = 5.0_f32;
+    splat_flat(
+        &mut out,
+        w,
+        h,
+        [256.0, 256.0],
+        a1,
+        a2,
+        [flux, flux, flux],
+        70.0 * 70.0,
+    );
+    let total: f32 = out.iter().sum();
+    assert!(
+        (total - 3.0 * flux).abs() < 0.15 * 3.0 * flux,
+        "a coarse splat must keep its flux: {total} vs {}",
+        3.0 * flux
+    );
+    // The centroid stays put: a level whose offset or scale is wrong moves
+    // the whole deposit.
+    let (mut cx, mut cy, mut m) = (0.0f64, 0.0f64, 0.0f64);
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let v = f64::from(out[(y * w as usize + x) * 3]);
+            cx += v * x as f64;
+            cy += v * y as f64;
+            m += v;
+        }
+    }
+    let (cx, cy) = (cx / m, cy / m);
+    assert!(
+        (cx - 255.5).abs() < 2.0 && (cy - 255.5).abs() < 2.0,
+        "a coarse splat must stay centred: ({cx:.1}, {cy:.1})"
+    );
+}
+
 /// **The splat reconstruction is a partition of unity** (K-366, fixed K-373).
 ///
 /// A uniform sheet of rays on a regular grid, all with the same weight and the
@@ -4959,7 +5035,6 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
 /// exactly what was put in.
 #[test]
 fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
-    use crate::fx::lens_flare::*;
     const W: u32 = 128;
     const H: u32 = 128;
     // Ray spacing in pixels, and the half-axes that go with it: a1 and a2 are
@@ -4976,7 +5051,7 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
     let (n, origin) = (9_usize, 32.0_f32);
     for j in 0..n {
         for i in 0..n {
-            splat_ray(
+            splat_flat(
                 &mut out,
                 W,
                 H,
@@ -5038,7 +5113,7 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
     for j in 0..n {
         for i in 0..n {
             let (fi, fj) = (i as f32, j as f32);
-            splat_ray(
+            splat_flat(
                 &mut sheared,
                 W,
                 H,
@@ -6551,7 +6626,7 @@ fn lens_flare_splats_conserve_flux_and_survive_folds() {
     // An ordinary footprint: deposited flux equals the flux put in (the
     // tent integrates to the parallelogram's area, which the divisor is).
     let mut out = vec![0.0_f32; (w * h * 3) as usize];
-    splat_ray(
+    splat_flat(
         &mut out,
         w,
         h,
@@ -6571,7 +6646,7 @@ fn lens_flare_splats_conserve_flux_and_survive_folds() {
     // finite (the density cap) and non-zero (the anti-alias floor) — the
     // two halves of what the quad machinery got wrong in turn.
     let mut fold = vec![0.0_f32; (w * h * 3) as usize];
-    splat_ray(
+    splat_flat(
         &mut fold,
         w,
         h,
@@ -6591,7 +6666,7 @@ fn lens_flare_splats_conserve_flux_and_survive_folds() {
 
     // A sub-pixel footprint deposits over at least a pixel, not nothing.
     let mut tiny = vec![0.0_f32; (w * h * 3) as usize];
-    splat_ray(
+    splat_flat(
         &mut tiny,
         w,
         h,
@@ -6608,7 +6683,7 @@ fn lens_flare_splats_conserve_flux_and_survive_folds() {
 
     // Off-raster splats are calmly clipped.
     let mut off = vec![0.0_f32; (w * h * 3) as usize];
-    splat_ray(
+    splat_flat(
         &mut off,
         w,
         h,

@@ -664,6 +664,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   numbers add up the same however they are shuffled. The first attempt used
   decimals and did exactly that; the tests caught it the same day.
 
+  **Big soft patches are painted coarse, then smoothed.** A ray that lands on a
+  big defocused ghost spreads its light over a big patch — sometimes hundreds of
+  pixels across — and painting every one of those pixels for every one of
+  hundreds of thousands of rays is where the effect's time actually went: the
+  cost of a ghost was its whole area, over and over, once per ray. So the
+  canvas the rays paint on is now a stack: the full-resolution picture on top,
+  and under it a half-size copy, a quarter-size one, and so on. A small sharp
+  patch is painted on the top layer exactly as before; a patch too big to
+  afford is painted on whichever smaller layer brings it down to a sensible
+  number of pixels, and at the end the layers are enlarged and added together.
+  Enlarging a coarse layer smooths it — which is fine, because the only
+  patches sent down there were big soft ones whose own softness is far
+  coarser than the smoothing. A patch is never blurred by more than about a
+  twenty-fourth of its own size, which the eye cannot find on a defocused
+  ghost. The payoff on a real frame was better than tenfold, and it is the
+  reason turning a flare dial no longer saturates the graphics card.
+
   **Every element gets its own coating.** Look at a photograph of a real flare
   and the ghosts are not one colour: there is a blue one next to a purple one
   next to an amber one. That is the lens, not an effect. A coating works by

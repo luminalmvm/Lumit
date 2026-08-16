@@ -64,12 +64,30 @@ struct Splat {
 };
 
 struct Dims {
-    // The flare buffer's size in pixels.
-    raster: vec2<u32>,
-    // How many splats this dispatch covers, from zero.
-    splat_count: u32,
-    _pad: u32,
+    // The flare buffer's width and height in pixels, how many splats this
+    // dispatch covers, and how many pyramid levels the accumulator holds
+    // (K-380). No level table: FXC cannot dynamically index a uniform
+    // array without unrolling every loop that touches it (it refused), and
+    // none is needed — level l is `ceil(raster / 2^l)` on both axes, which
+    // `level_dim` computes below, exactly as the Rust twin sizes the
+    // buffer (iterated ceil-halving and the closed form agree).
+    head: vec4<u32>,
 };
+
+// One axis of pyramid level `level`: ceil(n / 2^level).
+fn level_dim(n: u32, level: u32) -> u32 {
+    return (n + (1u << level) - 1u) >> level;
+}
+
+// Pixel offset of level `level` in the accumulator: the sizes of every
+// level before it. At most eleven iterations of plain arithmetic.
+fn level_offset(level: u32) -> u32 {
+    var off = 0u;
+    for (var k = 0u; k < level; k = k + 1u) {
+        off = off + level_dim(dims.head.x, k) * level_dim(dims.head.y, k);
+    }
+    return off;
+}
 
 @group(0) @binding(0) var<storage, read> splats: array<Splat>;
 // The fixed-point accumulator, three channels per pixel, laid out
@@ -125,35 +143,61 @@ fn add_fixed(idx: u32, v: f32) {
     atomicAdd(&accum[idx], u32(fixed));
 }
 
+// Widest kernel span, px, a splat deposits at full resolution (K-380) —
+// past this it moves to a coarser pyramid level. The twin of lumit_core's
+// DEPOSIT_SPAN_PX, pinned by test.
+const DEPOSIT_SPAN_PX: f32 = 48.0;
+
 @compute @workgroup_size(64)
 fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
-    if (i >= dims.splat_count) {
+    if (i >= dims.head.z) {
         return;
     }
     let s = splats[i];
     if (s.live < 0.5) {
         return;
     }
-    let a1 = vec2<f32>(s.a1x, s.a1y);
-    let a2 = vec2<f32>(s.a2x, s.a2y);
-    let centre = vec2<f32>(s.cx, s.cy);
-    let det = a1.x * a2.y - a1.y * a2.x;
+    var a1 = vec2<f32>(s.a1x, s.a1y);
+    var a2 = vec2<f32>(s.a2x, s.a2y);
+    var centre = vec2<f32>(s.cx, s.cy);
+    var det = a1.x * a2.y - a1.y * a2.x;
     if (abs(det) < 1e-12) {
         return;
     }
-    let inv_det = 1.0 / det;
     let peak = vec3<f32>(s.r, s.g, s.b);
 
     // The quadratic B-spline reaches one and a half grid steps — three
     // half-axes — each way (K-373 widened it to one step, K-376 to this).
-    let ext = 3.0 * (abs(a1) + abs(a2));
-    let w = f32(dims.raster.x);
-    let h = f32(dims.raster.y);
+    var ext = 3.0 * (abs(a1) + abs(a2));
+
+    // The pyramid level this splat can afford (K-380): halve the span until
+    // it fits. Exact halving, so the CPU twin picks the same level for the
+    // same splat. Everything then scales into the level's pixels; the
+    // kernel below is unchanged by the scale — (u, v) solve the same system
+    // when both sides carry it, and `peak` is a density per level-0 pixel,
+    // which the resolve's upsample reads back out at level 0.
+    var span = 2.0 * max(ext.x, ext.y);
+    var level = 0u;
+    while (span > DEPOSIT_SPAN_PX && level + 1u < dims.head.w) {
+        span = span * 0.5;
+        level = level + 1u;
+    }
+    let s2l = f32(1u << level);
+    centre = centre / s2l;
+    a1 = a1 / s2l;
+    a2 = a2 / s2l;
+    det = det / (s2l * s2l);
+    ext = ext / s2l;
+    let inv_det = 1.0 / det;
+    let lw = level_dim(dims.head.x, level);
+    let lh = level_dim(dims.head.y, level);
+    let off = level_offset(level) * 3u;
+
     let x0 = i32(max(floor(centre.x - ext.x), 0.0));
-    let x1 = i32(min(ceil(centre.x + ext.x), w - 1.0));
+    let x1 = i32(min(ceil(centre.x + ext.x), f32(lw) - 1.0));
     let y0 = i32(max(floor(centre.y - ext.y), 0.0));
-    let y1 = i32(min(ceil(centre.y + ext.y), h - 1.0));
+    let y1 = i32(min(ceil(centre.y + ext.y), f32(lh) - 1.0));
     if (x1 < x0 || y1 < y0) {
         return;
     }
@@ -168,7 +212,7 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
                 continue;
             }
             let k = bspline_q(u * 0.5) * bspline_q(v * 0.5);
-            let base = (u32(py) * dims.raster.x + u32(px)) * 3u;
+            let base = off + (u32(py) * lw + u32(px)) * 3u;
             add_fixed(base, peak.x * k);
             add_fixed(base + 1u, peak.y * k);
             add_fixed(base + 2u, peak.z * k);
@@ -176,20 +220,54 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 }
 
-// Write the finished sum into the flare texture: back to floating point, the
-// one place the value meets fp16, and the alpha the combine reads is the luma
-// of what landed.
+// One fixed-point texel of one level, as f32 density — all three channels
+// at once, because FXC cannot index a local vector as an l-value and would
+// otherwise try (and refuse) to unroll every loop around one.
+fn level_tap(off: u32, lw: u32, x: u32, y: u32) -> vec3<f32> {
+    let idx = off + (y * lw + x) * 3u;
+    return vec3<f32>(
+        f32(atomicLoad(&accum[idx])),
+        f32(atomicLoad(&accum[idx + 1u])),
+        f32(atomicLoad(&accum[idx + 2u])),
+    ) / ACCUM_SCALE;
+}
+
+// Write the finished sum into the flare texture: every level bilinearly
+// upsampled and summed (K-380 — level 0's tap is the identity, so a frame
+// whose splats all fit level 0 reads exactly as it did before the pyramid),
+// back to floating point, the one place the value meets fp16, and the alpha
+// the combine reads is the luma of what landed.
 @compute @workgroup_size(8, 8)
 fn resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
-    if (gid.x >= dims.raster.x || gid.y >= dims.raster.y) {
+    if (gid.x >= dims.head.x || gid.y >= dims.head.y) {
         return;
     }
-    let base = (gid.y * dims.raster.x + gid.x) * 3u;
-    let rgb = vec3<f32>(
-        f32(atomicLoad(&accum[base])),
-        f32(atomicLoad(&accum[base + 1u])),
-        f32(atomicLoad(&accum[base + 2u])),
-    ) / ACCUM_SCALE;
+    var rgb = vec3<f32>(0.0);
+    // The running offset walks the levels in step with the loop, so no
+    // level recomputes the sizes of everything before it.
+    var off_px = 0u;
+    for (var level = 0u; level < dims.head.w; level = level + 1u) {
+        let lw = level_dim(dims.head.x, level);
+        let lh = level_dim(dims.head.y, level);
+        let off = off_px * 3u;
+        off_px = off_px + lw * lh;
+        let s2l = f32(1u << level);
+        let pos_x = max((f32(gid.x) + 0.5) / s2l - 0.5, 0.0);
+        let pos_y = max((f32(gid.y) + 0.5) / s2l - 0.5, 0.0);
+        let x0 = min(u32(pos_x), lw - 1u);
+        let y0 = min(u32(pos_y), lh - 1u);
+        let x1 = min(x0 + 1u, lw - 1u);
+        let y1 = min(y0 + 1u, lh - 1u);
+        let fx = clamp(pos_x - f32(x0), 0.0, 1.0);
+        let fy = clamp(pos_y - f32(y0), 0.0, 1.0);
+        let t00 = level_tap(off, lw, x0, y0);
+        let t10 = level_tap(off, lw, x1, y0);
+        let t01 = level_tap(off, lw, x0, y1);
+        let t11 = level_tap(off, lw, x1, y1);
+        let top = t00 + (t10 - t00) * fx;
+        let bot = t01 + (t11 - t01) * fx;
+        rgb = rgb + top + (bot - top) * fy;
+    }
     let luma = 0.2126 * rgb.x + 0.7152 * rgb.y + 0.0722 * rgb.z;
     textureStore(out_tex, vec2<i32>(gid.xy), vec4<f32>(rgb, luma));
 }

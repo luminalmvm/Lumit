@@ -9636,3 +9636,38 @@ This bounds every submission; it does not make the work smaller. The deposit's t
 cost — 9 × ghost area × combos × lights, independent of ray count — is the recorded
 follow-up: deposit large splats into coarser accumulator levels and upsample at
 resolve, so a splat's cost is capped whatever its size.
+
+## K-380 — Big splats deposit into a pyramid, so a splat's cost is capped
+
+**DECIDED** (2026-08-16). Delivers [K-379](#k-379)'s recorded follow-up; continues
+[K-375](#k-375)/[K-376](#k-376), whose accumulator and kernel are unchanged in kind.
+
+K-379 bounded the *submissions*; the *work* was still nine times each ghost's image area in
+atomic adds per combo per light, independent of ray count — the deposit kernel spans three
+grid steps, so a frame of defocused ghosts pays its own area tens of times over. That is
+what "Normal still needs to be usable and currently it is completely unusable" costs, and
+the owner named the remedy in the same breath: "use the grid to speed things up then smooth
+it."
+
+The accumulator becomes a level pyramid — level 0 the flare buffer, each level ceil-halving
+both axes, ~1.33× the pixels in total. A splat whose kernel span exceeds
+`DEPOSIT_SPAN_PX` (48 px) deposits at the shallowest level that brings it under, everything
+scaled into level pixels; the resolve bilinearly upsamples and sums the levels. The kernel,
+the floors, the fold guard, the density cap and the fixed-point accumulation are all
+untouched — the peak is a density, and a density survives resampling — and level 0's
+read-back is the identity, so small-splat frames render exactly as before. The smoothing a
+coarse level costs is about a twenty-fourth of the splat's own size, on splats whose own
+softness is far coarser. A splat now costs at most about `DEPOSIT_SPAN_PX`² pixels.
+
+**Measured**: the frame-cost harness (960×540, Normal, 60 ghosts) went **1.15 s → 87 ms**
+per frame on the development machine — thirteenfold, and the difference between a flare
+dial that saturates the card and one that scrubs.
+
+Two implementation notes that cost an afternoon and are pinned in the impl note so they are
+not re-learned: FXC refuses dynamic indexing of uniform-buffer arrays (the level dims are
+derived in-shader as `ceil(raster / 2^level)` — provably what iterated ceil-halving
+produces — instead of being passed as a table), and refuses l-value indexing of local
+vectors (the resolve taps whole `vec3`s). Both failures presented as a silently black or
+garbage flare with the validation error only visible on stderr. The accumulator's old
+clamp to the scratch budget is also gone: level 0 must hold every pixel of the flare
+buffer, and the clamp was silently truncating it past 2K rasters.

@@ -536,13 +536,51 @@ fn frame_optics(native_fstop: f32, focal_mm: f32, fstop: f32, focus_m: f32) -> F
 
 /// What the deposit and resolve stages need beyond the splats: the flare
 /// buffer's size, because a splat's centre and axes are in its PIXELS
-/// (K-366), and how many splats the dispatch covers (K-375).
+/// (K-366), how many splats the dispatch covers (K-375), and the deposit
+/// pyramid's level table (K-380) — per level `[width, height, pixel offset
+/// into the accumulator, 0]`, level 0 the raster itself.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct DepositDims {
-    raster: [u32; 2],
-    splat_count: u32,
-    _pad: u32,
+    /// `[raster w, raster h, splat count, level count]`. The level DIMS are
+    /// not passed: FXC cannot dynamically index a uniform array without
+    /// unrolling every loop that touches it, and the shader derives them
+    /// from the raster instead — `ceil(raster / 2^level)`, which iterated
+    /// ceil-halving ([`deposit_levels_of`]) provably equals, so the sizing
+    /// here and the indexing there cannot disagree.
+    head: [u32; 4],
+}
+
+/// Most accumulator levels the deposit pyramid holds — the twin of
+/// `lumit_core::fx::lens_flare::MAX_DEPOSIT_LEVELS` and of the WGSL `Dims`
+/// array size, pinned by test.
+pub const MAX_DEPOSIT_LEVELS: usize = 12;
+
+/// The deposit pyramid's level dimensions (K-380) — the exact twin of
+/// `lumit_core::fx::lens_flare::deposit_levels` (lumit-gpu stays
+/// lumit-core-free in production, so the formula is mirrored and a test
+/// pins the two together).
+pub fn deposit_levels_of(w: u32, h: u32) -> Vec<(u32, u32)> {
+    let (mut lw, mut lh) = (w.max(1), h.max(1));
+    let mut out = vec![(lw, lh)];
+    while out.len() < MAX_DEPOSIT_LEVELS && lw.max(lh) > 32 {
+        lw = lw.div_ceil(2);
+        lh = lh.div_ceil(2);
+        out.push((lw, lh));
+    }
+    out
+}
+
+/// The pyramid's level count and its total size in pixels (all levels —
+/// about a third again over level 0), which is what the accumulator is
+/// allocated and cleared for.
+fn deposit_pyramid_of(w: u32, h: u32) -> (u32, u64) {
+    let levels = deposit_levels_of(w, h);
+    let px = levels
+        .iter()
+        .map(|&(lw, lh)| u64::from(lw) * u64::from(lh))
+        .sum();
+    (levels.len() as u32, px)
 }
 
 #[repr(C)]
@@ -1238,12 +1276,19 @@ impl LensFlareFx {
     }
 }
 
-/// The splat accumulator (K-375). Cleared to zero each frame, so it needs
-/// `COPY_DST` beside the storage binding.
+/// The splat accumulator (K-375; a level pyramid since K-380). Cleared to
+/// zero each frame, so it needs `COPY_DST` beside the storage binding.
+///
+/// NOT clamped to [`SCRATCH_BYTE_BUDGET`]: that budget bounds the per-batch
+/// ray/splat scratch, whose size the settings can wind up, where this is a
+/// framebuffer-scale allocation the raster alone decides — level 0 must
+/// hold every pixel of the flare buffer or the deposit writes past the end
+/// (the clamp silently truncated exactly that way past 2K, and the padded
+/// pyramid would have hit it sooner).
 fn accum_buffer(ctx: &GpuContext, bytes: u64) -> wgpu::Buffer {
     ctx.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("fx-lens-flare-accum"),
-        size: bytes.clamp(16, SCRATCH_BYTE_BUDGET),
+        size: bytes.max(16),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
@@ -1892,8 +1937,10 @@ impl FxEngine {
                 let (need_rays, need_splats) = plan.iter().fold((16u64, 16u64), |(r, s), b| {
                     (r.max(b.ray_bytes), s.max(b.splat_bytes))
                 });
-                // Three f32 channels a pixel of the padded flare buffer.
-                let accum_bytes = u64::from(fpw) * u64::from(fph) * 3 * 4;
+                // Three fixed-point channels a pixel, across every level of
+                // the deposit pyramid (K-380).
+                let (level_count, accum_px) = deposit_pyramid_of(fpw, fph);
+                let accum_bytes = accum_px * 3 * 4;
                 let scratch = lf.take_scratch(ctx, need_rays, need_splats, accum_bytes);
                 // Start from nothing: the accumulator is pooled, so last
                 // frame's sums are still in it.
@@ -2006,9 +2053,7 @@ impl FxEngine {
                             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("fx-lens-flare-deposit-dims"),
                                 contents: bytemuck::bytes_of(&DepositDims {
-                                    raster: [fpw, fph],
-                                    splat_count: splats_here,
-                                    _pad: 0,
+                                    head: [fpw, fph, splats_here, level_count],
                                 }),
                                 usage: wgpu::BufferUsages::UNIFORM,
                             });
@@ -2088,9 +2133,7 @@ impl FxEngine {
                         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some("fx-lens-flare-resolve-dims"),
                             contents: bytemuck::bytes_of(&DepositDims {
-                                raster: [fpw, fph],
-                                splat_count: 0,
-                                _pad: 0,
+                                head: [fpw, fph, 0, level_count],
                             }),
                             usage: wgpu::BufferUsages::UNIFORM,
                         });

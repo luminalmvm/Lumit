@@ -3458,6 +3458,101 @@ pub const MIN_SPLAT_AXIS_PX: f32 = 0.75;
 /// mask) and band-integrated rgb (K-364); the splat path's working type.
 pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
 
+/// Widest kernel span, px, a splat deposits at full resolution (K-380).
+/// Past this it moves to a coarser accumulator level — halved once per
+/// doubling — so one splat never costs more than about this many pixels
+/// squared, however large the ghost. The smoothing that costs is about a
+/// twenty-fourth of the splat's own size: invisible on the smooth defocused
+/// ghosts that have splats this big, and precisely the deal the owner asked
+/// for ("use the grid to speed things up then smooth it"). Spelled in
+/// `fx_lens_flare_deposit.wgsl` too, pinned by test.
+pub const DEPOSIT_SPAN_PX: f32 = 48.0;
+
+/// Most accumulator levels a deposit pyramid holds (K-380) — level 11 is a
+/// 2048-fold reduction, past any raster the engine renders. Pinned against
+/// the shader's array size by test.
+pub const MAX_DEPOSIT_LEVELS: usize = 12;
+
+/// The deposit pyramid's level dimensions for a `w × h` flare buffer
+/// (K-380): level 0 is the buffer itself, each next level halves both axes
+/// (rounding up), stopping once a level fits 32 px or the table is full.
+/// The GPU mirrors this (`deposit_levels_of`, pinned by test) so the two
+/// twins can never disagree about where a level's pixels sit.
+pub fn deposit_levels(w: u32, h: u32) -> Vec<(u32, u32)> {
+    let (mut lw, mut lh) = (w.max(1), h.max(1));
+    let mut out = vec![(lw, lh)];
+    while out.len() < MAX_DEPOSIT_LEVELS && lw.max(lh) > 32 {
+        lw = lw.div_ceil(2);
+        lh = lh.div_ceil(2);
+        out.push((lw, lh));
+    }
+    out
+}
+
+/// Which pyramid level a splat with kernel reach `ext` (px each way, level
+/// 0) deposits at (K-380): the shallowest whose span is within
+/// [`DEPOSIT_SPAN_PX`]. By repeated exact halving, not a logarithm — the
+/// shader does the identical loop, and halving is exact in floating point,
+/// so the two twins pick the same level for every splat.
+pub fn deposit_level(ext_x: f32, ext_y: f32, level_count: u32) -> u32 {
+    let mut span = 2.0 * ext_x.max(ext_y);
+    let mut level = 0u32;
+    while span > DEPOSIT_SPAN_PX && level + 1 < level_count {
+        span *= 0.5;
+        level += 1;
+    }
+    level
+}
+
+/// The CPU reference's deposit pyramid (K-380): one f32 RGB buffer per
+/// level of [`deposit_levels`]. The GPU's is one flat fixed-point buffer
+/// with per-level offsets; same shape, same arithmetic per level.
+pub(crate) struct DepositLevels {
+    pub(crate) dims: Vec<(u32, u32)>,
+    pub(crate) bufs: Vec<Vec<f32>>,
+}
+
+impl DepositLevels {
+    pub(crate) fn new(w: u32, h: u32) -> Self {
+        let dims = deposit_levels(w, h);
+        let bufs = dims
+            .iter()
+            .map(|&(lw, lh)| vec![0.0_f32; (lw * lh * 3) as usize])
+            .collect();
+        Self { dims, bufs }
+    }
+
+    /// Sum the levels into a `w × h × 3` buffer: level 0 lands exactly (its
+    /// texels are the output pixels), each coarser level is bilinearly
+    /// upsampled — the WGSL `resolve` op for op.
+    pub(crate) fn resolve(&self, out: &mut [f32]) {
+        let (w, h) = self.dims[0];
+        for (level, &(lw, lh)) in self.dims.iter().enumerate() {
+            let buf = &self.bufs[level];
+            let s = (1u32 << level) as f32;
+            for y in 0..h as usize {
+                let pos_y = ((y as f32 + 0.5) / s - 0.5).max(0.0);
+                let y0 = (pos_y as usize).min(lh as usize - 1);
+                let y1 = (y0 + 1).min(lh as usize - 1);
+                let fy = (pos_y - y0 as f32).clamp(0.0, 1.0);
+                for x in 0..w as usize {
+                    let pos_x = ((x as f32 + 0.5) / s - 0.5).max(0.0);
+                    let x0 = (pos_x as usize).min(lw as usize - 1);
+                    let x1 = (x0 + 1).min(lw as usize - 1);
+                    let fx = (pos_x - x0 as f32).clamp(0.0, 1.0);
+                    let tap = |lx: usize, ly: usize, c: usize| buf[(ly * lw as usize + lx) * 3 + c];
+                    let idx = (y * w as usize + x) * 3;
+                    for c in 0..3 {
+                        let top = tap(x0, y0, c) + (tap(x1, y0, c) - tap(x0, y0, c)) * fx;
+                        let bot = tap(x0, y1, c) + (tap(x1, y1, c) - tap(x0, y1, c)) * fx;
+                        out[idx + c] += top + (bot - top) * fy;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// A ray's local footprint axes (K-366, widened K-378): the image of one
 /// pupil-grid step under the ghost map, read off the neighbouring rays'
 /// landings — one-sided at the grid edge or beside a dead ray, and the
@@ -3592,11 +3687,17 @@ fn bspline_q(t: f32) -> f32 {
 /// itself visible. Nine cells a splat against the original one, and that is
 /// the price of a reconstruction that does not print its own sampling grid on
 /// the picture.
+///
+/// K-380 caps what one splat may COST: a splat whose kernel span exceeds
+/// [`DEPOSIT_SPAN_PX`] deposits into a coarser level of the pyramid instead
+/// — same kernel, same peak (a density per level-0 pixel is a density at
+/// any level), evaluated at texels a power of two apart and read back
+/// through the resolve's bilinear upsample. The floors, the guard and the
+/// density cap all run at level 0 BEFORE the level is chosen, exactly as
+/// the GPU's `build_splats` runs them before its deposit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn splat_ray(
-    out: &mut [f32],
-    w: u32,
-    h: u32,
+    levels: &mut DepositLevels,
     centre: [f32; 2],
     a1_in: [f32; 2],
     a2_in: [f32; 2],
@@ -3646,14 +3747,28 @@ pub(crate) fn splat_ray(
         flux_rgb[1] / (4.0 * divisor),
         flux_rgb[2] / (4.0 * divisor),
     ];
-    let inv_det = 1.0 / det;
-    // Bounding box of the tent's REACH, which is two half-axes each way.
+    // Bounding box of the kernel's REACH, which is three half-axes each way.
     let ext_x = 3.0 * (a1[0].abs() + a2[0].abs());
     let ext_y = 3.0 * (a1[1].abs() + a2[1].abs());
+    // The pyramid level this splat can afford (K-380), and everything
+    // scaled into its pixels. The kernel below is unchanged by the scale:
+    // (u, v) solve the same system whether both sides carry the 1/s, and
+    // `peak` is a density per level-0 pixel, which the resolve's upsample
+    // reads back out at level 0.
+    let level = deposit_level(ext_x, ext_y, levels.dims.len() as u32);
+    let s = (1u32 << level) as f32;
+    let (lw, lh) = levels.dims[level as usize];
+    let out = &mut levels.bufs[level as usize];
+    let centre = [centre[0] / s, centre[1] / s];
+    let a1 = [a1[0] / s, a1[1] / s];
+    let a2 = [a2[0] / s, a2[1] / s];
+    let det = det / (s * s);
+    let inv_det = 1.0 / det;
+    let (ext_x, ext_y) = (ext_x / s, ext_y / s);
     let x0 = ((centre[0] - ext_x).floor().max(0.0)) as i64;
-    let x1 = ((centre[0] + ext_x).ceil().min(w as f32 - 1.0)) as i64;
+    let x1 = ((centre[0] + ext_x).ceil().min(lw as f32 - 1.0)) as i64;
     let y0 = ((centre[1] - ext_y).floor().max(0.0)) as i64;
-    let y1 = ((centre[1] + ext_y).ceil().min(h as f32 - 1.0)) as i64;
+    let y1 = ((centre[1] + ext_y).ceil().min(lh as f32 - 1.0)) as i64;
     if x1 < x0 || y1 < y0 {
         return;
     }
@@ -3670,7 +3785,7 @@ pub(crate) fn splat_ray(
                 continue;
             }
             let k = bspline_q(u * 0.5) * bspline_q(v * 0.5);
-            let idx = ((py as u32 * w + px as u32) * 3) as usize;
+            let idx = ((py as u32 * lw + px as u32) * 3) as usize;
             if let Some(px3) = out.get_mut(idx..idx + 3) {
                 px3[0] += peak[0] * k;
                 px3[1] += peak[1] * k;
@@ -3706,6 +3821,9 @@ pub fn cpu_flare(
     if w == 0 || h == 0 || p.ghost_intensity <= 0.0 {
         return out;
     }
+    // The deposit pyramid (K-380): splats land at the level their size
+    // affords, and the resolve below sums the levels into `out`.
+    let mut deposit = DepositLevels::new(rw, rh);
     let (tier_base, tier_lambda, _) = quality_ladder(p.quality);
     // The Detail dial scales the tier's base AND its wavelength count
     // before the per-pair budget (K-265); both the CPU reference and the
@@ -3893,9 +4011,7 @@ pub fn cpu_flare(
                         let (a1, a2) = ray_axes(&corners, side, i, j);
                         let flux = wgt * gain * cell_area_px;
                         splat_ray(
-                            &mut out,
-                            rw,
-                            rh,
+                            &mut deposit,
                             pos,
                             a1,
                             a2,
@@ -3911,6 +4027,9 @@ pub fn cpu_flare(
             }
         }
     }
+    // The pyramid's levels sum into the flat buffer (K-380) — the WGSL
+    // resolve, op for op.
+    deposit.resolve(&mut out);
     // Blur radius from the BASE dims (the look must not change with the
     // padding), applied over the padded raster.
     blur_flare(

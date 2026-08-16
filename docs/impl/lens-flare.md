@@ -469,6 +469,36 @@ The two options not taken: `Rgba32Float` blending needs `FLOAT32_BLENDABLE`, whi
 universally available and would make the picture machine-dependent (K-353); and restating the
 oracle's bound would have recorded the loss rather than fixed it.
 
+### 5a-quater. Big splats deposit into a pyramid (K-380)
+
+A splat's deposit cost is its kernel's pixel count, and the kernel spans three grid steps —
+so a frame's deposit costs about **nine times each ghost's image area, per combo per light,
+whatever the ray count**. For defocused ghosts that is more than ten times the trace, and it
+is what made Normal slow and Ultra a machine-freezer (K-379 bounds the submissions; this
+bounds the work).
+
+The accumulator is therefore a **level pyramid**: level 0 is the flare buffer, each level
+below it ceil-halves both axes (`deposit_levels`, mirrored `deposit_levels_of`, pinned;
+stops at 32 px or `MAX_DEPOSIT_LEVELS`; about 1.33× level 0's pixels in total). A splat
+whose kernel span exceeds `DEPOSIT_SPAN_PX` (48) deposits at the shallowest level that
+brings it under — the level pick is repeated exact halving, identical in both twins — with
+centre, axes, det and bbox scaled into level pixels. Nothing else changes: the peak is a
+density per level-0 pixel (a density survives resampling), the floors, fold guard and
+density cap all ran at level 0 in `build_splats`/`splat_ray` before the level was chosen,
+and the kernel code is untouched because `(u, v)` solve the same system when both sides
+carry the scale. `resolve` bilinearly upsamples every level and sums; level 0's tap is the
+identity, so a frame whose splats all fit level 0 reads back exactly as before the pyramid.
+One splat now costs at most ~`DEPOSIT_SPAN_PX`² pixels, and the smoothing the coarse levels
+cost is ~1/24 of the splat's own size — invisible on the defocused ghosts big enough to
+take it. Measured on the frame-cost harness at 960×540 Normal/60 ghosts: **1.15 s → 87 ms**.
+
+Two FXC (DX12) traps the shader works around, for the record: a uniform-buffer array
+cannot be dynamically indexed without FXC unrolling every loop that touches it (it
+refuses), so the level dims are not passed as a table — the shader derives them as
+`ceil(raster / 2^level)`, which iterated ceil-halving provably equals; and a local vector
+cannot be indexed as an l-value, so the resolve taps whole `vec3`s rather than looping
+channels.
+
 ### 5b. Ghost edges are Fresnel: the knife-edge rim (K-369, re-derived K-370)
 
 The starburst above is the aperture's **far** field. A ghost is its **near** field. Each
