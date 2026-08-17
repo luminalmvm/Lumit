@@ -166,7 +166,7 @@ Each row names the first file to open.
 | Save format, autosave | `crates/lumit-project` | [01-CORE.md](01-CORE.md) |
 | How a frame gets rendered | `crates/lumit-render` | [02-PIXELS.md](02-PIXELS.md) |
 | An effect's look (GPU) | `crates/lumit-gpu/src/fx_*.wgsl` | [03-GPU.md](03-GPU.md) |
-| An effect's controls | `lumit-core/src/fx/effects/` if it has moved, `fx/builtins.rs` if not | [01-CORE.md](01-CORE.md) |
+| An effect's controls | `lumit-core/src/fx/effects/<name>.rs` — one file per effect | [01-CORE.md](01-CORE.md) |
 | Decoding, formats | `crates/lumit-media` | [04-MEDIA-AUDIO.md](04-MEDIA-AUDIO.md) |
 | Playback sync, audio | `crates/lumit-audio` | [04-MEDIA-AUDIO.md](04-MEDIA-AUDIO.md) |
 | What the UI can ask the engine | `crates/lumit-bridge/src/api/` | [05-BRIDGE.md](05-BRIDGE.md) |

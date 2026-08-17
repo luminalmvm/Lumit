@@ -108,6 +108,14 @@ pub enum Value {
     Choice(u32),
     /// Scene-linear RGBA.
     Colour([f32; 4]),
+    /// Four plain floats under one id (K-388): a small fixed vector an effect
+    /// would otherwise have to spell as four `derived.*` entries. Shake's
+    /// unit-free noise sample `(x, y, rotation, z)` is the first — nine of them
+    /// when its own motion blur is on, which as forty flat ids would drown the
+    /// bag. Deliberately not a `Colour`: these are not colours, and a kind that
+    /// lies about what it holds is a kind the panel and the bridge would have to
+    /// second-guess.
+    Vec4([f32; 4]),
     /// Whether the layer reference names a layer that was rendered for it.
     Layer(bool),
     /// The op's slot in the stack's file table, or `u32::MAX` for unset.
@@ -130,7 +138,7 @@ impl Value {
                 }
             }
             Value::Choice(v) => v as f32,
-            Value::Colour([r, ..]) => r,
+            Value::Colour([r, ..]) | Value::Vec4([r, ..]) => r,
             Value::Layer(v) => {
                 if v {
                     1.0
@@ -153,6 +161,7 @@ impl Value {
             Value::Colour(_) => 4,
             Value::Layer(_) => 5,
             Value::File(_) => 6,
+            Value::Vec4(_) => 7,
         }
     }
 }
@@ -245,6 +254,17 @@ impl<'a> Params<'a> {
     pub fn colour(&self, id: ParamId, default: [f32; 4]) -> [f32; 4] {
         match self.get(id) {
             Some(Value::Colour(v)) => v,
+            _ => default,
+        }
+    }
+
+    /// `id` as four plain floats, or `default` when absent or of another kind
+    /// (K-388). A `Colour` is deliberately *not* accepted here: the two kinds
+    /// mean different things, and reading one as the other would be the silent
+    /// mistake the tag exists to prevent.
+    pub fn vec4(&self, id: ParamId, default: [f32; 4]) -> [f32; 4] {
+        match self.get(id) {
+            Some(Value::Vec4(v)) => v,
             _ => default,
         }
     }
@@ -375,12 +395,22 @@ impl ResolvedStack {
         (0..self.ops.len()).filter_map(|i| self.get(i))
     }
 
-    /// Rescale every spatial value by `factor`.
+    /// Rescale every spatial value by `factor` — a stack resolved against one
+    /// raster and run on another (K-266).
     ///
-    /// This is the generic replacement for the old per-variant `rescale_px`: a
-    /// resolved stack made against one raster, reused at another (a precomp
-    /// realised at a wider size), needs its pixel quantities moved with it. The
-    /// unit is declared on the schema, so no effect can be forgotten here.
+    /// This is the repair for the Adjust arm of the draw builder, which resolves
+    /// with `px_scale` 1 because its stack runs on "the comp-sized
+    /// intermediate", which is only true at full preview resolution. Under
+    /// reduced-resolution preview every spatial parameter (the flare's light,
+    /// DoF apertures, blur radii, Shake's amplitude) landed too far right and
+    /// too big by exactly the preview factor; the owner measured the flare's
+    /// light hitting the frame edge at 1500 of a 1920 comp. The realise walk
+    /// calls this with `render_width / comp_width` before running an adjustment
+    /// stack, and a precomp realised at a wider size needs the same.
+    ///
+    /// Every op's parameters are in the arena, and the arena declares its units,
+    /// so this is one generic pass and no effect can be forgotten — which the
+    /// per-variant `rescale_px` match it replaced could not promise.
     pub fn rescale_spatial(&mut self, factor: f32) {
         if factor == 1.0 {
             return;
@@ -427,7 +457,9 @@ impl ResolvedStack {
                     Value::Int(v) => feed(&v.to_le_bytes()),
                     Value::Bool(v) | Value::Layer(v) => feed(&[u8::from(v)]),
                     Value::Choice(v) | Value::File(v) => feed(&v.to_le_bytes()),
-                    Value::Colour(c) => {
+                    // Four floats, one at a time — the tag above is what keeps a
+                    // Colour and a Vec4 of the same numbers apart.
+                    Value::Colour(c) | Value::Vec4(c) => {
                         for ch in c {
                             feed(&ch.to_le_bytes());
                         }

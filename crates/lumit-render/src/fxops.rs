@@ -4,10 +4,10 @@
 //! list into plain numbers, and this module walks that list calling the
 //! matching `FxEngine` kernel for each entry. The preview, the export
 //! renderer, and adjustment-layer staging all call through here, so an
-//! effect wired up once runs identically in all three — a new `Resolved`
-//! variant only ever needs one new arm.
+//! effect wired up once runs identically in all three — and there is no match
+//! over effects at all any more: the parameters come out of the stack's arena,
+//! and the kernel out of `gpufx`'s table, looked up by the effect's own name.
 
-use lumit_core::fx::Resolved;
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
@@ -225,7 +225,7 @@ pub fn run_ops(
     tex: Tex,
     w: u32,
     h: u32,
-    ops: &lumit_core::fx::ResolvedOps,
+    ops: &lumit_core::fx::ResolvedStack,
     neighbours: &[(i32, Tex)],
     flow_field: Option<&Tex>,
     luts: &[Option<LoadedLut>],
@@ -243,126 +243,52 @@ pub fn run_ops(
     // enumerates them with one predicate, in one order; two counters would let
     // the two sides drift apart silently.
     //
-    // A migrated effect names its list rather than carrying an arm of its own
-    // (`GpuEffect::aux`, K-387), and the Registry arm below advances the counter
-    // it names — so the ops that count along a list are still counted in one
-    // place, in stack order, whichever half of the migration they are in.
+    // An effect names its list rather than carrying an arm of its own
+    // (`GpuEffect::aux`, K-387), and the loop below advances the counter it
+    // names — so the ops that count along a list are counted in one place, in
+    // stack order. The whole-list kinds take no counter because they were never
+    // per-op.
     let mut lut_i = 0usize;
     let mut dof_i = 0usize;
     let mut flare_i = 0usize;
-    for op in &ops.ops {
+    for resolved in ops.iter() {
         // Only a *profiled* render reads a clock here, and it reads it either
         // side of a fence — see crate::profile on why an unfenced span would
-        // time the paperwork rather than the work.
+        // time the paperwork rather than the work. One reading per op, whether
+        // or not it draws, so the timings stay 1:1 with the resolve's own id
+        // list (`resolve_stack_temporal_named`).
         let started = timings.as_ref().map(|_| std::time::Instant::now());
-        match op {
-            // Shake dispatches the Transform kernel (docs/08 §3.4: a
-            // transform-domain effect): the shared affine turns the
-            // resolved wobble into the same op the CPU reference builds,
-            // so both paths consume bit-identical numbers. With its own
-            // motion blur on (T18/K-165) it instead builds one affine per
-            // sub-frame and dispatches the averaging kernel, the same
-            // sub-frames `cpu::transform_average` averages.
-            Resolved::Shake {
-                offset_px,
-                rotation_deg,
-                zoom,
-                edge,
-                mix,
-                mb,
-            } => match mb {
-                Some(samples) => {
-                    let mut taps = [lumit_gpu::fx::ShakeMbTap {
-                        m: [1.0, 0.0, 0.0, 1.0],
-                        off: [0.0, 0.0],
-                    }; lumit_gpu::fx::SHAKE_MB_SAMPLES];
-                    for (t, s) in taps.iter_mut().zip(samples.iter()) {
-                        let (anchor, position, scale, rot) =
-                            lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-                        let (m, off, _opacity) =
-                            lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
-                        *t = lumit_gpu::fx::ShakeMbTap { m, off };
-                    }
-                    tex = fx.shake_mb(
-                        ctx,
-                        &tex,
-                        w,
-                        h,
-                        &lumit_gpu::fx::ShakeMbOp {
-                            taps,
-                            count: samples.len() as u32,
-                            // Shake's own Edges control governs the revealed border.
-                            edge: *edge,
-                            mix: *mix,
-                        },
-                    );
+        // The parameters come out of the stack's arena and the kernel out of
+        // the GPU table, looked up by the effect's own name. An op with no
+        // table entry (an orchestration-only effect) passes the texture through
+        // — the convention a missing LUT or flow field already uses, never a
+        // fault (engine crates do not panic, 14-ENGINEERING-RULES §4).
+        if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
+            let aux = match gpu.aux() {
+                AuxKind::None => AuxSlot::None,
+                AuxKind::Lut => {
+                    let slot = luts.get(lut_i).and_then(|o| o.as_ref());
+                    lut_i += 1;
+                    AuxSlot::Lut(slot)
                 }
-                None => {
-                    let (anchor, position, scale, rot) =
-                        lumit_core::fx::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
-                    let (m, off, opacity) =
-                        lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
-                    tex = fx.transform(
-                        ctx,
-                        &tex,
-                        w,
-                        h,
-                        &lumit_gpu::fx::TransformOp {
-                            m,
-                            off,
-                            opacity,
-                            mix: *mix,
-                            // Shake's own Edges control governs the revealed border.
-                            edge: *edge,
-                        },
-                    );
+                AuxKind::LayerInput => {
+                    let slot = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
+                    dof_i += 1;
+                    AuxSlot::LayerInput(slot)
                 }
-            },
-            // A migrated effect (docs/impl/effect-registry.md §2.5): the
-            // variant holds only its place in the stack, so the parameters
-            // come out of `ops.bags` and the kernel out of the GPU table,
-            // looked up by the effect's own name. An op with no bag or no
-            // table entry (an orchestration-only effect) passes the texture
-            // through — the convention a missing LUT or flow field already
-            // uses, never a fault (engine crates do not panic,
-            // 14-ENGINEERING-RULES §4).
-            //
-            // An effect that consumes a side table says so
-            // (`GpuEffect::aux`, K-387) and this is where the counter it names
-            // advances — the same counter, in the same order, the effect's own
-            // arm advanced before it moved. The whole-list kinds take no
-            // counter because they were never per-op.
-            Resolved::Registry { op } => {
-                if let Some(resolved) = ops.bags.get(*op as usize) {
-                    if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
-                        let aux = match gpu.aux() {
-                            AuxKind::None => AuxSlot::None,
-                            AuxKind::Lut => {
-                                let slot = luts.get(lut_i).and_then(|o| o.as_ref());
-                                lut_i += 1;
-                                AuxSlot::Lut(slot)
-                            }
-                            AuxKind::LayerInput => {
-                                let slot = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
-                                dof_i += 1;
-                                AuxSlot::LayerInput(slot)
-                            }
-                            AuxKind::FlareInputs => {
-                                let matte = flare_mattes.get(flare_i).and_then(|o| o.texture(&tex));
-                                let lens = flare_lens.get(flare_i).and_then(|o| o.as_ref());
-                                flare_i += 1;
-                                AuxSlot::FlareInputs { matte, lens }
-                            }
-                            AuxKind::Neighbours => AuxSlot::Neighbours(neighbours),
-                            AuxKind::FlowField => AuxSlot::FlowField {
-                                field: flow_field,
-                                neighbours,
-                            },
-                        };
-                        tex = gpu.run(fx, ctx, &tex, w, h, resolved.params, aux);
-                    }
+                AuxKind::FlareInputs => {
+                    let matte = flare_mattes.get(flare_i).and_then(|o| o.texture(&tex));
+                    let lens = flare_lens.get(flare_i).and_then(|o| o.as_ref());
+                    flare_i += 1;
+                    AuxSlot::FlareInputs { matte, lens }
                 }
-            }
+                AuxKind::Neighbours => AuxSlot::Neighbours(neighbours),
+                AuxKind::FlowField => AuxSlot::FlowField {
+                    field: flow_field,
+                    neighbours,
+                },
+            };
+            tex = gpu.run(fx, ctx, &tex, w, h, resolved.params, aux);
         }
 
         if let (Some(started), Some(into)) = (started, timings.as_mut()) {

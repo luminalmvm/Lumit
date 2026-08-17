@@ -3521,11 +3521,11 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   needing a line of code per effect that somebody could forget to write. A preview that
   disagreed with the export used to be one forgotten line away.
 
-  The move is happening in batches, simplest effects first, and while it runs a test holds
-  each generated entry against the hand-written one it replaces and fails if they differ by
-  so much as a default value — which is what makes it a move rather than a rewrite.
+  The move happened in batches, simplest effects first, and while it ran a test held each
+  generated entry against the hand-written one it replaced and failed if they differed by so
+  much as a default value — which is what made it a move rather than a rewrite.
 
-  Thirty-four effects have moved so far, in eight batches: the ten colour ones first (Colour
+  **All thirty-five effects have moved**, in nine batches: the ten colour ones first (Colour
   balance, Saturation, Vibrancy, Exposure, Hue shift, Contrast, Gamma, Temperature, Invert,
   Tint), then the five blur ones (Gaussian blur, Directional blur, Radial blur, Sharpen,
   Simple sharpen), then Vignette, RGB split and Chromatic aberration, then Flash, then
@@ -3534,18 +3534,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   whose real input is not a number at all (see below); then the rest of those — Depth of
   field and Light wrap, which read another layer's picture, Fast motion blur and Datamosh,
   which read the movement measured off the footage, and Matte key, which turned out to read
-  nothing extra at all and was simply large; and last the Lens flare, which is the biggest
-  effect Lumit has and needed one thing nothing before it did (see below). Only Shake is
-  left. While it catches up, a
-  layer's stack is read **two ways at once**: the effects that have moved keep their
-  controls in the shared list of numbers, and the ones that haven't still have a slot each.
-  A single ordered list decides what runs when, so an effect that has moved and one that
-  hasn't can sit next to each other on a layer and nothing notices. Two other things
-  changed with them. The step that works out an effect's numbers at a frame is now **one
-  loop for all of them** — it reads the effect's own block of controls and asks the project
-  for each value in turn — instead of a hand-written passage per effect. And the code that
-  hands the work to the graphics card now **looks the effect up by name** rather than
-  matching on a slot, which is the door third-party effects will one day come through.
+  nothing extra at all and was simply large; then the Lens flare, which is the biggest
+  effect Lumit has and needed one thing nothing before it did (see below); and last Shake,
+  whose nine sub-frame wobbles do not fit a list of single numbers, so the list learned to
+  hold a group of four at once and Shake's wobble was split into the part that scales with
+  the picture and the part that does not.
+
+  With the last one across, the old arrangement is **gone** rather than merely unused: the
+  giant list of every effect, the slot each one had in it, the hand-written passage that
+  filled that slot in, and the one that turned it into a graphics-card call have all been
+  deleted, along with the test that was holding the two catalogues together — there is only
+  one catalogue now, generated from the one list. A layer's effect stack is a single
+  ordered run of controls, and the two places that walk it (the graphics-card path and the
+  plain reference version) choose nothing: they ask each effect for its behaviour **by
+  name**, which is the door third-party effects will one day come through. The step that
+  works out an effect's numbers at a frame is likewise **one loop for all of them** — it
+  reads the effect's own block of controls and asks the project for each value in turn —
+  instead of a hand-written passage per effect.
 
   The sums each effect does before the graphics card sees the numbers — turning "Saturation
   250 %" into a factor of 2.5, or a temperature into two channel gains — now live in one

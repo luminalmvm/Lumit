@@ -43,37 +43,25 @@ These sit above everything else: they are what the editor feels like in the hand
 
 ---
 
-## Now - the effect registry migration (K-381, docs/impl/effect-registry.md §6)
+## Now - the effect registry (K-381, docs/impl/effect-registry.md §6)
 
-The machinery landed in PR #99 - the derive macro, the registry, the parameter bag, and the
-first colour effects are declared through it. The colour batch then moved for real: the ten
-colour effects resolve, grade and dispatch through the registry, and the render path carries
-`ResolvedOps` (the ordering `Vec` plus the arena) rather than `Vec<Resolved>` alone. What is
-left is the per-family migration on top, in batches; these are the batches that have not
-landed. Delete each line as its batch lands.
+The migration is done. All 35 built-ins declare themselves in
+`lumit-core/src/fx/effects/`, one file each; `catalogue.rs` generates both halves of the
+catalogue from one list; a frame resolves every effect through one generic loop into the
+arena, and `run_ops` and `cpu::apply_stack` dispatch by name with no match over effects
+left in either. `Resolved`, `ResolvedOps`, `resolve_one`, the free `rescale_px` and the
+hand-written `BUILTINS` literal are all deleted, and with them the migration-only
+`the_generated_schema_matches_the_hand_written_one`. What is left is §6 step 5.
 
-- **The one that is not a batch at all**: `shake` carries a **variable-shape payload** -
-    nine sub-frame samples of four floats when its own motion blur is on - and dispatches a
-    different kernel for it. `Value` has no array kind, so this is a decision (32-odd
-    `derived.*` ids, or a new kind), not a migration.
-    What has landed: the blur family (`blur`, `directional_blur`, `radial_blur`, `sharpen`,
-    `sharpen_simple`), the first batch with spatial units, so `PctDiag` and the generic
-    rescale are exercised by `a_migrated_spatial_parameter_rescales_as_the_old_op_did`; then
-    `vignette`, `rgb_split` and `chromatic_aberration`, which brought the first `Px`
-    parameter and the first *mode fork* (an effect whose Wavelength toggle picks a different
-    kernel, packed as an enum rather than a tuple); then `flash`, `scanlines` and
-    `block_glitch` through the K-385 resolve-time hook, `sprite_flare`, `transform` and
-    `glow` beside them, and `posterize_time` and `accumulation_mb`, the first two effects
-    that declare no image op at all; then the aux seam with the two effects that prove its
-    two shapes - `lut` (a counted slot, `luts[lut_i]`) and `echo` (a whole list, the decoded
-    neighbours); and then the rest of the side-table batch, which is every remaining effect
-    but the flare - `dof` and `light_wrap` off the shared `dof_i` counter,
-    `motion_blur` and `datamosh` off the decoded motion, and `matte_key`, which turned out
-    to have no side table at all, only bulk; and last `lens_flare` on its own, whose bake
-    closure and frame-time grid probe moved wholesale into its `gpufx.rs` wrapper and whose
-    Lights-mode sources became K-385 derived values (two `Value::Colour` entries a light,
-    under sixteen fixed ids).
-- **Rescale a derived spatial value, or stop deriving one.** Scanlines' `derived.roll_px` is
+- **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
+    inputs; then **spare parameters**, the user's own sliders for expressions to read. The
+    rules are settled (§4 of the note); the panel affordances are not built.
+- **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
+    follow for free - except for dynamic parameters, which are per *instance* rather than per
+    effect and need a bridge call that takes an instance id.
+
+- **Rescale a derived spatial value, or stop deriving one.** Not a migration step - an open
+    defect the migration uncovered. Scanlines' `derived.roll_px` is
     in raster pixels, but `ResolvedStack::rescale_spatial` only moves values whose id matches
     a schema parameter with a spatial unit - a derived id matches nothing, so a stack resolved
     against one raster and reused at another (`realise.rs`, a precomp at a different size)
@@ -86,14 +74,6 @@ landed. Delete each line as its batch lands.
     `derived_spatial()` list the rescale pass consults (keeps the resolve maths bit-identical),
     or derive the roll in *periods* rather than pixels and multiply in `packed()` (no new API,
     but the f64 product rounds once more and so is not bit-identical to the old arm).
-- **Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body**,
-    and with them the migration-only `the_generated_schema_matches_the_hand_written_one`.
-- **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
-    inputs; then **spare parameters**, the user's own sliders for expressions to read. The
-    rules are settled (§4 of the note); the panel affordances are not built.
-- **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
-    follow for free - except for dynamic parameters, which are per *instance* rather than per
-    effect and need a bridge call that takes an instance id.
 
 ---
 

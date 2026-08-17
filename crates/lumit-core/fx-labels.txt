@@ -1,0 +1,258 @@
+# Every user-facing label the effects schema can send (K-303).
+# Generated - do not edit. To refresh after a schema change:
+#   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
+Add
+Alpha
+Alpha bias
+Amount
+Amplitude
+Anamorphic squeeze
+Anchor x
+Anchor y
+Angle
+Aperture
+As the lens file
+Aspect ratio
+Background
+Behind
+Blades
+Blend
+Block glitch
+Block size
+Bloom
+Blue
+Blur & sharpen
+Broadband, amber
+Broadband, blue
+Broadband, green
+Centre X
+Centre Y
+Channel offset
+Chromatic aberration
+Clip black
+Clip rollback
+Clip white
+Coating
+Colour
+Colour 1
+Colour 2
+Colour 3
+Colour balance
+Confidence
+Contrast
+Darken
+Datamosh
+Decay
+Depth channel
+Depth invert
+Depth layer
+Depth map
+Depth of field
+Despill amount
+Despill bias
+Detail
+Detect edge threshold
+Difference
+Directional blur
+Dispersion
+Displacement
+Display
+Distortion
+Divide
+Draft
+Duration
+Echo
+Echoes
+Edges
+Element 1
+Element 10
+Element 11
+Element 12
+Element 13
+Element 14
+Element 15
+Element 16
+Element 17
+Element 18
+Element 19
+Element 2
+Element 20
+Element 3
+Element 4
+Element 5
+Element 6
+Element 7
+Element 8
+Element 9
+Every Nth beat
+Exclusion
+Exposure
+F-stop
+Fade
+Far blur
+Fast motion blur
+File
+Final result
+Flare options
+Flash
+Focus (m)
+Focus distance
+Focus map
+Focus point x
+Focus point y
+Focus range
+Force on all layers
+Frame rate
+Frequency
+Gain
+Gamma
+Gaussian blur
+Ghost intensity
+Ghost size
+Ghost softness
+Ghost spacing
+Ghosts
+Glow
+Glow intensity
+Glow size
+Green
+Hard
+Hard colour
+Hard light
+High
+Highlight exposure
+Highlight threshold
+Highlights
+Hue shift
+In front
+Intensity
+Interlace offset
+Invert
+Iris
+LUT
+Length
+Lens
+Lens file
+Lens flare
+Lens options
+Lift
+Light tint
+Light wrap
+Light x
+Light y
+Lighten
+Lights
+Line period
+Luminance
+Luminance only
+Manual
+Manual light
+Map black to
+Map white to
+Matte
+Matte key
+Matte layer
+Max ghosts
+Mirror
+Mix
+Mode
+Motion blur
+Motion vectors
+Multiply
+Near blur
+None
+Normal
+Opacity %
+Overlay
+Per-axis wobble
+Phase
+Phase offset
+Position x
+Position y
+Posterize time
+Preserve luminance
+Quality
+RGB split
+Radial blur
+Radius
+Ramp
+Red
+Remove edge leak
+Rendered
+Repeat
+Repeat edge pixels
+Replace colour
+Replace method
+Reset interval
+Rim brightness
+Roll speed
+Rotation
+Rotation amount
+Roundness
+Rows/columns jitter
+Samples
+Saturation
+Scale
+Scale x %
+Scale y %
+Scanlines
+Screen
+Screen balance
+Screen colour
+Screen gain
+Screen matte
+Seed
+Shake
+Shape
+Sharpen
+Shutter
+Shutter angle
+Shutter phase
+Single layer, straw
+Slice repeat
+Soft colour
+Soft light
+Softness
+Source
+Source height
+Source width
+Spin
+Sprite flare
+Starburst intensity
+Status
+Stops
+Streak
+Streak angle
+Streak intensity
+Streak length
+Strobe
+Stylise
+Subtract
+Temperature
+Temporal
+Threshold
+Threshold softness
+Tint
+Transform
+Transparent
+Trigger
+Two layer, magenta
+Type
+Ultra
+Uncoated
+Unsharp mask
+Use focus point
+Use source colour
+Utility
+Vibrancy
+View
+Vignette
+Wavelength
+Width
+X amount
+X frequency
+Y amount
+Y frequency
+Z amount
+Z frequency
+Zoom

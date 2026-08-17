@@ -196,7 +196,7 @@ impl Realiser<'_> {
                 // depth source is Effects and masks (`d.fx` non-empty). Temporal
                 // inputs stay empty in v1 (same boundary as the matte). Export
                 // does the same, so the two depth passes match (K-031).
-                let linear = if d.fx.ops.is_empty() {
+                let linear = if d.fx.is_empty() {
                     linear
                 } else {
                     let luts = self.load_luts(&d.lut_files);
@@ -340,7 +340,7 @@ impl Realiser<'_> {
             let fx_ops = match l.fx_ref_width {
                 Some(ref_w) if ref_w > 0.0 => {
                     let mut ops = l.fx.clone();
-                    ops.rescale_px(tw as f32 / ref_w);
+                    ops.rescale_spatial(tw as f32 / ref_w);
                     ops
                 }
                 _ => l.fx.clone(),
@@ -554,7 +554,7 @@ impl Realiser<'_> {
             };
             // The effect stack runs on the linear source, after masks and
             // before the transform (docs/08 §1.5; docs/06 render order).
-            let mut tex = if l.fx.ops.is_empty() {
+            let mut tex = if l.fx.is_empty() {
                 tex
             } else {
                 let (w, h) = (tex.width(), tex.height());
@@ -594,7 +594,7 @@ impl Realiser<'_> {
                 let fx_ops = match l.fx_ref_width {
                     Some(ref_w) if ref_w > 0.0 => {
                         let mut ops = l.fx.clone();
-                        ops.rescale_px(w as f32 / ref_w);
+                        ops.rescale_spatial(w as f32 / ref_w);
                         ops
                     }
                     _ => l.fx.clone(),
@@ -689,7 +689,7 @@ impl Realiser<'_> {
                     // or blurred matte works. Temporal inputs stay empty in v1 — the
                     // matte source's echo/flow degrades to a still (documented). The
                     // same run export performs, so the two agree (K-031).
-                    let linear = if m.fx.ops.is_empty() {
+                    let linear = if m.fx.is_empty() {
                         linear
                     } else {
                         let luts = self.load_luts(&m.lut_files);

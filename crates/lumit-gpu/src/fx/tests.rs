@@ -1447,6 +1447,45 @@ fn wgsl_transform_matches_the_cpu_oracle() {
     }
 }
 
+/// One shake's resolved parameters, hand-built so the wobble is exactly what a
+/// test asks for (K-388).
+///
+/// A *resolved* wobble is whatever the seeded noise says, which is no way to
+/// sweep the kernel's border cases. `Shake::packed` builds each offset as
+/// `amplitude · axis amount · noise`, so amplitudes of exactly 1 make the
+/// unit-free noise vector *be* the wobble, and `zoom = 1 + z · noise` makes the
+/// z component `zoom - 1` — an exact f32 subtraction near 1, so it round-trips.
+/// The bag is the real thing either way: both the CPU reference and the op below
+/// are read out of it through the effect's own typed reader.
+fn shake_bag(
+    wobble: lumit_core::fx::ShakeSample,
+    edge: u32,
+    mix: f32,
+    mb: Option<[lumit_core::fx::ShakeSample; SHAKE_MB_SAMPLES]>,
+) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
+    use lumit_core::fx::effects::shake::Shake;
+    use lumit_core::fx::Value;
+    let noise = |s: lumit_core::fx::ShakeSample| {
+        Value::Vec4([s.offset_px[0], s.offset_px[1], s.rotation_deg, s.zoom - 1.0])
+    };
+    let mut bag = vec![
+        (Shake::AMPLITUDE, Value::Float(1.0)),
+        (Shake::X_AMP, Value::Float(1.0)),
+        (Shake::Y_AMP, Value::Float(1.0)),
+        (Shake::ROTATION, Value::Float(1.0)),
+        (Shake::MIX, Value::Float(mix * 100.0)),
+        (Shake::DERIVED_Z_AMP, Value::Float(1.0)),
+        (Shake::DERIVED_EDGE, Value::Choice(edge)),
+        (Shake::DERIVED_NOISE, noise(wobble)),
+    ];
+    if let Some(samples) = mb {
+        for (id, s) in Shake::DERIVED_MB_NOISE.iter().zip(samples.iter()) {
+            bag.push((*id, noise(*s)));
+        }
+    }
+    bag
+}
+
 /// The §1.6 oracle for shake (docs/08 §3.4): a transform-domain effect
 /// with no kernel of its own — the resolved wobble maps through the
 /// shared `shake_affine` to the Transform kernel, exactly as `run_ops`
@@ -1471,21 +1510,42 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
         ("twist-repeat", [1.0, 0.5], 4.0, 1.0, 1, 1.0),
         ("pumped-mirror", [0.0, 2.0], -2.0, 0.95, 2, 0.7),
     ] {
-        let shake = lumit_core::fx::Resolved::Shake {
-            offset_px: offset,
-            rotation_deg: rot,
-            zoom,
+        use lumit_core::fx::effects::shake::{Shake, ShakeDef, Shaken};
+        use lumit_core::fx::{EffectDef, EffectMetadata, Params};
+        let bag = shake_bag(
+            lumit_core::fx::ShakeSample {
+                offset_px: offset,
+                rotation_deg: rot,
+                zoom,
+            },
             edge,
             mix,
-            mb: None,
-        };
+            None,
+        );
+        let p = Params::new(&bag);
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
+        ShakeDef.apply_cpu(&mut cpu, w, h, p);
 
-        // The exact run_ops mapping: shared affine → transform op →
-        // the Transform kernel, carrying the Edges policy.
+        // The exact `gpufx` mapping: the bag → `packed` → the shared affine →
+        // transform op → the Transform kernel, carrying the Edges policy. The
+        // wobble is read back out of the bag rather than reused from the case
+        // above, so the reassembly K-388 pins is under test too.
+        let Shaken::Plain {
+            wobble,
+            edge: packed_edge,
+            mix: packed_mix,
+        } = Shake::read(p).packed(Shake::derived_of(p))
+        else {
+            panic!("no sub-frames in the bag: this is the plain shake");
+        };
+        assert_eq!(
+            (wobble.offset_px, wobble.rotation_deg, wobble.zoom),
+            (offset, rot, zoom),
+            "the noise vectors reassemble the wobble exactly"
+        );
+        assert_eq!((packed_edge, packed_mix), (edge, mix));
         let (anchor, position, scale, rotation) =
-            lumit_core::fx::shake_affine(w, h, offset, rot, zoom);
+            lumit_core::fx::shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
         let (m, off, opacity) =
             lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
         let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -1569,24 +1629,31 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         ("smear-repeat", 1, 1.0),
         ("smear-mirror-mixed", 2, 0.7),
     ] {
-        let shake = lumit_core::fx::Resolved::Shake {
-            offset_px: centre.offset_px,
-            rotation_deg: centre.rotation_deg,
-            zoom: centre.zoom,
-            edge,
-            mix,
-            mb: Some(samples),
-        };
+        use lumit_core::fx::effects::shake::{Shake, ShakeDef, Shaken};
+        use lumit_core::fx::{EffectDef, EffectMetadata, Params};
+        let bag = shake_bag(centre, edge, mix, Some(samples));
+        let p = Params::new(&bag);
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::apply(&mut cpu, w, h, &shake);
+        ShakeDef.apply_cpu(&mut cpu, w, h, p);
 
-        // The exact run_ops mapping: each sub-frame's shared affine → transform
-        // op → one tap of the averaging kernel.
+        // The exact `gpufx` mapping: the bag → `packed` → each sub-frame's
+        // shared affine → transform op → one tap of the averaging kernel.
+        let Shaken::Blurred {
+            samples: packed_samples,
+            ..
+        } = Shake::read(p).packed(Shake::derived_of(p))
+        else {
+            panic!("the bag carries sub-frames, so this is the smeared shake");
+        };
+        assert_eq!(
+            packed_samples, samples,
+            "the noise vectors reassemble every sub-frame exactly"
+        );
         let mut taps = [ShakeMbTap {
             m: [1.0, 0.0, 0.0, 1.0],
             off: [0.0, 0.0],
         }; SHAKE_MB_SAMPLES];
-        for (t, s) in taps.iter_mut().zip(samples.iter()) {
+        for (t, s) in taps.iter_mut().zip(packed_samples.iter()) {
             let (anchor, position, scale, rotation) =
                 lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
             let (m, off, _opacity) =

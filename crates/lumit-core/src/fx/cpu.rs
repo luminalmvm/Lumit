@@ -1,87 +1,28 @@
-use super::{MatteKeyParams, MbView, Resolved, MAX_BLADES};
-
-/// Apply one resolved effect to an RGBA f32 image (premultiplied,
-/// linear light), in place.
-pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
-    match fx {
-        // Shake is a transform-domain effect (docs/08 §3.4): the
-        // resolved wobble maps to the Transform reference through the
-        // same shared affine the GPU dispatch uses, so both paths
-        // consume bit-identical numbers. A neutral shake (zero wobble)
-        // maps to the identity affine — the bit-exact passthrough the
-        // Transform reference pins. `edge` is Shake's own Edges control.
-        // With motion blur (T18) the wobble is resampled at each sub-frame
-        // placement and the results averaged; without it, one resample.
-        Resolved::Shake {
-            offset_px,
-            rotation_deg,
-            zoom,
-            edge,
-            mix,
-            mb,
-        } => match mb {
-            Some(samples) => {
-                let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); super::SHAKE_MB_SAMPLES];
-                for (op, s) in ops.iter_mut().zip(samples.iter()) {
-                    let (anchor, position, scale, rot) =
-                        super::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-                    let (m, o, _opacity) = super::transform_op(anchor, position, scale, rot, 1.0);
-                    *op = (m, o);
-                }
-                transform_average(rgba, w, h, &ops, *edge, *mix);
-            }
-            None => {
-                let (anchor, position, scale, rot) =
-                    super::shake_affine(w, h, *offset_px, *rotation_deg, *zoom);
-                transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
-            }
-        },
-        // A migrated effect's parameters live in the stack's arena, which this
-        // single-op entry point has no way to receive. The dispatch that *does*
-        // have the arena is [`apply_stack`]; here the op is the passthrough,
-        // never a silent half-effect.
-        //
-        // Several of the migrated effects are passthroughs even *there*, and
-        // deliberately: Light wrap's background, Depth of field's depth pass,
-        // Echo's neighbour frames, Motion blur's and Datamosh's flow field and
-        // the LUT's cube are whole pictures that arrive beside the op as aux
-        // slots (K-387), and no single-buffer dispatcher carries one. The Lens
-        // flare is the same shape for a different reason (K-256, the K-114 LUT
-        // precedent): it owns a render pass over baked tables, and neither
-        // reaches a single `&mut [f32]`. Each keeps `EffectDef::apply_cpu`'s
-        // identity default — exactly the arms that used to sit here — and its
-        // §1.6 oracle runs against its `cpu::` reference directly from the
-        // lumit-gpu test, which can upload the second picture (for the flare,
-        // `lens_flare::cpu_flare`/`cpu_combine`: trace at ULP, frame at the
-        // perceptual bound).
-        Resolved::Registry { .. } => {}
-    }
-}
+use super::{MatteKeyParams, MbView, MAX_BLADES};
 
 /// Apply a whole resolved stack to an RGBA f32 image (premultiplied, linear
 /// light), in place — the CPU-degradation rung (K-019) and the parity oracle's
 /// entry point.
 ///
-/// This is [`apply`] plus the one thing a single op cannot carry: the arena a
-/// migrated effect's parameters live in (docs/impl/effect-registry.md §3, step
-/// 4). An effect that has moved to the registry is dispatched through its own
-/// [`EffectDef::apply_cpu`](super::EffectDef::apply_cpu) with its bag; an effect
-/// that still carries a variant goes through [`apply`], which is the same
-/// picture it always rendered.
-pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedOps) {
-    for op in &ops.ops {
-        match op {
-            Resolved::Registry { op } => {
-                // A dangling index cannot happen — resolve pushes the variant
-                // and the bag together — but engine crates do not panic on a
-                // caller's mistake (14-ENGINEERING-RULES §4), so an absent bag
-                // is the passthrough.
-                if let Some(fx) = ops.bags.get(*op as usize) {
-                    fx.def.apply_cpu(rgba, w, h, fx.params);
-                }
-            }
-            other => apply(rgba, w, h, other),
-        }
+/// Every effect is dispatched through its own
+/// [`EffectDef::apply_cpu`](super::EffectDef::apply_cpu) with the bag its
+/// parameters live in (docs/impl/effect-registry.md §3, step 4) — the whole
+/// stack, and not one op, is the unit here because an op's numbers are a
+/// borrowed run of the stack's own arena.
+///
+/// Several of the effects are passthroughs even here, and deliberately: Light
+/// wrap's background, Depth of field's depth pass, Echo's neighbour frames,
+/// Motion blur's and Datamosh's flow field and the LUT's cube are whole pictures
+/// that arrive beside the op as aux slots (K-387), and no single-buffer
+/// dispatcher carries one. The Lens flare is the same shape for a different
+/// reason (K-256, the K-114 LUT precedent): it owns a render pass over baked
+/// tables, and neither reaches a single `&mut [f32]`. Each keeps
+/// `EffectDef::apply_cpu`'s identity default, and its §1.6 oracle runs against
+/// its `cpu::` reference directly from the lumit-gpu test, which can upload the
+/// second picture.
+pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack) {
+    for fx in ops.iter() {
+        fx.def.apply_cpu(rgba, w, h, fx.params);
     }
 }
 

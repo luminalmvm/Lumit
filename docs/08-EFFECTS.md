@@ -749,8 +749,8 @@ Unpremultiplied (§2.2). An **unset, missing, 1D or unreadable** file is a label
 never a fault. GPU-only: the parsed cube is threaded beside the resolved op (like Echo's
 neighbour frames and Motion blur's flow field), so the CPU-degradation rung renders a LUT as
 identity — its §1.6 oracle reference is `lut::Lut3d::sample` used directly in the lumit-gpu
-test, the one effect whose reference lives outside `cpu::apply` (its parameter is a file, not
-a number). Preview and export load and apply it identically (K-031). **Follow-ups:** the
+test, the one effect whose reference lives outside its own `EffectDef::apply_cpu` (its parameter
+is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:** the
 Input-space control, Tetrahedral interpolation, the content-hash cache key (the cache is
 path-only for now, so an edited-on-disk LUT needs the app reopened), and embedding small LUTs
 in the project (K-040).
@@ -1376,7 +1376,7 @@ no-op.
 **Open (K-313).** Three things here are *our reading* of controls rather than measurements
 against a reference plugin, and are the honest places to correct later: Rim brightness's curve and
 Aspect ratio's mapping. So is the stops-to-power constant
-(`EXPOSURE_STOPS_PER_DOUBLING = 12` in `resolve_one`): 6 put the top of the Exposure slider at
+(`Dof::EXPOSURE_STOPS_PER_DOUBLING = 12`): 6 put the top of the Exposure slider at
 a power of 32, which is a maximum filter rather than a mean — flat hard-edged polygons instead
 of bokeh discs — and 12 puts the top at about 5.7, which is strong but still an average. Turn
 it if the onset feels early or late. Edge-leak removal only pulls back taps that are *nearer*

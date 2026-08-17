@@ -42,9 +42,9 @@ pub struct MatteDraw {
     /// Temporal inputs (neighbours/flow/depth) are not fed through an
     /// effects-and-masks matte in v1, so an echo or flow effect on the matte
     /// source degrades to a still (documented boundary).
-    pub fx: lumit_core::fx::ResolvedOps,
-    /// The matte source's `lut` file paths, 1:1 and in order with the `Resolved::
-    /// Lut` ops in `fx` (as for a layer's own `lut_files`). Empty unless the
+    pub fx: lumit_core::fx::ResolvedStack,
+    /// The matte source's `lut` file paths, 1:1 and in order with the `lut`
+    /// ops in `fx` (as for a layer's own `lut_files`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
     pub lut_files: Vec<Option<String>>,
     /// Set when the matte source is a **Precomp** (K-268): the nested comp's
@@ -75,7 +75,7 @@ pub struct DofInputDraw {
     /// depth source is `EffectsAndMasks` (K-142, mirroring the matte). Empty for
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
-    pub fx: lumit_core::fx::ResolvedOps,
+    pub fx: lumit_core::fx::ResolvedStack,
     /// The depth layer's `lut` file paths, 1:1 with the `lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
@@ -206,11 +206,11 @@ pub struct CompLayerDraw {
     /// The layer's live effect stack, resolved to plain numbers at this
     /// frame (docs/08; radius already in texture pixels). Applied to the
     /// linear source texture after masks, before the transform.
-    pub fx: lumit_core::fx::ResolvedOps,
+    pub fx: lumit_core::fx::ResolvedStack,
     /// The effect *instance* id behind each op in `fx`, 1:1 and in order
     /// (`lumit_core::fx::resolve_stack_temporal_named`). Only the profiler
     /// reads it: a measured millisecond has to land on the row of the stack
-    /// that spent it, and a `Resolved` op has forgotten where it came from.
+    /// that spent it, and this is the list the resolve walk itself reported.
     pub fx_ids: Vec<uuid::Uuid>,
     /// Decoded neighbour source frames for a temporal effect (echo etc.),
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
@@ -259,7 +259,7 @@ pub struct CompLayerDraw {
     /// resolve factor already matches (footage layers scale by their
     /// decode). The realise walk divides its target width by this and
     /// rescales every px-dimensioned resolved field
-    /// (`lumit_core::fx::rescale_px`) so px@comp parameters land where
+    /// (`ResolvedStack::rescale_spatial`) so px@comp parameters land where
     /// the user put them at every preview resolution.
     pub fx_ref_width: Option<f32>,
     /// Per-layer motion-blur sub-frame placements (docs/06 §4, K-120): the

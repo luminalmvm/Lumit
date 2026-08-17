@@ -80,9 +80,9 @@ texture** travels beside the ops:
 - `run_ops` Dof pass: if its `layer_inputs` slot is `Some(depth)`, call
   `fx.dof(ctx, &tex, w, h, depth, focus, range, aperture, mix)`; else passthrough
   (no depth = no blur, a labelled no-op).
-- `cpu::apply` Dof arm = passthrough (GPU-only, like the LUT); the §1.6 oracle
+- `DofDef::apply_cpu` = passthrough (GPU-only, like the LUT); the §1.6 oracle
   reference is the existing `wgsl_dof_matches_the_cpu_oracle` in lumit-gpu (its
-  `dof_reference`), not `cpu::apply` — the depth is a texture, not a number.
+  `dof_reference`), not the CPU dispatch — the depth is a texture, not a number.
 - Depth encoding: the depth layer's pixels are read as a single channel (its
   luminance or R) mapped to 0..1 by `upload_depth_map`; document that a brighter
   pixel = nearer/farther (pick one, note it). A pre-rendered comp-size texture is

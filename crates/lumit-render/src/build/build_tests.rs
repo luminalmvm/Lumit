@@ -393,7 +393,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
     assert!(matches!(draws[1].source, DrawSource::Adjust));
     assert_eq!(draws[1].natural_size, (1920.0, 1080.0));
-    assert_eq!(draws[1].fx.ops.len(), 1);
+    assert_eq!(draws[1].fx.len(), 1);
     let (_, cov_w, cov_h) = draws[1].mask_cov.as_ref().unwrap();
     assert_eq!((*cov_w, *cov_h), (1920, 1080));
 

@@ -155,80 +155,6 @@ pub struct MatteKeyParams {
     pub mix: f32,
 }
 
-/// One sub-frame state of a shake's own motion blur (T18, K-165): the wobble
-/// sampled at one point in the shutter, in the same `(offset_px, rotation_deg,
-/// zoom)` form the frame-time shake carries. The dispatch turns each into an
-/// affine through [`shake_affine`] and averages the resamples.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ShakeSample {
-    /// Wobble offset at this sub-frame, raster pixels.
-    pub offset_px: [f32; 2],
-    /// Rotation wobble at this sub-frame, degrees.
-    pub rotation_deg: f32,
-    /// Zoom factor at this sub-frame; 1 = no depth (z) shake.
-    pub zoom: f32,
-}
-
-impl ShakeSample {
-    /// The neutral (identity) sample — the fixed-size array's initialiser.
-    pub const IDENTITY: Self = Self {
-        offset_px: [0.0, 0.0],
-        rotation_deg: 0.0,
-        zoom: 1.0,
-    };
-}
-
-/// One effect, resolved to plain numbers at a frame — the flat form both the
-/// WGSL kernels (lumit-gpu) and the CPU references below consume.
-#[derive(Debug, Clone, Copy, PartialEq)]
-// Clippy would have the largest variant boxed. It cannot be: `Resolved` is
-// `Copy` by design — plain old data with no owned allocations, so a resolved
-// stack can be hashed byte-for-byte into the frame key (K-143) and copied into
-// a GPU uniform without a clone. `Box` is not `Copy`, so taking the advice
-// would cost the determinism guarantee to save a few hundred bytes on a
-// per-frame, per-layer value that never lives in a long array.
-#[allow(clippy::large_enum_variant)]
-pub enum Resolved {
-    /// A migrated effect: its parameters live in the stack's
-    /// [`ResolvedStack`] arena (`op` is the index of its op there), not in a
-    /// variant of their own. The Vec keeps ordering authority — the arena is
-    /// only the bag — so the two halves of a [`ResolvedOps`] stay in step
-    /// (docs/impl/effect-registry.md §2.3).
-    ///
-    /// Nearly every built-in resolves to this now (34 of them); only Shake
-    /// still has a variant of its own, and the migration ends when it loses it
-    /// and this enum goes with it.
-    Registry { op: u32 },
-    /// A shake, already sampled at this frame (the noise runs at resolve
-    /// time, host-side): the current wobble, dispatched through the Transform
-    /// kernel via [`shake_affine`] — no kernel of its own. `edge` (P3, K-145)
-    /// governs the border the resample reveals; there is no Auto-scale cover
-    /// any more (FX-11/K-146 replaced it with this Edges control).
-    Shake {
-        /// This frame's wobble offset, raster pixels.
-        offset_px: [f32; 2],
-        /// This frame's rotation wobble, degrees.
-        rotation_deg: f32,
-        /// This frame's zoom factor; 1 = no depth (z) shake.
-        zoom: f32,
-        /// Edge policy for the revealed border: 0 Transparent, 1 Repeat,
-        /// 2 Mirror ([`EdgesMode`]).
-        edge: u32,
-        /// 0..1.
-        mix: f32,
-        /// The shake's own motion blur (T18, K-165): `Some` when the toggle is
-        /// on and the amount is non-zero — the wobble sampled at
-        /// [`SHAKE_MB_SAMPLES`] sub-frame placements across the shutter, which
-        /// the dispatch resamples and averages in premultiplied linear space
-        /// (the accumulation-motion-blur philosophy, applied to this effect
-        /// alone). `None` is the plain single resample, the bit-exact
-        /// passthrough. The centre sample equals the frame-time wobble above.
-        /// Sampled host-side because the noise lattice needs 64-bit integers
-        /// the GPU has not got (docs/08 §3.12).
-        mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
-    },
-}
-
 /// Resolve a layer's live stack at layer time `lt` for a raster whose
 /// diagonal is `diag_px` pixels; `px_scale` is raster pixels per comp pixel
 /// (the §2.3 preview-resolution factor — 1.0 at full resolution), which
@@ -238,67 +164,6 @@ pub enum Resolved {
 /// marker-driven modes (Flash's Trigger and Strobe, §3.7). Placeholders,
 /// unknown names and bypassed effects resolve to nothing (they render as
 /// identity, docs/03 §8).
-/// Rescale every pixel-dimensioned field of already-resolved ops by `f` —
-/// the repair for a stack resolved against one raster and run on another
-/// (K-266). The Adjust arm of the draw builder resolves with `px_scale` 1
-/// because its stack runs on "the comp-sized intermediate" — which is only
-/// true at full preview resolution. Under reduced-resolution preview the
-/// intermediate is the preview raster, and every px@comp parameter (the
-/// flare's light, DoF apertures, blur radii) landed too far right and too
-/// big by exactly the preview factor; the owner measured the flare's light
-/// hitting the frame edge at 1500 of a 1920 comp. The realise walk calls
-/// this with `render_width / comp_width` before running an adjustment
-/// stack.
-///
-/// Exhaustive on purpose: a new op must decide here whether it owns pixel
-/// fields, so the bug cannot quietly return with the next effect.
-pub fn rescale_px(ops: &mut [Resolved], f: f32) {
-    if (f - 1.0).abs() < 1e-6 {
-        return;
-    }
-    for op in ops {
-        match op {
-            Resolved::Shake { offset_px, mb, .. } => {
-                offset_px[0] *= f;
-                offset_px[1] *= f;
-                if let Some(samples) = mb {
-                    for s in samples.iter_mut() {
-                        s.offset_px[0] *= f;
-                        s.offset_px[1] *= f;
-                    }
-                }
-            }
-            // A migrated effect keeps no pixel field here: its parameters sit
-            // in the arena, which declares its own units, so
-            // `ResolvedStack::rescale_spatial` moves them —
-            // `ResolvedOps::rescale_px` calls both halves together so neither
-            // can be forgotten.
-            Resolved::Registry { .. } => {}
-        }
-    }
-}
-
-/// A layer's stack resolved at one frame, in both the forms the hybrid period
-/// needs: the `Vec` of flat variants that still carries the ordering, and the
-/// arena the migrated effects keep their parameters in
-/// (docs/impl/effect-registry.md §2.3). `bags` is empty until the first effect
-/// migrates, so nothing downstream changes yet.
-#[derive(Debug, Clone, Default)]
-pub struct ResolvedOps {
-    pub ops: Vec<Resolved>,
-    pub bags: ResolvedStack,
-}
-
-impl ResolvedOps {
-    /// Rescale both halves for a stack resolved against one raster and run on
-    /// another (K-266) — the one entry point, so a caller cannot rescale the
-    /// variants and forget the arena.
-    pub fn rescale_px(&mut self, f: f32) {
-        rescale_px(&mut self.ops, f);
-        self.bags.rescale_spatial(f);
-    }
-}
-
 pub fn resolve_stack(
     effects: &[EffectInstance],
     lt: f64,
@@ -306,7 +171,7 @@ pub fn resolve_stack(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> ResolvedOps {
+) -> ResolvedStack {
     // The same walk, handed one time for every effect: when `sample_lt ==
     // frame_lt` the temporal branch cannot fire, so this is the plain resolve.
     resolve_stack_temporal_named(effects, lt, lt, diag_px, px_scale, markers, context).1
@@ -318,8 +183,8 @@ pub fn resolve_stack(
 /// costly/stochastic effect is not re-run per held sample), while every other
 /// effect resolves at the held/sample time `sample_lt`. When `sample_lt ==
 /// frame_lt` this is byte-identical to [`resolve_stack`], so an ordinary
-/// (non-temporal) render is unchanged — the two share [`resolve_one`], differing
-/// only in which layer time each effect is handed.
+/// (non-temporal) render is unchanged — the two share one walk, differing only
+/// in which layer time each effect is handed.
 pub fn resolve_stack_temporal(
     effects: &[EffectInstance],
     sample_lt: f64,
@@ -328,7 +193,7 @@ pub fn resolve_stack_temporal(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> ResolvedOps {
+) -> ResolvedStack {
     resolve_stack_temporal_named(
         effects, sample_lt, frame_lt, diag_px, px_scale, markers, context,
     )
@@ -338,14 +203,12 @@ pub fn resolve_stack_temporal(
 /// [`resolve_stack_temporal`] with the id of the effect instance behind each
 /// op, 1:1 and in order with `ops`.
 ///
-/// **Why the ids matter.** A [`Resolved`] op is a flat bag of numbers: by
-/// design it has forgotten which effect wrote it, because the kernels do not
-/// care. The render-time indicator does care — a measured millisecond has to
-/// land on the right row of the effect stack — and the mapping cannot be
-/// reconstructed afterwards by filtering the effect list, because
-/// [`resolve_one`] also drops placeholders, unknown names and the
-/// orchestration-only effects. So the one walk that knows both answers reports
-/// both, and everything else stays 1:1 by construction.
+/// **Why the ids matter.** The render-time indicator has to land a measured
+/// millisecond on the right row of the effect stack, and the mapping cannot be
+/// reconstructed afterwards by filtering the effect list, because the walk also
+/// drops placeholders, unknown names and the orchestration-only effects. So the
+/// one walk that knows both answers reports both, and everything else stays 1:1
+/// by construction.
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_stack_temporal_named(
     effects: &[EffectInstance],
@@ -355,9 +218,9 @@ pub fn resolve_stack_temporal_named(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> (Vec<Uuid>, ResolvedOps) {
+) -> (Vec<Uuid>, ResolvedStack) {
     let mut ids = Vec::new();
-    let mut out = ResolvedOps::default();
+    let mut out = ResolvedStack::new();
     for e in effects
         .iter()
         .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
@@ -367,18 +230,18 @@ pub fn resolve_stack_temporal_named(
         } else {
             frame_lt
         };
-        // A migrated effect (docs/impl/effect-registry.md §6) is looked up in
-        // the catalogue and resolved by the one generic loop below; anything
-        // still carrying a variant of its own goes through `resolve_one`. The
-        // `Vec` keeps the ordering either way, so the two halves of the stack
-        // cannot get out of step.
+        // Every built-in is looked up in the catalogue and resolved by the one
+        // generic loop below (docs/impl/effect-registry.md §6); a name this
+        // build does not know resolves to nothing, which is how an unknown
+        // effect stays an inert placeholder (K-065). The arena's own op order
+        // *is* the stack order, so there is no second list to keep in step.
         if let Some(def) = BUILTIN_DEFS.get(&e.effect.match_name) {
             // An orchestration-only effect (Posterize time, Accumulation motion
             // blur) resolves to nothing at all: it changes *what time* the layers
             // it covers render at, which the frame walk reads straight off the
             // instance, and it has no per-pixel op to order among the others.
-            // Skipping it here is exactly what `resolve_one` returning `None`
-            // meant for it — no op, no bag, and no id in the indicator's list.
+            // Skipping it here leaves it no op, no bag, and no id in the
+            // indicator's list.
             if !def.is_image_op() {
                 continue;
             }
@@ -389,14 +252,9 @@ pub fn resolve_stack_temporal_named(
                 diag_px,
                 px_scale,
                 markers,
-                &mut out.bags,
+                &mut out,
                 context.clone(),
             );
-            let op = (out.bags.len() - 1) as u32;
-            out.ops.push(Resolved::Registry { op });
-            ids.push(e.id);
-        } else if let Some(op) = resolve_one(e, lt, diag_px, context.clone()) {
-            out.ops.push(op);
             ids.push(e.id);
         }
     }
@@ -504,108 +362,4 @@ fn resolve_into_arena(
         },
         &mut |id, value| bags.push(id, value),
     );
-}
-
-/// Resolve one effect instance to its flat [`Resolved`] op at layer time `lt`,
-/// or None when it is a placeholder, an unknown name, or an orchestration-only
-/// effect (Posterize time, accumulation motion blur) that has no per-pixel op.
-/// The shared core of [`resolve_stack`] and [`resolve_stack_temporal`].
-///
-/// It takes neither a marker context nor the preview factor: Flash was the only
-/// arm that read markers and it reads them through [`ResolveCx`] now (K-385),
-/// and the Lens flare was the last arm with a px@comp parameter to scale — Shake
-/// measures its wobble against the diagonal instead.
-fn resolve_one(
-    e: &EffectInstance,
-    lt: f64,
-    diag_px: f32,
-    expression_context: Arc<ExpressionContext>,
-) -> Option<Resolved> {
-    // Every float parameter reads through the expression context. Bound once
-    // here so the sixty-odd call sites below stay as short as they were before
-    // expressions existed.
-    let fl = |id: &str| e.float_at_with_context(id, lt, expression_context.clone());
-    match e.effect.match_name.as_str() {
-        "shake" => {
-            let amp_pct = (fl("amplitude").unwrap_or(1.5) as f32).max(0.0);
-            let freq = fl("frequency").unwrap_or(8.0).max(0.0);
-            let rot_amount = (fl("rotation").unwrap_or(1.0) as f32).max(0.0);
-            // Per-axis wobble (twirl group, K-146): amount multipliers scale
-            // the master Amplitude, frequency multipliers the master rate.
-            // Defaults of 1 reproduce the old uniform x/y shake exactly.
-            let x_amp = (fl("x_amp").unwrap_or(1.0) as f32).max(0.0);
-            let y_amp = (fl("y_amp").unwrap_or(1.0) as f32).max(0.0);
-            let x_freq = fl("x_freq").unwrap_or(1.0).max(0.0);
-            let y_freq = fl("y_freq").unwrap_or(1.0).max(0.0);
-            let z_freq = fl("z_freq").unwrap_or(1.0).max(0.0);
-            // z (depth/scale) amount: the new id, else the old `zoom_pump`
-            // (migration — a project saved before FX-11 keeps its pump), a
-            // scale-pump per cent either way.
-            let z_pct = fl("z_amp").or_else(|| fl("zoom_pump")).unwrap_or(0.0) as f32;
-            let z_amp = (z_pct / 100.0).clamp(0.0, 1.0);
-            // Edges (P3, K-145): the new `edge` Choice, else migrate the old
-            // Auto-scale bool (on → Repeat hides the border as the cover once
-            // did; off → Transparent), else the schema default Repeat.
-            let edge = match e.param("edge") {
-                Some(EffectValue::Choice(c)) => {
-                    EdgesMode::from_code((*c).min(2)).unwrap_or(EdgesMode::Repeat)
-                }
-                _ => match e.param("auto_scale") {
-                    Some(EffectValue::Bool(false)) => EdgesMode::Transparent,
-                    _ => EdgesMode::Repeat,
-                },
-            };
-            let seed = match e.param("seed") {
-                Some(EffectValue::Seed(s)) => *s,
-                _ => 0,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // The wobble: independent noise channels sampled at local time ×
-            // frequency (per axis, §3.4) — deterministic, hop-free, identical
-            // on every machine (§2.4). One sampler drives the frame-time wobble
-            // and the motion-blur sub-frames, so they agree bit-for-bit.
-            let base = lt * freq;
-            let amp_px = (amp_pct / 100.0 * diag_px).max(0.0);
-            let wobble = ShakeWobble {
-                seed,
-                amp_px,
-                x_amp,
-                y_amp,
-                rot_amount,
-                z_amp,
-                x_freq,
-                y_freq,
-                z_freq,
-            };
-            let (offset_px, rotation_deg, zoom) = wobble.at(base);
-            // The shake's own motion blur (T18, K-165): when the toggle is on
-            // and the amount is non-zero, sample the wobble across the shutter
-            // for the dispatch to average; off is the plain single resample
-            // (the bit-exact passthrough). The centre offset is 0, so the middle
-            // sample equals the frame-time wobble exactly.
-            let motion_blur = e.bool_of("motion_blur").unwrap_or(false);
-            let mb_amount = fl("mb_amount").unwrap_or(0.5);
-            let mb = (motion_blur && mb_amount > 0.0).then(|| {
-                let mut samples = [ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
-                for (s, db) in samples.iter_mut().zip(shake_mb_offsets(mb_amount)) {
-                    let (offset_px, rotation_deg, zoom) = wobble.at(base + db);
-                    *s = ShakeSample {
-                        offset_px,
-                        rotation_deg,
-                        zoom,
-                    };
-                }
-                samples
-            });
-            Some(Resolved::Shake {
-                offset_px,
-                rotation_deg,
-                zoom,
-                edge: edge.code(),
-                mix,
-                mb,
-            })
-        }
-        _ => None,
-    }
 }

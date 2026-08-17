@@ -211,6 +211,29 @@ impl ShakeWobble {
     }
 }
 
+/// One sub-frame state of a shake's own motion blur (T18, K-165): the wobble
+/// sampled at one point in the shutter, in the same `(offset_px, rotation_deg,
+/// zoom)` form the frame-time shake carries. The dispatch turns each into an
+/// affine through [`shake_affine`] and averages the resamples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShakeSample {
+    /// Wobble offset at this sub-frame, raster pixels.
+    pub offset_px: [f32; 2],
+    /// Rotation wobble at this sub-frame, degrees.
+    pub rotation_deg: f32,
+    /// Zoom factor at this sub-frame; 1 = no depth (z) shake.
+    pub zoom: f32,
+}
+
+impl ShakeSample {
+    /// The neutral (identity) sample — the fixed-size array's initialiser.
+    pub const IDENTITY: Self = Self {
+        offset_px: [0.0, 0.0],
+        rotation_deg: 0.0,
+        zoom: 1.0,
+    };
+}
+
 /// The fixed number of sub-frame samples the shake's own motion blur averages
 /// (T18, K-165): odd, so the centre sample lands exactly on the frame time.
 /// A fixed count and order keep the smear deterministic (docs/14 §3), and the

@@ -1,7 +1,7 @@
 /// In plain terms: some of the words on screen are the engine's, not this
 /// application's. The effects and their controls name themselves —
 /// "Gaussian blur", "Radius", "Blur & sharpen"
-/// (`crates/lumit-core/src/fx/builtins.rs`) — and so does every keyboard
+/// (`crates/lumit-core/src/fx/effects/`, listed in `fx-labels.txt`) — and so does every keyboard
 /// shortcut in Settings ▸ Keymap: "Play or pause", "Anywhere"
 /// (`crates/lumit-keymap/src/lib.rs`). All of it arrives over the bridge as
 /// plain English. It is the only user-facing text Lumit shows that is not

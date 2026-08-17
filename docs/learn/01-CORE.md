@@ -130,15 +130,14 @@ depth 100. A failed script evaluates to −1.0 (or "" for text), never a failed 
 
 ## Effects
 
-`fx/builtins.rs` holds the catalogue as a static `BUILTINS: &[EffectSchema]` — 35 entries,
-in Add-effect menu order (K-137). `instantiate` copies a schema's defaults into an
-`EffectInstance`. `resolve_stack` evaluates every animatable parameter at layer time into
-flat `Resolved` ops, which are plain numbers. Both `fx/cpu.rs` (the CPU reference, and the
-GPU's test oracle, K-019) and `lumit-gpu`'s WGSL kernels consume them. Preview equals
-export because both read the same resolution (K-031).
-
-That is the shipping path, and it is being replaced underneath. Read
-`docs/impl/effect-registry.md` before touching any of it.
+Every effect is declared once, in its own file under `fx/effects/` — 35 of them,
+registered in `fx/catalogue.rs` in Add-effect menu order (K-137), which the macro expands
+into `BUILTINS: &[EffectSchema]`. `instantiate` copies a schema's defaults into an
+`EffectInstance`. `resolve_stack` evaluates every declared parameter at layer time into
+the parameter arena (`ResolvedStack`), and dispatch is a lookup: `lumit-render`'s GPU
+table and each effect's own `apply_cpu` (the CPU reference, and the GPU's test oracle,
+K-019) read the same bag. Preview equals export because both read the same resolution
+(K-031). Read `docs/impl/effect-registry.md` before touching any of it.
 
 ### An effect declared once (K-381)
 
@@ -182,12 +181,11 @@ Every numeric parameter also declares a `Unit` (`Raw`, `PctDiag`, `Px`, `Degrees
 (`rescale_spatial`): an effect can no longer be *forgotten* there, which is how a preview
 raster and a full-size export come to disagree.
 
-**State of the migration.** Nine effects have moved — the colour family: saturation,
-vibrancy, exposure, hue shift, contrast, gamma, temperature, invert, tint. The render path
-still runs on `Resolved`, and `builtins.rs` plus `resolved.rs` stay authoritative for
-all 35. While that lasts, `BUILTINS` remains the union, and a test holds each generated
-declaration field-for-field identical to the hand-written literal it will replace — which
-is what makes the port mechanical rather than a rewrite. Adding a *new* effect during the
+**State of the migration: complete.** All 35 effects are declared once; `Resolved`,
+`resolve_one`, `cpu::apply`'s match and the hand-written `BUILTINS` literal are gone, and
+the parity test went with them — its job was making the port mechanical, and the port is
+done. What remains of the programme is dynamic and spare parameters (docs/impl §6 step 5).
+Adding a *new* effect during the
 transition still needs the old sites; migrating one is a commit that changes no pixel.
 
 ## Saving: lumit-project
@@ -211,8 +209,9 @@ Retime → property Retime, K-249). Details: [10-FILE-FORMAT.md](../10-FILE-FORM
   bytes.
 - `retime: None` skips the map entirely. An identity map does not. A clip's
   identity map starts at `source_in`, not zero.
-- **Two effect catalogues are live at once** during the K-381 migration. A change to a
-  migrated effect's schema belongs in `fx/effects/<name>.rs`; the literal in `builtins.rs`
-  must move with it or the identity test fails. Twenty-six effects have only the literal.
+- **An effect's schema lives in `fx/effects/<name>.rs`** and nowhere else — the old
+  hand-written catalogue is gone. A new or renamed label also wants the fixture refresh
+  (`cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored`) and its
+  translation entry, or the l10n gate says so.
 - A new numeric parameter needs its `Unit`. `Raw` on something spatial compiles, renders
   correctly at full size, and is wrong at every preview resolution.

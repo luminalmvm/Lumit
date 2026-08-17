@@ -148,10 +148,21 @@ impl Catalogue {
 /// changes shape.
 #[macro_export]
 macro_rules! catalogue {
-    ($($def:expr),* $(,)?) => {
+    ($($def:expr => $decl:ty),* $(,)?) => {
         /// Every built-in effect's definition, in menu order.
         pub static BUILTIN_DEFS: $crate::fx::Catalogue =
             $crate::fx::Catalogue::new(&[$(&$def),*]);
+
+        /// Every built-in effect's declaration, in the same order — the list the
+        /// Add-effect menu, the command palette, the preset browser and the
+        /// bridge have always read.
+        ///
+        /// Generated from the same line as `BUILTIN_DEFS`, so the two cannot
+        /// disagree about which effects exist or about what order they come in;
+        /// until the last effect migrated this was a four-thousand-line literal
+        /// held against the generated declarations by a test.
+        pub const BUILTINS: &[$crate::fx::EffectSchema] =
+            &[$(<$decl as $crate::fx::EffectMetadata>::SCHEMA),*];
     };
 }
 

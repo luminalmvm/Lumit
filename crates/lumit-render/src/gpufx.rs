@@ -209,6 +209,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Lut,
     &Dof,
     &Transform,
+    &Shake,
     &Glow,
     &BlockGlitch,
     &Scanlines,
@@ -1023,6 +1024,85 @@ impl GpuEffect for Transform {
     }
 }
 
+struct Shake;
+impl GpuEffect for Shake {
+    fn match_name(&self) -> &'static str {
+        "shake"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        use effects::shake::{Shake as ShakeParams, Shaken};
+        // Shake dispatches the Transform kernel (docs/08 §3.4: a
+        // transform-domain effect — perturb a virtual camera, resample once):
+        // the shared affine turns the resolved wobble into the same op the CPU
+        // reference builds, so both paths consume bit-identical numbers. With
+        // its own motion blur on (T18/K-165) it builds one affine per sub-frame
+        // and dispatches the averaging kernel instead, over the same sub-frames
+        // `cpu::transform_average` averages. Shake's own Edges control governs
+        // the border the wobble reveals, either way.
+        let params = ShakeParams::read(p);
+        match params.packed(ShakeParams::derived_of(p)) {
+            Shaken::Plain { wobble, edge, mix } => {
+                let (anchor, position, scale, rot) = lumit_core::fx::shake_affine(
+                    w,
+                    h,
+                    wobble.offset_px,
+                    wobble.rotation_deg,
+                    wobble.zoom,
+                );
+                let (m, off, opacity) =
+                    lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                fx.transform(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::TransformOp {
+                        m,
+                        off,
+                        opacity,
+                        mix,
+                        edge,
+                    },
+                )
+            }
+            Shaken::Blurred { samples, edge, mix } => {
+                let mut taps = [lumit_gpu::fx::ShakeMbTap {
+                    m: [1.0, 0.0, 0.0, 1.0],
+                    off: [0.0, 0.0],
+                }; lumit_gpu::fx::SHAKE_MB_SAMPLES];
+                for (t, s) in taps.iter_mut().zip(samples.iter()) {
+                    let (anchor, position, scale, rot) =
+                        lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+                    let (m, off, _opacity) =
+                        lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                    *t = lumit_gpu::fx::ShakeMbTap { m, off };
+                }
+                fx.shake_mb(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::ShakeMbOp {
+                        taps,
+                        count: samples.len() as u32,
+                        edge,
+                        mix,
+                    },
+                )
+            }
+        }
+    }
+}
+
 struct Glow;
 impl GpuEffect for Glow {
     fn match_name(&self) -> &'static str {
@@ -1694,6 +1774,104 @@ mod tests {
         }
     }
 
+    /// **Shake picks its own kernel** (docs/08 §3.4, T18/K-165, K-388).
+    ///
+    /// Shake is the one migrated effect whose dispatch forks: plain, it is the
+    /// Transform kernel; with its own motion blur on, it is the averaging one,
+    /// fed nine affines. Nothing but this test joins the fork to the bag — a
+    /// wrapper that read the sub-frames and still called `transform` would
+    /// render a picture, just not a smeared one — so both modes run end to end
+    /// against the CPU reference, and the two must differ from each other.
+    #[test]
+    fn shake_renders_through_run_ops_in_both_modes() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        let source: Vec<f32> = (0..(w * h * 4))
+            .map(|i| match i % 4 {
+                3 => 1.0,
+                _ => (i % 13) as f32 / 13.0,
+            })
+            .collect();
+
+        // A big wobble, so a passthrough cannot pass for a render: 8 % of this
+        // raster's diagonal is a shift of a pixel or two, with a twist and a
+        // depth pump on top.
+        let shaken = |motion_blur: bool| {
+            let mut inst = lumit_core::fx::instantiate("shake").expect("shake is a built-in");
+            for p in &mut inst.params {
+                let v = match p.id.as_str() {
+                    "amplitude" => 8.0,
+                    "rotation" => 6.0,
+                    "z_amp" => 5.0,
+                    "mb_amount" => 0.9,
+                    "motion_blur" => {
+                        p.value = lumit_core::model::EffectValue::Bool(motion_blur);
+                        continue;
+                    }
+                    _ => continue,
+                };
+                p.value =
+                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
+            }
+            lumit_core::fx::resolve_stack(
+                std::slice::from_ref(&inst),
+                0.4,
+                ((w * w + h * h) as f32).sqrt(),
+                1.0,
+                &lumit_core::fx::MarkerContext::NONE,
+                std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+            )
+        };
+
+        let rendered = |ops: &lumit_core::fx::ResolvedStack| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+            );
+            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let mut cpu = source.clone();
+            lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, ops);
+            (gpu, cpu)
+        };
+
+        let (plain_gpu, plain_cpu) = rendered(&shaken(false));
+        let (smeared_gpu, smeared_cpu) = rendered(&shaken(true));
+        for (name, gpu, cpu) in [
+            ("plain", &plain_gpu, &plain_cpu),
+            ("smeared", &smeared_gpu, &smeared_cpu),
+        ] {
+            assert_ne!(
+                gpu, &source,
+                "{name}: the op passed the texture through — the GPU table was never reached"
+            );
+            for (i, (g, c)) in gpu.iter().zip(cpu.iter()).enumerate() {
+                assert!(
+                    (g - c).abs() < 1e-2,
+                    "{name} pixel {i}: GPU {g} vs CPU reference {c} — the bag reached the                      kernel with the wrong numbers"
+                );
+            }
+        }
+        assert_ne!(
+            plain_gpu, smeared_gpu,
+            "the motion-blur toggle must pick the other kernel"
+        );
+    }
+
     /// **The k-th LUT op binds the k-th cube** (docs/08 §3.11, K-387).
     ///
     /// The whole threading contract in one picture. `build.rs` enumerates a
@@ -1741,7 +1919,7 @@ mod tests {
             &lumit_core::fx::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
-        assert_eq!(ops.ops.len(), 2, "two LUT ops, two slots to bind");
+        assert_eq!(ops.len(), 2, "two LUT ops, two slots to bind");
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
@@ -1832,7 +2010,7 @@ mod tests {
             &lumit_core::fx::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
-        assert_eq!(ops.ops.len(), 2, "two consuming ops, two slots to bind");
+        assert_eq!(ops.len(), 2, "two consuming ops, two slots to bind");
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &fg, w, h);
         let plate_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &plate, w, h);

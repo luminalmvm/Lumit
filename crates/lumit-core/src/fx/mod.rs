@@ -24,6 +24,7 @@ pub mod effects;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
 /// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
+pub mod labels;
 pub mod lens_flare;
 /// The bundled lens prescription library (K-261): 1303 .lens files as
 /// embedded text, generated from the FlareSim / PhotonsToPhotos collection.

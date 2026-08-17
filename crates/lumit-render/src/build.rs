@@ -917,7 +917,7 @@ pub fn build_comp_draws_at(
                     pixels_by_layer,
                     visited,
                 );
-                if fx.ops.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
+                if fx.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
                     continue;
                 }
 
@@ -2009,9 +2009,9 @@ mod render_below_at_tests {
     // The one blur op's radius in raster pixels. Blur lives in the registry
     // (docs/impl/effect-registry.md §2.1), so its numbers come back out of the
     // arena through its own typed reader rather than out of a `Resolved` variant.
-    fn blur_radius_px(fx: &lumit_core::fx::ResolvedOps) -> f32 {
+    fn blur_radius_px(fx: &lumit_core::fx::ResolvedStack) -> f32 {
         use lumit_core::fx::{effects::blur::Blur, EffectMetadata};
-        let op = fx.bags.get(0).expect("expected a blur op");
+        let op = fx.get(0).expect("expected a blur op");
         assert_eq!(op.def.schema().match_name, "blur");
         Blur::read(op.params).packed().0
     }
@@ -2252,7 +2252,7 @@ mod render_below_at_tests {
         );
         // The Posterize itself has no per-pixel op — only the blur survives.
         assert_eq!(
-            d.fx.ops.len(),
+            d.fx.len(),
             1,
             "posterize resolves to nothing; only the blur"
         );

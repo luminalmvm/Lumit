@@ -9,25 +9,46 @@ use crate::model::{Composition, EffectInstance, EffectNamespace, EffectValue, La
 // call the resolvers without an expression context and get the detached one.
 // Shadowing the two entry points here keeps that out of every call below —
 // otherwise the same argument would be spelled out ninety times. They also
-// unwrap the `ResolvedOps` carrier to the `Vec` of variants the assertions below
-// read; a *migrated* effect resolves into the arena instead, and the tests for
-// those read it back through `resolve_migrated`.
+// reduce the resolved stack to its `Shape`: which effects ran, in what order,
+// with what numbers, which is what the ordering assertions below compare. A test
+// about one effect's own numbers reads them back through `resolve_migrated`.
+
+/// One resolved op as the ordering assertions read it: its match name and the
+/// bag it resolved to.
+type ShapedOp = (&'static str, Vec<(ParamId, Value)>);
+
+/// A whole resolved stack in that form. Comparing this compares the *whole*
+/// stack — which the old `Vec<Resolved>` stopped doing the moment the last
+/// effect's numbers moved into the arena and left one variant behind it.
+type Shape = Vec<ShapedOp>;
+
+fn shape(stack: &ResolvedStack) -> Shape {
+    stack
+        .iter()
+        .map(|fx| {
+            (
+                fx.def.schema().match_name,
+                fx.params.iter().collect::<Vec<_>>(),
+            )
+        })
+        .collect()
+}
+
 fn resolve_stack(
     effects: &[EffectInstance],
     lt: f64,
     diag_px: f32,
     px_scale: f32,
     markers: &MarkerContext,
-) -> Vec<Resolved> {
-    super::resolve_stack(
+) -> Shape {
+    shape(&super::resolve_stack(
         effects,
         lt,
         diag_px,
         px_scale,
         markers,
         Arc::new(ExpressionContext::detached()),
-    )
-    .ops
+    ))
 }
 
 fn resolve_stack_temporal_named(
@@ -37,7 +58,7 @@ fn resolve_stack_temporal_named(
     diag_px: f32,
     px_scale: f32,
     markers: &MarkerContext,
-) -> Vec<(uuid::Uuid, Resolved)> {
+) -> Vec<(uuid::Uuid, ShapedOp)> {
     let (ids, resolved) = super::resolve_stack_temporal_named(
         effects,
         sample_lt,
@@ -47,7 +68,7 @@ fn resolve_stack_temporal_named(
         markers,
         Arc::new(ExpressionContext::detached()),
     );
-    ids.into_iter().zip(resolved.ops).collect()
+    ids.into_iter().zip(shape(&resolved)).collect()
 }
 
 fn resolve_stack_temporal(
@@ -57,8 +78,8 @@ fn resolve_stack_temporal(
     diag_px: f32,
     px_scale: f32,
     markers: &MarkerContext,
-) -> Vec<Resolved> {
-    super::resolve_stack_temporal(
+) -> Shape {
+    shape(&super::resolve_stack_temporal(
         effects,
         sample_lt,
         frame_lt,
@@ -66,8 +87,7 @@ fn resolve_stack_temporal(
         px_scale,
         markers,
         Arc::new(ExpressionContext::detached()),
-    )
-    .ops
+    ))
 }
 
 /// Resolve a one-effect stack whose effect has moved to the registry, and read
@@ -93,13 +113,8 @@ fn resolve_migrated<T: EffectMetadata>(
         markers,
         Arc::new(ExpressionContext::detached()),
     );
-    assert_eq!(ops.ops.len(), 1, "expected exactly one resolved op");
-    assert!(
-        matches!(ops.ops[0], Resolved::Registry { op: 0 }),
-        "a migrated effect resolves to an arena op, got {:?}",
-        ops.ops[0]
-    );
-    T::read(ops.bags.get(0).expect("the migrated op").params)
+    assert_eq!(ops.len(), 1, "expected exactly one resolved op");
+    T::read(ops.get(0).expect("the migrated op").params)
 }
 
 /// The resolved bag of a one-effect migrated stack, in push order — for the
@@ -120,13 +135,76 @@ fn resolve_bag(
         markers,
         Arc::new(ExpressionContext::detached()),
     );
-    assert_eq!(ops.ops.len(), 1, "expected exactly one resolved op");
-    ops.bags
-        .get(0)
-        .expect("the migrated op")
-        .params
-        .iter()
-        .collect()
+    assert_eq!(ops.len(), 1, "expected exactly one resolved op");
+    ops.get(0).expect("the migrated op").params.iter().collect()
+}
+
+/// What a Shake instance hands its dispatch at `lt`: the wobble (or the whole
+/// motion-blur set) the old `Resolved::Shake` variant carried, now the declared
+/// rows and the resolve-time derivation (K-385, K-388) read back through the
+/// effect's own `packed`.
+fn shake_packed(e: &EffectInstance, lt: f64, diag_px: f32) -> effects::shake::Shaken {
+    shake_packed_scaled(e, lt, diag_px, 1.0)
+}
+
+/// [`shake_packed`] with the §2.3 preview factor in play.
+fn shake_packed_scaled(
+    e: &EffectInstance,
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+) -> effects::shake::Shaken {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        lt,
+        diag_px,
+        px_scale,
+        &MarkerContext::NONE,
+    );
+    let p = Params::new(&bag);
+    effects::shake::Shake::read(p).packed(effects::shake::Shake::derived_of(p))
+}
+
+/// A resolved stack holding one shake whose wobble is exactly `wobble` (and, for
+/// the motion-blur cases, exactly `mb`) — the hand-built bag the CPU-reference
+/// tests need, since a *resolved* wobble is whatever the noise says.
+///
+/// The trick is K-388's own arithmetic: `packed` builds each offset as
+/// `amplitude · axis amount · noise`, so amplitudes of exactly 1 make the
+/// unit-free noise vector *be* the wobble, and `zoom = 1 + z · noise` makes the
+/// z component `zoom - 1` (an exact f32 subtraction near 1, so it round-trips).
+fn shake_stack(
+    wobble: ShakeSample,
+    edge: u32,
+    mix_pct: f32,
+    mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
+) -> ResolvedStack {
+    let noise = |s: ShakeSample| {
+        Value::Vec4([s.offset_px[0], s.offset_px[1], s.rotation_deg, s.zoom - 1.0])
+    };
+    let mut ops = ResolvedStack::new();
+    ops.begin(&effects::shake::ShakeDef, Uuid::now_v7());
+    for (id, v) in [
+        (effects::shake::Shake::AMPLITUDE, 1.0),
+        (effects::shake::Shake::X_AMP, 1.0),
+        (effects::shake::Shake::Y_AMP, 1.0),
+        (effects::shake::Shake::ROTATION, 1.0),
+        (effects::shake::Shake::MIX, mix_pct),
+    ] {
+        ops.push(id, Value::Float(v));
+    }
+    ops.push(effects::shake::Shake::DERIVED_Z_AMP, Value::Float(1.0));
+    ops.push(effects::shake::Shake::DERIVED_EDGE, Value::Choice(edge));
+    ops.push(effects::shake::Shake::DERIVED_NOISE, noise(wobble));
+    if let Some(samples) = mb {
+        for (id, s) in effects::shake::Shake::DERIVED_MB_NOISE
+            .iter()
+            .zip(samples.iter())
+        {
+            ops.push(*id, noise(*s));
+        }
+    }
+    ops
 }
 
 /// What a Flash instance hands its kernel at `lt`: the `(strength, colour, mix)`
@@ -143,8 +221,8 @@ fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [
 /// `Resolved::LensFlare` variant carried, read back out of the resolved arena
 /// through the effect's own `packed` — Lights mode's sources included, since they
 /// are a resolve-time derivation (K-360, K-385) rather than a row.
-fn flare_packed(ops: &super::ResolvedOps) -> crate::fx::lens_flare::LensFlareParams {
-    let fx = ops.bags.get(0).expect("the flare op");
+fn flare_packed(ops: &super::ResolvedStack) -> crate::fx::lens_flare::LensFlareParams {
+    let fx = ops.get(0).expect("the flare op");
     let (lights, count) = effects::lens_flare::LensFlare::lights_of(fx.params);
     effects::lens_flare::LensFlare::read(fx.params).packed(lights, count)
 }
@@ -502,7 +580,7 @@ fn resolve_stack_evaluates_converts_and_skips_dead_effects() {
 
 // The render-time indicator (docs/13 §7.1) puts a measured millisecond on the
 // row of the effect stack that spent it, and the only thing that can say which
-// row an op came from is the walk that resolved it: `resolve_one` drops
+// row an op came from is the walk that resolved it: the resolve walk drops
 // placeholders, unknown names and the orchestration-only effects, so filtering
 // the effect list afterwards would misalign the moment a stack held one of
 // those. The named walk must therefore stay op-for-op identical to the plain
@@ -522,7 +600,7 @@ fn the_named_resolve_is_the_plain_one_with_the_ids_kept() {
     let named = resolve_stack_temporal_named(&stack, 0.0, 0.0, 1000.0, 1.0, &MarkerContext::NONE);
 
     assert_eq!(
-        named.iter().map(|(_, op)| *op).collect::<Vec<_>>(),
+        named.iter().map(|(_, op)| op.clone()).collect::<Shape>(),
         plain,
         "the same ops, in the same order"
     );
@@ -577,7 +655,7 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
             &MarkerContext::NONE,
             Arc::new(ExpressionContext::detached()),
         );
-        let fx = ops.bags.get(0).expect("the blur op");
+        let fx = ops.get(0).expect("the blur op");
         effects::blur::Blur::read(fx.params).radius
     }
     // Sample time 0.2 (radius 20% → 200px of a 1000px diagonal), frame time 0.8
@@ -3599,47 +3677,21 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
 
     // Resolving is deterministic: the same instance at the same time
     // yields the identical wobble, twice.
-    let a = resolve_stack(
-        std::slice::from_ref(&e),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    let b = resolve_stack(
-        std::slice::from_ref(&e),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(a, b);
-    let Resolved::Shake {
-        offset_px,
-        zoom,
-        edge,
-        mix,
-        ..
-    } = a[0]
-    else {
-        panic!("expected a Shake");
+    let a = shake_packed(&e, 0.4, 1000.0);
+    assert_eq!(a, shake_packed(&e, 0.4, 1000.0));
+    let effects::shake::Shaken::Plain { wobble, edge, mix } = a else {
+        panic!("motion blur ships off, so a fresh shake is the plain resample");
     };
     // 1.5% of a 1000px diagonal = 15px ceiling; the wobble stays
     // within it, z amount 0 leaves zoom at exactly 1, and the default
     // Edges control is Mirror (code 2 — owner, 2026-07-19).
-    assert!(offset_px[0].abs() <= 15.0 && offset_px[1].abs() <= 15.0);
-    assert_eq!(zoom, 1.0);
+    assert!(wobble.offset_px[0].abs() <= 15.0 && wobble.offset_px[1].abs() <= 15.0);
+    assert_eq!(wobble.zoom, 1.0);
     assert_eq!(edge, 2);
     assert_eq!(mix, 1.0);
 
     // Different frames wobble differently; different seeds too.
-    let later = resolve_stack(
-        std::slice::from_ref(&e),
-        0.9,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
+    let later = shake_packed(&e, 0.9, 1000.0);
     assert_ne!(a, later, "the wobble moves between frames");
     let mut reseeded = e.clone();
     for p in &mut reseeded.params {
@@ -3651,14 +3703,11 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
             p.value = EffectValue::Seed(old.wrapping_add(1));
         }
     }
-    let other = resolve_stack(
-        std::slice::from_ref(&reseeded),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    assert_ne!(
+        a,
+        shake_packed(&reseeded, 0.4, 1000.0),
+        "a different seed wobbles differently"
     );
-    assert_ne!(a, other, "a different seed wobbles differently");
 }
 
 #[test]
@@ -3668,30 +3717,24 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
 
     // A neutral shake (zero wobble) is the bit-exact identity: the affine
     // is the identity, whatever the Edges control.
-    let neutral = Resolved::Shake {
-        offset_px: [0.0, 0.0],
-        rotation_deg: 0.0,
-        zoom: 1.0,
-        edge: 1,
-        mix: 1.0,
-        mb: None,
-    };
+    let neutral = shake_stack(ShakeSample::IDENTITY, 1, 100.0, None);
     let mut n = img.clone();
-    cpu::apply(&mut n, w, h, &neutral);
+    cpu::apply_stack(&mut n, w, h, &neutral);
     assert_eq!(n, img);
 
     // A pure offset matches the Transform reference fed the same shared
     // affine and the same edge policy — the oracle path is one path.
-    let shaken = Resolved::Shake {
-        offset_px: [2.0, -1.0],
-        rotation_deg: 0.0,
-        zoom: 1.0,
-        edge: 0,
-        mix: 1.0,
-        mb: None,
-    };
+    let shaken = shake_stack(
+        ShakeSample {
+            offset_px: [2.0, -1.0],
+            ..ShakeSample::IDENTITY
+        },
+        0,
+        100.0,
+        None,
+    );
     let mut s = img.clone();
-    cpu::apply(&mut s, w, h, &shaken);
+    cpu::apply_stack(&mut s, w, h, &shaken);
     let (anchor, position, scale, rot) = shake_affine(w, h, [2.0, -1.0], 0.0, 1.0);
     let mut t = img.clone();
     cpu::transform(&mut t, w, h, anchor, position, scale, rot, 0, 1.0, 1.0);
@@ -3712,18 +3755,19 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     };
     let shake_with = |edge: u32| {
         let mut c = img.clone();
-        cpu::apply(
+        cpu::apply_stack(
             &mut c,
             w,
             h,
-            &Resolved::Shake {
-                offset_px: [6.0, 3.0],
-                rotation_deg: 0.0,
-                zoom: 1.0,
+            &shake_stack(
+                ShakeSample {
+                    offset_px: [6.0, 3.0],
+                    ..ShakeSample::IDENTITY
+                },
                 edge,
-                mix: 1.0,
-                mb: None,
-            },
+                100.0,
+                None,
+            ),
         );
         c
     };
@@ -3758,46 +3802,41 @@ fn shake_with_mb(amount: f64) -> crate::model::EffectInstance {
 
 #[test]
 fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
-    // Off (the default) resolves to a single wobble — no sub-frame set.
+    use effects::shake::Shaken;
+
+    // Off (the default) resolves to a single wobble — no sub-frame set, which
+    // is the *absence* of the derived vectors in the bag (K-388).
     let off = instantiate("shake").unwrap();
-    let r = resolve_stack(
-        std::slice::from_ref(&off),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    assert!(
+        matches!(shake_packed(&off, 0.4, 1000.0), Shaken::Plain { .. }),
+        "motion blur off carries no sub-frames"
     );
-    let Resolved::Shake { mb, .. } = r[0] else {
-        panic!("expected a Shake");
-    };
-    assert!(mb.is_none(), "motion blur off carries no sub-frames");
 
     // On: the sub-frame set is present, its centre sample is the frame-time
     // wobble exactly, and the samples actually differ across the shutter.
     let on = shake_with_mb(0.5);
-    let r = resolve_stack(
-        std::slice::from_ref(&on),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    let Resolved::Shake {
-        offset_px,
-        rotation_deg,
-        zoom,
-        mb,
-        ..
-    } = r[0]
-    else {
-        panic!("expected a Shake");
+    let packed = shake_packed(&on, 0.4, 1000.0);
+    let Shaken::Blurred { samples, .. } = packed else {
+        panic!("motion blur on carries sub-frames");
     };
-    let samples = mb.expect("motion blur on carries sub-frames");
     assert_eq!(samples.len(), SHAKE_MB_SAMPLES);
-    let centre = samples[SHAKE_MB_SAMPLES / 2];
-    assert_eq!(centre.offset_px, offset_px, "centre sample is the frame");
-    assert_eq!(centre.rotation_deg, rotation_deg);
-    assert_eq!(centre.zoom, zoom);
+    // The frame-time wobble is what the same instance packs to with the smear
+    // taken away — the centre sub-frame lands on offset 0, so the two are one
+    // sample of one noise curve.
+    let mut off_by_hand = on.clone();
+    for p in &mut off_by_hand.params {
+        if p.id == "motion_blur" {
+            p.value = EffectValue::Bool(false);
+        }
+    }
+    let Shaken::Plain { wobble, .. } = shake_packed(&off_by_hand, 0.4, 1000.0) else {
+        panic!("the smear is off now");
+    };
+    assert_eq!(
+        samples[SHAKE_MB_SAMPLES / 2],
+        wobble,
+        "centre sample is the frame"
+    );
     assert_ne!(
         samples[0].offset_px,
         samples[SHAKE_MB_SAMPLES - 1].offset_px,
@@ -3805,28 +3844,16 @@ fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
     );
 
     // Determinism: same instance, same time, identical sub-frames twice.
-    let r2 = resolve_stack(
-        std::slice::from_ref(&on),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(r, r2);
+    assert_eq!(packed, shake_packed(&on, 0.4, 1000.0));
 
     // A zero shutter is treated as no smear (the bit-exact single resample).
-    let zero = shake_with_mb(0.0);
-    let r = resolve_stack(
-        std::slice::from_ref(&zero),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    assert!(
+        matches!(
+            shake_packed(&shake_with_mb(0.0), 0.4, 1000.0),
+            Shaken::Plain { .. }
+        ),
+        "a zero shutter carries no sub-frames"
     );
-    let Resolved::Shake { mb, .. } = r[0] else {
-        panic!("expected a Shake");
-    };
-    assert!(mb.is_none(), "a zero shutter carries no sub-frames");
 }
 
 #[test]
@@ -3835,35 +3862,40 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     let img = transform_card(w, h);
 
     // A shake carrying a wobble, resolved without motion blur.
-    let base = shake_with_mb(0.0); // amount 0 ⇒ mb None ⇒ the plain shake
-    let plain = resolve_stack(
-        std::slice::from_ref(&base),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    let Resolved::Shake { mb: None, .. } = plain[0] else {
-        panic!("expected a plain Shake");
+    let resolved = |e: &EffectInstance| {
+        super::resolve_stack(
+            std::slice::from_ref(e),
+            0.4,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
     };
+    let base = shake_with_mb(0.0); // amount 0 ⇒ no sub-frames ⇒ the plain shake
+    let plain = resolved(&base);
+    assert!(
+        matches!(
+            shake_packed(&base, 0.4, 1000.0),
+            effects::shake::Shaken::Plain { .. }
+        ),
+        "expected a plain shake"
+    );
     let mut a = img.clone();
-    cpu::apply(&mut a, w, h, &plain[0]);
+    cpu::apply_stack(&mut a, w, h, &plain);
 
     // The same shake with motion blur on smears: the averaged result differs
     // from the plain single resample.
-    let blurred = resolve_stack(
-        std::slice::from_ref(&shake_with_mb(0.8)),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
+    let smeared = shake_with_mb(0.8);
     assert!(
-        matches!(blurred[0], Resolved::Shake { mb: Some(_), .. }),
+        matches!(
+            shake_packed(&smeared, 0.4, 1000.0),
+            effects::shake::Shaken::Blurred { .. }
+        ),
         "motion blur on carries sub-frames"
     );
     let mut b = img.clone();
-    cpu::apply(&mut b, w, h, &blurred[0]);
+    cpu::apply_stack(&mut b, w, h, &resolved(&smeared));
     assert_ne!(a, b, "motion blur smears the shake");
 
     // A degenerate sub-frame set — every sample equal to one wobble — averages
@@ -3874,26 +3906,15 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
         rotation_deg: 5.0,
         zoom: 1.02,
     };
-    let flat = Resolved::Shake {
-        offset_px: one.offset_px,
-        rotation_deg: one.rotation_deg,
-        zoom: one.zoom,
-        edge: 1,
-        mix: 1.0,
-        mb: Some([one; SHAKE_MB_SAMPLES]),
-    };
     let mut avg = img.clone();
-    cpu::apply(&mut avg, w, h, &flat);
-    let single = Resolved::Shake {
-        offset_px: one.offset_px,
-        rotation_deg: one.rotation_deg,
-        zoom: one.zoom,
-        edge: 1,
-        mix: 1.0,
-        mb: None,
-    };
+    cpu::apply_stack(
+        &mut avg,
+        w,
+        h,
+        &shake_stack(one, 1, 100.0, Some([one; SHAKE_MB_SAMPLES])),
+    );
     let mut one_shot = img.clone();
-    cpu::apply(&mut one_shot, w, h, &single);
+    cpu::apply_stack(&mut one_shot, w, h, &shake_stack(one, 1, 100.0, None));
     let worst = avg
         .iter()
         .zip(&one_shot)
@@ -3946,19 +3967,17 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
         extra: Default::default(),
     });
 
-    let resolved = resolve_stack(
-        std::slice::from_ref(&old),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    let Resolved::Shake { zoom, edge, .. } = resolved[0] else {
-        panic!("expected a Shake");
+    // Both folds are resolve-time work (K-388): the old ids are not schema rows,
+    // so they cannot come out of the bag on their own.
+    let effects::shake::Shaken::Plain { wobble, edge, .. } = shake_packed(&old, 0.4, 1000.0) else {
+        panic!("a pre-FX-11 shake has no motion blur");
     };
     // The old 10% Zoom pump becomes the z (depth) shake, so zoom moves off
     // 1; Auto-scale off migrates to the Transparent edge (code 0).
-    assert_ne!(zoom, 1.0, "the old Zoom pump migrated to the z shake");
+    assert_ne!(
+        wobble.zoom, 1.0,
+        "the old Zoom pump migrated to the z shake"
+    );
     assert_eq!(edge, 0, "Auto-scale off migrated to Transparent");
 
     // Auto-scale on (the old default) migrates to Repeat (code 1).
@@ -3967,17 +3986,188 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
             p.value = EffectValue::Bool(true);
         }
     }
-    let on = resolve_stack(
-        std::slice::from_ref(&old),
-        0.4,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    let Resolved::Shake { edge, .. } = on[0] else {
-        panic!("expected a Shake");
+    let effects::shake::Shaken::Plain { edge, .. } = shake_packed(&old, 0.4, 1000.0) else {
+        panic!("a pre-FX-11 shake has no motion blur");
     };
     assert_eq!(edge, 1, "Auto-scale on migrated to Repeat");
+}
+
+/// **The migration changed no maths** (K-388) — the claim the whole batch rests
+/// on, stated as arithmetic rather than as prose.
+///
+/// The old resolve arm built a [`ShakeWobble`] from the instance and called
+/// `at`. The new path splits that in two — unit-free noise at resolve time, the
+/// amplitudes at dispatch — and `Shake::packed` puts it back together in the
+/// same order, with the `f64 → f32` narrowing at the same step. So the two agree
+/// **bit-for-bit**, not within a tolerance, and this compares them that way: the
+/// frame wobble and all nine sub-frames.
+#[test]
+fn shake_packs_the_wobble_the_old_arm_resolved() {
+    use effects::shake::Shaken;
+    let mut e = shake_with_mb(0.8);
+    // Off the defaults on every axis, so a lost multiply cannot hide.
+    for p in &mut e.params {
+        let v = match p.id.as_str() {
+            "amplitude" => 3.25,
+            "frequency" => 6.5,
+            "rotation" => 7.0,
+            "x_amp" => 0.75,
+            "y_amp" => 1.4,
+            "x_freq" => 1.3,
+            "y_freq" => 0.6,
+            "z_amp" => 12.0,
+            "z_freq" => 1.7,
+            _ => continue,
+        };
+        p.value = EffectValue::Float(Property::fixed(v));
+    }
+    let (lt, diag_px) = (0.4, 1000.0);
+
+    // The old arm, transcribed: every read in f64, the amplitude turned into
+    // raster pixels by hand, the sampler doing the rest.
+    let fl = |id: &str| e.float_at(id, lt);
+    let wobble = ShakeWobble {
+        seed: match e.param("seed") {
+            Some(EffectValue::Seed(s)) => *s,
+            _ => 0,
+        },
+        amp_px: ((fl("amplitude").unwrap() as f32).max(0.0) / 100.0 * diag_px).max(0.0),
+        x_amp: (fl("x_amp").unwrap() as f32).max(0.0),
+        y_amp: (fl("y_amp").unwrap() as f32).max(0.0),
+        rot_amount: (fl("rotation").unwrap() as f32).max(0.0),
+        z_amp: ((fl("z_amp").unwrap() as f32) / 100.0).clamp(0.0, 1.0),
+        x_freq: fl("x_freq").unwrap().max(0.0),
+        y_freq: fl("y_freq").unwrap().max(0.0),
+        z_freq: fl("z_freq").unwrap().max(0.0),
+    };
+    let base = lt * fl("frequency").unwrap().max(0.0);
+    let old = |b: f64| {
+        let (offset_px, rotation_deg, zoom) = wobble.at(b);
+        ShakeSample {
+            offset_px,
+            rotation_deg,
+            zoom,
+        }
+    };
+
+    let Shaken::Blurred { samples, .. } = shake_packed(&e, lt, diag_px) else {
+        panic!("the smear is on");
+    };
+    for (i, db) in shake_mb_offsets(fl("mb_amount").unwrap())
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(samples[i], old(base + db), "sub-frame {i}");
+    }
+    // And with the smear off, the frame wobble itself.
+    for p in &mut e.params {
+        if p.id == "motion_blur" {
+            p.value = EffectValue::Bool(false);
+        }
+    }
+    let Shaken::Plain { wobble: packed, .. } = shake_packed(&e, lt, diag_px) else {
+        panic!("the smear is off now");
+    };
+    assert_eq!(packed, old(base), "the frame-time wobble");
+}
+
+/// **A shake reused at another raster wobbles by the right number of pixels**
+/// (K-266, K-386, K-388) — the unit flip under test.
+///
+/// The old `rescale_px` arm scaled the *resolved offsets*: `(amp_px · x_amp ·
+/// noise) · f`, and every sub-frame's beside them. Declaring Amplitude
+/// `PctDiag` scales the amplitude instead, one multiply earlier: `(amp_px · f) ·
+/// x_amp · noise`. The same product either way — but a different association, so
+/// the two can part company in the last bit or two of an f32. That is the
+/// accepted narrowing class K-388 names, which is why this asserts within an
+/// epsilon rather than bit-for-bit; a real regression here (a value that does
+/// not rescale at all, or rescales twice) is off by a factor of two, not by an
+/// ulp.
+///
+/// Rotation and zoom carry no pixels and must not move at all — the old arm did
+/// not touch them either.
+#[test]
+fn shake_amplitude_rescales_as_the_old_offsets_did() {
+    use effects::shake::Shaken;
+    // Motion blur on, so the frame wobble and the nine sub-frames are both in
+    // play: the old arm rescaled both, and the amplitude they share now does.
+    let e = shake_with_mb(0.8);
+    let resolve = |diag_px: f32| {
+        super::resolve_stack(
+            std::slice::from_ref(&e),
+            0.4,
+            diag_px,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+    };
+    let packed = |ops: &ResolvedStack| {
+        let p = ops.get(0).expect("the shake op").params;
+        effects::shake::Shake::read(p).packed(effects::shake::Shake::derived_of(p))
+    };
+
+    // Two factors: a half, where every multiply is exact and the two orders
+    // agree bit-for-bit, and 0.3, where they do not — which is what the epsilon
+    // below is for, and why it is not an assert_eq.
+    let full = packed(&resolve(1000.0));
+    for f in [0.5f32, 0.3] {
+        // Resolved against a 1000 px diagonal, then repaired for a raster this
+        // much smaller — the adjustment-layer path (`realise.rs`).
+        let mut reused = resolve(1000.0);
+        reused.rescale_spatial(f);
+        let (
+            Shaken::Blurred { samples: moved, .. },
+            Shaken::Blurred {
+                samples: at_full, ..
+            },
+        ) = (packed(&reused), full)
+        else {
+            panic!("the smear is on");
+        };
+        // And the same stack resolved against that raster directly.
+        let Shaken::Blurred {
+            samples: direct, ..
+        } = packed(&resolve(1000.0 * f))
+        else {
+            panic!("the smear is on");
+        };
+
+        // An ulp of a ~10 px offset is ~1e-6; a value that failed to rescale
+        // would be out by most of itself. 1e-4 sits far above the one and far
+        // below the other.
+        let close = |a: f32, b: f32, what: &str| {
+            assert!(
+                (a - b).abs() < 1e-4,
+                "factor {f}, {what}: rescaled {a} vs resolved-there {b}"
+            );
+        };
+        let mut moved_at_all = false;
+        for (i, (m, d)) in moved.iter().zip(direct.iter()).enumerate() {
+            close(m.offset_px[0], d.offset_px[0], &format!("sub-frame {i} x"));
+            close(m.offset_px[1], d.offset_px[1], &format!("sub-frame {i} y"));
+            // The old arm's own formula, stated: the full-resolution offset
+            // scaled by the same factor, after the fact.
+            close(
+                m.offset_px[0],
+                at_full[i].offset_px[0] * f,
+                &format!("sub-frame {i} x, the old rescale"),
+            );
+            assert_eq!(m.rotation_deg, d.rotation_deg, "degrees are not pixels");
+            assert_eq!(m.zoom, d.zoom, "a zoom factor is not pixels");
+            moved_at_all |= m.offset_px[0] != at_full[i].offset_px[0];
+        }
+        assert!(
+            moved_at_all,
+            "the offsets must actually have moved, or this test proves nothing"
+        );
+    }
+
+    // A factor of 1 is the identity, bit-for-bit: the repair must cost nothing
+    // when there is nothing to repair.
+    let mut same = resolve(1000.0);
+    same.rescale_spatial(1.0);
+    assert_eq!(packed(&same), full);
 }
 
 #[test]
@@ -4429,8 +4619,7 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
             Arc::new(ExpressionContext::detached()),
         );
         assert!(ids.is_empty(), "{name} claimed a slot in the indicator");
-        assert!(ops.ops.is_empty(), "{name} resolved to an op");
-        assert!(ops.bags.is_empty(), "{name} resolved to a bag");
+        assert!(ops.is_empty(), "{name} resolved to an op");
     }
 
     // And it is still the effect the frame walk finds: declaring it changed
@@ -5930,9 +6119,8 @@ fn lens_flare_custom_lens_file_overrides_and_degrades() {
 // preview bug: the flare's light hit the frame edge at 1500 of a 1920 comp
 // because the preview factor was applied to the raster and not the params.
 //
-// Both effects here have moved to the arena, so `ResolvedOps::rescale_px` moves
-// them the one generic way: by the unit each parameter declares. It still calls
-// both halves, because Shake's variant is not gone yet.
+// Every effect is in the arena now, so `ResolvedStack::rescale_spatial` moves them the
+// one generic way: by the unit each parameter declares.
 #[test]
 fn resolved_px_fields_rescale_for_a_different_raster() {
     // The default Width is 0 (the labelled no-op), so author one to scale.
@@ -5952,12 +6140,12 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
             Arc::new(ExpressionContext::detached()),
         )
     };
-    let packed = |ops: &super::ResolvedOps| {
-        effects::light_wrap::LightWrap::read(ops.bags.get(0).expect("the wrap op").params).packed()
+    let packed = |ops: &super::ResolvedStack| {
+        effects::light_wrap::LightWrap::read(ops.get(0).expect("the wrap op").params).packed()
     };
     let mut wrap = authored(10.0);
     assert_eq!(packed(&wrap), (10.0, 1.0, 1.0));
-    wrap.rescale_px(0.5);
+    wrap.rescale_spatial(0.5);
     let (width_px, intensity, mix) = packed(&wrap);
     assert_eq!(width_px, 5.0, "px fields scale");
     assert_eq!(intensity, 1.0, "unitless fields do not");
@@ -5987,7 +6175,7 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
         &MarkerContext::NONE,
         Arc::new(ExpressionContext::detached()),
     );
-    flare.rescale_px(0.5);
+    flare.rescale_spatial(0.5);
     let p = flare_packed(&flare);
     assert_eq!(p.light, [500.0, 250.0], "the flare's light is px@comp");
     assert_eq!(p.source_size, [20.0, 10.0], "and so is its source size");
@@ -5995,7 +6183,7 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
 
     // Factor 1 is exactly a no-op, on both halves.
     let mut same = authored(7.0);
-    same.rescale_px(1.0);
+    same.rescale_spatial(1.0);
     assert_eq!(packed(&same).0, 7.0);
 }
 
@@ -6242,7 +6430,7 @@ fn lens_flare_neutral_points_and_default_resolve() {
         &MarkerContext::NONE,
         Arc::new(ExpressionContext::detached()),
     );
-    assert_eq!(ops.ops.len(), 1, "expected one Lens flare op");
+    assert_eq!(ops.len(), 1, "expected one Lens flare op");
     let rp = flare_packed(&ops);
     // px@comp defaults at the schema's nominal 1080p (K-260).
     assert!((rp.light[0] - 640.0).abs() < 1e-3);
@@ -6470,7 +6658,7 @@ fn lens_flare_blend_options_all_resolve() {
             &MarkerContext::NONE,
             Arc::new(ExpressionContext::detached()),
         );
-        assert_eq!(ops.ops.len(), 1, "lens_flare resolves to exactly one op");
+        assert_eq!(ops.len(), 1, "lens_flare resolves to exactly one op");
         assert_eq!(flare_packed(&ops).blend, mode.min(last));
     }
 }
@@ -6495,7 +6683,7 @@ fn lens_flare_params_evaluate_expressions_in_context() {
         ..ExpressionContext::detached()
     });
     let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context);
-    assert_eq!(ops.ops.len(), 1, "lens_flare resolves to exactly one op");
+    assert_eq!(ops.len(), 1, "lens_flare resolves to exactly one op");
     let p = flare_packed(&ops);
     assert!(
         (p.intensity - 3.0).abs() < 1e-6,
@@ -8841,27 +9029,6 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
 
 use uuid::Uuid;
 
-/// Test 5 of the note's plan, and the one that makes the migration mechanical
-/// rather than a rewrite: for every effect that has moved to a generated
-/// declaration, the generated `EffectSchema` is field-for-field the literal it
-/// replaced. It is deleted with the last batch, when there is no hand-written
-/// literal left to compare against.
-#[test]
-fn the_generated_schema_matches_the_hand_written_one() {
-    for def in BUILTIN_DEFS.iter() {
-        let generated = def.schema();
-        let hand_written = BUILTINS
-            .iter()
-            .find(|s| s.match_name == generated.match_name)
-            .unwrap_or_else(|| panic!("{} has no hand-written entry", generated.match_name));
-        assert_eq!(
-            generated, hand_written,
-            "the generated declaration for {} differs from the catalogue literal",
-            generated.match_name
-        );
-    }
-}
-
 /// A name is how a saved project finds its effect again, so two effects sharing
 /// one is a project-corrupting defect rather than a mere mistake.
 #[test]
@@ -9029,12 +9196,12 @@ fn only_spatial_values_rescale() {
 }
 
 /// docs/impl/effect-registry.md §7 test 4, deferred from the plumbing stage: a
-/// spatial parameter in the arena rescales under [`ResolvedOps::rescale_px`]
+/// spatial parameter in the arena rescales under [`ResolvedStack::rescale_spatial`]
 /// **exactly** as the old `Resolved` op did.
 ///
 /// This is the one property the migration could silently lose. K-266's repair —
 /// a stack resolved against the comp raster and then run on a smaller preview
-/// target — reaches the arena through `ResolvedOps::rescale_px`, which calls
+/// target — reaches the arena through `ResolvedStack::rescale_spatial`, which calls
 /// both halves; if a blur declared `Unit::Raw` it would render at full-size
 /// radii on a half-size preview, which is precisely the bug that was fixed for
 /// the flare. So the golden values are written out: the old table said "radius
@@ -9052,8 +9219,8 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
         &MarkerContext::NONE,
         Arc::new(ExpressionContext::detached()),
     );
-    let radius = |ops: &super::ResolvedOps| -> f32 {
-        effects::blur::Blur::read(ops.bags.get(0).expect("the blur op").params)
+    let radius = |ops: &super::ResolvedStack| -> f32 {
+        effects::blur::Blur::read(ops.get(0).expect("the blur op").params)
             .packed()
             .0
     };
@@ -9061,10 +9228,10 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
 
     // Half-resolution preview: the old `rescale_px` multiplied `radius_px` by
     // the factor, and so must the arena.
-    ops.rescale_px(0.5);
+    ops.rescale_spatial(0.5);
     assert_eq!(radius(&ops), 7.5, "the radius follows the preview raster");
     assert_eq!(
-        effects::blur::Blur::read(ops.bags.get(0).expect("the blur op").params)
+        effects::blur::Blur::read(ops.get(0).expect("the blur op").params)
             .packed()
             .2,
         1.0,
@@ -9092,7 +9259,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
         &MarkerContext::NONE,
         Arc::new(ExpressionContext::detached()),
     );
-    same.rescale_px(1.0);
+    same.rescale_spatial(1.0);
     assert_eq!(radius(&same), 15.0);
 }
 
@@ -9100,7 +9267,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
 /// units: RGB split's Amount is `PctDiag` (divided by 100 and multiplied by the
 /// diagonal at resolve) and chromatic aberration's is `Px` (multiplied by the
 /// preview factor at resolve). Each must be scaled **exactly once** on the way
-/// in and exactly once again by [`ResolvedOps::rescale_px`] — which is what the
+/// in and exactly once again by [`ResolvedStack::rescale_spatial`] — which is what the
 /// old arms and `rescale_px` did between them.
 ///
 /// The failure this pins is silent: declaring the unit *and* converting again in
@@ -9120,24 +9287,24 @@ fn the_stylise_family_rescales_once_in_each_unit() {
         )
     };
     // RGB split, % diag: 0.4 % of a 1000 px diagonal is 4 px.
-    let amount = |ops: &super::ResolvedOps| -> f32 {
-        match effects::rgb_split::RgbSplit::read(ops.bags.get(0).expect("the op").params).packed() {
+    let amount = |ops: &super::ResolvedStack| -> f32 {
+        match effects::rgb_split::RgbSplit::read(ops.get(0).expect("the op").params).packed() {
             effects::rgb_split::Split::Classic { amount_px, .. } => amount_px,
             other => panic!("expected the classic split, got {other:?}"),
         }
     };
     let mut ops = resolve("rgb_split", 1.0);
     assert_eq!(amount(&ops), 4.0);
-    ops.rescale_px(0.5);
+    ops.rescale_spatial(0.5);
     assert_eq!(amount(&ops), 2.0, "% diag follows the preview raster");
 
     // Chromatic aberration, px@comp: the authored 4 px, scaled by the preview
     // factor at resolve and by the repair factor afterwards — once each, so a
     // half-resolution resolve followed by a further halving is a quarter of the
     // authored width, not an eighth.
-    let ca = |ops: &super::ResolvedOps| -> f32 {
+    let ca = |ops: &super::ResolvedStack| -> f32 {
         match effects::chromatic_aberration::ChromaticAberration::read(
-            ops.bags.get(0).expect("the op").params,
+            ops.get(0).expect("the op").params,
         )
         .packed()
         {
@@ -9147,17 +9314,17 @@ fn the_stylise_family_rescales_once_in_each_unit() {
     };
     let mut full = resolve("chromatic_aberration", 1.0);
     assert_eq!(ca(&full), 4.0);
-    full.rescale_px(0.5);
+    full.rescale_spatial(0.5);
     assert_eq!(ca(&full), 2.0, "px@comp follows the preview raster");
     // Resolving directly against the smaller raster lands in the same place —
     // the whole point of the K-266 correction.
     assert_eq!(ca(&resolve("chromatic_aberration", 0.5)), ca(&full));
     let mut half = resolve("chromatic_aberration", 0.5);
-    half.rescale_px(0.5);
+    half.rescale_spatial(0.5);
     assert_eq!(ca(&half), 1.0, "scaled once at resolve, once by the repair");
     // Factor 1 is exactly a no-op, as it was for the variants.
     let mut same = resolve("chromatic_aberration", 1.0);
-    same.rescale_px(1.0);
+    same.rescale_spatial(1.0);
     assert_eq!(ca(&same), 4.0);
 }
 
@@ -9206,6 +9373,12 @@ fn every_parameter_declares_a_unit() {
     // reduced-resolution preview while the Light point beside it moved. Both are
     // px@comp and the pair has to travel together, or the flare's ghosts take the
     // shape of a source the wrong size for the frame they land on.
+    //
+    // Shake's **Amplitude** is the one entry the old match reached by another
+    // road: the arm multiplied it by the diagonal by hand and `rescale_px`
+    // scaled the *resolved offsets* instead. Declaring the unit puts the scaling
+    // one multiply earlier (K-388), which is the same wobble to within the
+    // reassociation `shake_amplitude_rescales_as_the_old_offsets_did` bounds.
     assert_eq!(
         spatial,
         vec![
@@ -9230,6 +9403,7 @@ fn every_parameter_declares_a_unit() {
             ("transform", "position_x"),
             ("transform", "position_y"),
             ("glow", "radius"),
+            ("shake", "amplitude"),
             ("block_glitch", "block_size"),
             ("block_glitch", "block_amount"),
             ("block_glitch", "channel_offset"),
@@ -9270,6 +9444,77 @@ fn the_frame_key_separates_a_value_from_its_number() {
     // And the same value hashes the same way twice: the determinism the frame
     // key rests on (K-143).
     assert_eq!(hash(Value::Float(0.25)), hash(Value::Float(0.25)));
+    // The four-float kinds are the pair most at risk: same numbers, same
+    // length, different meaning (K-388). Only the tag separates them.
+    let four = [0.25f32, 0.5, 0.75, 1.0];
+    assert_ne!(hash(Value::Vec4(four)), hash(Value::Colour(four)));
+    assert_eq!(hash(Value::Vec4(four)), hash(Value::Vec4(four)));
+    assert_ne!(
+        hash(Value::Vec4(four)),
+        hash(Value::Vec4([0.25, 0.5, 0.75, -1.0])),
+        "the last component is fed too"
+    );
+}
+
+/// [`Value::Vec4`] is a kind of its own (K-388): its tag is distinct from every
+/// other kind's, it is fed to the frame key as tag + four floats, and it reads
+/// back through [`Params::vec4`] — never through the Colour accessor, and never
+/// the other way about.
+#[test]
+fn a_vec4_is_its_own_kind_and_reads_back_whole() {
+    // Tag distinctness, stated over the whole set rather than pairwise by hand:
+    // a new kind that forgets its own tag fails here.
+    let kinds = [
+        Value::Float(1.0),
+        Value::Int(1),
+        Value::Bool(true),
+        Value::Choice(1),
+        Value::Colour([1.0; 4]),
+        Value::Layer(true),
+        Value::File(1),
+        Value::Vec4([1.0; 4]),
+    ];
+    let mut tags: Vec<u8> = Vec::new();
+    for k in kinds {
+        // The tag is private, so read it the way the frame key does: the byte
+        // that follows the id in the fed stream.
+        let mut stack = ResolvedStack::new();
+        stack.begin(&effects::invert::InvertDef, Uuid::nil());
+        stack.push(ParamId::new("x"), k);
+        let mut bytes: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| bytes.extend_from_slice(b));
+        let tag = *bytes.get(bytes.len() - 1 - payload_len(k)).expect("a tag");
+        assert!(!tags.contains(&tag), "two kinds share tag {tag}");
+        tags.push(tag);
+    }
+
+    // Read-back: the exact four floats, in order.
+    let v = [1.5f32, -2.5, 0.0, 7.25];
+    let id = ParamId::new("derived.something");
+    let entries = [(id, Value::Vec4(v))];
+    let p = Params::new(&entries);
+    assert_eq!(p.vec4(id, [0.0; 4]), v);
+    // Absent, and present-but-another-kind, both fall back to the default —
+    // the same rule every typed reader follows (K-258).
+    assert_eq!(p.vec4(ParamId::new("nothing"), [9.0; 4]), [9.0; 4]);
+    let wrong = [(id, Value::Colour(v))];
+    assert_eq!(
+        Params::new(&wrong).vec4(id, [9.0; 4]),
+        [9.0; 4],
+        "a Colour is not a Vec4"
+    );
+    // `as_f32` gives the first component, as it does for a Colour.
+    assert_eq!(Value::Vec4(v).as_f32(), 1.5);
+}
+
+/// How many payload bytes [`ResolvedStack::feed_hash`] writes for a value —
+/// the test above walks back over them to reach the tag byte.
+fn payload_len(v: Value) -> usize {
+    match v {
+        Value::Bool(_) | Value::Layer(_) => 1,
+        Value::Float(_) | Value::Int(_) | Value::Choice(_) | Value::File(_) => 4,
+        Value::Colour(_) | Value::Vec4(_) => 16,
+    }
 }
 
 /// A stack carrying a migrated effect is dispatched to that effect's own CPU
@@ -9284,14 +9529,10 @@ fn a_registered_effect_renders_what_the_old_dispatch_rendered() {
     let source: Vec<f32> = (0..16).map(|i| i as f32 / 16.0).collect();
 
     let mut through_registry = source.clone();
-    let mut ops = ResolvedOps::default();
-    ops.bags
-        .begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
-    ops.bags
-        .push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
-    ops.bags
-        .push(effects::exposure::Exposure::MIX, Value::Float(100.0));
-    ops.ops.push(Resolved::Registry { op: 0 });
+    let mut ops = ResolvedStack::new();
+    ops.begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
+    ops.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
+    ops.push(effects::exposure::Exposure::MIX, Value::Float(100.0));
     cpu::apply_stack(&mut through_registry, 2, 2, &ops);
 
     let mut through_the_old_numbers = source.clone();
@@ -9379,12 +9620,11 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     let both =
         |def: &'static dyn EffectDef, entries: &[(ParamId, Value)], old: &dyn Fn(&mut Vec<f32>)| {
             let mut new = source.clone();
-            let mut ops = ResolvedOps::default();
-            ops.bags.begin(def, uuid::Uuid::now_v7());
+            let mut ops = ResolvedStack::new();
+            ops.begin(def, uuid::Uuid::now_v7());
             for (id, value) in entries {
-                ops.bags.push(*id, *value);
+                ops.push(*id, *value);
             }
-            ops.ops.push(Resolved::Registry { op: 0 });
             cpu::apply_stack(&mut new, 4, 4, &ops);
 
             let mut legacy = source.clone();
@@ -9782,7 +10022,7 @@ fn the_side_table_batch_stays_a_cpu_passthrough() {
             &MarkerContext::NONE,
             Arc::new(ExpressionContext::detached()),
         );
-        assert_eq!(ops.ops.len(), 1, "{name} resolves to exactly one op");
+        assert_eq!(ops.len(), 1, "{name} resolves to exactly one op");
         let mut out = source.clone();
         cpu::apply_stack(&mut out, w, h, &ops);
         assert_eq!(

@@ -40,6 +40,7 @@ pub mod radial_blur;
 pub mod rgb_split;
 pub mod saturation;
 pub mod scanlines;
+pub mod shake;
 pub mod sharpen;
 pub mod sharpen_simple;
 pub mod sprite_flare;
