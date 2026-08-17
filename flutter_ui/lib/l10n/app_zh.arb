@@ -1,5 +1,5 @@
 {
-  "@@locale": "zh-CN",
+  "@@locale": "zh",
   "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): under five words, two where two will do.",
   "aboutBlurb": "一个动态图形设计与合成编辑器。V3通用公共许可协议下的免费剪辑软件",
   "@aboutBlurb": {
