@@ -24,10 +24,6 @@ pub enum FlowError {
     Readback(String),
     #[error("frame dimensions differ")]
     DimensionMismatch,
-    /// The settings ask for something the kernels do not implement; the caller
-    /// runs the CPU oracle instead of returning a differently-measured field.
-    #[error("these flow settings have no GPU path")]
-    Unsupported,
 }
 
 /// One uniform block per pyramid level (matches `Params` in dis.wgsl).
@@ -250,20 +246,16 @@ impl GpuFlow {
         self.flow_pair_with(a, b, &crate::FlowSettings::default())
     }
 
-    /// Both directions under explicit settings, or [`FlowError::Unsupported`]
-    /// when the kernels cannot express them.
+    /// Both directions under explicit settings.
     ///
-    /// The shader still carries the iteration cap, the pyramid floor and the
-    /// smoothing sigma as WGSL constants, so a non-default Vector detail or
-    /// Smoothness has no GPU expression yet. Refusing is the only honest answer:
-    /// returning a field measured to different rules than the settings asked for
-    /// would make the picture depend on which backend happened to be alive,
-    /// which is exactly the preview-≠-export class of fault K-331 exists to
-    /// remove. The caller degrades to the CPU oracle, which is correct and slow.
-    ///
-    /// ponytail: constants baked into dis.wgsl; push them into the per-level
-    /// `Params` uniform when the GPU flow relocation lands, and this refusal
-    /// goes away.
+    /// Every knob the settings carry is expressed on the GPU: the pyramid
+    /// floor shapes the plan, the iteration cap and the smoothing sigma ride
+    /// the per-level `Params` uniform, and the refinement count scales by
+    /// depth exactly as the CPU's does. The vote-clustering radius stays a
+    /// shared constant on both backends deliberately - the CPU's second pass
+    /// uses the fixed `FLOW_SIGMA2` there too, so the two agree step for
+    /// step. There is no refused configuration; a build error here is a
+    /// pipeline fault, not a settings gap.
     pub fn flow_pair_with(
         &mut self,
         a: &Gray,

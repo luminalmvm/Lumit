@@ -1446,10 +1446,11 @@ impl FlowEngine {
     /// Both flow directions at the frames' own resolution, on whichever
     /// backend is live, under explicit settings.
     ///
-    /// The GPU backend takes only the settings its kernels honour so far; a
-    /// setting it cannot express sends the pair to the CPU oracle rather than
-    /// quietly returning a field measured to different rules, because the two
-    /// disagreeing is worse than the slow answer.
+    /// The GPU expresses every setting (the plan takes the pyramid floor, the
+    /// per-level uniform the iteration cap and smoothing sigma, the refinement
+    /// count scales by depth as the CPU's does). A GPU *fault* - a lost device,
+    /// a failed pipeline - degrades this engine to the CPU oracle for the rest
+    /// of its life rather than risking a differently-measured field.
     pub fn flow_pair_with(
         &mut self,
         a: &Gray,
@@ -2413,7 +2414,30 @@ mod tests {
         // All three parts of DIS, both backends (K-332): the shader now has
         // the refinement, and the oracle's red-black sweeps mean the two can
         // agree step for step rather than merely in spirit.
+        //
+        // Default settings AND a deliberately non-default set: every knob the
+        // settings carry has a GPU expression (the old refusal is gone), and
+        // this is what holds the two backends to the same answer under the
+        // knobs a user actually turns - fewer iterations, heavier smoothing,
+        // a higher pyramid floor, a different refinement budget.
+        let tuned = FlowSettings {
+            iterations: 8,
+            smoothness: 80.0,
+            min_level_dim: 24,
+            refine_iters: 2,
+            ..FlowSettings::default()
+        };
         for (i, (a, b)) in scenes.iter().enumerate() {
+            for set in [FlowSettings::default(), tuned] {
+                let (cf, _) = flow_pair_with(a, b, &set);
+                let (gf, _) = g.flow_pair_with(a, b, &set).unwrap();
+                let df = mean_abs_diff(&cf, &gf);
+                assert!(
+                    df < 1e-3,
+                    "scene {i} ({:?} iters): fwd CPU/GPU diff {df}",
+                    set.iterations
+                );
+            }
             let (cf, cg) = flow_pair_with(a, b, &FlowSettings::default());
             let (gf, gg) = g.flow_pair(a, b).unwrap();
             let (df, dg) = (mean_abs_diff(&cf, &gf), mean_abs_diff(&cg, &gg));
@@ -2478,9 +2502,10 @@ mod tests {
         let (w, h) = (960, 540);
         let a = render(w, h, |x, y| perlin(x, y, 3));
         let b = render(w, h, |x, y| perlin(x - 9.7, y + 4.3, 3));
-        // The GPU implements DIS parts one and two only (K-332): asking it for
-        // the default settings returns Unsupported in nanoseconds, which is not
-        // a timing. Measure what it actually runs.
+        // Bench the two-part configuration (no variational refinement), the
+        // pre-K-332 baseline: it is what the adaptive path runs when the
+        // refinement budget is zero, and it keeps this number comparable
+        // across the K-332 change. The GPU runs all three parts these days.
         let two_part = FlowSettings {
             refine_iters: 0,
             ..FlowSettings::default()
