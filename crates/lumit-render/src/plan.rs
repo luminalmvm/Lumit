@@ -639,6 +639,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
             paint: Vec::new(),

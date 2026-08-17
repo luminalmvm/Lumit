@@ -1322,9 +1322,9 @@ class LayerReference {
         that: this,
       );
 
-  /// This layer's Flow group, or the defaults when its policy is not Flow —
-  /// so the panel can show the controls it *would* get without the document
-  /// having to hold them yet.
+  /// This layer's Flow group: the live one, else the parked one it would get
+  /// back on, else the defaults — so the panel can show the controls it
+  /// *would* have without the policy being Flow yet.
   BridgeFlowParams getFlowParams() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetFlowParams(
         that: this,
@@ -1487,17 +1487,6 @@ class LayerReference {
   /// ask when a menu opens, never while drawing a row.
   bool hasPicture() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceHasPicture(
-        that: this,
-      );
-
-  /// Whether this layer positions in z and honours the active camera (K-023).
-  ///
-  /// Read-only for now: the switch's *toggle* is a Timeline op that has not
-  /// been ported. The Effect controls panel needs the reader regardless, to
-  /// decide whether to draw the z and x/y-rotation rows at all — a 2D layer
-  /// showing 3D controls that do nothing is worse than not showing them. A
-  /// camera is 3D by construction whatever its switch says.
-  bool isThreeD() => BridgeLib.instance.api.crateApiLayerLayerReferenceIsThreeD(
         that: this,
       );
 
@@ -1668,14 +1657,14 @@ class LayerReference {
   /// policy it had before flow is not recorded, and Nearest is the crisp
   /// default docs/04 §10 names.
   ///
-  /// **Turning it off discards the Flow group.** The parameters live inside
-  /// the `Flow` variant of the policy, so there is nowhere to keep them while
-  /// the policy is something else. Comparing a flow shot against the plain
-  /// one is an ordinary thing to do and should not cost the tuning that got
-  /// you there; fixing it means moving `FlowParams` onto the layer beside the
-  /// policy rather than inside it (docs/TODO.md). Recorded here rather than
-  /// worked around, because a UI-side stash of the last settings would be the
-  /// view holding document state.
+  /// **Turning it off parks the Flow group, it does not discard it.** The
+  /// parameters live inside the `Flow` variant of the policy, so while the
+  /// policy is Nearest they wait in `Layer::parked_flow` and come back out
+  /// when flow does: comparing a flow shot against the plain one is an
+  /// ordinary thing to do and does not cost the tuning that got you there.
+  /// Parked on the document, not in the view — it serialises and undoes with
+  /// everything else, and both fields move in one op, so a single undo puts
+  /// the policy and its tuning back together.
   void setFlowEnabled({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetFlowEnabled(that: this, on_: on_);
 
@@ -1694,6 +1683,11 @@ class LayerReference {
           .crateApiLayerLayerReferenceSetFlowParams(that: this, params: params);
 
   /// Choose how in-between frames are found. One undo step.
+  ///
+  /// Leaving Flow **parks** the group on the layer rather than dropping it,
+  /// and coming back to Flow takes it out again, so comparing a flow shot
+  /// against the plain one costs nothing (`Layer::parked_flow`). Both fields
+  /// move in the same op, so one undo puts both back.
   void setInterpolation({required BridgeRetimeInterp interpolation}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetInterpolation(
           that: this, interpolation: interpolation);

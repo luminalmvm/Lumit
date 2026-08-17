@@ -5616,3 +5616,81 @@ fn a_closed_project_is_forgotten_and_its_worker_channel_disconnects() {
     // Closing again is not an error: it is closed, which is what was asked.
     project.close().expect("closing a closed project is fine");
 }
+
+/// Opening a project displaces the ones already open — and must forget their
+/// change streams as well as the projects themselves. `close` removes both
+/// registries for one project; `open_project` cleared only `PROJECTS`, so
+/// every project a session ever opened left its sink in `STREAMS` for the life
+/// of the process.
+///
+/// Tested through `forget_streams_except` rather than `open_project`, which no
+/// test may call: the registries are process-wide and clearing `PROJECTS`
+/// would pull every other test's project out from under it.
+#[test]
+fn opening_a_project_forgets_the_displaced_projects_streams() {
+    use crate::api::state::{forget_streams_except, STREAMS};
+
+    // A sink that goes nowhere: with no Dart VM to post to, sending is a
+    // no-op, and this test never sends — it only asks who is registered.
+    let sink = || std::sync::Arc::new(crate::frb_generated::StreamSink::deserialize("0".into()));
+
+    let displaced = Uuid::now_v7();
+    let opened = Uuid::now_v7();
+    {
+        let mut streams = STREAMS.write().expect("streams");
+        streams.insert(displaced, sink());
+        streams.insert(opened, sink());
+    }
+
+    forget_streams_except(opened).expect("forgotten");
+
+    let streams = STREAMS.read().expect("streams");
+    assert!(
+        !streams.contains_key(&displaced),
+        "a displaced project must not keep its change stream"
+    );
+    assert!(
+        streams.contains_key(&opened),
+        "the project just opened keeps its own"
+    );
+}
+
+/// Turning flow off parks its tuning instead of dropping it, and puts the
+/// policy and the tuning back in one undo step — the point of them riding the
+/// same op (docs/04-RETIMING.md §10).
+#[test]
+fn turning_flow_off_parks_its_tuning_and_one_undo_restores_both() {
+    use crate::api::retime::BridgeFlowParams;
+
+    let (project, layer) = project_with_layer();
+    layer.set_flow_enabled(true).expect("flow on");
+    let tuned = BridgeFlowParams {
+        resolution: 1,
+        detail: 3,
+        smoothness: 80.0,
+        occlusion: 1,
+        fallback: 1,
+        hud_guard: false,
+        always: false,
+    };
+    layer.set_flow_params(tuned.clone()).expect("tuned");
+
+    layer.set_flow_enabled(false).expect("flow off");
+    assert!(!layer.get_flow_enabled().expect("read"), "flow is off");
+    assert_eq!(
+        layer.get_flow_params().expect("read"),
+        tuned,
+        "the tuning is parked, not gone"
+    );
+
+    project.undo().expect("undone");
+    assert!(layer.get_flow_enabled().expect("read"), "flow is back on");
+    assert_eq!(
+        layer.get_flow_params().expect("read"),
+        tuned,
+        "one undo step brings the policy and its tuning back together"
+    );
+
+    layer.set_flow_enabled(true).expect("already on is a no-op");
+    assert_eq!(layer.get_flow_params().expect("read"), tuned);
+}

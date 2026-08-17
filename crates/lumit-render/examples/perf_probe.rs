@@ -41,6 +41,7 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         volume_db: Property::zero(),
         retime: None,
         interpolation: Default::default(),
+        parked_flow: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),

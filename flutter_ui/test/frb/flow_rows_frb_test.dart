@@ -239,7 +239,7 @@ void main() {
           reason: 'the stopwatch plants a key and the rate becomes a curve');
     });
 
-    testWidgets('switching flow off discards the group, for now',
+    testWidgets('switching flow off parks the group and back on restores it',
         (tester) async {
       final p = withComp();
       final layer = footageLayer(p);
@@ -256,17 +256,16 @@ void main() {
         ),
       );
       layer.setFlowEnabled(on_: false);
+      // Comparing a flow shot against the plain one is a normal thing to do and
+      // must not cost the tuning that got you there: while the policy is
+      // Nearest the group waits in the layer's parked_flow, and the panel keeps
+      // showing what it would come back to.
+      expect(layer.getFlowParams().detail, 3);
+
       layer.setFlowEnabled(on_: true);
-      // Pinning the *limitation*, not endorsing it. The parameters live inside
-      // the Flow variant of the interpolation policy, so turning flow off has
-      // nowhere to keep them. Comparing a flow shot against the plain one is a
-      // normal thing to do and should not cost the tuning that got you there —
-      // fixing it means moving FlowParams onto the layer beside the policy
-      // rather than inside it (docs/TODO.md). When that lands, this test
-      // inverts and the reason it exists is recorded here.
-      expect(layer.getFlowParams().resolution, 0);
-      expect(layer.getFlowParams().detail, 1);
-      expect(layer.getFlowParams().smoothness, 50);
+      expect(layer.getFlowParams().resolution, 1);
+      expect(layer.getFlowParams().detail, 3);
+      expect(layer.getFlowParams().smoothness, 80);
     });
   }, skip: !engineAvailable);
 }

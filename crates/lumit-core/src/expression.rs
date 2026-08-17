@@ -444,6 +444,7 @@ mod tests {
             effects: Vec::new(),
             switches: Switches::default(),
             interpolation: Default::default(),
+            parked_flow: None,
             markers: Vec::new(),
             paint: Default::default(),
             extra: serde_json::Map::new(),

@@ -296,6 +296,11 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         interpolation: crate::retime::Interpolation,
+        /// Where the layer's Flow tuning sits while the policy is not Flow
+        /// ([`crate::model::Layer::parked_flow`]). Part of this op rather than
+        /// its own, so turning flow off and putting the tuning away is one
+        /// undo step that restores both together.
+        parked_flow: Option<Box<crate::retime::FlowParams>>,
     },
     /// Several ops as one undo step (e.g. "create Solids folder + solid +
     /// layer"). Applied in order; the inverse is the reversed inverses. If a
@@ -1075,6 +1080,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             comp,
             layer,
             interpolation,
+            parked_flow,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let l = c
@@ -1083,10 +1089,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
             let previous = std::mem::replace(&mut l.interpolation, interpolation.clone());
+            let previous_parked = std::mem::replace(&mut l.parked_flow, parked_flow.clone());
             Ok(Op::SetLayerInterpolation {
                 comp: *comp,
                 layer: *layer,
                 interpolation: previous,
+                parked_flow: previous_parked,
             })
         }
         Op::Batch { ops } => {

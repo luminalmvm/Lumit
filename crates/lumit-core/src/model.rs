@@ -1319,6 +1319,18 @@ pub struct Layer {
     /// frames between two it has.
     #[serde(default)]
     pub interpolation: crate::retime::Interpolation,
+    /// The Flow tuning kept while the policy is Nearest or Blend, so switching
+    /// flow off to compare against the plain shot and back on again costs
+    /// nothing.
+    ///
+    /// **Document state, not a UI stash**: it serialises, undoes and copies
+    /// with the layer like everything else, which a view-side memory of "the
+    /// last settings" would not. `None` once the policy is Flow again — the
+    /// live parameters are then inside [`Self::interpolation`], and two copies
+    /// of the same tuning would be one too many. Boxed because most layers
+    /// never have one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parked_flow: Option<Box<crate::retime::FlowParams>>,
     #[serde(default)]
     pub blend: BlendMode,
     /// Masks gate the layer's alpha before effects/transform
@@ -2142,6 +2154,36 @@ mod tests {
         assert_eq!(ev, serde_json::from_str::<EffectValue>(&ev_json).unwrap());
     }
 
+    /// Flow tuning parked while the policy is Nearest is document state: it
+    /// survives a save/load, and a project saved before the field existed still
+    /// loads (the key is simply absent).
+    #[test]
+    fn parked_flow_round_trips_and_old_projects_still_load() {
+        let mut layer = comp_with_cameras().layers.remove(0);
+        let params = crate::retime::FlowParams {
+            smoothness: 80.0,
+            detail: crate::retime::VectorDetail::Ultra,
+            ..Default::default()
+        };
+        layer.interpolation = crate::retime::Interpolation::Nearest;
+        layer.parked_flow = Some(Box::new(params.clone()));
+
+        let json = serde_json::to_string(&layer).unwrap();
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.parked_flow.as_deref(), Some(&params));
+        assert_eq!(back, layer);
+
+        // An old project has no `parked_flow` key at all — which is also what
+        // a layer that never parked anything writes.
+        layer.parked_flow = None;
+        let old = serde_json::to_string(&layer).unwrap();
+        assert!(
+            !old.contains("parked_flow"),
+            "nothing parked, nothing saved"
+        );
+        assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
+    }
+
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
             id: Uuid::now_v7(),
@@ -2177,6 +2219,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             retime: None,
             interpolation: Default::default(),
+            parked_flow: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
@@ -2508,6 +2551,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             retime: None,
             interpolation: Default::default(),
+            parked_flow: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),

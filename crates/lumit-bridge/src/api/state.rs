@@ -322,6 +322,20 @@ pub static PROJECTS: LazyLock<RwLock<BTreeMap<Uuid, Arc<RwLock<LumitBridgeState>
 pub static STREAMS: LazyLock<RwLock<BTreeMap<Uuid, Arc<CallbackStream>>>> =
     LazyLock::new(|| RwLock::new(BTreeMap::new()));
 
+/// Forget every change-stream sink but `keep`'s — the `STREAMS` half of the
+/// wholesale close [`LumitBridgeState::open_project`] performs, the shape
+/// `ProjectReference::close` has for one project. Without it, opening projects
+/// all day leaves one live sink per project the process ever had.
+///
+/// Its own function so a test can run it without `open_project`'s registry
+/// clear, which no test may do: the registries are process-wide and the suite
+/// runs in parallel. Takes one registry, holds no other lock.
+pub(crate) fn forget_streams_except(keep: Uuid) -> Result<(), BridgeError> {
+    let mut streams = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
+    streams.retain(|held, _| *held == keep);
+    Ok(())
+}
+
 /// The scope of one op: which composition it touches, which layer within it,
 /// and whether it changed the project item list.
 ///
@@ -598,6 +612,11 @@ impl LumitBridgeState {
 
             p.insert(id, Arc::new(RwLock::new(state)));
         }
+
+        // The displaced projects' change sinks go too — a forgotten project
+        // with a live sink is a leak, and one registry at a time means after
+        // the `PROJECTS` guard above has been dropped, not inside it.
+        forget_streams_except(id)?;
 
         // After the clear, so this project's requests are not the ones
         // cancelled, and outside the registry lock.

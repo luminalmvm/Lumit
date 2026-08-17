@@ -528,13 +528,29 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
-      expect(p.layer.isThreeD(), isFalse);
       expect(find.text('Rotation x'), findsNothing);
       expect(find.text('Rotation y'), findsNothing);
       // Position draws two cells, not three, when the layer is flat.
       expect(find.byKey(const ValueKey('tf-positionZ')), findsNothing);
       expect(find.byKey(const ValueKey('tf-positionX')), findsOneWidget);
       expect(find.byKey(const ValueKey('tf-positionY')), findsOneWidget);
+    });
+
+    /// A camera is 3D by construction whatever its switch says (K-023): it
+    /// positions in z and looks somewhere, so hiding its z and rotation rows
+    /// would gate away the only controls that mean anything on it. The rule
+    /// used to live in an engine reader nothing called; now the panel decides
+    /// it from the model, and this is what pins that a camera never lost it.
+    testWidgets('a camera gets its 3D rows without its switch', (tester) async {
+      final p = withLayer();
+      final comp = p.uiState.selectedComp!;
+      final camera = comp.addCameraLayer();
+      p.uiState.selectedLayer.value = camera;
+      await mount(tester, p);
+
+      expect(find.text('Rotation x'), findsOneWidget);
+      expect(find.text('Rotation y'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tf-positionZ')), findsOneWidget);
     });
 
     /// An animated parameter stays a field (docs/07 §4.3): editing it writes

@@ -58,6 +58,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         volume_db: Property::zero(),
         retime: None,
         interpolation: Default::default(),
+        parked_flow: None,
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),

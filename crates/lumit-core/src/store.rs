@@ -369,6 +369,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             retime: None,
             interpolation: Default::default(),
+            parked_flow: None,
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
@@ -841,6 +842,7 @@ mod tests {
                     volume_db: crate::anim::Property::zero(),
                     retime: None,
                     interpolation: Default::default(),
+                    parked_flow: None,
                     blend: Default::default(),
                     masks: Vec::new(),
                     paint: Vec::new(),
@@ -920,6 +922,7 @@ mod tests {
                 comp: comp_id,
                 layer: layer_id,
                 interpolation: Interpolation::Blend,
+                parked_flow: None,
             })
             .unwrap();
         assert_eq!(
@@ -1027,6 +1030,7 @@ mod tests {
                     volume_db: crate::anim::Property::zero(),
                     retime: None,
                     interpolation: Default::default(),
+                    parked_flow: None,
                     blend: Default::default(),
                     masks: Vec::new(),
                     paint: Vec::new(),

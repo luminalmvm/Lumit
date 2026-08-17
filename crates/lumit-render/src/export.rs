@@ -724,6 +724,7 @@ mod tests {
                 volume_db: lumit_core::anim::Property::zero(),
                 retime: None,
                 interpolation: Default::default(),
+                parked_flow: None,
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),

@@ -288,7 +288,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       layer: layer,
                       comp: comp,
                       transform: info.transform,
-                      threeD: info.switches.threeD,
+                      // A camera is 3D by construction whatever its switch
+                      // says (K-023) — its z and rotation rows must always
+                      // draw. Decided here from the model the panel already
+                      // holds, not by asking the engine per rebuild (K-184).
+                      threeD: info.switches.threeD ||
+                          info.kind == BridgeLayerKind.camera,
                       playheadFrame: playhead,
                       onSeek: (frame) => ui.playheadFrame.value = frame,
                       onChanged: ui.model.refresh,

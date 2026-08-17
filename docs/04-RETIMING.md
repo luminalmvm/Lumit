@@ -524,6 +524,13 @@ resolves a fractional source position; the policy decides the pixels:
 - **Flow:** optical-flow synthesis of the intermediate frame (engine and parameters in
   [08-EFFECTS.md](08-EFFECTS.md)). Twixtor-class quality is the bar (K-064).
 
+Switching the policy away from Flow **parks** the Flow group rather than dropping it: the
+parameters live inside the `Flow` variant, so while the policy is Nearest or Blend they wait
+in the layer's `parked_flow` and come back out when Flow does. Comparing a flow shot against
+the plain one is ordinary and MUST NOT cost the tuning. Parked state is document state — it
+saves, loads and undoes with the layer, and the policy and its parked group move in one op,
+so a single undo restores both.
+
 Requirements and expectations for Flow:
 
 - Quality expectation: clean, well-lit footage at 2× slow-down SHOULD show no obvious

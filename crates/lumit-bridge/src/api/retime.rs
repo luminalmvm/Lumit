@@ -117,36 +117,62 @@ impl LayerReference {
     }
 
     /// Choose how in-between frames are found. One undo step.
+    ///
+    /// Leaving Flow **parks** the group on the layer rather than dropping it,
+    /// and coming back to Flow takes it out again, so comparing a flow shot
+    /// against the plain one costs nothing (`Layer::parked_flow`). Both fields
+    /// move in the same op, so one undo puts both back.
     #[frb(sync)]
     pub fn set_interpolation(&self, interpolation: BridgeRetimeInterp) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let (interpolation, parked_flow) = match interpolation {
+            BridgeRetimeInterp::Flow => (
+                Interpolation::Flow(self.live_flow_params(&layer)),
+                // The tuning is live again; nothing left in the shed.
+                None,
+            ),
+            other => {
+                let parked = match &layer.interpolation {
+                    Interpolation::Flow(p) => Some(Box::new(p.clone())),
+                    // Already off — keep whatever was parked before.
+                    _ => layer.parked_flow.clone(),
+                };
+                let policy = match other {
+                    BridgeRetimeInterp::Blend => Interpolation::Blend,
+                    _ => Interpolation::Nearest,
+                };
+                (policy, parked)
+            }
+        };
         self.commit(lumit_core::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
-            interpolation: match interpolation {
-                BridgeRetimeInterp::Nearest => Interpolation::Nearest,
-                BridgeRetimeInterp::Blend => Interpolation::Blend,
-                // Keep the parameters a layer already had: turning Flow off to
-                // compare against Nearest and back on again must not silently
-                // reset the group.
-                BridgeRetimeInterp::Flow => {
-                    Interpolation::Flow(match &self.item()?.interpolation {
-                        Interpolation::Flow(p) => p.clone(),
-                        _ => Default::default(),
-                    })
-                }
-            },
+            interpolation,
+            parked_flow,
         })
     }
 
-    /// This layer's Flow group, or the defaults when its policy is not Flow —
-    /// so the panel can show the controls it *would* get without the document
-    /// having to hold them yet.
+    /// The Flow parameters an edit should build on: the live ones, else the
+    /// parked ones, else the defaults.
+    fn live_flow_params(&self, layer: &lumit_core::model::Layer) -> lumit_core::retime::FlowParams {
+        match &layer.interpolation {
+            Interpolation::Flow(p) => p.clone(),
+            _ => layer
+                .parked_flow
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(Default::default),
+        }
+    }
+
+    /// This layer's Flow group: the live one, else the parked one it would get
+    /// back on, else the defaults — so the panel can show the controls it
+    /// *would* have without the policy being Flow yet.
     #[frb(sync)]
     pub fn get_flow_params(&self) -> Result<BridgeFlowParams, BridgeError> {
-        Ok(match &self.item()?.interpolation {
-            Interpolation::Flow(p) => BridgeFlowParams::from_core(p),
-            _ => BridgeFlowParams::from_core(&Default::default()),
-        })
+        Ok(BridgeFlowParams::from_core(
+            &self.live_flow_params(&self.item()?),
+        ))
     }
 
     /// Write the Flow group. One undo step.
@@ -156,14 +182,12 @@ impl LayerReference {
     /// nothing would be worse than one that means what it says.
     #[frb(sync)]
     pub fn set_flow_params(&self, params: BridgeFlowParams) -> Result<(), BridgeError> {
-        let base = match &self.item()?.interpolation {
-            Interpolation::Flow(p) => p.clone(),
-            _ => Default::default(),
-        };
+        let base = self.live_flow_params(&self.item()?);
         self.commit(lumit_core::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params.onto(&base)),
+            parked_flow: None,
         })
     }
 
@@ -190,10 +214,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn get_flow_input_rate(&self) -> Result<crate::api::effect::BridgeScalar, BridgeError> {
         let layer = self.item()?;
-        let p = match &layer.interpolation {
-            Interpolation::Flow(p) => p.input_fps.clone(),
-            _ => lumit_core::anim::Property::zero(),
-        };
+        let p = self.live_flow_params(&layer).input_fps;
         Ok(crate::api::effect::BridgeScalar::read_at(
             &p,
             layer.start_offset.0,
@@ -209,15 +230,13 @@ impl LayerReference {
     ) -> Result<(), BridgeError> {
         let layer = self.item()?;
         let animation = value.animation_at(layer.start_offset.0)?;
-        let mut params = match &layer.interpolation {
-            Interpolation::Flow(p) => p.clone(),
-            _ => Default::default(),
-        };
+        let mut params = self.live_flow_params(&layer);
         params.input_fps.animation = animation;
         self.commit(lumit_core::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params),
+            parked_flow: None,
         })
     }
 
@@ -231,14 +250,14 @@ impl LayerReference {
     /// policy it had before flow is not recorded, and Nearest is the crisp
     /// default docs/04 §10 names.
     ///
-    /// **Turning it off discards the Flow group.** The parameters live inside
-    /// the `Flow` variant of the policy, so there is nowhere to keep them while
-    /// the policy is something else. Comparing a flow shot against the plain
-    /// one is an ordinary thing to do and should not cost the tuning that got
-    /// you there; fixing it means moving `FlowParams` onto the layer beside the
-    /// policy rather than inside it (docs/TODO.md). Recorded here rather than
-    /// worked around, because a UI-side stash of the last settings would be the
-    /// view holding document state.
+    /// **Turning it off parks the Flow group, it does not discard it.** The
+    /// parameters live inside the `Flow` variant of the policy, so while the
+    /// policy is Nearest they wait in `Layer::parked_flow` and come back out
+    /// when flow does: comparing a flow shot against the plain one is an
+    /// ordinary thing to do and does not cost the tuning that got you there.
+    /// Parked on the document, not in the view — it serialises and undoes with
+    /// everything else, and both fields move in one op, so a single undo puts
+    /// the policy and its tuning back together.
     #[frb(sync)]
     pub fn set_flow_enabled(&self, on: bool) -> Result<(), BridgeError> {
         if on == self.get_flow_enabled()? {

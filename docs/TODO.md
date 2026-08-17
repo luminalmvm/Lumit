@@ -355,21 +355,15 @@ composites back to the CPU would work and would cost more than the flow does.
 
 **Flow's remaining K-331 work.** The engine, the GPU port, the cache and the
 controls have landed. What is left:
-1. **Turning the flow switch off discards the Flow group.** `FlowParams` lives
-    inside the `Flow` variant of `Interpolation`, so there is nowhere to keep it
-    while the policy is Nearest. Comparing a flow shot against the plain one is
-    ordinary and should not cost the tuning. Move `FlowParams` onto the layer
-    beside the policy (pre-release, no migration); `flow_rows_frb_test.dart`
-    pins the current behaviour and inverts when this lands.
-2. **`PreviewEngine::default` still builds its pool without a GPU**, so that
+1. **`PreviewEngine::default` still builds its pool without a GPU**, so that
     path measures flow on a headless device of its own; the headless renderer
     the Flutter frontend drives shares the render device correctly. Pass a
     context in, or delete the path if nothing drives it.
-3. **The remaining CPU work in synthesis is the luma conversion and the frame
+2. **The remaining CPU work in synthesis is the luma conversion and the frame
     uploads** — about 70 ms of the 79 ms a 1080p interpolation costs, against
     8 ms for the flow itself. Both would go if the decoded frame reached the
     card once and stayed there, which is the `DrawSource` change K-331 sketched.
-4. **A measurement harness on real gameplay** (K-332 follow-up), so the learned
+3. **A measurement harness on real gameplay** (K-332 follow-up), so the learned
     ceiling — RIFE-class synthesis, WAFT-class flow — is judged against numbers
     rather than impressions. A learned synthesiser emits no flow field, so Fast
     motion blur and Datamosh need DIS vectors regardless.

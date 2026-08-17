@@ -1819,6 +1819,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   and out gradually rather than switching, because a hard edge between "warped" and "not
   warped" is itself something you would see. It is on by default and can be turned off in the
   Flow group.
+
+  **Turning flow off keeps your tuning.** Flipping the switch back to the plain picture is how
+  you check whether the flow is actually helping, so the settings you arrived at are put aside
+  rather than thrown away — the layer keeps them in a spare pocket (`parked_flow`) and hands
+  them straight back when you turn flow on again. The pocket is part of the project, not a
+  passing memory in the interface, so it survives saving, closing and reopening, and one undo
+  reverses the whole switch-off: the policy and the settings come back together.
   **This is wired up for
   Footage layers now**: a Speed % box in a footage layer's twirl-down retimes it (50% =
   half speed, and so on), and the same Retime map feeds preview, export, and the cache

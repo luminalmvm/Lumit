@@ -2794,20 +2794,6 @@ impl LayerReference {
         Ok(())
     }
 
-    /// Whether this layer positions in z and honours the active camera (K-023).
-    ///
-    /// Read-only for now: the switch's *toggle* is a Timeline op that has not
-    /// been ported. The Effect controls panel needs the reader regardless, to
-    /// decide whether to draw the z and x/y-rotation rows at all — a 2D layer
-    /// showing 3D controls that do nothing is worse than not showing them. A
-    /// camera is 3D by construction whatever its switch says.
-    #[frb(sync)]
-    pub fn is_three_d(&self) -> Result<bool, BridgeError> {
-        let layer = self.item()?;
-        Ok(layer.switches.three_d
-            || matches!(layer.kind, lumit_core::model::LayerKind::Camera { .. }))
-    }
-
     /// This layer's whole transform.
     #[frb(sync)]
     pub fn get_transform(&self) -> Result<BridgeTransform, BridgeError> {
