@@ -436,7 +436,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "light_x",
                 label: "Light x",
                 // px@comp (K-260), like the physical flare's light. Open both
@@ -449,7 +449,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "light_y",
                 label: "Light y",
                 kind: ParamKind::Float {
@@ -480,7 +480,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "glow_size",
                 label: "Glow size",
                 kind: ParamKind::Float {
@@ -524,7 +524,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "ghost_size",
                 label: "Ghost size",
                 kind: ParamKind::Float {
@@ -544,7 +544,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "streak_length",
                 label: "Streak length",
                 kind: ParamKind::Float {
@@ -2048,7 +2048,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "anchor_x",
                 label: "Anchor x",
                 // Pixels at full comp resolution (px@comp, §2.3), exactly
@@ -2060,7 +2060,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "anchor_y",
                 label: "Anchor y",
                 kind: ParamKind::Float {
@@ -2070,7 +2070,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "position_x",
                 label: "Position x",
                 // px@comp; the anchor point lands here. Defaults equal the
@@ -2082,7 +2082,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "position_y",
                 label: "Position y",
                 kind: ParamKind::Float {
@@ -2198,7 +2198,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "radius",
                 label: "Radius",
                 // px@comp (§2.3, K-135): the halo gaussian's half-width in
@@ -2481,7 +2481,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "block_size",
                 label: "Block size",
                 // px@comp (§2.3): a deliberately pixel-scale look.
@@ -2504,7 +2504,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "block_amount",
                 label: "Displacement",
                 // % diag (§2.3), the same currency as Blur's Radius/Length.
@@ -2515,7 +2515,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "channel_offset",
                 label: "Channel offset",
                 // % diag: a per-block hashed RGB split (status note above).
@@ -2589,7 +2589,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "scanline_period",
                 label: "Line period",
                 // px@comp: the deliberately pixel-scale scanline pitch.

@@ -53,8 +53,10 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &RadialBlur,
     &Sharpen,
     &SharpenSimple,
+    &SpriteFlare,
     &RgbSplit,
     &ChromaticAberration,
+    &Flash,
     &ColourBalance,
     &Saturation,
     &Vibrancy,
@@ -64,6 +66,10 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Contrast,
     &Gamma,
     &Temperature,
+    &Transform,
+    &Glow,
+    &BlockGlitch,
+    &Scanlines,
     &Invert,
     &Tint,
 ];
@@ -242,6 +248,45 @@ impl GpuEffect for SharpenSimple {
                 amount,
                 radius,
                 mix,
+            },
+        )
+    }
+}
+
+struct SpriteFlare;
+impl GpuEffect for SpriteFlare {
+    fn match_name(&self) -> &'static str {
+        "sprite_flare"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let s = effects::sprite_flare::SpriteFlare::read(p).packed();
+        fx.sprite_flare(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::SpriteFlareOp {
+                light: s.light,
+                intensity: s.intensity,
+                tint: s.tint,
+                glow_size: s.glow_size,
+                glow_intensity: s.glow_intensity,
+                ghosts: s.ghosts,
+                ghost_spacing: s.ghost_spacing,
+                ghost_size: s.ghost_size,
+                ghost_intensity: s.ghost_intensity,
+                streak_length: s.streak_length,
+                streak_intensity: s.streak_intensity,
+                streak_angle_deg: s.streak_angle_deg,
+                mix: s.mix,
             },
         )
     }
@@ -451,6 +496,39 @@ impl GpuEffect for Vibrancy {
     }
 }
 
+struct Flash;
+impl GpuEffect for Flash {
+    fn match_name(&self) -> &'static str {
+        "flash"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        // Strength is the resolve-time envelope (K-385), already in the bag; the
+        // wrapper does no time maths of its own, exactly as it does no arithmetic
+        // of its own.
+        let f = effects::flash::Flash::read(p);
+        let (strength, colour, mix) = f.packed(effects::flash::Flash::strength_of(p));
+        fx.flash(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::FlashOp {
+                strength,
+                colour,
+                mix,
+            },
+        )
+    }
+}
+
 struct Vignette;
 impl GpuEffect for Vignette {
     fn match_name(&self) -> &'static str {
@@ -583,6 +661,162 @@ impl GpuEffect for Temperature {
             &lumit_gpu::fx::TemperatureOp {
                 gain_r,
                 gain_b,
+                mix,
+            },
+        )
+    }
+}
+
+struct Transform;
+impl GpuEffect for Transform {
+    fn match_name(&self) -> &'static str {
+        "transform"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (anchor, position, scale, rotation_deg, opacity, mix) =
+            effects::transform::Transform::read(p).packed();
+        // The affine is the one lumit-core helper both paths build through, so
+        // the CPU reference and the kernel consume identical numbers (K-031).
+        let (m, off, opacity) =
+            lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, opacity);
+        fx.transform(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::TransformOp {
+                m,
+                off,
+                opacity,
+                mix,
+                // The Transform effect has no Edges control: a transparent
+                // border, its long-standing behaviour.
+                edge: 0,
+            },
+        )
+    }
+}
+
+struct Glow;
+impl GpuEffect for Glow {
+    fn match_name(&self) -> &'static str {
+        "glow"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (radius_px, threshold, knee, intensity, tint, mix) =
+            effects::glow::Glow::read(p).packed();
+        fx.glow(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::GlowOp {
+                radius_px,
+                threshold,
+                knee,
+                intensity,
+                tint,
+                mix,
+            },
+        )
+    }
+}
+
+struct BlockGlitch;
+impl GpuEffect for BlockGlitch {
+    fn match_name(&self) -> &'static str {
+        "block_glitch"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        // The tick is the resolve-time discretised layer time (K-385), already
+        // in the bag; the wrapper does no time maths of its own, exactly as it
+        // does no arithmetic of its own.
+        let b = effects::block_glitch::BlockGlitch::read(p);
+        let (
+            intensity,
+            seed,
+            tick,
+            block_size_px,
+            jitter_frac,
+            amount_px,
+            chan_px,
+            slice_frac,
+            mix,
+        ) = b.packed(effects::block_glitch::BlockGlitch::tick_of(p));
+        fx.block_glitch(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BlockGlitchOp {
+                intensity,
+                seed,
+                tick,
+                block_size_px,
+                jitter_frac,
+                amount_px,
+                chan_px,
+                slice_frac,
+                mix,
+            },
+        )
+    }
+}
+
+struct Scanlines;
+impl GpuEffect for Scanlines {
+    fn match_name(&self) -> &'static str {
+        "scanlines"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        // Intensity carries an old project's folded Darkness and the roll is
+        // this frame's offset — both resolve-time derivations (K-385), already
+        // in the bag.
+        let (i, r) = effects::scanlines::Scanlines::derived_of(p);
+        let (intensity, period_px, roll_px, interlace, mix) =
+            effects::scanlines::Scanlines::read(p).packed(i, r);
+        fx.scanlines(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::ScanlinesOp {
+                intensity,
+                period_px,
+                roll_px,
+                interlace,
                 mix,
             },
         )

@@ -3525,10 +3525,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each generated entry against the hand-written one it replaces and fails if they differ by
   so much as a default value — which is what makes it a move rather than a rewrite.
 
-  Eighteen effects have moved so far, in three batches: the ten colour ones first (Colour
+  Twenty-six effects have moved so far, in five batches: the ten colour ones first (Colour
   balance, Saturation, Vibrancy, Exposure, Hue shift, Contrast, Gamma, Temperature, Invert,
   Tint), then the five blur ones (Gaussian blur, Directional blur, Radial blur, Sharpen,
-  Simple sharpen), then Vignette, RGB split and Chromatic aberration. While the rest catch up, a
+  Simple sharpen), then Vignette, RGB split and Chromatic aberration, then Flash, and then
+  seven more: Sprite flare, Transform, Glow, Block glitch and Scanlines, plus Posterize time
+  and Motion blur, which draw nothing at all (see below). While the rest catch up, a
   layer's stack is read **two ways at once**: the effects that have moved keep their
   controls in the shared list of numbers, and the ones that haven't still have a slot each.
   A single ordered list decides what runs when, so an effect that has moved and one that
@@ -3545,6 +3547,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   that one place. That matters more than it sounds: the test that proves the two agree
   compares their *pictures*, so it would never have noticed the two doing the division
   differently. One copy cannot disagree with itself.
+
+- **The effects that need the clock (K-385)** — the arrangement above assumes that reading
+  an effect's controls tells you what it will draw, and a few effects break that: how bright
+  a Flash is now depends on the moment, the composition's beat markers and a whole keyframed
+  Trigger track, Scanlines needs to know how far its lines have scrolled by now, and Block
+  glitch which coarse *tick* the moment falls in — none of them a control anybody could put
+  a slider on. So an effect can answer one extra question at frame time — "given the clock
+  and the markers, what do you work out?" — and its answers join its controls in the same
+  list of numbers, under names marked *derived*. They are never saved and never shown in the
+  panel, just recomputed every frame exactly as the old hand-written passage recomputed them.
+
+- **The two effects that draw nothing** — Posterize time and Motion blur never change a
+  pixel's colour; they change *what moment the layers underneath are drawn at*, which is
+  decided a level above the effect stack, in the walk that works out which frames to render.
+  So they declare their controls like everybody else and declare that they have no picture
+  pass, and the render path skips them entirely.
 
 ## 5. Making a change safely (the recipe)
 

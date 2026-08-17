@@ -9834,3 +9834,38 @@ is no longer expressible — which is also why this rode the migration commit ra
 than landing as the two commits §6 asks for. The unit system cannot state the bug.
 `the_stylise_family_rescales_once_in_each_unit` and
 `a_migrated_spatial_parameter_rescales_as_the_old_op_did` pin the corrected rule.
+
+## K-385 — An effect that needs the clock asks for it through one resolve-time hook
+
+**DECIDED** (2026-08-17). Unblocks the registry migration for the effects the blur and
+stylise batches held back — Flash, Scanlines, Block glitch, and the temporal family —
+which derive values from layer time, the marker context, or a whole keyframe track:
+things the parameter bag cannot carry, because they are not parameters.
+
+`EffectDef` grows one optional method, `resolve_derived(cx, push)`, called by the
+generic resolve after the declared parameters. It sees exactly what the old
+`resolve_one` arms saw (the instance, layer time, the raster diagonal, the §2.3 preview
+factor, and the marker and expression contexts) and its only output is values pushed
+into the bag under derived
+`ParamId` constants that live beside the effect's schema ids. Derived values are never
+panel rows, never keyframed, never serialised — they are recomputed every resolve, as
+the old arms recomputed them. The frame key is untouched: time is the frame's identity
+and markers are document state it already covers.
+
+The alternative — leaving a bespoke match for "the time-dependent ones" — would have
+made resolve_one immortal, and the migration's whole point is that it dies.
+docs/impl/effect-registry.md §2.4a carries the shape.
+
+## K-386 — A wrong Unit::Raw found during migration is corrected where it is found
+
+**DECIDED** (2026-08-17). Generalises [K-384](#k-384): the registry migration keeps
+finding parameters whose old `rescale_px` treatment was wrong — raster-pixel values
+listed as "nothing in pixels" that therefore never rescaled with the preview factor
+(K-266's class of fault). Scanlines' period and Block glitch's sizes joined Radial
+blur's amount in this batch.
+
+The rule, so each instance does not need its own entry: when migration shows a
+parameter's true unit and the old dispatch mis-declared it, the declared unit wins,
+the module documents the change, and `every_parameter_declares_a_unit`'s golden list
+pins it. The output change is the *correction* of a preview≠export disagreement, never
+a new look at full resolution — an oracle that moves at full raster still means a bug.

@@ -17,8 +17,43 @@
 //! (docs/12), and in time the user's own — arrive through the same trait object
 //! at run time, which is the seam this arrangement exists for.
 
-use super::params::Params;
+use std::sync::Arc;
+
+use super::markers::MarkerContext;
+use super::params::{ParamId, Params, Value};
 use super::schema::EffectSchema;
+use crate::expression::ExpressionContext;
+use crate::model::EffectInstance;
+
+/// What resolve-time derivation sees (docs/impl/effect-registry.md §2.4a, K-385).
+///
+/// **In plain terms.** Most effects are entirely described by their controls: a
+/// radius, a colour, a mix. A few are not — a Flash fired from beat markers has
+/// to know what time it is, which beats the comp carries, and the shape of a
+/// whole keyframed track, none of which is a control anyone could slide. This is
+/// the small parcel of "everything that is not a parameter" handed to the one
+/// hook that needs it, and it carries exactly what the hand-written resolve arms
+/// used to read: no more, so the hook cannot quietly grow into a second engine.
+pub struct ResolveCx<'a> {
+    /// The instance being resolved — its stored properties in full, which is
+    /// what lets a derivation read a whole keyframed track rather than one
+    /// evaluated number.
+    pub inst: &'a EffectInstance,
+    /// Layer time, seconds (the held/sample time for a temporal re-render).
+    pub lt: f64,
+    /// The raster's diagonal in pixels, for a derivation whose result is spatial.
+    pub diag_px: f32,
+    /// Raster pixels per comp pixel (the §2.3 preview factor), for a derivation
+    /// whose result is built from a px@comp control — Scanlines' roll offset is
+    /// a product of the layer time and the *raster* line period, so it cannot be
+    /// worked out from the authored number alone.
+    pub px_scale: f32,
+    /// The layer's §1.4 marker context ([`MarkerContext::NONE`] where no comp is
+    /// in play — every marker-driven effect falls back gracefully on it).
+    pub markers: &'a MarkerContext,
+    /// The context every animated read evaluates through, expressions included.
+    pub context: Arc<ExpressionContext>,
+}
 
 /// One effect's behaviour: everything the engine needs of it that is not the
 /// declaration itself.
@@ -40,6 +75,18 @@ pub trait EffectDef: Sync + Send + 'static {
     /// effects (Posterize time, Accumulation motion blur) that have no image
     /// operation of their own.
     fn apply_cpu(&self, _rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {}
+
+    /// Values derived at resolve time from things that are not parameters
+    /// (docs/impl/effect-registry.md §2.4a, K-385): layer time, the marker
+    /// context, a whole keyframed track.
+    ///
+    /// Pushed into the bag after the declared parameters, under `ParamId`s the
+    /// effect declares beside its schema ids and namespaces `derived.`. They are
+    /// never panel rows, never keyframed and never serialised — they are the
+    /// *result* of parameters and time, recomputed every resolve exactly as the
+    /// hand-written arms recomputed them. The hook reads and pushes; it writes
+    /// nothing else. The default pushes nothing, which is every effect but a few.
+    fn resolve_derived(&self, _cx: &ResolveCx<'_>, _push: &mut dyn FnMut(ParamId, Value)) {}
 
     /// Whether this effect has an image operation at all. `false` for the
     /// orchestration-only effects, which the render path skips and the

@@ -218,6 +218,50 @@ different uniform, which is why those effects had two `Resolved` variants each b
 moved. `packed()` answering with a small enum keeps the fork in one place: the CPU
 reference and the GPU wrapper both match on it, so neither can decide the mode for itself.
 
+### 2.4a Resolve-time derivation (the time and marker seam, K-385)
+
+A few effects derive values at resolve time from things that are not parameters: Flash
+builds a beat envelope from the marker context and a whole keyframed trigger track,
+Scanlines rolls by layer time, Block glitch ticks by it, and the temporal family samples
+around it. The bag cannot carry "layer time" as a declared parameter - it is not one -
+so `EffectDef` grows one optional hook:
+
+```rust
+/// What resolve-time derivation sees: the instance, layer time, the raster
+/// diagonal, the §2.3 preview factor, the marker context and the expression
+/// context - exactly what the old `resolve_one` arms read, no more.
+pub struct ResolveCx<'a> { ... }
+
+trait EffectDef {
+    ...
+    /// Values derived at resolve time from non-parameters. Pushed into the bag
+    /// under `ParamId`s the effect declares beside its schema consts (their ids
+    /// namespaced `derived.`), after the declared parameters, in declaration
+    /// order. The default pushes nothing, which is every effect but a few.
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {}
+}
+```
+
+Three rules keep it honest:
+
+- **The hook reads, never writes.** It sees the instance and the contexts; the only
+  output is the pushed values. Host maths that needs no time stays in `pack`.
+- **Derived ids are constants, not schema rows.** They never appear in the panel, are
+  not keyframeable, and are not serialised - they are the *result* of parameters and
+  time, recomputed every resolve. The collision test covers them like any other id.
+- **The frame key needs nothing new.** Layer time is part of the frame's identity and
+  the marker context is document state the key already covers; the hook only moves
+  where the derivation runs, exactly as the old arms did it.
+
+**The trap: a derived value does not rescale.** `ResolvedStack::rescale_spatial` finds a
+value's unit by matching its id against the schema, and a derived id matches nothing — so
+a derived value in raster pixels is left behind when a stack resolved against one raster is
+reused at another. Scanlines is the live case: `derived.roll_px` is a product of the *raster*
+line period, and under rescale the period moves while the offset does not, shifting the
+pattern's phase with the size. Prefer deriving a quantity that is already unit-free (a tick,
+a strength, a count of periods) over one in pixels; where pixels are unavoidable the rescale
+pass has to be told, and that is a decision, not a batch (see §6).
+
 ### 2.5 The GPU half (`lumit-render/src/gpufx.rs`)
 
 `lumit-gpu` only dev-depends on `lumit-core` (docs/05), so the GPU dispatch table cannot
@@ -347,14 +391,22 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    `exposure`, `contrast`, `gamma`, `tint`, `invert`, `hue_shift`, `temperature`,
    `vibrancy`, `colour_balance`), each batch deleting its `Resolved` variants, its
    `resolve_one` arm, its `cpu::apply` arm and its `run_ops` arm.
-3. The awkward ones last, and each on its own: `dof` (23 parameters, folded aperture),
-   `shake` (sub-frame samples), `lens_flare` (50 parameters, bakes, a matte input),
-   `matte_key`, `motion_blur`, `datamosh`. **`flash`, `scanlines` and `block_glitch` join
-   that list** — not for their size but for their seam: each derives a number from the
-   *layer time* at resolve (Scanlines' roll offset, Block glitch's discretised tick), and
-   Flash also reads the §1.4 marker context and its Trigger property's whole keyframe track.
-   `resolve_into_arena` evaluates declared parameters and nothing else, so migrating them
-   means widening `EffectDef` with a resolve-time hook first — a decision, not a batch.
+3. The awkward ones last, and each on its own. `flash`, `scanlines` and `block_glitch` were
+   on this list for their seam rather than their size — each derives a number from the
+   *layer time* at resolve, and Flash also reads the §1.4 marker context and its Trigger
+   property's whole keyframe track — and came off it when K-385 widened `EffectDef` with
+   §2.4a's hook. What is left is blocked by something the bag cannot carry:
+   - a **side table** threaded beside the ops and consumed by a counter that must stay 1:1
+     and in order with them: `lut` (`luts[lut_i]`), `dof` (23 parameters, folded aperture,
+     and a layer-input slot), `light_wrap` (a layer-input slot off the same `dof_i`
+     counter), `lens_flare` (50 parameters, bakes, `flare_mattes[flare_i]`);
+   - a **neighbour frame or flow field** off the layer's decode: `echo`, `motion_blur`,
+     `datamosh`;
+   - a **variable-shape payload**: `shake`'s nine sub-frame samples, which also fork the
+     dispatch to a different kernel. `Value` has no array kind, so this is a decision.
+
+   `matte_key` is on none of those counts — a flat bundle of scalars, colours and two
+   normalised Choice codes — and is simply the next one to move.
 4. Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body.
 5. Dynamic parameters, then spare parameters, then the panel affordances for both.
 

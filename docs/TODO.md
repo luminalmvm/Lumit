@@ -52,22 +52,42 @@ colour effects resolve, grade and dispatch through the registry, and the render 
 left is the per-family migration on top, in batches; these are the batches that have not
 landed. Delete each line as its batch lands.
 
-- **Migrate the rest of the stylise family, and the temporal one**, then the awkward six on
-    their own: `dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`, `datamosh`. What has
-    landed: the blur family (`blur`, `directional_blur`, `radial_blur`, `sharpen`,
+- **Migrate `matte_key`.** It is the last effect with no side table: its op is a flat bundle
+    of scalars, colours and two Choice codes, so nothing but its size held it back. Its one
+    wrinkle is that the two Choices are normalised through `MatteKeyView::from_code(..).code()`
+    and `ReplaceMethod::from_code(..).code()` at resolve, so an out-of-range stored choice
+    lands on a valid one - the generic pass pushes the raw `Choice`, so that normalisation
+    belongs in `packed()`.
+- **Then the eight that need the seam widened again**, each on its own and each blocked by
+    something the bag cannot carry:
+    - a **side table** threaded beside the ops, consumed by a counter that must stay 1:1 and
+      in order with them - `lut` (`luts[lut_i]`), `dof` and `light_wrap` (both take a
+      layer-input slot off the shared `dof_i` counter), `lens_flare` (`flare_mattes[flare_i]`);
+    - a **neighbour frame or flow field** off the layer's decode - `echo` (neighbours),
+      `motion_blur` (flow field), `datamosh` (both);
+    - a **variable-shape payload**: `shake` carries nine sub-frame samples of four floats
+      when its own motion blur is on, and dispatches a different kernel for it. `Value` has
+      no array kind, so this one is a decision (32-odd `derived.*` ids, or a new kind), not
+      a batch.
+    What has landed: the blur family (`blur`, `directional_blur`, `radial_blur`, `sharpen`,
     `sharpen_simple`), the first batch with spatial units, so `PctDiag` and the generic
     rescale are exercised by `a_migrated_spatial_parameter_rescales_as_the_old_op_did`; then
     `vignette`, `rgb_split` and `chromatic_aberration`, which brought the first `Px`
     parameter and the first *mode fork* (an effect whose Wavelength toggle picks a different
-    kernel, packed as an enum rather than a tuple).
-- **`flash`, `scanlines` and `block_glitch` need the seam widened first**, so they were held
-    back from the stylise batch. Each derives a number from the *layer time* at resolve -
-    Scanlines' roll offset, Block glitch's discretised tick - and Flash reads the §1.4 marker
-    context and its Trigger property's whole keyframe track, none of which
-    `resolve_into_arena` carries: it evaluates declared parameters and nothing else. Either
-    `EffectDef` gains a hook that runs at resolve with the time and the marker context, or
-    those three keep their arms until the end. Decide before the temporal family, which has
-    the same shape (Echo, Datamosh and Posterize time are all time-derived).
+    kernel, packed as an enum rather than a tuple); then `flash`, `scanlines` and
+    `block_glitch` through the K-385 resolve-time hook, `sprite_flare`, `transform` and
+    `glow` beside them, and `posterize_time` and `accumulation_mb`, the first two effects
+    that declare no image op at all.
+- **Rescale a derived spatial value, or stop deriving one.** Scanlines' `derived.roll_px` is
+    in raster pixels, but `ResolvedStack::rescale_spatial` only moves values whose id matches
+    a schema parameter with a spatial unit - a derived id matches nothing, so a stack resolved
+    against one raster and reused at another (`realise.rs`, a precomp at a different size)
+    scales the line period and leaves the roll offset behind, and the pattern's phase shifts
+    with the size. Before K-385 neither moved, so the phase was right and the period wrong;
+    now it is the other way about. Two fixes, both small: give `EffectDef` a
+    `derived_spatial()` list the rescale pass consults (keeps the resolve maths bit-identical),
+    or derive the roll in *periods* rather than pixels and multiply in `packed()` (no new API,
+    but the f64 product rounds once more and so is not bit-identical to the old arm).
 - **Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body**,
     and with them the migration-only `the_generated_schema_matches_the_hand_written_one`.
 - **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed

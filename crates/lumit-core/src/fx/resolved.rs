@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use super::markers::flash_nth;
 use super::*;
 use crate::{
     expression::ExpressionContext,
@@ -199,9 +198,6 @@ pub enum Resolved {
     /// Nothing produces this yet: the carrier lands before the first effect
     /// moves, so every consumer already has the arm it will need.
     Registry { op: u32 },
-    /// Sprite flare (docs/08 §3.29, K-359): the art-directed flare, placed
-    /// from a light position rather than from the picture's bright pixels.
-    SpriteFlare(crate::fx::cpu::SpriteFlareParams),
     /// Light wrap (docs/08 §3.28, K-358): the background's light spilled
     /// around the foreground's edge. Consumes a layer-input slot — the
     /// referenced Background layer — exactly as Depth of field's depth does.
@@ -213,51 +209,12 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
-    Flash {
-        /// The evaluated envelope × intensity, 0..1 (0 = no flash).
-        strength: f32,
-        /// Scene-linear RGBA flash colour (alpha unused: the flash respects
-        /// the layer's own footprint).
-        colour: [f32; 4],
-        /// 0..1.
-        mix: f32,
-    },
     /// Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
     /// keyer. The op carries its full parameter bundle ([`MatteKeyParams`]) so the
     /// CPU reference and the WGSL kernel consume the identical numbers (K-031). The
     /// maths are continuous everywhere (no hard step), so the §1.6 oracle holds; the
     /// default green screen colour keys out of the box, and Mix 0 is the identity.
     MatteKey(MatteKeyParams),
-    Transform {
-        /// Anchor point, raster pixels (converted from px@comp, §2.3).
-        anchor: [f32; 2],
-        /// Where the anchor lands, raster pixels.
-        position: [f32; 2],
-        /// Per-axis factor; 1 is natural size, negative flips.
-        scale: [f32; 2],
-        /// Degrees about the anchor (0° = none; y-down raster, so positive
-        /// turns clockwise on screen, matching the layer transform).
-        rotation_deg: f32,
-        /// 0..1, multiplied into the premultiplied output.
-        opacity: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    Glow {
-        /// The halo gaussian's half-width in raster pixels.
-        radius_px: f32,
-        /// Linear-light bright threshold, ≥ 0 (unbounded above, K-090).
-        threshold: f32,
-        /// Soft-knee width around the threshold, 0..1.
-        knee: f32,
-        /// Gain on the added halo; 0 is the neutral point.
-        intensity: f32,
-        /// Scene-linear RGBA halo tint (alpha unused: the halo's own alpha
-        /// is untinted coverage).
-        tint: [f32; 4],
-        /// 0..1.
-        mix: f32,
-    },
     /// A shake, already sampled at this frame (the noise runs at resolve
     /// time, host-side): the current wobble, dispatched through the Transform
     /// kernel via [`shake_affine`] — no kernel of its own. `edge` (P3, K-145)
@@ -285,50 +242,6 @@ pub enum Resolved {
         /// Sampled host-side because the noise lattice needs 64-bit integers
         /// the GPU has not got (docs/08 §3.12).
         mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
-    },
-    /// Block glitch (docs/08 §3.12, split out by K-107). `tick` is the
-    /// local time already discretised at [`GLITCH_TICK_HZ`] (host-side, so
-    /// the kernel never sees raw time or does its own time maths).
-    /// Intensity 0 is the bit-exact passthrough (pinned by test) — see the
-    /// schema's status note for why every hashed quantity here is scaled by
-    /// it.
-    BlockGlitch {
-        /// The master 0..1 dial; scales every hashed quantity.
-        intensity: f32,
-        seed: u32,
-        /// Local time discretised at [`GLITCH_TICK_HZ`] (§3.12 status
-        /// note): per-block hashing reads this, not raw time.
-        tick: i32,
-        /// Raster pixels (px@comp × the §2.3 preview factor).
-        block_size_px: f32,
-        /// 0..1, fraction of block_size_px (the "Rows/columns jitter").
-        jitter_frac: f32,
-        /// Peak per-block displacement, raster pixels (% diag).
-        amount_px: f32,
-        /// Peak per-block R/B split, raster pixels (% diag).
-        chan_px: f32,
-        /// 0..1: odds (before the Intensity scale) a block slice-repeats.
-        slice_frac: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Scanlines (docs/08 §3.12, split by K-107; single Intensity since
-    /// FX-13/K-147). `roll_px` is the scanline pattern's already-computed
-    /// pixel offset (roll speed × local time × period), host-computed so the
-    /// kernel never sees raw time. Intensity 0 is the bit-exact passthrough
-    /// (pinned by test).
-    Scanlines {
-        /// The single 0..1 dial: how dark the dark lines get (1 = black).
-        /// An old project's separate Darkness folds into this at resolve.
-        intensity: f32,
-        /// Raster pixels (px@comp × the §2.3 preview factor).
-        period_px: f32,
-        /// The scanline pattern's pixel offset at this frame (roll speed ×
-        /// local time × period_px, host-computed).
-        roll_px: f32,
-        interlace: bool,
-        /// 0..1.
-        mix: f32,
     },
     /// Datamosh (docs/08 §3.12, K-104, its own effect since K-107; reworked to
     /// a flow-driven melt by K-164/T19): follow the current→previous flow field
@@ -557,26 +470,7 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
     for op in ops {
         match op {
             Resolved::LightWrap { width_px, .. } => *width_px *= f,
-            Resolved::SpriteFlare(p) => {
-                // Every distance the flare draws with is px@comp, so all of
-                // them shrink together with the preview raster (K-266) — the
-                // light's position included, or the whole flare would slide.
-                p.light[0] *= f;
-                p.light[1] *= f;
-                p.glow_size *= f;
-                p.ghost_size *= f;
-                p.streak_length *= f;
-            }
-            Resolved::Flash { .. } | Resolved::MatteKey(_) | Resolved::Lut { .. } => {}
-            Resolved::Transform {
-                anchor, position, ..
-            } => {
-                anchor[0] *= f;
-                anchor[1] *= f;
-                position[0] *= f;
-                position[1] *= f;
-            }
-            Resolved::Glow { radius_px, .. } => *radius_px *= f,
+            Resolved::MatteKey(_) | Resolved::Lut { .. } => {}
             Resolved::Shake { offset_px, mb, .. } => {
                 offset_px[0] *= f;
                 offset_px[1] *= f;
@@ -587,23 +481,10 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
                     }
                 }
             }
-            Resolved::BlockGlitch {
-                block_size_px,
-                amount_px,
-                chan_px,
-                ..
-            } => {
-                *block_size_px *= f;
-                *amount_px *= f;
-                *chan_px *= f;
-            }
-            // Scanlines' period and Datamosh's blocks follow their own
-            // texture-relative conventions (docs/08); Echo and MotionBlur
-            // carry times and flow scales, not pixels.
-            Resolved::Scanlines { .. }
-            | Resolved::Datamosh { .. }
-            | Resolved::Echo { .. }
-            | Resolved::MotionBlur { .. } => {}
+            // Datamosh's blocks follow their own texture-relative convention
+            // (docs/08); Echo and MotionBlur carry times and flow scales, not
+            // pixels.
+            Resolved::Datamosh { .. } | Resolved::Echo { .. } | Resolved::MotionBlur { .. } => {}
             Resolved::Dof {
                 near_aperture,
                 far_aperture,
@@ -728,19 +609,29 @@ pub fn resolve_stack_temporal_named(
         // `Vec` keeps the ordering either way, so the two halves of the stack
         // cannot get out of step.
         if let Some(def) = BUILTIN_DEFS.get(&e.effect.match_name) {
+            // An orchestration-only effect (Posterize time, Accumulation motion
+            // blur) resolves to nothing at all: it changes *what time* the layers
+            // it covers render at, which the frame walk reads straight off the
+            // instance, and it has no per-pixel op to order among the others.
+            // Skipping it here is exactly what `resolve_one` returning `None`
+            // meant for it — no op, no bag, and no id in the indicator's list.
+            if !def.is_image_op() {
+                continue;
+            }
             resolve_into_arena(
                 def,
                 e,
                 lt,
                 diag_px,
                 px_scale,
+                markers,
                 &mut out.bags,
                 context.clone(),
             );
             let op = (out.bags.len() - 1) as u32;
             out.ops.push(Resolved::Registry { op });
             ids.push(e.id);
-        } else if let Some(op) = resolve_one(e, lt, diag_px, px_scale, markers, context.clone()) {
+        } else if let Some(op) = resolve_one(e, lt, diag_px, px_scale, context.clone()) {
             out.ops.push(op);
             ids.push(e.id);
         }
@@ -774,12 +665,19 @@ pub fn resolve_stack_temporal_named(
 /// Both are what [`ResolvedStack::rescale_spatial`] moves again if the stack is
 /// later reused at another size, which is the symmetry the old `rescale_px`
 /// had.
+///
+/// After the declared parameters comes the one thing the declaration cannot
+/// carry: values derived from layer time, the marker context or a whole
+/// keyframed track ([`EffectDef::resolve_derived`], K-385). Almost every effect
+/// pushes nothing there.
+#[allow(clippy::too_many_arguments)]
 fn resolve_into_arena(
     def: &'static dyn EffectDef,
     e: &EffectInstance,
     lt: f64,
     diag_px: f32,
     px_scale: f32,
+    markers: &MarkerContext,
     bags: &mut ResolvedStack,
     context: Arc<ExpressionContext>,
 ) {
@@ -829,18 +727,31 @@ fn resolve_into_arena(
         };
         bags.push(ParamId::new(p.id), value);
     }
+    def.resolve_derived(
+        &ResolveCx {
+            inst: e,
+            lt,
+            diag_px,
+            px_scale,
+            markers,
+            context,
+        },
+        &mut |id, value| bags.push(id, value),
+    );
 }
 
 /// Resolve one effect instance to its flat [`Resolved`] op at layer time `lt`,
 /// or None when it is a placeholder, an unknown name, or an orchestration-only
 /// effect (Posterize time, accumulation motion blur) that has no per-pixel op.
 /// The shared core of [`resolve_stack`] and [`resolve_stack_temporal`].
+///
+/// It takes no marker context: Flash was the only arm that read one, and it
+/// reads it through [`ResolveCx`] now (K-385).
 fn resolve_one(
     e: &EffectInstance,
     lt: f64,
     diag_px: f32,
     px_scale: f32,
-    markers: &MarkerContext,
     expression_context: Arc<ExpressionContext>,
 ) -> Option<Resolved> {
     // Every float parameter reads through the expression context. Bound once
@@ -848,35 +759,6 @@ fn resolve_one(
     // expressions existed.
     let fl = |id: &str| e.float_at_with_context(id, lt, expression_context.clone());
     match e.effect.match_name.as_str() {
-        "sprite_flare" => {
-            let tint = e.colour_at("tint", lt).unwrap_or([1.0; 4]);
-            Some(Resolved::SpriteFlare(crate::fx::cpu::SpriteFlareParams {
-                // px@comp through the §2.3 preview factor, exactly as the
-                // physical flare's light is (K-260).
-                light: [
-                    fl("light_x").unwrap_or(640.0) as f32 * px_scale,
-                    fl("light_y").unwrap_or(360.0) as f32 * px_scale,
-                ],
-                intensity: (fl("intensity").unwrap_or(1.0) as f32).max(0.0),
-                tint: [
-                    (tint[0] as f32).max(0.0),
-                    (tint[1] as f32).max(0.0),
-                    (tint[2] as f32).max(0.0),
-                ],
-                glow_size: (fl("glow_size").unwrap_or(120.0) as f32).max(0.0) * px_scale,
-                glow_intensity: (fl("glow_intensity").unwrap_or(1.0) as f32).max(0.0),
-                ghosts: (fl("ghosts").unwrap_or(6.0).round() as i64)
-                    .clamp(0, crate::fx::cpu::SPRITE_FLARE_MAX_GHOSTS as i64)
-                    as u32,
-                ghost_spacing: (fl("ghost_spacing").unwrap_or(0.35) as f32).max(0.0),
-                ghost_size: (fl("ghost_size").unwrap_or(60.0) as f32).max(0.0) * px_scale,
-                ghost_intensity: (fl("ghost_intensity").unwrap_or(0.35) as f32).max(0.0),
-                streak_length: (fl("streak_length").unwrap_or(300.0) as f32).max(0.0) * px_scale,
-                streak_intensity: (fl("streak_intensity").unwrap_or(0.5) as f32).max(0.0),
-                streak_angle_deg: fl("streak_angle").unwrap_or(0.0) as f32,
-                mix: (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0),
-            }))
-        }
         "light_wrap" => {
             // px@comp like every distance parameter (K-260), through the
             // §2.3 preview factor so a half-resolution preview wraps by the
@@ -887,43 +769,6 @@ fn resolve_one(
             Some(Resolved::LightWrap {
                 width_px,
                 intensity,
-                mix,
-            })
-        }
-        "flash" => {
-            // Instances saved before the marker modes existed carry no
-            // "mode" parameter and resolve as Manual — byte-identically.
-            let mode = match e.param("mode") {
-                Some(EffectValue::Choice(c)) => *c,
-                _ => 0,
-            };
-            let envelope = match mode {
-                // Trigger (1) and Strobe (2): the §3.7 beat envelope
-                // from the §1.4 context; Strobe thins the beat list to
-                // every Nth.
-                1 | 2 => {
-                    let duration = fl("duration").unwrap_or(2.0).max(0.0);
-                    let fade = matches!(e.param("shape"), Some(EffectValue::Choice(1)));
-                    let nth = if mode == 2 { flash_nth(e, lt) } else { 1 };
-                    let phase = fl("phase").unwrap_or(0.0);
-                    flash_beat_envelope(markers, lt, duration, fade, nth, phase)
-                }
-                // Manual: keyframed hits on Trigger, decaying over
-                // Decay — the original form, untouched.
-                _ => {
-                    let decay_s = (fl("decay").unwrap_or(120.0) / 1000.0).max(0.0);
-                    match e.param("trigger") {
-                        Some(EffectValue::Float(p)) => flash_envelope(p, lt, decay_s),
-                        _ => 0.0,
-                    }
-                }
-            };
-            let intensity = fl("intensity").unwrap_or(100.0).max(0.0) / 100.0;
-            let colour = e.colour_at("colour", lt).unwrap_or([1.0; 4]);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Flash {
-                strength: (envelope * intensity).clamp(0.0, 1.0) as f32,
-                colour: colour.map(|c| c as f32),
                 mix,
             })
         }
@@ -1303,24 +1148,6 @@ fn resolve_one(
                 mix,
             })
         }
-        "glow" => {
-            // Radius is px@comp (K-135), scaled by the §2.3 preview factor so
-            // a Half preview blurs the same halo as Full, only softer.
-            let radius = fl("radius").unwrap_or(24.0) as f32;
-            let threshold = (fl("threshold").unwrap_or(0.8) as f32).max(0.0);
-            let knee = (fl("knee").unwrap_or(0.5) as f32).clamp(0.0, 1.0);
-            let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
-            let tint = e.colour_at("tint", lt).unwrap_or([1.0; 4]);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Glow {
-                radius_px: (radius * px_scale).max(0.0),
-                threshold,
-                knee,
-                intensity,
-                tint: tint.map(|c| c as f32),
-                mix,
-            })
-        }
         "shake" => {
             let amp_pct = (fl("amplitude").unwrap_or(1.5) as f32).max(0.0);
             let freq = fl("frequency").unwrap_or(8.0).max(0.0);
@@ -1399,66 +1226,6 @@ fn resolve_one(
                 edge: edge.code(),
                 mix,
                 mb,
-            })
-        }
-        "block_glitch" => {
-            let intensity = (fl("intensity").unwrap_or(0.35) as f32).clamp(0.0, 1.0);
-            let seed = match e.param("seed") {
-                Some(EffectValue::Seed(s)) => *s,
-                _ => 0,
-            };
-            // Local time discretised at the fixed tick rate (§3.12
-            // status note): block hashing reads this, never raw time.
-            let tick = (lt * GLITCH_TICK_HZ).floor() as i32;
-            let block_size_px = (fl("block_size").unwrap_or(24.0) as f32 * px_scale).max(1.0);
-            let jitter_frac = (fl("block_jitter").unwrap_or(25.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let amount_pct = fl("block_amount").unwrap_or(3.0) as f32;
-            let chan_pct = fl("channel_offset").unwrap_or(1.0) as f32;
-            let slice_frac = (fl("slice_repeat").unwrap_or(20.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::BlockGlitch {
-                intensity,
-                seed,
-                tick,
-                block_size_px,
-                jitter_frac,
-                amount_px: (amount_pct / 100.0 * diag_px).max(0.0),
-                chan_px: (chan_pct / 100.0 * diag_px).max(0.0),
-                slice_frac,
-                mix,
-            })
-        }
-        "scanlines" => {
-            // The single Intensity (FX-13, K-147): 0..1 = how dark the dark
-            // lines get. An old project also carried a separate Darkness
-            // param (0..100): fold it in, so the loaded look is the old
-            // Intensity × Darkness product exactly. A new project has no
-            // Darkness param, so the raw Intensity stands.
-            let raw = fl("intensity").unwrap_or(0.35);
-            let folded = match fl("scanline_darkness") {
-                Some(darkness_pct) => raw * (darkness_pct / 100.0),
-                None => raw,
-            };
-            let intensity = (folded as f32).clamp(0.0, 1.0);
-            let period_px = (fl("scanline_period").unwrap_or(3.0) as f32 * px_scale).max(1.0);
-            let roll_speed = fl("scanline_roll").unwrap_or(0.0);
-            // The scanline pattern's pixel offset at this frame (roll
-            // speed × local time × period), so the kernel never sees
-            // raw time or does its own time maths (§2.4: the CPU/GPU
-            // must agree, and f32 time would round differently near a
-            // tick boundary than f64 does — precomputing sidesteps it).
-            let roll_px = (roll_speed * lt * f64::from(period_px)) as f32;
-            let interlace = match e.param("scanline_interlace") {
-                Some(EffectValue::Bool(b)) => *b,
-                _ => false,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Scanlines {
-                intensity,
-                period_px,
-                roll_px,
-                interlace,
-                mix,
             })
         }
         "datamosh" => {
@@ -1546,22 +1313,6 @@ fn resolve_one(
                 samples,
                 mix,
                 view,
-            })
-        }
-        "transform" => {
-            // px@comp parameters scale by the preview factor (§2.3) so
-            // Half preview frames exactly like Full, only softer.
-            let px = |id: &str| fl(id).unwrap_or(0.0) as f32 * px_scale;
-            let pct = |id: &str| fl(id).unwrap_or(100.0) as f32 / 100.0;
-            let opacity = (fl("opacity").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Transform {
-                anchor: [px("anchor_x"), px("anchor_y")],
-                position: [px("position_x"), px("position_y")],
-                scale: [pct("scale_x"), pct("scale_y")],
-                rotation_deg: fl("rotation").unwrap_or(0.0) as f32,
-                opacity,
-                mix,
             })
         }
         _ => None,

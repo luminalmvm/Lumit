@@ -102,6 +102,85 @@ fn resolve_migrated<T: EffectMetadata>(
     T::read(ops.bags.get(0).expect("the migrated op").params)
 }
 
+/// The resolved bag of a one-effect migrated stack, in push order — for the
+/// assertions that are about the *bag* rather than about the declared struct: a
+/// derived value (K-385), or how many entries an effect resolves to at all.
+fn resolve_bag(
+    effects: &[EffectInstance],
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+    markers: &MarkerContext,
+) -> Vec<(ParamId, Value)> {
+    let ops = super::resolve_stack(
+        effects,
+        lt,
+        diag_px,
+        px_scale,
+        markers,
+        Arc::new(ExpressionContext::detached()),
+    );
+    assert_eq!(ops.ops.len(), 1, "expected exactly one resolved op");
+    ops.bags
+        .get(0)
+        .expect("the migrated op")
+        .params
+        .iter()
+        .collect()
+}
+
+/// What a Flash instance hands its kernel at `lt`: the `(strength, colour, mix)`
+/// the old `Resolved::Flash` variant carried, now the resolve-time derivation
+/// (K-385) read back through the effect's own `packed`.
+fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [f32; 4], f32) {
+    let bag = resolve_bag(std::slice::from_ref(e), lt, 1000.0, 1.0, markers);
+    let p = Params::new(&bag);
+    effects::flash::Flash::read(p).packed(effects::flash::Flash::strength_of(p))
+}
+
+/// What a Scanlines instance hands its kernel: the fields the old
+/// `Resolved::Scanlines` variant carried, with the folded intensity and the roll
+/// offset coming out of the resolve-time derivation (K-385).
+fn scanlines_packed(
+    e: &EffectInstance,
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+) -> (f32, f32, f32, bool, f32) {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        lt,
+        diag_px,
+        px_scale,
+        &MarkerContext::NONE,
+    );
+    let p = Params::new(&bag);
+    let (i, r) = effects::scanlines::Scanlines::derived_of(p);
+    effects::scanlines::Scanlines::read(p).packed(i, r)
+}
+
+/// What a Block glitch instance hands its kernel: the fields the old
+/// `Resolved::BlockGlitch` variant carried, with the discretised tick coming out
+/// of the resolve-time derivation (K-385).
+#[allow(clippy::type_complexity)]
+fn block_glitch_packed(
+    e: &EffectInstance,
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+) -> (f32, u32, i32, f32, f32, f32, f32, f32, f32) {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        lt,
+        diag_px,
+        px_scale,
+        &MarkerContext::NONE,
+    );
+    let p = Params::new(&bag);
+    effects::block_glitch::BlockGlitch::read(p)
+        .packed(effects::block_glitch::BlockGlitch::tick_of(p))
+}
+
 // Posterize time (docs/08 §3.25): the held comp time snaps down to the coarser
 // grid. The two comp times that share a held frame MUST return the exact same
 // tau (that equality is what lets the frame cache dedup them) and never divide
@@ -2041,20 +2120,9 @@ fn flash_instantiates_resolves_and_lights_within_the_footprint() {
     assert_eq!(e.colour_at("colour", 0.0), Some([1.0, 1.0, 1.0, 1.0]));
     // Trigger 0: resolves to a zero-strength (identity) flash — the
     // §1.2 trigger-driven exemption.
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::Flash {
-            strength: 0.0,
-            colour: [1.0; 4],
-            mix: 1.0
-        }]
+        flash_packed(&e, 0.0, &MarkerContext::NONE),
+        (0.0, [1.0; 4], 1.0)
     );
 
     // CPU semantics: strength 1 paints the footprint the flash colour.
@@ -3339,23 +3407,19 @@ fn transform_instantiates_and_resolves_with_the_preview_factor() {
     assert_eq!(e.float_at("rotation", 0.0), Some(0.0));
     assert_eq!(e.float_at("opacity", 0.0), Some(100.0));
     // Defaults resolve to the exact identity op.
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
+    let packed = |e: &EffectInstance, diag_px, px_scale| {
+        resolve_migrated::<effects::transform::Transform>(
+            std::slice::from_ref(e),
+            0.0,
+            diag_px,
+            px_scale,
+            &MarkerContext::NONE,
+        )
+        .packed()
+    };
     assert_eq!(
-        r,
-        vec![Resolved::Transform {
-            anchor: [0.0; 2],
-            position: [0.0; 2],
-            scale: [1.0; 2],
-            rotation_deg: 0.0,
-            opacity: 1.0,
-            mix: 1.0
-        }]
+        packed(&e, 1000.0, 1.0),
+        ([0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0)
     );
 
     // px@comp parameters scale by the §2.3 preview factor; percentages
@@ -3370,23 +3434,9 @@ fn transform_instantiates_and_resolves_with_the_preview_factor() {
             _ => {}
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        500.0,
-        0.5,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::Transform {
-            anchor: [20.0, 0.0],
-            position: [50.0, 0.0],
-            scale: [2.0, 1.0],
-            rotation_deg: 90.0,
-            opacity: 1.0,
-            mix: 1.0
-        }]
+        packed(&e, 500.0, 0.5),
+        ([20.0, 0.0], [50.0, 0.0], [2.0, 1.0], 90.0, 1.0, 1.0)
     );
 }
 
@@ -3413,18 +3463,8 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
     assert_eq!(e.colour_at("tint", 0.0), Some([1.0; 4]));
     // Radius is px@comp scaled by the preview factor: 24 px × a half-res
     // (0.5) factor = 12 raster px; diag_px no longer feeds Radius.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Glow {
-            radius_px: 12.0,
-            threshold: 0.8,
-            knee: 0.5,
-            intensity: 1.0,
-            tint: [1.0; 4],
-            mix: 1.0
-        }]
-    );
+    let g = resolve_migrated::<effects::glow::Glow>(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
+    assert_eq!(g.packed(), (12.0, 0.8, 0.5, 1.0, [1.0; 4], 1.0));
     // The Radius schema is now open above (px@comp, K-135).
     let s = schema("glow").unwrap();
     let radius = s.params.iter().find(|p| p.id == "radius").unwrap();
@@ -4276,13 +4316,16 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
     assert!(matches!(e.param("shape"), Some(EffectValue::Choice(0))));
     assert_eq!(e.float_at("every_nth", 0.0), Some(1.0));
     assert_eq!(e.float_at("phase", 0.0), Some(0.0));
-    let dark = Resolved::Flash {
-        strength: 0.0,
-        colour: [1.0; 4],
-        mix: 1.0,
-    };
-    let r = resolve_stack(std::slice::from_ref(&e), 1.0, 1000.0, 1.0, &ctx);
-    assert_eq!(r, vec![dark], "Manual ignores markers entirely");
+    // The old arm's two outcomes, transcribed: strength is the envelope
+    // times Intensity (100 % → 1), clamped, and colour and mix come
+    // straight from the declared rows.
+    let dark = (0.0, [1.0; 4], 1.0);
+    let lit = (1.0, [1.0; 4], 1.0);
+    assert_eq!(
+        flash_packed(&e, 1.0, &ctx),
+        dark,
+        "Manual ignores markers entirely"
+    );
 
     // Trigger mode lights on the beat and is spent past Duration.
     for p in &mut e.params {
@@ -4290,25 +4333,20 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
             p.value = EffectValue::Choice(1);
         }
     }
-    let lit = Resolved::Flash {
-        strength: 1.0,
-        colour: [1.0; 4],
-        mix: 1.0,
-    };
-    let r = resolve_stack(std::slice::from_ref(&e), 1.0, 1000.0, 1.0, &ctx);
-    assert_eq!(r, vec![lit]);
-    let r = resolve_stack(std::slice::from_ref(&e), 1.75, 1000.0, 1.0, &ctx);
-    assert_eq!(r, vec![dark], "3 frames past a 2-frame flash");
+    assert_eq!(flash_packed(&e, 1.0, &ctx), lit);
+    assert_eq!(
+        flash_packed(&e, 1.0, &ctx).0,
+        (flash_beat_envelope(&ctx, 1.0, 2.0, false, 1, 0.0) * 1.0).clamp(0.0, 1.0) as f32,
+        "the derived strength is the old arm's envelope × intensity"
+    );
+    assert_eq!(
+        flash_packed(&e, 1.75, &ctx),
+        dark,
+        "3 frames past a 2-frame flash"
+    );
     // And with no markers at all it resolves dark — never an error
     // (§1.4 graceful fallback).
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        1.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(r, vec![dark]);
+    assert_eq!(flash_packed(&e, 1.0, &MarkerContext::NONE), dark);
 
     // Strobe every 2nd beat: beat index 1 (2 s) does not fire, index 2
     // (3 s) does.
@@ -4319,10 +4357,13 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
             _ => {}
         }
     }
-    let r = resolve_stack(std::slice::from_ref(&e), 2.0, 1000.0, 1.0, &ctx);
-    assert_eq!(r, vec![dark]);
-    let r = resolve_stack(std::slice::from_ref(&e), 3.0, 1000.0, 1.0, &ctx);
-    assert_eq!(r, vec![lit]);
+    assert_eq!(flash_packed(&e, 2.0, &ctx), dark);
+    assert_eq!(flash_packed(&e, 3.0, &ctx), lit);
+    assert_eq!(
+        flash_packed(&e, 3.0, &ctx).0,
+        flash_beat_envelope(&ctx, 3.0, 2.0, false, 2, 0.0) as f32,
+        "Strobe thins the beat list to every Nth before the envelope"
+    );
 
     // A legacy instance (saved before the marker modes existed) has no
     // mode parameter and still resolves Manual: a static Trigger of
@@ -4339,15 +4380,122 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
             p.value = EffectValue::Float(Property::fixed(0.4));
         }
     }
-    let r = resolve_stack(std::slice::from_ref(&legacy), 1.0, 1000.0, 1.0, &ctx);
-    assert_eq!(
-        r,
-        vec![Resolved::Flash {
-            strength: 0.4,
-            colour: [1.0; 4],
-            mix: 1.0
-        }]
+    assert_eq!(flash_packed(&legacy, 1.0, &ctx), (0.4, [1.0; 4], 1.0));
+}
+
+/// The resolve-time hook (K-385) is opt-in: an effect that does not implement it
+/// resolves to exactly its declared parameters and nothing more, and the one that
+/// does adds exactly its derived ids after them, in declaration order.
+#[test]
+fn only_an_effect_with_a_derivation_pushes_beyond_its_schema() {
+    let plain = instantiate("vignette").unwrap();
+    let bag = resolve_bag(
+        std::slice::from_ref(&plain),
+        1.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
     );
+    assert_eq!(
+        bag.len(),
+        BUILTIN_DEFS
+            .get("vignette")
+            .expect("vignette is migrated")
+            .schema()
+            .params
+            .len(),
+        "an effect with no resolve_derived pushes nothing beyond its schema"
+    );
+
+    let flash = instantiate("flash").unwrap();
+    let bag = resolve_bag(
+        std::slice::from_ref(&flash),
+        1.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let schema_len = BUILTIN_DEFS
+        .get("flash")
+        .expect("flash is migrated")
+        .schema()
+        .params
+        .len();
+    assert_eq!(bag.len(), schema_len + 1);
+    assert_eq!(
+        bag[schema_len].0,
+        effects::flash::Flash::DERIVED_STRENGTH,
+        "the derived value lands after the declared ones"
+    );
+}
+
+/// An orchestration-only effect resolves to **nothing**: no op, no bag, and no
+/// id in the render-time indicator's list. It changes what time the layers it
+/// covers render at, which the frame walk reads straight off the instance
+/// ([`stack_posterize`], [`stack_accumulation_mb`]) — there is no per-pixel pass
+/// to order among the others, which is exactly what `resolve_one` returning
+/// `None` meant for it before it was declared.
+#[test]
+fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
+    for name in ["posterize_time", "accumulation_mb"] {
+        let def = BUILTIN_DEFS.get(name).expect("declared");
+        assert!(!def.is_image_op(), "{name} draws nothing");
+        let e = instantiate(name).unwrap_or_else(|| panic!("{name} does not instantiate"));
+        let (ids, ops) = super::resolve_stack_temporal_named(
+            std::slice::from_ref(&e),
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        assert!(ids.is_empty(), "{name} claimed a slot in the indicator");
+        assert!(ops.ops.is_empty(), "{name} resolved to an op");
+        assert!(ops.bags.is_empty(), "{name} resolved to a bag");
+    }
+
+    // And it is still the effect the frame walk finds: declaring it changed
+    // where its schema lives, not what reads it.
+    let mut post = instantiate("posterize_time").unwrap();
+    for p in &mut post.params {
+        if p.id == "rate" {
+            p.value = EffectValue::Float(Property::fixed(4.0));
+        }
+    }
+    assert!(
+        super::stack_posterize(std::slice::from_ref(&post), true, 0.0).is_some(),
+        "the held-time detector still reads the instance"
+    );
+}
+
+/// A derived id shares the bag with the declared ones (K-385), so it is covered
+/// by the same rule: two ids hashing alike would silently make two controls one.
+/// Checked on what actually resolves rather than on the schema alone, because
+/// that is where the two kinds of id meet.
+#[test]
+fn no_resolved_bag_carries_one_id_twice() {
+    for def in BUILTIN_DEFS.iter() {
+        let name = def.schema().match_name;
+        // An orchestration-only effect resolves to no op and so to no bag —
+        // there is nothing here for it to carry twice.
+        if !def.is_image_op() {
+            continue;
+        }
+        let e = instantiate(name).unwrap_or_else(|| panic!("{name} does not instantiate"));
+        let bag = resolve_bag(
+            std::slice::from_ref(&e),
+            1.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        let mut seen: Vec<ParamId> = Vec::new();
+        for (id, _) in &bag {
+            assert!(!seen.contains(id), "{name} resolves one id twice");
+            seen.push(*id);
+        }
+    }
 }
 
 #[test]
@@ -4436,35 +4584,10 @@ fn block_glitch_instantiates_and_resolves() {
     // yields the identical result, twice — and the px_scale factor
     // (0.5 here) reaches the px@comp parameters exactly like Transform
     // and Shake's do.
-    let a = resolve_stack(
-        std::slice::from_ref(&e),
-        0.4,
-        1000.0,
-        0.5,
-        &MarkerContext::NONE,
-    );
-    let b = resolve_stack(
-        std::slice::from_ref(&e),
-        0.4,
-        1000.0,
-        0.5,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(a, b);
-    let Resolved::BlockGlitch {
-        intensity,
-        tick,
-        block_size_px,
-        jitter_frac,
-        amount_px,
-        chan_px,
-        slice_frac,
-        mix,
-        ..
-    } = a[0]
-    else {
-        panic!("expected a BlockGlitch");
-    };
+    let a = block_glitch_packed(&e, 0.4, 1000.0, 0.5);
+    assert_eq!(a, block_glitch_packed(&e, 0.4, 1000.0, 0.5));
+    let (intensity, _seed, tick, block_size_px, jitter_frac, amount_px, chan_px, slice_frac, mix) =
+        a;
     assert_eq!(intensity, 0.35);
     assert_eq!(tick, 3); // floor(0.4 * GLITCH_TICK_HZ 8) = 3
     assert_eq!(block_size_px, 12.0); // 24 px@comp * px_scale 0.5
@@ -4476,14 +4599,9 @@ fn block_glitch_instantiates_and_resolves() {
 
     // A different frame ticks differently (the per-block hash itself
     // only runs inside cpu::block_glitch/the kernel, not here).
-    let later = resolve_stack(
-        std::slice::from_ref(&e),
-        0.9,
-        1000.0,
-        0.5,
-        &MarkerContext::NONE,
-    );
+    let later = block_glitch_packed(&e, 0.9, 1000.0, 0.5);
     assert_ne!(a, later, "the tick moves between frames");
+    assert_eq!(later.2, 7); // floor(0.9 * 8)
 }
 
 #[test]
@@ -4499,23 +4617,27 @@ fn scanlines_instantiates_and_resolves() {
         Some(EffectValue::Bool(false))
     ));
 
-    let a = resolve_stack(
-        std::slice::from_ref(&e),
-        0.4,
-        1000.0,
-        0.5,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        a,
-        vec![Resolved::Scanlines {
-            intensity: 0.35, // no Darkness param, so the raw Intensity stands
-            period_px: 1.5,  // 3 px@comp * px_scale 0.5
-            roll_px: 0.0,    // roll speed 0
-            interlace: false,
-            mix: 1.0,
-        }]
+        scanlines_packed(&e, 0.4, 1000.0, 0.5),
+        (
+            0.35,  // no Darkness param, so the raw Intensity stands
+            1.5,   // 3 px@comp * px_scale 0.5
+            0.0,   // roll speed 0
+            false, // interlace
+            1.0,   // mix
+        )
     );
+
+    // Rolling: the offset is roll speed × layer time × the *raster* period,
+    // precomputed here so the kernel never sees raw time (§2.4). 4 lines/s at
+    // 0.5 s over a 1.5 px period = 3 px.
+    let mut rolling = e;
+    for p in &mut rolling.params {
+        if p.id == "scanline_roll" {
+            p.value = EffectValue::Float(Property::fixed(4.0));
+        }
+    }
+    assert_eq!(scanlines_packed(&rolling, 0.5, 1000.0, 0.5).2, 3.0);
 }
 
 #[test]
@@ -4535,17 +4657,10 @@ fn scanlines_migrates_old_darkness_into_intensity() {
         value: EffectValue::Float(Property::fixed(80.0)),
         extra: serde_json::Map::new(),
     });
-    let a = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    // 0.5 × 0.80 = 0.40.
-    let Resolved::Scanlines { intensity, .. } = a[0] else {
-        panic!("expected a scanlines op");
-    };
+    // 0.5 × 0.80 = 0.40. The fold reads a parameter that is not a schema row at
+    // all, which is why it happens in the resolve-time hook (K-385) rather than
+    // coming out of the bag with the declared ones.
+    let intensity = scanlines_packed(&e, 0.0, 1000.0, 1.0).0;
     assert!(
         (intensity - 0.40).abs() < 1e-6,
         "old Darkness folds into Intensity: got {intensity}"
@@ -8931,12 +9046,20 @@ fn every_parameter_declares_a_unit() {
         .filter(|(_, p)| p.unit.is_spatial())
         .map(|(name, p)| (name, p.id))
         .collect();
-    // The blur family's %-diagonal lengths, RGB split's own, and chromatic
-    // aberration's px@comp Amount — nothing else. Radial blur's Centre is a
-    // fraction of the frame, Sharpen's neighbour distance is a kernel stride,
-    // and every Vignette distance is read in a metric derived from the raster's
-    // own w/h, so none of them follows the raster — exactly what the old
+    // The blur family's %-diagonal lengths, the two flare/transform families'
+    // px@comp points and radii, and Block glitch's own pair of currencies —
+    // nothing else. Radial blur's Centre is a fraction of the frame, Sharpen's
+    // neighbour distance is a kernel stride, Sprite flare's Ghost spacing is a
+    // fraction of the light→centre distance, Transform's Scale is per cent, and
+    // every Vignette distance is read in a metric derived from the raster's own
+    // w/h — so none of those follows the raster, exactly what the old
     // `rescale_px` match said about them.
+    //
+    // Scanlines' Line period is the one entry the old match disagreed with: it
+    // was scaled by the preview factor at resolve and then *not* rescaled with
+    // the stack, so a scanlined adjustment layer under a reduced-resolution
+    // preview kept comp-sized lines. Declaring the unit states it once and the
+    // generic pass does both halves.
     assert_eq!(
         spatial,
         vec![
@@ -8944,8 +9067,22 @@ fn every_parameter_declares_a_unit() {
             ("directional_blur", "length"),
             ("radial_blur", "amount"),
             ("sharpen", "radius"),
+            ("sprite_flare", "light_x"),
+            ("sprite_flare", "light_y"),
+            ("sprite_flare", "glow_size"),
+            ("sprite_flare", "ghost_size"),
+            ("sprite_flare", "streak_length"),
             ("rgb_split", "amount"),
             ("chromatic_aberration", "amount"),
+            ("transform", "anchor_x"),
+            ("transform", "anchor_y"),
+            ("transform", "position_x"),
+            ("transform", "position_y"),
+            ("glow", "radius"),
+            ("block_glitch", "block_size"),
+            ("block_glitch", "block_amount"),
+            ("block_glitch", "channel_offset"),
+            ("scanlines", "scanline_period"),
         ]
     );
     // The two units are not interchangeable: % diag divides by the diagonal,
@@ -9167,6 +9304,212 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             ),
         ],
         &|p| cpu::tint(p, [0.05, 0.0, 0.1], [1.0, 0.9, 0.6], 1.0),
+    );
+    both(
+        // Flash's strength is derived rather than declared (K-385), so it goes
+        // into the bag here the way `resolve_derived` puts it there.
+        &effects::flash::FlashDef,
+        &[
+            (
+                effects::flash::Flash::COLOUR,
+                Value::Colour([1.0, 0.8, 0.5, 1.0]),
+            ),
+            (effects::flash::Flash::MIX, Value::Float(50.0)),
+            (effects::flash::Flash::DERIVED_STRENGTH, Value::Float(0.6)),
+        ],
+        &|p| cpu::flash(p, 0.6, [1.0, 0.8, 0.5, 1.0], 0.5),
+    );
+    both(
+        &effects::glow::GlowDef,
+        &[
+            (effects::glow::Glow::THRESHOLD, Value::Float(0.2)),
+            (effects::glow::Glow::KNEE, Value::Float(0.5)),
+            // Already through the preview factor, as the bag carries it.
+            (effects::glow::Glow::RADIUS, Value::Float(2.0)),
+            (effects::glow::Glow::INTENSITY, Value::Float(1.5)),
+            (
+                effects::glow::Glow::TINT,
+                Value::Colour([1.0, 0.8, 0.5, 1.0]),
+            ),
+            (effects::glow::Glow::MIX, Value::Float(60.0)),
+        ],
+        &|p| cpu::glow(p, 4, 4, 2.0, 0.2, 0.5, 1.5, [1.0, 0.8, 0.5, 1.0], 0.6),
+    );
+    both(
+        &effects::transform::TransformDef,
+        &[
+            (effects::transform::Transform::ANCHOR_X, Value::Float(2.0)),
+            (effects::transform::Transform::ANCHOR_Y, Value::Float(2.0)),
+            (effects::transform::Transform::POSITION_X, Value::Float(3.0)),
+            (effects::transform::Transform::POSITION_Y, Value::Float(1.0)),
+            (effects::transform::Transform::SCALE_X, Value::Float(200.0)),
+            (effects::transform::Transform::SCALE_Y, Value::Float(50.0)),
+            (effects::transform::Transform::ROTATION, Value::Float(30.0)),
+            (effects::transform::Transform::OPACITY, Value::Float(80.0)),
+            (effects::transform::Transform::MIX, Value::Float(75.0)),
+        ],
+        // The old arm's `px`/`pct` helpers, and the Transform effect's fixed
+        // transparent edge.
+        &|p| {
+            cpu::transform(
+                p,
+                4,
+                4,
+                [2.0, 2.0],
+                [3.0, 1.0],
+                [2.0, 0.5],
+                30.0,
+                0,
+                0.8,
+                0.75,
+            )
+        },
+    );
+    both(
+        &effects::sprite_flare::SpriteFlareDef,
+        &[
+            (
+                effects::sprite_flare::SpriteFlare::LIGHT_X,
+                Value::Float(1.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::LIGHT_Y,
+                Value::Float(2.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::INTENSITY,
+                Value::Float(1.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::TINT,
+                Value::Colour([1.0, 0.5, 0.25, 1.0]),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::GLOW_SIZE,
+                Value::Float(3.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::GLOW_INTENSITY,
+                Value::Float(1.0),
+            ),
+            (effects::sprite_flare::SpriteFlare::GHOSTS, Value::Int(3)),
+            (
+                effects::sprite_flare::SpriteFlare::GHOST_SPACING,
+                Value::Float(0.4),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::GHOST_SIZE,
+                Value::Float(2.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::GHOST_INTENSITY,
+                Value::Float(0.5),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::STREAK_LENGTH,
+                Value::Float(4.0),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::STREAK_INTENSITY,
+                Value::Float(0.6),
+            ),
+            (
+                effects::sprite_flare::SpriteFlare::STREAK_ANGLE,
+                Value::Float(15.0),
+            ),
+            (effects::sprite_flare::SpriteFlare::MIX, Value::Float(50.0)),
+        ],
+        &|p| {
+            cpu::sprite_flare(
+                p,
+                4,
+                4,
+                &cpu::SpriteFlareParams {
+                    light: [1.0, 2.0],
+                    intensity: 1.0,
+                    tint: [1.0, 0.5, 0.25],
+                    glow_size: 3.0,
+                    glow_intensity: 1.0,
+                    ghosts: 3,
+                    ghost_spacing: 0.4,
+                    ghost_size: 2.0,
+                    ghost_intensity: 0.5,
+                    streak_length: 4.0,
+                    streak_intensity: 0.6,
+                    streak_angle_deg: 15.0,
+                    mix: 0.5,
+                },
+            )
+        },
+    );
+    both(
+        // Block glitch's tick is derived rather than declared (K-385), so it
+        // goes into the bag here the way `resolve_derived` puts it there.
+        &effects::block_glitch::BlockGlitchDef,
+        &[
+            (
+                effects::block_glitch::BlockGlitch::INTENSITY,
+                Value::Float(0.5),
+            ),
+            (
+                effects::block_glitch::BlockGlitch::BLOCK_SIZE,
+                Value::Float(3.0),
+            ),
+            (
+                effects::block_glitch::BlockGlitch::BLOCK_JITTER,
+                Value::Float(40.0),
+            ),
+            (
+                effects::block_glitch::BlockGlitch::BLOCK_AMOUNT,
+                Value::Float(2.0),
+            ),
+            (
+                effects::block_glitch::BlockGlitch::CHANNEL_OFFSET,
+                Value::Float(1.0),
+            ),
+            (
+                effects::block_glitch::BlockGlitch::SLICE_REPEAT,
+                Value::Float(30.0),
+            ),
+            (effects::block_glitch::BlockGlitch::SEED, Value::Int(7)),
+            (effects::block_glitch::BlockGlitch::MIX, Value::Float(80.0)),
+            (
+                effects::block_glitch::BlockGlitch::DERIVED_TICK,
+                Value::Int(3),
+            ),
+        ],
+        &|p| cpu::block_glitch(p, 4, 4, 0.5, 7, 3, 3.0, 0.4, 2.0, 1.0, 0.3, 0.8),
+    );
+    both(
+        // Scanlines' folded intensity and roll offset are derived too (K-385).
+        &effects::scanlines::ScanlinesDef,
+        &[
+            (effects::scanlines::Scanlines::INTENSITY, Value::Float(0.9)),
+            (
+                effects::scanlines::Scanlines::SCANLINE_PERIOD,
+                Value::Float(2.0),
+            ),
+            (
+                effects::scanlines::Scanlines::SCANLINE_ROLL,
+                Value::Float(3.0),
+            ),
+            (
+                effects::scanlines::Scanlines::SCANLINE_INTERLACE,
+                Value::Bool(true),
+            ),
+            (effects::scanlines::Scanlines::MIX, Value::Float(50.0)),
+            (
+                effects::scanlines::Scanlines::DERIVED_INTENSITY,
+                Value::Float(0.6),
+            ),
+            (
+                effects::scanlines::Scanlines::DERIVED_ROLL_PX,
+                Value::Float(1.5),
+            ),
+        ],
+        // The derived pair wins over the declared Intensity and Roll speed —
+        // which is the whole point of them.
+        &|p| cpu::scanlines(p, 4, 4, 0.6, 2.0, 1.5, true, 0.5),
     );
     both(
         &effects::invert::InvertDef,

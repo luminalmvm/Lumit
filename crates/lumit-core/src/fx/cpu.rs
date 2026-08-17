@@ -10,44 +10,7 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // own functions by the callers that hold the extra texture; here they
         // are the passthrough rather than a silent half-effect.
         Resolved::LightWrap { .. } => {}
-        Resolved::SpriteFlare(p) => sprite_flare(rgba, w, h, p),
-        Resolved::Flash {
-            strength,
-            colour,
-            mix,
-        } => flash(rgba, *strength, *colour, *mix),
         Resolved::MatteKey(p) => matte_key(rgba, p),
-        Resolved::Transform {
-            anchor,
-            position,
-            scale,
-            rotation_deg,
-            opacity,
-            mix,
-        } => transform(
-            rgba,
-            w,
-            h,
-            *anchor,
-            *position,
-            *scale,
-            *rotation_deg,
-            // The Transform effect has no Edges control: transparent border,
-            // its long-standing behaviour.
-            0,
-            *opacity,
-            *mix,
-        ),
-        Resolved::Glow {
-            radius_px,
-            threshold,
-            knee,
-            intensity,
-            tint,
-            mix,
-        } => glow(
-            rgba, w, h, *radius_px, *threshold, *knee, *intensity, *tint, *mix,
-        ),
         // Shake is a transform-domain effect (docs/08 §3.4): the
         // resolved wobble maps to the Transform reference through the
         // same shared affine the GPU dispatch uses, so both paths
@@ -80,39 +43,6 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
                 transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
             }
         },
-        Resolved::BlockGlitch {
-            intensity,
-            seed,
-            tick,
-            block_size_px,
-            jitter_frac,
-            amount_px,
-            chan_px,
-            slice_frac,
-            mix,
-        } => block_glitch(
-            rgba,
-            w,
-            h,
-            *intensity,
-            *seed,
-            *tick,
-            *block_size_px,
-            *jitter_frac,
-            *amount_px,
-            *chan_px,
-            *slice_frac,
-            *mix,
-        ),
-        Resolved::Scanlines {
-            intensity,
-            period_px,
-            roll_px,
-            interlace,
-            mix,
-        } => scanlines(
-            rgba, w, h, *intensity, *period_px, *roll_px, *interlace, *mix,
-        ),
         // Echo is temporal: it needs the layer's neighbour frames, which
         // this single-buffer in-place dispatcher does not carry. The real
         // path is [`echo`] (with neighbours) on the GPU; here it is a

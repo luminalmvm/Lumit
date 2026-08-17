@@ -19,12 +19,14 @@
 //! one to be identical for every effect that has moved.
 
 use super::effects::{
-    blur::BlurDef, chromatic_aberration::ChromaticAberrationDef, colour_balance::ColourBalanceDef,
+    accumulation_mb::AccumulationMbDef, block_glitch::BlockGlitchDef, blur::BlurDef,
+    chromatic_aberration::ChromaticAberrationDef, colour_balance::ColourBalanceDef,
     contrast::ContrastDef, directional_blur::DirectionalBlurDef, exposure::ExposureDef,
-    gamma::GammaDef, hue_shift::HueShiftDef, invert::InvertDef, radial_blur::RadialBlurDef,
-    rgb_split::RgbSplitDef, saturation::SaturationDef, sharpen::SharpenDef,
-    sharpen_simple::SharpenSimpleDef, temperature::TemperatureDef, tint::TintDef,
-    vibrancy::VibrancyDef, vignette::VignetteDef,
+    flash::FlashDef, gamma::GammaDef, glow::GlowDef, hue_shift::HueShiftDef, invert::InvertDef,
+    posterize_time::PosterizeTimeDef, radial_blur::RadialBlurDef, rgb_split::RgbSplitDef,
+    saturation::SaturationDef, scanlines::ScanlinesDef, sharpen::SharpenDef,
+    sharpen_simple::SharpenSimpleDef, sprite_flare::SpriteFlareDef, temperature::TemperatureDef,
+    tint::TintDef, transform::TransformDef, vibrancy::VibrancyDef, vignette::VignetteDef,
 };
 
 crate::catalogue![
@@ -33,8 +35,10 @@ crate::catalogue![
     RadialBlurDef,
     SharpenDef,
     SharpenSimpleDef,
+    SpriteFlareDef,
     RgbSplitDef,
     ChromaticAberrationDef,
+    FlashDef,
     ColourBalanceDef,
     SaturationDef,
     VibrancyDef,
@@ -44,6 +48,12 @@ crate::catalogue![
     ContrastDef,
     GammaDef,
     TemperatureDef,
+    TransformDef,
+    GlowDef,
+    BlockGlitchDef,
+    ScanlinesDef,
+    PosterizeTimeDef,
+    AccumulationMbDef,
     InvertDef,
     TintDef,
 ];

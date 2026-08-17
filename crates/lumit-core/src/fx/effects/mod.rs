@@ -14,21 +14,29 @@
 //! `builtins.rs` and `resolved.rs` and are listed there. `catalogue.rs` names
 //! the ones that have.
 
+pub mod accumulation_mb;
+pub mod block_glitch;
 pub mod blur;
 pub mod chromatic_aberration;
 pub mod colour_balance;
 pub mod contrast;
 pub mod directional_blur;
 pub mod exposure;
+pub mod flash;
 pub mod gamma;
+pub mod glow;
 pub mod hue_shift;
 pub mod invert;
+pub mod posterize_time;
 pub mod radial_blur;
 pub mod rgb_split;
 pub mod saturation;
+pub mod scanlines;
 pub mod sharpen;
 pub mod sharpen_simple;
+pub mod sprite_flare;
 pub mod temperature;
 pub mod tint;
+pub mod transform;
 pub mod vibrancy;
 pub mod vignette;

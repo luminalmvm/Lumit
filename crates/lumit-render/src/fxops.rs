@@ -248,23 +248,6 @@ pub fn run_ops(
         // time the paperwork rather than the work.
         let started = timings.as_ref().map(|_| std::time::Instant::now());
         match op {
-            Resolved::Flash {
-                strength,
-                colour,
-                mix,
-            } => {
-                tex = fx.flash(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::FlashOp {
-                        strength: *strength,
-                        colour: *colour,
-                        mix: *mix,
-                    },
-                );
-            }
             Resolved::MatteKey(p) => {
                 tex = fx.matte_key(
                     ctx,
@@ -285,60 +268,6 @@ pub fn run_ops(
                         replace_method: p.replace_method,
                         replace_colour: p.replace_colour,
                         mix: p.mix,
-                    },
-                );
-            }
-            Resolved::Transform {
-                anchor,
-                position,
-                scale,
-                rotation_deg,
-                opacity,
-                mix,
-            } => {
-                let (m, off, opacity) = lumit_core::fx::transform_op(
-                    *anchor,
-                    *position,
-                    *scale,
-                    *rotation_deg,
-                    *opacity,
-                );
-                tex = fx.transform(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::TransformOp {
-                        m,
-                        off,
-                        opacity,
-                        mix: *mix,
-                        // The Transform effect has no Edges control: a
-                        // transparent border, its long-standing behaviour.
-                        edge: 0,
-                    },
-                );
-            }
-            Resolved::Glow {
-                radius_px,
-                threshold,
-                knee,
-                intensity,
-                tint,
-                mix,
-            } => {
-                tex = fx.glow(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::GlowOp {
-                        radius_px: *radius_px,
-                        threshold: *threshold,
-                        knee: *knee,
-                        intensity: *intensity,
-                        tint: *tint,
-                        mix: *mix,
                     },
                 );
             }
@@ -404,56 +333,6 @@ pub fn run_ops(
                     );
                 }
             },
-            Resolved::BlockGlitch {
-                intensity,
-                seed,
-                tick,
-                block_size_px,
-                jitter_frac,
-                amount_px,
-                chan_px,
-                slice_frac,
-                mix,
-            } => {
-                tex = fx.block_glitch(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::BlockGlitchOp {
-                        intensity: *intensity,
-                        seed: *seed,
-                        tick: *tick,
-                        block_size_px: *block_size_px,
-                        jitter_frac: *jitter_frac,
-                        amount_px: *amount_px,
-                        chan_px: *chan_px,
-                        slice_frac: *slice_frac,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Scanlines {
-                intensity,
-                period_px,
-                roll_px,
-                interlace,
-                mix,
-            } => {
-                tex = fx.scanlines(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::ScanlinesOp {
-                        intensity: *intensity,
-                        period_px: *period_px,
-                        roll_px: *roll_px,
-                        interlace: *interlace,
-                        mix: *mix,
-                    },
-                );
-            }
             Resolved::Datamosh {
                 intensity,
                 displacement,
@@ -553,29 +432,6 @@ pub fn run_ops(
                         l.domain_max,
                     );
                 }
-            }
-            Resolved::SpriteFlare(p) => {
-                tex = fx.sprite_flare(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::SpriteFlareOp {
-                        light: p.light,
-                        intensity: p.intensity,
-                        tint: p.tint,
-                        glow_size: p.glow_size,
-                        glow_intensity: p.glow_intensity,
-                        ghosts: p.ghosts,
-                        ghost_spacing: p.ghost_spacing,
-                        ghost_size: p.ghost_size,
-                        ghost_intensity: p.ghost_intensity,
-                        streak_length: p.streak_length,
-                        streak_intensity: p.streak_intensity,
-                        streak_angle_deg: p.streak_angle_deg,
-                        mix: p.mix,
-                    },
-                );
             }
             Resolved::LightWrap {
                 width_px,
