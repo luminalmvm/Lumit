@@ -154,35 +154,41 @@ no-op), never a panic.
   mtime forces a re-parse; a blank path yields identity.
 - **Determinism**: same inputs → identical bytes across runs (docs/14).
 
-## 8. Wiring the effect into the pipeline (`Resolved` is `Copy`)
+## 8. Wiring the effect into the pipeline (the resolved bag holds numbers only)
 
-The effect stack is resolved to `&[Resolved]` (lumit-core `fx::resolve_stack`),
-and `Resolved` is `#[derive(Copy)]` carrying plain scalars — it cannot hold a
+A resolved effect is a bag of plain values (`Value` is `Copy`) — it cannot hold a
 `String` path or the LUT data. So the LUT is threaded the same way `flow_field`
 and `neighbours` already are (`fxops::run_ops` takes them as separate params for
 the effects that need them):
 
-- **`Resolved::Lut { mix: f32 }`** carries only the mix. The resolve arm reads
-  Mix; it does not touch the file (there is nowhere Copy to put it).
-- **The loaded LUT is threaded alongside `ops`.** `run_ops` gains a parameter
-  parallel to `ops` — `luts: &[Option<LoadedLut>]`, one slot per op, `Some` only
-  for a `Lut` op whose file loaded. Its `Lut` arm binds that texture and calls
-  `FxEngine::lut`; a `None` slot (unset path, or a parse/IO failure) is a
+- **The declaration carries the File row, the bag does not.**
+  `effects::lut::Lut` declares File and Mix, because the panel needs both rows;
+  `resolve_into_arena` pushes Mix and skips File, since only the caller knows
+  which cube loaded. `Lut::packed()` is therefore the mix alone.
+- **The loaded LUT is threaded alongside `ops`.** `run_ops` takes a parameter
+  parallel to `ops` — `luts: &[Option<LoadedLut>]`, one slot per `lut` op, `Some`
+  only for an op whose file loaded. The GPU pass declares
+  `aux() == AuxKind::Lut` (K-387, effect-registry.md §2.5a), so `run_ops`
+  advances the LUT counter and hands the slot in; the pass binds that texture and
+  calls `FxEngine::lut`. A `None` slot (unset path, or a parse/IO failure) is a
   passthrough — the §3.11 "missing file is a labelled no-op, never a fault" rule
-  and the never-crash rule both fall out of this.
+  and the never-crash rule both fall out of this. **The counter advances for an
+  empty slot too**: skipping it would bind the next op's cube to this one, which
+  is what `the_kth_lut_op_binds_the_kth_slot` (lumit-render `gpufx.rs`) exists to
+  catch.
 - **The caller prepares the LUTs.** `build_comp_draws` (preview) and the export
   renderer both already call `resolve_stack` next to the layer's `EffectInstance`
-  list; for each `Lut` effect they read its File param with
+  list; for each `lut` effect they read its File param with
   `EffectInstance::path_at("file", lt)`, run it through the cache (§4), and fill
   the parallel `luts` slot. Both paths call the one shared `run_ops`, so preview
   == export (K-031) for free.
-- **CPU fallback / the oracle.** Because the LUT data never reaches the
-  `Resolved`-based `cpu::apply`, that arm is a **passthrough** (the CPU
-  degradation rung renders a LUT as a no-op — acceptable: a LUT is a GPU colour
-  map). The CPU *reference* for the §1.6 oracle is `lut::Lut3d::sample` used
-  directly in the GPU test (§7), not `cpu::apply` — the one effect whose oracle
-  reference lives outside `cpu::apply`, precisely because its parameter is a file,
-  not a number.
+- **CPU fallback / the oracle.** Because the LUT data never reaches the CPU
+  dispatcher, `LutDef` keeps `EffectDef::apply_cpu`'s identity default — a
+  **passthrough** (the CPU degradation rung renders a LUT as a no-op —
+  acceptable: a LUT is a GPU colour map). The CPU *reference* for the §1.6 oracle
+  is `lut::Lut3d::sample` used directly in the GPU test (§7) — the one effect
+  whose oracle reference lives outside the CPU dispatcher, precisely because its
+  parameter is a file, not a number.
 
 **v1 shipped subset (to log as K-114 with the effect).** The §3.11 spec lists
 File, Input space, Interpolation and Mix; v1 ships **File + Mix** only, **3D

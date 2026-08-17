@@ -619,7 +619,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "width",
                 label: "Width",
                 // px@comp (K-260), and the same distance twice: how far the
@@ -1697,7 +1697,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 kind: ParamKind::Bool { default: false },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 // Where to read the focus depth, px@comp (K-260: point
                 // parameters are PIXELS, never % of frame). Pairs with
                 // `focus_point_y` into one point row with a crosshair pick
@@ -1715,7 +1715,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "focus_point_y",
                 label: "Focus point y",
                 kind: ParamKind::Float {
@@ -1755,7 +1755,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 // Per-side circle-of-confusion for the near side — depths in
                 // front of focus (`d < focus`). px@comp, scaled by the Aperture
                 // master. Owner's "adjust close/far blur separately". Absent on
@@ -1769,7 +1769,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 // Per-side circle-of-confusion for the far side — depths behind
                 // focus (`d >= focus`). px@comp, scaled by the Aperture master.
                 // Absent on pre-feature projects, where it falls back to

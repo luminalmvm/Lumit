@@ -30,9 +30,9 @@ struct EchoParams {
 /// One resolved flow motion blur (docs/08 §3.2). The per-pixel motion is a
 /// dense flow field passed as its own texture (see [`upload_flow_field`] and
 /// [`FxEngine::motion_blur`]); this op carries only the scalars the kernel
-/// turns a vector into a streak with. `samples` must equal the resolved
-/// `Resolved::MotionBlur::samples` so the GPU integrates the CPU oracle's
-/// exact tap count.
+/// turns a vector into a streak with. `samples` must equal the tap count
+/// `lumit_core::fx::effects::motion_blur::MotionBlur::packed` produces, so the
+/// GPU integrates the CPU oracle's exact tap count.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MotionBlurOp {
     /// Shutter ÷ 360: streak length as a fraction of the inter-frame motion.

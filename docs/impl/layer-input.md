@@ -72,11 +72,12 @@ texture** travels beside the ops:
   and Mix. Traits: cost Moderate, roi Padded(aperture), temporal `{0}`,
   premultiplied true (the gather is over premultiplied colour — confirm against
   `fx_dof.wgsl`).
-- `Resolved::Dof { focus, range, aperture, mix }` (scalars only — the depth
-  texture is threaded per §2, not carried in Resolved).
-- resolve arm reads the floats; the depth layer id is read separately by the
-  caller (like the LUT path) to render + thread the depth texture.
-- `run_ops` Dof arm: if its `layer_inputs` slot is `Some(depth)`, call
+- The resolved bag carries the scalars only — the depth texture is threaded per
+  §2, never in the bag; since K-387 the effect declares that by returning
+  `AuxKind::LayerInput` from `GpuEffect::aux`, and `run_ops` binds the slot.
+- the generic resolve reads the floats; the depth layer id is read separately by
+  the caller (like the LUT path) to render + thread the depth texture.
+- `run_ops` Dof pass: if its `layer_inputs` slot is `Some(depth)`, call
   `fx.dof(ctx, &tex, w, h, depth, focus, range, aperture, mix)`; else passthrough
   (no depth = no blur, a labelled no-op).
 - `cpu::apply` Dof arm = passthrough (GPU-only, like the LUT); the §1.6 oracle
@@ -206,7 +207,7 @@ Logged as K-123 (Layer-input parameter kind) and K-124 (DoF effect).
 
 Three additions to the DoF effect that read the same threaded depth pass, none
 touching the layer-input plumbing above (they are plain scalar params on the
-effect instance, carried in `Resolved::Dof`, which stays `Copy`):
+effect instance, carried in the resolved bag as ordinary values):
 
 - **Depth invert** (`depth_invert` bool). Applied to the depth *after* it is
   read (`d' = 1 - d`) and *before* the circle-of-confusion, the near/far select

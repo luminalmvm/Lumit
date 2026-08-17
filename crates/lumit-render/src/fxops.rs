@@ -11,6 +11,8 @@ use lumit_core::fx::Resolved;
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
+use crate::gpufx::{AuxKind, AuxSlot};
+
 type Tex = wgpu::Texture;
 
 /// A parsed-and-uploaded `.cube` LUT ready to bind (docs/08 §3.11,
@@ -201,13 +203,14 @@ pub fn render_layer_input(
 /// when the stack has a flow-consuming effect (Flow motion blur, or Datamosh
 /// — §3.12, K-107); a missing field makes that effect a passthrough
 /// (degrade, never fault). `luts` is the parallel LUT list (docs/08 §3.11): the
-/// k-th `Resolved::Lut` op binds `luts[k]` — a `None` slot (unset, missing, 1D
-/// or unreadable file) is a passthrough, exactly like a missing flow field.
-/// `layer_inputs` is the parallel depth-input list (docs/08 §3.22, docs/impl/
-/// layer-input.md): the k-th `Resolved::Dof` op binds `layer_inputs[k]` — the
-/// referenced layer rendered alone at comp size, [`LayerInput::ThisLayer`]
-/// for the effect's own input (K-288), or [`LayerInput::Absent`] (unset,
-/// missing or cyclic) for a passthrough, exactly like a missing LUT.
+/// k-th `lut` op binds `luts[k]` — a `None` slot (unset, missing, 1D or
+/// unreadable file) is a passthrough, exactly like a missing flow field.
+/// `layer_inputs` is the parallel layer-input list (docs/08 §3.22, §3.28,
+/// docs/impl/layer-input.md): the k-th layer-input-consuming op — `dof` or
+/// `light_wrap` — binds `layer_inputs[k]`, the referenced layer rendered alone
+/// at comp size, [`LayerInput::ThisLayer`] for the effect's own input (K-288),
+/// or [`LayerInput::Absent`] (unset, missing or cyclic) for a passthrough,
+/// exactly like a missing LUT.
 /// `flare_mattes` is the parallel Lens flare Matte-source list (docs/08
 /// §3.27, K-257), and `flare_lens` the parallel custom-prescription list
 /// (K-264, `lens_file` as content hash + text; None = use the picked
@@ -232,13 +235,18 @@ pub fn run_ops(
     mut timings: Option<&mut Vec<f32>>,
 ) -> Tex {
     let mut tex = tex;
-    // The k-th Resolved::Lut op consumes the k-th `luts` slot (the whole
-    // threading contract — see resolve_stack's `lut` arm and CompLayerDraw's
-    // lut_files); a slot is present only when its `.cube` file loaded. The k-th
-    // layer-input-consuming op consumes the k-th
-    // `layer_inputs` slot the same way. Both share one counter because
-    // `build.rs`'s `layer_inputs_for` enumerates them with one predicate, in one
-    // order; two counters would let the two sides drift apart silently.
+    // The k-th `lut` op consumes the k-th `luts` slot (the whole threading
+    // contract — see `build.rs`'s `lut_files` and CompLayerDraw's lut_files); a
+    // slot is present only when its `.cube` file loaded. The k-th
+    // layer-input-consuming op consumes the k-th `layer_inputs` slot the same
+    // way. Both share one counter because `build.rs`'s `layer_inputs_for`
+    // enumerates them with one predicate, in one order; two counters would let
+    // the two sides drift apart silently.
+    //
+    // A migrated effect names its list rather than carrying an arm of its own
+    // (`GpuEffect::aux`, K-387), and the Registry arm below advances the counter
+    // it names — so the ops that count along a list are still counted in one
+    // place, in stack order, whichever half of the migration they are in.
     let mut lut_i = 0usize;
     let mut dof_i = 0usize;
     let mut flare_i = 0usize;
@@ -248,29 +256,6 @@ pub fn run_ops(
         // time the paperwork rather than the work.
         let started = timings.as_ref().map(|_| std::time::Instant::now());
         match op {
-            Resolved::MatteKey(p) => {
-                tex = fx.matte_key(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::MatteKeyOp {
-                        view: p.view,
-                        key: p.key,
-                        gain: p.gain,
-                        balance: p.balance,
-                        despill_bias: p.despill_bias,
-                        alpha_bias: p.alpha_bias,
-                        spill: p.spill,
-                        clip_black: p.clip_black,
-                        clip_white: p.clip_white,
-                        clip_rollback: p.clip_rollback,
-                        replace_method: p.replace_method,
-                        replace_colour: p.replace_colour,
-                        mix: p.mix,
-                    },
-                );
-            }
             // Shake dispatches the Transform kernel (docs/08 §3.4: a
             // transform-domain effect): the shared affine turns the
             // resolved wobble into the same op the CPU reference builds,
@@ -333,205 +318,6 @@ pub fn run_ops(
                     );
                 }
             },
-            Resolved::Datamosh {
-                intensity,
-                displacement,
-                bloom,
-                steps,
-                mix,
-            } => {
-                // Datamosh (§3.12, K-107; flow-driven melt K-164) reads the
-                // layer's -1 neighbour and its current→previous flow field,
-                // exactly as Motion blur reads its own +1-neighbour flow field.
-                // Either missing (a non-footage layer, or a dropped decode) is a
-                // passthrough, never a fault. The blend maths take a single
-                // fraction; Mix folds into Intensity here rather than adding a
-                // second uniform, since mixing the same two inputs twice
-                // collapses to one mix by the product.
-                if let (Some(flow), Some((_, prev))) =
-                    (flow_field, neighbours.iter().find(|(o, _)| *o == -1))
-                {
-                    tex = fx.datamosh(
-                        ctx,
-                        &tex,
-                        prev,
-                        flow,
-                        w,
-                        h,
-                        &lumit_gpu::fx::DatamoshOp {
-                            intensity: *intensity * *mix,
-                            displacement: *displacement,
-                            bloom: *bloom,
-                            steps: *steps,
-                        },
-                    );
-                }
-            }
-            Resolved::Echo { weights, mode, mix } => {
-                // Echo reads the layer's neighbour frames (offsets -1..-8);
-                // the render decoded exactly the ones the window needs.
-                let by_offset: Vec<(i32, &Tex)> = neighbours.iter().map(|(o, t)| (*o, t)).collect();
-                tex = fx.echo(
-                    ctx,
-                    &tex,
-                    &by_offset,
-                    w,
-                    h,
-                    &lumit_gpu::fx::EchoOp {
-                        weights: *weights,
-                        mode: *mode,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::MotionBlur {
-                shutter_frac,
-                samples,
-                mix,
-                view,
-            } => {
-                // Fast motion blur reads the layer's dense motion field (with a
-                // confidence channel, FX-19), which the decode worker computed
-                // from the current + next source frames. With no field (a plain
-                // layer, or a decode that dropped the neighbour) it is a
-                // passthrough — never a fault.
-                if let Some(flow) = flow_field {
-                    tex = fx.motion_blur(
-                        ctx,
-                        &tex,
-                        flow,
-                        w,
-                        h,
-                        &lumit_gpu::fx::MotionBlurOp {
-                            shutter_frac: *shutter_frac,
-                            samples: *samples,
-                            mix: *mix,
-                            view: view.code(),
-                        },
-                    );
-                }
-            }
-            Resolved::Lut { mix } => {
-                // The k-th Lut op binds the k-th `luts` slot (§3.11). A None
-                // slot — an unset, missing, 1D or unreadable file — is a
-                // passthrough (the labelled no-op rule; never a fault). The
-                // parsed cube travels beside the op, exactly as Motion blur's
-                // flow field does, since a path is not Copy in `Resolved`.
-                let loaded = luts.get(lut_i).and_then(|o| o.as_ref());
-                lut_i += 1;
-                if let Some(l) = loaded {
-                    tex = fx.lut(
-                        ctx,
-                        &tex,
-                        w,
-                        h,
-                        &l.texture,
-                        l.size,
-                        *mix,
-                        l.domain_min,
-                        l.domain_max,
-                    );
-                }
-            }
-            Resolved::LightWrap {
-                width_px,
-                intensity,
-                mix,
-            } => {
-                // Shares the layer-input counter with Dof (K-358): both are
-                // enumerated by `build.rs`'s one `layer_input_param`
-                // predicate, so one counter keeps the slots and the ops in
-                // step. An absent Background — unset, missing or cyclic — is
-                // the passthrough, the labelled no-op every layer-input
-                // effect follows.
-                let background = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
-                dof_i += 1;
-                if let Some(background) = background {
-                    if *width_px > 0.0 && *intensity > 0.0 && *mix > 0.0 {
-                        tex = fx.light_wrap(
-                            ctx,
-                            &tex,
-                            w,
-                            h,
-                            background,
-                            &lumit_gpu::fx::LightWrapOp {
-                                width_px: *width_px,
-                                intensity: *intensity,
-                                mix: *mix,
-                            },
-                        );
-                    }
-                }
-            }
-            Resolved::Dof {
-                focus,
-                range,
-                near_aperture,
-                far_aperture,
-                depth_invert,
-                blade_normals,
-                blade_count,
-                apothem2,
-                roundness,
-                rim,
-                aspect_scale,
-                threshold,
-                bokeh_power,
-                repeat_edge,
-                depth_bound,
-                depth_channel,
-                use_focus_point,
-                focus_point,
-                gamma,
-                remove_edge_leak,
-                detect_edge_threshold,
-                display,
-                mix,
-            } => {
-                // The k-th Dof op binds the k-th `layer_inputs` slot (docs/08
-                // §3.22, docs/impl/layer-input.md): the referenced layer
-                // rendered alone at comp size, its red channel read as depth.
-                // A None slot — unset, missing or cyclic — is a passthrough
-                // (the labelled no-op rule; never a fault). The depth is a
-                // whole texture, so it travels beside the op, exactly as the
-                // LUT cube does, since it is not Copy in `Resolved`.
-                let depth = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
-                dof_i += 1;
-                if let Some(depth) = depth {
-                    tex = fx.dof(
-                        ctx,
-                        &tex,
-                        w,
-                        h,
-                        depth,
-                        &lumit_gpu::fx::DofOp {
-                            focus: *focus,
-                            range: *range,
-                            near_aperture: *near_aperture,
-                            far_aperture: *far_aperture,
-                            blade_normals: *blade_normals,
-                            blade_count: *blade_count,
-                            apothem2: *apothem2,
-                            roundness: *roundness,
-                            rim: *rim,
-                            aspect_scale: *aspect_scale,
-                            threshold: *threshold,
-                            bokeh_power: *bokeh_power,
-                            repeat_edge: *repeat_edge,
-                            depth_bound: *depth_bound,
-                            depth_channel: *depth_channel,
-                            depth_invert: *depth_invert,
-                            use_focus_point: *use_focus_point,
-                            focus_point: *focus_point,
-                            gamma: *gamma,
-                            remove_edge_leak: *remove_edge_leak,
-                            detect_edge_threshold: *detect_edge_threshold,
-                            display: *display,
-                            mix: *mix,
-                        },
-                    );
-                }
-            }
             Resolved::LensFlare(p) => {
                 // Lens flare (docs/08 §3.27, K-256/K-257). Every frame-time
                 // number the GPU needs is derived here through the one
@@ -694,10 +480,40 @@ pub fn run_ops(
             // through — the convention a missing LUT or flow field already
             // uses, never a fault (engine crates do not panic,
             // 14-ENGINEERING-RULES §4).
+            //
+            // An effect that consumes a side table says so
+            // (`GpuEffect::aux`, K-387) and this is where the counter it names
+            // advances — the same counter, in the same order, the effect's own
+            // arm advanced before it moved. The whole-list kinds take no
+            // counter because they were never per-op.
             Resolved::Registry { op } => {
                 if let Some(resolved) = ops.bags.get(*op as usize) {
                     if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
-                        tex = gpu.run(fx, ctx, &tex, w, h, resolved.params);
+                        let aux = match gpu.aux() {
+                            AuxKind::None => AuxSlot::None,
+                            AuxKind::Lut => {
+                                let slot = luts.get(lut_i).and_then(|o| o.as_ref());
+                                lut_i += 1;
+                                AuxSlot::Lut(slot)
+                            }
+                            AuxKind::LayerInput => {
+                                let slot = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
+                                dof_i += 1;
+                                AuxSlot::LayerInput(slot)
+                            }
+                            AuxKind::FlareInputs => {
+                                let matte = flare_mattes.get(flare_i).and_then(|o| o.texture(&tex));
+                                let lens = flare_lens.get(flare_i).and_then(|o| o.as_ref());
+                                flare_i += 1;
+                                AuxSlot::FlareInputs { matte, lens }
+                            }
+                            AuxKind::Neighbours => AuxSlot::Neighbours(neighbours),
+                            AuxKind::FlowField => AuxSlot::FlowField {
+                                field: flow_field,
+                                neighbours,
+                            },
+                        };
+                        tex = gpu.run(fx, ctx, &tex, w, h, resolved.params, aux);
                     }
                 }
             }

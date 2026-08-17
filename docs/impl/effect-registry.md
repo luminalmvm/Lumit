@@ -281,6 +281,51 @@ pub trait GpuEffect: Sync + 'static {
 asserts the two registries agree: every schema that resolves has exactly one `GpuEffect`,
 and every `GpuEffect` names a schema.
 
+### 2.5a Side-table inputs (the parallel-list seam, K-387)
+
+Some effects consume an input the render prepared beside the stack: the k-th LUT op
+binds `luts[k]`, a depth/layer input binds `layer_inputs[k]`, Echo reads the decoded
+neighbour frames, the flow consumers read the dense field. `build.rs` enumerates these
+with one predicate in one order, and `run_ops` walks shared counters so the two sides
+cannot drift. Registry dispatch keeps that contract by making the consumption a
+declaration:
+
+```rust
+pub enum AuxKind { None, Lut, LayerInput, FlareInputs, Neighbours, FlowField }
+
+pub trait GpuEffect {
+    ...
+    /// Which parallel input list this effect consumes a slot of. run_ops
+    /// advances the matching counter exactly as the old match arms did.
+    fn aux(&self) -> AuxKind { AuxKind::None }
+    fn run(&self, ..., aux: AuxSlot<'_>) -> Tex;
+}
+```
+
+`AuxSlot` is the borrowed slot (or the whole list, for Neighbours/FlowField, which were
+never per-op). The Registry arm advances the counter its `aux()` names and hands the
+slot over; the enumeration predicate in `build.rs` matches instance `match_name`s, the
+consumption matches def `match_name`s, and they are the same names — the one-predicate,
+one-order rule survives unchanged. A missing slot stays a passthrough (degrade, never
+fault), exactly the convention every list already had.
+
+Two kinds carry a **pair**, because two inputs arrive together and are counted as one:
+`FlareInputs` is the flare's Matte source and its custom prescription off the one
+`flare_i`, and `FlowField` is the dense field *and* the decoded neighbours off the one
+decode — Datamosh walks the field out of the −1 frame, so it needs both, while Fast
+motion blur ignores the frames. Neither pair advances a second counter, which is the
+point: an effect declares one list, not a set of them.
+
+Two facts about a slot cannot be a parameter and so are read off the slot itself. The
+first is presence — a Layer row never reaches the arena, so "is a depth pass bound?"
+is `aux.layer_input().is_some()`, which `Dof::packed` takes as an argument; the second
+is that a slot only ever exists for an op whose Layer row names something, so presence
+*is* the old `depth_bound`. The gate is
+`a_side_table_effect_declares_the_list_it_consumes` (§7 test 14), and the counter's own
+gate is `depth_of_field_and_light_wrap_share_one_layer_input_counter` (test 15), whose
+first slot is deliberately empty: an implementation that advances the counter only when
+it has something to bind hands the second effect the first effect's plate.
+
 ### 2.6 Registration is a list, not a `ctor`
 
 `lumit-core/src/fx/catalogue.rs`, the whole of it:
@@ -395,18 +440,22 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    on this list for their seam rather than their size — each derives a number from the
    *layer time* at resolve, and Flash also reads the §1.4 marker context and its Trigger
    property's whole keyframe track — and came off it when K-385 widened `EffectDef` with
-   §2.4a's hook. What is left is blocked by something the bag cannot carry:
-   - a **side table** threaded beside the ops and consumed by a counter that must stay 1:1
-     and in order with them: `lut` (`luts[lut_i]`), `dof` (23 parameters, folded aperture,
-     and a layer-input slot), `light_wrap` (a layer-input slot off the same `dof_i`
-     counter), `lens_flare` (50 parameters, bakes, `flare_mattes[flare_i]`);
-   - a **neighbour frame or flow field** off the layer's decode: `echo`, `motion_blur`,
-     `datamosh`;
+   §2.4a's hook. `lut` and `echo` came off it when K-387 added §2.5a's aux seam — one an
+   effect that counts along a list, one that reads a whole list, so both shapes are proven —
+   and the rest of the side-table set followed it in one batch: `dof` (the folded aperture,
+   and the layer-input slot), `light_wrap` (the same `dof_i` counter), `motion_blur` and
+   `datamosh` (the decoded motion), plus `matte_key`, which was on none of those counts at
+   all — a flat bundle of scalars, colours and two normalised Choice codes — and was held
+   back only by its size.
+
+   Two things are left, and neither is a batch:
+   - **`lens_flare` is its own campaign**: 50 parameters, three parallel lists, a lazy bake
+     closure the engine may run on another thread, and a frame-time grid probe that calls
+     back into `lumit-core` mid-dispatch. `AuxKind::FlareInputs` already carries its two
+     slots, so the seam is not what blocks it — the bulk and the bake are, and they want
+     reviewing on their own branch.
    - a **variable-shape payload**: `shake`'s nine sub-frame samples, which also fork the
      dispatch to a different kernel. `Value` has no array kind, so this is a decision.
-
-   `matte_key` is on none of those counts — a flat bundle of scalars, colours and two
-   normalised Choice codes — and is simply the next one to move.
 4. Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body.
 5. Dynamic parameters, then spare parameters, then the panel affordances for both.
 
@@ -456,3 +505,27 @@ Parity, throughout:
 13. Every existing `*_matches_the_cpu_oracle` test in `lumit-gpu` passes unchanged. They are
     the actual acceptance criterion for the migration; they take the effect's own parameter
     struct, which `pack` now produces, so they need no rewriting.
+
+Side tables (§2.5a, K-387) — every one of these fails as a *picture*, never as a crash,
+which is why each is written down:
+
+14. `a_side_table_effect_declares_the_list_it_consumes` (lumit-render) — an effect declaring
+    a `File` or `Layer` row must return something other than `AuxKind::None`, because
+    `resolve_into_arena` drops those kinds and the input would otherwise never arrive. The
+    only place both halves are visible. Its lumit-core twin is
+    `the_arena_carries_no_file_slot_or_layer_binding`, which pins the silence.
+15. `the_kth_lut_op_binds_the_kth_slot` and
+    `depth_of_field_and_light_wrap_share_one_layer_input_counter` (lumit-render) — the
+    counting contract itself, once per counter. In both, the **first slot is deliberately
+    empty**: an implementation that advances a counter only when it has something to bind
+    passes the test with one slot and grades (or wraps) the wrong effect with two. The
+    second also proves the counter is shared across two *different* effects, which is what
+    `build.rs`'s single `layer_input_param` predicate promises.
+16. `echo_receives_the_decoded_neighbours` (lumit-render) — the whole-list shape, asserted
+    on the trail rather than on the plumbing: an empty list where the render decoded four
+    frames renders a perfectly ordinary picture, and nothing else notices.
+17. `the_side_table_batch_stays_a_cpu_passthrough` (lumit-core) — the six effects whose real
+    input is a second picture draw **nothing** through `cpu::apply_stack`, exactly as their
+    old `cpu::apply` arms did. The degradation rung (K-019) is the path nobody looks at, so
+    an `apply_cpu` written for one of these — reading a garbage buffer, or half-rendering —
+    would go unnoticed.

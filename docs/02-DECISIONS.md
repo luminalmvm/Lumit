@@ -9869,3 +9869,16 @@ parameter's true unit and the old dispatch mis-declared it, the declared unit wi
 the module documents the change, and `every_parameter_declares_a_unit`'s golden list
 pins it. The output change is the *correction* of a preview≠export disagreement, never
 a new look at full resolution — an oracle that moves at full raster still means a bug.
+
+## K-387 — A side-table effect declares which list it consumes
+
+**DECIDED** (2026-08-17). The last seam of the registry migration. The render prepares
+parallel input lists beside a stack (LUTs, layer inputs, neighbour frames, the flow
+field, the flare's mattes and lenses), bound to ops by shared counters in stack order —
+one predicate in build.rs, one order in run_ops, drift impossible. Under registry
+dispatch that binding becomes a declaration: `GpuEffect::aux()` names the list, the
+Registry arm advances the matching counter and hands the borrowed slot into `run`.
+The build-side predicate keys on instance match_names and the consumption on def
+match_names — the same names — so the one-predicate, one-order rule is untouched, and
+a missing slot stays a passthrough. docs/impl/effect-registry.md §2.5a carries the
+shape.

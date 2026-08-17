@@ -3525,12 +3525,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each generated entry against the hand-written one it replaces and fails if they differ by
   so much as a default value — which is what makes it a move rather than a rewrite.
 
-  Twenty-six effects have moved so far, in five batches: the ten colour ones first (Colour
+  Thirty-three effects have moved so far, in seven batches: the ten colour ones first (Colour
   balance, Saturation, Vibrancy, Exposure, Hue shift, Contrast, Gamma, Temperature, Invert,
   Tint), then the five blur ones (Gaussian blur, Directional blur, Radial blur, Sharpen,
-  Simple sharpen), then Vignette, RGB split and Chromatic aberration, then Flash, and then
+  Simple sharpen), then Vignette, RGB split and Chromatic aberration, then Flash, then
   seven more: Sprite flare, Transform, Glow, Block glitch and Scanlines, plus Posterize time
-  and Motion blur, which draw nothing at all (see below). While the rest catch up, a
+  and Motion blur, which draw nothing at all (see below); then LUT and Echo, the first two
+  whose real input is not a number at all (see below); and then the rest of those — Depth of
+  field and Light wrap, which read another layer's picture, Fast motion blur and Datamosh,
+  which read the movement measured off the footage, and Matte key, which turned out to read
+  nothing extra at all and was simply large. Only the Lens flare is left. While it catches
+  up, a
   layer's stack is read **two ways at once**: the effects that have moved keep their
   controls in the shared list of numbers, and the ones that haven't still have a slot each.
   A single ordered list decides what runs when, so an effect that has moved and one that
@@ -3563,6 +3568,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   decided a level above the effect stack, in the walk that works out which frames to render.
   So they declare their controls like everybody else and declare that they have no picture
   pass, and the render path skips them entirely.
+
+- **The effects whose real input is not a number (K-387)** — a LUT's input is a *file* of
+  colours somebody exported from a grading tool; Echo's input is the *pictures* of the
+  frames just before this one; Depth of field's is another layer, rendered on its own. None
+  of that fits in a list of numbers, so the render prepares those things in lists running
+  alongside the effect stack, and which entry belongs to which effect is settled by
+  **counting**: the second LUT on a layer takes the second cube. That counting is the whole
+  contract, and it is easy to break in a way nothing notices — skip a cube because its file
+  was missing, and every LUT below it silently grades with somebody else's look.
+
+  So an effect now **says which list it consumes**, and one place — the loop that hands work
+  to the graphics card — does the counting for all of them. An effect that names no list is
+  handed nothing, which is nearly all of them. An effect whose entry is missing (the file
+  never loaded, the layer was deleted) is handed an empty slot and passes the picture through
+  untouched: the labelled do-nothing Lumit uses everywhere rather than an error. And the
+  count still advances for that empty slot — which is the bug the regression test in
+  `gpufx.rs` is written to catch, because it is the one that looks harmless.
 
 ## 5. Making a change safely (the recipe)
 

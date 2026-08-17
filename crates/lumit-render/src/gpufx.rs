@@ -26,22 +26,150 @@ use lumit_core::fx::{EffectMetadata, Params};
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
+use crate::fxops::LoadedLut;
+
 type Tex = wgpu::Texture;
+
+/// Which parallel input list an effect consumes a slot of
+/// (docs/impl/effect-registry.md §2.5a, K-387).
+///
+/// **In plain terms.** A few effects need something the *render* prepared, not
+/// something the user typed: a parsed `.cube`, another layer's picture, the
+/// frames either side of this one, the motion field. Those arrive as lists
+/// running alongside the stack, and which entry of a list belongs to which op is
+/// settled by counting: the k-th LUT op takes the k-th cube. This says which
+/// list an effect counts along, so `run_ops` can advance that counter and hand
+/// the slot over without knowing anything else about the effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuxKind {
+    /// Nothing beside the op — every effect but a handful.
+    None,
+    /// The parallel LUT list (docs/08 §3.11): one parsed cube per `lut` op.
+    Lut,
+    /// The parallel layer-input list (docs/08 §3.22, docs/impl/layer-input.md):
+    /// one rendered layer per consuming op, shared by Depth of field and Light
+    /// wrap because `build.rs` enumerates them with one predicate.
+    LayerInput,
+    /// The Lens flare's pair (K-257, K-264): its Matte source and its custom
+    /// prescription, counted together off one index.
+    FlareInputs,
+    /// The layer's decoded neighbour frames — the whole list, never per-op.
+    Neighbours,
+    /// The layer's decoded motion — the dense field and the neighbour frames
+    /// beside it, both whole, never per-op.
+    FlowField,
+}
+
+/// The borrowed slot itself, as [`crate::fxops::run_ops`] resolved it.
+///
+/// A missing input is `None` (or an empty list), which every effect that takes
+/// one renders as a passthrough: an unset LUT, a dangling layer reference or a
+/// dropped decode degrades the picture, it never faults
+/// (14-ENGINEERING-RULES §4).
+#[derive(Clone, Copy)]
+pub enum AuxSlot<'a> {
+    /// The effect declared [`AuxKind::None`].
+    None,
+    /// This op's parsed cube, or `None` when the file was unset, missing, 1D or
+    /// unreadable.
+    Lut(Option<&'a LoadedLut>),
+    /// This op's layer input, already resolved against the picture the chain is
+    /// carrying (so [`crate::fxops::LayerInput::ThisLayer`] is a real texture by
+    /// the time it arrives here).
+    LayerInput(Option<&'a Tex>),
+    /// The flare's Matte source and its custom prescription (content hash and
+    /// text), each absent on its own terms.
+    FlareInputs {
+        matte: Option<&'a Tex>,
+        lens: Option<&'a (u64, String)>,
+    },
+    /// Every decoded neighbour frame, keyed by offset; empty unless the stack
+    /// asked for a temporal window.
+    Neighbours(&'a [(i32, Tex)]),
+    /// The layer's decoded motion: the dense field at this raster if one was
+    /// computed, and the neighbour frames it displaces. Both come off the one
+    /// decode, and Datamosh reads both — the field to walk along, the −1 frame
+    /// to drag — which is why they arrive together, as the flare's matte and its
+    /// prescription do. Fast motion blur ignores the frames.
+    FlowField {
+        field: Option<&'a Tex>,
+        neighbours: &'a [(i32, Tex)],
+    },
+}
+
+impl<'a> AuxSlot<'a> {
+    /// This op's cube. `None` for a missing slot *and* for a slot of the wrong
+    /// kind — which cannot happen, since [`GpuEffect::aux`] is what chose the
+    /// kind, and which is a passthrough rather than a panic if it ever does.
+    pub fn lut(self) -> Option<&'a LoadedLut> {
+        match self {
+            AuxSlot::Lut(l) => l,
+            _ => None,
+        }
+    }
+
+    /// This op's layer input — the depth pass, the background plate — already
+    /// resolved against the picture the chain is carrying. `None` for an unset,
+    /// missing or cyclic reference: the labelled no-op.
+    pub fn layer_input(self) -> Option<&'a Tex> {
+        match self {
+            AuxSlot::LayerInput(t) => t,
+            _ => None,
+        }
+    }
+
+    /// The decoded neighbour frames, empty when there are none — from either of
+    /// the two kinds that carry them.
+    pub fn neighbours(self) -> &'a [(i32, Tex)] {
+        match self {
+            AuxSlot::Neighbours(n) => n,
+            AuxSlot::FlowField { neighbours, .. } => neighbours,
+            _ => &[],
+        }
+    }
+
+    /// The dense motion field, `None` when the decode computed none — a plain
+    /// layer, or a dropped neighbour. The passthrough, never a fault.
+    pub fn flow_field(self) -> Option<&'a Tex> {
+        match self {
+            AuxSlot::FlowField { field, .. } => field,
+            _ => None,
+        }
+    }
+}
 
 /// One migrated effect's GPU pass.
 ///
 /// The arguments are what [`crate::fxops::run_ops`] already holds when an op
-/// comes round: the engine, the device, the picture the chain is carrying, and
-/// its size. `run` returns the picture after the pass, which for most effects is
-/// a new texture.
+/// comes round: the engine, the device, the picture the chain is carrying, its
+/// size, and whatever the render prepared beside the stack for it. `run` returns
+/// the picture after the pass, which for most effects is a new texture.
 pub trait GpuEffect: Sync + 'static {
     /// The stable name this answers to — the same `match_name` the effect's
     /// declaration carries in `lumit-core`.
     fn match_name(&self) -> &'static str;
 
-    /// Draw the effect, with its parameters read from the resolved bag.
-    fn run(&self, fx: &FxEngine, ctx: &GpuContext, tex: &Tex, w: u32, h: u32, p: Params<'_>)
-        -> Tex;
+    /// Which parallel input list this effect consumes a slot of.
+    /// [`crate::fxops::run_ops`] advances the matching counter exactly as the
+    /// old match arms did, so the enumeration in `build.rs` and the consumption
+    /// here stay in step (K-387).
+    fn aux(&self) -> AuxKind {
+        AuxKind::None
+    }
+
+    /// Draw the effect, with its parameters read from the resolved bag and its
+    /// side-table input (if it declared one) already bound.
+    #[allow(clippy::too_many_arguments)]
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex;
 }
 
 /// Every migrated effect's GPU pass. Order is irrelevant here (the Add-effect
@@ -54,6 +182,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Sharpen,
     &SharpenSimple,
     &SpriteFlare,
+    &LightWrap,
     &RgbSplit,
     &ChromaticAberration,
     &Flash,
@@ -66,10 +195,16 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Contrast,
     &Gamma,
     &Temperature,
+    &Lut,
+    &Dof,
     &Transform,
     &Glow,
     &BlockGlitch,
     &Scanlines,
+    &Datamosh,
+    &Echo,
+    &MotionBlur,
+    &MatteKey,
     &Invert,
     &Tint,
 ];
@@ -106,6 +241,7 @@ impl GpuEffect for Blur {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, edge, mix) = effects::blur::Blur::read(p).packed();
         fx.blur(
@@ -135,6 +271,7 @@ impl GpuEffect for DirectionalBlur {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (length_px, angle_deg, edge, mix) =
             effects::directional_blur::DirectionalBlur::read(p).packed();
@@ -172,6 +309,7 @@ impl GpuEffect for RadialBlur {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (centre_frac, amount_px, spin, edge, mix) =
             effects::radial_blur::RadialBlur::read(p).packed();
@@ -205,6 +343,7 @@ impl GpuEffect for Sharpen {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, radius_px, threshold, luma_only, mix) =
             effects::sharpen::Sharpen::read(p).packed();
@@ -237,6 +376,7 @@ impl GpuEffect for SharpenSimple {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, radius, mix) = effects::sharpen_simple::SharpenSimple::read(p).packed();
         fx.sharpen_simple(
@@ -266,6 +406,7 @@ impl GpuEffect for SpriteFlare {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let s = effects::sprite_flare::SpriteFlare::read(p).packed();
         fx.sprite_flare(
@@ -292,6 +433,50 @@ impl GpuEffect for SpriteFlare {
     }
 }
 
+struct LightWrap;
+impl GpuEffect for LightWrap {
+    fn match_name(&self) -> &'static str {
+        "light_wrap"
+    }
+    /// The Background plate is another layer, rendered alone at this raster —
+    /// the layer-input list, off the same counter Depth of field uses because
+    /// `build.rs` enumerates both with one predicate (K-358, K-387).
+    fn aux(&self) -> AuxKind {
+        AuxKind::LayerInput
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (width_px, intensity, mix) = effects::light_wrap::LightWrap::read(p).packed();
+        // An absent Background — unset, missing or cyclic — is the passthrough,
+        // and so is any neutral setting: the old arm guarded both, and the CPU
+        // reference guards the second internally, so the two paths agree about
+        // which inputs draw nothing at all.
+        match aux.layer_input() {
+            Some(background) if width_px > 0.0 && intensity > 0.0 && mix > 0.0 => fx.light_wrap(
+                ctx,
+                tex,
+                w,
+                h,
+                background,
+                &lumit_gpu::fx::LightWrapOp {
+                    width_px,
+                    intensity,
+                    mix,
+                },
+            ),
+            _ => tex.clone(),
+        }
+    }
+}
+
 struct RgbSplit;
 impl GpuEffect for RgbSplit {
     fn match_name(&self) -> &'static str {
@@ -305,6 +490,7 @@ impl GpuEffect for RgbSplit {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         // The Wavelength tier runs a different kernel, which is why the effect's
         // `packed` answers with a mode rather than a tuple. The offset vector and
@@ -375,6 +561,7 @@ impl GpuEffect for ChromaticAberration {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         match effects::chromatic_aberration::ChromaticAberration::read(p).packed() {
             effects::chromatic_aberration::Fringe::Classic {
@@ -435,6 +622,7 @@ impl GpuEffect for ColourBalance {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (lift, gamma, gain, mix) = effects::colour_balance::ColourBalance::read(p).packed();
         fx.colour_balance(
@@ -465,6 +653,7 @@ impl GpuEffect for Saturation {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (saturation, mix) = effects::saturation::Saturation::read(p).packed();
         fx.saturation(
@@ -490,6 +679,7 @@ impl GpuEffect for Vibrancy {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, mix) = effects::vibrancy::Vibrancy::read(p).packed();
         fx.vibrancy(ctx, tex, w, h, &lumit_gpu::fx::VibrancyOp { amount, mix })
@@ -509,6 +699,7 @@ impl GpuEffect for Flash {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         // Strength is the resolve-time envelope (K-385), already in the bag; the
         // wrapper does no time maths of its own, exactly as it does no arithmetic
@@ -542,6 +733,7 @@ impl GpuEffect for Vignette {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, radius, softness, roundness, ramp, mix) =
             effects::vignette::Vignette::read(p).packed();
@@ -575,6 +767,7 @@ impl GpuEffect for Exposure {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (factor, mix) = effects::exposure::Exposure::read(p).packed();
         fx.exposure(ctx, tex, w, h, &lumit_gpu::fx::ExposureOp { factor, mix })
@@ -594,6 +787,7 @@ impl GpuEffect for HueShift {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (m, mix) = effects::hue_shift::HueShift::read(p).packed();
         fx.hue_shift(ctx, tex, w, h, &lumit_gpu::fx::HueShiftOp { m, mix })
@@ -613,6 +807,7 @@ impl GpuEffect for Contrast {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (k, mix) = effects::contrast::Contrast::read(p).packed();
         fx.contrast(ctx, tex, w, h, &lumit_gpu::fx::ContrastOp { k, mix })
@@ -632,6 +827,7 @@ impl GpuEffect for Gamma {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (gamma, mix) = effects::gamma::Gamma::read(p).packed();
         fx.gamma(ctx, tex, w, h, &lumit_gpu::fx::GammaOp { gamma, mix })
@@ -651,6 +847,7 @@ impl GpuEffect for Temperature {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (gain_r, gain_b, mix) = effects::temperature::Temperature::read(p).packed();
         fx.temperature(
@@ -662,6 +859,114 @@ impl GpuEffect for Temperature {
                 gain_r,
                 gain_b,
                 mix,
+            },
+        )
+    }
+}
+
+struct Lut;
+impl GpuEffect for Lut {
+    fn match_name(&self) -> &'static str {
+        "lut"
+    }
+    /// The k-th `lut` op binds the k-th cube (docs/08 §3.11) — the counter
+    /// `run_ops` advances for this kind.
+    fn aux(&self) -> AuxKind {
+        AuxKind::Lut
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let mix = effects::lut::Lut::read(p).packed();
+        // An empty slot — unset, missing, 1D or unreadable file — is the
+        // labelled no-op, exactly as the old arm's `if let Some` was; the
+        // texture handle is an `Arc`, so passing it back costs nothing.
+        match aux.lut() {
+            Some(l) => fx.lut(
+                ctx,
+                tex,
+                w,
+                h,
+                &l.texture,
+                l.size,
+                mix,
+                l.domain_min,
+                l.domain_max,
+            ),
+            None => tex.clone(),
+        }
+    }
+}
+
+struct Dof;
+impl GpuEffect for Dof {
+    fn match_name(&self) -> &'static str {
+        "dof"
+    }
+    /// The depth pass is the referenced layer rendered alone at this raster —
+    /// the k-th consuming op binds the k-th slot (docs/08 §3.22, K-387), the
+    /// counter Light wrap shares.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LayerInput
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        // An empty slot — unset, missing or cyclic — is the labelled no-op,
+        // exactly as the old arm's `if let Some` was.
+        let Some(depth) = aux.layer_input() else {
+            return tex.clone();
+        };
+        // A slot only ever arrives for an op whose Layer row names something
+        // (`build.rs`'s `layer_input_param` predicate), so a depth pass being
+        // *here* is precisely what "a depth layer is bound" meant in the old
+        // resolve arm — the fact the bag cannot carry, since a Layer row never
+        // reaches it.
+        let d = effects::dof::Dof::read(p).packed(true, effects::dof::Dof::blades_of(p));
+        fx.dof(
+            ctx,
+            tex,
+            w,
+            h,
+            depth,
+            &lumit_gpu::fx::DofOp {
+                focus: d.focus,
+                range: d.range,
+                near_aperture: d.near_aperture,
+                far_aperture: d.far_aperture,
+                blade_normals: d.blade_normals,
+                blade_count: d.blade_count,
+                apothem2: d.apothem2,
+                roundness: d.roundness,
+                rim: d.rim,
+                aspect_scale: d.aspect_scale,
+                threshold: d.threshold,
+                bokeh_power: d.bokeh_power,
+                repeat_edge: d.repeat_edge,
+                depth_bound: true,
+                depth_channel: d.depth_channel,
+                depth_invert: d.depth_invert,
+                use_focus_point: d.use_focus_point,
+                focus_point: d.focus_point,
+                gamma: d.gamma,
+                remove_edge_leak: d.remove_edge_leak,
+                detect_edge_threshold: d.detect_edge_threshold,
+                display: d.display,
+                mix: d.mix,
             },
         )
     }
@@ -680,6 +985,7 @@ impl GpuEffect for Transform {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (anchor, position, scale, rotation_deg, opacity, mix) =
             effects::transform::Transform::read(p).packed();
@@ -718,6 +1024,7 @@ impl GpuEffect for Glow {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, threshold, knee, intensity, tint, mix) =
             effects::glow::Glow::read(p).packed();
@@ -751,6 +1058,7 @@ impl GpuEffect for BlockGlitch {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         // The tick is the resolve-time discretised layer time (K-385), already
         // in the bag; the wrapper does no time maths of its own, exactly as it
@@ -800,6 +1108,7 @@ impl GpuEffect for Scanlines {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         // Intensity carries an old project's folded Darkness and the roll is
         // this frame's offset — both resolve-time derivations (K-385), already
@@ -823,6 +1132,181 @@ impl GpuEffect for Scanlines {
     }
 }
 
+struct Datamosh;
+impl GpuEffect for Datamosh {
+    fn match_name(&self) -> &'static str {
+        "datamosh"
+    }
+    /// Datamosh reads the layer's decoded motion — the current→previous flow
+    /// field *and* the −1 neighbour it drags along it. Whole lists, so no
+    /// counter advances for this kind.
+    fn aux(&self) -> AuxKind {
+        AuxKind::FlowField
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        // Either input missing — a non-footage layer, or a dropped decode — is a
+        // passthrough, never a fault, exactly as the old arm's tuple `if let`
+        // was.
+        let (Some(flow), Some((_, prev))) = (
+            aux.flow_field(),
+            aux.neighbours().iter().find(|(o, _)| *o == -1),
+        ) else {
+            return tex.clone();
+        };
+        let (ramp, reach) = effects::datamosh::Datamosh::derived_of(p);
+        let (intensity, displacement, bloom, steps, mix) =
+            effects::datamosh::Datamosh::read(p).packed(ramp, reach);
+        fx.datamosh(
+            ctx,
+            tex,
+            prev,
+            flow,
+            w,
+            h,
+            &lumit_gpu::fx::DatamoshOp {
+                // The blend maths take a single fraction; Mix folds into
+                // Intensity here rather than adding a second uniform, since
+                // mixing the same two inputs twice collapses to one mix by the
+                // product.
+                intensity: intensity * mix,
+                displacement,
+                bloom,
+                steps,
+            },
+        )
+    }
+}
+
+struct Echo;
+impl GpuEffect for Echo {
+    fn match_name(&self) -> &'static str {
+        "echo"
+    }
+    /// Echo reads the layer's decoded neighbour frames — the **whole** list, not
+    /// a slot of it, so no counter advances for this kind. The render decoded
+    /// exactly the offsets the effect's declared temporal window asked for.
+    fn aux(&self) -> AuxKind {
+        AuxKind::Neighbours
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (weights, mode, mix) = effects::echo::Echo::read(p).packed();
+        // The kernel is called whether or not any neighbour arrived, exactly as
+        // the old arm called it: an offset with no frame simply contributes
+        // nothing, so a layer at its first frame trails off rather than
+        // flickering between an echoed and an un-echoed picture.
+        let by_offset: Vec<(i32, &Tex)> = aux.neighbours().iter().map(|(o, t)| (*o, t)).collect();
+        fx.echo(
+            ctx,
+            tex,
+            &by_offset,
+            w,
+            h,
+            &lumit_gpu::fx::EchoOp { weights, mode, mix },
+        )
+    }
+}
+
+struct MotionBlur;
+impl GpuEffect for MotionBlur {
+    fn match_name(&self) -> &'static str {
+        "motion_blur"
+    }
+    /// The streak follows the layer's dense motion field (with a confidence
+    /// channel, FX-19), which the decode worker computed from the current and
+    /// next source frames. A whole texture, so no counter advances for it.
+    fn aux(&self) -> AuxKind {
+        AuxKind::FlowField
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        // With no field (a plain layer, or a decode that dropped the neighbour)
+        // it is a passthrough — never a fault.
+        let Some(flow) = aux.flow_field() else {
+            return tex.clone();
+        };
+        let (shutter_frac, samples, mix, view) = effects::motion_blur::MotionBlur::read(p).packed();
+        fx.motion_blur(
+            ctx,
+            tex,
+            flow,
+            w,
+            h,
+            &lumit_gpu::fx::MotionBlurOp {
+                shutter_frac,
+                samples,
+                mix,
+                view: view.code(),
+            },
+        )
+    }
+}
+
+struct MatteKey;
+impl GpuEffect for MatteKey {
+    fn match_name(&self) -> &'static str {
+        "matte_key"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let k = effects::matte_key::MatteKey::read(p).packed();
+        fx.matte_key(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::MatteKeyOp {
+                view: k.view,
+                key: k.key,
+                gain: k.gain,
+                balance: k.balance,
+                despill_bias: k.despill_bias,
+                alpha_bias: k.alpha_bias,
+                spill: k.spill,
+                clip_black: k.clip_black,
+                clip_white: k.clip_white,
+                clip_rollback: k.clip_rollback,
+                replace_method: k.replace_method,
+                replace_colour: k.replace_colour,
+                mix: k.mix,
+            },
+        )
+    }
+}
+
 struct Invert;
 impl GpuEffect for Invert {
     fn match_name(&self) -> &'static str {
@@ -836,6 +1320,7 @@ impl GpuEffect for Invert {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let mix = effects::invert::Invert::read(p).packed();
         fx.invert(ctx, tex, w, h, &lumit_gpu::fx::InvertOp { mix })
@@ -855,6 +1340,7 @@ impl GpuEffect for Tint {
         w: u32,
         h: u32,
         p: Params<'_>,
+        _aux: AuxSlot<'_>,
     ) -> Tex {
         let (black, white, mix) = effects::tint::Tint::read(p).packed();
         fx.tint(ctx, tex, w, h, &lumit_gpu::fx::TintOp { black, white, mix })
@@ -891,6 +1377,41 @@ mod tests {
             assert!(
                 BUILTIN_DEFS.get(name).is_some(),
                 "the GPU table names {name}, which no effect declares"
+            );
+        }
+    }
+
+    /// An effect whose real input is a file or another layer must say which
+    /// list that input arrives on (K-387), because `resolve_into_arena`
+    /// deliberately drops those parameter kinds: only the render knows which
+    /// cube loaded or which layer was rendered, so nothing reaches the bag.
+    ///
+    /// This is the gate that makes the silence safe, and it lives here because
+    /// it is the only place both halves are visible — the declaration in
+    /// `lumit-core`, the consumption in this table. Without it, migrating an
+    /// effect and forgetting its `aux()` is a picture that renders perfectly and
+    /// quietly ignores its grade.
+    #[test]
+    fn a_side_table_effect_declares_the_list_it_consumes() {
+        use lumit_core::fx::ParamKind;
+        for def in BUILTIN_DEFS.iter() {
+            let name = def.schema().match_name;
+            let side_input = def
+                .schema()
+                .params
+                .iter()
+                .any(|p| matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. }));
+            if !side_input {
+                continue;
+            }
+            let gpu = gpu_effect(name).unwrap_or_else(|| {
+                panic!("{name} takes a file or layer input but has no GPU pass to receive it")
+            });
+            assert_ne!(
+                gpu.aux(),
+                AuxKind::None,
+                "{name} declares a file or layer row, but its GPU pass claims no list — \
+                 the input it was given would never arrive"
             );
         }
     }
@@ -982,5 +1503,244 @@ mod tests {
                  kernel with the wrong numbers"
             );
         }
+    }
+
+    /// **The k-th LUT op binds the k-th cube** (docs/08 §3.11, K-387).
+    ///
+    /// The whole threading contract in one picture. `build.rs` enumerates a
+    /// layer's enabled `lut` effects in stack order, and `run_ops` walks a
+    /// counter down the ops in the same order; nothing but the counting joins
+    /// the two, so a slot that is skipped or double-counted grades the wrong
+    /// effect — a project where dragging one LUT above another moves the grade
+    /// to a layer nobody touched.
+    ///
+    /// The failure this pins is the tempting one: advancing the counter only
+    /// when a cube is actually there. The first slot here is deliberately
+    /// **empty** (an unset or unreadable file — the passthrough every list
+    /// allows), so an implementation that skips it hands the second op the first
+    /// slot and renders no grade at all.
+    #[test]
+    fn the_kth_lut_op_binds_the_kth_slot() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (4u32, 4u32);
+        // Opaque yellow: full red and green, no blue. Every channel sits on a
+        // corner of the two-entry cube below, so the answer is the cube's own
+        // value rather than an interpolation of it.
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 0.0, 1.0]).collect();
+
+        // A grade that takes green to zero and leaves red and blue alone.
+        let cube: Vec<[f32; 3]> = (0..8u32)
+            .map(|i| [(i & 1) as f32, 0.0, ((i >> 2) & 1) as f32])
+            .collect();
+        let kill_green = crate::fxops::LoadedLut {
+            texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
+            size: 2,
+            domain_min: [0.0; 3],
+            domain_max: [1.0; 3],
+        };
+
+        let inst = lumit_core::fx::instantiate("lut").expect("lut is a built-in");
+        let ops = lumit_core::fx::resolve_stack(
+            &[inst.clone(), inst],
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        assert_eq!(ops.ops.len(), 2, "two LUT ops, two slots to bind");
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            None,
+            // Slot 0 empty, slot 1 the grade: only the *second* op grades.
+            &[None, Some(kill_green)],
+            &[],
+            &[],
+            &[],
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        assert!(
+            got[1] < 1e-2,
+            "green is {} — the second op did not bind the second slot",
+            got[1]
+        );
+        assert!(
+            (got[0] - 1.0).abs() < 1e-2 && got[2] < 1e-2,
+            "the grade changed a channel it was told to leave alone: {got:?}"
+        );
+    }
+
+    /// **Depth of field and Light wrap count along ONE layer-input list**
+    /// (docs/impl/layer-input.md §2, K-358, K-387).
+    ///
+    /// `build.rs` fills a slot for every enabled effect that declares a Layer
+    /// row — one predicate, `layer_input_param`, covering both — and `run_ops`
+    /// walks a single counter down the ops in the same order. Two counters, or a
+    /// counter that only advanced when a slot was actually filled, would hand the
+    /// second effect the first effect's plate: a project where adding a Depth of
+    /// field above a Light wrap silently moves which layer the wrap reads.
+    ///
+    /// So the first slot here is deliberately **empty** and belongs to the Depth
+    /// of field — the passthrough case, which is where a "skip the counter when
+    /// there is nothing to bind" implementation goes wrong — and the second holds
+    /// a bright plate for the Light wrap. If the counter is shared and
+    /// unconditional, the wrap lights the foreground's edge; if it is not, the
+    /// wrap reads the empty slot and draws nothing at all.
+    #[test]
+    fn depth_of_field_and_light_wrap_share_one_layer_input_counter() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 24u32);
+
+        // A dim opaque square in an empty frame: a real matte edge for the wrap
+        // to find, and dark enough that a spill is unmistakable.
+        let mut fg = vec![0.0f32; (w * h * 4) as usize];
+        for y in 6..18u32 {
+            for x in 8..24u32 {
+                let i = ((y * w + x) * 4) as usize;
+                fg[i] = 0.05;
+                fg[i + 1] = 0.05;
+                fg[i + 2] = 0.05;
+                fg[i + 3] = 1.0;
+            }
+        }
+        let plate: Vec<f32> = (0..(w * h) as usize)
+            .flat_map(|_| [2.0f32, 2.0, 2.0, 1.0])
+            .collect();
+
+        // Stack order: Depth of field (its Depth row unset — an empty slot),
+        // then Light wrap with a real Width so it has something to draw.
+        let dof = lumit_core::fx::instantiate("dof").expect("dof is a built-in");
+        let mut wrap = lumit_core::fx::instantiate("light_wrap").expect("light_wrap is a built-in");
+        for p in &mut wrap.params {
+            if p.id == "width" {
+                p.value =
+                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(5.0));
+            }
+        }
+        let ops = lumit_core::fx::resolve_stack(
+            &[dof, wrap],
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        assert_eq!(ops.ops.len(), 2, "two consuming ops, two slots to bind");
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &fg, w, h);
+        let plate_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &plate, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            None,
+            &[],
+            // Slot 0 empty (the Depth of field's), slot 1 the plate (the wrap's).
+            &[
+                crate::fxops::LayerInput::Absent,
+                crate::fxops::LayerInput::Texture(plate_tex),
+            ],
+            &[],
+            &[],
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        // Just inside the square's left edge: the band the wrap paints.
+        let at = |x: u32, y: u32| got[((y * w + x) * 4) as usize];
+        assert!(
+            at(9, 12) > 0.05 + 1e-2,
+            "the edge band is {} — the wrap never saw the second slot",
+            at(9, 12)
+        );
+        // And nowhere outside the matte: an empty pixel stays empty, which is
+        // also what proves the Depth of field passed through rather than
+        // gathering the plate it was never given.
+        for i in (0..got.len()).step_by(4) {
+            if fg[i + 3] == 0.0 {
+                assert_eq!(
+                    got[i + 3],
+                    0.0,
+                    "pixel {} gained coverage outside the matte",
+                    i / 4
+                );
+            }
+        }
+    }
+
+    /// **Echo is handed the neighbour frames themselves** (docs/08 §3.13,
+    /// K-387). The whole-list kinds take no counter, which makes them look like
+    /// the easy case — but an effect that receives an empty list where the
+    /// render decoded four frames renders a perfectly ordinary picture with no
+    /// trail on it, and nothing else in the pipeline notices. So the trail is
+    /// asserted, not the plumbing: a dark frame with a bright neighbour behind
+    /// it must come out brighter than it went in.
+    #[test]
+    fn echo_receives_the_decoded_neighbours() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (4u32, 4u32);
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [0.2f32, 0.2, 0.2, 1.0]).collect();
+        let previous: Vec<f32> = (0..(w * h)).flat_map(|_| [0.8f32, 0.8, 0.8, 1.0]).collect();
+
+        let inst = lumit_core::fx::instantiate("echo").expect("echo is a built-in");
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let neighbours = [(-1, lumit_gpu::fx::upload_linear_f32(&ctx, &previous, w, h))];
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &neighbours,
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        assert!(
+            got[0] > 0.2 + 1e-2,
+            "red is {} — the neighbour list never reached the kernel",
+            got[0]
+        );
     }
 }

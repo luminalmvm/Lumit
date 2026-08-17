@@ -159,6 +159,39 @@ fn scanlines_packed(
     effects::scanlines::Scanlines::read(p).packed(i, r)
 }
 
+/// What a Depth of field instance hands its kernel: the [`cpu::DofParams`] the
+/// old `Resolved::Dof` variant carried, with the floored blade count coming out
+/// of the resolve-time derivation (K-385) and `depth_bound` — the fact a Layer
+/// row cannot put in the bag — supplied by the caller, as the render supplies it
+/// from the aux slot (K-387).
+fn dof_packed(e: &EffectInstance, px_scale: f32, depth_bound: bool) -> cpu::DofParams {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        px_scale,
+        &MarkerContext::NONE,
+    );
+    let p = Params::new(&bag);
+    effects::dof::Dof::read(p).packed(depth_bound, effects::dof::Dof::blades_of(p))
+}
+
+/// What a Datamosh instance hands its kernel at `lt`: the fields the old
+/// `Resolved::Datamosh` variant carried, with the reset ramp and the migrated
+/// reach coming out of the resolve-time derivation (K-385).
+fn datamosh_packed(e: &EffectInstance, lt: f64) -> (f32, f32, f32, i32, f32) {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        lt,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let p = Params::new(&bag);
+    let (ramp, reach) = effects::datamosh::Datamosh::derived_of(p);
+    effects::datamosh::Datamosh::read(p).packed(ramp, reach)
+}
+
 /// What a Block glitch instance hands its kernel: the fields the old
 /// `Resolved::BlockGlitch` variant carried, with the discretised tick coming out
 /// of the resolve-time derivation (K-385).
@@ -563,18 +596,17 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
     );
 }
 
-/// A neutral resolved Depth of field with the given per-side radii: every
-/// control the aperture and highlight groups added at the value that makes the
-/// kernel take its historical path (K-313). Spelled once here because
-/// functional-update syntax does not reach inside an enum variant.
-fn resolved_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) -> Resolved {
+/// A neutral Depth of field bundle with the given per-side radii: every control
+/// the aperture and highlight groups added at the value that makes the kernel
+/// take its historical path (K-313). Spelled once here because a twenty-field
+/// struct is not something to write out twice.
+fn neutral_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) -> cpu::DofParams {
     let (blade_normals, apothem2) = crate::fx::aperture_blades(6, 0.0);
-    Resolved::Dof {
+    cpu::DofParams {
         focus: 0.5,
         range: 0.1,
         near_aperture,
         far_aperture,
-        depth_invert: false,
         blade_normals,
         blade_count: 6,
         apothem2,
@@ -584,8 +616,8 @@ fn resolved_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) ->
         threshold: 1.0,
         bokeh_power: 1.0,
         repeat_edge: true,
-        depth_bound: false,
         depth_channel: 0,
+        depth_invert: false,
         use_focus_point: false,
         focus_point,
         gamma: 1.0,
@@ -620,14 +652,16 @@ fn dof_instantiates_unset_and_resolves_its_floats() {
     // Display defaults to Rendered (the normal blurred output).
     assert!(matches!(e.param("display"), Some(EffectValue::Choice(0))));
 
-    // resolve_stack carries only the scalars; the depth is threaded beside
-    // the op. The default Aperture master (8) is unity, so each side
-    // resolves to its Near/Far radius (8) scaled by the §2.3 preview factor
-    // (here 0.5 → 4 raster px). A `dof` always resolves to exactly one
-    // Resolved::Dof, so it stays 1:1 and in order with the depth-input list
-    // even when the depth reference is unset.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
-    assert_eq!(r, vec![resolved_dof(4.0, 4.0, [480.0, 270.0])]);
+    // The bag carries only the scalars; the depth is threaded beside the op as
+    // its aux slot (K-387). The default Aperture master (8) is unity, so each
+    // side resolves to its Near/Far radius (8) scaled by the §2.3 preview factor
+    // (here 0.5 → 4 raster px). A `dof` always resolves to exactly one op, so it
+    // stays 1:1 and in order with the depth-input list even when the depth
+    // reference is unset.
+    assert_eq!(
+        dof_packed(&e, 0.5, false),
+        neutral_dof(4.0, 4.0, [480.0, 270.0])
+    );
 }
 
 #[test]
@@ -643,14 +677,10 @@ fn dof_near_far_override_and_fall_back_to_the_aperture_master() {
             _ => {}
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    assert_eq!(
+        dof_packed(&e, 1.0, false),
+        neutral_dof(20.0, 8.0, [960.0, 540.0])
     );
-    assert_eq!(r, vec![resolved_dof(20.0, 8.0, [960.0, 540.0])]);
 
     // A legacy instance saved before the Near/Far pair existed has only
     // `aperture`; both sides then fall back to it, reproducing the old
@@ -664,14 +694,10 @@ fn dof_near_far_override_and_fall_back_to_the_aperture_master() {
     legacy
         .params
         .retain(|p| p.id != "near_aperture" && p.id != "far_aperture");
-    let r = resolve_stack(
-        std::slice::from_ref(&legacy),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    assert_eq!(
+        dof_packed(&legacy, 1.0, false),
+        neutral_dof(12.0, 12.0, [960.0, 540.0])
     );
-    assert_eq!(r, vec![resolved_dof(12.0, 12.0, [960.0, 540.0])]);
 }
 
 #[test]
@@ -788,24 +814,8 @@ fn datamosh_instantiates_and_resolves() {
     assert_eq!(e.float_at("reset_interval", 0.0), Some(0.0));
     assert_eq!(e.float_at("mix", 0.0), Some(100.0));
 
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     // Reset off (interval 0) → full ramp; displacement 4 → 4 taps.
-    assert_eq!(
-        r,
-        vec![Resolved::Datamosh {
-            intensity: 1.0,
-            displacement: 4.0,
-            bloom: 0.6,
-            steps: 4,
-            mix: 1.0,
-        }]
-    );
+    assert_eq!(datamosh_packed(&e, 0.0), (1.0, 4.0, 0.6, 4, 1.0));
 
     // Intensity 0 and Mix 0 both resolve cleanly (the bit-exact
     // passthrough is enforced where the op actually runs, in lumit-gpu
@@ -817,22 +827,9 @@ fn datamosh_instantiates_and_resolves() {
             p.value = EffectValue::Float(Property::fixed(0.0));
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&zero_intensity),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::Datamosh {
-            intensity: 0.0,
-            displacement: 4.0,
-            bloom: 0.6,
-            steps: 4,
-            mix: 1.0,
-        }]
+        datamosh_packed(&zero_intensity, 0.0),
+        (0.0, 4.0, 0.6, 4, 1.0)
     );
 }
 
@@ -850,17 +847,7 @@ fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
             p.value = EffectValue::Float(Property::fixed(9.0));
         }
     }
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Datamosh {
-            intensity: 2.5,
-            displacement: 9.0,
-            bloom: 0.6,
-            steps: 9,
-            mix: 1.0,
-        }]
-    );
+    assert_eq!(datamosh_packed(&e, 0.0), (2.5, 9.0, 0.6, 9, 1.0));
 
     // An old project (K-148) carries `streak_length`, not `displacement`: the
     // resolve reads it as the reach fallback, so the loaded look is unchanged.
@@ -871,37 +858,14 @@ fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
             p.value = EffectValue::Float(Property::fixed(7.0));
         }
     }
-    let r = resolve_stack(&[legacy], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Datamosh {
-            intensity: 1.0,
-            displacement: 7.0,
-            bloom: 0.6,
-            steps: 7,
-            mix: 1.0,
-        }]
-    );
+    assert_eq!(datamosh_packed(&legacy, 0.0), (1.0, 7.0, 0.6, 7, 1.0));
 }
 
 /// Resolve one datamosh instance at `lt` and return its `(intensity,
 /// displacement)`; a small helper for the reset-ramp test.
 fn datamosh_reach(e: &EffectInstance, lt: f64) -> (f32, f32) {
-    match &resolve_stack(
-        std::slice::from_ref(e),
-        lt,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    )[..]
-    {
-        [Resolved::Datamosh {
-            intensity,
-            displacement,
-            ..
-        }] => (*intensity, *displacement),
-        other => panic!("expected one Datamosh, got {other:?}"),
-    }
+    let (intensity, displacement, ..) = datamosh_packed(e, lt);
+    (intensity, displacement)
 }
 
 #[test]
@@ -939,40 +903,41 @@ fn datamosh_reset_interval_ramps_the_melt() {
 
 #[test]
 fn cpu_apply_datamosh_is_a_passthrough() {
-    // The single-buffer CPU dispatcher cannot carry a neighbour frame or
-    // a flow field, so Resolved::Datamosh degrades to a no-op here,
-    // exactly like Echo and Motion blur.
+    // The single-buffer CPU dispatcher cannot carry a neighbour frame or a flow
+    // field, so Datamosh degrades to a no-op there, exactly like Echo and Motion
+    // blur — its `apply_cpu` keeps `EffectDef`'s identity default, which is what
+    // the old `Resolved::Datamosh` arm of `cpu::apply` was. Run through
+    // `apply_stack`, which is the dispatch a migrated effect reaches.
     let (w, h) = (5u32, 5u32);
     let img = transform_card(w, h);
     let mut out = img.clone();
-    cpu::apply(
-        &mut out,
-        w,
-        h,
-        &Resolved::Datamosh {
-            intensity: 1.0,
-            displacement: 4.0,
-            bloom: 0.6,
-            steps: 4,
-            mix: 1.0,
-        },
+    let e = instantiate("datamosh").unwrap();
+    let ops = super::resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
     );
+    cpu::apply_stack(&mut out, w, h, &ops);
     assert_eq!(out, img);
 }
 
 #[test]
 fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
     let e = instantiate("motion_blur").unwrap();
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     // Defaults: 180° → shutter_frac 0.5, 16 samples, full mix, Rendered view.
     assert_eq!(
-        r,
-        vec![Resolved::MotionBlur {
-            shutter_frac: 0.5,
-            samples: 16,
-            mix: 1.0,
-            view: MbView::Rendered,
-        }]
+        resolve_migrated::<effects::motion_blur::MotionBlur>(
+            &[e],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE
+        )
+        .packed(),
+        (0.5, 16, 1.0, MbView::Rendered)
     );
     // A custom stack: 90° halves the streak; Samples rounds and clamps.
     let mut e = instantiate("motion_blur").unwrap();
@@ -984,15 +949,16 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             _ => {}
         }
     }
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(
-        r,
-        vec![Resolved::MotionBlur {
-            shutter_frac: 0.25,
-            samples: 8,
-            mix: 0.5,
-            view: MbView::Rendered,
-        }]
+        resolve_migrated::<effects::motion_blur::MotionBlur>(
+            &[e],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE
+        )
+        .packed(),
+        (0.25, 8, 0.5, MbView::Rendered)
     );
     // The View row resolves the diagnostic choices (FX-19).
     let mut e = instantiate("motion_blur").unwrap();
@@ -1001,14 +967,15 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             p.value = EffectValue::Choice(2);
         }
     }
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert!(matches!(
-        r.as_slice(),
-        [Resolved::MotionBlur {
-            view: MbView::Confidence,
-            ..
-        }]
-    ));
+    let (.., view) = resolve_migrated::<effects::motion_blur::MotionBlur>(
+        &[e],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    )
+    .packed();
+    assert_eq!(view, MbView::Confidence);
 }
 
 #[test]
@@ -1282,8 +1249,13 @@ fn cpu_datamosh_bloom_accumulates_the_far_trail() {
 #[test]
 fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
     // FX-17/K-149: the default blend mode is Screen (index 3), Echoes clamps
-    // to the raised 16-frame window, and the legacy mode indices 0/1/2 still
-    // resolve to Add/Behind/Max so old projects load unchanged.
+    // to the raised 16-frame window, and every stored mode index survives the
+    // trip so old projects load unchanged.
+    //
+    // The clamps read here now live in `Echo::packed` rather than in a resolve
+    // arm (K-387) — the bag carries the authored number and the effect converts
+    // it, which is the shape every migrated effect has. The numbers pinned are
+    // the ones the old arm produced.
     let e = instantiate("echo").unwrap();
     assert!(matches!(e.param("mode"), Some(EffectValue::Choice(3))));
 
@@ -1297,10 +1269,9 @@ fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
             p.value = EffectValue::Float(Property::fixed(0.5));
         }
     }
-    let r = resolve_stack(&[over], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    let Resolved::Echo { weights, mode, .. } = r[0] else {
-        panic!("expected an echo op");
-    };
+    let (weights, mode, _) =
+        resolve_migrated::<effects::echo::Echo>(&[over], 0.0, 1000.0, 1.0, &MarkerContext::NONE)
+            .packed();
     assert_eq!(mode, 3, "default mode is Screen");
     assert!(weights.iter().all(|w| *w > 0.0), "all 16 taps are live");
     assert!((weights[0] - 0.5).abs() < 1e-6 && (weights[15] - 0.5f32.powi(16)).abs() < 1e-9);
@@ -1315,10 +1286,9 @@ fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
                 p.value = EffectValue::Choice(m);
             }
         }
-        let r = resolve_stack(&[old], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-        let Resolved::Echo { mode, .. } = r[0] else {
-            panic!("expected an echo op");
-        };
+        let (_, mode, _) =
+            resolve_migrated::<effects::echo::Echo>(&[old], 0.0, 1000.0, 1.0, &MarkerContext::NONE)
+                .packed();
         assert_eq!(mode, m, "mode index preserved");
     }
     let mut oob = e.clone();
@@ -1327,10 +1297,9 @@ fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
             p.value = EffectValue::Choice(99);
         }
     }
-    let r = resolve_stack(&[oob], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    let Resolved::Echo { mode, .. } = r[0] else {
-        panic!("expected an echo op");
-    };
+    let (_, mode, _) =
+        resolve_migrated::<effects::echo::Echo>(&[oob], 0.0, 1000.0, 1.0, &MarkerContext::NONE)
+            .packed();
     assert_eq!(mode, 13, "out-of-range mode clamps to the last (Divide)");
 }
 
@@ -2261,16 +2230,16 @@ fn matte_key_instantiates_and_resolves_defaults() {
         e.param("replace_method"),
         Some(EffectValue::Choice(2)) // Soft colour, as Keylight
     ));
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::MatteKey(MatteKeyParams {
+        resolve_migrated::<effects::matte_key::MatteKey>(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE
+        )
+        .packed(),
+        MatteKeyParams {
             view: 0,
             key: [0.0, 0.6, 0.0, 1.0],
             gain: 1.0,
@@ -2284,7 +2253,7 @@ fn matte_key_instantiates_and_resolves_defaults() {
             replace_method: 2,
             replace_colour: [0.5, 0.5, 0.5, 1.0],
             mix: 1.0,
-        })]
+        }
     );
 }
 
@@ -2313,16 +2282,14 @@ fn matte_key_migrates_pre_k154_projects() {
             p.value = EffectValue::Float(Property::fixed(30.0));
         }
     }
-    let r = resolve_stack(
+    let p = resolve_migrated::<effects::matte_key::MatteKey>(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
-    );
-    let Resolved::MatteKey(p) = r[0] else {
-        panic!("expected a resolved matte key");
-    };
+    )
+    .packed();
     assert_eq!(p.key, [0.0, 0.6, 0.0, 1.0], "screen colour carries over");
     assert!((p.spill - 0.30).abs() < 1e-6, "legacy spill carries over");
     assert_eq!(p.gain, 1.0, "new gain takes its default");
@@ -5951,51 +5918,63 @@ fn lens_flare_custom_lens_file_overrides_and_degrades() {
 // other than the one it resolved against (K-266) — the adjustment-layer
 // preview bug: the flare's light hit the frame edge at 1500 of a 1920 comp
 // because the preview factor was applied to the raster and not the params.
+//
+// Both halves of a `ResolvedOps` are checked through the one public entry point:
+// the flare still carries a variant, Light wrap has moved to the arena, and
+// `ResolvedOps::rescale_px` has to move each in its own way — the variant by the
+// `rescale_px` match, the bag by the unit its parameter declares.
 #[test]
 fn resolved_px_fields_rescale_for_a_different_raster() {
-    use crate::fx::{rescale_px, Resolved};
-    let mut ops = vec![
-        Resolved::LightWrap {
-            width_px: 10.0,
-            intensity: 1.0,
-            mix: 1.0,
-        },
-        Resolved::LensFlare(crate::fx::lens_flare::LensFlareParams {
-            light: [1000.0, 500.0],
-            ..default_flare_params()
-        }),
-    ];
-    rescale_px(&mut ops, 0.5);
-    match &ops[0] {
-        Resolved::LightWrap {
-            width_px,
-            intensity,
-            mix,
-        } => {
-            assert_eq!(*width_px, 5.0, "px fields scale");
-            assert_eq!(*intensity, 1.0, "unitless fields do not");
-            assert_eq!(*mix, 1.0, "unitless fields do not");
+    // The default Width is 0 (the labelled no-op), so author one to scale.
+    let authored = |width: f64| {
+        let mut e = instantiate("light_wrap").unwrap();
+        for p in &mut e.params {
+            if p.id == "width" {
+                p.value = EffectValue::Float(Property::fixed(width));
+            }
         }
-        other => panic!("unexpected {other:?}"),
-    }
-    match &ops[1] {
+        super::resolve_stack(
+            &[e],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+    };
+    let packed = |ops: &super::ResolvedOps| {
+        effects::light_wrap::LightWrap::read(ops.bags.get(0).expect("the wrap op").params).packed()
+    };
+    let mut wrap = authored(10.0);
+    assert_eq!(packed(&wrap), (10.0, 1.0, 1.0));
+    wrap.rescale_px(0.5);
+    let (width_px, intensity, mix) = packed(&wrap);
+    assert_eq!(width_px, 5.0, "px fields scale");
+    assert_eq!(intensity, 1.0, "unitless fields do not");
+    assert_eq!(mix, 1.0, "unitless fields do not");
+
+    let mut flare = super::ResolvedOps {
+        ops: vec![Resolved::LensFlare(
+            crate::fx::lens_flare::LensFlareParams {
+                light: [1000.0, 500.0],
+                ..default_flare_params()
+            },
+        )],
+        bags: Default::default(),
+    };
+    flare.rescale_px(0.5);
+    match &flare.ops[0] {
         Resolved::LensFlare(p) => {
             assert_eq!(p.light, [500.0, 250.0], "the flare's light is px@comp");
             assert_eq!(p.intensity, 1.0);
         }
         other => panic!("unexpected {other:?}"),
     }
-    // Factor 1 is exactly a no-op.
-    let mut same = vec![Resolved::LightWrap {
-        width_px: 7.0,
-        intensity: 1.0,
-        mix: 1.0,
-    }];
-    rescale_px(&mut same, 1.0);
-    match &same[0] {
-        Resolved::LightWrap { width_px, .. } => assert_eq!(*width_px, 7.0),
-        other => panic!("unexpected {other:?}"),
-    }
+
+    // Factor 1 is exactly a no-op, on both halves.
+    let mut same = authored(7.0);
+    same.rescale_px(1.0);
+    assert_eq!(packed(&same).0, 7.0);
 }
 
 // An anamorphic squeeze (or scale) below 1 asks the combine for flare
@@ -8014,14 +7993,15 @@ fn a_legacy_dof_resolves_to_the_neutral_aperture() {
                 | "repeat_edge_pixels"
         )
     });
-    let r = resolve_stack(
-        std::slice::from_ref(&legacy),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
+    // The focus point reads its **declared default** rather than the old arm's
+    // separate `unwrap_or(0.0)` fallback — K-258's rule for a parameter a saved
+    // project has never heard of, and the one the arena applies to every row.
+    // Nothing renders differently for it: the point is read only when Use focus
+    // point is on, which this instance does not carry either, so it stays false.
+    assert_eq!(
+        dof_packed(&legacy, 1.0, false),
+        neutral_dof(8.0, 8.0, [960.0, 540.0])
     );
-    assert_eq!(r, vec![resolved_dof(8.0, 8.0, [0.0, 0.0])]);
 }
 
 // **The fold's load-bearing promise** (K-313): at the shipped defaults the
@@ -9060,6 +9040,13 @@ fn every_parameter_declares_a_unit() {
     // the stack, so a scanlined adjustment layer under a reduced-resolution
     // preview kept comp-sized lines. Declaring the unit states it once and the
     // generic pass does both halves.
+    //
+    // Depth of field's **Aperture is deliberately absent**, though it is
+    // authored in px@comp like the two radii beside it. It enters the maths as
+    // the unitless ratio `aperture / 8` multiplying Near/Far, and exactly one
+    // factor of that product may follow the raster — declaring all three would
+    // blur a half-resolution preview by a quarter of the disc. The factor that
+    // follows it is Near/Far, which is also the pair the old `rescale_px` moved.
     assert_eq!(
         spatial,
         vec![
@@ -9072,8 +9059,13 @@ fn every_parameter_declares_a_unit() {
             ("sprite_flare", "glow_size"),
             ("sprite_flare", "ghost_size"),
             ("sprite_flare", "streak_length"),
+            ("light_wrap", "width"),
             ("rgb_split", "amount"),
             ("chromatic_aberration", "amount"),
+            ("dof", "focus_point_x"),
+            ("dof", "focus_point_y"),
+            ("dof", "near_aperture"),
+            ("dof", "far_aperture"),
             ("transform", "anchor_x"),
             ("transform", "anchor_y"),
             ("transform", "position_x"),
@@ -9516,28 +9508,168 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         &[(effects::invert::Invert::MIX, Value::Float(100.0))],
         &|p| cpu::invert(p, 1.0),
     );
+    both(
+        // Matte key is the only one of the side-table batch with a CPU
+        // reference to compare at all: the other four (Light wrap, Depth of
+        // field, Fast motion blur, Datamosh) need a second picture the
+        // single-buffer dispatcher has not got, so their `apply_cpu` is the
+        // identity by design — the same passthrough their `cpu::apply` arms
+        // were, and pinned by `the_side_table_batch_stays_a_cpu_passthrough`.
+        //
+        // Every per-cent dial here is off its default, so the old arm's
+        // divisions and clamps are all exercised: 150 % gain is the open-above
+        // case, and the two Choice rows go through the wire-code enums.
+        &effects::matte_key::MatteKeyDef,
+        &[
+            (effects::matte_key::MatteKey::VIEW, Value::Choice(1)),
+            (
+                effects::matte_key::MatteKey::KEY,
+                Value::Colour([0.0, 0.7, 0.1, 1.0]),
+            ),
+            (
+                effects::matte_key::MatteKey::SCREEN_GAIN,
+                Value::Float(150.0),
+            ),
+            (
+                effects::matte_key::MatteKey::SCREEN_BALANCE,
+                Value::Float(40.0),
+            ),
+            (
+                effects::matte_key::MatteKey::DESPILL_BIAS,
+                Value::Colour([0.4, 0.5, 0.6, 1.0]),
+            ),
+            (
+                effects::matte_key::MatteKey::ALPHA_BIAS,
+                Value::Colour([0.6, 0.5, 0.4, 1.0]),
+            ),
+            (effects::matte_key::MatteKey::SPILL, Value::Float(80.0)),
+            (effects::matte_key::MatteKey::CLIP_BLACK, Value::Float(10.0)),
+            (effects::matte_key::MatteKey::CLIP_WHITE, Value::Float(90.0)),
+            (
+                effects::matte_key::MatteKey::CLIP_ROLLBACK,
+                Value::Float(25.0),
+            ),
+            (
+                effects::matte_key::MatteKey::REPLACE_METHOD,
+                Value::Choice(1),
+            ),
+            (
+                effects::matte_key::MatteKey::REPLACE_COLOUR,
+                Value::Colour([0.3, 0.3, 0.3, 1.0]),
+            ),
+            (effects::matte_key::MatteKey::MIX, Value::Float(75.0)),
+        ],
+        // The old arm's arithmetic, transcribed: per cent ÷ 100, gain floored
+        // rather than clamped, and both Choice rows normalised through their
+        // wire codes.
+        &|p| {
+            cpu::matte_key(
+                p,
+                &MatteKeyParams {
+                    view: 1,
+                    key: [0.0, 0.7, 0.1, 1.0],
+                    gain: 1.5,
+                    balance: 0.4,
+                    despill_bias: [0.4, 0.5, 0.6, 1.0],
+                    alpha_bias: [0.6, 0.5, 0.4, 1.0],
+                    spill: 0.8,
+                    clip_black: 0.1,
+                    clip_white: 0.9,
+                    clip_rollback: 0.25,
+                    replace_method: 1,
+                    replace_colour: [0.3, 0.3, 0.3, 1.0],
+                    mix: 0.75,
+                },
+            )
+        },
+    );
+}
+
+/// The four side-table effects of the K-387 batch have **no** CPU reference
+/// through the arena dispatch, and that silence is deliberate: each needs a
+/// second picture — a background plate, a depth pass, a flow field, a neighbour
+/// frame — that no single-buffer dispatcher carries. Their `apply_cpu` keeps
+/// [`EffectDef`]'s identity default, which is exactly what their old
+/// `cpu::apply` arms were.
+///
+/// Worth pinning rather than assuming, because the failure is invisible: an
+/// `apply_cpu` written for one of these would read a garbage second buffer or
+/// half-render, and the degradation rung (K-019) is the one path nobody looks
+/// at. Their §1.6 oracles run against `cpu::light_wrap` / `cpu::dof` /
+/// `cpu::motion_blur` / `cpu::datamosh` directly from the lumit-gpu tests, which
+/// can upload the second picture.
+#[test]
+fn the_side_table_batch_stays_a_cpu_passthrough() {
+    let (w, h) = (4u32, 4u32);
+    let source: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 17) as f32 / 17.0).collect();
+    for name in [
+        "light_wrap",
+        "dof",
+        "motion_blur",
+        "datamosh",
+        "echo",
+        "lut",
+    ] {
+        let e = instantiate(name).unwrap_or_else(|| panic!("{name} is a built-in"));
+        let ops = super::resolve_stack(
+            &[e],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        assert_eq!(ops.ops.len(), 1, "{name} resolves to exactly one op");
+        let mut out = source.clone();
+        cpu::apply_stack(&mut out, w, h, &ops);
+        assert_eq!(
+            out, source,
+            "{name} drew something on the CPU rung, which has no second picture to draw it from"
+        );
+    }
 }
 
 /// The arena can carry a number, a switch, a choice and a colour, but a LUT's
 /// file slot and a layer reference's binding are decided by the *caller* —
 /// `resolve_into_arena` skips those kinds, because it has no way to know which
-/// cube loaded or which layer was rendered.
+/// cube loaded or which layer was rendered. Reading one back out of a bag
+/// therefore always answers "unset", whatever the project stored.
 ///
-/// While no migrated effect declares one that is a correct silence. The moment
-/// one does, this fails: the alternative is a Tint that quietly renders without
-/// its LUT because the reader took a default.
+/// That is only safe because the real input arrives beside the op as an aux slot
+/// (K-387): the gate that an effect declaring one of these kinds also declares
+/// the list it consumes is `a_side_table_effect_declares_the_list_it_consumes`,
+/// in lumit-render, where both halves are visible. What is pinned here is the
+/// half lumit-core owns — that the bag stays silent, so nobody is tempted to
+/// read the grade out of it.
 #[test]
-fn no_migrated_effect_declares_a_kind_the_arena_cannot_carry() {
-    for def in BUILTIN_DEFS.iter() {
-        for p in def.schema().params {
-            assert!(
-                !matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. }),
-                "{}'s {} is a {:?}, which resolve_into_arena drops — thread it \
-                 beside the op before migrating this effect",
-                def.schema().match_name,
-                p.id,
-                p.kind
-            );
-        }
-    }
+fn the_arena_carries_no_file_slot_or_layer_binding() {
+    let lut = instantiate("lut").expect("lut is a built-in");
+    let declared = BUILTIN_DEFS
+        .get("lut")
+        .expect("lut is migrated")
+        .schema()
+        .params
+        .len();
+    assert!(
+        declared > 1,
+        "the File row is part of the declaration, for the panel"
+    );
+
+    let bag = resolve_bag(
+        std::slice::from_ref(&lut),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(
+        bag.len(),
+        declared - 1,
+        "the File row must not reach the arena — the cube is an aux slot"
+    );
+    assert_eq!(
+        resolve_migrated::<effects::lut::Lut>(&[lut], 0.0, 1000.0, 1.0, &MarkerContext::NONE).file,
+        None,
+        "the typed reader answers `unset`, never a default slot"
+    );
 }

@@ -4,13 +4,6 @@ use super::{MatteKeyParams, MbView, Resolved, MAX_BLADES};
 /// linear light), in place.
 pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
     match fx {
-        // Light wrap needs a second picture — the Background layer — which
-        // this single-image entry point has no way to receive, exactly as
-        // Depth of field's depth pass does not. Both are driven through their
-        // own functions by the callers that hold the extra texture; here they
-        // are the passthrough rather than a silent half-effect.
-        Resolved::LightWrap { .. } => {}
-        Resolved::MatteKey(p) => matte_key(rgba, p),
         // Shake is a transform-domain effect (docs/08 §3.4): the
         // resolved wobble maps to the Transform reference through the
         // same shared affine the GPU dispatch uses, so both paths
@@ -43,35 +36,6 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
                 transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
             }
         },
-        // Echo is temporal: it needs the layer's neighbour frames, which
-        // this single-buffer in-place dispatcher does not carry. The real
-        // path is [`echo`] (with neighbours) on the GPU; here it is a
-        // pass-through (the CPU-fallback render can't echo).
-        Resolved::Echo { .. } => {}
-        // Motion blur needs the layer's flow field, which this
-        // single-buffer dispatcher does not carry either. The real path is
-        // [`motion_blur`] (with the flow field) on the GPU; here it is a
-        // pass-through, exactly like Echo.
-        Resolved::MotionBlur { .. } => {}
-        // Datamosh needs the layer's -1 neighbour and its flow field,
-        // which this single-buffer dispatcher does not carry either. The
-        // real path is `FxEngine::datamosh` (with neighbour + flow) on
-        // the GPU; here it is a pass-through, exactly like Echo and
-        // Motion blur.
-        Resolved::Datamosh { .. } => {}
-        // A LUT is a GPU colour map: the parsed cube never reaches this
-        // Resolved-based CPU dispatcher (the file path is threaded
-        // separately), so the CPU-degradation rung renders it as identity.
-        // The §1.6 oracle reference is `lut::Lut3d::sample`, exercised
-        // directly in the lumit-gpu test, not through cpu::apply.
-        Resolved::Lut { .. } => {}
-        // Depth of field. The depth is a texture (the referenced layer
-        // rendered alone) that never reaches this single-buffer dispatcher, so
-        // the effect is identity here — like Echo, Motion blur and LUT — and
-        // its §1.6 oracle runs through `dof` directly from the lumit-gpu test,
-        // which can upload one. An UNSET depth reference is the effect's
-        // labelled no-op on every path, so there is no second case to serve.
-        Resolved::Dof { .. } => {}
         // Lens flare is GPU-only (K-256, the K-114 LUT precedent): its render
         // pass and baked textures never reach this single-buffer dispatcher,
         // so the CPU-degradation rung renders it as identity. The §1.6 oracle
@@ -79,10 +43,18 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // perceptual bound) against `lens_flare::cpu_flare`/`cpu_combine`.
         Resolved::LensFlare(..) => {}
         // A migrated effect's parameters live in the stack's arena, which this
-        // single-op entry point has no way to receive — exactly as Light wrap's
-        // background and Depth of field's depth pass do not reach it. The
-        // dispatch that *does* have the arena is [`apply_stack`]; here the op is
-        // the passthrough, never a silent half-effect.
+        // single-op entry point has no way to receive. The dispatch that *does*
+        // have the arena is [`apply_stack`]; here the op is the passthrough,
+        // never a silent half-effect.
+        //
+        // Several of the migrated effects are passthroughs even *there*, and
+        // deliberately: Light wrap's background, Depth of field's depth pass,
+        // Echo's neighbour frames, Motion blur's and Datamosh's flow field and
+        // the LUT's cube are whole pictures that arrive beside the op as aux
+        // slots (K-387), and no single-buffer dispatcher carries one. Each keeps
+        // `EffectDef::apply_cpu`'s identity default — exactly the arms that used
+        // to sit here — and its §1.6 oracle runs against its `cpu::` reference
+        // directly from the lumit-gpu test, which can upload the second picture.
         Resolved::Registry { .. } => {}
     }
 }

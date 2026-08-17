@@ -195,26 +195,10 @@ pub enum Resolved {
     /// only the bag — so the two halves of a [`ResolvedOps`] stay in step
     /// (docs/impl/effect-registry.md §2.3).
     ///
-    /// Nothing produces this yet: the carrier lands before the first effect
-    /// moves, so every consumer already has the arm it will need.
+    /// Nearly every built-in resolves to this now (33 of them); only Shake and
+    /// Lens flare still have variants of their own, and the migration ends when
+    /// they lose them and this enum goes with them.
     Registry { op: u32 },
-    /// Light wrap (docs/08 §3.28, K-358): the background's light spilled
-    /// around the foreground's edge. Consumes a layer-input slot — the
-    /// referenced Background layer — exactly as Depth of field's depth does.
-    LightWrap {
-        /// How far the wrap reaches inside the edge, raster pixels.
-        width_px: f32,
-        /// Gain on the spill before it is screened on.
-        intensity: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
-    /// keyer. The op carries its full parameter bundle ([`MatteKeyParams`]) so the
-    /// CPU reference and the WGSL kernel consume the identical numbers (K-031). The
-    /// maths are continuous everywhere (no hard step), so the §1.6 oracle holds; the
-    /// default green screen colour keys out of the box, and Mix 0 is the identity.
-    MatteKey(MatteKeyParams),
     /// A shake, already sampled at this frame (the noise runs at resolve
     /// time, host-side): the current wobble, dispatched through the Transform
     /// kernel via [`shake_affine`] — no kernel of its own. `edge` (P3, K-145)
@@ -242,193 +226,6 @@ pub enum Resolved {
         /// Sampled host-side because the noise lattice needs 64-bit integers
         /// the GPU has not got (docs/08 §3.12).
         mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
-    },
-    /// Datamosh (docs/08 §3.12, K-104, its own effect since K-107; reworked to
-    /// a flow-driven melt by K-164/T19): follow the current→previous flow field
-    /// out of the -1 source neighbour in a short streamline walk, accumulating
-    /// the samples along it into a melting prediction blended over the current
-    /// frame. The neighbour frame and its flow field are not carried here —
-    /// like Echo's neighbour frames and Motion blur's flow field, they travel
-    /// beside the resolved op, supplied only when the layer is footage and the
-    /// decode fetched them; a missing pair degrades this to a no-op, never a
-    /// fault. The periodic Reset (docs/08 §3.12) is already folded into
-    /// `intensity`/`displacement` here — it is a pure function of layer time,
-    /// so the kernel stays time-agnostic and the oracle tests the melt directly.
-    Datamosh {
-        /// Blend against the current frame; 0 the passthrough, > 1
-        /// extrapolates past the moshed frame (open ceiling, K-135/FX-14).
-        /// Already scaled by the reset ramp (0 at each simulated I-frame).
-        intensity: f32,
-        /// Total reach of the streamline walk in frames of predicted motion
-        /// (K-161): `steps` samples span it, so each step advances ~1 frame of
-        /// flow. Already scaled by the reset ramp.
-        displacement: f32,
-        /// How much of the reach accumulates (0..1): 0 keeps the nearest step
-        /// (a short trail), 1 averages the whole walk (a long melting bloom).
-        bloom: f32,
-        /// Bilinear taps along the streamline (2..64, or 1), derived from
-        /// `displacement` so each step is ~one frame of motion. Carried
-        /// explicitly so the CPU oracle and WGSL kernel loop the same count.
-        steps: i32,
-        /// 0..1, the host Mix. Composes with `intensity` by multiplication
-        /// before reaching the kernel (mixing the same two inputs twice
-        /// collapses to one mix by the product), so the existing GPU/CPU
-        /// maths need not carry a second blend knob.
-        mix: f32,
-    },
-    /// Echo / trails (docs/08 §3.13). `weights[i]` is the intensity of the
-    /// echo at frame offset `-(i+1)` (0 = no echo there); the render supplies
-    /// the neighbour frame at each live offset. `mode` is the combine blend
-    /// (FX-17/K-149): 0 = Add, 1 = Behind, 2 = Max, 3 = Screen, 4 = Normal,
-    /// 5 = Multiply, 6 = Overlay, 7 = Soft light, 8 = Hard light, 9 = Darken.
-    /// Up to 16 echoes (the raised static window).
-    Echo {
-        weights: [f32; 16],
-        mode: u32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Flow motion blur (docs/08 §3.2). The per-pixel motion vectors are not
-    /// carried here — they are a whole flow field, computed in the decode
-    /// worker and passed to the kernel as a separate texture (the same way
-    /// Echo's neighbour *frames* travel beside the resolved op, not inside
-    /// it). This variant carries only the scalars the kernel needs to turn a
-    /// vector into a streak.
-    MotionBlur {
-        /// Shutter ÷ 360: the streak length as a fraction of the inter-frame
-        /// motion (0 = no blur; 0.5 at the 180° default).
-        shutter_frac: f32,
-        /// Evenly spaced bilinear taps along the streak (already rounded and
-        /// clamped from the Samples parameter).
-        samples: i32,
-        /// 0..1.
-        mix: f32,
-        /// Which view to output (docs/08 §3.2, FX-19): the blurred picture, or a
-        /// diagnostic look at the flow field or the confidence.
-        view: MbView,
-    },
-    /// LUT (docs/08 §3.11, docs/impl/lut.md, K-114): a 3D `.cube` colour
-    /// lookup. Only the host Mix is `Copy`-carried here; the parsed-and-
-    /// uploaded cube is a whole 3D texture, so — like Echo's neighbour frames
-    /// and Motion blur's flow field — it travels beside the resolved op (the
-    /// caller's LUT cache fills a parallel `luts` slot), not inside it. An
-    /// unset/1D/unreadable file leaves that slot empty and the op is a
-    /// passthrough. `mix == 0` is the bit-exact input.
-    Lut {
-        /// 0..1.
-        mix: f32,
-    },
-    /// Depth of field (docs/08 §3.22, docs/impl/layer-input.md): a lens blur
-    /// whose per-pixel circle-of-confusion comes from a depth pass. Only the
-    /// scalars are `Copy`-carried here; the depth is a whole texture — the
-    /// referenced layer rendered alone at comp size — so (like the LUT's cube
-    /// and Motion blur's flow field) it travels beside the resolved op (the
-    /// caller fills a parallel `layer_inputs` slot), not inside it. An unset,
-    /// missing or cyclic depth reference leaves that slot empty and the op is
-    /// a passthrough. `aperture == 0`, an all-in-band depth, or `mix == 0` are
-    /// bit-exact passthroughs.
-    ///
-    /// **Every control the aperture and highlight groups added is neutral at
-    /// its default, and the kernel reaches that by *branching* rather than by
-    /// multiplying by one** (K-313): Roundness 1 takes the plain `r² ≤ coc²`
-    /// circle test, Concentration 0 and Remove edge leak 0 take the unweighted
-    /// accumulation, and Exposure 0 takes the unsplit sum — because
-    /// `Σ(c·w)/Σw` is not an identity in IEEE 754 even when every `w` is one,
-    /// and neither is splitting a tap at a threshold and adding it back. A
-    /// project saved before any of this therefore renders bit-identically,
-    /// which is what let the aperture fold into the shipped effect rather than
-    /// arrive as a second one beside it.
-    Dof {
-        /// The in-focus depth, 0..1. Ignored while `use_focus_point` is set.
-        focus: f32,
-        /// Half-width of the sharp band around `focus`, 0..1.
-        range: f32,
-        /// Maximum circle-of-confusion radius for the **near** side (depths in
-        /// front of focus, `d < focus`), raster pixels — the per-side Near blur
-        /// already scaled by the Aperture master and the §2.3 preview factor.
-        near_aperture: f32,
-        /// Maximum circle-of-confusion radius for the **far** side (depths
-        /// behind focus, `d >= focus`), raster pixels — the Far blur already
-        /// scaled by the master and the preview factor.
-        far_aperture: f32,
-        /// When set, the per-pixel depth is inverted (`d' = 1 - d`) before the
-        /// circle-of-confusion, swapping near and far. A `Copy` scalar, so the
-        /// enum stays `Copy` and threads beside the depth texture unchanged.
-        depth_invert: bool,
-        /// The aperture polygon's outward edge normals, unit length, the first
-        /// `blade_count` entries live. Host-computed: WGSL's transcendentals
-        /// carry no guarantee of matching Rust's, which is exactly what the
-        /// §1.6 oracle measures.
-        blade_normals: [[f32; 2]; MAX_BLADES],
-        /// 3..=[`MAX_BLADES`]. Inert while `roundness` is 1 — a circle has no
-        /// blades — which is why the schema needs no Circle entry.
-        blade_count: u32,
-        /// `cos²(π/N)`, host-computed.
-        apothem2: f32,
-        /// Roundness, −1..1. Positive bows the blades outward toward the
-        /// circle; **negative goes concave** — the same inside test with the
-        /// sign flipped pulls the edge midpoints in while the vertices stay on
-        /// the circle, which is a star. The aperture therefore stays inscribed
-        /// in the circle at every value, so the kernel's `ceil(radius)` scan
-        /// box remains a correct bound on the taps. 1 takes the plain circle
-        /// test and is the shipped default.
-        roundness: f32,
-        /// Radial weighting inside the aperture, −1..1. 0 is the flat disc and
-        /// takes the unweighted branch.
-        rim: f32,
-        /// Anamorphic squeeze as a pair of multipliers on the tap offset before
-        /// the inside test, computed host-side (K-137's precedent for a
-        /// host-side single division). Both are ≥ 1 and exactly one is > 1, so
-        /// the aperture only ever *shrinks* on one axis — it can never exceed
-        /// the circle, and the scan box is untouched. `[1.0, 1.0]` at Deform 0.
-        aspect_scale: [f32; 2],
-        /// The tonal split level, and the power the excess is raised to — the
-        /// split-at-threshold power mean. `bokeh_power` is
-        /// `2^(Exposure/EXPOSURE_STOPS_PER_DOUBLING)`, host-computed; **1 is
-        /// the plain arithmetic mean and takes the unsplit branch**.
-        threshold: f32,
-        bokeh_power: f32,
-        /// Clamp the gather to the frame edge instead of pulling in
-        /// transparency (Repeat edge pixels). True is the shipped default and
-        /// the historical behaviour.
-        repeat_edge: bool,
-        /// Whether a depth layer is bound. False defocuses the whole frame
-        /// uniformly at the far-side radius — the "no depth, one radius"
-        /// reading, which is also what makes the effect usable as a plain
-        /// aperture blur.
-        depth_bound: bool,
-        /// Which channel of the depth layer is read as depth — an index into
-        /// [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS). 0 (Red) is the channel
-        /// this effect has always read.
-        depth_channel: u32,
-        /// When set, focus is whatever depth sits under `focus_point` and
-        /// `focus` is ignored — the greyed row in the panel.
-        use_focus_point: bool,
-        /// Where to read that depth, in the consuming layer's raster pixels
-        /// (already scaled by the preview factor). Authored in layer space —
-        /// the frame the effect stack and its resampled depth both live in.
-        focus_point: [f32; 2],
-        /// The Profile control, resolved to a multiplier on the depth distance
-        /// before the ramp (`2^profile`, computed host-side so the kernel sees
-        /// a plain multiply). 1 is the neutral, and multiplying by exactly 1 is
-        /// exact in IEEE 754, so this one needs no branch. Above 1 the
-        /// transition bites sooner, below 1 it stretches out past the range so
-        /// even the far extreme is softened rather than obliterated. This is
-        /// what stops focus being all-or-nothing on a real depth pass, whose
-        /// content sits in a narrow band with one near object well outside it.
-        gamma: f32,
-        /// How hard a tap across a depth discontinuity **and in front of** this
-        /// pixel is pulled back, and how big a depth jump counts as one. 0 leak
-        /// takes the unweighted branch.
-        remove_edge_leak: f32,
-        detect_edge_threshold: f32,
-        /// Diagnostic view: 0 = Rendered (the blurred output), 1 = Depth map
-        /// (post-invert greyscale), 2 = Focus map (the smooth in-focus mask).
-        /// Modes 1/2 ignore the blur and Mix and write the view directly.
-        /// Forced to 0 when `depth_bound` is false — there is nothing to show.
-        display: u32,
-        /// 0..1.
-        mix: f32,
     },
     /// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md, K-256): traced
     /// ghosts and the Fourier starburst. The op carries its full parameter
@@ -469,8 +266,6 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
     }
     for op in ops {
         match op {
-            Resolved::LightWrap { width_px, .. } => *width_px *= f,
-            Resolved::MatteKey(_) | Resolved::Lut { .. } => {}
             Resolved::Shake { offset_px, mb, .. } => {
                 offset_px[0] *= f;
                 offset_px[1] *= f;
@@ -480,25 +275,6 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
                         s.offset_px[1] *= f;
                     }
                 }
-            }
-            // Datamosh's blocks follow their own texture-relative convention
-            // (docs/08); Echo and MotionBlur carry times and flow scales, not
-            // pixels.
-            Resolved::Datamosh { .. } | Resolved::Echo { .. } | Resolved::MotionBlur { .. } => {}
-            Resolved::Dof {
-                near_aperture,
-                far_aperture,
-                focus_point,
-                ..
-            } => {
-                *near_aperture *= f;
-                *far_aperture *= f;
-                // The focus point is px@comp too (K-260), so it travels with
-                // the radii: a stack resolved against the comp raster and run
-                // on a smaller preview target must read its focus depth from
-                // the same *place* in the picture, not the same pixel index.
-                focus_point[0] *= f;
-                focus_point[1] *= f;
             }
             Resolved::LensFlare(p) => {
                 p.light[0] *= f;
@@ -719,10 +495,12 @@ fn resolve_into_arena(
             // A File slot and a Layer binding are decided by the *caller*, which
             // is the only thing that knows which cube loaded or which layer was
             // rendered (docs/impl/layer-input.md); they are threaded beside the
-            // op exactly as they are today. No migrated effect declares one yet,
-            // and `no_migrated_effect_declares_a_kind_the_arena_cannot_carry`
-            // fails the moment one does — a silent default would be a picture
-            // quietly rendering without its LUT.
+            // op as an aux slot instead (K-387, docs/impl/effect-registry.md
+            // §2.5a), so the bag deliberately carries nothing for them. An
+            // effect declaring one must declare the list it consumes:
+            // `a_side_table_effect_declares_the_list_it_consumes` in
+            // lumit-render fails the moment one does not, and a silent default
+            // here would be a picture quietly rendering without its LUT.
             ParamKind::File { .. } | ParamKind::Layer { .. } => continue,
         };
         bags.push(ParamId::new(p.id), value);
@@ -759,75 +537,6 @@ fn resolve_one(
     // expressions existed.
     let fl = |id: &str| e.float_at_with_context(id, lt, expression_context.clone());
     match e.effect.match_name.as_str() {
-        "light_wrap" => {
-            // px@comp like every distance parameter (K-260), through the
-            // §2.3 preview factor so a half-resolution preview wraps by the
-            // same visible width the export will.
-            let width_px = (fl("width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
-            let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::LightWrap {
-                width_px,
-                intensity,
-                mix,
-            })
-        }
-        "matte_key" => {
-            // Keylight-style colour-difference keyer (K-154, superseding the
-            // K-121 chroma-distance key). Every colour resolves to a scene-linear
-            // array at frame time; the CPU reference and the WGSL kernel derive
-            // the screen's primary channel and reference from `key` identically.
-            // Per-cent dials become plain 0..1 fractions. A project saved before
-            // K-154 keeps its stored `key` (screen colour) and `spill` (now the
-            // despill amount); its old `tolerance`/`softness` are superseded by
-            // gain/balance/clip and simply go unread, and the new controls take
-            // their Keylight defaults — see the §3.21 migration note.
-            let colour = |id: &str, def: [f64; 4]| -> [f32; 4] {
-                e.colour_at(id, lt).unwrap_or(def).map(|c| c as f32)
-            };
-            let view = match e.param("view") {
-                Some(EffectValue::Choice(c)) => *c,
-                _ => 0,
-            };
-            let gain = (fl("screen_gain").unwrap_or(100.0) as f32 / 100.0).max(0.0);
-            let balance = (fl("screen_balance").unwrap_or(50.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // Despill defaults on (Keylight-like); an older instance carrying a
-            // Spill value keeps it, an even older one without the param reads 0.
-            let spill = (fl("spill").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let clip_black = (fl("clip_black").unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let clip_white = (fl("clip_white").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let clip_rollback = (fl("clip_rollback").unwrap_or(0.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let replace_method = match e.param("replace_method") {
-                Some(EffectValue::Choice(c)) => ReplaceMethod::from_code(*c).code(),
-                _ => ReplaceMethod::SoftColour.code(),
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::MatteKey(MatteKeyParams {
-                view: MatteKeyView::from_code(view).code(),
-                key: colour("key", [0.0, 0.6, 0.0, 1.0]),
-                gain,
-                balance,
-                despill_bias: colour("despill_bias", [0.5, 0.5, 0.5, 1.0]),
-                alpha_bias: colour("alpha_bias", [0.5, 0.5, 0.5, 1.0]),
-                spill,
-                clip_black,
-                clip_white,
-                clip_rollback,
-                replace_method,
-                replace_colour: colour("replace_colour", [0.5, 0.5, 0.5, 1.0]),
-                mix,
-            }))
-        }
-        "lut" => {
-            // Only Mix is Copy-carried; the `.cube` file's parsed cube is a
-            // 3D texture threaded beside the resolved op (the caller's LUT
-            // cache), exactly as the flow field is for Motion blur. A `lut`
-            // effect always resolves to exactly one Resolved::Lut, so the
-            // ordered enabled-builtin-`lut` list stays 1:1 and in order with
-            // the Resolved::Lut ops — the whole threading contract.
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Lut { mix })
-        }
         "lens_flare" => {
             // Lens flare (docs/08 §3.27, K-256/K-257). Everything resolves to
             // plain numbers; the bake derives from them GPU-side (cached by
@@ -979,175 +688,6 @@ fn resolve_one(
                 },
             ))
         }
-        "dof" => {
-            // Scalars only; the depth pass (the referenced layer's rendered
-            // texture) is threaded beside the op by the caller, exactly as
-            // the LUT cube is. A `dof` effect always resolves to exactly one
-            // Resolved::Dof, so the ordered enabled-builtin-`dof` list stays
-            // 1:1 and in order with the Dof ops — the threading contract.
-            let focus = (fl("focus").unwrap_or(0.5) as f32).clamp(0.0, 1.0);
-            let range = (fl("range").unwrap_or(0.1) as f32).clamp(0.0, 1.0);
-            // Aperture is the px@comp master; Near/Far are the per-side
-            // radii it scales about its default 8 (unity). A pre-feature
-            // project has only `aperture` and lacks Near/Far, which then
-            // read their default 8, so each side resolves to
-            // 8·(aperture/8)·px_scale = aperture·px_scale — identical to the
-            // old single-aperture behaviour. px@comp is scaled by the §2.3
-            // preview factor so a Half preview blurs the same disc as Full.
-            let master = fl("aperture").unwrap_or(8.0) as f32 / 8.0;
-            let near = fl("near_aperture").unwrap_or(8.0) as f32;
-            let far = fl("far_aperture").unwrap_or(8.0) as f32;
-            // Budget cap (docs/13, docs/14): the disc gather is O(coc²) taps
-            // per pixel, and the Aperture master MULTIPLIES the per-side radii
-            // (so Aperture 150 × Near 55 becomes a ~1000 px circle of
-            // confusion), which submits quadrillions of taps and hangs the
-            // GPU — freezing the preview that renders on the UI thread. Cap
-            // the effective per-side radius so the cost stays bounded;
-            // ordinary apertures (≤ the 40 px slider) sit far below it.
-            const MAX_APERTURE_PX: f32 = 128.0;
-            let near_aperture = (near * master * px_scale).clamp(0.0, MAX_APERTURE_PX);
-            let far_aperture = (far * master * px_scale).clamp(0.0, MAX_APERTURE_PX);
-            // Depth invert (a plain Bool; absent on pre-feature projects,
-            // where it reads false — the historical, unchanged behaviour).
-            let depth_invert = matches!(e.param("depth_invert"), Some(EffectValue::Bool(true)));
-
-            // ---- The aperture (K-313) ----
-            //
-            // The blade count floors to an integer, so a keyframe sweeping
-            // 5 → 6 steps rather than growing half a blade — a pentagon does
-            // not interpolate into a hexagon, and the difference is only where
-            // that truth is enforced.
-            let blade_count = (fl("blades").unwrap_or(6.0) as f32)
-                .floor()
-                .clamp(3.0, MAX_BLADES as f32) as u32;
-            let rotation_deg = fl("rotation").unwrap_or(0.0) as f32;
-            let (blade_normals, apothem2) = super::aperture_blades(blade_count, rotation_deg);
-            // 1 is the circle, and the circle is what this effect has always
-            // gathered — so it is the default and the kernel's fast path.
-            let roundness = (fl("roundness").unwrap_or(1.0) as f32).clamp(-1.0, 1.0);
-            let rim = (fl("rim").unwrap_or(0.0) as f32).clamp(-1.0, 1.0);
-
-            // Deform squeezes one axis and leaves the other alone, so the
-            // aperture only ever shrinks inside the circle and the kernel's
-            // scan box stays a correct bound. The reciprocal is taken here, not
-            // per tap (K-137's host-side single division), and the magnitude is
-            // held below 1 so it cannot divide by zero at the range's ends.
-            let deform = (fl("aspect").unwrap_or(0.0) as f32).clamp(-1.0, 1.0);
-            let squeeze = 1.0 / (1.0 - deform.abs().min(0.95));
-            let aspect_scale = if deform > 0.0 {
-                [1.0, squeeze] // a wide oval: pull y in
-            } else if deform < 0.0 {
-                [squeeze, 1.0]
-            } else {
-                [1.0, 1.0]
-            };
-
-            // ---- The highlights ----
-            //
-            // Exposure 0 gives a power of exactly 1, which the kernel reads as
-            // "do not split at all" and takes the plain sum — the arithmetic
-            // this effect has always done. That exactness is the reason the
-            // power is computed here rather than in the kernel: neither path
-            // then evaluates its own `exp2` (§1.6).
-            //
-            // **The constant is fitted, not measured.** 6 (the stops-per-stop
-            // reading) puts the top of the slider at a power of 32, which is a
-            // maximum filter rather than a mean: it renders hard-edged flat
-            // polygons instead of bokeh discs and erases everything below the
-            // local peak. 12 puts the top at about 5.7 and the point where
-            // balls begin at about 2 — strong, but still an average. docs/08
-            // §3.22 records it as open; turn it if the onset feels early or
-            // late.
-            const EXPOSURE_STOPS_PER_DOUBLING: f32 = 12.0;
-            let exposure = (fl("exposure").unwrap_or(0.0) as f32).clamp(-30.0, 30.0);
-            let bokeh_power = (exposure / EXPOSURE_STOPS_PER_DOUBLING).exp2();
-            let threshold = (fl("threshold").unwrap_or(1.0) as f32).max(0.0);
-
-            let repeat_edge = !matches!(
-                e.param("repeat_edge_pixels"),
-                Some(EffectValue::Bool(false))
-            );
-
-            // ---- The depth model ----
-            //
-            // An unset, missing or cyclic reference defocuses the frame
-            // uniformly at the far-side radius, so the rest of the depth group
-            // has nothing to describe and resolve neutralises it rather than
-            // letting the kernel read a garbage sample.
-            let depth_bound = matches!(e.param("depth"), Some(EffectValue::Layer(Some(_))));
-            let depth_channel = match e.param("depth_channel") {
-                Some(EffectValue::Choice(c)) => (*c).min(CHANNEL_OPTIONS.len() as u32 - 1),
-                _ => 0, // Red — the channel this effect has always read
-            };
-            let use_focus_point =
-                depth_bound && matches!(e.param("use_focus_point"), Some(EffectValue::Bool(true)));
-            // The point is authored in the consuming layer's pixels — the frame
-            // the stack runs in — so it scales by the preview factor exactly as
-            // a px@comp radius does (§2.3). An `_x`/`_y` Float pair, which is
-            // the panel's point row (docs/07 §6.1); there is no Point schema
-            // kind and this is why one is not needed.
-            let focus_point = [
-                fl("focus_point_x").unwrap_or(0.0) as f32 * px_scale,
-                fl("focus_point_y").unwrap_or(0.0) as f32 * px_scale,
-            ];
-            // Profile shapes the focus falloff. Host-side `exp2` for the same
-            // reason the tonal power is host-side: neither path then evaluates
-            // its own (§1.6). 0 is the neutral multiplier of exactly 1, and
-            // multiplying by exactly 1 is exact, so this one needs no branch.
-            // One doubling per unit, so the slider's useful zone sits in its
-            // middle rather than its first third (see the schema's note).
-            let profile = (fl("gamma").unwrap_or(0.0) as f32).clamp(-10.0, 10.0);
-            let gamma = profile.exp2();
-            // Edge-leak suppression reads two depths per tap, so it is dead
-            // weight without a depth pass — and its neutral is what keeps the
-            // gather bit-identical to the historical one.
-            let remove_edge_leak = if depth_bound {
-                (fl("remove_edge_leak").unwrap_or(0.0) as f32).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-            let detect_edge_threshold =
-                (fl("detect_edge_threshold").unwrap_or(0.10) as f32).clamp(0.0, 1.0);
-            // Diagnostic view (clamped to the shipped modes; absent on
-            // pre-feature projects → 0 Rendered, the normal output). With no
-            // depth bound there is nothing for the depth or focus views to
-            // draw, so resolve forces Rendered rather than letting the kernel
-            // display the stand-in texture that occupies the depth slot.
-            let display = if depth_bound {
-                match e.param("display") {
-                    Some(EffectValue::Choice(c)) => (*c).min(2),
-                    _ => 0,
-                }
-            } else {
-                0
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Dof {
-                focus,
-                range,
-                near_aperture,
-                far_aperture,
-                depth_invert,
-                blade_normals,
-                blade_count,
-                apothem2,
-                roundness,
-                rim,
-                aspect_scale,
-                threshold,
-                bokeh_power,
-                repeat_edge,
-                depth_bound,
-                depth_channel,
-                use_focus_point,
-                focus_point,
-                gamma,
-                remove_edge_leak,
-                detect_edge_threshold,
-                display,
-                mix,
-            })
-        }
         "shake" => {
             let amp_pct = (fl("amplitude").unwrap_or(1.5) as f32).max(0.0);
             let freq = fl("frequency").unwrap_or(8.0).max(0.0);
@@ -1226,93 +766,6 @@ fn resolve_one(
                 edge: edge.code(),
                 mix,
                 mb,
-            })
-        }
-        "datamosh" => {
-            // Intensity ceiling is open (K-135/FX-14): clamp only at zero, so
-            // > 1 extrapolates past the moshed frame. Displacement supersedes
-            // the K-148 `streak_length` id (read as a fallback so an old
-            // project keeps its reach); default 4 frames.
-            let intensity = (fl("intensity").unwrap_or(0.5) as f32).max(0.0);
-            let displacement = fl("displacement")
-                .or_else(|| fl("streak_length"))
-                .unwrap_or(4.0)
-                .max(1.0) as f32;
-            let bloom = (fl("bloom").unwrap_or(0.6) as f32).clamp(0.0, 1.0);
-            // Periodic I-frame reset (K-164): the melt ramps from a clean frame
-            // just after each reset up to full by the next. A pure function of
-            // layer time `lt` (seconds), so the kernel stays time-agnostic and
-            // the frame-cache key already covers it (a param+time function, the
-            // K-093/K-094 reasoning). 0 = off (a constant melt); the content-
-            // driven reset at stills/cuts (zero flow) fires regardless.
-            let interval = (fl("reset_interval").unwrap_or(0.0)).max(0.0);
-            let ramp = if interval > 0.0 {
-                (lt / interval).rem_euclid(1.0) as f32
-            } else {
-                1.0
-            };
-            let eff_intensity = intensity * ramp;
-            let eff_displacement = (displacement * ramp).max(0.0);
-            // Each step advances ~1 frame of flow, so the tap count tracks the
-            // reach; clamped to the 2..64 Motion blur's own streak loops (or 1
-            // at a sub-frame reach, where a single tap is exact).
-            let steps = if eff_displacement < 1.0 {
-                1
-            } else {
-                (eff_displacement.round() as i32).clamp(2, 64)
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Datamosh {
-                intensity: eff_intensity,
-                displacement: eff_displacement,
-                bloom,
-                steps,
-                mix,
-            })
-        }
-        "echo" => {
-            // Echoes k = 1..count sit at offset -k with intensity
-            // decay^k (v1 fixed one-frame spacing); the render supplies
-            // the neighbour frame at each offset. weights[i] is the echo
-            // at offset -(i+1). Up to 16 echoes (FX-17/K-149).
-            let count = (fl("echoes").unwrap_or(4.0).round() as i32).clamp(1, 16);
-            let decay = (fl("decay").unwrap_or(0.6) as f32).clamp(0.0, 1.0);
-            // Combine blend mode; the default when the param is absent matches
-            // the schema default (Screen, index 3). Clamped to the 0..=13 range
-            // the CPU oracle and WGSL kernel branch over (T21).
-            let mode = match e.param("mode") {
-                Some(EffectValue::Choice(c)) => (*c).min(13),
-                _ => 3,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let mut weights = [0.0f32; 16];
-            for (i, w) in weights.iter_mut().enumerate() {
-                if (i as i32) < count {
-                    *w = decay.powi(i as i32 + 1);
-                }
-            }
-            Some(Resolved::Echo { weights, mode, mix })
-        }
-        "motion_blur" => {
-            // Streak length = motion × (shutter ÷ 360); the flow field
-            // (the motion itself) is threaded to the kernel separately.
-            // Samples is the spec's integer carried as a Float row —
-            // rounded and clamped to the same 2..64 the kernel loops.
-            let shutter_frac = (fl("shutter_angle").unwrap_or(180.0) as f32 / 360.0).max(0.0);
-            let samples = (fl("samples").unwrap_or(16.0).round() as i32).clamp(2, 64);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // View (FX-19): a diagnostic look at the flow or confidence, else the
-            // blurred picture. An older project without the row reads Rendered.
-            let view = match e.param("view") {
-                Some(EffectValue::Choice(1)) => MbView::MotionVectors,
-                Some(EffectValue::Choice(2)) => MbView::Confidence,
-                _ => MbView::Rendered,
-            };
-            Some(Resolved::MotionBlur {
-                shutter_frac,
-                samples,
-                mix,
-                view,
             })
         }
         _ => None,

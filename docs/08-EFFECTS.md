@@ -1346,10 +1346,11 @@ temporal. Category **Blur & sharpen**. A zero effective aperture (master or both
 depth everywhere inside the sharp band, or `Mix 0` are all bit-exact passthroughs, pinned by
 the kernel oracle.
 
-**Threading the depth (K-031).** `Resolved::Dof` carries only the scalars; the depth is a
+**Threading the depth (K-031).** The resolved bag carries only the scalars; the depth is a
 whole texture, so — like the LUT's cube and Motion blur's flow field — the referenced layer's
-render travels **beside** the resolved op (a parallel `layer_inputs` slot the k-th `Dof` op
-binds). Preview and export render the depth through **one shared helper**
+render travels **beside** the resolved op (a parallel `layer_inputs` slot the k-th consuming
+op binds, declared by the effect as `AuxKind::LayerInput` per K-387 and shared with §3.28's
+Light wrap). Preview and export render the depth through **one shared helper**
 (`fxops::render_layer_input`), so the viewport and the file match. The frame cache key hashes
 the referenced layer's source and transform (the same content a matte's key hashes), so
 editing the depth pass retires stale frames.

@@ -76,7 +76,7 @@ pub struct DofInputDraw {
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
     pub fx: lumit_core::fx::ResolvedOps,
-    /// The depth layer's `lut` file paths, 1:1 with the `Resolved::Lut` ops in
+    /// The depth layer's `lut` file paths, 1:1 with the `lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
     pub lut_files: Vec<Option<String>>,
@@ -226,14 +226,15 @@ pub struct CompLayerDraw {
     /// The ordered file paths of the layer's enabled built-in `lut` effects
     /// (docs/08 §3.11; None = unset). Because `resolve_stack` keeps the same
     /// filter and order and a `lut` effect always resolves to exactly one
-    /// `Resolved::Lut`, this list is 1:1 and in order with the stack's `Lut`
+    /// op, this list is 1:1 and in order with the stack's `lut`
     /// ops — the caller loads each path and passes the parallel `luts` to
     /// `run_ops`. No GPU work happens here; these are just the strings.
     pub lut_files: Vec<Option<String>>,
-    /// The depth inputs of the layer's enabled built-in `dof` effects (docs/08
-    /// §3.22, docs/impl/layer-input.md). Because `resolve_stack` keeps the
-    /// same filter and order and a `dof` effect always resolves to exactly one
-    /// `Resolved::Dof`, this list is 1:1 and in order with the stack's `Dof`
+    /// The layer inputs of the layer's enabled built-in `dof` and `light_wrap`
+    /// effects (docs/08 §3.22, §3.28, docs/impl/layer-input.md). Because
+    /// `resolve_stack` keeps the same filter and order and each of those
+    /// effects always resolves to exactly one op, this list is 1:1 and in order
+    /// with the stack's layer-input-consuming
     /// ops — the caller renders each one alone at comp size and passes the
     /// parallel `layer_inputs` to `run_ops`. A [`LayerInputDraw::Layer`]
     /// carries the referenced layer's source pixels; the GPU render happens in

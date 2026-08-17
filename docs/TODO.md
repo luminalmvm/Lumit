@@ -52,23 +52,19 @@ colour effects resolve, grade and dispatch through the registry, and the render 
 left is the per-family migration on top, in batches; these are the batches that have not
 landed. Delete each line as its batch lands.
 
-- **Migrate `matte_key`.** It is the last effect with no side table: its op is a flat bundle
-    of scalars, colours and two Choice codes, so nothing but its size held it back. Its one
-    wrinkle is that the two Choices are normalised through `MatteKeyView::from_code(..).code()`
-    and `ReplaceMethod::from_code(..).code()` at resolve, so an out-of-range stored choice
-    lands on a valid one - the generic pass pushes the raw `Choice`, so that normalisation
-    belongs in `packed()`.
-- **Then the eight that need the seam widened again**, each on its own and each blocked by
-    something the bag cannot carry:
-    - a **side table** threaded beside the ops, consumed by a counter that must stay 1:1 and
-      in order with them - `lut` (`luts[lut_i]`), `dof` and `light_wrap` (both take a
-      layer-input slot off the shared `dof_i` counter), `lens_flare` (`flare_mattes[flare_i]`);
-    - a **neighbour frame or flow field** off the layer's decode - `echo` (neighbours),
-      `motion_blur` (flow field), `datamosh` (both);
-    - a **variable-shape payload**: `shake` carries nine sub-frame samples of four floats
-      when its own motion blur is on, and dispatches a different kernel for it. `Value` has
-      no array kind, so this one is a decision (32-odd `derived.*` ids, or a new kind), not
-      a batch.
+- **`lens_flare` is the final boss, and gets its own campaign.** Fifty parameters, three
+    parallel lists (`flare_mattes[flare_i]`, `flare_lens[flare_i]`, and the bake's own
+    cache), a lazy bake closure the GPU may run on another thread, and a frame-time grid
+    probe that calls back into `lumit-core` mid-dispatch. None of that is blocked by the
+    seam any more - `AuxKind::FlareInputs` is built and carries both slots off the one
+    `flare_i` counter - but it is far too much to ride along beside other effects, and its
+    §1.6 oracle is staged in two halves (trace at ULP, frame at the perceptual bound). Move
+    it alone, with its bake and probe reviewed as their own question, and keep the flare's
+    WGSL bit-stability work off the same branch.
+- **Then the one that is not a batch at all**: `shake` carries a **variable-shape payload** -
+    nine sub-frame samples of four floats when its own motion blur is on - and dispatches a
+    different kernel for it. `Value` has no array kind, so this is a decision (32-odd
+    `derived.*` ids, or a new kind), not a migration.
     What has landed: the blur family (`blur`, `directional_blur`, `radial_blur`, `sharpen`,
     `sharpen_simple`), the first batch with spatial units, so `PctDiag` and the generic
     rescale are exercised by `a_migrated_spatial_parameter_rescales_as_the_old_op_did`; then
@@ -77,7 +73,12 @@ landed. Delete each line as its batch lands.
     kernel, packed as an enum rather than a tuple); then `flash`, `scanlines` and
     `block_glitch` through the K-385 resolve-time hook, `sprite_flare`, `transform` and
     `glow` beside them, and `posterize_time` and `accumulation_mb`, the first two effects
-    that declare no image op at all.
+    that declare no image op at all; then the aux seam with the two effects that prove its
+    two shapes - `lut` (a counted slot, `luts[lut_i]`) and `echo` (a whole list, the decoded
+    neighbours); and then the rest of the side-table batch, which is every remaining effect
+    but the flare - `dof` and `light_wrap` off the shared `dof_i` counter,
+    `motion_blur` and `datamosh` off the decoded motion, and `matte_key`, which turned out
+    to have no side table at all, only bulk.
 - **Rescale a derived spatial value, or stop deriving one.** Scanlines' `derived.roll_px` is
     in raster pixels, but `ResolvedStack::rescale_spatial` only moves values whose id matches
     a schema parameter with a spatial unit - a derived id matches nothing, so a stack resolved

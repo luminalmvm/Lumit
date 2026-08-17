@@ -144,7 +144,7 @@ impl Realiser<'_> {
     /// LRU-evicted (K-271, docs/impl/lut.md §4) — and a 1D or unreadable/absent
     /// file yields a `None` slot (a labelled no-op, never a fault). The output
     /// is 1:1 and in order with `files`, so the k-th slot lines up with the
-    /// k-th `Resolved::Lut` op.
+    /// k-th `lut` op.
     fn load_luts(&self, files: &[Option<String>]) -> Vec<Option<LoadedLut>> {
         let mut cache = self.lut_cache.borrow_mut();
         files
@@ -576,11 +576,12 @@ impl Realiser<'_> {
                         .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h))
                 });
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
-                // `Resolved::Lut` ops (§3.11); the same load export uses (K-031).
+                // `lut` ops (§3.11); the same load export uses (K-031).
                 let luts = self.load_luts(&l.lut_files);
-                // The depth-of-field depth inputs, resampled to this layer's
-                // working raster (w, h), 1:1 with the stack's Resolved::Dof ops
-                // (§3.22); the same render export runs (K-031).
+                // The layer inputs — a depth pass, a Light wrap background —
+                // resampled to this layer's working raster (w, h), 1:1 with the
+                // stack's consuming ops (§3.22, §3.28); the same render export
+                // runs (K-031).
                 let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h);
                 let flare_mattes = self.render_layer_inputs(&l.flare_mattes, w, h);
                 let flare_lens = self.load_flare_lens(&l.flare_lens_files);

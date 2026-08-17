@@ -521,11 +521,12 @@ pub fn build_comp_draws_at(
         })
     };
 
-    // The depth inputs of a stack's enabled built-in `dof` effects (docs/08
-    // §3.22, docs/impl/layer-input.md), 1:1 and in order with the stack's
-    // Resolved::Dof ops — the same `enabled && Builtin && match_name` filter
-    // resolve_stack applies, and a `dof` effect always resolves to exactly one
-    // op. Each slot carries the referenced layer's SOURCE pixels (via the same
+    // The layer inputs of a stack's enabled built-in `dof` and `light_wrap`
+    // effects (docs/08 §3.22, §3.28, docs/impl/layer-input.md), 1:1 and in order
+    // with the stack's layer-input-consuming ops — the same
+    // `enabled && Builtin && match_name` filter resolve_stack applies, and each
+    // of those effects always resolves to exactly one op. Each slot carries the
+    // referenced layer's SOURCE pixels (via the same
     // `pixels_for` a matte uses, so effects are not applied and a depth
     // reference can never recurse); an unset or dangling reference is None (a
     // passthrough). The depth layer does NOT need to be visible — a depth map
@@ -968,11 +969,12 @@ pub fn build_comp_draws_at(
                     neighbours: Vec::new(),
                     flow_field: None,
                     // Ordered file paths of the enabled built-in `lut` effects,
-                    // 1:1 with the stack's Resolved::Lut ops (docs/08 §3.11);
+                    // 1:1 with the stack's `lut` ops (docs/08 §3.11);
                     // the same `lt` resolve_stack used above.
                     lut_files: lut_files(&layer.effects, lt),
-                    // Depth inputs of the enabled built-in `dof` effects, 1:1
-                    // with the stack's Resolved::Dof ops (docs/08 §3.22).
+                    // Depth inputs of the enabled built-in `dof` and
+                    // `light_wrap` effects, 1:1 with the stack's
+                    // layer-input-consuming ops (docs/08 §3.22, §3.28).
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
                     flare_mattes: flare_mattes_for(layer.id, &layer.effects),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
@@ -1205,12 +1207,13 @@ pub fn build_comp_draws_at(
             neighbours,
             flow_field,
             // Ordered file paths of the enabled built-in `lut` effects, 1:1
-            // with the stack's Resolved::Lut ops (docs/08 §3.11); the same `lt`
+            // with the stack's `lut` ops (docs/08 §3.11); the same `lt`
             // resolve_stack used for `fx`.
             lut_files: lut_files(&layer.effects, lt),
-            // Depth inputs of the enabled built-in `dof` effects, 1:1 with the
-            // stack's Resolved::Dof ops (docs/08 §3.22); built the same way
-            // export does, so the two blur identically (K-031).
+            // Depth inputs of the enabled built-in `dof` and `light_wrap`
+            // effects, 1:1 with the stack's layer-input-consuming ops (docs/08
+            // §3.22, §3.28); built the same way export does, so the two blur
+            // identically (K-031).
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             flare_mattes: flare_mattes_for(layer.id, &layer.effects),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
@@ -1234,8 +1237,8 @@ pub fn build_comp_draws_at(
 /// (docs/08 §3.11, K-114), each resolved at layer time `lt` (None = unset).
 /// `resolve_stack` filters on the identical `e.enabled && namespace == Builtin`
 /// predicate and preserves order, and a `lut` effect always resolves to exactly
-/// one `Resolved::Lut`, so this list is 1:1 and in the same order as the stack's
-/// `Resolved::Lut` ops — the alignment `run_ops` relies on to bind LUT k to op
+/// one op, so this list is 1:1 and in the same order as the stack's
+/// `lut` ops — the alignment `run_ops` relies on to bind LUT k to op
 /// k. Preview (here) and export build it the same way, so the two match (K-031).
 fn lut_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
     use lumit_core::model::EffectNamespace;
