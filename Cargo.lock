@@ -1485,6 +1485,7 @@ name = "lumit-core"
 version = "0.2.0"
 dependencies = [
  "arc-swap",
+ "lumit-fx-macros",
  "parking_lot",
  "proptest",
  "rayon",
@@ -1516,6 +1517,15 @@ dependencies = [
  "pollster",
  "thiserror 2.0.18",
  "wgpu",
+]
+
+[[package]]
+name = "lumit-fx-macros"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
