@@ -9882,3 +9882,28 @@ The build-side predicate keys on instance match_names and the consumption on def
 match_names — the same names — so the one-predicate, one-order rule is untouched, and
 a missing slot stays a passthrough. docs/impl/effect-registry.md §2.5a carries the
 shape.
+
+## K-388 — The bag gains a four-float value, and Shake's noise is derived unit-free
+
+**DECIDED** (2026-08-17). The last migration blocker. Shake resolves nine sub-frame
+wobble samples — four floats each — and `Value` had no shape for them: forty flat
+`derived.*` ids would drown the bag, and abusing `Colour` would lie about what the
+floats are. Two changes, taken together:
+
+- **`Value::Vec4([f32; 4])`**: one variant, one `tag()` byte, one `feed_hash` arm
+  (tag, then the four floats — the field-by-field rule of K-381 unchanged), one
+  `Params::vec4` accessor. General, not Shake-shaped: the next effect with a small
+  fixed vector uses it too.
+- **Shake derives its noise unit-free and keeps its amplitude in the schema.** The
+  old arm baked `amp_px` into every sample, which would have made the derived values
+  spatial — and derived values do not rescale (`rescale_spatial` walks schema units).
+  Instead `amplitude` declares its true unit (`PctDiag`, under K-386's rule: the arm
+  hand-multiplied by the diagonal), so the arena holds a rescalable schema value, and
+  `resolve_derived` pushes only the unit-free noise vectors. `packed()` reassembles
+  `ShakeWobble::at`'s arithmetic — same association, same cast point — so frame-time
+  output is bit-identical; on the rescale path the factor associates one multiply
+  earlier, an ulp of the accepted narrowing class.
+
+The alternative — teaching derived values to rescale — would have given `derived.*`
+ids a second contract (a unit table living nowhere) for exactly one consumer.
+Deriving the value that has no unit is smaller and cannot drift.
