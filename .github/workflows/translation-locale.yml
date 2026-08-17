@@ -48,4 +48,15 @@ jobs:
           Crowdin writes its own code into @@locale, which Flutter's generator
           refuses when it disagrees with the filename. Put back automatically;
           see .github/workflows/translation-locale.yml."
+          # Crowdin pushes several commits to this branch in quick succession,
+          # so the branch can move between this job's checkout and its push.
+          # Rebase onto whatever landed and try again; each retry re-runs the
+          # rewrite so a freshly-synced file is mended too. The last push is
+          # allowed to fail loudly - a real error should stay red.
+          for attempt in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+            python3 .github/scripts/name_arb_locales.py
+            git diff --quiet || git commit -am "Name each .arb's locale after its filename (retry $attempt)"
+          done
           git push
