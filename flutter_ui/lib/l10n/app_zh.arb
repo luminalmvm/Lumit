@@ -1,5 +1,5 @@
 {
-  "@@locale": "zh",
+  "@@locale": "zh-CN",
   "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): under five words, two where two will do.",
   "aboutBlurb": "一个动态图形设计与合成编辑器。V3通用公共许可协议下的免费剪辑软件",
   "@aboutBlurb": {
@@ -203,6 +203,10 @@
         "type": "String"
       }
     }
+  },
+  "openingProject": "Opening project…",
+  "@openingProject": {
+    "description": "Card shown over the interface while a project file is being read from disk."
   },
   "couldNotOpenLink": "Could not open {url}",
   "@couldNotOpenLink": {
@@ -729,6 +733,10 @@
   "@fxAspectRatio": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxBackground": "Background",
+  "@fxBackground": {
+    "description": "Effect controls — a control on Light wrap. Picks the layer whose light spills round the foreground's edge; normally the plate the subject was keyed onto."
+  },
   "fxBehind": "Behind",
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
@@ -792,6 +800,114 @@
   "fxCoating": "Coating",
   "@fxCoating": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxElement1": "Element 1",
+  "@fxElement1": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement2": "Element 2",
+  "@fxElement2": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement3": "Element 3",
+  "@fxElement3": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement4": "Element 4",
+  "@fxElement4": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement5": "Element 5",
+  "@fxElement5": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement6": "Element 6",
+  "@fxElement6": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement7": "Element 7",
+  "@fxElement7": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement8": "Element 8",
+  "@fxElement8": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement9": "Element 9",
+  "@fxElement9": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement10": "Element 10",
+  "@fxElement10": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement11": "Element 11",
+  "@fxElement11": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement12": "Element 12",
+  "@fxElement12": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement13": "Element 13",
+  "@fxElement13": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement14": "Element 14",
+  "@fxElement14": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement15": "Element 15",
+  "@fxElement15": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement16": "Element 16",
+  "@fxElement16": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement17": "Element 17",
+  "@fxElement17": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement18": "Element 18",
+  "@fxElement18": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement19": "Element 19",
+  "@fxElement19": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxElement20": "Element 20",
+  "@fxElement20": {
+    "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
+  },
+  "fxCoatingAsFile": "As the lens file",
+  "@fxCoatingAsFile": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingUncoated": "Uncoated",
+  "@fxCoatingUncoated": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingSingleStraw": "Single layer, straw",
+  "@fxCoatingSingleStraw": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingTwoMagenta": "Two layer, magenta",
+  "@fxCoatingTwoMagenta": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadGreen": "Broadband, green",
+  "@fxCoatingBroadGreen": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadAmber": "Broadband, amber",
+  "@fxCoatingBroadAmber": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
+  },
+  "fxCoatingBroadBlue": "Broadband, blue",
+  "@fxCoatingBroadBlue": {
+    "description": "Effect controls — one option in the per-element coating menu on Lens flare, naming an anti-reflective design by the colour it leaves in a ghost."
   },
   "fxColour": "Colour",
   "@fxColour": {
@@ -1045,9 +1161,21 @@
   "@fxGhostIntensity": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxGhostSize": "Ghost size",
+  "@fxGhostSize": {
+    "description": "Effect controls — a control on Sprite flare. How big each of the flare's ghost discs is drawn."
+  },
   "fxGhostSoftness": "Ghost softness",
   "@fxGhostSoftness": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxGhostSpacing": "Ghost spacing",
+  "@fxGhostSpacing": {
+    "description": "Effect controls — a control on Sprite flare. How far apart the ghosts sit along the line from the light through the middle of the frame."
+  },
+  "fxGhosts": "Ghosts",
+  "@fxGhosts": {
+    "description": "Effect controls — a control on Sprite flare. How many ghost discs the flare draws."
   },
   "fxGlow": "Glow",
   "@fxGlow": {
@@ -1136,6 +1264,10 @@
   "fxLightTint": "Light tint",
   "@fxLightTint": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLightWrap": "Light wrap",
+  "@fxLightWrap": {
+    "description": "Effect name in the Effects list. Spills the background's light round the edge of a keyed foreground so it sits in the shot rather than on top of it."
   },
   "fxLightX": "Light x",
   "@fxLightX": {
@@ -1445,9 +1577,29 @@
   "@fxSource": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxSourceHeight": "Source height",
+  "@fxSourceHeight": {
+    "description": "Effect controls — a control on Lens flare. Half the height of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
+  },
+  "fxSourceWidth": "Source width",
+  "@fxSourceWidth": {
+    "description": "Effect controls — a control on Lens flare. Half the width of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
+  },
+  "fxGlowIntensity": "Glow intensity",
+  "@fxGlowIntensity": {
+    "description": "Effect controls — a control on Sprite flare. How bright the soft glow on the light itself is."
+  },
+  "fxGlowSize": "Glow size",
+  "@fxGlowSize": {
+    "description": "Effect controls — a control on Sprite flare. How wide the soft glow on the light itself spreads, in pixels."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxSpriteFlare": "Sprite flare",
+  "@fxSpriteFlare": {
+    "description": "Effect name in the Effects list. An art-directed lens flare drawn from a light position you set — a glow, a train of ghosts and a streak — rather than simulated through a real lens."
   },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
@@ -1458,6 +1610,22 @@
     "description": "Effect controls — a control on Matte key."
   },
   "fxStops": "Stops",
+  "fxStreak": "Streak",
+  "@fxStreak": {
+    "description": "Effect controls — the heading over Sprite flare's streak controls. The long thin horizontal flare an anamorphic lens throws."
+  },
+  "fxStreakAngle": "Streak angle",
+  "@fxStreakAngle": {
+    "description": "Effect controls — a control on Sprite flare. Which way the long thin streak through the light is angled; 0 is horizontal."
+  },
+  "fxStreakIntensity": "Streak intensity",
+  "@fxStreakIntensity": {
+    "description": "Effect controls — a control on Sprite flare. How bright the long thin streak through the light is."
+  },
+  "fxStreakLength": "Streak length",
+  "@fxStreakLength": {
+    "description": "Effect controls — a control on Sprite flare. How far the long thin streak reaches from the light, in pixels."
+  },
   "@fxStops": {
     "description": "Effect controls — a control on Exposure."
   },
@@ -1544,6 +1712,10 @@
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxWidth": "Width",
+  "@fxWidth": {
+    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
   },
   "fxXAmount": "X amount",
   "@fxXAmount": {
@@ -2190,6 +2362,10 @@
   "@menuAnimateText": {
     "description": "Menu item."
   },
+  "menuAuto": "Auto",
+  "@menuAuto": {
+    "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
+  },
   "menuAnimation": "Animation",
   "@menuAnimation": {
     "description": "Menu item."
@@ -2209,6 +2385,10 @@
   "menuBlendingMode": "Blending mode",
   "@menuBlendingMode": {
     "description": "Menu item."
+  },
+  "menuAreaLight": "Area light",
+  "@menuAreaLight": {
+    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
   },
   "menuCamera": "Camera",
   "@menuCamera": {
@@ -2378,6 +2558,10 @@
   "@menuNull": {
     "description": "Menu item."
   },
+  "menuPointLight": "Point light",
+  "@menuPointLight": {
+    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
+  },
   "menuOpenProject": "Open project…",
   "@menuOpenProject": {
     "description": "Menu item."
@@ -2497,6 +2681,10 @@
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
+  },
+  "menuSpotLight": "Spot light",
+  "@menuSpotLight": {
+    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {
@@ -3592,6 +3780,18 @@
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
   },
+  "switchAcceptsLights": "Accepts lights",
+  "@switchAcceptsLights": {
+    "description": "Layer switch and its column heading in the Timeline: whether the composition's Light layers shade this layer."
+  },
+  "switchAcceptsLightsOff": "Accepts lights: off",
+  "@switchAcceptsLightsOff": {
+    "description": "Tooltip on the Accepts lights switch when it is off: the composition's lights leave this layer alone."
+  },
+  "switchAcceptsLightsOn": "Accepts lights: on",
+  "@switchAcceptsLightsOn": {
+    "description": "Tooltip on the Accepts lights switch when it is on: the composition's lights shade this layer."
+  },
   "switchVisible": "Visible",
   "@switchVisible": {
     "description": "Layer switch: the layer is drawn. One or two words — it is a tooltip."
@@ -3813,6 +4013,10 @@
   "@tipCacheVram": {
     "description": "Tooltip on the VRAM cache meter."
   },
+  "tipClearRegionOfInterest": "Clear region",
+  "@tipClearRegionOfInterest": {
+    "description": "Tooltip on the Viewer bar's region button while a region is set: clicking it goes back to previewing the whole frame."
+  },
   "tipChooseCacheFolder": "Choose folder",
   "@tipChooseCacheFolder": {
     "description": "Tooltip on the button that picks where parked frames go. Under five words."
@@ -3991,9 +4195,29 @@
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. Under five words."
   },
+  "tipCompBackground": "Composition background",
+  "@tipCompBackground": {
+    "description": "Tooltip on the Viewer bar's background colour swatch. Under five words."
+  },
+  "tipPreviewResolution": "Preview resolution",
+  "@tipPreviewResolution": {
+    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). Under five words."
+  },
+  "tipPreviewResolutionAdaptive": "Adaptive playback chooses the resolution",
+  "@tipPreviewResolutionAdaptive": {
+    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
+  },
   "tipProperties": "Properties",
   "@tipProperties": {
     "description": "Tooltip on the twirl that opens a layer's properties. Under five words."
+  },
+  "tipDragRegionOfInterest": "Drag a region",
+  "@tipDragRegionOfInterest": {
+    "description": "Tooltip on the Viewer bar's region button once armed: the next drag on the picture sweeps out the region to preview."
+  },
+  "tipRegionOfInterest": "Region of interest",
+  "@tipRegionOfInterest": {
+    "description": "Tooltip on the Viewer bar's region-of-interest button: arm a drag that limits the preview to a rectangle of the composition."
   },
   "tipRemove": "Remove",
   "@tipRemove": {
