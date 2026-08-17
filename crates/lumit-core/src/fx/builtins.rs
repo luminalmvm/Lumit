@@ -3567,7 +3567,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "light_x",
                 label: "Light x",
                 // px@comp (K-260: point parameters are PIXELS, the
@@ -3583,7 +3583,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "light_y",
                 label: "Light y",
                 kind: ParamKind::Float {
@@ -3593,7 +3593,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "source_width",
                 label: "Source width",
                 // px@comp like the position (K-260), and the HALF-width of the
@@ -3608,7 +3608,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "source_height",
                 label: "Source height",
                 kind: ParamKind::Float {

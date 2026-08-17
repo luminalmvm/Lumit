@@ -1254,8 +1254,8 @@ fn lut_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Opti
 }
 
 /// The `lens_file` paths of the enabled built-in `lens_flare` effects, 1:1
-/// and in order with the stack's `Resolved::LensFlare` ops (K-264) — the
-/// LUT-files pattern for the flare's custom prescription.
+/// and in order with the stack's `lens_flare` ops (K-264) — the LUT-files
+/// pattern for the flare's custom prescription.
 fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
     use lumit_core::model::EffectNamespace;
     effects

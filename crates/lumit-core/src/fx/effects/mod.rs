@@ -30,6 +30,7 @@ pub mod gamma;
 pub mod glow;
 pub mod hue_shift;
 pub mod invert;
+pub mod lens_flare;
 pub mod light_wrap;
 pub mod lut;
 pub mod matte_key;

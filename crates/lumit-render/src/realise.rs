@@ -118,7 +118,7 @@ impl Realiser<'_> {
     }
 
     /// Read a layer's `lens_file` paths into (content hash, text) slots,
-    /// 1:1 with the stack's `Resolved::LensFlare` ops (K-264). A `None`
+    /// 1:1 with the stack's `lens_flare` ops (K-264). A `None`
     /// slot (unset, missing on disk, unreadable) degrades to the picked
     /// library lens inside the bake — a labelled fallback, never a fault.
     /// No cache, deliberately: a .lens file is about a kilobyte, the read

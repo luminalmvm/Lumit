@@ -52,16 +52,7 @@ colour effects resolve, grade and dispatch through the registry, and the render 
 left is the per-family migration on top, in batches; these are the batches that have not
 landed. Delete each line as its batch lands.
 
-- **`lens_flare` is the final boss, and gets its own campaign.** Fifty parameters, three
-    parallel lists (`flare_mattes[flare_i]`, `flare_lens[flare_i]`, and the bake's own
-    cache), a lazy bake closure the GPU may run on another thread, and a frame-time grid
-    probe that calls back into `lumit-core` mid-dispatch. None of that is blocked by the
-    seam any more - `AuxKind::FlareInputs` is built and carries both slots off the one
-    `flare_i` counter - but it is far too much to ride along beside other effects, and its
-    §1.6 oracle is staged in two halves (trace at ULP, frame at the perceptual bound). Move
-    it alone, with its bake and probe reviewed as their own question, and keep the flare's
-    WGSL bit-stability work off the same branch.
-- **Then the one that is not a batch at all**: `shake` carries a **variable-shape payload** -
+- **The one that is not a batch at all**: `shake` carries a **variable-shape payload** -
     nine sub-frame samples of four floats when its own motion blur is on - and dispatches a
     different kernel for it. `Value` has no array kind, so this is a decision (32-odd
     `derived.*` ids, or a new kind), not a migration.
@@ -78,14 +69,20 @@ landed. Delete each line as its batch lands.
     neighbours); and then the rest of the side-table batch, which is every remaining effect
     but the flare - `dof` and `light_wrap` off the shared `dof_i` counter,
     `motion_blur` and `datamosh` off the decoded motion, and `matte_key`, which turned out
-    to have no side table at all, only bulk.
+    to have no side table at all, only bulk; and last `lens_flare` on its own, whose bake
+    closure and frame-time grid probe moved wholesale into its `gpufx.rs` wrapper and whose
+    Lights-mode sources became K-385 derived values (two `Value::Colour` entries a light,
+    under sixteen fixed ids).
 - **Rescale a derived spatial value, or stop deriving one.** Scanlines' `derived.roll_px` is
     in raster pixels, but `ResolvedStack::rescale_spatial` only moves values whose id matches
     a schema parameter with a spatial unit - a derived id matches nothing, so a stack resolved
     against one raster and reused at another (`realise.rs`, a precomp at a different size)
     scales the line period and leaves the roll offset behind, and the pattern's phase shifts
     with the size. Before K-385 neither moved, so the phase was right and the period wrong;
-    now it is the other way about. Two fixes, both small: give `EffectDef` a
+    now it is the other way about. The Lens flare's `derived.light*` entries are the same
+    shape - raster pixels under a derived id - though there the old `rescale_px` match did
+    not move them either, so a Lights-mode flare on a resized precomp is no worse than it
+    was and no better. Two fixes, both small: give `EffectDef` a
     `derived_spatial()` list the rescale pass consults (keeps the resolve maths bit-identical),
     or derive the roll in *periods* rather than pixels and multiply in `packed()` (no new API,
     but the f64 product rounds once more and so is not bit-identical to the old arm).

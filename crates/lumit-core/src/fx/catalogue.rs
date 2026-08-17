@@ -23,8 +23,8 @@ use super::effects::{
     chromatic_aberration::ChromaticAberrationDef, colour_balance::ColourBalanceDef,
     contrast::ContrastDef, datamosh::DatamoshDef, directional_blur::DirectionalBlurDef,
     dof::DofDef, echo::EchoDef, exposure::ExposureDef, flash::FlashDef, gamma::GammaDef,
-    glow::GlowDef, hue_shift::HueShiftDef, invert::InvertDef, light_wrap::LightWrapDef,
-    lut::LutDef, matte_key::MatteKeyDef, motion_blur::MotionBlurDef,
+    glow::GlowDef, hue_shift::HueShiftDef, invert::InvertDef, lens_flare::LensFlareDef,
+    light_wrap::LightWrapDef, lut::LutDef, matte_key::MatteKeyDef, motion_blur::MotionBlurDef,
     posterize_time::PosterizeTimeDef, radial_blur::RadialBlurDef, rgb_split::RgbSplitDef,
     saturation::SaturationDef, scanlines::ScanlinesDef, sharpen::SharpenDef,
     sharpen_simple::SharpenSimpleDef, sprite_flare::SpriteFlareDef, temperature::TemperatureDef,
@@ -65,4 +65,5 @@ crate::catalogue![
     MatteKeyDef,
     InvertDef,
     TintDef,
+    LensFlareDef,
 ];

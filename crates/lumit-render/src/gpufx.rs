@@ -136,6 +136,17 @@ impl<'a> AuxSlot<'a> {
             _ => None,
         }
     }
+
+    /// The Lens flare's Matte source and its custom prescription, each absent on
+    /// its own terms: an unset or dangling matte detects no sources, and an
+    /// unset, missing or unparsable `.lens` file falls back to the picked library
+    /// lens. `(None, None)` for a slot of the wrong kind, which cannot happen.
+    pub fn flare_inputs(self) -> (Option<&'a Tex>, Option<&'a (u64, String)>) {
+        match self {
+            AuxSlot::FlareInputs { matte, lens } => (matte, lens),
+            _ => (None, None),
+        }
+    }
 }
 
 /// One migrated effect's GPU pass.
@@ -207,6 +218,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &MatteKey,
     &Invert,
     &Tint,
+    &LensFlare,
 ];
 
 /// The GPU pass for `match_name`, or `None` when the effect has no image
@@ -1344,6 +1356,183 @@ impl GpuEffect for Tint {
     ) -> Tex {
         let (black, white, mix) = effects::tint::Tint::read(p).packed();
         fx.tint(ctx, tex, w, h, &lumit_gpu::fx::TintOp { black, white, mix })
+    }
+}
+
+struct LensFlare;
+impl GpuEffect for LensFlare {
+    fn match_name(&self) -> &'static str {
+        "lens_flare"
+    }
+    /// The Matte source and the custom `.lens` prescription, counted together off
+    /// one index (K-257, K-264, K-387): `build.rs` enumerates the layer's enabled
+    /// `lens_flare` effects once and fills both lists in that order, so the k-th
+    /// flare op binds the k-th entry of each.
+    fn aux(&self) -> AuxKind {
+        AuxKind::FlareInputs
+    }
+    /// The one wrapper that is not thin, and could not be: the flare needs a
+    /// **bake** — the prescription parsed, every ghost path ray-probed and ranked,
+    /// the starburst transformed — which is far too heavy to redo per frame, so it
+    /// is handed over as a closure the GPU side runs only when its parameter-hash
+    /// cache misses, and may run beside the frame rather than inside it
+    /// (`FxEngine::set_deferred_flare_bakes`, K-350).
+    ///
+    /// Everything below the bake is still the registry's rule: no arithmetic of
+    /// its own. Every frame-time number comes out of the one `lumit-core` module
+    /// that owns the formulas (K-031: the CPU reference and the kernels read
+    /// identical values), through the effect's `packed`.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::lens_flare as lf;
+        let (matte, custom) = aux.flare_inputs();
+        let (lights, light_count) = effects::lens_flare::LensFlare::lights_of(p);
+        let params = effects::lens_flare::LensFlare::read(p).packed(lights, light_count);
+        let p = &params;
+
+        let (tier_base, tier_lambda, flare_div) = lf::quality_ladder(p.quality);
+        // The Detail dial scales the tier's base and wavelength count (K-265) —
+        // through the shared helpers, so this equals the CPU reference.
+        let grid = lf::detail_base(tier_base, p.detail);
+        let lambda_count = lf::detail_lambda(tier_lambda, p.detail);
+        let energy = p.ghost_intensity;
+        // The traced bands with their eight radiometric sub-samples (K-364),
+        // Ghost intensity folded into every sub-weight — the bake's
+        // auto-exposure gain joins it GPU-side.
+        let bands: Vec<lumit_gpu::fx::FlareBand> = lf::spectral_bands(lambda_count, p.dispersion)
+            .into_iter()
+            .map(|b| lumit_gpu::fx::FlareBand {
+                traced_nm: b.traced_nm,
+                sub_idx: b.sub_idx,
+                sub_rgb: b
+                    .sub_rgb
+                    .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
+            })
+            .collect();
+        let op = lumit_gpu::fx::LensFlareOp {
+            // Raster pixels → fraction here, where the raster is known (K-260:
+            // the parameter is px@comp).
+            light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
+            // Manual mode's lights: ONE entry per light, size and all (K-367). An
+            // area source is no longer replicated into point samples — every ray
+            // integrates the extent itself, so the extent travels with the light.
+            manual_lights: lf::manual_light(p, w, h)
+                .iter()
+                .map(|l| {
+                    [
+                        l.pos[0],
+                        l.pos[1],
+                        l.rgb[0],
+                        l.rgb[1],
+                        l.rgb[2],
+                        l.extent[0],
+                        l.extent[1],
+                    ]
+                })
+                .collect(),
+            intensity: p.intensity,
+            bands,
+            max_ghosts: p.max_ghosts,
+            coating: p.coating,
+            focus_m: p.focus_m,
+            fstop: p.fstop,
+            blades: p.blades,
+            aperture_rotation_deg: p.aperture_rotation_deg,
+            roundness: p.roundness,
+            aperture_softness: p.aperture_softness,
+            ghost_softness: p.ghost_softness,
+            grid,
+            flare_div,
+            screen_transform: lf::screen_transform(w),
+            starburst_intensity: p.starburst_intensity,
+            scale: p.scale,
+            anamorphic: p.anamorphic,
+            source: p.source,
+            threshold: p.threshold,
+            threshold_softness: p.threshold_softness,
+            light_tint: p.light_tint,
+            use_source_colour: p.use_source_colour,
+            blend: p.blend,
+            mix: p.mix,
+            bake_key: lf::bake_key_with(p, custom.map(|(h, _)| *h)),
+        };
+        let custom_text = custom.map(|(_, text)| text.clone());
+        // Manual mode's frame-time grid probe (K-267): the GPU hands back its
+        // cached bake's tables and this closure runs the one lumit-core probe
+        // both twins share, at the frame's actual light direction.
+        let light_frac = op.light_frac;
+        let aspect = h as f32 / w.max(1) as f32;
+        let probe = move |pb: &lumit_gpu::fx::FlareProbeBake| {
+            let needs = lf::frame_grid_needs_from_rows(
+                pb.surfaces,
+                pb.ghosts,
+                pb.sensor_z_mm,
+                pb.focal_mm,
+                pb.pupil_mm,
+                pb.start_z_mm,
+                pb.pair_count,
+                lf::light_direction(light_frac, aspect, pb.focal_mm),
+                params.coating,
+                lf::fstop_scale(pb.native_fstop, params.fstop),
+                lf::focus_shift_mm(params.focus_m, pb.focal_mm),
+            );
+            lf::plan_frame_grids(grid, pb.spreads, &needs)
+        };
+        fx.lens_flare(
+            ctx,
+            tex,
+            w,
+            h,
+            &op,
+            matte,
+            // The bake as something the bake thread can own and run (K-350): one
+            // small `Arc` a flare a frame, beside a pass that traces hundreds of
+            // thousands of rays. Whether it is actually run beside the frame or
+            // inside it is the engine's policy, not this call's — see
+            // `FxEngine::set_deferred_flare_bakes`.
+            &(std::sync::Arc::new(move || {
+                let b = lf::bake_with(&params, custom_text.as_deref());
+                lumit_gpu::fx::FlareBakeData {
+                    surfaces: b
+                        .surfaces
+                        .iter()
+                        .map(|s| {
+                            [
+                                s.radius_mm,
+                                s.z_mm,
+                                s.semi_ap_mm,
+                                s.cauchy_a,
+                                s.cauchy_b,
+                                s.coating_layers,
+                                s.is_stop,
+                                0.0,
+                            ]
+                        })
+                        .collect(),
+                    ghosts: b.pairs.clone(),
+                    spreads: b.spreads.clone(),
+                    sensor_z_mm: b.sensor_z_mm,
+                    focal_mm: b.focal_mm,
+                    native_fstop: b.native_fstop,
+                    pupil_mm: b.pupil_mm,
+                    start_z_mm: b.start_z_mm,
+                    energy_gain: b.energy_gain,
+                    reflectance: b.reflectance.clone(),
+                    starburst: b.starburst,
+                    sb_res: lf::STARBURST_RES,
+                    sb_fields: lf::STARBURST_FIELDS as u32,
+                }
+            }) as lumit_gpu::fx::FlareBake),
+            &probe,
+        )
     }
 }
 

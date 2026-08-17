@@ -241,13 +241,13 @@ pub struct CompLayerDraw {
     /// `realise_segment`.
     pub dof_inputs: Vec<LayerInputDraw>,
     /// The Lens flare Matte sources (docs/08 §3.27, K-257), 1:1 with the
-    /// stack's `Resolved::LensFlare` ops, in the same shape the DoF depth
+    /// stack's `lens_flare` ops, in the same shape the DoF depth
     /// inputs take. [`LayerInputDraw::Absent`] when the reference is unset,
     /// dangling or the Source type is not Matte — the effect then detects
     /// nothing, never faults.
     pub flare_mattes: Vec<LayerInputDraw>,
     /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
-    /// effects (K-264), 1:1 with the stack's `Resolved::LensFlare` ops —
+    /// effects (K-264), 1:1 with the stack's `lens_flare` ops —
     /// None = unset. The caller reads and hashes each file and passes the
     /// parallel `flare_lens` texts to `run_ops`; a missing or unreadable
     /// file degrades to the picked library lens (labelled fallback).

@@ -36,12 +36,6 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
                 transform(rgba, w, h, anchor, position, scale, rot, *edge, 1.0, *mix);
             }
         },
-        // Lens flare is GPU-only (K-256, the K-114 LUT precedent): its render
-        // pass and baked textures never reach this single-buffer dispatcher,
-        // so the CPU-degradation rung renders it as identity. The §1.6 oracle
-        // is staged in the lumit-gpu tests (trace at ULP, frame at the
-        // perceptual bound) against `lens_flare::cpu_flare`/`cpu_combine`.
-        Resolved::LensFlare(..) => {}
         // A migrated effect's parameters live in the stack's arena, which this
         // single-op entry point has no way to receive. The dispatch that *does*
         // have the arena is [`apply_stack`]; here the op is the passthrough,
@@ -51,10 +45,15 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // deliberately: Light wrap's background, Depth of field's depth pass,
         // Echo's neighbour frames, Motion blur's and Datamosh's flow field and
         // the LUT's cube are whole pictures that arrive beside the op as aux
-        // slots (K-387), and no single-buffer dispatcher carries one. Each keeps
-        // `EffectDef::apply_cpu`'s identity default — exactly the arms that used
-        // to sit here — and its §1.6 oracle runs against its `cpu::` reference
-        // directly from the lumit-gpu test, which can upload the second picture.
+        // slots (K-387), and no single-buffer dispatcher carries one. The Lens
+        // flare is the same shape for a different reason (K-256, the K-114 LUT
+        // precedent): it owns a render pass over baked tables, and neither
+        // reaches a single `&mut [f32]`. Each keeps `EffectDef::apply_cpu`'s
+        // identity default — exactly the arms that used to sit here — and its
+        // §1.6 oracle runs against its `cpu::` reference directly from the
+        // lumit-gpu test, which can upload the second picture (for the flare,
+        // `lens_flare::cpu_flare`/`cpu_combine`: trace at ULP, frame at the
+        // perceptual bound).
         Resolved::Registry { .. } => {}
     }
 }

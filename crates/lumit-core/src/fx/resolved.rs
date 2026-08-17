@@ -195,9 +195,9 @@ pub enum Resolved {
     /// only the bag — so the two halves of a [`ResolvedOps`] stay in step
     /// (docs/impl/effect-registry.md §2.3).
     ///
-    /// Nearly every built-in resolves to this now (33 of them); only Shake and
-    /// Lens flare still have variants of their own, and the migration ends when
-    /// they lose them and this enum goes with them.
+    /// Nearly every built-in resolves to this now (34 of them); only Shake
+    /// still has a variant of its own, and the migration ends when it loses it
+    /// and this enum goes with it.
     Registry { op: u32 },
     /// A shake, already sampled at this frame (the noise runs at resolve
     /// time, host-side): the current wobble, dispatched through the Transform
@@ -227,14 +227,6 @@ pub enum Resolved {
         /// the GPU has not got (docs/08 §3.12).
         mb: Option<[ShakeSample; SHAKE_MB_SAMPLES]>,
     },
-    /// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md, K-256): traced
-    /// ghosts and the Fourier starburst. The op carries its full parameter
-    /// bundle ([`LensFlareParams`], all plain numbers); the baked resources
-    /// (disc/starburst textures, ghost ranking) derive from those numbers
-    /// through `lens_flare::bake`, cached GPU-side by [`lens_flare::bake_key`]
-    /// — so nothing travels beside the op. GPU-only: the CPU degradation rung
-    /// renders it as a labelled no-op (the K-114 LUT precedent).
-    LensFlare(crate::fx::lens_flare::LensFlareParams),
 }
 
 /// Resolve a layer's live stack at layer time `lt` for a raster whose
@@ -275,10 +267,6 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
                         s.offset_px[1] *= f;
                     }
                 }
-            }
-            Resolved::LensFlare(p) => {
-                p.light[0] *= f;
-                p.light[1] *= f;
             }
             // A migrated effect keeps no pixel field here: its parameters sit
             // in the arena, which declares its own units, so
@@ -407,7 +395,7 @@ pub fn resolve_stack_temporal_named(
             let op = (out.bags.len() - 1) as u32;
             out.ops.push(Resolved::Registry { op });
             ids.push(e.id);
-        } else if let Some(op) = resolve_one(e, lt, diag_px, px_scale, context.clone()) {
+        } else if let Some(op) = resolve_one(e, lt, diag_px, context.clone()) {
             out.ops.push(op);
             ids.push(e.id);
         }
@@ -523,13 +511,14 @@ fn resolve_into_arena(
 /// effect (Posterize time, accumulation motion blur) that has no per-pixel op.
 /// The shared core of [`resolve_stack`] and [`resolve_stack_temporal`].
 ///
-/// It takes no marker context: Flash was the only arm that read one, and it
-/// reads it through [`ResolveCx`] now (K-385).
+/// It takes neither a marker context nor the preview factor: Flash was the only
+/// arm that read markers and it reads them through [`ResolveCx`] now (K-385),
+/// and the Lens flare was the last arm with a px@comp parameter to scale — Shake
+/// measures its wobble against the diagonal instead.
 fn resolve_one(
     e: &EffectInstance,
     lt: f64,
     diag_px: f32,
-    px_scale: f32,
     expression_context: Arc<ExpressionContext>,
 ) -> Option<Resolved> {
     // Every float parameter reads through the expression context. Bound once
@@ -537,157 +526,6 @@ fn resolve_one(
     // expressions existed.
     let fl = |id: &str| e.float_at_with_context(id, lt, expression_context.clone());
     match e.effect.match_name.as_str() {
-        "lens_flare" => {
-            // Lens flare (docs/08 §3.27, K-256/K-257). Everything resolves to
-            // plain numbers; the bake derives from them GPU-side (cached by
-            // lens_flare::bake_key), so nothing travels beside the op except
-            // the Matte source's rendered layer (the DoF layer-input shape).
-            // Light position is a raster fraction; % keeps it
-            // resolution-independent (§2.3).
-            // px@comp -> raster pixels through the §2.3 preview factor, the
-            // Transform-anchor convention (K-260: point params are pixels).
-            let lx = fl("light_x").unwrap_or(640.0) as f32 * px_scale;
-            let ly = fl("light_y").unwrap_or(360.0) as f32 * px_scale;
-            // Source size (K-355): the half-extent of an area light, in the
-            // same px@comp the position uses, so it rides the same preview
-            // factor. Zero is the point source the effect has always had.
-            let sw = (fl("source_width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
-            let sh = (fl("source_height").unwrap_or(0.0) as f32).max(0.0) * px_scale;
-            let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
-            // Library index (K-261; out-of-range clamps inside lens_entry).
-            // A pre-K-264 save's index pointed into the old 1299-lens
-            // table; pre-release, it simply lands on a valid curated lens.
-            let lens = match e.param("lens_model") {
-                Some(EffectValue::Choice(c)) => *c,
-                _ => 16,
-            };
-            let fstop = (fl("fstop").unwrap_or(2.8) as f32).clamp(0.7, 32.0);
-            let focus_m = (fl("focus").unwrap_or(100.0) as f32).max(0.2);
-            let quality = match e.param("quality") {
-                Some(EffectValue::Choice(c)) => (*c).min(3),
-                _ => 1,
-            };
-            let detail = (fl("detail").unwrap_or(1.0) as f32).clamp(0.25, 4.0);
-            // Blend menu (K-289). An index past the menu clamps to the last
-            // option rather than faulting; a project saved before the menu
-            // existed is migrated by `backfill_builtin_params`, so the
-            // fallback here is simply the default.
-            let blend = match e.param("blend") {
-                Some(EffectValue::Choice(c)) => {
-                    (*c).min(crate::fx::lens_flare::BLEND_OPTIONS.len() as u32 - 1)
-                }
-                _ => crate::fx::lens_flare::BLEND_ADD,
-            };
-            // Source mode (K-257): Lights resolves as Manual until light
-            // layers land (the option is prepared, not wired).
-            let source = match e.param("source_type") {
-                Some(EffectValue::Choice(c)) => (*c).min(2),
-                _ => 0,
-            };
-            let threshold = (fl("threshold").unwrap_or(1.0) as f32).max(0.0);
-            let threshold_softness = (fl("threshold_softness").unwrap_or(0.25) as f32).max(0.0);
-            // Light tint (K-259): scene-linear RGB, clamped at zero below and
-            // open above (an HDR tint pushes the flare hotter). Alpha unused.
-            let tint = e.colour_at("light_tint", lt).unwrap_or([1.0; 4]);
-            let light_tint = [
-                (tint[0] as f32).max(0.0),
-                (tint[1] as f32).max(0.0),
-                (tint[2] as f32).max(0.0),
-            ];
-            let use_source_colour = e.bool_of("use_source_colour").unwrap_or(true);
-            let anamorphic = (fl("anamorphic").unwrap_or(1.0) as f32).clamp(0.5, 3.0);
-            // Int-kind params arrive as Float values; the resolve rounds.
-            let blades = (fl("blades").unwrap_or(8.0).round() as i64).clamp(3, 16);
-            let aperture_rotation = fl("aperture_rotation").unwrap_or(0.0) as f32;
-            let roundness = (fl("roundness").unwrap_or(0.15) as f32).clamp(0.0, 1.0);
-            let aperture_softness =
-                (fl("aperture_softness").unwrap_or(0.05) as f32).clamp(0.0, 1.0);
-            let ghost_intensity = (fl("ghost_intensity").unwrap_or(1.0) as f32).max(0.0);
-            let ghost_softness = (fl("ghost_softness").unwrap_or(0.02) as f32).clamp(0.0, 2.0);
-            let max_ghosts = (fl("max_ghosts").unwrap_or(60.0).round() as i64).clamp(0, 200);
-            let dispersion = (fl("dispersion").unwrap_or(1.0) as f32).max(0.0);
-            let coating = (fl("coating").unwrap_or(0.75) as f32).clamp(0.0, 1.0);
-            // The per-element coatings (K-371): one Choice row per glass
-            // element, `coating_el1` upwards. A row the panel never showed
-            // (this lens has fewer elements) reads its default and leaves the
-            // prescription's own column alone, so an unset row and a missing
-            // row are the same thing.
-            let mut coating_elements = [crate::fx::lens_flare::COATING_AS_FILE;
-                crate::fx::lens_flare::MAX_COATING_ELEMENTS];
-            for (i, slot) in coating_elements.iter_mut().enumerate() {
-                let id = crate::fx::lens_flare::COATING_ELEMENT_IDS[i];
-                *slot = (fl(id).unwrap_or(0.0).round().max(0.0) as u32)
-                    .min(crate::fx::lens_flare::COATING_DESIGNS - 1);
-            }
-            let sb_intensity = (fl("starburst_intensity").unwrap_or(1.0) as f32).max(0.0);
-            let scale = (fl("scale").unwrap_or(1.0) as f32).clamp(0.05, 20.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // Lights mode (K-360): the comp's own Light layers, resolved here
-            // because the expression context already carries the document, the
-            // comp and the time — everything needed, and nothing new to
-            // thread. Positions and extents go in RASTER pixels, so they ride
-            // the same preview factor the Manual position does and
-            // `manual_light` turns both into fractions in one place.
-            let mut lights =
-                [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES];
-            let mut light_count = 0u32;
-            if source == 2 {
-                let ec = &expression_context;
-                if let Some(owner) = ec.comp.and_then(|id| ec.document.comp(id)) {
-                    for resolved in owner.lights_at(ec.comp_time) {
-                        if light_count as usize >= crate::fx::lens_flare::MAX_SOURCES {
-                            break;
-                        }
-                        lights[light_count as usize] = crate::fx::lens_flare::FlareLight {
-                            pos: [
-                                resolved.position.0 as f32 * px_scale,
-                                resolved.position.1 as f32 * px_scale,
-                            ],
-                            rgb: resolved.colour,
-                            extent: [
-                                resolved.half_size.0 as f32 * px_scale,
-                                resolved.half_size.1 as f32 * px_scale,
-                            ],
-                        };
-                        light_count += 1;
-                    }
-                }
-            }
-            Some(Resolved::LensFlare(
-                crate::fx::lens_flare::LensFlareParams {
-                    light: [lx, ly],
-                    source_size: [sw, sh],
-                    lights,
-                    light_count,
-                    intensity,
-                    lens,
-                    fstop,
-                    focus_m,
-                    blades: blades as u32,
-                    aperture_rotation_deg: aperture_rotation,
-                    roundness,
-                    aperture_softness,
-                    coating_elements,
-                    ghost_intensity,
-                    ghost_softness,
-                    max_ghosts: max_ghosts as u32,
-                    dispersion,
-                    coating,
-                    starburst_intensity: sb_intensity,
-                    scale,
-                    source,
-                    threshold,
-                    threshold_softness,
-                    light_tint,
-                    use_source_colour,
-                    anamorphic,
-                    quality,
-                    detail,
-                    blend,
-                    mix,
-                },
-            ))
-        }
         "shake" => {
             let amp_pct = (fl("amplitude").unwrap_or(1.5) as f32).max(0.0);
             let freq = fl("frequency").unwrap_or(8.0).max(0.0);

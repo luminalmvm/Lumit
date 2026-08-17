@@ -3525,17 +3525,18 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each generated entry against the hand-written one it replaces and fails if they differ by
   so much as a default value — which is what makes it a move rather than a rewrite.
 
-  Thirty-three effects have moved so far, in seven batches: the ten colour ones first (Colour
+  Thirty-four effects have moved so far, in eight batches: the ten colour ones first (Colour
   balance, Saturation, Vibrancy, Exposure, Hue shift, Contrast, Gamma, Temperature, Invert,
   Tint), then the five blur ones (Gaussian blur, Directional blur, Radial blur, Sharpen,
   Simple sharpen), then Vignette, RGB split and Chromatic aberration, then Flash, then
   seven more: Sprite flare, Transform, Glow, Block glitch and Scanlines, plus Posterize time
   and Motion blur, which draw nothing at all (see below); then LUT and Echo, the first two
-  whose real input is not a number at all (see below); and then the rest of those — Depth of
+  whose real input is not a number at all (see below); then the rest of those — Depth of
   field and Light wrap, which read another layer's picture, Fast motion blur and Datamosh,
   which read the movement measured off the footage, and Matte key, which turned out to read
-  nothing extra at all and was simply large. Only the Lens flare is left. While it catches
-  up, a
+  nothing extra at all and was simply large; and last the Lens flare, which is the biggest
+  effect Lumit has and needed one thing nothing before it did (see below). Only Shake is
+  left. While it catches up, a
   layer's stack is read **two ways at once**: the effects that have moved keep their
   controls in the shared list of numbers, and the ones that haven't still have a slot each.
   A single ordered list decides what runs when, so an effect that has moved and one that
@@ -3585,6 +3586,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   untouched: the labelled do-nothing Lumit uses everywhere rather than an error. And the
   count still advances for that empty slot — which is the bug the regression test in
   `gpufx.rs` is written to catch, because it is the one that looks harmless.
+
+- **The effect whose lights are other layers** — the Lens flare has three ways of being
+  told where the light is. Two of them fit the arrangement above: you can drag a point
+  around the frame, or you can point it at another layer and let it find the bright spots in
+  the picture (that layer arrives on one of the lists just described, alongside the optional
+  lens-prescription file you can supply instead of one of the twenty built in). The third is
+  **Lights mode**, where the flares come from the composition's own Light layers — and those
+  are neither a number you typed nor a picture the render prepared. They are whatever lights
+  happen to exist in the composition at this moment, with their positions, colours and sizes
+  read off their own animation.
+
+  That is exactly the "given the clock, what do you work out?" question described above, so
+  it is answered the same way: at the moment the flare's controls are read, the lights are
+  looked up and written into the same list of numbers as extra *derived* entries — two per
+  light, because a colour slot holds four numbers and a light needs seven. Only the lights
+  that actually exist are written, so a flare in either of the other two modes carries none
+  of it. A composition with no lights at all flares with nothing, rather than falling back
+  to the draggable point and putting a flare somewhere nobody asked for.
 
 ## 5. Making a change safely (the recipe)
 

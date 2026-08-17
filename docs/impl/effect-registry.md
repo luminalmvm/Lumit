@@ -448,14 +448,20 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    all — a flat bundle of scalars, colours and two normalised Choice codes — and was held
    back only by its size.
 
-   Two things are left, and neither is a batch:
-   - **`lens_flare` is its own campaign**: 50 parameters, three parallel lists, a lazy bake
-     closure the engine may run on another thread, and a frame-time grid probe that calls
-     back into `lumit-core` mid-dispatch. `AuxKind::FlareInputs` already carries its two
-     slots, so the seam is not what blocks it — the bulk and the bake are, and they want
-     reviewing on their own branch.
-   - a **variable-shape payload**: `shake`'s nine sub-frame samples, which also fork the
-     dispatch to a different kernel. `Value` has no array kind, so this is a decision.
+   **`lens_flare` was its own campaign** and has landed: 50 parameters, the aux pair, a
+   lazy bake closure the engine may run on another thread, and a frame-time grid probe that
+   calls back into `lumit-core` mid-dispatch. `AuxKind::FlareInputs` already carried its two
+   slots, so the seam was never what blocked it; what it needed of its own was a home for
+   **Lights mode's sources** (K-360), which are the comp's own Light layers at this frame
+   rather than anything anyone types. They are §2.4a derived values, two `Value::Colour`
+   entries a light — geometry `(x, y, half_w, half_h)` and colour `(r, g, b, 0)` — under
+   sixteen fixed ids, pushed only for the sources that exist, so a Manual or Matte flare
+   carries none of them. The bake closure and the probe moved wholesale into the GPU
+   wrapper, which is the one wrapper in `gpufx.rs` that is not thin and could not be.
+
+   One thing is left, and it is not a batch: a **variable-shape payload** — `shake`'s nine
+   sub-frame samples, which also fork the dispatch to a different kernel. `Value` has no
+   array kind, so this is a decision.
 4. Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body.
 5. Dynamic parameters, then spare parameters, then the panel affordances for both.
 

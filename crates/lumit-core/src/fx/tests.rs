@@ -138,6 +138,17 @@ fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [
     effects::flash::Flash::read(p).packed(effects::flash::Flash::strength_of(p))
 }
 
+/// What a Lens flare op hands the bake and the kernels: the
+/// [`LensFlareParams`](crate::fx::lens_flare::LensFlareParams) bundle the old
+/// `Resolved::LensFlare` variant carried, read back out of the resolved arena
+/// through the effect's own `packed` — Lights mode's sources included, since they
+/// are a resolve-time derivation (K-360, K-385) rather than a row.
+fn flare_packed(ops: &super::ResolvedOps) -> crate::fx::lens_flare::LensFlareParams {
+    let fx = ops.bags.get(0).expect("the flare op");
+    let (lights, count) = effects::lens_flare::LensFlare::lights_of(fx.params);
+    effects::lens_flare::LensFlare::read(fx.params).packed(lights, count)
+}
+
 /// What a Scanlines instance hands its kernel: the fields the old
 /// `Resolved::Scanlines` variant carried, with the folded intensity and the roll
 /// offset coming out of the resolve-time derivation (K-385).
@@ -5919,10 +5930,9 @@ fn lens_flare_custom_lens_file_overrides_and_degrades() {
 // preview bug: the flare's light hit the frame edge at 1500 of a 1920 comp
 // because the preview factor was applied to the raster and not the params.
 //
-// Both halves of a `ResolvedOps` are checked through the one public entry point:
-// the flare still carries a variant, Light wrap has moved to the arena, and
-// `ResolvedOps::rescale_px` has to move each in its own way — the variant by the
-// `rescale_px` match, the bag by the unit its parameter declares.
+// Both effects here have moved to the arena, so `ResolvedOps::rescale_px` moves
+// them the one generic way: by the unit each parameter declares. It still calls
+// both halves, because Shake's variant is not gone yet.
 #[test]
 fn resolved_px_fields_rescale_for_a_different_raster() {
     // The default Width is 0 (the labelled no-op), so author one to scale.
@@ -5953,23 +5963,35 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
     assert_eq!(intensity, 1.0, "unitless fields do not");
     assert_eq!(mix, 1.0, "unitless fields do not");
 
-    let mut flare = super::ResolvedOps {
-        ops: vec![Resolved::LensFlare(
-            crate::fx::lens_flare::LensFlareParams {
-                light: [1000.0, 500.0],
-                ..default_flare_params()
-            },
-        )],
-        bags: Default::default(),
-    };
-    flare.rescale_px(0.5);
-    match &flare.ops[0] {
-        Resolved::LensFlare(p) => {
-            assert_eq!(p.light, [500.0, 250.0], "the flare's light is px@comp");
-            assert_eq!(p.intensity, 1.0);
-        }
-        other => panic!("unexpected {other:?}"),
+    // The flare's own px@comp rows: the Light point, and the Source size beside
+    // it. The old per-variant match moved the light and left the source size
+    // behind, so an area source on an adjustment layer kept its comp-sized extent
+    // under a reduced-resolution preview; declaring both `Px` states it once and
+    // the generic pass does the pair.
+    let mut flare_inst = instantiate("lens_flare").unwrap();
+    for p in &mut flare_inst.params {
+        let v = match p.id.as_str() {
+            "light_x" => 1000.0,
+            "light_y" => 500.0,
+            "source_width" => 40.0,
+            "source_height" => 20.0,
+            _ => continue,
+        };
+        p.value = EffectValue::Float(Property::fixed(v));
     }
+    let mut flare = super::resolve_stack(
+        std::slice::from_ref(&flare_inst),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    flare.rescale_px(0.5);
+    let p = flare_packed(&flare);
+    assert_eq!(p.light, [500.0, 250.0], "the flare's light is px@comp");
+    assert_eq!(p.source_size, [20.0, 10.0], "and so is its source size");
+    assert_eq!(p.intensity, 1.0, "unitless fields do not");
 
     // Factor 1 is exactly a no-op, on both halves.
     let mut same = authored(7.0);
@@ -6212,27 +6234,25 @@ fn lens_flare_neutral_points_and_default_resolve() {
 
     // Fresh instance -> resolve carries the documented defaults.
     let inst = instantiate("lens_flare").unwrap();
-    let ops = resolve_stack(
+    let ops = super::resolve_stack(
         std::slice::from_ref(&inst),
         0.0,
         2202.9075,
         1.0,
         &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
     );
-    match ops.as_slice() {
-        [Resolved::LensFlare(rp)] => {
-            // px@comp defaults at the schema's nominal 1080p (K-260).
-            assert!((rp.light[0] - 640.0).abs() < 1e-3);
-            assert!((rp.light[1] - 360.0).abs() < 1e-3);
-            assert_eq!(rp.intensity, 1.0);
-            assert_eq!(rp.lens, 16, "default lens is the Master Prime 50");
-            assert_eq!(rp.blades, 8);
-            assert_eq!(rp.max_ghosts, 60);
-            assert_eq!(rp.quality, 1);
-            assert_eq!(rp.mix, 1.0);
-        }
-        other => panic!("expected one LensFlare op, got {other:?}"),
-    }
+    assert_eq!(ops.ops.len(), 1, "expected one Lens flare op");
+    let rp = flare_packed(&ops);
+    // px@comp defaults at the schema's nominal 1080p (K-260).
+    assert!((rp.light[0] - 640.0).abs() < 1e-3);
+    assert!((rp.light[1] - 360.0).abs() < 1e-3);
+    assert_eq!(rp.intensity, 1.0);
+    assert_eq!(rp.lens, 16, "default lens is the Master Prime 50");
+    assert_eq!(rp.blades, 8);
+    assert_eq!(rp.max_ghosts, 60);
+    assert_eq!(rp.quality, 1);
+    assert_eq!(rp.mix, 1.0);
 }
 
 // §8.6 (CPU half) — the reference renderer produces finite energy at the
@@ -6442,11 +6462,16 @@ fn lens_flare_blend_options_all_resolve() {
                 p.value = EffectValue::Choice(mode);
             }
         }
-        let ops = resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE);
-        let [Resolved::LensFlare(p)] = ops.as_slice() else {
-            panic!("lens_flare must resolve to exactly one op");
-        };
-        assert_eq!(p.blend, mode.min(last));
+        let ops = super::resolve_stack(
+            &[inst],
+            0.0,
+            2202.9,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        assert_eq!(ops.ops.len(), 1, "lens_flare resolves to exactly one op");
+        assert_eq!(flare_packed(&ops).blend, mode.min(last));
     }
 }
 
@@ -6469,10 +6494,9 @@ fn lens_flare_params_evaluate_expressions_in_context() {
         comp_time: 3.0,
         ..ExpressionContext::detached()
     });
-    let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context).ops;
-    let [Resolved::LensFlare(p)] = ops.as_slice() else {
-        panic!("lens_flare must resolve to exactly one op");
-    };
+    let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context);
+    assert_eq!(ops.ops.len(), 1, "lens_flare resolves to exactly one op");
+    let p = flare_packed(&ops);
     assert!(
         (p.intensity - 3.0).abs() < 1e-6,
         "intensity must follow the expression through the context: {}",
@@ -7552,6 +7576,133 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     // A default light is white at full intensity — a fresh one should light
     // something rather than land as a black source nobody can see.
     assert_eq!(lights[1].colour, [1.0, 1.0, 1.0]);
+
+    // ---- and the whole way through to the trace (K-360, K-385) ----
+    //
+    // Lights mode's sources are the one thing about this effect that is neither
+    // a control nor a picture the render prepared, so they ride the resolve-time
+    // derivation hook into the same bag as everything else. Nothing checks the
+    // ids that carry them but this: a derivation that pushed under a name the
+    // reader does not look for resolves a perfectly ordinary flare with no
+    // lights in it, which looks exactly like a comp that has none.
+    let mut flare = instantiate("lens_flare").unwrap();
+    for p in &mut flare.params {
+        if p.id == "source_type" {
+            p.value = EffectValue::Choice(2);
+        }
+    }
+    let comp_id = comp.id;
+    let mut document = crate::model::Document::new();
+    document
+        .items
+        .push(crate::model::ProjectItem::Composition(comp));
+    let context = Arc::new(ExpressionContext {
+        document: Arc::new(document),
+        comp: Some(comp_id),
+        comp_time: 1.0,
+        ..ExpressionContext::detached()
+    });
+    let ops = super::resolve_stack(
+        std::slice::from_ref(&flare),
+        0.0,
+        2202.9,
+        1.0,
+        &MarkerContext::NONE,
+        context.clone(),
+    );
+    let p = flare_packed(&ops);
+    assert_eq!(p.source, 2, "Lights mode");
+    assert_eq!(
+        p.light_count, 2,
+        "the two visible lights, and not the third"
+    );
+    assert_eq!(
+        p.lights[0].pos,
+        [300.0, 200.0],
+        "raster pixels, as resolved"
+    );
+    assert_eq!(
+        p.lights[0].extent,
+        [80.0, 40.0],
+        "the area light's half-size"
+    );
+    assert_eq!(p.lights[0].rgb, [1.0, 1.0, 1.0]);
+    assert_eq!(
+        p.lights[1].extent,
+        [0.0, 0.0],
+        "a point light has no extent"
+    );
+    // And `manual_light` divides them by the raster exactly as it divides the
+    // Manual point — one place decides the fraction.
+    let placed = crate::fx::lens_flare::manual_light(&p, 1920, 1080);
+    assert_eq!(placed.len(), 2);
+    assert_eq!(placed[0].pos, [300.0 / 1920.0, 200.0 / 1080.0]);
+
+    // Manual mode carries none of it: the derivation pushes nothing at all, so
+    // the flare is the single light at the parameter position it always was.
+    let manual = instantiate("lens_flare").unwrap();
+    let ops = super::resolve_stack(
+        std::slice::from_ref(&manual),
+        0.0,
+        2202.9,
+        1.0,
+        &MarkerContext::NONE,
+        context,
+    );
+    let p = flare_packed(&ops);
+    assert_eq!(p.light_count, 0, "Manual mode has no light layers to carry");
+    assert_eq!(crate::fx::lens_flare::manual_light(&p, 1920, 1080).len(), 1);
+}
+
+/// **A per-element coating choice reaches the trace** (K-371).
+///
+/// The regression: the resolve arm read all twenty rows through the *float*
+/// accessor, which answers `None` for a `Choice` value — so every element
+/// silently resolved to "as the lens file" and the whole feature was inert from
+/// the panel, whatever anyone picked. Nothing showed it: the flare rendered
+/// perfectly, just with the prescription's own coatings.
+#[test]
+fn lens_flare_element_coatings_reach_the_trace() {
+    use crate::fx::lens_flare::{COATING_AS_FILE, COATING_DESIGNS, MAX_COATING_ELEMENTS};
+
+    let resolved = |el1: u32, el3: u32| {
+        let mut inst = instantiate("lens_flare").unwrap();
+        for p in &mut inst.params {
+            match p.id.as_str() {
+                "coating_el1" => p.value = EffectValue::Choice(el1),
+                "coating_el3" => p.value = EffectValue::Choice(el3),
+                _ => continue,
+            }
+        }
+        let ops = super::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            2202.9,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        flare_packed(&ops).coating_elements
+    };
+
+    // A fresh instance leaves every element as the prescription describes it —
+    // the default, and what every flare rendered before the rows existed.
+    assert_eq!(
+        resolved(0, 0),
+        [COATING_AS_FILE; MAX_COATING_ELEMENTS],
+        "an untouched panel changes no element's coating"
+    );
+
+    let picked = resolved(4, 1);
+    assert_eq!(picked[0], 4, "element 1's pick reaches the trace");
+    assert_eq!(picked[2], 1, "and so does element 3's");
+    assert_eq!(
+        picked[1], COATING_AS_FILE,
+        "a row nobody touched still leaves its element alone"
+    );
+
+    // An index past the palette clamps rather than indexing off the end of it.
+    assert_eq!(resolved(COATING_DESIGNS + 5, 0)[0], COATING_DESIGNS - 1);
 }
 
 #[test]
@@ -9047,6 +9198,14 @@ fn every_parameter_declares_a_unit() {
     // factor of that product may follow the raster — declaring all three would
     // blur a half-resolution preview by a quarter of the disc. The factor that
     // follows it is Near/Far, which is also the pair the old `rescale_px` moved.
+    //
+    // The Lens flare's **Source size** is the second entry the old match
+    // disagreed with, for the same reason Scanlines' period was: it was scaled by
+    // the preview factor at resolve and then not rescaled with the stack, so an
+    // area source on an adjustment layer kept its comp-sized extent under a
+    // reduced-resolution preview while the Light point beside it moved. Both are
+    // px@comp and the pair has to travel together, or the flare's ghosts take the
+    // shape of a source the wrong size for the frame they land on.
     assert_eq!(
         spatial,
         vec![
@@ -9075,6 +9234,10 @@ fn every_parameter_declares_a_unit() {
             ("block_glitch", "block_amount"),
             ("block_glitch", "channel_offset"),
             ("scanlines", "scanline_period"),
+            ("lens_flare", "light_x"),
+            ("lens_flare", "light_y"),
+            ("lens_flare", "source_width"),
+            ("lens_flare", "source_height"),
         ]
     );
     // The two units are not interchangeable: % diag divides by the diagonal,
