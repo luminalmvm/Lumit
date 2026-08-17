@@ -271,6 +271,17 @@ imported theme travels with the user rather than the machine's settings.
     left" — the workers the earlier tests spun up exhaust the device, so the
     failing set shifts run to run and every member passes alone. Whatever fixes
     the contention should make that message impossible, not rarer.
+    **It has now grown past individual tests into the job.** Through the whole of
+    PR #97 the `flutter frontend (Linux build + analyze + test)` job never once
+    completed: every run reached `timeline_panel_frb_test.dart`, logged
+    `vkAllocateMemory failed: A device memory allocation has failed` over and
+    over, and was killed with "the runner has received a shutdown signal" — a
+    re-run of the same job on the same commit died the same way, so it is
+    persistent rather than flaky. Say plainly what that costs: `flutter analyze`
+    passes, but **the Dart test suite is unverified on that branch**, because the
+    macOS Flutter job beside it is `flutter build macos` — a build gate, not the
+    tests. Anything relying on "CI is green on the frontend" is relying on a
+    check that did not run.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and K-254 gave the bare digits to the numbered
     markers. Needs its own chord or a modal reading.
