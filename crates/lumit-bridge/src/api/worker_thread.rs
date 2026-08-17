@@ -2669,6 +2669,21 @@ fn handle_requests(
                         .renderer
                         .set_transparent_background(transparent_background);
                     state.renderer.set_region(region);
+                    // The look is folded into every frame's name
+                    // (`named_under_view`), so this message renames every
+                    // frame without moving the document revision — the one
+                    // case the name memo's revision check cannot see. Left
+                    // standing, the memo kept serving the old look's names:
+                    // the cache bar read all-zero and the idle fill
+                    // re-rendered frames it had already banked, for as long
+                    // as the grid was up — which is its default state.
+                    state.names.clear();
+                    // And both readers of those names start over: the bar
+                    // sweep rebuilds against the new names rather than
+                    // refining a strip of the old ones, and the fill gets to
+                    // find its window cold again.
+                    state.published_bar = None;
+                    state.fill_exhausted = false;
                     Ok(())
                 }
             };
