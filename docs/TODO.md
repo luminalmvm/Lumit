@@ -17,16 +17,6 @@ this file is the concrete backlog underneath it.
 
 These sit above everything else: they are what the editor feels like in the hand.
 
-- **The lens flare is not bit-stable on this machine, today.**
-    `lumit-gpu`'s `fx::tests::wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals`
-    fails its own "GPU lens flare must be bit-stable" assertion on a clean `main`
-    (checked 2026-08-08 by stashing every local change and running it alone): two
-    runs of the same flare give different pixels. Bit-stability is the property
-    the whole additive-blend draw order exists to protect
-    ([impl/lens-flare.md](impl/lens-flare.md) §2.4), so this is a real
-    regression and not a flaky test - and it means the two flare performance
-    items below cannot be measured honestly until it is understood. Find which
-    stage varies before changing anything.
 - **The flare's raster still draws the cells it culled.** After K-263 a batch
     draws exactly its own cells, but a cell the guards kill is still stored and
     still submitted as a degenerate off-screen triangle. Compacting to just the
@@ -59,14 +49,7 @@ Flutter is the only frontend (K-174, K-182); git history is the parity reference
 These are v1-scope surfaces it does not yet match.
 
 **Viewer bar ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
-- The wireframe/overlay *menu*; guides menu; region-of-interest;
-    background-colour swatch.
-- **Preview resolution is a menu row, not yet a bar dropdown** (§2.2 item 2).
-    Full / Half / Quarter work end to end — the View menu, the three chords and
-    the command palette all set the `scale` every render request carries — but
-    the dropdown the bar is supposed to carry is not built, **Third** and
-    **Auto** have no rows, and the choice is shell-wide rather than stored per
-    composition in the project as §2.2 asks.
+- The wireframe/overlay *menu*; guides menu; region-of-interest.
 - **The colour-management badge is a readout and cannot yet be clicked**
     (§2.2 item 8). It is built: always on the bar, naming the display
     transform, and saying the picture is not the export while the exposure or
@@ -281,7 +264,24 @@ imported theme travels with the user rather than the machine's settings.
     passes at `--concurrency=1`, which is what CI runs. They contend for the
     shared engine (audio device, render worker) across test *files*. Give those
     files a serial marker or make the engine per-file - the serial run is a
-    mitigation, not the fix, and it costs wall-clock.
+    mitigation, not the fix, and it costs wall-clock. A concrete signature,
+    measured 2026-08-12 *within* `viewer_panel_frb_test.dart` alone on the
+    owner's machine: five frame-arrival tests fail late in the file with
+    "Could not create the renderer … device request failed: Not enough memory
+    left" — the workers the earlier tests spun up exhaust the device, so the
+    failing set shifts run to run and every member passes alone. Whatever fixes
+    the contention should make that message impossible, not rarer.
+    **It has now grown past individual tests into the job.** Through the whole of
+    PR #97 the `flutter frontend (Linux build + analyze + test)` job never once
+    completed: every run reached `timeline_panel_frb_test.dart`, logged
+    `vkAllocateMemory failed: A device memory allocation has failed` over and
+    over, and was killed with "the runner has received a shutdown signal" — a
+    re-run of the same job on the same commit died the same way, so it is
+    persistent rather than flaky. Say plainly what that costs: `flutter analyze`
+    passes, but **the Dart test suite is unverified on that branch**, because the
+    macOS Flutter job beside it is `flutter build macos` — a build gate, not the
+    tests. Anything relying on "CI is green on the frontend" is relying on a
+    check that did not run.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and K-254 gave the bare digits to the numbered
     markers. Needs its own chord or a modal reading.
@@ -631,6 +631,21 @@ Recorded so they are not re-proposed as gaps:
     is session-only on purpose: what persists is the arrangement, which the user
     is free to drag about, so a ticked preset could claim a layout the panels no
     longer match (`state/workspace.dart`).
+- **Re-time the flare after K-373 and K-375.** The tent now reaches a full grid
+    step, which is four times the fragments per splat, and the deposit moved from
+    the raster blender to a compute scatter with a compare-and-swap float add,
+    whose cost depends on contention (many splats on one pixel) rather than on
+    fill rate. Both are correctness fixes worth their price, but the price is
+    unmeasured on a real card: docs/13-PERFORMANCE-RULES.md budgets gate merges,
+    and the per-frame figure in docs/impl/lens-flare.md predates both. The
+    `lens_flare_frame_cost` measurement test is the place to read it.
+- **The idle cache fill is not interruptible.** It composites one frame per turn,
+    so a scrub arriving mid-frame waits for that composite to finish - up to a
+    couple of seconds on a comp with a Lens flare. The 200 ms lull it waits for
+    means a continuous drag never meets it; a pause-then-scrub does. Fixing it
+    means cancelling work already handed to the GPU, which docs/14 asks for in
+    general and the flare's render pass does not yet offer. Named in K-372 so it
+    is not rediscovered as the cache-key bug that entry fixed.
 - **No progress for the idle cache fill** - it is not a frame anyone is waiting
     for, so the bar stays quiet for it.
 - The two recorded behavioural deviations (export queue-snapshot timing;

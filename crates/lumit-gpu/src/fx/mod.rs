@@ -16,6 +16,7 @@ mod common;
 mod dof;
 mod engine;
 mod lens_flare;
+mod lighting;
 mod split;
 mod stylise;
 mod temporal;
@@ -28,6 +29,7 @@ pub use common::*;
 // effect's two dozen scalars, and a public type does need naming.
 pub use dof::*;
 pub use lens_flare::*;
+pub use lighting::*;
 pub use split::*;
 pub use stylise::*;
 pub use temporal::*;
@@ -48,6 +50,13 @@ pub struct FxEngine {
     /// convolution, the radius-free sibling of the Unsharp mask's two-entry
     /// kernel above.
     sharpen_simple: wgpu::ComputePipeline,
+    /// Sprite flare (docs/08 §3.29, K-359): one procedural pass, placed from
+    /// a light position rather than from the picture's bright pixels.
+    sprite_flare: wgpu::ComputePipeline,
+    /// Light wrap (docs/08 §3.28, K-358): the two passes that fold the
+    /// background's blur and the foreground's softened matte into the edge.
+    light_wrap_pack: wgpu::ComputePipeline,
+    light_wrap_combine: wgpu::ComputePipeline,
     rgb_split: wgpu::ComputePipeline,
     spectral_split: wgpu::ComputePipeline,
     chromatic_aberration: wgpu::ComputePipeline,
@@ -58,6 +67,9 @@ pub struct FxEngine {
     matte_key: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
+    /// The lighting pass (docs/06, K-361). Not an effect — the realiser calls
+    /// it directly, between a layer's effect stack and its composite.
+    lighting: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
     tint: wgpu::ComputePipeline,
@@ -96,7 +108,7 @@ pub struct FxEngine {
     /// Lens flare (docs/08 §3.27, K-256): the one effect that owns a render
     /// pass — its pipelines, layouts and bake cache live in their own
     /// sub-struct rather than six more fields here.
-    lens_flare: LensFlareFx,
+    lens_flare: lens_flare::LazyFlare,
     layout: wgpu::BindGroupLayout,
     /// The adjustment blend's own layout: three sampled inputs (below,
     /// processed, coverage) where every effect kernel takes two.
@@ -123,15 +135,19 @@ impl FxEngine {
     /// still being baked draws the lens the last frame drew (or, with none
     /// yet, no flare) instead of stopping for half a second of optics.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
-        self.lens_flare
-            .deferred
-            .store(deferred, std::sync::atomic::Ordering::Relaxed);
+        self.lens_flare.set_deferred(deferred);
     }
 
     /// Whether a flare bake is being made right now.
+    ///
+    /// Answered without waiting for the flare's own pipelines to finish
+    /// compiling (see [`lens_flare::LazyFlare`]): nothing can be baking before
+    /// there is anything to bake with.
     #[must_use]
     pub fn flare_bake_pending(&self) -> bool {
-        self.lens_flare.bake_pending()
+        self.lens_flare
+            .ready()
+            .is_some_and(lens_flare::LensFlareFx::bake_pending)
     }
 
     /// A number that moves whenever a flare bake is queued or lands.
@@ -144,9 +160,11 @@ impl FxEngine {
     /// that outlives every edit and undo that might have fixed it.
     #[must_use]
     pub fn flare_bake_generation(&self) -> u64 {
-        self.lens_flare
-            .generation
-            .load(std::sync::atomic::Ordering::Relaxed)
+        // Zero until the flare engine exists, and honestly so: a bake cannot
+        // have been queued or landed before there is one.
+        self.lens_flare.ready().map_or(0, |lf| {
+            lf.generation.load(std::sync::atomic::Ordering::Relaxed)
+        })
     }
 
     /// Start making a lens's bake now, before any frame asks to draw it.
@@ -160,7 +178,9 @@ impl FxEngine {
     /// already baking, or when this machine gave us no bake thread. Queueing
     /// is never required — a miss makes the bake either way.
     pub fn warm_flare_bake(&self, key: u64, bake: &lens_flare::FlareBake) -> bool {
-        self.lens_flare.warm(key, bake)
+        // The one flare call that *does* wait for the pipelines: a caller
+        // asking for a bake by name has decided a flare is wanted.
+        self.lens_flare.get().warm(key, bake)
     }
 
     /// One compute pass: `src` and `orig` sampled, `dst` written, `params`

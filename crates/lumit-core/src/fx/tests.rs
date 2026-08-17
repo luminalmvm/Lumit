@@ -4811,16 +4811,58 @@ fn lens_flare_optics_match_the_textbook() {
     let expect = ((1.0f32 - 1.5) / (1.0 + 1.5)).powi(2);
     assert!((r - expect).abs() < 1e-4, "{r} vs {expect}");
 
-    // The MgF₂ quarter-wave coating at its design wavelength reflects LESS
-    // than bare glass, and each extra layer quarters the residual again.
-    let plain = fresnel_cos(1.0, 1.0, 1.9);
-    let one = surface_reflectance(1.0, 1.0, 1.9, 1.0, 550.0, 1.0);
-    let two = surface_reflectance(1.0, 1.0, 1.9, 2.0, 550.0, 1.0);
+    // Coatings, on ordinary crown glass (K-356). Note the glass: MgF₂ is
+    // very nearly the IDEAL single layer for n ≈ 1.9, because 1.38² = 1.904,
+    // so a stack comparison there measures a coincidence rather than a
+    // coating. n = 1.5 is the honest case and the common one.
+    let plain = fresnel_cos(1.0, 1.0, 1.5);
+    let one = surface_reflectance(1.0, 1.0, 1.5, 0.0, 1.0, 550.0, 1.0);
+    let three = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
     assert!(one < plain, "coated {one} should be below bare {plain}");
-    assert!(two < one, "multicoat {two} should be below single {one}");
+    assert!(
+        three < one,
+        "the broadband stack {three} should beat the single layer {one}"
+    );
+
+    // **Reflectance varies across the band, and that is the point.** A real
+    // multicoat has minima rather than a flat floor, which is what gives
+    // ghosts their colour: the stack reflects some wavelengths several times
+    // more than others. The old single-number model could not do this.
+    let across: Vec<f32> = [430.0f32, 500.0, 550.0, 620.0, 680.0]
+        .iter()
+        .map(|&nm| surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, nm, 1.0))
+        .collect();
+    let lo = across.iter().copied().fold(f32::MAX, f32::min);
+    let hi = across.iter().copied().fold(0.0f32, f32::max);
+    assert!(
+        hi > lo * 3.0,
+        "a broadband stack must be wavelength-selective: {across:?}"
+    );
+
+    // **And it shifts with the angle of incidence**, because the phase
+    // thickness carries a cos θ — which is the observed effect that a ghost
+    // changes hue as its source moves off axis. Steeply off-axis, the band
+    // has moved enough that the design wavelength is no longer the minimum.
+    let straight = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
+    let oblique = surface_reflectance(0.6, 1.0, 1.5, 0.0, 3.0, 550.0, 1.0);
+    assert!(
+        oblique > straight * 1.5,
+        "the coating must vary with angle: {oblique} at 53° vs {straight} \
+         at normal"
+    );
+
     // The Coating dial at 0 is bare glass regardless of the file layers.
-    let off = surface_reflectance(1.0, 1.0, 1.9, 2.0, 550.0, 0.0);
+    let off = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 0.0);
     assert!((off - plain).abs() < 1e-6);
+
+    // A bare stack (0 layers) is exactly the uncoated interface, and the
+    // transfer matrix agrees with plain Fresnel there — the degenerate case
+    // that proves the chain closes correctly.
+    let empty = stack_reflectance(1.0, 1.0, 1.5, &coating_design(0, 0.0), 550.0);
+    assert!(
+        (empty - plain).abs() < 1e-5,
+        "an empty stack {empty} must equal bare Fresnel {plain}"
+    );
 }
 
 // §8.4 — the prescription library and pair ranking (K-261, curated to
@@ -4873,12 +4915,989 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     let a = bake(&p);
     let b = bake(&p);
     assert_eq!(a.pairs, b.pairs);
+    // Bit-identical across runs INCLUDING the K-365 field slices, which are
+    // baked in parallel: `collect` restores slice order, so the thread pool
+    // cannot reach the pixels.
     assert_eq!(a.starburst, b.starburst);
+    assert_eq!(
+        a.starburst.len(),
+        STARBURST_FIELDS * (STARBURST_RES * STARBURST_RES * 3) as usize,
+        "the sprite is the field slices concatenated, slice-major"
+    );
     assert_eq!(a.energy_gain, b.energy_gain);
+    // The K-369 ring masks are baked in parallel the same way, and the slice
+    // each path picks comes off the spreads — both must be bit-equal too, or
+    // two identical projects would draw different ghost edges.
     assert!(!a.pairs.is_empty());
-    for pair in &a.pairs {
-        assert!(pair[0] < pair[1]);
-        assert!((pair[1] as usize) < a.surfaces.len());
+    for path in &a.pairs {
+        assert!(path[0] < path[1]);
+        assert!((path[1] as usize) < a.surfaces.len());
+        // Four-bounce paths (K-368) carry the same walk one leg further in:
+        // the third bounce is past the second, the fourth before the third.
+        if path[2] != NO_BOUNCE {
+            assert!(path[0] < path[2] && path[3] < path[2]);
+            assert!((path[2] as usize) < a.surfaces.len());
+            assert_ne!(path[3], NO_BOUNCE);
+        } else {
+            assert_eq!(path[3], NO_BOUNCE);
+        }
+    }
+}
+
+/// One splat through the full K-380 deposit — pyramid, then resolve — into a
+/// flat `w × h × 3` buffer, which is the shape every kernel test below reads.
+/// Splats small enough for level 0 land bit-exactly as they always did (the
+/// level-0 resolve is the identity); a splat past [`DEPOSIT_SPAN_PX`] takes
+/// the coarser path the production frame takes.
+#[allow(clippy::too_many_arguments)]
+fn splat_flat(
+    out: &mut [f32],
+    w: u32,
+    h: u32,
+    centre: [f32; 2],
+    a1: [f32; 2],
+    a2: [f32; 2],
+    rgb: [f32; 3],
+    cell_area: f32,
+) {
+    use crate::fx::lens_flare::{splat_ray, DepositLevels};
+    let mut levels = DepositLevels::new(w, h);
+    splat_ray(&mut levels, centre, a1, a2, rgb, cell_area);
+    levels.resolve(out);
+}
+
+/// **A splat too big for full resolution keeps its flux and its place**
+/// (K-380). The pyramid is an optimisation: a coarse level's kernel is the
+/// same kernel sampled at wider texels and read back through a bilinear
+/// upsample, so the deposited energy, its centre and its extent must all
+/// survive the trip — this is the test that fails if a level's offset,
+/// scale or upsample is wrong by even one texel.
+#[test]
+fn lens_flare_a_large_splat_deposits_coarse_and_keeps_its_flux() {
+    use crate::fx::lens_flare::*;
+    let (w, h) = (512u32, 512u32);
+    // Span ~420 px: several levels down at DEPOSIT_SPAN_PX = 48.
+    let (a1, a2) = ([35.0, 0.0], [0.0, 35.0]);
+    let ext = 3.0 * (a1[0] + a2[0] + a1[1] + a2[1]);
+    let level = deposit_level(ext, ext, 12);
+    assert!(
+        level >= 2,
+        "this splat must actually take the coarse path, got level {level}"
+    );
+    let mut out = vec![0.0_f32; (w * h * 3) as usize];
+    let flux = 5.0_f32;
+    splat_flat(
+        &mut out,
+        w,
+        h,
+        [256.0, 256.0],
+        a1,
+        a2,
+        [flux, flux, flux],
+        70.0 * 70.0,
+    );
+    let total: f32 = out.iter().sum();
+    assert!(
+        (total - 3.0 * flux).abs() < 0.15 * 3.0 * flux,
+        "a coarse splat must keep its flux: {total} vs {}",
+        3.0 * flux
+    );
+    // The centroid stays put: a level whose offset or scale is wrong moves
+    // the whole deposit.
+    let (mut cx, mut cy, mut m) = (0.0f64, 0.0f64, 0.0f64);
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            let v = f64::from(out[(y * w as usize + x) * 3]);
+            cx += v * x as f64;
+            cy += v * y as f64;
+            m += v;
+        }
+    }
+    let (cx, cy) = (cx / m, cy / m);
+    assert!(
+        (cx - 255.5).abs() < 2.0 && (cy - 255.5).abs() < 2.0,
+        "a coarse splat must stay centred: ({cx:.1}, {cy:.1})"
+    );
+}
+
+/// **The splat reconstruction is a partition of unity** (K-366, fixed K-373).
+///
+/// A uniform sheet of rays on a regular grid, all with the same weight and the
+/// same footprint, must reconstruct a **flat** field — that is what "the ghost
+/// is smooth" means, and it is the property K-366 lacked. Its tent reached one
+/// half-axis while the rays sit a full step apart, so neighbouring tents met
+/// exactly where both had fallen to zero: a lattice of separate pyramids with
+/// a seam of zero along every cell boundary, which is a woven grid of dark
+/// lines printed over every ghost. Energy was conserved throughout, which is
+/// why every flux test passed while the artefact was plainly on screen.
+///
+/// This asserts both halves: the interior is flat, **and** the flux is still
+/// exactly what was put in.
+#[test]
+fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
+    const W: u32 = 128;
+    const H: u32 = 128;
+    // Ray spacing in pixels, and the half-axes that go with it: a1 and a2 are
+    // HALF a step, which is what `ray_axes` hands over.
+    const STEP: f32 = 8.0;
+    let a1 = [STEP * 0.5, 0.0];
+    let a2 = [0.0, STEP * 0.5];
+    let cell_area = STEP * STEP;
+    let flux = 3.0_f32;
+
+    let mut out = vec![0.0_f32; (W * H * 3) as usize];
+    // A lattice well inside the buffer, so no tent is clipped by an edge and
+    // the flux check is exact.
+    let (n, origin) = (9_usize, 32.0_f32);
+    for j in 0..n {
+        for i in 0..n {
+            splat_flat(
+                &mut out,
+                W,
+                H,
+                [origin + i as f32 * STEP, origin + j as f32 * STEP],
+                a1,
+                a2,
+                [flux, flux, flux],
+                cell_area,
+            );
+        }
+    }
+
+    // **Flux.** Every ray's deposit lands inside the buffer, so the total is
+    // exactly what went in.
+    let total: f64 = out.iter().step_by(3).map(|v| f64::from(*v)).sum();
+    let want = f64::from(flux) * (n * n) as f64;
+    assert!(
+        (total - want).abs() / want < 1e-4,
+        "flux must be conserved: {total} vs {want}"
+    );
+
+    // **Flatness.** Inside the lattice — a step in from its outermost rays, so
+    // every sample sees a full set of neighbours — the field must be constant.
+    // The value is the flux of one ray spread over one cell.
+    let expect = flux / (STEP * STEP);
+    let (lo, hi) = (origin + STEP, origin + (n - 2) as f32 * STEP);
+    let mut worst = 0.0_f32;
+    let mut ripple_min = f32::MAX;
+    let mut ripple_max = 0.0_f32;
+    for y in (lo as u32)..(hi as u32) {
+        for x in (lo as u32)..(hi as u32) {
+            let v = out[((y * W + x) * 3) as usize];
+            worst = worst.max((v - expect).abs() / expect);
+            ripple_min = ripple_min.min(v);
+            ripple_max = ripple_max.max(v);
+        }
+    }
+    assert!(
+        worst < 0.02,
+        "the interior must be flat: worst deviation {:.1}% (min {ripple_min}, \
+         max {ripple_max}, expected {expect})",
+        100.0 * worst
+    );
+    // Said the other way round, because this is the number that was wrong: the
+    // peak-to-trough ripple across the sheet. K-366 reached zero at every cell
+    // boundary, which is 100%.
+    let ripple = (ripple_max - ripple_min) / ripple_max.max(1e-9);
+    assert!(
+        ripple < 0.05,
+        "peak-to-trough ripple across a uniform sheet must be nothing: {:.1}%",
+        100.0 * ripple
+    );
+
+    // And the same for a sheared footprint, since a ghost's cells are rarely
+    // axis-aligned: the tent's frame is the parallelogram's, not the pixel's.
+    let sh1 = [STEP * 0.5, STEP * 0.25];
+    let sh2 = [-STEP * 0.2, STEP * 0.5];
+    let mut sheared = vec![0.0_f32; (W * H * 3) as usize];
+    for j in 0..n {
+        for i in 0..n {
+            let (fi, fj) = (i as f32, j as f32);
+            splat_flat(
+                &mut sheared,
+                W,
+                H,
+                [
+                    origin + fi * 2.0 * sh1[0] + fj * 2.0 * sh2[0],
+                    origin + fi * 2.0 * sh1[1] + fj * 2.0 * sh2[1],
+                ],
+                sh1,
+                sh2,
+                [flux, flux, flux],
+                cell_area,
+            );
+        }
+    }
+    let det = (sh1[0] * sh2[1] - sh1[1] * sh2[0]).abs() * 4.0;
+    let expect_sh = flux / det;
+    let mut worst_sh = 0.0_f32;
+    for j in 2..(n - 2) {
+        for i in 2..(n - 2) {
+            let (fi, fj) = (i as f32, j as f32);
+            let x = (origin + fi * 2.0 * sh1[0] + fj * 2.0 * sh2[0]).round() as u32;
+            let y = (origin + fi * 2.0 * sh1[1] + fj * 2.0 * sh2[1]).round() as u32;
+            let v = sheared[((y * W + x) * 3) as usize];
+            worst_sh = worst_sh.max((v - expect_sh).abs() / expect_sh);
+        }
+    }
+    assert!(
+        worst_sh < 0.05,
+        "a sheared sheet must reconstruct flat too: worst {:.1}%",
+        100.0 * worst_sh
+    );
+}
+
+/// **The reconstruction must not print the ray grid on the picture** (K-366,
+/// K-373, K-376) — measured on a real frame, not a synthetic sheet.
+///
+/// `lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux` proves the
+/// kernel partitions unity on a *uniform* lattice, which is the case a tent
+/// already handled. It did not catch what the owner could see, because a real
+/// ghost's rays are neither uniform nor axis-aligned, and a tent is only C⁰:
+/// it reconstructs a surface with a crease along every cell boundary, and the
+/// eye finds creases.
+///
+/// So this measures the thing itself — how far each pixel departs from its own
+/// 3×3 mean, relative to that mean — over a real flare, in two brightness
+/// bands. Where it has stood:
+///
+/// | kernel | bright | dark |
+/// |---|---|---|
+/// | K-366, tent at half a step | 15.8% | — |
+/// | K-373, tent at a full step | 2.42% | 4.59% |
+/// | K-376, quadratic B-spline | **1.91%** | **3.81%** |
+///
+/// The floor is not zero and must not be asserted to be: a flare genuinely has
+/// fine detail — iris rims, overlapping faint ghosts — and past about 3% in the
+/// dark band the measurement is reading that rather than any artefact (it stops
+/// falling when the rays are multiplied eightfold, which sampling noise would
+/// not do). The thresholds below sit just above what is measured, so a
+/// regression in the reconstruction shows up here rather than on screen.
+#[test]
+fn lens_flare_reconstruction_does_not_imprint_its_own_grid() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        // No ghost blur: a blur would hide grid imprinting rather than prevent
+        // it, and this test is about preventing it.
+        ghost_softness: 0.0,
+        starburst_intensity: 0.0,
+        quality: 1,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (256u32, 144u32);
+    let buf = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h));
+    let at = |x: usize, y: usize| buf[(y * w as usize + x) * 3];
+    let mx = buf.iter().cloned().fold(0.0_f32, f32::max);
+    assert!(mx > 0.0, "the reference must render something to measure");
+
+    let ripple = |lo: f32, hi: f32| -> f32 {
+        let (mut num, mut den) = (0.0_f64, 0.0_f64);
+        for y in 1..h as usize - 1 {
+            for x in 1..w as usize - 1 {
+                let c = at(x, y);
+                if c < mx * lo || c > mx * hi {
+                    continue;
+                }
+                let mut m = 0.0_f32;
+                for dy in 0..3 {
+                    for dx in 0..3 {
+                        m += at(x + dx - 1, y + dy - 1);
+                    }
+                }
+                m /= 9.0;
+                num += f64::from((c - m).abs());
+                den += f64::from(m);
+            }
+        }
+        (100.0 * num / den.max(1e-9)) as f32
+    };
+
+    let bright = ripple(0.02, 1.0);
+    let dark = ripple(0.0002, 0.02);
+    assert!(
+        bright < 2.5,
+        "the lit part of the frame is rippling at {bright:.2}% against the \
+         1.91% the quadratic B-spline measures — the reconstruction has \
+         regressed towards printing its sampling grid (K-366 measured 15.8%)"
+    );
+    assert!(
+        dark < 4.5,
+        "the faint part of the frame is rippling at {dark:.2}% against the \
+         3.81% the quadratic B-spline measures; the floor there is about 3%, \
+         which is the flare's own fine detail rather than an artefact"
+    );
+}
+
+/// **Ghost edges are Fresnel, and only their edges are** (K-369, re-derived
+/// K-370).
+///
+/// The rim carries the knife-edge diffraction profile a real defocused
+/// aperture casts; the interior of a ghost is left exactly as flat as the
+/// plain iris mask. That second half is the regression: K-369's propagated
+/// masks ran at Fresnel numbers of 2 to 64, two to three orders below what a
+/// real ghost has, and at those the near field is a whole-aperture pattern —
+/// the bundled default measured 2.4× the flat mask's interior on the bottom
+/// rung, 4.7× at the very centre — so every frame-filling ghost painted a
+/// broad concentric interference pattern across the picture.
+#[test]
+fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
+    use crate::fx::lens_flare::*;
+    let p = default_flare_params();
+    let baked = bake(&p);
+    let rot = p.aperture_rotation_deg.to_radians();
+    let roundness = effective_roundness(p.roundness, p.fstop, baked.native_fstop);
+
+    // The derivation, at the sizes real ghosts come in: a 5%-of-frame ghost
+    // and a frame-filling wash are both hundreds to thousands, never the
+    // handful the propagated ladder could reach.
+    let tight = ghost_fresnel_number(0.05, 2.8);
+    let wash = ghost_fresnel_number(1.0, 2.8);
+    assert!(
+        (300.0..500.0).contains(&tight),
+        "a 5% ghost at f/2.8 is a few hundred, got {tight}"
+    );
+    assert!(
+        (6000.0..8000.0).contains(&wash),
+        "a frame-filling ghost at f/2.8 is thousands, got {wash}"
+    );
+    assert!(wash > tight, "a bigger ghost has the higher Fresnel number");
+    // Stopping down shrinks the ghost and the pupil together, so the fringes
+    // coarsen as F ∝ scale²; and a degenerate stop rings not at all.
+    assert!(ghost_fresnel_number(0.05 * 0.35, 8.0) < tight);
+    assert_eq!(ghost_fresnel_number(0.0, 2.8), 0.0);
+    assert_eq!(ghost_fresnel_number(0.05, 0.0), 0.0);
+
+    // The knife-edge profile itself: 1 deep inside, ¼ on the edge, a first
+    // fringe above 1 just inside it, nothing far outside.
+    // Deep inside it settles on 1, approached through a fringe train whose
+    // amplitude decays as 1/(πv) — so "flat" is a limit, and the tolerance
+    // has to be that decay rather than zero.
+    for v in [40.0_f32, 80.0, 160.0] {
+        let ripple = (knife_edge_intensity(v) - 1.0).abs();
+        assert!(
+            ripple < 2.5 / (std::f32::consts::PI * v),
+            "at v {v} the profile is {ripple} off 1"
+        );
+    }
+    assert!((knife_edge_intensity(0.0) - 0.25).abs() < 0.01);
+    assert!(knife_edge_intensity(-6.0) < 0.02);
+    let first = knife_edge_intensity(1.217);
+    assert!(
+        (1.3..1.45).contains(&first),
+        "the first fringe peaks near 1.37, got {first}"
+    );
+    // Monotone it is not — which is the whole point, and what the analytic
+    // mask can never be.
+    let profile: Vec<f32> = (0..400)
+        .map(|i| knife_edge_intensity(i as f32 * 0.05 - 2.0))
+        .collect();
+    let peaks = profile
+        .windows(3)
+        .filter(|w| w[1] > w[0] && w[1] >= w[2] && w[1] > 1.0)
+        .count();
+    assert!(peaks >= 3, "the fringe train must have several peaks");
+
+    // **The interior is flat.** Along a radial line through the inner 60% of
+    // the pupil, a ringed mask must not deviate from the plain one by more
+    // than a whisper — the check K-369 could not have passed.
+    let f = ghost_fresnel_number(1.0, p.fstop);
+    let grid = 2.0 / 63.0;
+    let mut worst = 0.0_f32;
+    for i in 0..38 {
+        let u = i as f32 / 63.0 * 0.98;
+        let ringed = ghost_mask(
+            u,
+            0.0,
+            p.blades,
+            rot,
+            roundness,
+            p.aperture_softness,
+            f,
+            grid,
+        );
+        let plain = pupil_mask(u, 0.0, p.blades, rot, roundness, p.aperture_softness);
+        worst = worst.max((ringed - plain).abs());
+    }
+    assert!(
+        worst < 0.02,
+        "the ghost interior must not be shaded by its rim: worst |Δ| {worst}"
+    );
+
+    // At zero the mask IS the plain one, byte for byte — the path every
+    // unmeasurable ghost takes.
+    for i in 0..64 {
+        let u = i as f32 / 63.0 * 1.2 - 0.6;
+        assert_eq!(
+            ghost_mask(
+                u,
+                0.3,
+                p.blades,
+                rot,
+                roundness,
+                p.aperture_softness,
+                0.0,
+                grid
+            ),
+            pupil_mask(u, 0.3, p.blades, rot, roundness, p.aperture_softness),
+        );
+    }
+
+    // **The rim does ring** where the grid is fine enough to carry it: with
+    // softness off and a dense grid, the profile overshoots the plateau just
+    // inside the edge.
+    let fine = 0.002;
+    let sharp: Vec<f32> = (0..600)
+        .map(|i| {
+            let u = i as f32 / 599.0;
+            ghost_mask(u, 0.0, p.blades, rot, roundness, 0.0, tight, fine)
+        })
+        .collect();
+    let plateau: f32 = sharp[..100].iter().sum::<f32>() / 100.0;
+    assert!(
+        sharp.iter().any(|&v| v > plateau * 1.15),
+        "the rim must overshoot its own plateau ({plateau}); peak {}",
+        sharp.iter().fold(0.0_f32, |m, &v| m.max(v))
+    );
+    // …and the fringes GROW towards the rim rather than washing over the
+    // ghost. The train does reach inwards — a Fresnel edge is not a local
+    // effect and pretending otherwise would be the same lie in the other
+    // direction — but its envelope decays as 2/(πv), so the outer tenth of
+    // the radius must ripple several times harder than the inner half. This
+    // is the shape K-369's bottom rungs had exactly backwards: theirs peaked
+    // at the CENTRE.
+    let ripple = |lo: usize, hi: usize| {
+        sharp[lo..hi]
+            .iter()
+            .fold(0.0_f32, |m, &v| m.max((v - plateau).abs()))
+    };
+    let (inner, rim) = (ripple(0, 300), ripple(540, 600));
+    assert!(
+        rim > inner * 3.0,
+        "the fringes must gather at the rim: inner {inner}, rim {rim}"
+    );
+    assert!(
+        inner < 0.1,
+        "the inner half must stay within a tenth of its plateau, got {inner}"
+    );
+
+    // **Fringes nobody can sample are averaged, not aliased.** A grid far
+    // coarser than the fringe spacing gets the plain mask back; that is the
+    // band limit, and it is what stops an aliased fringe train from beating
+    // across the whole ghost.
+    let coarse = 2.0 / 15.0;
+    for i in 0..64 {
+        let u = i as f32 / 63.0 * 1.1;
+        let ringed = ghost_mask(u, 0.0, p.blades, rot, roundness, 0.0, wash, coarse);
+        let plain = pupil_mask(u, 0.0, p.blades, rot, roundness, 0.0);
+        assert!(
+            (ringed - plain).abs() < 1e-6,
+            "unresolvable fringes must average to the plain edge at u {u}"
+        );
+    }
+
+    // The Fresnel integrals themselves, against their limits and their known
+    // value at the first fringe.
+    // Both tend to ½, oscillating in with amplitude ~1/(πv).
+    let (c, s) = fresnel_cs(100.0);
+    assert!((c - 0.5).abs() < 0.005 && (s - 0.5).abs() < 0.005);
+    let (cn, sn) = fresnel_cs(-1.5);
+    let (cp, sp) = fresnel_cs(1.5);
+    assert!((cn + cp).abs() < 1e-6 && (sn + sp).abs() < 1e-6, "odd in v");
+    let (c1, s1) = fresnel_cs(1.0);
+    assert!((c1 - 0.7799).abs() < 3e-3, "C(1) = 0.7799, got {c1}");
+    assert!((s1 - 0.4383).abs() < 3e-3, "S(1) = 0.4383, got {s1}");
+
+    // Every ranked path can ring now — the closed form costs the same as the
+    // polygon, so there is no budget to fall off the end of.
+    assert!(!baked.spreads.is_empty());
+    assert!(baked
+        .spreads
+        .iter()
+        .all(|&s| ghost_fresnel_number(s, baked.native_fstop) > 0.0));
+}
+
+/// **The element-coating rows name parameters that exist** (K-371).
+///
+/// Their visibility is resolved in the panel against a *sibling by id*, and a
+/// sibling that does not exist fails silently: the panel finds nothing, hides
+/// every row that names it, and leaves only the rows whose threshold no lens
+/// reaches — whose value set is empty, which means "always visible". That is
+/// precisely what shipping `"lens"` for the Lens dropdown did, and what it
+/// looked like from the outside was "only elements 19 and 20 are there, and
+/// changing them does nothing" (no lens has nineteen elements, so those rows
+/// governed nothing at all). Nothing in the type system connects the id in the
+/// bridge to the id in the schema, so this is the connection.
+#[test]
+fn lens_flare_element_rows_and_the_lens_pick_line_up() {
+    use crate::fx::lens_flare::*;
+    let flare = crate::fx::BUILTINS
+        .iter()
+        .find(|s| s.match_name == "lens_flare")
+        .expect("the Lens flare is a builtin");
+
+    // The sibling the coating rows' visibility is resolved against. The
+    // bridge spells this id too (`LENS_PICK_PARAM`); if it ever moves, this
+    // fails here rather than silently emptying the panel.
+    let lens = flare
+        .params
+        .iter()
+        .find(|p| p.id == "lens_model")
+        .expect("the Lens dropdown is `lens_model`");
+    match lens.kind {
+        ParamKind::Choice { options, .. } => assert_eq!(
+            options.len(),
+            crate::fx::lens_library::LENS_LIBRARY.len(),
+            "the dropdown must offer every bundled lens, since the row \
+             thresholds are indices into that same library"
+        ),
+        _ => panic!("the visibility rule needs a Choice to read"),
+    }
+
+    // Every element row exists, in order, and offers the whole palette.
+    for (i, id) in COATING_ELEMENT_IDS.iter().enumerate() {
+        let row = flare
+            .params
+            .iter()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("element row {} (`{id}`) is missing", i + 1));
+        match row.kind {
+            ParamKind::Choice {
+                options, default, ..
+            } => {
+                assert_eq!(options.len(), COATING_DESIGNS as usize);
+                assert_eq!(default, COATING_AS_FILE, "a row starts as the file");
+            }
+            _ => panic!("`{id}` must be a Choice"),
+        }
+    }
+
+    // Each row is its own group, carrying its own element threshold, and the
+    // thresholds run 1..=MAX_COATING_ELEMENTS with none missing or doubled.
+    let mut thresholds: Vec<u32> = Vec::new();
+    for g in flare.groups {
+        if let Some(n) = g.visible_when_lens_elements {
+            assert_eq!(
+                g.params.len(),
+                1,
+                "an element threshold governs exactly one row"
+            );
+            assert_eq!(
+                g.params[0],
+                COATING_ELEMENT_IDS[n as usize - 1],
+                "threshold {n} must govern element {n}"
+            );
+            assert!(
+                g.visible_when.is_none(),
+                "the two visibility rules are mutually exclusive: the bridge \
+                 reads one or the other"
+            );
+            thresholds.push(n);
+        }
+    }
+    thresholds.sort_unstable();
+    assert_eq!(
+        thresholds,
+        (1..=MAX_COATING_ELEMENTS as u32).collect::<Vec<_>>()
+    );
+
+    // And the thresholds a bundled lens can actually reach are the ones the
+    // panel will ever draw: the library tops out well under the schema's
+    // ceiling, so the rows past it must resolve to "never", not "always".
+    let reachable = library_element_counts()
+        .into_iter()
+        .max()
+        .expect("a library");
+    assert!(reachable < MAX_COATING_ELEMENTS as u32);
+    assert!(lenses_with_at_least(reachable + 1).is_empty());
+}
+
+/// **A coating is per glass element, and different coatings make differently
+/// coloured ghosts** (K-371).
+///
+/// A real flare shows a blue ghost beside a purple one beside an amber one,
+/// because a lens's elements are not all coated alike and what a coated
+/// surface reflects is the complement of what its coating suppresses. The
+/// palette is that choice, per element; this pins the mapping from element to
+/// surface, the colour separation the palette actually produces, and that
+/// leaving every row alone is byte-for-byte the picture before it existed.
+#[test]
+fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
+    use crate::fx::lens_flare::*;
+    let p = default_flare_params();
+
+    // The element mapping, on a lens whose own header states the answer: the
+    // Tessar is four elements over eight surfaces.
+    let tessar = parse_lens(include_str!(
+        "../../lens_files/Zeiss_100mm_F4.5_Tessar.lens"
+    ))
+    .expect("the bundled Tessar parses");
+    assert_eq!(element_count(&tessar.surfaces), 4);
+    let elements = surface_elements(&tessar.surfaces);
+    assert_eq!(elements.len(), tessar.surfaces.len());
+    // Element 0 is the front piece of glass: its own row opens it, the row
+    // after closes it. The aperture stop belongs to no element.
+    assert_eq!(elements[0], 0);
+    assert_eq!(elements[1], 0);
+    assert_eq!(elements[2], 1);
+    assert_eq!(elements[3], 1);
+    assert_eq!(elements[4], -1, "the stop bounds no glass");
+    // The cemented pair: the join goes to the earlier element, which is the
+    // documented rule.
+    assert_eq!(elements[5], 2);
+    assert_eq!(elements[6], 3);
+    assert_eq!(elements[7], 3);
+    // Elements are numbered front to back, contiguously, with no gaps.
+    let seen: Vec<i32> = elements.iter().copied().filter(|&e| e >= 0).collect();
+    assert!(seen.windows(2).all(|w| w[1] == w[0] || w[1] == w[0] + 1));
+
+    // Every bundled lens reports a sane element count, and the library
+    // spans the range the schema's twenty rows have to cover.
+    let counts = library_element_counts();
+    assert_eq!(counts.len(), 20);
+    assert!(counts
+        .iter()
+        .all(|&c| (3..=MAX_COATING_ELEMENTS as u32).contains(&c)));
+    let (lo, hi) = (
+        *counts.iter().min().expect("a library"),
+        *counts.iter().max().expect("a library"),
+    );
+    assert!(lo <= 5 && hi >= 16, "counts run {lo}..{hi}");
+    // The row thresholds: every lens has a first element, and the deepest
+    // rows belong to the few big zooms alone.
+    assert_eq!(lenses_with_at_least(1).len(), 20);
+    assert!(!lenses_with_at_least(hi).is_empty());
+    assert!(lenses_with_at_least(MAX_COATING_ELEMENTS as u32 + 1).is_empty());
+
+    // **Stamping.** An element's choice reaches both of its surfaces, and a
+    // surface belonging to no element is left as the file describes it.
+    let mut surfaces = tessar.surfaces.clone();
+    let mut choices = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
+    choices[1] = 4;
+    apply_element_coatings(&mut surfaces, &choices);
+    assert_eq!(surfaces[2].coating_design, 4.0);
+    assert_eq!(surfaces[3].coating_design, 4.0);
+    assert_eq!(surfaces[0].coating_design, COATING_AS_FILE as f32);
+    assert_eq!(surfaces[4].coating_design, COATING_AS_FILE as f32);
+    // An out-of-range palette index is clamped rather than indexing nothing.
+    let mut wild = tessar.surfaces.clone();
+    let mut mad = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
+    mad[0] = 9999;
+    apply_element_coatings(&mut wild, &mad);
+    assert_eq!(wild[0].coating_design, (COATING_DESIGNS - 1) as f32);
+
+    // **The palette really does separate colours.** Each design's residual
+    // reflection is measured at normal incidence across the visible band and
+    // reduced to the wavelength it reflects most. Real coatings differ in
+    // where their minimum sits, so the peaks must land in different parts of
+    // the spectrum — that is the whole mechanism behind a blue ghost sitting
+    // beside an amber one.
+    let peak_nm = |choice: u32| -> f32 {
+        let mut best = (0.0_f32, 550.0_f32);
+        let mut nm = 420.0_f32;
+        while nm <= 680.0 {
+            let r = surface_reflectance(1.0, 1.0, 1.5, choice as f32, 1.0, nm, 1.0);
+            if r > best.0 {
+                best = (r, nm);
+            }
+            nm += 2.0;
+        }
+        best.1
+    };
+    let blue = peak_nm(3);
+    let green = peak_nm(4);
+    let amber = peak_nm(5);
+    assert!(
+        blue < 500.0,
+        "the blue-residual design must reflect short, peaks at {blue}"
+    );
+    assert!(
+        amber > 600.0,
+        "the amber-residual design must reflect long, peaks at {amber}"
+    );
+    assert!(
+        (blue - amber).abs() > 120.0,
+        "two designs must be plainly different colours: {blue} vs {amber}"
+    );
+    let _ = green;
+
+    // Uncoated is brighter than any coating, at every wavelength tried.
+    for nm in [450.0_f32, 550.0, 650.0] {
+        let bare = surface_reflectance(1.0, 1.0, 1.5, 1.0, 1.0, nm, 1.0);
+        for design in 2..COATING_DESIGNS {
+            let coated = surface_reflectance(1.0, 1.0, 1.5, design as f32, 1.0, nm, 1.0);
+            assert!(
+                coated < bare,
+                "design {design} at {nm} nm reflects {coated}, more than bare {bare}"
+            );
+        }
+    }
+
+    // The Coating dial still governs everything: at 0 every design is bare
+    // glass, whatever the element rows say.
+    let plain = fresnel_cos(1.0, 1.0, 1.5);
+    for design in 0..COATING_DESIGNS {
+        let off = surface_reflectance(1.0, 1.0, 1.5, design as f32, 3.0, 550.0, 0.0);
+        assert!((off - plain).abs() < 1e-6, "design {design} at Coating 0");
+    }
+
+    // **An untouched panel changes nothing.** Every row at "As the lens file"
+    // must bake byte-for-byte the surfaces the prescription describes.
+    let mut untouched = tessar.surfaces.clone();
+    apply_element_coatings(&mut untouched, &[COATING_AS_FILE; MAX_COATING_ELEMENTS]);
+    for (a, b) in untouched.iter().zip(&tessar.surfaces) {
+        assert_eq!(a.coating_layers, b.coating_layers);
+        assert_eq!(a.coating_design, COATING_AS_FILE as f32);
+    }
+
+    // …and it is a BAKE input, so changing one rebakes rather than quietly
+    // serving the previous lens's optics.
+    let base = bake_key(&p);
+    let mut changed = p;
+    changed.coating_elements[0] = 5;
+    assert_ne!(base, bake_key(&changed), "an element coating must rebake");
+    let mut deeper = p;
+    deeper.coating_elements[MAX_COATING_ELEMENTS - 1] = 2;
+    assert_ne!(base, bake_key(&deeper), "the last row counts too");
+
+    // And the bake really does answer differently: uncoating the front
+    // element brightens the ghosts it takes part in.
+    let mut uncoated_front = p;
+    uncoated_front.coating_elements[0] = 1;
+    let a = bake(&p);
+    let b = bake(&uncoated_front);
+    assert_eq!(a.surfaces.len(), b.surfaces.len());
+    assert_ne!(
+        a.reflectance, b.reflectance,
+        "the reflectance table must follow the element rows"
+    );
+}
+
+/// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the
+/// enumeration stays bounded, and old uncoated glass shows the doubled
+/// ghosts modern coatings suppress.
+#[test]
+fn lens_flare_four_bounce_ghosts_rank_and_render() {
+    use crate::fx::lens_flare::*;
+    // The walk: a known-bright two-bounce path lands, and its sentinel form
+    // is what it always was.
+    let p = default_flare_params();
+    let baked = bake(&p);
+    let dir = light_direction([0.33, 0.30], 9.0 / 16.0, baked.focal_mm);
+    let two = baked.pairs[0];
+    let origin = [baked.pupil_mm * 0.3, 0.0, baked.start_z_mm];
+    let hit = trace_splat(
+        &baked,
+        [two[0], two[1], NO_BOUNCE, NO_BOUNCE],
+        550.0,
+        origin,
+        dir,
+        0.75,
+        1.0,
+        0.0,
+    );
+    let Some((pos, w)) = hit else {
+        panic!("the brightest ranked path traced nothing at the default light")
+    };
+    assert!(pos[0].is_finite() && pos[1].is_finite() && w.is_finite());
+    // Bit-equal twice: the walk carries no state between calls.
+    assert_eq!(
+        hit,
+        trace_splat(
+            &baked,
+            [two[0], two[1], NO_BOUNCE, NO_BOUNCE],
+            550.0,
+            origin,
+            dir,
+            0.75,
+            1.0,
+            0.0
+        )
+    );
+
+    // Vintage glass shows its double ghosts. The Biotar is a 1927 design and
+    // every surface of it is bare or single-coated, so a four-bounce path
+    // keeps ~10⁻⁶ of the light rather than the ~10⁻¹⁰ a modern stack leaves.
+    //
+    // **The ranking reality, measured.** On every bundled lens the whole
+    // two-bounce family outranks the whole four-bounce one — four extra
+    // Fresnel factors are simply worth more than any geometry — so what
+    // decides whether a four-bounce ghost renders is not whether it beats a
+    // pair but whether the pairs run out first. The Biotar has 11 surfaces
+    // and 45 surviving pairs, so its four-bounce paths start at rank 45 and
+    // over a hundred of them fall inside the rendered 200. The 24-surface
+    // Master Prime has 252 pairs, and its four-bounce paths never get a
+    // look in — which is the physically right answer for modern multicoated
+    // glass, and the assertion below pins it.
+    let vintage = LensFlareParams {
+        lens: 17, // Zeiss Biotar 50mm F1.4
+        ..default_flare_params()
+    };
+    let vb = bake(&vintage);
+    let four_in_view = vb
+        .pairs
+        .iter()
+        .take(MAX_RENDERED_PAIRS)
+        .filter(|p| p[2] != NO_BOUNCE)
+        .count();
+    assert!(
+        four_in_view > 0,
+        "the Biotar renders no four-bounce ghost at all: {} paths ranked",
+        vb.pairs.len()
+    );
+    // …and they are honest ghosts, not table entries: one must actually
+    // land light on the sensor.
+    let vdir = light_direction([0.33, 0.30], 0.5625, vb.focal_mm);
+    let landed = vb.pairs.iter().filter(|p| p[2] != NO_BOUNCE).any(|&path| {
+        (0..8).any(|k| {
+            let frac = k as f32 / 8.0;
+            let o = [vb.pupil_mm * frac, vb.pupil_mm * frac * 0.5, vb.start_z_mm];
+            matches!(
+                trace_splat(&vb, path, 550.0, o, vdir, 1.0, 1.0, 0.0),
+                Some((_, w)) if w > 0.0
+            )
+        })
+    });
+    assert!(landed, "no four-bounce path put light on the sensor");
+
+    // Modern coatings keep them rare: on the Master Prime the brightest
+    // ghosts are all still the two-bounce ones.
+    let modern = bake(&default_flare_params()); // lens 16, Master Prime
+    for path in modern.pairs.iter().take(8) {
+        assert_eq!(
+            path[2], NO_BOUNCE,
+            "a four-bounce path outranked the two-bounce ghosts on a \
+             multi-coated lens: {path:?}"
+        );
+    }
+
+    // The enumeration bound holds: no more four-bounce paths survive than
+    // were ever probed.
+    for b in [&baked, &vb] {
+        let four = b.pairs.iter().filter(|p| p[2] != NO_BOUNCE).count();
+        assert!(
+            four <= FOUR_BOUNCE_PROBE_CAP,
+            "{four} probed-and-kept paths"
+        );
+    }
+}
+
+/// One angular ring of a starburst slice: `bins` samples of the pattern's
+/// luma at `radius` (a fraction of the sprite's half-size), taken from the
+/// nearest texel and smoothed over ±`SMOOTH` bins so a spike reads as one
+/// bump rather than a comb of them.
+fn starburst_ring(slice: &[f32], n: usize, radius: f32) -> Vec<f32> {
+    const BINS: usize = 720;
+    const SMOOTH: isize = 5;
+    let c = (n - 1) as f32 / 2.0;
+    let r = radius * (n as f32 / 2.0);
+    let raw: Vec<f32> = (0..BINS)
+        .map(|k| {
+            let a = std::f32::consts::TAU * k as f32 / BINS as f32;
+            let x = (c + r * a.cos()).round().clamp(0.0, (n - 1) as f32) as usize;
+            let y = (c + r * a.sin()).round().clamp(0.0, (n - 1) as f32) as usize;
+            let i = (y * n + x) * 3;
+            0.2126 * slice[i] + 0.7152 * slice[i + 1] + 0.0722 * slice[i + 2]
+        })
+        .collect();
+    (0..BINS)
+        .map(|k| {
+            let mut s = 0.0;
+            for d in -SMOOTH..=SMOOTH {
+                s += raw[(k as isize + d).rem_euclid(BINS as isize) as usize];
+            }
+            s / (2 * SMOOTH + 1) as f32
+        })
+        .collect()
+}
+
+/// Strict local maxima of a circular ring that stand above `1.5 ×` its mean
+/// — the diffraction spikes, counted without caring how bright they are.
+fn starburst_spikes(ring: &[f32]) -> usize {
+    let n = ring.len();
+    let mean = ring.iter().sum::<f32>() / n as f32;
+    (0..n)
+        .filter(|&k| {
+            let v = ring[k];
+            v > 1.5 * mean && v > ring[(k + n - 1) % n] && v > ring[(k + 1) % n]
+        })
+        .count()
+}
+
+/// **The starburst still counts the blades** (K-256's physics, re-checked
+/// after the K-365 field slices): the sprite is the iris polygon's
+/// Fraunhofer diffraction, and a polygon's spikes run perpendicular to its
+/// edges — so an EVEN blade count gives N spikes (opposite edges are
+/// parallel and share a spike) and an ODD one gives 2N. Slice 0 is the
+/// on-axis picture; a bake that lost the polygon, or concatenated its
+/// slices in the wrong order, changes this count.
+#[test]
+fn starburst_slice_zero_counts_the_iris_blades() {
+    use crate::fx::lens_flare::*;
+    let n = STARBURST_RES as usize;
+    for (blades, want) in [(6u32, 6usize), (5, 10)] {
+        // Lens 18 is the cheapest bundled prescription. Roundness 0 keeps
+        // the polygon a polygon — and the f-stop must be well down from the
+        // lens's native 4.5, because `effective_roundness` rounds the iris
+        // off near wide open (a real iris's blades barely meet there), and
+        // a circle has no blades to count.
+        let p = LensFlareParams {
+            lens: 18,
+            blades,
+            roundness: 0.0,
+            fstop: 16.0,
+            ..default_flare_params()
+        };
+        let baked = bake(&p);
+        let ring = starburst_ring(&baked.starburst[..n * n * 3], n, 0.3);
+        assert_eq!(
+            starburst_spikes(&ring),
+            want,
+            "{blades} blades must give {want} spikes"
+        );
+    }
+}
+
+/// **The cat's-eye is real** (K-365): at the sensor-corner field angle the
+/// front and rear mechanical stops clip the iris into a sliver, so the last
+/// field slice must differ from the on-axis one — and must still carry
+/// light, because a starburst that goes black in the corners is a worse
+/// picture than one that never changed. If `trace_transmit` ever silently
+/// returned 1 everywhere, the first assertion fails; if it ever returned 0
+/// everywhere, the second does.
+#[test]
+fn the_corner_field_slice_is_a_cats_eye_not_the_on_axis_sprite() {
+    use crate::fx::lens_flare::*;
+    let per = (STARBURST_RES * STARBURST_RES * 3) as usize;
+    // Lens 16 is the Master Prime: fast enough that its stops really do
+    // clip at the corner field angle. Lens 0 is the bundled APS-C design,
+    // which at the full-frame corner passes nothing at all — the case the
+    // dead-slice hold exists for.
+    for lens in [16u32, 0] {
+        let p = LensFlareParams {
+            lens,
+            ..default_flare_params()
+        };
+        let baked = bake(&p);
+        let on_axis = &baked.starburst[..per];
+        let corner = &baked.starburst[(STARBURST_FIELDS - 1) * per..];
+        let energy = on_axis.iter().sum::<f32>().max(1e-9);
+        let l1: f32 = on_axis
+            .iter()
+            .zip(corner)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / energy;
+        assert!(
+            l1 > 0.02,
+            "lens {lens}: corner slice differs from on-axis by only {l1}"
+        );
+        let corner_energy = corner.iter().sum::<f32>();
+        assert!(
+            corner_energy > 0.1 * energy,
+            "lens {lens}: the corner slice kept only {corner_energy} of \
+             {energy} — the vignette has killed the sprite, not shaped it"
+        );
     }
 }
 
@@ -5039,7 +6058,9 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
             }
         }
     }
-    let lights = detect_lights(&matte, w, h, 1.0, 0.25, true, [1.0, 1.0, 1.0]);
+    // Threshold below the sources' luma: K-363's gate is "brighter than",
+    // so a white (1.0) source at threshold 1.0 is at the line, not over it.
+    let lights = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0, 1.0, 1.0]);
     assert_eq!(lights.len(), 2, "one disc anchor, one dot anchor");
     // The disc's anchor sits inside the disc, the dot's on the dot.
     let disc = &lights[0];
@@ -5056,7 +6077,7 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
     );
     // The dot reads as the classic point: white × gate(1.0) — and the disc
     // reads as MANY tiles of that, several times the dot's flux.
-    let gate = threshold_gate(1.0, 1.0, 0.25);
+    let gate = threshold_gate(1.0, 0.5, 0.25);
     assert!(
         (dot_light.rgb[0] - gate).abs() < 1e-6,
         "{:?}",
@@ -5589,90 +6610,111 @@ fn lens_flare_focus_shift_follows_the_thin_lens() {
     assert!(focus_shift_mm(0.2, 50.0) <= 50.0);
 }
 
-// The streak guard (K-262), tested where the bug lived. K-261 inflated ANY
-// sub-pixel quad to 4 px² by scaling about its centroid — which for a
-// fold-straddling sliver (near-zero area, large extent) multiplied its
-// length by up to 100×, drawing the "random lines across the flare" the
-// owner reported. Both oracles agreed with each other while drawing it, so
-// parity could never have caught this; the guard itself is the pin.
+// The splat guard (K-366), tested where the old quad bugs lived. Quads
+// connected rays across caustic folds, and the sliver/inflate rescue
+// machinery (K-261..K-264) existed to survive that; splats never connect
+// rays, so what needs pinning now is the deposit itself: flux is conserved
+// away from the density cap, a footprint never drops below the anti-alias
+// floor, and a fold (near-parallel axes) deposits a finite bright line
+// rather than nothing or a spike.
 #[test]
-fn lens_flare_quad_guard_drops_slivers_and_keeps_ghosts() {
+fn lens_flare_splats_conserve_flux_and_survive_folds() {
     use crate::fx::lens_flare::*;
-    let quad = |pts: [[f32; 2]; 4]| -> [FlareVertex; 4] {
-        [
-            FlareVertex {
-                pos: pts[0],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[1],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[2],
-                rgb: [1.0; 3],
-            },
-            FlareVertex {
-                pos: pts[3],
-                rgb: [1.0; 3],
-            },
-        ]
-    };
-    let longest = |v: &[FlareVertex; 4]| {
-        (0..4)
-            .map(|i| {
-                let (a, b) = (v[i].pos, v[(i + 1) % 4].pos);
-                (a[0] - b[0]).hypot(a[1] - b[1])
-            })
-            .fold(0.0f32, f32::max)
-    };
+    let sum = |buf: &[f32]| -> f32 { buf.iter().sum() };
+    let (w, h) = (64u32, 64u32);
 
-    // A big well-formed cell: drawn untouched.
-    let mut big = quad([[0.0, 0.0], [50.0, 0.0], [50.0, 50.0], [0.0, 50.0]]);
-    let before = big;
-    assert!(inflate_quad(&mut big));
-    assert_eq!(big[2].pos, before[2].pos);
-    assert_eq!(big[0].rgb, before[0].rgb);
-
-    // A compact sub-sample cell (well under the 1 px² floor): inflated,
-    // flux conserved, still compact.
-    let mut tiny = quad([[10.0, 10.0], [10.4, 10.0], [10.4, 10.4], [10.0, 10.4]]);
-    assert!(inflate_quad(&mut tiny));
-    assert!(
-        longest(&tiny) <= MAX_INFLATE_EDGE_PX * 3.0,
-        "{}",
-        longest(&tiny)
+    // An ordinary footprint: deposited flux equals the flux put in (the
+    // tent integrates to the parallelogram's area, which the divisor is).
+    let mut out = vec![0.0_f32; (w * h * 3) as usize];
+    splat_flat(
+        &mut out,
+        w,
+        h,
+        [32.0, 32.0],
+        [4.0, 0.0],
+        [0.0, 3.0],
+        [7.0, 5.0, 3.0],
+        16.0,
     );
-    assert!(tiny[0].rgb[0] < 1.0, "inflation must dim to conserve flux");
-
-    // THE K-262 BUG: a sub-pixel SLIVER — 40 px long, hair thin. K-261
-    // stretched this to ~400 px; it must be dropped, never inflated.
-    let mut sliver = quad([[10.0, 10.0], [50.0, 10.02], [50.0, 10.03], [10.0, 10.01]]);
+    let total = sum(&out);
     assert!(
-        !inflate_quad(&mut sliver),
-        "a fold sliver must be dropped, never inflated"
+        (total - 15.0).abs() < 0.15,
+        "an uncapped splat deposits its whole flux: {total} vs 15"
     );
 
-    // THE K-264 REVERSAL: a long thin quad ABOVE the area floor (150 px²)
-    // is a fold-straddling cell and K-262 dropped it — which cut the
-    // triangular notches out of every caustic rim the owner reported at
-    // Ultra. With the vertex-smoothed density its brightness comes from its
-    // neighbourhood, so it DRAWS, untouched.
-    let mut fold = quad([[0.0, 0.0], [300.0, 0.0], [300.0, 0.5], [0.0, 0.5]]);
-    let before_fold = fold;
-    assert!(
-        inflate_quad(&mut fold),
-        "a drawable-area fold cell draws since K-264 — dropping it notches the rims"
+    // A caustic fold: axes long but nearly parallel. The deposit must be
+    // finite (the density cap) and non-zero (the anti-alias floor) — the
+    // two halves of what the quad machinery got wrong in turn.
+    let mut fold = vec![0.0_f32; (w * h * 3) as usize];
+    splat_flat(
+        &mut fold,
+        w,
+        h,
+        [32.0, 32.0],
+        [10.0, 0.0],
+        [10.0, 1e-4],
+        [1.0, 1.0, 1.0],
+        16.0,
     );
-    assert_eq!(fold[1].pos, before_fold[1].pos, "and it draws unmodified");
+    let fold_total = sum(&fold);
+    assert!(fold_total > 0.0, "a fold still deposits");
+    let peak = fold.iter().fold(0.0_f32, |a, &b| a.max(b));
+    assert!(
+        peak <= 1.0 / (MIN_AREA_FRAC * 16.0) + 1.0,
+        "the density cap bounds a fold's brightness: peak {peak}"
+    );
 
-    // An elongated cell that is short is a caustic rim cell: kept, always.
-    let mut rim = quad([[0.0, 0.0], [12.0, 0.0], [12.0, 1.5], [0.0, 1.5]]);
-    assert!(inflate_quad(&mut rim), "rim cells must survive");
+    // A sub-pixel footprint deposits over at least a pixel, not nothing.
+    let mut tiny = vec![0.0_f32; (w * h * 3) as usize];
+    splat_flat(
+        &mut tiny,
+        w,
+        h,
+        [32.0, 32.0],
+        [0.05, 0.0],
+        [0.0, 0.05],
+        [1.0, 1.0, 1.0],
+        16.0,
+    );
+    assert!(
+        sum(&tiny) > 0.0,
+        "the anti-alias floor keeps sub-pixel rays"
+    );
+
+    // Off-raster splats are calmly clipped.
+    let mut off = vec![0.0_f32; (w * h * 3) as usize];
+    splat_flat(
+        &mut off,
+        w,
+        h,
+        [-100.0, -100.0],
+        [4.0, 0.0],
+        [0.0, 4.0],
+        [1.0, 1.0, 1.0],
+        16.0,
+    );
+    assert_eq!(sum(&off), 0.0);
+
+    // ray_axes: central differences where neighbours live, the floor when
+    // none do, and a dead axis borrowed from the live one at right angles.
+    let side = 3usize;
+    let mut corners: Vec<Option<lens_flare::Corner>> = vec![None; side * side];
+    corners[4] = Some(([10.0, 10.0], 1.0, [1.0; 3]));
+    let (a1, a2) = ray_axes(&corners, side, 1, 1);
+    assert_eq!(
+        (a1, a2),
+        ([MIN_SPLAT_AXIS_PX, 0.0], [0.0, MIN_SPLAT_AXIS_PX])
+    );
+    corners[3] = Some(([6.0, 10.0], 1.0, [1.0; 3]));
+    corners[5] = Some(([14.0, 10.0], 1.0, [1.0; 3]));
+    let (a1, a2) = ray_axes(&corners, side, 1, 1);
+    assert_eq!(a1, [2.0, 0.0], "central difference halved twice: 8/2/2");
+    assert!(
+        (a2[0] - 0.0).abs() < 1e-6 && (a2[1].abs() - MIN_SPLAT_AXIS_PX).abs() < 1e-6,
+        "the dead axis sits at right angles to the live one: {a2:?}"
+    );
 }
 
-// Adaptive grid (K-262): the budget follows the ghost's image size, and a
-// pair's grid is stable and sane whatever its spread.
 #[test]
 fn lens_flare_grid_budget_follows_ghost_size() {
     use crate::fx::lens_flare::*;
@@ -5803,9 +6845,18 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
 /// The documented drop-on defaults, shared by the lens flare tests.
 fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     crate::fx::lens_flare::LensFlareParams {
+        // Every element left as the lens file describes it (K-371) — the
+        // drop-on default, and byte-for-byte the pre-K-371 picture.
+        coating_elements: [crate::fx::lens_flare::COATING_AS_FILE;
+            crate::fx::lens_flare::MAX_COATING_ELEMENTS],
         // Raster pixels (K-260): tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
+        // A point source, as the effect has always defaulted to, and no
+        // comp lights — Manual mode never reads them.
+        source_size: [0.0, 0.0],
+        lights: [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES],
+        light_count: 0,
         intensity: 1.0,
         lens: 16,
         fstop: 2.8,
@@ -5862,20 +6913,35 @@ fn lens_flare_detects_matte_sources_deterministically() {
         2,
         "the neighbour must be suppressed: {lights:?}"
     );
-    // Brightest first, at the pixel centre.
-    assert!((lights[0].pos[0] - 20.5 / 128.0).abs() < 1e-6);
+    // Brightest first — and since K-355 the light sits at the flux centre of
+    // everything folded into it, not on its brightest pixel. Both pixels are
+    // one lit region here, so the centre is between them weighted by
+    // brightness: (20·4 + 28·3) / 7 = 164/7.
+    let cx = 164.0 / 7.0;
+    assert!(
+        (lights[0].pos[0] - (cx + 0.5) / 128.0).abs() < 1e-6,
+        "x {}",
+        lights[0].pos[0] * 128.0 - 0.5
+    );
     assert!((lights[0].pos[1] - 24.5 / 96.0).abs() < 1e-6);
-    assert_eq!(lights[0].rgb, [4.0, 4.0, 4.0]);
+    // …and its colour is the MEAN of the lit pixels, not the brightest one's:
+    // (4 + 3) / 2. One sparkle can no longer define a source's colour.
+    assert_eq!(lights[0].rgb, [3.5, 3.5, 3.5]);
     // The warm source keeps its colour.
     assert!((lights[1].pos[0] - 100.5 / 128.0).abs() < 1e-6);
     assert_eq!(lights[1].rgb, [1.5, 1.0, 0.5]);
 
-    // The soft gate scales (luma 4 in a [3, 7] gate lands at ~0.16), and a
-    // threshold above every source finds none.
-    let gated = detect_lights(&matte, w, h, 5.0, 2.0, true, [1.0; 3]);
+    // The soft gate scales (K-363: luma 4 against a gate opening 3 → 5
+    // lands half-way, 0.5), and a threshold above every source finds none —
+    // including one AT a source's luma, which "brighter than" excludes.
+    let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3]);
     assert!(!gated.is_empty());
     assert!(gated[0].rgb[0] < 4.0, "the gate must attenuate: {gated:?}");
     assert!(detect_lights(&matte, w, h, 10.0, 0.0, true, [1.0; 3]).is_empty());
+    assert!(
+        detect_lights(&matte, w, h, 4.0, 0.0, true, [1.0; 3]).is_empty(),
+        "a threshold at the brightest source's own luma finds nothing:          the gate is 'brighter than', not 'at least'"
+    );
 
     // Determinism: two runs agree bit-for-bit.
     assert_eq!(
@@ -5883,11 +6949,610 @@ fn lens_flare_detects_matte_sources_deterministically() {
         detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3])
     );
 
-    // The gate itself: hard step at softness 0, smooth half-way at the
-    // threshold otherwise.
+    // The gate itself (K-363, one-sided): closed at and below the threshold,
+    // open a softness above it. The two cases the owner asked for by name:
+    // at threshold 1 only light brighter than 1 flares, and at threshold 0
+    // anything brighter than black does — black itself never.
     assert_eq!(threshold_gate(0.99, 1.0, 0.0), 0.0);
-    assert_eq!(threshold_gate(1.0, 1.0, 0.0), 1.0);
-    assert!((threshold_gate(1.0, 1.0, 0.5) - 0.5).abs() < 1e-6);
+    assert_eq!(
+        threshold_gate(1.0, 1.0, 0.0),
+        0.0,
+        "at the line is not over it"
+    );
+    assert_eq!(threshold_gate(1.01, 1.0, 0.0), 1.0);
+    assert_eq!(
+        threshold_gate(1.0, 1.0, 0.5),
+        0.0,
+        "softness opens the gate above the threshold, never below or at it"
+    );
+    assert!(threshold_gate(1.25, 1.0, 0.5) > 0.0 && threshold_gate(1.25, 1.0, 0.5) < 1.0);
+    assert_eq!(threshold_gate(1.5, 1.0, 0.5), 1.0);
+    assert_eq!(threshold_gate(0.0, 0.0, 0.25), 0.0, "black never flares");
+    assert!(
+        threshold_gate(0.05, 0.0, 0.25) > 0.0,
+        "at threshold 0, anything brighter than black flares"
+    );
+}
+
+/// **A source spanning several tiles is found at the centre of its light, not
+/// at one arbitrary pixel of it** (K-354).
+///
+/// The anchor used to be pinned to the brightest pixel of the brightest tile.
+/// For a point source that is exactly right, and this test pins that it still
+/// is. For a *practical* — a softbox, a window, a lamp with a visible bulb —
+/// it put the light at whichever corner of the source the tile scan happened
+/// to reach first, so a flare fired from a large soft source came out of its
+/// edge rather than its middle.
+///
+/// Since K-355 every tile carries its own flux moments rather than one pixel's,
+/// so the answer is the source's TRUE centre — and no single pixel, however
+/// hot, can move it. That is what stops a flare jumping about inside a
+/// practical as sensor noise shuffles which pixel happens to be brightest.
+#[test]
+fn lens_flare_centres_an_area_source_on_its_light() {
+    use crate::fx::lens_flare::*;
+    let (w, h) = (128u32, 128u32);
+    let mut matte = vec![0.0f32; (w * h * 4) as usize];
+    // A uniform square filling four whole 32-px tiles: x and y both 32..=95,
+    // so its true centre is (63.5, 63.5).
+    for y in 32..96u32 {
+        for x in 32..96u32 {
+            let i = ((y * w + x) * 4) as usize;
+            matte[i] = 2.0;
+            matte[i + 1] = 2.0;
+            matte[i + 2] = 2.0;
+            matte[i + 3] = 1.0;
+        }
+    }
+    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(lights.len(), 1, "one source: {lights:?}");
+
+    // Every lit pixel is weighed, so the answer is the square's exact centre
+    // — (32 + 95) / 2 — rather than a corner of it, which is where this used
+    // to land.
+    let centre = 63.5f32;
+    let px = lights[0].pos[0] * w as f32 - 0.5;
+    let py = lights[0].pos[1] * h as f32 - 0.5;
+    assert!((px - centre).abs() < 1e-3, "x {px}, want {centre}");
+    assert!((py - centre).abs() < 1e-3, "y {py}, want {centre}");
+
+    // **The jumping test.** One pixel of the source goes very hot, as sensor
+    // sparkle does frame to frame. That pixel now owns the tile's `luma_max`,
+    // so before K-355 it would have become the light's position outright — a
+    // 30-pixel jump for a source that has not moved. Weighing every pixel
+    // leaves the centre where it was, to well under a pixel.
+    let mut sparkle = matte.clone();
+    let i = ((34 * w + 34) * 4) as usize;
+    for c in 0..3 {
+        sparkle[i + c] = 40.0;
+    }
+    let jumped = detect_lights(&sparkle, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(jumped.len(), 1);
+    let jx = jumped[0].pos[0] * w as f32 - 0.5;
+    let jy = jumped[0].pos[1] * h as f32 - 0.5;
+    assert!(
+        (jx - px).abs() < 1.0 && (jy - py).abs() < 1.0,
+        "one hot pixel moved the light from ({px}, {py}) to ({jx}, {jy})"
+    );
+
+    // And the source knows how big it is, which is what lets it be sampled
+    // across rather than flared as a point (K-355).
+    assert!(
+        lights[0].extent[0] > 0.1,
+        "a source 64 px wide in a 128 px frame must measure a real extent: \
+         {:?}",
+        lights[0].extent
+    );
+    // …and that extent is what every ray integrates over (K-367): rays at
+    // different pupil corners take their light from different points of it.
+    assert_ne!(
+        source_jitter(0, 0, 0, lights[0].extent),
+        source_jitter(1, 1, 0, lights[0].extent),
+        "an extent must move the rays' source positions apart"
+    );
+    // …and each band samples it at its own phase (K-378), which is what
+    // buries the one-band reconstruction ripple when the bands sum.
+    assert_ne!(
+        source_jitter(0, 0, 0, lights[0].extent),
+        source_jitter(0, 0, 1, lights[0].extent),
+        "an extent must move the bands' source positions apart"
+    );
+
+    // A one-pixel source has only itself to average, so point lights are
+    // exactly where they always were.
+    let mut dot = vec![0.0f32; (w * h * 4) as usize];
+    let i = ((70 * w + 20) * 4) as usize;
+    dot[i] = 4.0;
+    dot[i + 1] = 4.0;
+    dot[i + 2] = 4.0;
+    dot[i + 3] = 1.0;
+    let point = detect_lights(&dot, w, h, 1.0, 0.0, true, [1.0; 3]);
+    assert_eq!(point.len(), 1);
+    assert!((point[0].pos[0] - 20.5 / w as f32).abs() < 1e-6);
+    assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);
+}
+
+/// **A point source did not move** (K-367).
+///
+/// The per-ray source integration replaced K-355's replication, and the one
+/// thing it must not do is disturb the source every project already has. A
+/// zero extent has to offset every ray by exactly nothing — not nearly
+/// nothing — so a point light's picture is the same bits it always was. The
+/// old behaviour cannot be run to compare against, so this pins the two
+/// halves that make it true: the jitter is identically zero over a grid wider
+/// than any quality tier launches, and the render is stable and independent
+/// of how the light was built.
+#[test]
+fn lens_flare_a_point_source_jitters_by_nothing() {
+    use crate::fx::lens_flare::*;
+    for band in 0..3 {
+        for j in 0..64 {
+            for i in 0..64 {
+                assert_eq!(
+                    source_jitter(i, j, band, [0.0, 0.0]),
+                    [0.0, 0.0],
+                    "ray ({i}, {j}) band {band} of a point source must take \
+                     its light from the light's own position"
+                );
+            }
+        }
+    }
+    // A real extent does move rays apart — otherwise the sweep above would
+    // pass on a jitter that had simply been switched off.
+    assert_ne!(source_jitter(3, 5, 0, [0.1, 0.1]), [0.0, 0.0]);
+
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (96u32, 54u32);
+    let via_param = manual_light(&p, w, h);
+    assert_eq!(via_param[0].extent, [0.0, 0.0], "the default is a point");
+    let hand = vec![FlareLight {
+        pos: via_param[0].pos,
+        rgb: via_param[0].rgb,
+        extent: [0.0, 0.0],
+    }];
+    let a = cpu_flare(&p, &baked, w, h, &via_param);
+    assert!(a.iter().sum::<f32>() > 0.0, "the point flare must render");
+    assert_eq!(
+        a,
+        cpu_flare(&p, &baked, w, h, &hand),
+        "a zero extent must be the plain point path, bit for bit"
+    );
+    assert_eq!(
+        a,
+        cpu_flare(&p, &baked, w, h, &via_param),
+        "and the same frame every run (docs/14 determinism)"
+    );
+}
+
+/// **An area source flares as ONE shape, not as a grid of copies** (K-367).
+///
+/// This is the defect the owner reported: "bright areas of a matte using
+/// multiple points instead of an area". K-355 rendered a source by splitting
+/// it into up to 5×5 point lights, so wherever a ghost was smaller than the
+/// spacing between those samples you saw that many separate copies of the
+/// aperture strung out in a line — five little irises where there should have
+/// been one soft bar. Integrating the source per ray instead makes the copies
+/// impossible rather than merely rare: no two rays share a source position,
+/// and each one's splat footprint (K-366) inflates by the local
+/// source-to-sensor stretch, which is exactly the gap a replica would have
+/// sat in.
+///
+/// Measured as local maxima along the line through the brightest ghost: the
+/// replicated version grew new peaks there, and the integrated one must not.
+#[test]
+fn lens_flare_an_area_source_does_not_replicate_its_ghosts() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        // No ghost blur: a blur would hide replication rather than prevent
+        // it, and this test is about preventing it.
+        ghost_softness: 0.0,
+        light: [64.0, 36.0],
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    let (rw, rh) = flare_pad_dims(w, h, p.anamorphic, p.scale);
+    let point = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h));
+    // A bar-shaped source most of the frame wide — a tube practical, and far
+    // wider than the sample spacing that used to show.
+    let wide = LensFlareParams {
+        source_size: [40.0, 10.0],
+        ..p
+    };
+    let area = cpu_flare(&wide, &baked, w, h, &manual_light(&wide, w, h));
+    assert_ne!(
+        point, area,
+        "an area source must not render as a point does"
+    );
+    // The old mechanism, rebuilt by hand so the comparison is a measurement
+    // rather than an assertion: the same source as the 5x5 grid of point
+    // lights sharing its flux that `expand_area_lights` used to hand the
+    // trace.
+    let centre = manual_light(&wide, w, h)[0];
+    let mut replicated = Vec::new();
+    for iy in 0..5 {
+        for ix in 0..5 {
+            let t = |i: usize| i as f32 / 4.0 * 2.0 - 1.0;
+            replicated.push(FlareLight {
+                pos: [
+                    centre.pos[0] + t(ix) * centre.extent[0],
+                    centre.pos[1] + t(iy) * centre.extent[1],
+                ],
+                rgb: centre.rgb.map(|c| c / 25.0),
+                extent: [0.0, 0.0],
+            });
+        }
+    }
+    let replicated = cpu_flare(&wide, &baked, w, h, &replicated);
+
+    // The profile of ONE ghost: the horizontal line through the brightest
+    // pixel of the POINT render — the same window in all three pictures, so
+    // the comparison is of the same ghost rather than of whatever each
+    // happens to make brightest — smoothed by a 3-tap mean so single-pixel
+    // splat grain cannot count as a peak.
+    let lum = |buf: &[f32], i: usize| buf[i * 3] + buf[i * 3 + 1] + buf[i * 3 + 2];
+    let bi = (0..(rw * rh) as usize)
+        .max_by(|&a, &b| {
+            lum(&point, a)
+                .partial_cmp(&lum(&point, b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("a non-empty flare buffer");
+    let (bx, by) = (bi % rw as usize, bi / rw as usize);
+    let peaks = |buf: &[f32]| -> usize {
+        let lo = bx.saturating_sub(12);
+        let hi = (bx + 12).min(rw as usize - 1);
+        let row: Vec<f32> = (lo..=hi).map(|x| lum(buf, by * rw as usize + x)).collect();
+        let smooth: Vec<f32> = (0..row.len())
+            .map(|i| {
+                let a = row[i.saturating_sub(1)];
+                let b = row[i];
+                let c = row[(i + 1).min(row.len() - 1)];
+                (a + b + c) / 3.0
+            })
+            .collect();
+        let cut = smooth.iter().cloned().fold(0.0_f32, f32::max) * 0.1;
+        (1..smooth.len() - 1)
+            .filter(|&i| smooth[i] > cut && smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1])
+            .count()
+    };
+
+    let (pp, ap, rp) = (peaks(&point), peaks(&area), peaks(&replicated));
+    assert!(pp > 0, "the point flare must have a ghost to profile");
+    assert!(
+        rp > pp,
+        "the test's own replication must actually replicate, or it proves \
+         nothing: {rp} peaks against a point's {pp}"
+    );
+    // **Measured against the replication, not against the point.** The
+    // comparison that matters is with the mechanism K-367 replaced, and it is
+    // the only one of the three that is like-for-like: the same source, the
+    // same extent, rendered the old way. An area source must carry no more
+    // structure through this window than 25 stamped copies do.
+    //
+    // It used to read `ap <= pp`, against the POINT render, and that held only
+    // while K-366's reconstruction was printing its sampling grid over
+    // everything (K-373). With the grid gone, a bar source's ghost is a bar,
+    // and a cut across a bar shows both of its rims where a point's small
+    // ghost shows one summit — so the area render legitimately counts two
+    // peaks to the point's one, and comparing the two was never comparing the
+    // same object.
+    assert!(
+        ap <= rp,
+        "an area source must smear its ghost, not stamp copies of it: \
+         {ap} peaks against the old replication's {rp} (a point's is {pp})"
+    );
+}
+
+/// **The jitter integrates the source; it does not lose light** (K-367).
+///
+/// Every ray carries the light's FULL colour now — there are no per-sample
+/// flux shares, because the pupil grid already averages over the rays. The
+/// obvious way to get that wrong is to keep dividing (a wide source fading as
+/// it widens) or to stop dividing without removing the replication (a wide
+/// source brightening). Both show up as an energy ratio away from one.
+#[test]
+fn lens_flare_an_area_source_keeps_its_flux() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 8,
+        light: [64.0, 36.0],
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    let point: f32 = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h))
+        .iter()
+        .sum();
+    let wide = LensFlareParams {
+        source_size: [12.0, 12.0],
+        ..p
+    };
+    let area: f32 = cpu_flare(&wide, &baked, w, h, &manual_light(&wide, w, h))
+        .iter()
+        .sum();
+    assert!(point > 0.0, "the point flare must render: {point}");
+    let ratio = area / point;
+    // The floor sits at 0.94, not 0.98: spreading is the point, and on this
+    // deliberately tiny raster a few percent of the honestly-spread smear
+    // crosses the frame edge (K-378's wider footprints spread a little
+    // further than K-367's). Measured 0.972 here and 1.007 on a padded
+    // buffer that catches the spill — the flux is spread, not lost. The
+    // window still fails the bugs it exists for: replication-style scaling
+    // is off by whole factors, not percent.
+    assert!(
+        (0.94..=1.02).contains(&ratio),
+        "an area source must spread one light's flux, not scale it: {ratio} \
+         ({area} against {point})"
+    );
+}
+
+/// **An area source renders as a smooth shape, not a woven grid** (K-378).
+///
+/// K-367's per-ray source integration hops each ray's source point by more
+/// than the whole source between pupil neighbours — that is what
+/// equidistributes the samples — and three things in the reconstruction let
+/// that read as a quasi-periodic mesh stamped across every ghost, which is
+/// what the owner photographed: central-difference footprints cancelled
+/// toward zero wherever a ray's two neighbours hopped to the same side; the
+/// old `PHI_V` sits within 0.002 of 4/7, so its samples fell into seven
+/// slow-drifting combs that lined up into stripes; and every band re-traced
+/// the same source points, so the bands' summed ripple never averaged.
+///
+/// The flux tests all passed throughout, exactly as K-376 records for the
+/// kernel's own version of this lesson: they measure how much light there
+/// is, never whether it is smooth. So this measures smoothness — the
+/// row-to-row and column-to-column ripple of the rendered disc against its
+/// own local mean — on the brightest ghost of an area render.
+#[test]
+fn lens_flare_an_area_source_renders_without_stripes() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        // No ghost blur: the ripple must die in the reconstruction, not be
+        // hidden under a blur the user is free to turn off. No starburst:
+        // this measures the ghosts.
+        ghost_softness: 0.0,
+        starburst_intensity: 0.0,
+        quality: 1,
+        source_size: [16.0, 10.0],
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (256u32, 144u32);
+    let buf = cpu_flare(&p, &baked, w, h, &manual_light(&p, w, h));
+    let lum = |x: usize, y: usize| {
+        let i = (y * w as usize + x) * 3;
+        buf[i] + buf[i + 1] + buf[i + 2]
+    };
+    // K-376's grid-imprint metric with a WIDER neighbourhood: each pixel's
+    // departure from its own 9×9 mean, relative to that mean, over the lit
+    // region. K-376's 3×3 cannot see this artefact — the mesh's period is
+    // the ray spacing, several pixels, so every pixel sits close to a 3×3
+    // mean and a plainly striped ghost scores under that test's bound
+    // (measured; it is the same passed-while-visible trap K-376 itself
+    // records). A 9×9 mean spans the mesh's period and reads it.
+    let mx = (0..h as usize)
+        .flat_map(|y| (0..w as usize).map(move |x| (x, y)))
+        .map(|(x, y)| lum(x, y))
+        .fold(0.0_f32, f32::max);
+    assert!(mx > 0.0, "the area flare must render something to measure");
+    let (mut num, mut den) = (0.0_f64, 0.0_f64);
+    for y in 4..h as usize - 4 {
+        for x in 4..w as usize - 4 {
+            let c = lum(x, y);
+            if c < mx * 0.02 {
+                continue;
+            }
+            let mut m = 0.0_f32;
+            for dy in 0..9 {
+                for dx in 0..9 {
+                    m += lum(x + dx - 4, y + dy - 4);
+                }
+            }
+            m /= 81.0;
+            num += f64::from((c - m).abs());
+            den += f64::from(m);
+        }
+    }
+    let ripple = (100.0 * num / den.max(1e-9)) as f32;
+    assert!(
+        ripple < 3.0,
+        "an area source's ghosts are rippling at {ripple:.2}% against the \
+         ~4% the K-378 reconstruction measures — the woven mesh is coming \
+         back (the K-367 reconstruction measured ~13% here, and read as a \
+         grid stamped across every ghost on screen)"
+    );
+}
+
+/// **A wide source's starburst smears across it** (K-367).
+///
+/// The ghosts integrate their source per ray, but the starburst cannot: it is
+/// a baked sprite, not a traced path. It *is* shift-invariant, though — the
+/// diffraction pattern of a hole does not change shape as the source moves,
+/// only where it sits — so the starburst of an extended source is exactly the
+/// point sprite convolved with the source, and stamping a fixed 3×3 grid
+/// across the source is that convolution in quadrature. Stamping once at the
+/// centre instead would give a softbox the pinpoint spike of a star, which is
+/// the one thing a softbox does not have.
+#[test]
+fn lens_flare_an_area_source_smears_its_starburst() {
+    use crate::fx::lens_flare::*;
+    let p = LensFlareParams {
+        quality: 0,
+        max_ghosts: 1,
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let (w, h) = (192u32, 108u32);
+    // An empty ghost buffer, so what is measured is the starburst alone.
+    let flare = vec![0.0_f32; (w * h * 3) as usize];
+    let render = |lights: &[FlareLight]| -> Vec<f32> {
+        let mut rgba = vec![0.0_f32; (w * h * 4) as usize];
+        cpu_combine(&mut rgba, w, h, &p, &baked, &flare, w, h, lights);
+        rgba
+    };
+    let row = |rgba: &[f32], light: &FlareLight| -> Vec<f32> {
+        let y = (light.pos[1] * h as f32) as usize;
+        (0..w as usize)
+            .map(|x| {
+                let i = (y * w as usize + x) * 4;
+                rgba[i] + rgba[i + 1] + rgba[i + 2]
+            })
+            .collect()
+    };
+    // The lit SPAN along the row through the light, measured at a fixed
+    // absolute level rather than at each picture's own half maximum: the
+    // sprite is a very peaked star, so smearing it lowers the peak as much as
+    // it widens the base, and a relative half-max would chase its own tail.
+    // The level is a tenth of the POINT starburst's peak, so both pictures are
+    // measured against the same line.
+    let span = |r: &[f32], cut: f32| -> usize {
+        let lit: Vec<usize> = (0..r.len()).filter(|&i| r[i] >= cut).collect();
+        match (lit.first(), lit.last()) {
+            (Some(&a), Some(&b)) => b - a + 1,
+            _ => 0,
+        }
+    };
+
+    let base = manual_light(&p, w, h);
+    let point = render(&base);
+    let point_row = row(&point, &base[0]);
+    let cut = point_row.iter().cloned().fold(0.0_f32, f32::max) * 0.1;
+    assert!(cut > 0.0, "the starburst must render something");
+    let point_w = span(&point_row, cut);
+
+    // A source under the threshold is a point of light, bit for bit: the
+    // stamp grid collapses to one stamp on the light's own position carrying
+    // its whole colour, so nothing anyone has already built moves.
+    assert_eq!(starburst_stamp_grid([0.0, 0.0]), (1, 1));
+    let tiny = vec![FlareLight {
+        extent: [SB_MIN_EXTENT * 0.5, SB_MIN_EXTENT * 0.5],
+        ..base[0]
+    }];
+    assert_eq!(
+        point,
+        render(&tiny),
+        "a source below the stamp threshold must render as the point it is"
+    );
+
+    // A source 60 px across smears its spike across itself.
+    let ext = 30.0 / w as f32;
+    let wide = vec![FlareLight {
+        extent: [ext, 0.0],
+        ..base[0]
+    }];
+    assert_eq!(starburst_stamp_grid([ext, 0.0]), (SB_STAMPS, 1));
+    let wide_w = span(&row(&render(&wide), &wide[0]), cut);
+    assert!(
+        wide_w > point_w + 40,
+        "a 60 px source must smear its starburst across roughly its own \
+         width: {wide_w} px lit against a point's {point_w}"
+    );
+}
+
+/// **Light layers resolve, and an area light keeps its size** (K-360).
+///
+/// The whole reason the layer exists is the area kind: a light with a real
+/// width and height flares as its own shape through the machinery K-355 built,
+/// where a point can only ever be a dot. This pins the resolve — including that
+/// only an area light reports extent, whatever the stored numbers say, and that
+/// a light switched off is not a light (K-230's rule for every layer).
+#[test]
+fn lens_flare_light_layers_resolve_with_their_extent() {
+    use crate::anim::Property;
+    use crate::model::*;
+    use crate::time::{CompTime, Duration, FrameRate, Rational};
+
+    let mut comp = Composition {
+        id: uuid::Uuid::now_v7(),
+        name: "Scene".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(30, 1).unwrap(),
+        duration: Duration(Rational::new(5, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: MotionBlur::default(),
+        extra: serde_json::Map::new(),
+    };
+
+    let mut light_layer = |kind: LightKind, x: f64, half: f64, visible: bool| {
+        let mut l = Layer {
+            markers: Vec::new(),
+            id: uuid::Uuid::now_v7(),
+            name: "Light".into(),
+            kind: LayerKind::Light {
+                light: Box::new(LightDef {
+                    kind,
+                    half_size: [Property::fixed(half), Property::fixed(half * 0.5)],
+                    ..LightDef::default()
+                }),
+            },
+            in_point: CompTime(Rational::new(0, 1).unwrap()),
+            out_point: CompTime(Rational::new(5, 1).unwrap()),
+            start_offset: CompTime(Rational::new(0, 1).unwrap()),
+            transform: TransformGroup {
+                position_x: Property::fixed(x),
+                position_y: Property::fixed(200.0),
+                ..TransformGroup::default()
+            },
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            retime: None,
+            interpolation: Default::default(),
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        l.switches.visible = visible;
+        comp.layers.push(l);
+    };
+
+    light_layer(LightKind::Area, 300.0, 80.0, true);
+    light_layer(LightKind::Point, 900.0, 80.0, true);
+    light_layer(LightKind::Area, 1500.0, 40.0, false);
+
+    let lights = comp.lights_at(1.0);
+    assert_eq!(lights.len(), 2, "a light switched off is not a light");
+
+    // Top of the stack first — the order the effects that read lights take
+    // them in, so a crowded frame spends its slots on the ones on top.
+    assert_eq!(lights[0].position.0, 300.0);
+    assert_eq!(lights[0].kind, LightKind::Area);
+    assert_eq!(
+        lights[0].half_size,
+        (80.0, 40.0),
+        "an area light reports its real size"
+    );
+
+    assert_eq!(lights[1].position.0, 900.0);
+    assert_eq!(
+        lights[1].half_size,
+        (0.0, 0.0),
+        "a point light has no extent, whatever the stored numbers say"
+    );
+
+    // Outside every span there are no lights at all.
+    assert!(comp.lights_at(99.0).is_empty());
+
+    // A default light is white at full intensity — a fresh one should light
+    // something rather than land as a black source nobody can see.
+    assert_eq!(lights[1].colour, [1.0, 1.0, 1.0]);
 }
 
 #[test]
@@ -6859,4 +8524,162 @@ fn custom_name_roundtrips_and_defaults_to_none() {
     let json = serde_json::to_string(&named).unwrap();
     let back: EffectInstance = serde_json::from_str(&json).unwrap();
     assert_eq!(back.custom_name.as_deref(), Some("Blur the sign"));
+}
+
+/// TEMPORARY perf probe (not part of the suite): times a bake per library
+/// lens so the 23-second report can be reproduced or ruled out. Run with
+/// `cargo test -p lumit-core --release bake_timing -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn bake_timing_probe() {
+    for lens in 0..crate::fx::lens_library::LENS_LIBRARY.len() as u32 {
+        let p = crate::fx::lens_flare::LensFlareParams {
+            lens,
+            ..default_flare_params()
+        };
+        let t = std::time::Instant::now();
+        let baked = crate::fx::lens_flare::bake(&p);
+        let four = |take: usize| {
+            baked
+                .pairs
+                .iter()
+                .take(take)
+                .filter(|p| p[2] != crate::fx::lens_flare::NO_BOUNCE)
+                .count()
+        };
+        eprintln!(
+            "lens {lens:2} ({}): {:6.1} ms, {} surfaces, {} paths ({} four-bounce, {} in the rendered {})",
+            crate::fx::lens_flare::lens_entry(lens).name,
+            t.elapsed().as_secs_f64() * 1000.0,
+            baked.surfaces.len(),
+            baked.pairs.len(),
+            four(usize::MAX),
+            four(crate::fx::lens_flare::MAX_RENDERED_PAIRS),
+            crate::fx::lens_flare::MAX_RENDERED_PAIRS,
+        );
+    }
+}
+
+/// **Spectral radiometry preserves exposure and actually resolves the
+/// coating** (K-364, entry A2). Two halves:
+///
+/// The bands' sub-weights sum to what `lambda_weights` gave each whole band
+/// — XYZ→RGB is linear, so splitting the CIE integral must split the RGB
+/// weight exactly. If this drifts, every flare changes brightness on a
+/// change that promised colour accuracy only.
+///
+/// And a coated ghost's band-integrated energy must differ from the old
+/// band-centre sample — the whole point: a 7-layer stack's reflectance
+/// oscillates inside one band, and one sample per band cannot see it.
+#[test]
+fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
+    use crate::fx::lens_flare::*;
+    for count in [3u32, 8, 16] {
+        let old = lambda_weights(count, 1.0);
+        let new = spectral_bands(count, 1.0);
+        assert_eq!(old.len(), new.len());
+        for (k, (o, n)) in old.iter().zip(&new).enumerate() {
+            assert!(
+                (o.0 - n.traced_nm).abs() < 1e-4,
+                "geometry ladder unchanged"
+            );
+            // In XYZ the subs sum exactly to the band mean; in RGB the
+            // out-of-gamut clamp now applies per sub-sample rather than per
+            // band, and Σ max(xᵢ, 0) ≥ max(Σ xᵢ, 0) — so every channel is
+            // AT LEAST the old weight (violet bands clamp G and R), and a
+            // band no clamp touches is exact. "Strictly less thrown away"
+            // is the property; never-dimmer is its testable face.
+            let mut any_exact = false;
+            for c in 0..3 {
+                let sum: f32 = n.sub_rgb.iter().map(|s| s[c]).sum();
+                assert!(
+                    sum + 1e-3 >= o.1[c],
+                    "band {k} channel {c}: spectral must never be dimmer                      ({sum} vs {})",
+                    o.1[c]
+                );
+                if (sum - o.1[c]).abs() < 2e-3 {
+                    any_exact = true;
+                }
+            }
+            assert!(
+                any_exact,
+                "band {k}: at least one channel must match the old weight                  exactly — every channel drifting means the normalisation                  changed, not the clamp"
+            );
+        }
+    }
+
+    // A coated lens, one ghost, one off-axis ray: spectral vs band-centre.
+    let p = LensFlareParams {
+        lens: 16, // Zeiss Master Prime: modern multi-layer coatings
+        ..default_flare_params()
+    };
+    let baked = bake(&p);
+    let bands = spectral_bands(3, 1.0);
+    let old_weights = lambda_weights(3, 1.0);
+    let dir = light_direction([0.3, 0.3], 0.5625, baked.focal_mm);
+    let mut spectral_differs = false;
+    let mut compared = 0u32;
+    // Several ghosts and pupil points: any one surviving ray on a coated
+    // path is enough to show the band centre under-resolves the stack.
+    for pair in baked.pairs.iter().take(8) {
+        for frac in [0.1_f32, 0.3, 0.5] {
+            let origin = [
+                baked.pupil_mm * frac,
+                baked.pupil_mm * frac * 0.5,
+                baked.start_z_mm,
+            ];
+            for (band, old) in bands.iter().zip(&old_weights) {
+                let Some((_, _, rgb)) =
+                    trace_splat_spectral(&baked, *pair, band, origin, dir, 1.0, 1.0, 0.0)
+                else {
+                    continue;
+                };
+                let Some((_, w)) =
+                    trace_splat(&baked, *pair, band.traced_nm, origin, dir, 1.0, 1.0, 0.0)
+                else {
+                    continue;
+                };
+                if w <= 1e-9 {
+                    continue;
+                }
+                compared += 1;
+                for (new_c, old_w) in rgb.iter().zip(old.1) {
+                    let old_c = old_w * w;
+                    if old_c > 1e-8 && (new_c - old_c).abs() / old_c > 0.02 {
+                        spectral_differs = true;
+                    }
+                }
+            }
+        }
+    }
+    assert!(compared > 0, "no ray survived; the probe geometry is wrong");
+    assert!(
+        spectral_differs,
+        "on a multi-coated lens the band-integrated energy must differ from \
+         the band-centre sample — otherwise A2 resolved nothing"
+    );
+
+    // Determinism: the same band twice is the same bits.
+    let probe_origin = [baked.pupil_mm * 0.3, 0.0, baked.start_z_mm];
+    let a = trace_splat_spectral(
+        &baked,
+        baked.pairs[0],
+        &bands[1],
+        probe_origin,
+        dir,
+        0.7,
+        1.0,
+        0.0,
+    );
+    let b = trace_splat_spectral(
+        &baked,
+        baked.pairs[0],
+        &bands[1],
+        probe_origin,
+        dir,
+        0.7,
+        1.0,
+        0.0,
+    );
+    assert_eq!(a, b);
 }

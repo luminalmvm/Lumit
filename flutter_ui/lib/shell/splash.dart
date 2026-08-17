@@ -21,6 +21,74 @@ const List<String> bootLines = [
   'shell',
 ];
 
+/// The card shown while a document is being read off disk.
+///
+/// Its job is what it *hides*: opening a project replaces the whole document,
+/// and the panels behind this are still drawing the previous one. Rather than
+/// letting them empty out panel by panel as the new document arrives, the shell
+/// leaves whatever was on screen standing and covers it with this until the new
+/// project is adopted — one swap, no half-loaded interface.
+///
+/// The bar is indeterminate: reading a `.lum` reports no progress, so it sweeps
+/// rather than claiming to know how far along it is.
+class OpeningOverlay extends StatefulWidget {
+  const OpeningOverlay({super.key});
+
+  @override
+  State<OpeningOverlay> createState() => _OpeningOverlayState();
+}
+
+class _OpeningOverlayState extends State<OpeningOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _sweep = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // Nothing underneath is clickable while the document it belongs to is being
+    // replaced, and the scrim is what says so.
+    return AbsorbPointer(
+      child: ColoredBox(
+        color: t.scrim,
+        child: Center(
+          child: Container(
+            width: 260,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: t.surface1,
+              borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+              border: Border.all(color: t.hairline),
+              boxShadow: t.floatShadow,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.openingProject, style: t.bodyPrimary),
+                const SizedBox(height: 12),
+                AnimatedBuilder(
+                  animation: _sweep,
+                  builder: (context, _) =>
+                      HouseProgressBar(fraction: _sweep.value),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class SplashOverlay extends StatefulWidget {
   final VoidCallback onDone;
 

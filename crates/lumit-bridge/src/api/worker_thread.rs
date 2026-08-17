@@ -904,6 +904,37 @@ fn wants_disk_lead(on_card: bool, in_memory: bool, on_disk: bool, already_asked:
     on_disk && !on_card && !in_memory && !already_asked
 }
 
+/// The quality one **still** frame is made and named under — a scrub, a drag
+/// preview, or the republish after a lens bake.
+///
+/// It is the scale the caller asked for, and deliberately **not** scaled by
+/// the adaptive tier (K-372). The tier is playback's own instrument: it buys a
+/// cheaper composite so a run keeps time, and [`playback_quality`] applies it
+/// where that trade is being made. Nothing still is being paced.
+///
+/// The idle fill and the display path must derive this the same way or the
+/// fill banks frames the scrub cannot find, so they both come here.
+#[frb(ignore)]
+fn still_quality(scale: f32) -> lumit_render::Quality {
+    quality_for(scale)
+}
+
+/// The quality one **playback** frame is made and named under: the run's scale,
+/// coarsened by the adaptive tier when the run is Adaptive (K-186).
+///
+/// `tier` is passed rather than read so the trade is visible at the call site,
+/// where the cost it explains is measured — and so the distinction from
+/// [`still_quality`] can be tested without a global.
+#[frb(ignore)]
+fn playback_quality(scale: f32, mode: BridgePlaybackMode, tier: u32) -> lumit_render::Quality {
+    let effective = if matches!(mode, BridgePlaybackMode::Adaptive) {
+        scale * crate::realtime::tier_scale(tier)
+    } else {
+        scale
+    };
+    quality_for(effective)
+}
+
 /// Get one frame ready to show, taking the cheapest route the tiers allow
 /// (docs/06 §5.1: VRAM first, then promote from the tiers below, and only then
 /// composite).
@@ -1175,7 +1206,9 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         ),
         None => (0, frames - 1),
     };
-    let quality = quality_for(scale);
+    // The same derivation the display path uses, so a frame the fill banks is
+    // one a scrub can find (K-372).
+    let quality = still_quality(scale);
     let bgra = zero_copy_wants_bgra();
     let (_, budget, _) = state.renderer.frame_texture_stats();
     let (cw, ch) = (comp.width, comp.height);
@@ -1285,13 +1318,24 @@ pub enum WorkerRequest {
     Play(PlayRequest),
     /// Stop playing. Harmless when nothing is playing.
     StopPlayback,
-    /// Set the Viewer's exposure and tone map (K-314). A *setting*, not a
-    /// picture: it changes how every frame from here on is display-encoded and
-    /// nothing about the document. Preview only — an export builds its own
-    /// renderer, which nobody sends this to.
-    SetDisplayView {
+    /// Set the whole of how the Viewer is looking, in one message: exposure
+    /// and tone map (K-314) plus whether the comp's background colour is left
+    /// out of the composite while the transparency grid is up (K-352). A
+    /// *setting*, not a picture: it changes how every frame from here on is
+    /// made and display-encoded and nothing about the document. Preview only —
+    /// an export builds its own renderer, which nobody sends this to. One
+    /// message rather than one per control, so the renderer can never hold
+    /// half a look.
+    SetViewerLook {
         stops: f64,
         tone_map: bool,
+        transparent_background: bool,
+        /// The region of interest as comp fractions `[u0, v0, u1, v1]`
+        /// (K-362), or `None` for the whole frame. It rides the look message
+        /// rather than getting one of its own for the same reason the
+        /// background flag does: the renderer must never hold half a look, and
+        /// this is a way of viewing like the rest of it.
+        region: Option<[f32; 4]>,
     },
 }
 
@@ -2218,12 +2262,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // force while the frame is made, not when it is shown. Read before
             // the render so the cost can be attributed to it afterwards.
             let tier = crate::realtime::tier();
-            let effective = if matches!(playback.mode, BridgePlaybackMode::Adaptive) {
-                playback.scale * crate::realtime::tier_scale(tier)
-            } else {
-                playback.scale
-            };
-            let quality = quality_for(effective);
+            let quality = playback_quality(playback.scale, playback.mode, tier);
             let comp_id = playback.comp.id;
             // BGRA on the Windows shared-texture path (ANGLE only opens BGRA
             // surfaces); RGBA everywhere else.
@@ -2617,10 +2656,34 @@ fn handle_requests(
                     state.playback = None;
                     Ok(())
                 }
-                WorkerRequest::SetDisplayView { stops, tone_map } => {
+                WorkerRequest::SetViewerLook {
+                    stops,
+                    tone_map,
+                    transparent_background,
+                    region,
+                } => {
                     state
                         .renderer
                         .set_display_view(lumit_render::DisplayParams::from_stops(stops, tone_map));
+                    state
+                        .renderer
+                        .set_transparent_background(transparent_background);
+                    state.renderer.set_region(region);
+                    // The look is folded into every frame's name
+                    // (`named_under_view`), so this message renames every
+                    // frame without moving the document revision — the one
+                    // case the name memo's revision check cannot see. Left
+                    // standing, the memo kept serving the old look's names:
+                    // the cache bar read all-zero and the idle fill
+                    // re-rendered frames it had already banked, for as long
+                    // as the grid was up — which is its default state.
+                    state.names.clear();
+                    // And both readers of those names start over: the bar
+                    // sweep rebuilds against the new names rather than
+                    // refining a strip of the old ones, and the fill gets to
+                    // find its window cold again.
+                    state.published_bar = None;
+                    state.fill_exhausted = false;
                     Ok(())
                 }
             };
@@ -2654,7 +2717,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
-        | WorkerRequest::SetDisplayView { .. } => DrainClass::PictureKeepAll,
+        | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
         WorkerRequest::RenderComp(_) | WorkerRequest::RenderCompWithPreview(_) => {
             DrainClass::PictureNewestWins
         }
@@ -3363,14 +3426,19 @@ fn publish_zero_copy(
     mode: BridgePlaybackMode,
     cacheable: bool,
 ) {
-    // The adaptive tier applies here exactly as on the Windows sibling: without
-    // it a coarser tier makes the picture no cheaper, so the controller's
-    // decision has no effect and playback drops frames instead of softening.
-    let effective = if matches!(mode, BridgePlaybackMode::Adaptive) {
-        scale * crate::realtime::tier_scale(crate::realtime::tier())
-    } else {
-        scale
-    };
+    // **A still frame is rendered at the scale it was asked for.** The
+    // adaptive tier is playback's own instrument (K-186) — it buys a cheaper
+    // composite so a run keeps time — and playback applies it itself, where
+    // it is read beside the cost it is about to explain (`play_one_frame`).
+    // Nothing that reaches here is playback: it is a scrub, a drag preview,
+    // or the republish after a lens bake. Applying the tier to those was a
+    // leftover from before K-181 moved playback into the worker, and it cost
+    // real time (K-372): the tier survives a run, so after any heavy pass
+    // every later scrub asked for `scale × tier` while the idle fill went on
+    // banking at `scale` — different content names, so a frame the fill had
+    // already made was invisible to the scrub that wanted it, and the picture
+    // was composited from scratch with the cache bar showing green over it.
+    let _ = mode;
     // Through the ladder, not straight to a composite: a frame already held on
     // the card, in memory, or parked on disk costs a copy or an upload rather
     // than a render (see `prepare_frame`).
@@ -3379,7 +3447,7 @@ fn publish_zero_copy(
         document,
         comp,
         frame,
-        quality_for(effective),
+        still_quality(scale),
         false,
         cacheable,
     ) {
@@ -3407,7 +3475,9 @@ fn publish_zero_copy(
         offset: shared.offset,
         drm_fourcc: shared.drm_fourcc,
         modifier: shared.modifier,
-        tier: crate::realtime::tier(),
+        // A still frame is made at Full, whatever playback last settled on,
+        // so it must not report a tier it was not rendered at (K-372).
+        tier: lumit_eval::schedule::FINEST_TIER,
     }));
 }
 
@@ -3426,23 +3496,26 @@ fn publish_zero_copy(
     mode: BridgePlaybackMode,
     cacheable: bool,
 ) {
-    // The adaptive tier is applied here, the only display path: without it the
-    // controller could drop to Quarter and the picture would not get any
-    // cheaper, so the tier would do nothing at all and playback would keep time
-    // by dropping frames for ever. What a frame costs is reported by
-    // `play_one_frame`, which times the render.
-    let effective = if matches!(mode, BridgePlaybackMode::Adaptive) {
-        scale * crate::realtime::tier_scale(crate::realtime::tier())
-    } else {
-        scale
-    };
+    // **A still frame is rendered at the scale it was asked for.** The
+    // adaptive tier is playback's own instrument (K-186) — it buys a cheaper
+    // composite so a run keeps time — and playback applies it itself, where
+    // it is read beside the cost it is about to explain (`play_one_frame`).
+    // Nothing that reaches here is playback: it is a scrub, a drag preview,
+    // or the republish after a lens bake. Applying the tier to those was a
+    // leftover from before K-181 moved playback into the worker, and it cost
+    // real time (K-372): the tier survives a run, so after any heavy pass
+    // every later scrub asked for `scale × tier` while the idle fill went on
+    // banking at `scale` — different content names, so a frame the fill had
+    // already made was invisible to the scrub that wanted it, and the picture
+    // was composited from scratch with the cache bar showing green over it.
+    let _ = mode;
     // Through the ladder, not straight to a composite — see `prepare_frame`.
     let prepared = match prepare_frame(
         state,
         document,
         comp,
         frame,
-        quality_for(effective),
+        still_quality(scale),
         true,
         cacheable,
     ) {
@@ -3467,7 +3540,10 @@ fn publish_zero_copy(
             frame,
             width: shared.width,
             height: shared.height,
-            tier: crate::realtime::tier(),
+            // A still frame is made at Full, whatever playback last
+            // settled on, so it must not report a tier it was not rendered
+            // at (K-372).
+            tier: lumit_eval::schedule::FINEST_TIER,
         },
     ));
 }
@@ -3475,10 +3551,61 @@ fn publish_zero_copy(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{drain_to_newest, DrainClass, Playback};
+    use super::{drain_to_newest, playback_quality, still_quality, DrainClass, Playback};
     use crate::api::composition::{BridgePlaybackMode, CompositionReference};
     use std::sync::mpsc::channel;
     use uuid::Uuid;
+
+    /// **A scrub must find what the fill banked** (K-372).
+    ///
+    /// The adaptive tier survives the run that set it, so before this a heavy
+    /// playback pass left every later scrub asking for `scale × tier` while
+    /// the idle fill went on banking at `scale`. Different scales are
+    /// different content names, so the frame the fill had already made was
+    /// invisible to the scrub that wanted it and the picture was composited
+    /// from scratch — with the cache bar green over it, because the fill's
+    /// copy really was there.
+    ///
+    /// The tier is passed rather than read precisely so this can be checked
+    /// without touching the process-wide controller.
+    #[test]
+    fn a_still_frame_is_named_the_same_whatever_tier_playback_left_behind() {
+        use lumit_eval::schedule::{COARSEST_TIER, FINEST_TIER};
+
+        for scale in [1.0_f32, 0.5, 0.25] {
+            let still = still_quality(scale).tag();
+            // Whatever playback last settled on, a still frame is named the
+            // same — which is what lets the fill and the scrub meet.
+            for tier in FINEST_TIER..=COARSEST_TIER {
+                assert_eq!(
+                    still_quality(scale).tag(),
+                    still,
+                    "a still frame must not read the tier (scale {scale}, tier {tier})"
+                );
+            }
+            // Playback still gets its coarser frame: that trade is the whole
+            // point of the tier, and removing it there would make an Adaptive
+            // run drop frames instead of softening.
+            assert_eq!(
+                playback_quality(scale, BridgePlaybackMode::Adaptive, FINEST_TIER).tag(),
+                still,
+                "at the finest tier the two must agree"
+            );
+            assert_ne!(
+                playback_quality(scale, BridgePlaybackMode::Adaptive, COARSEST_TIER).tag(),
+                still,
+                "a coarse tier must genuinely make a playback frame cheaper"
+            );
+            // Every-frame playback is not paced by the tier either, so it
+            // names frames exactly as a scrub does — which is what lets a
+            // scrubbed span play back without re-rendering.
+            assert_eq!(
+                playback_quality(scale, BridgePlaybackMode::EveryFrame, COARSEST_TIER).tag(),
+                still,
+                "every-frame playback ignores the tier"
+            );
+        }
+    }
 
     fn playback(mode: BridgePlaybackMode, last: u64) -> Playback {
         Playback {

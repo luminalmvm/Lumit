@@ -100,6 +100,24 @@ class ProjectReference {
         that: this,
       );
 
+  /// Close this project: forget it in both registries, so every later call
+  /// through this reference answers `InvalidProject` — and, with the state
+  /// dropped, the request channel its render worker waits on is dropped too.
+  /// The worker sees the disconnect, stops, and everything it held — most of
+  /// all its renderer, a whole GPU device — is freed with it.
+  ///
+  /// [`LumitBridgeState::open_project`] already does this wholesale for every
+  /// open project; this is the same farewell for one. Closing a project that
+  /// is already gone is not an error: it is closed, which is what was asked.
+  ///
+  /// This is what stops a long-lived process from accumulating one worker and
+  /// one GPU device per project it has ever made. The frb test suite was the
+  /// proof: a test process makes a project per test, and without a close the
+  /// Linux CI runner ran out of memory under the pile of live renderers.
+  void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
+        that: this,
+      );
+
   List<ItemReference> getItems() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceGetItems(
         that: this,

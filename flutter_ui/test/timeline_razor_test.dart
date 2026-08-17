@@ -39,6 +39,7 @@ void main() {
           motionBlur: false,
           collapse: false,
           shy: false,
+          acceptsLights: true,
         ),
         blend: 0,
         span: const BridgeSpan(

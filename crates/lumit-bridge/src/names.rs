@@ -44,6 +44,19 @@ impl NameCache {
     /// document revision the caller read alongside its snapshot: a different
     /// revision empties the memo first, so a stale name can never be served.
     ///
+    /// Forget everything, revision aside.
+    ///
+    /// For when the names themselves change meaning without the document
+    /// moving: the Viewer's way of looking is folded into every name
+    /// (`named_under_view` — exposure, tone map, the transparency grid, the
+    /// region), so a look change renames every frame at the same revision. A
+    /// memo keyed only by `(comp, frame, quality)` would go on serving the old
+    /// look's names — which is how the cache bar read all-zero and the idle
+    /// fill re-rendered for ever whenever the grid was up (its default).
+    pub(crate) fn clear(&mut self) {
+        self.map.clear();
+    }
+
     /// `compute` returning `None` (frame not nameable yet) is passed through
     /// and NOT remembered — the next ask tries again, which is what lets a
     /// finishing probe make a frame nameable mid-session.
@@ -126,6 +139,23 @@ mod tests {
         // And once the probe lands, the name is served and then remembered.
         assert_eq!(names.get_or_compute(1, b, 9, 1000, || Some(5)), Some(5));
         assert_eq!(names.get_or_compute(1, b, 9, 1000, || None), Some(5));
+    }
+
+    /// A look change renames every frame at the same revision (the look is
+    /// folded into the names), which the revision check cannot see — so the
+    /// worker clears the memo when the look changes, and the next ask
+    /// recomputes under the new look rather than serving the old one's name.
+    #[test]
+    fn a_cleared_memo_recomputes_at_the_same_revision() {
+        let mut names = NameCache::default();
+        let comp = Uuid::now_v7();
+        assert_eq!(names.get_or_compute(1, comp, 0, 1000, || Some(1)), Some(1));
+        names.clear();
+        assert_eq!(
+            names.get_or_compute(1, comp, 0, 1000, || Some(2)),
+            Some(2),
+            "after a clear, the same key is computed afresh"
+        );
     }
 
     /// The cap empties rather than growing without bound — crude, correct, and

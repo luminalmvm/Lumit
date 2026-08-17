@@ -4,14 +4,18 @@
 
 // The combine stage.
 
+// The layout fx_lens_flare_detect.wgsl fills and the trace reads. This pass
+// reads the emitting extent too (K-367): the starburst of an extended source
+// is the point sprite convolved with the source, and the stamp grid below is
+// that convolution.
 struct Light {
     pos_x: f32,
     pos_y: f32,
     r: f32,
     g: f32,
     b: f32,
-    _pad0: f32,
-    _pad1: f32,
+    ext_x: f32,
+    ext_y: f32,
     _pad2: f32,
 };
 
@@ -64,6 +68,83 @@ fn tap_rgb(tex: texture_2d<f32>, fx_in: f32, fy_in: f32, dims: vec2<i32>) -> vec
         + textureLoad(tex, vec2<i32>(x1, y0), 0).rgb * tx;
     let b = textureLoad(tex, vec2<i32>(x0, y1), 0).rgb * (1.0 - tx)
         + textureLoad(tex, vec2<i32>(x1, y1), 0).rgb * tx;
+    return a * (1.0 - ty) + b * ty;
+}
+
+// Field-angle slices in the starburst atlas (K-365) -- the WGSL spelling of
+// lumit_core::fx::lens_flare::STARBURST_FIELDS, pinned against it by test.
+// The atlas is ONE texture, STARBURST_RES wide by STARBURST_RES * F tall,
+// slice 0 (on-axis) at the top.
+const STARBURST_FIELDS: u32 = 8u;
+
+// The starburst stamp grid (K-367) -- lumit_core's SB_MIN_EXTENT / SB_STAMPS,
+// pinned against them by test. The ghosts integrate their source per ray, but
+// the starburst is a BAKED sprite and cannot; it is shift-invariant, though,
+// so the starburst of an extended source is exactly the point sprite
+// convolved with the source. These stamps are that convolution in quadrature
+// form: a fixed 3x3 grid spanning +/-extent, each carrying 1/(nx*ny) of the
+// light. A source narrower than SB_MIN_EXTENT of the raster is one stamp at
+// full strength on its own position -- bit-identical to what a point always
+// drew, which a test pins.
+const SB_MIN_EXTENT: f32 = 0.004;
+const SB_STAMPS: u32 = 3u;
+
+// Stamps on one axis, and where stamp i of n sits across it in units of the
+// half-extent (-1 .. +1; 0 when there is only one). lumit_core's
+// `starburst_stamp_grid` / `starburst_stamp_offset`.
+fn sb_stamp_count(ext: f32) -> u32 {
+    if (ext >= SB_MIN_EXTENT) {
+        return SB_STAMPS;
+    }
+    return 1u;
+}
+
+fn sb_stamp_offset(i: u32, n: u32) -> f32 {
+    if (n <= 1u) {
+        return 0.0;
+    }
+    return f32(i) / f32(n - 1u) * 2.0 - 1.0;
+}
+
+// Where a light sits in the field: (field fraction, azimuth) -- the twin of
+// lumit_core's `starburst_field`. Offsets in sensor mm follow `dir_of`'s
+// convention (half the 36 mm sensor width is 18, the y fraction scaled by
+// the raster aspect), over the sensor's half-diagonal. The azimuth is taken
+// on the RASTER's offsets, y down, because it turns the sprite in raster
+// space; sensor y is up, so this mirrors the true meridional angle, which
+// the cat's-eye's own symmetry makes invisible.
+fn starburst_field(px: f32, py: f32, aspect: f32) -> vec2<f32> {
+    let half_w = 18.0;
+    let dx = px - 0.5;
+    let dy = py - 0.5;
+    let x_mm = 2.0 * dx * half_w;
+    let y_mm = 2.0 * dy * aspect * half_w;
+    let half_diag = 0.5 * sqrt(36.0 * 36.0 + 24.0 * 24.0);
+    let frac = clamp(sqrt(x_mm * x_mm + y_mm * y_mm) / half_diag, 0.0, 1.0);
+    return vec2<f32>(frac, atan2(dy, dx));
+}
+
+// Bilinear tap of one slice of the starburst atlas at unit (u, v) -- the
+// same arithmetic lumit_core's combine uses. The slice's own rows are the
+// only ones read (`base` offsets, the clamp keeps a malformed atlas in
+// bounds), so slice s can never bleed into s +/- 1.
+fn tap_sb(u: f32, v: f32, sw: i32, rows: i32, slice: i32) -> vec3<f32> {
+    let fx = u * f32(sw - 1);
+    let fy = v * f32(rows - 1);
+    let x0 = clamp(i32(floor(fx)), 0, sw - 1);
+    let y0 = clamp(i32(floor(fy)), 0, rows - 1);
+    let x1 = min(x0 + 1, sw - 1);
+    let y1 = min(y0 + 1, rows - 1);
+    let tx = clamp(fx - floor(fx), 0.0, 1.0);
+    let ty = clamp(fy - floor(fy), 0.0, 1.0);
+    let sdims = vec2<i32>(textureDimensions(sb_tex));
+    let base = slice * rows;
+    let ry0 = clamp(base + y0, 0, sdims.y - 1);
+    let ry1 = clamp(base + y1, 0, sdims.y - 1);
+    let a = textureLoad(sb_tex, vec2<i32>(x0, ry0), 0).rgb * (1.0 - tx)
+        + textureLoad(sb_tex, vec2<i32>(x1, ry0), 0).rgb * tx;
+    let b = textureLoad(sb_tex, vec2<i32>(x0, ry1), 0).rgb * (1.0 - tx)
+        + textureLoad(sb_tex, vec2<i32>(x1, ry1), 0).rgb * tx;
     return a * (1.0 - ty) + b * ty;
 }
 
@@ -146,27 +227,64 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
         sy / cp.h * cp.fh - 0.5 + (f32(fdims.y) - cp.fh) / 2.0,
         fdims,
     );
-    // One starburst sprite per live light: anchored on its light, sized by
-    // Scale, stretched by the squeeze, tinted by the light.
+    // One starburst sprite per STAMP: anchored on the stamp, sized by Scale,
+    // stretched by the squeeze, tinted by its share of the light -- and
+    // turned and blended across the K-365 field slices at the stamp's OWN
+    // position, so a smeared starburst near the frame edge leans a little
+    // differently at each end of itself, which is the physical picture. A
+    // point light is one stamp on its own position at full strength.
     var sb = vec3<f32>(0.0);
     if (cp.sb_intensity > 0.0 && cp.sb_half > 0.0) {
         let sdims = vec2<i32>(textureDimensions(sb_tex));
+        let rows = max(sdims.y / i32(STARBURST_FIELDS), 1);
+        // A stamp can only contribute where |rot| is inside the sprite, and
+        // the rotation preserves length -- so this rejects, before any trig,
+        // exactly the stamps the u/v test below would have rejected anyway.
+        // The CPU twin has no need of it: it works its stamps out once per
+        // frame where this shader redoes them per pixel.
+        let reach2 = cp.sb_half * cp.sb_half * (cp.squeeze * cp.squeeze + 1.0);
         for (var li = 0u; li < cp.light_count; li = li + 1u) {
             let light = lights[li];
             if (light.r <= 0.0 && light.g <= 0.0 && light.b <= 0.0) {
                 continue;
             }
-            let rel_x = f32(xy.x) + 0.5 - light.pos_x * cp.w;
-            let rel_y = f32(xy.y) + 0.5 - light.pos_y * cp.h;
-            let u = rel_x / (cp.sb_half * cp.squeeze) * 0.5 + 0.5;
-            let v = rel_y / cp.sb_half * 0.5 + 0.5;
-            if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
-                continue;
+            let nx = sb_stamp_count(light.ext_x);
+            let ny = sb_stamp_count(light.ext_y);
+            // The share folded into the colour, not applied after the sprite:
+            // the CPU twin does it here too, so the two agree op for op.
+            let rgb = vec3<f32>(light.r, light.g, light.b) * (1.0 / f32(nx * ny));
+            for (var iy = 0u; iy < ny; iy = iy + 1u) {
+                for (var ix = 0u; ix < nx; ix = ix + 1u) {
+                    let sp_x = light.pos_x + sb_stamp_offset(ix, nx) * light.ext_x;
+                    let sp_y = light.pos_y + sb_stamp_offset(iy, ny) * light.ext_y;
+                    let rel_x = f32(xy.x) + 0.5 - sp_x * cp.w;
+                    let rel_y = f32(xy.y) + 0.5 - sp_y * cp.h;
+                    if (rel_x * rel_x + rel_y * rel_y > reach2) {
+                        continue;
+                    }
+                    // Turn the sprite so the baked +x cat's-eye lean points
+                    // along the stamp's own radial direction (rotation by
+                    // -azimuth).
+                    let fa = starburst_field(sp_x, sp_y, cp.h / cp.w);
+                    let ca = cos(fa.y);
+                    let sa = sin(fa.y);
+                    let rot_x = rel_x * ca + rel_y * sa;
+                    let rot_y = -rel_x * sa + rel_y * ca;
+                    let u = rot_x / (cp.sb_half * cp.squeeze) * 0.5 + 0.5;
+                    let v = rot_y / cp.sb_half * 0.5 + 0.5;
+                    if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
+                        continue;
+                    }
+                    // The two slices bracketing this stamp's field fraction.
+                    let s = fa.x * f32(STARBURST_FIELDS - 1u);
+                    let s0 = min(i32(floor(s)), i32(STARBURST_FIELDS) - 1);
+                    let s1 = min(s0 + 1, i32(STARBURST_FIELDS) - 1);
+                    let ts = s - f32(s0);
+                    let sprite = tap_sb(u, v, sdims.x, rows, s0) * (1.0 - ts)
+                        + tap_sb(u, v, sdims.x, rows, s1) * ts;
+                    sb = sb + sprite * cp.sb_intensity * rgb;
+                }
             }
-            sb = sb
-                + tap_rgb(sb_tex, u * f32(sdims.x - 1), v * f32(sdims.y - 1), sdims)
-                    * cp.sb_intensity
-                    * vec3<f32>(light.r, light.g, light.b);
         }
     }
     let add = (f + sb) * cp.intensity;

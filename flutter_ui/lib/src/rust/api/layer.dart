@@ -350,6 +350,10 @@ enum BridgeLayerKind {
   /// generated Dart enum would otherwise carry a member called `null`, which
   /// is a Dart reserved word (K-206); `lumit-core` keeps `LayerKind::Null`.
   nullLayer,
+
+  /// A Light layer (K-360): a source of light other layers see. Draws no
+  /// pixels of its own, like a Camera.
+  light,
   ;
 }
 
@@ -389,6 +393,9 @@ enum BridgeLayerSwitch {
   motionBlur,
   collapse,
   shy,
+
+  /// K-361: whether the comp's Light layers shade this one.
+  acceptsLights,
   ;
 }
 
@@ -418,6 +425,10 @@ class BridgeLayerSwitches {
   /// shy filter is on. Never changes what renders.
   final bool shy;
 
+  /// Accepts lights (K-361): whether the comp's Light layers shade this one.
+  /// Defaults on, and does nothing at all in a comp with no lights.
+  final bool acceptsLights;
+
   const BridgeLayerSwitches({
     required this.visible,
     required this.audible,
@@ -428,6 +439,7 @@ class BridgeLayerSwitches {
     required this.motionBlur,
     required this.collapse,
     required this.shy,
+    required this.acceptsLights,
   });
 
   @override
@@ -440,7 +452,8 @@ class BridgeLayerSwitches {
       fx.hashCode ^
       motionBlur.hashCode ^
       collapse.hashCode ^
-      shy.hashCode;
+      shy.hashCode ^
+      acceptsLights.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -455,7 +468,8 @@ class BridgeLayerSwitches {
           fx == other.fx &&
           motionBlur == other.motionBlur &&
           collapse == other.collapse &&
-          shy == other.shy;
+          shy == other.shy &&
+          acceptsLights == other.acceptsLights;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its

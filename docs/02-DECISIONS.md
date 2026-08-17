@@ -8332,6 +8332,1346 @@ Not fixed here, and unchanged: the flare's raster still draws the cells it culle
 `wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals` bit-stability question is
 still open (both remain in TODO).
 
+**K-351 · DECIDED · Opening a project shows one loading card and nothing else, and no
+shader a project does not use is compiled before its first frame.** Two halves of the same
+complaint — the first preview took the better part of ten seconds, and the interface spent
+that time looking loaded but empty.
+
+**The measurement first**, because the cause was not where it looked. On this machine a
+render worker took **7.7 s to start**, and 6.5 s of that was `LensFlareFx::new`: the flare's
+ray tracer is the largest shader in the program and its three pipelines dominate every other
+kernel put together (`crates/lumit-render/examples/first_frame_probe.rs` is the probe that
+says so). Every project paid it, including one with an empty composition and no flare
+anywhere in it, because the worker built every pipeline before answering its first request.
+The flare's pipelines are now built on a **thread of their own** (`LazyFlare`) and joined by
+the first frame that actually draws a flare — which, by the time anyone applies one, has long
+since finished. Worker start is 1.1 s. Nothing about what the effect draws changes: this is
+only about *when* the compiling happens, and the bake-deferral machinery of K-350 is
+untouched — the flag set before the pipelines exist is applied when they do.
+
+**And the reading of the document is off the drawing thread.** `open_project` is no longer
+`#[frb(sync)]`: parsing a `.lum` and stating every media file it names froze the window for
+as long as it took. It now runs on a worker thread, which is what makes the second half
+possible.
+
+**One swap, not a fill.** While a document is being read *and* until the Viewer has
+something to show of it, the shell stands behind a single card with a progress bar
+(`OpeningOverlay`) and the panels behind it still hold the previous project. Panels that
+filled one by one while the picture was still coming read as a slow editor; everything
+appearing at once reads as an application loading, which is what it is. The card lifts on
+the first reply from the new project's worker — any reply, not the frame alone, so a first
+render that faults cannot leave the interface covered — or, for a project that fronts no
+composition, as soon as the session restore says there is no picture to wait for.
+
+Not fixed here: the 1.1 s that remains is the graphics device (0.6 s) and the other engines
+(0.5 s), and a project's own footage still probes on first use.
+
+**K-352 · DECIDED · The transparency grid actually sees transparency: while it is up, the
+Viewer's renderer leaves the comp's background colour out of the composite.** docs/07 §2.2
+item 4 always said the grid is a checkerboard "instead of the comp background colour", and
+it never was: the comp you are looking at cleared to its backdrop at full alpha (nested
+comps clear transparent, K-241, but the top of the walk did not), so every uncovered pixel
+reached the Viewer opaque and the board behind the picture could never show — even with
+every layer hidden. The grid button was a control that did nothing visible.
+
+The grid state now lives in `LumitUiState` (not the panel) and rides the Viewer's one
+look message: `set_viewer_look` carries exposure, tone map (K-314) and this flag together,
+so the renderer can never hold half a look and each control costs no channel of its own.
+Renderer-owned, deduplicated against the last look actually sent (the record clears on
+project adoption, so a worker just born cannot disagree with the button), and never sent
+to an export's own renderer — an export always draws the backdrop. The two backdrops are two different pictures, so the flag is folded into the
+frame's cache name beside the view (K-346's mechanism); the one-time cost is that frames
+banked under a non-neutral view before this entry take new names.
+
+Also fixed here, the board's edge: the picture and its board share one rectangle, but the
+board is painted anti-aliased while the platform texture is not, so a fractional rectangle
+bled a soft row of board out under the picture at some zooms. The shared rectangle is now
+snapped to whole device pixels (`snapToDevicePixels`), where the two rasterise identically.
+
+**K-353 · DECIDED · The lens flare antialiases itself, and hardware multisampling is gone
+from it — which is what made the flare bit-stable again.** The flare had been failing its
+own "GPU lens flare must be bit-stable" assertion on a clean main since before 2026-08-08
+(docs/TODO.md carried it as the standing blocker). It is fixed, and the cause was not
+where any of the guesses pointed.
+
+**What was measured, in order.** The ray trace is bit-identical run to run — the trace
+oracle hook reads the ray landings back and they never move. The ghost blur and the
+starburst are innocent: switching either off leaves the variance untouched. The variance
+survives all the way down to a single ghost at one wavelength and minimum detail, so it is
+not an accumulation-depth effect either. Pooling is not the cause; allocating the scratch
+and the multisample target fresh every frame changes nothing. What does change everything
+is the number of samples: rendering the identical frame through a single-sampled pipeline
+is bit-identical across every configuration tried, four runs each. **Additively blending
+fp16 into a 4x multisample target is not reproducible on this hardware** — a few hundred
+of 36864 floats came back one fp16 ULP different each run, in different places each time.
+
+**The fix keeps the antialiasing and drops the hardware.** K-264 added multisampling
+because jagged ghost silhouettes were one of the three Ultra artefacts; that reason still
+stands, so the coverage is now computed rather than sampled. Barycentric coordinates are
+affine in screen position, so `dpdx`/`dpdy` of them are exact, and a fragment can evaluate
+its own barycentric at each of the four standard sample positions and take
+`colour x covered/4`. That is exactly the model `lumit_core`'s `raster_triangle` already
+spelled out as the CPU twin, so the oracle now agrees with the GPU **by construction**
+rather than by resembling a hardware resolve.
+
+Two things that fix demanded and are worth knowing. A single-sampled rasteriser only makes
+a fragment where the pixel CENTRE is covered, so cells that cover sample positions but no
+centre would simply vanish — a third of the flare's energy went missing at the first
+attempt. Every triangle is therefore widened by a pixel before rasterising, and the
+fragment's own coverage test throws the padding away again. The widening displaces the two
+edge lines and re-intersects them rather than pushing corners away from the centroid:
+a caustic-folded cell is a **sliver** whose corners are nearly collinear, so "away from the
+centroid" points along it and leaves its thin axis exactly as thin as it was — which is the
+3% of energy the anamorphic test caught still missing after the first widening.
+
+Also gone with the multisample target: the largest allocation the effect made, ~66 MB at a
+1080p flare buffer (K-265's pool), and the resolve.
+
+Not fixed here, and still open: the flare's raster still draws the cells it culled, which
+remains in TODO.
+
+**K-354 · DECIDED · A detected flare source sits at the centre of its light, not at one
+arbitrary pixel of it.** Matte mode pinned each light to the brightest pixel of its
+brightest tile. For a point source that is exactly right and still is. For a *practical* —
+a softbox, a window, a lamp with a visible bulb — it put the light wherever the tile scan
+happened to reach a maximum first, so a flare fired from a large soft source came out of
+its edge rather than its middle. Each anchor now takes the flux-weighted centroid of the
+tiles that feed it, in the same fixed tile order both twins already used, so the change
+costs nothing and stays deterministic. A one-tile source has only itself to average and is
+untouched.
+
+**What this deliberately does NOT fix, so it is not assumed.** The weight is flux and each
+tile is still represented by its single brightest pixel, so one very hot pixel — a sensor
+sparkle, a specular glint — still pulls the centroid toward itself and still flickers frame
+to frame on real footage. Suppressing that needs each tile to carry its whole flux and its
+own centroid rather than one pixel's, which is a change to the tile reduction in both twins
+and is folded into the source-region rework
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase D), where real segmented source regions
+with recovered flux replace tile-max detection altogether. The earlier plan's "firefly
+suppression by 1/(1+luma) weighting" assumed a per-pixel sum that this detector does not
+have; it is not applicable as written, and Phase D is where it actually belongs.
+
+**K-355 · DECIDED · A flare no longer jumps, because a light is no longer one pixel — and a
+light with an area flares like one.** Two complaints with one root. Every detection tile was
+represented by its single brightest pixel, for the light's position AND its colour, and a
+light was always a point however large the thing emitting it.
+
+**Why flares jumped.** Inside a practical — a lamp with a visible bulb, a window, a
+softbox — *which* pixel is brightest changes frame to frame with sensor noise and specular
+sparkle. The reported position hopped between them, so the whole flare jittered across a
+source that had not moved at all. K-354 centroided the tiles and helped, but the weight was
+still one pixel per tile, so one hot pixel could still drag it. Each tile now carries the
+statistics of its **whole lit area** — Σ gate, Σ colour·gate, and Σ luma·gate with its first
+moments — so a source's position is the flux centroid of every lit pixel in it and its
+colour is their mean. A 40× sparkle moves a 64 px source by under a pixel, which the
+regression test asserts by adding one. Point sources are untouched: a single lit pixel is
+its own centroid and its own mean.
+
+**Why area lights now look right.** The flare of an extended source is the integral of the
+point flares over the emitting area, and at the budget K-353's plan sets out (~2 s a frame)
+that integral is evaluated **directly** rather than approximated. Detection measures each
+source's half-extent as the standard deviation of its flux about its centre; a source wider
+than a fraction of the frame is split into a small centred grid of samples, each carrying an
+equal share of the flux. The sum carries the source's shape: a tube's ghosts come out as
+bars, a window's as rectangles, a bulb's as discs — which a point source structurally cannot
+do. Energy is conserved by construction (the shares sum to one light), so a source only ever
+gets *smoother* as it is split, never brighter, and the GPU test pins exactly that.
+
+The grid is regular, centred and unjittered, so determinism holds (docs/14) and K-353's
+bit-stability still passes. Manual mode gets the same thing as a pair of dials — **Source
+width** and **Source height**, px@comp half-extents (K-260), defaulting to 0, which is the
+point source the effect has always had.
+
+`MAX_LIGHTS` rises 16 → 64 and splits into `MAX_SOURCES` (16, distinct sources detection may
+find) and `MAX_LIGHTS` (64, slots the trace carries), because a source now spends several
+slots when it has extent. Sixteen point sources still cost sixteen slots; a source that
+cannot be split faithfully within the budget is carried as the single point it started as
+rather than as half an area source, which would lose the rest of its flux.
+
+Two consequences worth stating. A source's colour is now the mean of its lit pixels rather
+than its brightest pixel's, so a source with a hot core reads very slightly dimmer than it
+did — that is the firefly suppression working, and it is the more correct answer. And the
+per-tile sums are order-dependent where the old maximum was not: the CPU scans a tile in row
+order and the GPU merges 64 threads' partials in thread order, so the twins agree to the
+matte oracle's perceptual bound rather than op-for-op. Both are internally deterministic,
+which is the property that actually matters.
+
+Not fixed here: ghosts are still *summed* point flares rather than the source's image warped
+by each ghost's own Jacobian, which is the exact treatment
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase D). Sampling converges to it and is what
+the literature uses as the reference; the convolution is the optimisation, not the truth.
+
+**K-356 · DECIDED · Lens coatings are real multi-layer stacks solved by transfer matrix,
+not one layer times a quarter.** The flare's per-surface reflectance was a single-layer MgF₂
+quarter wave, with every additional layer of the prescription's coating column approximated
+as "quarter the residual again". That is the FlareSim shortcut, and it is the reason ghost
+*colour* was the least convincing thing about the effect: a single-layer coating has one
+reflectance minimum, so it can only ever tint ghosts one way, while a real multicoated lens
+has two or more and runs magenta, then green, then amber as a light crosses the frame.
+
+Each surface's coating is now a stack, and its reflectance the standard **characteristic
+transfer matrix**: per layer a phase thickness `δ = 2π n d cos θ / λ` and an optical
+admittance `η = n cos θ` (s) or `n / cos θ` (p), matrices `[[cos δ, i sin δ/η], [i η sin δ,
+cos δ]]` chained and closed on the substrate to give `Y = C/B` and `r = (η₀ − Y)/(η₀ + Y)`,
+with both polarisations averaged for unpolarised light.
+
+**The angle term is the one that earns this.** `δ` carries `cos θ`, so the whole reflectance
+band shifts blue as the angle of incidence rises — and flare rays strike interfaces at large,
+varied angles. That is precisely the observed behaviour a scalar coating strength cannot
+express: a ghost changing hue as its source moves off axis. The test pins it (53° reflects
+over 1.5× what normal incidence does at the design wavelength) alongside wavelength
+selectivity (a broadband stack's reflectance varies more than 3× across the visible).
+
+**What the stacks are, and the honest limit on them.** A `.lens` file publishes a layer
+*count*, never a recipe — real designs are manufacturer secrets, and every serious attempt in
+the literature concludes coatings can only be *measured*, not predicted. So each order takes
+its textbook design: one layer is the MgF₂ quarter wave, two a V-coat, three the classic
+broadband quarter/half/quarter W, and more extends it with alternating quarter-wave pairs.
+The *shape* is what matters here, not the exact recipe. Per-lens calibration against
+photographed flares is what would make the model invertible, and it stays out of scope
+([NEXT-FEATURES.md](NEXT-FEATURES.md) entry 1 Phase E).
+
+One test had to change, and its old assertion was a fossil of the old model: it compared a
+single layer against a "multicoat" on **n = 1.9** glass, where MgF₂ is very nearly the ideal
+single layer (1.38² = 1.904) and any stack is *worse* at exactly 550 nm. That is a
+coincidence of that glass, not a property of coatings; the comparison now runs on ordinary
+n = 1.5 crown, where the broadband stack beats the single layer as it should.
+
+**K-357 · DECIDED · Auto is a real preview tier, the resolution is per composition, and the
+comp's backdrop has a swatch.** The three halves docs/07 §2.2 owed after the bar dropdown
+landed.
+
+**Auto is not Full under another name, and the old "Full" was neither.** The tier labelled
+Full silently multiplied the panel's own scale, so it never meant composition resolution —
+there was no way to ask for that at all, which is exactly what you want when judging detail
+at 100 %. Auto now means "render only the pixels the current magnification can display" and
+is the default because it is what the Viewer has always in fact done; Full means composition
+resolution whatever the panel is showing; Half, Third and Quarter are the fractions they
+say, taken as asked rather than multiplied by the panel, so the tier you chose is the tier
+you get. Third and Auto have no chord of their own (§15 names three), so `action` is now
+optional on the enum.
+
+**The tier is per composition**, in the session blob beside the viewer looks (K-314's
+pattern, K-245's blob) rather than in the document: a heavy shot wants Quarter while the
+title card beside it does not, and choosing how coarsely to preview is a way of *working on*
+a comp, not an edit to it — so it makes no op, no undo step, and can never reach an export
+(glossary §5). A tier name a build does not recognise reads as Auto rather than refusing the
+project.
+
+**The background swatch is the opposite kind of thing, and sits next to the grid button for
+that reason.** Everything else on that half of the bar — exposure, tone map, the
+transparency grid (K-352) — is a way of looking. The background colour is what the composite
+is actually drawn onto and what an export writes there, so it goes through a new
+`SetCompBackground` op and Ctrl+Z undoes it. The two controls answer the same question from
+opposite sides — *what is behind the picture* — and having one without the other is what
+made a black comp confusing. Black and white are offered as presets because that is nine
+uses in ten.
+
+**K-359 · DECIDED · The sprite flare is its own effect, not a mode of the physical one.**
+docs/08 §3.29. The owner asked for an Optical-Flares-style flare alongside the simulated
+one (2026-08-12), and *alongside* is the whole design: §3.27 asks "what would this lens
+actually do", §3.29 asks "draw me a flare here". They answer different questions, and the
+first draft of NEXT-FEATURES muddled itself by trying to make one serve both.
+
+Everything is placed from the light's **position** — a glow on it, a train of iris ghosts
+along the line from the light through the frame's centre, and an anamorphic streak. The
+ghosts march through the centre because that is where a real lens puts its reflections
+(mirrored about the optical axis), and their spacing is a *fraction* of the light→centre
+distance, so the train stretches and gathers as the light moves rather than sliding rigidly.
+
+**No bright-pass, which is the point.** Nothing is read from the picture's brightness, so
+there is no threshold for a source to cross and nothing to pop as grain moves — the exact
+complaint that made §3.27's Matte mode unpleasant on footage. The oracle asserts it as a
+property rather than trusting it: moving the light one pixel may not change any pixel by
+more than a small bound, which a threshold-driven flare cannot pass.
+
+One procedural compute pass, no inputs but the layer, so it is Cheap where §3.27 is Heavy.
+Both flares stay; neither is the other's fallback.
+
+**K-360 · DECIDED · Light layers, and the flare's Lights source mode finally wired.**
+`LayerKind::Light` (docs/03-DATA-MODEL.md §5.5) — the first new layer kind since Shape, and
+what K-257 reserved the flare's third source mode for.
+
+**A light is a Camera-shaped thing, not a Solid-shaped one.** It draws no pixels of its own;
+it is something other layers *see*. So it carries its placement in the ordinary layer
+transform rather than inventing a second one — a light animates, parents, and is dragged
+with everything already built for that — and `Composition::lights_at` resolves the visible,
+in-span ones at a time, top of the stack first, which is the order the effects that read
+them take their slots in. A light switched off is not a light, exactly as a layer switched
+off is not on the picture (K-230).
+
+**The area kind is the one that earns the layer.** Point and spot are there for completeness;
+a rectangle with a real width and height is what a compositor actually reaches for, and what
+the flare can do something with that a point cannot. An area light arrives at the flare with
+a real extent and flares as its own shape through exactly the machinery K-355 built for
+detected sources — so a strip light throws bar-shaped ghosts, with no new rendering code at
+all. That is why K-355 came first.
+
+**Lights mode needed no new plumbing**, which is worth recording because the obvious design
+does. The lights are resolved in `resolved.rs` from the expression context, which already
+carries the document, the comp and the time — everything needed — and they ride to the GPU
+in a fixed array on `LensFlareParams` rather than a `Vec`, because those params must stay
+`Copy` for the bake cache and the frame-key hash. An empty list in Lights mode is the
+labelled no-op: a comp with no lights flares with nothing, rather than falling back to the
+Manual point and putting a flare somewhere nobody asked for.
+
+The frame key hashes the light's own properties, not just the fact of it — unlike a Camera,
+where the pose is hashed at comp level. A light that changed colour without renaming its
+frames would serve a stale one.
+
+Not built here: **LTC shading of layers by these lights** (NEXT-FEATURES entry 4c). The model
+is now in place for it, which was the dependency.
+
+---
+
+## K-361 — Layers are shaded by lights with a closed-form area-light integral, and light adds rather than replaces
+
+**DECIDED** (2026-08-12). Supersedes nothing; completes K-360, which built the Light layer
+and said this was the dependency it was there to satisfy.
+
+A layer with the new **Accepts lights** switch on is shaded by the composition's Light
+layers in a pass that runs after its effect stack and before it is placed —
+`lumit_core::lighting` (the reference), `fx_lighting.wgsl` (its twin), called from
+`Realiser::realise_segment`. It is **not an effect**: it has no entry in docs/08, no
+`Resolved` variant and no place in a stack, because it is not something you add to a layer,
+it is something the composition does to it. docs/06 gains the pass.
+
+**The maths is closed-form, and that is the whole point.** How brightly a flat surface is lit
+by a flat glowing rectangle has an exact answer — the cosine-weighted fraction of the
+surface's sky that the rectangle covers, which is a sum of one term per edge. Four edges,
+four terms, no sampling and no noise. This is the diffuse form factor, and it is also the
+identity-matrix case of **Linearly Transformed Cosines** (Heitz et al. 2016), which is what
+NEXT-FEATURES entry 4c named.
+
+**LTC's fitted matrix tables are deliberately not shipped.** They are what buys roughness and
+specular highlights, they are 64×64×2 textures of published-but-third-party fitted data, and
+a 2.5D compositor shading flat layer planes has nothing to be glossy with — there are no
+per-pixel normals, and inventing them from luminance is a content-dependent quality cliff
+that Nuke's Relight is the ceiling for, not a first landing. Diffuse over a quad is the
+honest 2.5D answer and it needs no tables at all. The code is shaped so a matrix fetch drops
+in ahead of the same integral if that changes.
+
+**Light adds; it does not replace.** The pass multiplies the picture by `1 + light`. Physical
+shading multiplies by the light alone, which means dropping one light into a composition
+plunges everything it does not reach into black — the correct answer to a question no
+compositor is asking. Adding also makes the no-op exact rather than approximate: a
+composition with no Light layers produces an empty light list, the pass never runs, and the
+frame is byte-for-byte what it was before any of this existed. That is the compatibility
+promise, and it is a test.
+
+**A point light has no inverse square.** Its brightness is the cosine law and the artistic
+falloff dial, nothing else. An inverse square measured in comp pixels is a number with no
+physical meaning that a compositor would only have to fight; `falloff_px` already says, in
+pixels, where the light stops, which is the control someone actually wants.
+
+**The rectangle is clipped to the horizon**, not merely clamped at the end. The part of a
+light that has sunk behind the surface must be removed before the sum, or the answer is
+nonsense rather than merely too big — and a light straddling the plane is a real case, not a
+corner one. The form factor is then taken as a **magnitude**: the sign only records which way
+round the corners were listed, and a light here has no back face to hide behind, so no
+caller has to wind its corners a particular way to get light.
+
+**A 2D layer is shaded where it is drawn, not where its transform says.** A layer without the
+3D switch is composited flat at z = 0 whatever its z and out-of-plane rotations hold, so the
+shading forces those to zero too. Shading a layer at a depth the compositor ignores would
+light something that is not there.
+
+`ResolvedLight` gained `z`, `rotation_x_deg` and `rotation_y_deg` for this. The Lens flare
+ignores them — it works in the projected picture, where a light is simply wherever it lands —
+but shading cannot: a rectangle in the same plane as the surface it lights is edge-on and
+throws nothing, so a softbox that does anything at all is a softbox in front.
+
+**Budget:** eight lights per layer, the nearest kept, chosen by a total order so two runs pick
+the same eight. Running out of uniform slots must never make a frame fail (docs/13).
+
+**Frame key:** the comp's lights are hashed once at comp level (a Light layer draws no pixels,
+so nothing else in that walk would notice one moving), and only when the comp has one.
+`accepts_lights` is hashed only when it is *off* and a light exists — the default is on, so
+off is the state that departs from what a pre-lighting key described. Every key made before
+this stays valid.
+
+---
+
+## K-362 — The region of interest is a window on the composite, and a frame rendered through one takes its own name
+
+**DECIDED** (2026-08-12). Closes docs/07 §2.2 item 7 and NEXT-FEATURES entry 7.
+
+Drag a rectangle on the picture and the Viewer composites only that window of the
+composition. Preview only: the export renderer is never sent one, which is the same
+construction that keeps the preview scale out of files (K-186) and the Viewer's exposure out
+of them (K-346).
+
+**It is a window, not a crop of a finished frame.** `Realiser::realise_region` shifts the
+comp-pixels-to-NDC mapping and sizes the target to the region, so the composite writes only
+the pixels asked for. The camera matrix is untouched — it projects comp space, and the region
+maps a window onto the result, which is why a region cannot change perspective. Pixel density
+is unchanged: a region half as wide renders half as many pixels of the same size, so every
+px-dimensioned parameter in the frame still means what it meant.
+
+**Two stagings refuse the window, and the frame is composited whole and cropped instead.** An
+**adjustment layer** runs its effects on the composite of everything below it, and a
+**motion-blurring layer** averages sub-frame copies into a comp-sized texture first. Both are
+written against the comp raster, and windowing either halfway would give a wrong picture
+rather than a fast one. Refusing is silent by design *because it cannot be noticed*: the
+returned texture is the region's size either way, so the picture is identical and only the
+work differs. A regression test asserts a windowed composite is the same pixels the full
+frame has there — that equivalence is the whole promise, and without it working inside a
+region is working on a lie.
+
+That is the honest form of the warning NEXT-FEATURES recorded against this entry. A region
+saves the composite, the display encode and the publish; it does **not** save the effect
+stack, which runs per layer at the layer's own size and is untouched. Culling layers whose
+placement misses the region would save that too, and is the upgrade path — it is not here
+because a layer that appears not to touch the region can still reach it through an adjustment
+layer's blur, and getting that wrong is a missing element rather than a slow frame.
+
+**The frame name folds the region in** (`named_under_view`, joining K-346's view and K-352's
+transparent background). The alternative the plan floated — refusing to name frames while a
+region is set — would make the cache useless exactly when it is wanted, since scrubbing
+inside a region is the use case. A region covering the whole comp is refused as no region at
+all, so the common case keeps sharing the full frame's names and nothing already banked is
+orphaned.
+
+**The rectangle crosses every boundary as fractions**, never pixels: which pixel a point is
+depends on the raster the engine settles on, and it settles on different ones at different
+preview resolutions. Fractions mean the same thing at all of them. Degenerate input —
+inverted, empty, out of range, not finite — clears the region rather than faulting, on both
+sides: a drag that ends where it began is a gesture, not an error.
+
+**One button, both states.** Set a region and the same control clears it; "look at a corner"
+and "stop looking at a corner" are one decision, not two. The region is outlined whenever it
+is in force, so it is never possible to be looking at part of a shot without being told —
+the failure mode this feature would otherwise introduce.
+
+Per comp, in the session beside the preview resolution (K-357), for the same reason: choosing
+where to look is a way of working, not an edit.
+
+---
+
+## K-363 — The flare threshold is one-sided: the luma a pixel must exceed, softened only upward
+
+**DECIDED** (2026-08-12, owner). Supersedes the symmetric gate K-259 shipped.
+
+The Matte-mode Threshold now means what it says: **the absolute scene-linear luma a pixel
+must exceed to flare at all.** At 1.0 only over-range highlights flare; at 0.0 anything
+brighter than black does — and black itself never flares. Threshold softness widens the
+onset *above* the line (fully open at `threshold + softness`), never below it.
+
+The gate it replaces opened at `threshold − softness` and reached half strength at the
+threshold itself. Two consequences the owner hit: sources dimmer than the stated threshold
+still flared, and — the degenerate case that made the old shape indefensible — at threshold
+0 with any softness, **pure black passed the gate at half strength**. A threshold whose zero
+does not mean "everything brighter than black" is a dial that cannot be reasoned about.
+
+Both twins changed together (`lens_flare::threshold_gate` and `fx_lens_flare_detect.wgsl`'s
+`gate`), the detection tests pin the two named cases, and the hard-edge comparison is
+strictly greater-than — "at the line" is not "over it".
+
+This changes pictures for projects that relied on at-or-below-threshold sources flaring,
+so the effect's version bumps 5 → 6 — the K-016 mechanism that retires every cached frame
+the old gate drew. The old behaviour is recoverable by lowering the threshold by the
+softness — which is exactly the sentence that shows the new semantics are the primitive ones.
+
+---
+
+## K-364 — Ghost radiometry is spectral: 8 sub-samples per traced band against a baked reflectance table
+
+**DECIDED** (2026-08-12). Entry A2 of the flare programme; builds directly on K-356's
+transfer-matrix coatings, which created the problem this solves.
+
+A ghost's colour is its path's reflectance, and since K-356 that reflectance is a real
+multi-layer stack whose R(λ) oscillates several times across the visible. The trace sampled
+it once per traced band — at the band centre — and a curve with three minima sampled at
+three points is systematically wrong in exactly the quantity K-356 made accurate.
+
+Geometry and radiometry now split, because they vary at different rates. The ray path is
+still traced once per band (dispersion is smooth; the geometry ladder is unchanged). The
+ray's **energy** is carried per band as eight sub-sample throughputs, each reading a
+**baked reflectance table** — `FlareBaked::reflectance`, R on a (surface, direction, λ at
+5 nm, cos θ) grid, computed once per lens change by the same `stack_reflectance` the trace
+used to chain per ray — and folded against the band's CIE weights at the sensor. Even the
+lowest quality tier now samples the spectrum 24 times where it sampled 3; Ultra samples it
+256 times. The per-frame cost went *down*: eight table reads replaced a 2×2 complex matrix
+chain per surface event, and the WGSL's inline thin-film maths is deleted.
+
+Choices worth recording:
+
+- **Both crossing directions are tabulated** (a ghost's phase-2 walk crosses surfaces
+  backwards) rather than Snell-conjugating angles at trace time. Twice the table, none of
+  the per-ray trigonometry, no reciprocity argument to get subtly wrong.
+- **Sub-wavelengths snap to the table's 5 nm grid**, so the lookup is exact in λ and only
+  cos θ interpolates. The CPU twin and the WGSL mirror the same arithmetic op for op.
+- **Exposure is preserved by construction**: a band's sub-weights are its CIE integral
+  split eight ways, so a spectrally flat throughput renders at exactly the old exposure.
+  The out-of-gamut clamp moves from per-band to per-sub-sample, which throws strictly less
+  away (violet bands used to zero their whole negative channel).
+- **The Coating dial stays frame-time**: the table stores the fully coated stack, plain
+  Fresnel stays analytic at the band wavelength, and the dial blends between them per
+  event — so animating it never rebakes, exactly as before.
+- The trace's corner output grew from a scalar weight to (geometric weight, rgb), and the
+  K-266 3×3 cliff-smoothing now carries weight×rgb through the same mean — with a constant
+  rgb it is exactly the old smooth, so nothing about its shape changed.
+
+The ranking and spread probes inside the bake keep the scalar single-λ walk: they only
+rank, and 8× radiometry there would be spent on answers nothing reads.
+
+---
+
+## K-365 — The starburst is field-dependent: eight cat's-eye slices, one azimuth, rotated at draw time
+
+**DECIDED** (2026-08-12). Entry B2 of the flare programme.
+
+The starburst is Fraunhofer diffraction at the iris, and the bake treated the iris as the
+whole story: one sprite per lens, stamped identically wherever the light sat. Off-axis
+that is wrong. The hole light actually diffracts through is the iris clipped by the
+front and rear mechanical stops from opposite sides — the **cat's-eye** every
+photographer knows from the lemon-shaped bokeh at a picture's edges — so a real starburst
+squashes and leans as the light moves out towards a corner, and ours did not.
+
+The aperture is now baked at `STARBURST_FIELDS` = 8 field angles, slice 0 on-axis and
+slice 7 at the sensor-corner angle `atan(half sensor diagonal / focal)`. Each slice is
+the same `pupil_mask` polygon multiplied by the imaging path's vignette, measured by a
+new straight refract-only walk (`trace_transmit`) that accumulates the housing feather
+`trace_splat` already uses. The slices are concatenated slice-major and uploaded as one
+atlas texture; the combine reads the two slices bracketing each light's field fraction
+and lerps.
+
+Choices worth recording:
+
+- **One azimuth, rotated at draw time.** The cat's-eye is symmetric about the meridional
+  plane, so the whole family is one baked azimuth (the lean along +x) turned by −azimuth
+  when the sprite is stamped. Baking the azimuths instead would multiply the bake by the
+  number of directions and buy nothing.
+- **Slice 0 is the old picture, bit-for-bit.** On-axis the imaging vignette is 1 across
+  the whole entrance pupil for every bundled prescription, so a centred light renders
+  exactly what it rendered before. Nothing about this change is a look; it is a shape
+  that was missing off-centre.
+- **The vignette trace skips the stop and samples the entrance pupil.** The iris is
+  already the polygon mask, so counting the stop again would shrink every image by its
+  own edge; and the disc traced is `focal / 2N`, not the wider ghost-spray radius, which
+  when used clipped the polygon into a circle at two thirds of its edge and made every
+  aperture round. Both are the kind of double-count that reads as "the feature does
+  nothing" rather than as a bug.
+- **A dead slice holds the last live one.** A lens that does not cover the full frame —
+  the bundled 7Artisans is an APS-C design, and a user `.lens` file may be anything —
+  passes nothing at the outer field angles, and its corner slice bakes black. A starburst
+  that vanishes as the light nears the corner is a worse picture than one that stopped
+  changing there.
+- **The bake stays under half a second.** The eight slices are independent FFTs and go
+  wide across the pool; a 24-surface prescription measured 170 ms before and 225 ms after
+  on the development machine. The bake already runs beside the frame (K-350), so this
+  never touches the picture's latency.
+
+The blade parity the starburst has always had — an even blade count gives N spikes, an
+odd one 2N — is now pinned by a test on slice 0, because the vignette multiply is exactly
+the kind of change that can quietly round the iris off and leave a plausible-looking glow.
+
+---
+
+## K-366 — The ghost grid is splatted per ray, not rasterised as quads
+
+**DECIDED** (2026-08-12). Entry B1 of the flare programme.
+
+The trace fires a grid of rays through the pupil and every one of them lands somewhere on
+the sensor. Since K-261 the renderer joined neighbouring landings into quads and drew
+those quads, brightness being the launch cell's area over the landed one. That is a fair
+model of a smooth map and a wrong one at a **caustic fold**, which is precisely where a
+flare's rims and arcs live: at a fold the map folds back on itself, so a quad joining four
+rays across it is a sliver spanning geometry that is not one patch at all. Every rescue
+K-261..K-264 added — sub-pixel inflation about the centroid, sliver parking, the unlit
+corner pull-in, the vertex-smoothed density — and K-353's pixel widening with its analytic
+four-sample coverage exist to survive that one wrong join. Each fixed the artefact in front
+of it and moved the next one somewhere else: notched rims, fan lines out of the bore,
+Ultra faceting, dropped fold flux.
+
+A ray now deposits on its own. Its footprint is the image of its pupil cell under the
+ghost's map, read as a 2×2 Jacobian by central differences over the neighbouring rays'
+landings (`ray_axes`; one-sided at the grid edge or beside a dead ray). It spreads its
+flux over that parallelogram as a separable tent `(1−|u|)(1−|v|)`, which integrates to the
+parallelogram's area — so flux is conserved exactly, and a fold is simply several splats
+landing on top of one another, which is the integral the effect wanted all along. Nothing
+is joined to anything, so there is no sliver to park, nothing to inflate, no corner to
+pull in and no coverage to compute; all of that machinery is deleted rather than patched
+again.
+
+Choices worth recording:
+
+- **The density cap is kept, unchanged.** At a fold the density `cell ÷ landed` genuinely
+  diverges; the integral over a pixel does not, but a *discrete* ray concentrates the
+  divergence into a few pixels. `MIN_AREA_FRAC` = 3e-3 caps it at ≈333×, which is K-262's
+  number and K-262's reason.
+- **`MIN_SPLAT_AXIS_PX` = 0.75 replaces `MIN_QUAD_PX`'s inflation.** It is an anti-alias
+  floor, not a rescue: a footprint that collapses below a pixel still deposits over
+  roughly one, so a caustic line is a line rather than a row of dropped sub-pixel points.
+  The fold case — both axes long but nearly parallel — pushes the second axis across the
+  first up to the same floor, which is what stops an edge-on fold's flux vanishing into a
+  zero-area parallelogram.
+- **The GPU does the division, the raster does the tent.** `build_splats` (one thread per
+  ray, replacing `quad_area` and `build_verts`) writes centre, half-axes and the peak;
+  the draw is one instanced six-vertex quad per ray whose fragment evaluates the tent and
+  adds. A tent is continuous, so the single-sampled target of K-353 needs no coverage
+  logic at all and the pipeline keeps its bit-stability by construction — fixed instance
+  order, additive blend, one sample.
+- **Scratch is now per ray, not per quad.** 48 bytes a splat against 84 a cell (20-byte
+  corners plus the area word), and `side²` of them where there were `(side−1)²` — a wash
+  in memory, one compute pass fewer, and the `SCRATCH_BYTE_BUDGET` bound is unchanged.
+- **Pictures move, so the effect's version goes 6 → 7.** Folds and rims are where the
+  difference is; smooth ghost bodies render as they did.
+
+The CPU reference and the WGSL are twins op for op, as they have been since K-261, and the
+two constants above are spelled in both and pinned by test.
+
+## K-367 — An area source is integrated per ray, not replicated into point lights
+
+**DECIDED** (2026-08-12). Entry D of the flare programme, and the answer to the owner's
+report that the effect was rendering "bright areas of a matte using multiple points
+instead of an area".
+
+K-355 gave a source a size and rendered it by **replication**: `expand_area_lights` split
+one light into up to 5×5 point lights spanning ±extent, each carrying a share of the flux,
+and the whole ray pipeline ran once per sample (the Matte path expanded the same way
+inside detection, which is the only reason `MAX_LIGHTS` was 64 rather than 16). The flare
+of an extended source really is the integral of the point flares over it, so the model was
+right; evaluating it by replication was not. It cost up to 25× the rays, and wherever a
+ghost was smaller than the spacing between samples it showed exactly what the owner saw —
+N overlapping copies of the aperture strung out in a line, rather than one smeared shape.
+Sampling more finely could only ever push the artefact below the current ghost size, never
+remove it.
+
+**Each ray integrates the source itself instead.** A ray at pupil-grid (i, j) offsets its
+light position within the source's ±extent rectangle by a smooth deterministic
+stratification and computes its own direction from the jittered position; every ray
+carries the light's full colour, because the pupil grid already averages. The source
+integral is absorbed into the pupil quadrature the trace was already performing, so an
+area source costs exactly what a point source costs, whatever its size — the plan's
+"per-ghost warped convolution", arrived at through the splatting pipeline rather than
+beside it. The sampling *is* the warped convolution, evaluated per ray.
+
+What makes replicas impossible rather than merely rare is K-366. A splat's footprint is
+the image of its pupil cell read by central differences over its neighbours' landings, and
+those neighbours now sit at different points of the source — so each footprint inflates by
+the local source-to-sensor stretch, which is precisely the gap a replica would have sat
+in. No two rays share a source position, and every ray's deposit already covers the
+spacing between them.
+
+Choices worth recording:
+
+- **A triangle wave, not `fract`.** `offset = tri((i + ½)·Φ)·extent`, with
+  `tri(x) = 2·|2·(fract(x) − ½)| − 1`. The usual low-discrepancy trick is a bare `fract`
+  of an irrational rotation, and it is wrong here for one specific reason: `fract` jumps
+  the whole range at each wrap, and the footprints are central differences over exactly
+  the neighbours a jump would separate by the width of the source — one splat inflated to
+  the whole source stamps a bright bar across the ghost. A triangle wave is continuous at
+  every wrap, still uniform on [−1, 1], and just as deterministic.
+- **A different irrational per axis** (`PHI_U` = 1/ρ, `PHI_V` = 1/ρ², the plastic
+  constant's pair): one constant for both would put every offset on a diagonal of the
+  rectangle, sampling a line rather than an area.
+- **Extent 0 is bit-identical to before.** Every ray offsets by exactly zero, so the point
+  source every existing project has does not move — pinned by test over a grid wider than
+  any quality tier launches, alongside the render being independent of how the light was
+  built.
+- **`MAX_LIGHTS` is deleted; `MAX_SOURCES` (16) is again the whole story.** One source is
+  one light slot however large it is. Matte detection stores each source's measured extent
+  instead of looping samples into slots, and the trace dispatch shrinks with it. The op
+  seam carries the extent: `LensFlareOp::manual_lights` is `[x, y, r, g, b, ext_x, ext_y]`
+  and the WGSL `Light` spends two of its three pads on it.
+- **The starburst smears by a fixed 3×3 stamp over the source.** The ghosts integrate
+  their source per ray; the starburst cannot, because it is a baked sprite rather than a
+  traced path. It is *shift-invariant* though — a hole's diffraction pattern does not
+  change shape as the source moves, only where it is centred — so an extended source's
+  starburst is exactly the point sprite convolved with the source, and the combine
+  evaluates that convolution in quadrature: three stamps per axis whose extent passes
+  `SB_MIN_EXTENT` (0.004 of the raster, the old area threshold), spanning ±extent, each
+  carrying `1/(nx·ny)` of the light. The K-355 replication used to give this for free as a
+  side effect of stamping per sample, and per-ray integration would otherwise have thrown
+  it away, leaving a softbox with a star's pinpoint spike. The K-365 field slice and
+  azimuth are computed **per stamp**, so a smeared starburst near the frame edge leans a
+  little differently at each end of itself. A point source is one stamp at full strength
+  on its own position, bit-identical to what it always drew.
+- **Area pictures change, so the effect's version goes 7 → 8.** A point source's does not.
+
+The CPU twin (`source_jitter`) and the shader's copy are op for op, and the two constants
+are pinned by test — compared as bits, since Rust and WGSL print floats differently.
+
+## K-368 — Four-bounce ghosts are enumerated under a reflectance-product prefilter and ranked in one list with the pairs
+
+**DECIDED** (2026-08-12). Entry C1 of the flare accuracy programme.
+
+A ghost is light that reflected off **two** lens surfaces on its way to the sensor, and
+the bake has always traced exactly those: `N(N−1)/2` paths for `N` interfaces, ranked by
+an on-axis ray probe. Light that bounces **four** times lands on the sensor too. With
+modern coatings each such path carries on the order of 10⁻⁵ of a two-bounce one, which
+sounds like nothing — but the sun is ~10⁵ times a normal highlight, a few four-bounce
+paths happen to focus tightly rather than wash out, and with vintage uncoated glass
+(R ≈ 4% a surface) they are plainly visible as the chains of doubled ghosts old lenses
+are known for. Not tracing them made every bundled prescription slightly cleaner than the
+glass it describes.
+
+**The path model.** `FlareBaked::pairs` becomes `Vec<[u32; 4]>`. Slots 0 and 1 keep
+exactly the meaning K-261 gave them — the ray runs forward to `b`, reflects, back to `a`,
+reflects, then out — so `a < b` still holds and a two-bounce path is
+`[a, b, NO_BOUNCE, NO_BOUNCE]` with `NO_BOUNCE = u32::MAX`. A four-bounce path adds the
+same figure once more: forward from `a` to `c` reflecting there, back to `d` reflecting
+there, then forward to the sensor. Hence `a < c` and `d < c`, while `c` may sit either
+side of `b` and `d` may be `a` itself. The sentinel is what keeps the two-bounce case
+honest: with `c` = `u32::MAX` no surface index can equal it, so phase 3 runs to the end
+of the stack with its reflect flag always false and the ghosts every existing project has
+execute the statements they always did — in all three walks (`trace_splat`,
+`trace_splat_spectral`, and the WGSL trace kernel, which spends two of `Combo`'s padding
+slots on `bounce_c`/`bounce_d` and so keeps its layout).
+
+**Why they are prefiltered rather than probed.** There are ~N⁴/4 four-bounce paths — over
+a hundred thousand on a normal prescription, millions on a zoom — and the ray probe that
+ranks pairs costs three traced rays each. They are therefore pre-ranked by an upper bound
+on the energy a path can carry: the product of the four surfaces' reflectances at normal
+incidence and 550 nm, precomputed once per surface. It is an upper bound in the coating's
+own terms (an AR stack is designed to be at its worst on-axis) and it is a product of
+numbers under one, so a partial product bounds the whole — which is what lets the search
+prune an entire `(a, b)` sub-tree the moment its pair reflectance cannot beat the worst
+candidate already kept. The best `FOUR_BOUNCE_PROBE_CAP` = 1500 of them are kept, in a
+bounded top-K heap keyed by (bound bits, tuple) so the kept set is one deterministic set
+rather than whichever equal-bound path arrived first.
+
+**The bound decides only what is probed.** What renders is decided by the same on-axis
+three-wavelength ray probe every pair faces, against the same `PAIR_MIN_INTENSITY` floor,
+and the survivors merge into **one** ranked list — descending probe brightness, ties by
+tuple order. Everything downstream (`MAX_RENDERED_PAIRS`, the spread probes, the frame
+grid plan, the GPU combo table) consumes that list unchanged and cannot tell the two kinds
+apart. A crude bound can therefore only cost a path its chance to be measured; it can
+never make one render brighter than it is.
+
+Measured on the bundled library: the whole two-bounce family outranks the whole
+four-bounce one on every lens — four Fresnel factors are worth more than any geometry — so
+what decides whether the extra ghosts appear is whether the pairs run out first. The
+11-surface Biotar has 45 pairs, so its four-bounce paths start at rank 45 and over a
+hundred fall inside the rendered 200; the 24-surface Master Prime has 252 pairs and its
+four-bounce paths never get a look in, which is the right answer for modern multicoated
+glass. Bakes stay inside the budget (118–208 ms across the library, the cap's 1500 probes
+included).
+
+**Existing projects gain ghosts, so the effect's version goes 8 → 9.**
+
+## K-369 — Ghost edges are Fresnel: a baked near-field ring mask per defocus rung
+
+**DECIDED** (2026-08-12). Entry C2 of the flare accuracy programme.
+
+The starburst is **Fraunhofer** diffraction — the far field of the aperture — and it has
+been right since K-256. The ghosts are **Fresnel**. Each ghost image is defocused by its
+own amount, so its edge is not the hard iris polygon the ray trace draws: it carries
+near-field diffraction ringing, a set of fringes just inside the rim brighter than the
+middle of the ghost, at a scale set by that ghost's own defocus. Every real-time flare
+drops this, which is exactly why real-time ghosts have stencil edges and photographed ones
+shimmer.
+
+**The propagator was already in the file.** `bake_starburst` multiplies the aperture by
+the quadratic phase `e^{iπ(x²+y²)/(λd)}` and takes one FFT — that IS Fresnel propagation to
+distance `d` (the single-FFT propagator). Joo et al. (2016, CGF 35(4)) parameterise the
+family of ghost images by the fractional Fourier transform; the computable member of that
+family, at each order, is this same propagator at a different distance. C2 is therefore the
+machinery the file already contains, run at a ladder of distances, and applied as the
+**iris mask** of the brightest ghosts rather than as a sprite.
+
+**The ladder.** `RING_SLICES` = 6 slices of `RING_RES`² = 128², at Fresnel numbers
+`F = 64, 32, 16, 8, 4, 2`. Folding `F = a²/(λd)` into coordinates normalised so the
+aperture frame is `x, y ∈ [−1, 1]` makes the chirp phase exactly `π·F·(x² + y²)`, which is
+the whole parameterisation: high `F` is a nearly-focused edge with fine ripples, low `F`
+spreads. The slices are baked from the **same on-axis aperture image the starburst's slice
+0 uses** — computed once and read twice — so the ring masks rebake with blades, rotation,
+roundness and f-stop exactly when the starburst does, under the same `bake_key`.
+
+Two details are load-bearing and were derived rather than guessed. First, the propagator's
+output lands in its own frame: DFT bin `m` sits at `x' = m/(N·Δx·F)` in the aperture's
+units, so the output window is `±1/(2·Δx·F)` wide and **narrows as `F` rises**. Reaching
+`F = 64` at all needs `N ≥ 256`, which is why the propagation runs at `APERTURE_RES` and
+only the resampled mask is `RING_RES`; the same bound is the chirp's Nyquist limit, so one
+condition covers both. Second, the intensity is resampled back onto **pupil** coordinates
+(`u = 1` is aperture ndc `APERTURE_SIZE`), so a mask lookup at a traced ray's `(u, v)` is a
+direct bilinear tap — `ring_mask_sample`, mirrored op-for-op in the trace WGSL with
+`RING_RES`/`RING_SLICES` pinned by the constants test.
+
+**Energy is preserved, over the pupil DISC.** Each slice is scaled so its energy equals the
+analytic iris mask's — a ringed ghost must be neither brighter nor dimmer than the
+hard-edged one it replaces — and nothing is clamped: the overshoot above 1 at the rim
+(measured peak ≈ 1.50 against a plateau of ≈ 0.98 at `F` 64) is the Gibbs ringing and is the
+entire point. The disc rather than the square matters: Fresnel diffraction genuinely throws
+light past the geometric aperture, and the trace does not spray rays out there, so
+normalising over the square would quietly halve the widest ghosts.
+
+**Which ghost gets which rung, and the honest limits of that.** The top `RING_GHOSTS` = 32
+ranked paths carry a slice; everything below keeps the analytic mask, because a ghost that
+faint contributes no visible edge. The slice comes from the path's already-measured image
+spread: `F ≈ RING_SPREAD_REF / spread`, clamped to the ladder. Joo et al. derive each
+ghost's order from the ABCD matrix chain of its own path — the exact answer, and **the
+recorded upgrade path**; the spread proxy buys the same monotone relationship (tight ghost
+→ near its focus → crisp edge with fine ringing; frame-filling wash → broad ringing)
+without the matrix plumbing. `RING_SPREAD_REF` = 3.2 is a **calibration, not a derivation**:
+the bundled library's top-32 spreads run 0.05 … 8 of the sensor diagonal, and 3.2 lays the
+six rungs across 0.05 … 1.6 of that. It is the knob to turn, and it earns its own
+regression test — at the plan's first value of 0.5 every ranked path on every bundled lens
+landed on the bottom rung and the ladder had one step.
+
+The bake cost is the six FFTs alone: the aperture image they propagate is one the starburst
+was already tracing, so the added time is single-digit milliseconds against a bake of
+hundreds.
+
+**Existing projects' ghost edges change, so the effect's version goes 9 → 10.**
+
+## K-370 — Ghost-edge diffraction is the knife-edge asymptotic at the real Fresnel numbers, not a propagated mask ladder
+
+**DECIDED** (2026-08-13). **Supersedes the implementation of [K-369](#k-369--ghost-edges-are-fresnel-a-baked-near-field-ring-mask-per-defocus-rung)**; K-369's intent — a ghost's rim carries near-field diffraction, and stencil edges are wrong — stands unchanged.
+
+**What the owner saw.** "The output from the lens flare effect feels like it has a Fresnel
+interference pattern which can be distracting across the whole screen where the effect is
+applied." That is exactly what it was, and the measurement is unambiguous. Dumping the
+K-369 ring masks' radial profiles on the bundled default:
+
+| slice | F | interior ripple | interior mean vs the flat mask |
+|---|---|---|---|
+| 0 | 64 | 6.3% | 0.99 |
+| 3 | 8 | 23.6% | 1.20 |
+| 4 | 4 | 36.4% | 1.26 |
+| 5 | 2 | **44.0%** | **2.39** (4.7× at the centre, 0.3 at the rim) |
+
+and every one of the top-32 paths landed on slices 3, 4 or 5. So each visible ghost carried
+a broad concentric brightness gradient across its **whole area**, not a rim effect — and the
+ghosts that fill the frame painted that over the whole picture.
+
+**Why the ladder could only ever land there.** The Fresnel number of a ghost is derivable,
+and K-369 never derived it. The ghost patch *is* the defocused aperture, so its radius on
+the sensor is `a`; the cone forming it leaves the pupil at the marginal-ray angle, which the
+working f-number fixes at `1/(2N)`, so the defocus is `z ≈ 2Na`. One power of `a` cancels:
+
+```text
+F = a²/(λz) = a/(2Nλ)
+```
+
+Put real numbers in. A 5%-of-frame ghost at f/2.8 is `F ≈ 350`; a frame-filling one `F ≈
+7000`; the widest washes on the bundled lenses reach `F ≈ 50 000`. K-369 baked at `F` of 2
+to 64 — **two to three orders of magnitude low** — because that is the ceiling a 256²
+single-FFT propagator can reach: its output window is `±(N−1)/(4F)` aperture units and has
+to cover the aperture, so `F ≤ (N−1)/3`. Reaching `F = 1000` would need a 4096² transform.
+The calibration `RING_SPREAD_REF` was then tuned to spread real ghosts across the rungs the
+propagator *could* reach, which guaranteed they all sat in the regime where the near field
+is a whole-aperture pattern rather than an edge one. K-369's own entry called that constant
+"a calibration, not a derivation, and the knob to turn"; the knob had no setting that worked,
+because the mechanism was wrong for the regime.
+
+**The replacement.** At `F` in the hundreds and up, the fringes are a rim effect a few
+percent of the pupil wide and the blade is locally straight, so the correct model is the
+**knife-edge asymptotic** — a closed form of one variable, the perpendicular distance to the
+blade:
+
+```text
+I(v) = ½[(C(v) + ½)² + (S(v) + ½)²],   v = s·√(2F)
+```
+
+with `C`, `S` the Fresnel integrals (`π/2` convention, by the standard auxiliary-function
+rational approximation, error < 2e-3). It is 1 deep inside, exactly ¼ on the geometric edge,
+peaks at ≈ 1.37 at `v ≈ 1.22`, and decays to nothing outside — the light real diffraction
+throws past the blade, which the old bake had to normalise away. `s` is `(bound − r)` from
+the same polygon bound `pupil_mask` already computes, times the cosine that turns a radial
+gap into a perpendicular one (exact for the polygon, 1 for a round iris).
+
+**The interior of a ghost is now flat by construction.** Whatever else this profile does, it
+cannot shade or tint the middle of a ghost — that is the property the regression test pins,
+and the one K-369 could not have passed.
+
+**Fringes nobody can sample are averaged, not drawn.** A fringe train finer than the pupil
+ray grid does not appear; it **aliases**, and an aliased fringe train is a beat pattern
+spread across the whole ghost — the other half of what was on screen. The honest answer when
+they cannot be resolved is their average, and a diffraction profile averages to the geometric
+edge it surrounds. So the mask crosses from the ringed profile to the plain one over
+`blur_v` of 0.5 … 2, where `blur_v` is the wider of the ray-grid step and the Softness
+feather, in `v` units. A soft blade smears its own fringes exactly as a coarse grid does, so
+the two enter the same way.
+
+The practical consequence is worth stating plainly: **the big frame-filling ghosts now show
+essentially the plain iris edge**, because their fringes are far finer than any grid the
+effect traces, and the tight bright ones — where a real photograph shows ringed rims — keep
+theirs. That is the opposite of what K-369 did, and it is the right way round.
+
+**What this deletes.** `RING_SLICES`, `RING_RES`, `RING_GHOSTS`, `RING_SPREAD_REF`,
+`bake_ring_masks`, `analytic_ring_mask`, `ring_disc_energy`, `ring_slice_for`,
+`ring_mask_sample`, the six FFTs and the `RING_SLICES × RING_RES²` float table, the
+`FlareBaked::ring_masks`/`ring_slice` fields, the GPU-side buffer and its trace-kernel
+binding 9. A `f32` Fresnel number per combo replaces the `i32` slice index in the same
+padding slot, so the struct layout is again unchanged. There is no per-path budget any more:
+the closed form costs the same as the polygon it replaces, so every ranked path rings.
+
+**The Fresnel number is computed per frame, not baked.** It moves with the working stop —
+stopping down shrinks the ghost and the pupil together, so `F ∝ stop_scale²` — and both twins
+derive it from the bake's measured spread by `ghost_fresnel_number`, mirrored in lumit-gpu as
+`ghost_fresnel_of` under the usual twin rule.
+
+**The phase argument is reduced by hand, and it has to be.** `v` reaches the low hundreds
+deep inside a ghost, so `v²` reaches five figures and the phase `πv²/2` runs to tens of
+thousands of radians. A CPU `sin` reduces that properly; a GPU one is not required to, and on
+CI's real hardware does not — the twins disagreed by **1.25% of the frame's total energy**,
+spread over every ghost interior, which is the shape of a range-reduction failure rather than
+of a maths error. Both twins now take `v²` mod 4 first: one f32 multiply and a floor,
+identical on both sides by IEEE, leaving each to ask for a sine of something under 2π.
+
+**Recorded limits.** The fringes are computed at one wavelength (`RING_LAMBDA_UM` = 0.55):
+their spacing goes as `√λ`, so across the visible band it varies by ±15%, far under the blur
+they are already averaged by. They are uniform round the rim, which is right along a blade
+and wrong at a corner, where two edges' diffraction would add. Neither is worth six times the
+per-ray arithmetic; both are the recorded upgrade path if a corner ever shows.
+
+**Existing projects' ghost edges change, so the effect's version goes 10 → 11.**
+
+## K-371 — A coating is chosen per glass element, from a measured palette, and the panel offers one row per element the lens has
+
+**DECIDED** (2026-08-13). Extends [K-356](#k-356) (multi-layer coatings by transfer matrix) rather than replacing it: the maths is untouched, what changes is who chooses the design.
+
+**Why.** Owner: "Irl lens flares can have very different colours for different
+ghosts. For instance it feels quite common seeing blue, purple, green and orange ghosts all
+in the same flare. So it'd be nice to be able to change the coating per glass lens in the
+lens, changing the number of them depending on lens used." That is right, and it is the
+lens, not stylisation: a coated surface reflects whatever its coating fails to suppress, and
+a manufacturer cuts different elements for different parts of the spectrum. Until now the
+whole prescription took its coating from the `.lens` file's own column and a single global
+Coating dial, so every ghost in a train was tinted by the same design.
+
+**The element model.** A `.lens` prescription is a list of *surfaces*, but what a person
+points at is a piece of glass. A row whose medium is glass opens an element; the row after
+closes it; elements number front to back, as every patent diagram does. A cemented pair's
+shared surface has cement on it rather than air, so it carries no AR coating in reality —
+it goes to the **earlier** element, and nothing about a cemented interface deserves a
+control of its own. `surface_elements` is that walk and `element_count` its total; the
+bundled library runs 4 elements (Tessar) to 18 (Canon 70-200).
+
+**The palette is measured, not asserted.** Each entry is a textbook design of its order —
+real recipes are manufacturer secrets (K-356) — and the residual was measured across
+420–680 nm at normal incidence, keeping only designs that are both distinctly coloured and,
+as a real coating is, dimmer than bare glass everywhere. Band split of the reflected energy,
+against bare crown glass at a flat 0.04:
+
+| # | design | peak R | r / g / b | reads as |
+|---|---|---|---|---|
+| 1 | uncoated | 0.040 | flat | bright neutral |
+| 2 | MgF₂ quarter, 520 nm | 0.018 | 0.38 / 0.35 / 0.27 | straw |
+| 3 | MgF₂ + Al₂O₃ quarters, 520 nm | 0.019 | 0.55 / 0.12 / 0.32 | magenta |
+| 4 | broadband W, 520 nm | 0.004 | 0.37 / 0.38 / 0.25 | green, faintest |
+| 5 | broadband W, 480 nm | 0.013 | 0.81 / 0.09 / 0.09 | amber |
+| 6 | broadband W, 560 nm | 0.025 | 0.07 / 0.14 / 0.79 | blue |
+
+Entry 0 is "As the lens file" and is the default, so an untouched panel bakes byte-for-byte
+the picture it always did.
+
+**A finding worth recording.** The palette writes its stacks out rather than reading
+K-356's `coating_stack` layer ladder, because that ladder's 2-, 4- and 6-layer rungs —
+"the same W with extra quarter-wave pairs beneath, broadening it further and lowering the
+mean" — measure **0.06 to 0.31 peak reflectance, brighter than bare glass**. They are a
+plausible-looking extension, not a real design. Nothing exercises them today: every bundled
+prescription's coating column is 0 or 1, and the palette avoids them. Correcting the ladder
+itself is left as its own change with its own measurements.
+
+**It is a bake input.** The per-element choices resolve into the surface table before the
+reflectance table is built from it, and `bake_key` folds them in, so changing one rebakes
+exactly as changing the lens does — 0.2 s release. The resolved design rides in the surface
+row's former padding slot, so the WGSL mirror's stride is unchanged and the shader, which
+only ever reads the baked table, needs no change at all.
+
+**How the row count follows the lens, without a new frontend mechanism.** The schema
+declares twenty rows — the ceiling — each in its own single-member group carrying
+`visible_when_lens_elements`. That field never crosses the bridge as itself: group
+visibility is *already* resolved in the panel from a live sibling value, so
+`list_parameter_groups` turns each threshold into exactly that shape — the sibling is the
+Lens dropdown, the values are the lenses whose prescription has enough elements. The panel
+implements one visibility rule, not two, and learns nothing about optics. A four-element
+Tessar draws four rows; the Canon 70-200 draws eighteen.
+
+**Recorded limit.** A user's own `.lens` file overrides the Lens dropdown, and only the file
+knows its element count, so the rows offered then follow the *picked* lens. An element with
+no row keeps the file's own coating, which is what an untouched row does anyway. Lifting it
+needs a per-instance schema query, which the effect-schema seam does not have and which is
+not worth inventing for one control.
+
+**No version bump.** Every row defaults to "As the lens file", so an existing project's
+picture is unchanged, and the effect's stored values gain rows that read as their default
+when absent.
+
+**New strings — a Crowdin upload is owed**: the twenty `fxElement1…fxElement20` row labels
+and the seven `fxCoating*` palette options.
+
+## K-372 — The adaptive tier is playback's alone: a still frame is rendered, and named, at the scale it was asked for
+
+**DECIDED** (2026-08-13). Fixes an owner-reported slowness; narrows [K-186](#k-186) (the adaptive resolution tier) to the case it was designed for.
+
+**What the owner saw.** "After pre-rendering a bit of the comp, scrubbing the playhead to a
+different point that was pre-rendered still took time to try and render the frame again for
+some reason, which really shouldn't be happening and it makes the program feel very slow and
+sluggish." Correct on every count, including that it should not be happening: the frames
+really were there.
+
+**The cause.** `publish_zero_copy` — the display path for a **scrub**, a drag preview, and
+the republish after a lens bake — scaled the requested preview scale by the adaptive
+playback tier:
+
+```rust
+let effective = if matches!(mode, Adaptive) { scale * tier_scale(tier()) } else { scale };
+```
+
+Three facts make that a cache miss on every scrub:
+
+1. The frontend sends `Adaptive` for a **still** frame whenever the user's Playback
+   preference is Adaptive, which is the default (`requestFrame` in `main.dart`).
+2. The tier is a *playback* verdict and **survives the run that set it** — it is reset at
+   the start of the next `play`, not at its end. So a single heavy pass leaves the tier at
+   Half or Quarter for as long as the editor sits still.
+3. The idle cache fill names its frames from the raw `last_shown` scale, with no tier.
+
+So after any heavy playback pass, the fill banked frames at `scale` while every scrub asked
+for `scale × tier`. Under content keying those are **different frames** (the quality tag is
+part of the name, K-178), so the fill's copy was invisible to the scrub that wanted it and
+the picture was composited from scratch — while the cache bar showed green over it, because
+the fill's copy really was there. Both halves of the machine worked correctly and neither
+could help the other.
+
+**Why the line existed.** It predates [K-181](#k-181), which moved playback into the worker.
+Playback now has its own ring and applies the tier itself, in `play_one_frame`, read beside
+the cost it is about to explain. Nothing that reaches `publish_zero_copy` is playback any
+more, so the tier there had stopped doing its job and was only doing damage. Its comment
+still argued the old case — "the only display path" — which it had not been for some time.
+
+**The rule.** The tier buys a cheaper composite so a *run keeps time*. Nothing still is being
+paced, so a still frame is rendered at the scale it was asked for. Two named functions say
+which is which — `still_quality(scale)` and `playback_quality(scale, mode, tier)` — and the
+fill and the display path both call the first, so they cannot drift apart again. The tier is
+**passed** to the second rather than read inside it, so the distinction is visible where the
+trade is made and testable without touching the process-wide controller.
+
+A still frame also now reports `FINEST_TIER` to the frontend rather than whatever playback
+last settled on: it was made at Full, and the resolution badge should not claim otherwise.
+
+**A separate slowness is left standing, and named here so it is not rediscovered as this
+one.** The idle fill composites one frame per turn and is not interruptible, so a scrub
+arriving mid-frame waits for that composite to finish — up to a couple of seconds on a comp
+with a Lens flare. It is gated behind a 200 ms lull, so a continuous drag never meets it, but
+a pause-then-scrub does. Fixing it means cancelling work already handed to the GPU, which
+`docs/14-ENGINEERING-RULES.md` asks for in general and the flare's render pass does not yet
+offer; it is its own change with its own measurements.
+
+## K-373 — The splat tent reaches a full grid step, because a half-step tent reconstructs its own sampling grid
+
+**DECIDED** (2026-08-13). Fixes the reconstruction half of [K-366](#k-366--the-ghost-grid-is-splatted-per-ray-not-rasterised-as-quads); its per-ray splatting model is unchanged and correct.
+
+**What the owner saw**, and what the earlier fix did not touch. After K-370 removed the
+ring-mask ladder, a frame still showed "the interference pattern ... clearly visible at all
+options": a fine woven cross-hatch over the whole picture, a bright cross through the big
+ghost's centre along the two pupil axes, and stepped edges on the ghost rims. That is not
+diffraction. It is the sampling grid, printed on the image by the reconstruction filter.
+
+**The bug, in one line.** `ray_axes` returns **half**-axes — a full step between neighbouring
+rays is `2·a1` — and K-366 gave the tent a support of `±a1`. Two neighbouring tents therefore
+met exactly at the point where both had fallen to zero.
+
+A linear B-spline partitions unity only when its support is **twice** the sample spacing:
+tents at spacing `h` must reach `±h`. At `±h/2` they do not overlap at all, and the sum is a
+lattice of separate pyramids with a seam of zero along every cell boundary. Measured on a
+uniform sheet of identical rays — the case whose answer must be flat — the reconstruction ran
+from 0.0029 to 0.1436 about an expected 0.0469: a **49× peak-to-trough ripple**, 206% worst
+deviation. The regression test asserts flatness to 2% and fails at that figure without the
+fix.
+
+**Energy was conserved throughout, which is why nothing caught it.** The tent integrates to
+the parallelogram's area either way, so every flux test, every oracle mean and every
+bit-stability check passed while the artefact was plainly on screen. A conservation law is
+not a smoothness law, and the flare's test suite had the first and not the second.
+
+**The fix** is to give the tent the reach a partition of unity needs: `±2·a1`, i.e. one full
+grid step each way. The integral grows by four with it, so the peak is divided by four and
+the deposited flux is unchanged; `area`, `MIN_AREA_FRAC` and the density cap keep their K-366
+meaning in half-axis units, untouched. On the GPU the splat quad doubles and the fragment
+tent is unchanged — its `uv` still runs `±1` at the quad's corners, but that corner now sits
+on the *next ray along*, where its own tent is at full height.
+
+**It costs four times the fragments per splat**, on the effect's hottest raster. That is the
+price of a reconstruction that does not print its own sampling grid on the picture, and it is
+the sort of cost `docs/13-PERFORMANCE-RULES.md` exists to measure rather than guess at — the
+per-frame budget should be re-timed on a real card.
+
+**A test was recalibrated, and honestly.** `lens_flare_an_area_source_does_not_replicate_its_ghosts`
+asserted that an area source's ghost profile shows no more peaks than a *point* source's. That
+held only while the grid seams were flattening the profile. A bar-shaped source's ghost is a
+bar, and a cut across a bar shows both of its rims where a point's small ghost shows one
+summit — so the comparison was never of the same object. It now measures against the
+replication it was built to rule out, which is the like-for-like control the test already
+constructs.
+
+## K-374 — A group's lens-element visibility names `lens_model`, and an unreachable threshold says "never" rather than "always"
+
+**DECIDED** (2026-08-13). A defect in [K-371](#k-371) as shipped, fixed with the test that would have caught it.
+
+**What the owner saw**: "trying different lens coating options it didn't seem to do anything,
+but ... it also looked like only coating's 19/20 were available." Both halves are one bug, and
+the second explains the first.
+
+The bridge resolves each element row's threshold into the visibility rule the panel already
+has — sibling parameter plus the values it may hold — and it named that sibling **`"lens"`**.
+The Lens dropdown's id is **`lens_model`**. A sibling that does not exist fails *silently*:
+the panel looks it up, finds nothing, and hides every row that names it. The rows that
+survived were elements 19 and 20, whose threshold no bundled lens reaches (the deepest is 18)
+and whose value set was therefore **empty** — and an empty set means "always visible". So the
+only rows on screen were the two that govern elements no lens has, which is why changing them
+did nothing.
+
+Two fixes, and a test each:
+
+- the id is spelled once, as `LENS_PICK_PARAM`, and a test asserts the schema declares it —
+  along with every element row, its palette, and that each threshold governs the row it names;
+- an unreachable threshold now emits a set holding one impossible index rather than an empty
+  one, so it reads as "never" in the vocabulary the panel already has. A test pins that the
+  number of never-drawing rows is exactly the schema's ceiling less the deepest bundled lens.
+
+**The general lesson, recorded because the seam invites it**: every id crossing to the
+frontend by *name* wants a test that the name resolves. Nothing in the type system connects a
+string in `lumit-bridge` to a `ParamSchema` in `lumit-core`, and the failure mode is a control
+that quietly is not there.
+
+## K-375 — The flare's splats accumulate in f32 through a compute pass, not in fp16 through the blender
+
+**DECIDED** (2026-08-13, owner's choice between three costed options). Replaces the raster deposit half of [K-366](#k-366--the-ghost-grid-is-splatted-per-ray-not-rasterised-as-quads); the per-ray splatting model and [K-373](#k-373)'s tent are unchanged.
+
+**The defect.** Every ray's flux is deposited over a footprint, and a bright pixel takes
+contributions from thousands of them. That accumulation was done by the raster blender,
+additively, into the flare buffer — which is `WORKING_FORMAT`, `Rgba16Float`. **Adding a small
+increment to a large fp16 running sum loses everything below half an ULP of the sum**, and
+that is a systematic loss, not jitter that cancels: the brighter the pixel, the more of each
+further contribution disappears.
+
+Measured against the f32 CPU reference on the padded-anamorphic oracle: the middle of the
+frame 4.5% dim, the border ring 0.7%, the outer fifths 0.1% — tracking local brightness
+exactly as the mechanism predicts, and growing with the number of contributions per pixel
+(K-373 quadrupled that count and the deficit grew ~3.5×, which is what identified it). It had
+been there since K-366 and read as a mysterious 1.2% oracle gap.
+
+**Why this option and not the other two.** `Rgba32Float` blending needs the
+`FLOAT32_BLENDABLE` device feature, which this build does not request and which is not
+universally available — it would either raise the hardware floor or make the picture differ by
+machine, which is the determinism [K-353](#k-353) fought for. Restating the oracle's bound
+would have recorded the loss rather than fixed it, and the loss is real: the GPU was
+systematically darkening its own highlights.
+
+**The mechanism.** The sum is accumulated in **f32** in a pooled storage buffer, three channels
+a pixel, and written into the fp16 texture **once**, by a resolve pass, at the end. One
+rounding instead of thousands. The texture stays fp16 — a single stored value has precision to
+spare; it was only ever the accumulation that was short, so nothing downstream (blur, combine)
+changes at all.
+
+**The sum is fixed point, and the first attempt at this was wrong.** WGSL has no float
+atomics, and the obvious substitute — a compare-and-swap loop over the f32's bit pattern — is
+exact per add but leaves the *order* of the adds to whichever thread wins the slot. Float
+addition is not associative, so the same document rendered two different pictures. CI caught
+it immediately (`an area source must be bit-stable too`), which is [K-353](#k-353) doing its
+job.
+
+Integer addition **is** associative and commutative, so `atomicAdd` on a u32 gives a sum
+independent of thread order. The accumulator is therefore fixed point at 2^18 steps per unit
+of radiance: every deposit is rounded to the nearest 3.8e-6 and added exactly. That is
+*unbiased* rounding against the blender's systematic truncation — better precision where it
+mattered, and reproducible, which the float version was not. Radiance is never negative, so
+the sign bit is spare range rather than a missing case.
+
+The cost is a ceiling: above 16383.99 in a channel the u32 **wraps** rather than saturating,
+because detecting the overflow would need the compare-and-swap whose order dependence this
+design exists to avoid. The margin is the safety, and it is measured rather than asserted — a
+test renders the CPU reference at four times intensity with no ghost blur and requires the
+brightest pixel to sit at least 100× under the ceiling, so the scale is revisited before a
+user ever sees a wrapped highlight.
+
+**A twin, not merely an analogue.** `deposit` mirrors `lumit_core`'s `splat_ray` op for op —
+same bounding box, same inverse 2×2, same tent, same order — which the raster could not, since
+its pixel selection was the rasteriser's fill rule rather than the reference's `|u| < 2` test.
+The oracle should therefore agree more closely than it ever has, and the exact figure is
+CI's to report: this machine has no adapter, and `tests/wgsl_validates.rs` (naga, no card)
+is what checked the new kernel here.
+
+**What this deletes**: the whole render pipeline, its bind group layout, its
+`fx_lens_flare_draw.wgsl`, and the additive `BlendState` that was the actual bug.
+`Scratch` gains the accumulator, pooled and size-bounded on the same rule as the rays and
+splats, and cleared per frame with `clear_buffer`.
+
+## K-376 — The splat kernel is a quadratic B-spline, because a tent's creases are visible too
+
+**DECIDED** (2026-08-14). Continues [K-373](#k-373); the partition-of-unity requirement it established is unchanged, and this is about what *kind* of partition.
+
+**The owner, on a build carrying K-373**: "genuinely feels like the flares are getting worse.
+That grid pattern is still absurdly visible." K-373 was right and not sufficient, and the gap
+between those two is worth recording, because the test that passed is the reason it was missed.
+
+**Why the flat-sheet test passed while the artefact stayed.** K-373's regression test lays
+down a *uniform* lattice of identical rays and requires the reconstruction to be flat. A tent
+handles that case exactly — it is the case a tent is designed for. A real ghost's rays are
+neither uniform nor axis-aligned, and there the tent's weakness shows: a linear B-spline is
+only **C⁰**, so the reconstructed surface has a crease along every cell boundary. The eye finds
+creases; it is the same Mach-band sensitivity that makes a polygon silhouette visible in
+otherwise smooth shading. A test on the easy case proved a property that did not transfer.
+
+**Measured on a real frame** — each pixel's departure from its own 3×3 mean, relative to that
+mean, in two brightness bands:
+
+| kernel | bright | dark |
+|---|---|---|
+| K-366, tent at half a step (what the owner photographed) | 15.8% | — |
+| K-373, tent at a full step | 2.42% | 4.59% |
+| **K-376, quadratic B-spline** | **1.91%** | **3.81%** |
+| cubic B-spline, for comparison | 1.87% | 3.72% |
+
+The quadratic — `3/4 − t²` inside a half step, `(3/2 − |t|)²/2` out to one and a half — is the
+standard answer to this exact symptom in the simulation literature, where it is called grid
+imprinting or cell-crossing noise. It partitions unity like the tent and is C¹. The cubic buys
+almost nothing further for sixteen cells a splat against nine, so it is recorded here and not
+taken.
+
+**What is left is not the kernel.** The dark band settles at about 3% and **stops falling when
+the rays are multiplied eightfold**, which sampling noise would not do — so it is the flare's
+own fine detail (iris rims, overlapping faint ghost tails) being read by a metric that cannot
+tell detail from artefact, not a residual grid. The new test's thresholds sit just above the
+measured figures for that reason, and say so.
+
+**The measurement is now a test.** `lens_flare_reconstruction_does_not_imprint_its_own_grid`
+measures a real frame rather than a synthetic sheet, which is the thing K-373 failed to do.
+
+## K-377 — The accumulator's fixed-point scale is sized from what the buffer holds
+
+**DECIDED** (2026-08-14). Corrects a number in [K-375](#k-375).
+
+K-375 picked 2^18 steps per unit of radiance and justified the ceiling — 16384 — as "orders
+above anything a frame produces". It is: the flare buffer measures a **peak of 0.042** and a
+**median lit pixel of 0.0028** on the bundled default, because the auto-exposure normalises it
+there (K-258). That makes the ceiling four hundred thousand times the peak — range spent on
+headroom no frame will ever reach, and paid for in resolution exactly where the picture is
+dark and banding is most visible.
+
+2^24 keeps a ceiling of 256 — still six thousand times the measured peak, and a thousand times
+it at fourfold intensity — and drops the quantum to 6e-8, a fifty-thousandth of the median lit
+pixel. The margin is measured by the same test as before rather than argued.
+
+The lesson is the one K-375 should have taken: the range was chosen before anything was
+measured, and a measurement was a two-line print away.
+
+## K-378 — Area-source sampling the splat reconstruction can actually follow
+
+**DECIDED** (2026-08-16). Amends [K-367](#k-367) (per-ray source integration — the
+mechanism stands) and [K-366](#k-366)/[K-373](#k-373) (the footprint rule changes).
+
+**The owner, with matte sources on footage**: "until this is fixed (the grid looking
+stuff) the lens flare is unusable — Normal still needs to be usable and currently it is
+completely unusable even at ultra." Reproduced exactly on the CPU reference: give the
+default lens any source extent and every ghost wears a woven mesh; a point source is
+clean. K-367's integration was right about the integral and wrong about what the
+reconstruction could survive, in three separable ways, each fixed at its own site:
+
+1. **Footprints averaged where they should cover.** The source offsets hop by more than
+   the whole source between pupil neighbours — that is what equidistributes them — so a
+   ray's two neighbours regularly land on the *same side* of it, and K-366's central
+   difference (their average) cancelled toward zero: a collapsed splat sitting between
+   two wide gaps, quasi-periodically across the ghost. `ray_axes`/`build_splats` now
+   take the **longer one-sided difference** per axis. On a smooth map the sides agree
+   and this is the central difference it was; under jitter, under-coverage becomes
+   impossible and the cost is overlap, which is only blur. (A smooth low-frequency
+   jitter that central differences could follow was tried first and rejected: it
+   couples source position to pupil position, and a big softbox rendered as folded
+   zigzag sheets.)
+
+2. **1/ρ² is not a rotation.** K-367 took the plastic constant's 2D low-discrepancy
+   pair (1/ρ, 1/ρ²), but each constant drives its own axis by its own index, so each
+   must be a good **1D** rotation alone — and 1/ρ² = 0.5698 sits within 0.002 of 4/7,
+   so its samples fall into seven combs that precess too slowly to wash out across a
+   pupil grid: stripes down every ghost, on either axis it drives. `PHI_V` is now
+   **1/ψ = 0.6823278** (supergolden; ψ³ = ψ² + 1) — the same family of cubic Pisot
+   units as 1/ρ, rationally independent of it, and tied-best of a scanned battery on
+   the stripe metric. (The golden ratio, the textbook best rotation, was measured and
+   is *worse* here — the triangle wave's reflection symmetry doubles its coincidence
+   structure into a mesh. The battery beat the theory; the test pins the measurement.)
+
+3. **Every band re-traced the same source points.** Bands splat independently and sum,
+   so each now samples the source at its own phase (`PHI_BAND` = 0.618 per band):
+   band-count × the effective source sampling for free, and each band's residual
+   ripple averages toward the mean instead of reinforcing.
+
+Measured on the new `lens_flare_an_area_source_renders_without_stripes` (a 9×9
+grid-imprint metric — K-376's 3×3 provably cannot see this artefact: the mesh's period
+is the ray spacing, several pixels, and the K-367 mesh *passes* K-376's bound while
+plainly visible): **7.3% → 1.1%**; the visual mesh is gone at every quality including
+Draft. A point source is bit-identical throughout (zero extent, zero offset, every
+band). The area-flux test's floor widens 0.98 → 0.94: the wider footprints spread a
+little further, and on a 192-px test raster a few percent of the smear honestly crosses
+the frame edge — measured 1.007 on a padded buffer that catches it.
+
+## K-379 — The submission pacing counts the deposit, not just the trace
+
+**DECIDED** (2026-08-16). Extends [K-263](#k-263)'s submission split and [K-375](#k-375)'s
+deposit.
+
+**The owner**: changing a flare setting "starts lagging my entire pc… it ended up
+freezing the whole pc until it crashed lumit and closed vscode with it, after the pc was
+frozen for like a good 2 minutes." That is the K-263 device-loss failure back in a new
+coat: the frame IS split into submissions, but the split is paced by
+`Batch::steps` — the trace's ray–surface count — and since K-375 the deposit is a
+compute scatter whose cost the trace count cannot see. A splat deposits over its own
+footprint, so a ghost's deposit costs about **nine times its image area in atomic
+adds, per combo per light, however many rays sample it** (kernel support of 1.5 grid
+steps each way = ~9 cells of overlap). For a frame-filling defocused ghost on a 1080p
+buffer that is ~40 M atomics per combo-light — and a Normal frame of sixty ghosts,
+eight bands and a handful of matte sources packs *tens of seconds* of scatter into
+submissions the step model priced as milliseconds. The watchdog kills one, the device
+dies, the session is over; until it dies, the saturated queue starves the desktop
+compositor, which is the whole-PC freeze.
+
+Two changes, both in the plan (testable without a card, like the rest of it):
+
+- `combo_deposit_cost(spread × stop_scale, flare diagonal px)` estimates each combo's
+  deposit pixels from its bake spread — over-counting elongated ghosts, which errs the
+  safe way — and `plan_flushes` paces on trace steps + deposit pixels, treating one
+  deposited pixel as one step (both are a few dozen operations).
+- `plan_batches` caps a batch's (combo × light) slot count so one batch's deposit
+  stays about one `STEPS_PER_SUBMIT`, because a batch is the atomic unit of encoding
+  and a flush between batches cannot split the inside of one. A batch of one combo and
+  one light is always allowed — it is itself about that size for the biggest ghost a
+  padded 4K buffer holds, which is the floor the bound rests on.
+
+This bounds every submission; it does not make the work smaller. The deposit's total
+cost — 9 × ghost area × combos × lights, independent of ray count — is the recorded
+follow-up: deposit large splats into coarser accumulator levels and upsample at
+resolve, so a splat's cost is capped whatever its size.
+
+## K-380 — Big splats deposit into a pyramid, so a splat's cost is capped
+
+**DECIDED** (2026-08-16). Delivers [K-379](#k-379)'s recorded follow-up; continues
+[K-375](#k-375)/[K-376](#k-376), whose accumulator and kernel are unchanged in kind.
+
+K-379 bounded the *submissions*; the *work* was still nine times each ghost's image area in
+atomic adds per combo per light, independent of ray count — the deposit kernel spans three
+grid steps, so a frame of defocused ghosts pays its own area tens of times over. That is
+what "Normal still needs to be usable and currently it is completely unusable" costs, and
+the owner named the remedy in the same breath: "use the grid to speed things up then smooth
+it."
+
+The accumulator becomes a level pyramid — level 0 the flare buffer, each level ceil-halving
+both axes, ~1.33× the pixels in total. A splat whose kernel span exceeds
+`DEPOSIT_SPAN_PX` (48 px) deposits at the shallowest level that brings it under, everything
+scaled into level pixels; the resolve bilinearly upsamples and sums the levels. The kernel,
+the floors, the fold guard, the density cap and the fixed-point accumulation are all
+untouched — the peak is a density, and a density survives resampling — and level 0's
+read-back is the identity, so small-splat frames render exactly as before. The smoothing a
+coarse level costs is about a twenty-fourth of the splat's own size, on splats whose own
+softness is far coarser. A splat now costs at most about `DEPOSIT_SPAN_PX`² pixels.
+
+**Measured**: the frame-cost harness (960×540, Normal, 60 ghosts) went **1.15 s → 87 ms**
+per frame on the development machine — thirteenfold, and the difference between a flare
+dial that saturates the card and one that scrubs.
+
+Two implementation notes that cost an afternoon and are pinned in the impl note so they are
+not re-learned: FXC refuses dynamic indexing of uniform-buffer arrays (the level dims are
+derived in-shader as `ceil(raster / 2^level)` — provably what iterated ceil-halving
+produces — instead of being passed as a table), and refuses l-value indexing of local
+vectors (the resolve taps whole `vec3`s). Both failures presented as a silently black or
+garbage flare with the validation error only visible on stderr. The accumulator's old
+clamp to the scratch budget is also gone: level 0 must hold every pixel of the flare
+buffer, and the clamp was silently truncating it past 2K rasters.
+
 ## K-382 — Three overlaid waves need a paint order and a fan
 
 **DECIDED** (2026-08-06, landed 2026-08-17 — the commit sat unpushed). K-284 put the

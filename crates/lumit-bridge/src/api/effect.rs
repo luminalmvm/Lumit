@@ -452,6 +452,13 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
 /// conditional run of parameters takes. `visible_when_param` with a
 /// non-empty `visible_when_values` shows the group only while that sibling
 /// Choice parameter holds one of those indices.
+// A group whose schema says its rows are per glass element of a lens (K-371)
+// arrives as exactly that same shape: `visible_when_param` is the Lens
+// dropdown and `visible_when_values` lists the lenses whose prescription has
+// enough elements for the row. The panel therefore has one visibility rule to
+// implement, not two, and learns nothing about optics. Deliberately NOT a doc
+// comment: frb mirrors those into the generated Dart, and this note is about
+// how the Rust side fills the fields in, which the frontend need not read.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeParamGroup {
@@ -465,6 +472,16 @@ pub struct BridgeParamGroup {
     /// See the struct docs. Empty when the group is unconditional.
     pub visible_when_values: Vec<u32>,
 }
+
+/// The Lens flare's lens-pick parameter, whose value the per-element coating
+/// rows' visibility is resolved against (K-371).
+///
+/// Spelled once, here, because getting it wrong is silent: the panel looks the
+/// sibling up by id, finds nothing, and hides every row that names it — which
+/// is exactly what shipping `"lens"` instead of `"lens_model"` did. The rows
+/// that survived were the ones with an unreachable threshold, whose empty
+/// value set means "always". The constants test pins this against the schema.
+pub(crate) const LENS_PICK_PARAM: &str = "lens_model";
 
 /// Every parameter group `effect` declares, in schema order (empty for an
 /// effect with none, or an unknown name). The panel inserts each group's
@@ -485,11 +502,34 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
             label: g.label.to_owned(),
             params: g.params.iter().map(|p| (*p).to_owned()).collect(),
             collapsed: g.collapsed,
-            visible_when_param: g.visible_when.map(|(id, _)| id.to_owned()),
-            visible_when_values: g
-                .visible_when
-                .map(|(_, vs)| vs.to_vec())
-                .unwrap_or_default(),
+            // The per-element rows (K-371) become an ordinary "this sibling
+            // Choice holds one of these" rule, resolved from the lens library
+            // here so the frontend needs no new mechanism and no notion of an
+            // element. The two conditions are mutually exclusive by
+            // construction: a group declares one or the other.
+            visible_when_param: match (g.visible_when, g.visible_when_lens_elements) {
+                (Some((id, _)), _) => Some(id.to_owned()),
+                (None, Some(_)) => Some(LENS_PICK_PARAM.to_owned()),
+                (None, None) => None,
+            },
+            visible_when_values: match (g.visible_when, g.visible_when_lens_elements) {
+                (Some((_, vs)), _) => vs.to_vec(),
+                (None, Some(n)) => {
+                    let lenses = lumit_core::fx::lens_flare::lenses_with_at_least(n);
+                    // **An empty set means "always visible"** (see
+                    // `BridgeParamGroup`), which is the opposite of what an
+                    // unreachable threshold wants: no bundled lens has
+                    // nineteen elements, so element 19's row must never draw
+                    // rather than always draw. A set holding one impossible
+                    // index says that in the vocabulary the panel already has.
+                    if lenses.is_empty() {
+                        vec![u32::MAX]
+                    } else {
+                        lenses
+                    }
+                }
+                (None, None) => Vec::new(),
+            },
         })
         .collect()
 }
@@ -1080,5 +1120,76 @@ impl BridgeEffectInstance {
             .iter()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// **The coating rows resolve against a parameter that exists** (K-371).
+    ///
+    /// A group's visibility is looked up in the panel by sibling id, and a
+    /// sibling that is not there fails silently — the rows naming it simply
+    /// never draw. Shipping `"lens"` instead of `"lens_model"` did exactly
+    /// that, leaving only the rows with an unreachable threshold, whose empty
+    /// value set means "always visible". So: the id names a real Choice, and
+    /// every emitted rule is one the panel can act on.
+    #[test]
+    fn every_element_row_names_a_real_sibling_and_a_reachable_set() {
+        let flare = lumit_core::fx::BUILTINS
+            .iter()
+            .find(|s| s.match_name == "lens_flare")
+            .expect("the Lens flare is a builtin");
+        assert!(
+            flare.params.iter().any(|p| p.id == LENS_PICK_PARAM),
+            "`{LENS_PICK_PARAM}` must be a parameter of the Lens flare"
+        );
+
+        let groups = list_parameter_groups("lens_flare".to_owned());
+        let mut per_element = 0;
+        for g in &groups {
+            let Some(param) = &g.visible_when_param else {
+                assert!(g.visible_when_values.is_empty());
+                continue;
+            };
+            assert!(
+                flare.params.iter().any(|p| p.id == param),
+                "group `{}` is resolved against `{param}`, which the schema \
+                 does not declare",
+                g.label
+            );
+            assert!(
+                !g.visible_when_values.is_empty(),
+                "a conditional group with an empty value set reads as \
+                 unconditional, which is the opposite of what it means"
+            );
+            if param == LENS_PICK_PARAM {
+                per_element += 1;
+            }
+        }
+        assert_eq!(
+            per_element,
+            lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS,
+            "every element row must carry a rule"
+        );
+
+        // A threshold no bundled lens reaches must resolve to "never", and it
+        // says so with an index no Lens choice can hold.
+        let deep = groups
+            .iter()
+            .filter(|g| g.visible_when_param.as_deref() == Some(LENS_PICK_PARAM))
+            .filter(|g| g.visible_when_values == vec![u32::MAX])
+            .count();
+        let reachable = lumit_core::fx::lens_flare::library_element_counts()
+            .into_iter()
+            .max()
+            .expect("a library");
+        assert_eq!(
+            deep,
+            lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS - reachable as usize,
+            "the rows past the deepest bundled lens are the ones that never draw"
+        );
     }
 }

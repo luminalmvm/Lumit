@@ -210,10 +210,14 @@ fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
         LayerKind::Text { .. } => SourceRef::Text,
         LayerKind::Shape { .. } => SourceRef::Shape,
         LayerKind::Sequence { .. } => SourceRef::Sequence,
-        // Three kinds have no source of their own. An Adjustment layer is
-        // handled before this point (it wraps what is below it); a Camera and a
-        // Null reach here and are dropped by the caller's `continue`.
-        LayerKind::Camera { .. } | LayerKind::Adjustment | LayerKind::Null => return None,
+        // Four kinds have no source of their own. An Adjustment layer is
+        // handled before this point (it wraps what is below it); a Camera, a
+        // Light and a Null reach here and are dropped by the caller's
+        // `continue` — a light is something other layers see, never a picture.
+        LayerKind::Camera { .. }
+        | LayerKind::Light { .. }
+        | LayerKind::Adjustment
+        | LayerKind::Null => return None,
     })
 }
 

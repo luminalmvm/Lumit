@@ -1487,6 +1487,7 @@ dependencies = [
  "arc-swap",
  "parking_lot",
  "proptest",
+ "rayon",
  "rhai",
  "serde",
  "serde_json",

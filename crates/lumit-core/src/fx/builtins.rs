@@ -50,12 +50,14 @@ const SHAKE_GROUPS: &[ParamGroup] = &[
         params: &["x_amp", "x_freq", "y_amp", "y_freq", "z_amp", "z_freq"],
         collapsed: true,
         visible_when: None,
+        visible_when_lens_elements: None,
     },
     ParamGroup {
         label: "Motion blur",
         params: &["motion_blur", "mb_amount"],
         collapsed: true,
         visible_when: None,
+        visible_when_lens_elements: None,
     },
 ];
 
@@ -366,6 +368,248 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 1.0,
                     slider: (1.0, 8.0),
                     hard: (Some(1.0), None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
+    // Sprite flare (docs/08 §3.29, K-359): the ART-DIRECTED flare, and a
+    // deliberately separate effect from the physically simulated §3.27 rather
+    // than a mode of it — the two answer different questions. Everything is
+    // placed from the light's POSITION: a glow on it, a train of iris ghosts
+    // marching along the line through the frame's centre (which is where a real
+    // lens puts its reflections, mirrored about the optical axis), and an
+    // anamorphic streak through it. No bright-pass, so nothing to flicker on
+    // footage — the complaint that sent the physical flare's Matte mode back to
+    // the drawing board. Intensity 0 and Mix 0 are the bit-exact passthrough.
+    EffectSchema {
+        groups: &[
+            ParamGroup {
+                label: "Glow",
+                params: &["glow_size", "glow_intensity"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: None,
+            },
+            ParamGroup {
+                label: "Ghosts",
+                params: &["ghosts", "ghost_spacing", "ghost_size", "ghost_intensity"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: None,
+            },
+            ParamGroup {
+                label: "Streak",
+                params: &["streak_length", "streak_intensity", "streak_angle"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: None,
+            },
+        ],
+        enabled_when: &[],
+        match_name: "sprite_flare",
+        label: "Sprite flare",
+        version: 1,
+        category: FxCategory::Stylise,
+        traits: EffectTraits {
+            cost: CostClass::Cheap,
+            roi: Roi::FullFrame,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "light_x",
+                label: "Light x",
+                // px@comp (K-260), like the physical flare's light. Open both
+                // sides: an off-frame light still throws ghosts across it,
+                // which is most of what this effect is for.
+                kind: ParamKind::Float {
+                    default: 640.0,
+                    slider: (0.0, 3840.0),
+                    hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "light_y",
+                label: "Light y",
+                kind: ParamKind::Float {
+                    default: 360.0,
+                    slider: (0.0, 2160.0),
+                    hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "intensity",
+                label: "Intensity",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "tint",
+                label: "Tint",
+                // Scene-linear, and open above so an HDR tint can push the
+                // flare hotter than the plate.
+                kind: ParamKind::Colour {
+                    default: [1.0, 1.0, 1.0, 1.0],
+                    range: (0.0, 4.0),
+                },
+            },
+            ParamSchema {
+                id: "glow_size",
+                label: "Glow size",
+                kind: ParamKind::Float {
+                    default: 120.0,
+                    slider: (0.0, 800.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "glow_intensity",
+                label: "Glow intensity",
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 4.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghosts",
+                label: "Ghosts",
+                // How many discs march along the axis; 0 is none of them.
+                kind: ParamKind::Int {
+                    default: 6,
+                    slider: (0, 16),
+                    hard: (Some(0), Some(16)),
+                },
+            },
+            ParamSchema {
+                id: "ghost_spacing",
+                label: "Ghost spacing",
+                // A fraction of the light→centre distance, so the train
+                // stretches and gathers as the light moves, exactly as a real
+                // one does.
+                kind: ParamKind::Float {
+                    default: 0.35,
+                    slider: (0.0, 1.5),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghost_size",
+                label: "Ghost size",
+                kind: ParamKind::Float {
+                    default: 60.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "ghost_intensity",
+                label: "Ghost intensity",
+                kind: ParamKind::Float {
+                    default: 0.35,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_length",
+                label: "Streak length",
+                kind: ParamKind::Float {
+                    default: 300.0,
+                    slider: (0.0, 2000.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_intensity",
+                label: "Streak intensity",
+                kind: ParamKind::Float {
+                    default: 0.5,
+                    slider: (0.0, 2.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "streak_angle",
+                label: "Streak angle",
+                // 0 is horizontal — the anamorphic look.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (-180.0, 180.0),
+                    hard: (None, None),
+                },
+            },
+            MIX_PARAM,
+        ],
+    },
+    // Light wrap (docs/08 §3.28, K-358): the oldest trick in compositing and
+    // one Lumit had no answer for. A keyed subject reads as pasted on because
+    // in a real camera the light behind it spills round its edges; this takes
+    // the referenced Background layer, blurs it over Width, and screens that
+    // blur back only into the band just inside the foreground's own outline —
+    // found from the foreground's alpha, so the effect needs no mask of its
+    // own. Screened rather than added, so a bright plate brightens the edge
+    // toward itself rather than past white. Width 0 is the bit-exact
+    // passthrough, as is an unset Background (the labelled-no-op rule every
+    // layer-input effect follows).
+    EffectSchema {
+        groups: &[],
+        enabled_when: &[],
+        match_name: "light_wrap",
+        label: "Light wrap",
+        version: 1,
+        category: FxCategory::Stylise,
+        traits: EffectTraits {
+            cost: CostClass::Moderate,
+            // The wrap reaches Width inside the edge and the blur reads Width
+            // out; 10 % of the diagonal covers any sane setting.
+            roi: Roi::PaddedPctDiag(10.0),
+            temporal: &[0],
+            // The band is read off the foreground's own alpha, which only
+            // means anything premultiplied.
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[
+            ParamSchema {
+                id: "background",
+                label: "Background",
+                // Unset until the owner picks one — a labelled no-op. No
+                // self_default (K-288): a layer is never its own background,
+                // so starting pointed at itself would be a wrap of nothing.
+                kind: ParamKind::Layer {
+                    self_default: false,
+                },
+            },
+            ParamSchema {
+                id: "width",
+                label: "Width",
+                // px@comp (K-260), and the same distance twice: how far the
+                // wrap reaches inside the edge, and the radius the background
+                // is softened by.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 200.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "intensity",
+                label: "Intensity",
+                // Gain on the spill before it is screened on. Open above
+                // (K-090) for a deliberately hot wrap.
+                kind: ParamKind::Float {
+                    default: 1.0,
+                    slider: (0.0, 3.0),
+                    hard: (Some(0.0), None),
                 },
             },
             MIX_PARAM,
@@ -1244,12 +1488,14 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["blades", "roundness", "rotation", "aspect", "rim"],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 label: "Highlights",
                 params: &["threshold", "exposure"],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             ParamGroup {
                 // How the depth pass is READ — which number in it is depth,
@@ -1265,6 +1511,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
         ],
         // The greyed rows: which of two controls is in charge, said in the
@@ -2705,6 +2952,7 @@ pub const BUILTINS: &[EffectSchema] = &[
             ],
             collapsed: true,
             visible_when: None,
+            visible_when_lens_elements: None,
         }],
         enabled_when: &[],
         match_name: "matte_key",
@@ -2957,6 +3205,150 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
+            },
+            // One coating row per glass element (K-371), each headerless and
+            // drawn only when the lens in play has that element: four rows on
+            // the Tessar, eighteen on the Canon 70-200.
+            ParamGroup {
+                label: "",
+                params: &["coating_el1"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(1),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el2"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(2),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el3"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(3),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el4"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(4),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el5"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(5),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el6"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(6),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el7"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(7),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el8"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(8),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el9"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(9),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el10"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(10),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el11"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(11),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el12"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(12),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el13"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(13),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el14"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(14),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el15"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(15),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el16"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(16),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el17"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(17),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el18"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(18),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el19"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(19),
+            },
+            ParamGroup {
+                label: "",
+                params: &["coating_el20"],
+                collapsed: false,
+                visible_when: None,
+                visible_when_lens_elements: Some(20),
             },
             ParamGroup {
                 label: "Flare options",
@@ -2971,6 +3363,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 ],
                 collapsed: true,
                 visible_when: None,
+                visible_when_lens_elements: None,
             },
             // The source-colour toggle: headerless, and shown for BOTH the
             // source modes that HAVE a source colour to take (Matte, and
@@ -2980,6 +3373,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["use_source_colour"],
                 collapsed: false,
                 visible_when: Some(("source_type", &[1, 2])),
+                visible_when_lens_elements: None,
             },
             // The matte rows: headerless (empty label renders them in place,
             // no twirl), shown only while Source type is Matte.
@@ -2988,12 +3382,17 @@ pub const BUILTINS: &[EffectSchema] = &[
                 params: &["matte", "threshold", "threshold_softness"],
                 collapsed: false,
                 visible_when: Some(("source_type", &[1])),
+                visible_when_lens_elements: None,
             },
         ],
         enabled_when: &[],
         match_name: "lens_flare",
         label: "Lens flare",
-        version: 5,
+        // 11 since K-370: the ghost-edge diffraction is the knife-edge
+        // asymptotic at each ghost's own (derived, and far higher) Fresnel
+        // number, so the rim ringing hugs the rim and the broad interference
+        // pattern K-369's mask ladder painted across the frame is gone.
+        version: 11,
         category: FxCategory::Stylise,
         traits: EffectTraits {
             cost: CostClass::Heavy,
@@ -3026,6 +3425,29 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 360.0,
                     slider: (0.0, 2160.0),
                     hard: (None, None),
+                },
+            },
+            ParamSchema {
+                id: "source_width",
+                label: "Source width",
+                // px@comp like the position (K-260), and the HALF-width of the
+                // emitting area: 0 — the default — is the point source the
+                // effect has always had, and anything larger makes it an AREA
+                // light whose ghosts take the shape of the source rather than
+                // of a point (K-355). Pairs with source_height into one row.
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
+                },
+            },
+            ParamSchema {
+                id: "source_height",
+                label: "Source height",
+                kind: ParamKind::Float {
+                    default: 0.0,
+                    slider: (0.0, 400.0),
+                    hard: (Some(0.0), None),
                 },
             },
             ParamSchema {
@@ -3152,6 +3574,192 @@ pub const BUILTINS: &[EffectSchema] = &[
                     default: 0.05,
                     slider: (0.0, 1.0),
                     hard: (Some(0.0), Some(1.0)),
+                },
+            },
+            // The per-element coatings (K-371): one row per glass element,
+            // each choosing a real AR design. Twenty is the schema's ceiling;
+            // each row's own group says how many elements a lens must have
+            // for it to be drawn, so the panel offers exactly as many as the
+            // lens does. Left "As the lens file" — the default — a row
+            // changes nothing at all.
+            ParamSchema {
+                id: "coating_el1",
+                label: "Element 1",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el2",
+                label: "Element 2",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el3",
+                label: "Element 3",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el4",
+                label: "Element 4",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el5",
+                label: "Element 5",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el6",
+                label: "Element 6",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el7",
+                label: "Element 7",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el8",
+                label: "Element 8",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el9",
+                label: "Element 9",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el10",
+                label: "Element 10",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el11",
+                label: "Element 11",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el12",
+                label: "Element 12",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el13",
+                label: "Element 13",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el14",
+                label: "Element 14",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el15",
+                label: "Element 15",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el16",
+                label: "Element 16",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el17",
+                label: "Element 17",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el18",
+                label: "Element 18",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el19",
+                label: "Element 19",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
+                },
+            },
+            ParamSchema {
+                id: "coating_el20",
+                label: "Element 20",
+                kind: ParamKind::Choice {
+                    options: crate::fx::lens_flare::COATING_DESIGN_OPTIONS,
+                    default: 0,
+                    dividers_after: &[0, 1],
                 },
             },
             // --- Flare options group ---
@@ -3283,7 +3891,9 @@ pub const BUILTINS: &[EffectSchema] = &[
             ParamSchema {
                 id: "threshold",
                 label: "Threshold",
-                // Linear luma at/above which a detected source flares fully.
+                // The absolute scene-linear luma a pixel must EXCEED to
+                // flare (K-363): at 1.0 only over-range highlights, at 0.0
+                // anything brighter than black — black itself never.
                 // Slider normalised 0–1 (typing goes above; open ceiling).
                 kind: ParamKind::Float {
                     default: 1.0,

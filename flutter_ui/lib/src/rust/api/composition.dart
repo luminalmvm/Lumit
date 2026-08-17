@@ -10,6 +10,7 @@ import 'effect.dart';
 import 'export.dart';
 import 'footage.dart';
 import 'layer.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
@@ -71,6 +72,12 @@ class BridgeCompModel {
   /// their own motion-blur switch actually blur. Drawn by the Timeline's
   /// master button; written through `set_motion_blur_enabled`.
   final bool motionBlurEnabled;
+
+  /// The comp's background colour, scene-linear RGBA — what the Viewer
+  /// bar's swatch shows. In the model so a bar that rebuilds on every
+  /// arriving frame reads the held copy rather than asking the engine per
+  /// rebuild (K-184); writes still go through `set_background`.
+  final F32Array4 background;
   final List<BridgeLayerEntry> layers;
 
   const BridgeCompModel({
@@ -79,6 +86,7 @@ class BridgeCompModel {
     required this.fpsNum,
     required this.fpsDen,
     required this.motionBlurEnabled,
+    required this.background,
     required this.layers,
   });
 
@@ -89,6 +97,7 @@ class BridgeCompModel {
       fpsNum.hashCode ^
       fpsDen.hashCode ^
       motionBlurEnabled.hashCode ^
+      background.hashCode ^
       layers.hashCode;
 
   @override
@@ -101,6 +110,7 @@ class BridgeCompModel {
           fpsNum == other.fpsNum &&
           fpsDen == other.fpsDen &&
           motionBlurEnabled == other.motionBlurEnabled &&
+          background == other.background &&
           layers == other.layers;
 }
 
@@ -318,6 +328,17 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddFootageLayer(
               that: this, footage: footage, asSequence: asSequence);
 
+  /// Add a Light layer at the comp centre (K-360).
+  ///
+  /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
+  /// because that is the shape every other frb choice takes. An **area**
+  /// light starts at a tenth of the comp's width and height, which is a
+  /// softbox rather than a pinprick: a light with no size would draw exactly
+  /// as a point one and leave nothing to discover.
+  LayerReference addLightLayer({required int kind}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddLightLayer(
+          that: this, kind: kind);
+
   /// Add a Null layer: an invisible layer with no source of its own, carrying
   /// only a transform, for parenting rigs. It has no size, so only its
   /// position is centred and the anchor stays at the origin.
@@ -424,6 +445,15 @@ class CompositionReference {
   /// something — is recognised by a signature and costs nothing.
   void audioPrepare() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAudioPrepare(
+        that: this,
+      );
+
+  /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
+  /// item 10). What the composite is drawn onto where nothing covers it, and
+  /// what an export writes there — distinct from the Viewer's transparency
+  /// grid (K-352), which only decides whether that backdrop is *drawn*.
+  F32Array4 background() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceBackground(
         that: this,
       );
 
@@ -887,21 +917,12 @@ class CompositionReference {
               scale: scale,
               layer: layer);
 
-  /// Set what the Viewer looks *through*: `stops` of exposure and whether the
-  /// tone map is engaged (K-314, docs/07 §2.2 items 12-13).
-  ///
-  /// **Preview only.** It moves the display encode of every frame the session
-  /// renderer composites from here on and nothing else — no document, no op,
-  /// no undo step. An export builds its own renderer and this is never sent
-  /// to it, so the export is neutral by construction.
-  ///
-  /// The frontend follows this with its ordinary request for the frame under
-  /// the playhead: a setting changes what the *next* frame looks like, and
-  /// without an ask the picture would not move until something else did.
-  void setDisplayView({required double stops, required bool toneMap}) =>
-      BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceSetDisplayView(
-              that: this, stops: stops, toneMap: toneMap);
+  /// Set this composition's background colour — one op, one undo step
+  /// (K-357). A document edit that reaches the export, unlike the Viewer's
+  /// preview-only grid.
+  void setBackground({required F32Array4 rgba}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetBackground(
+          that: this, rgba: rgba);
 
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
@@ -930,6 +951,35 @@ class CompositionReference {
   void setSettings({required BridgeCompSettings settings}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSettings(
           that: this, settings: settings);
+
+  /// Set what the Viewer looks *through*, whole: `stops` of exposure and
+  /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
+  /// whether the comp's background colour is left out of the composite so
+  /// the transparency grid can show through what nothing covers (K-352).
+  ///
+  /// **Preview only.** It moves how every frame the session renderer makes
+  /// from here on is composited and display-encoded, and nothing else — no
+  /// document, no op, no undo step. An export builds its own renderer and
+  /// this is never sent to it, so an export is neutral and draws the
+  /// backdrop by construction.
+  ///
+  /// One call carrying the whole look, so the renderer can never hold half
+  /// of one. The frontend follows a *change* with its ordinary request for
+  /// the frame under the playhead: a setting changes what the next frame is
+  /// made of, and without an ask the picture would not move until something
+  /// else did.
+  void setViewerLook(
+          {required double stops,
+          required bool toneMap,
+          required bool transparentBackground,
+          Float32List? region}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetViewerLook(
+              that: this,
+              stops: stops,
+              toneMap: toneMap,
+              transparentBackground: transparentBackground,
+              region: region);
 
   /// Set the work area, or clear it with `None`.
   void setWorkArea({BridgeSpan? span}) =>
@@ -972,4 +1022,18 @@ class CompositionReference {
           runtimeType == other.runtimeType &&
           internalproject == other.internalproject &&
           internalid == other.internalid;
+}
+
+class F32Array4 extends NonGrowableListView<double> {
+  static const arraySize = 4;
+
+  @internal
+  Float32List get inner => _inner;
+  final Float32List _inner;
+
+  F32Array4(this._inner)
+      : assert(_inner.length == arraySize),
+        super(_inner);
+
+  F32Array4.init() : this(Float32List(arraySize));
 }

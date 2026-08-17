@@ -182,6 +182,13 @@ List<RadialEntry> fxConsoleRadial(
           },
         ),
         RadialEntry(
+          label: l10n.menuAreaLight,
+          run: () {
+            comp!.addLightLayer(kind: 2);
+            done();
+          },
+        ),
+        RadialEntry(
           label: l10n.menuAdjustment,
           run: () {
             comp!.addAdjustmentLayer();

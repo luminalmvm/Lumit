@@ -158,6 +158,13 @@ pub enum Op {
         layer: Uuid,
         motion_blur: bool,
     },
+    /// Toggle a layer's Accepts lights switch (K-361): whether the comp's
+    /// Light layers shade it.
+    SetLayerAcceptsLights {
+        comp: Uuid,
+        layer: Uuid,
+        accepts_lights: bool,
+    },
     /// Toggle a layer's shy switch (docs/07 §4.2): hidden from the Timeline's
     /// list while the comp's shy filter is on. Never changes what renders.
     SetLayerShy {
@@ -184,6 +191,16 @@ pub enum Op {
     SetCompMotionBlur {
         comp: Uuid,
         motion_blur: crate::model::MotionBlur,
+    },
+    /// Set a composition's background colour (docs/07 §2.2 item 10, K-357).
+    ///
+    /// A document edit, unlike the Viewer's transparency grid (K-352) which
+    /// only decides whether the backdrop is *drawn*: this is what colour it is
+    /// when it is, and it reaches the export. Scene-linear, exactly
+    /// invertible.
+    SetCompBackground {
+        comp: Uuid,
+        background: crate::model::LinearColour,
     },
     /// Toggle a Precomp layer's collapse-transformations switch (docs/06 §1.4).
     SetLayerCollapse {
@@ -382,6 +399,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
         | Op::SetLayerMotionBlur { comp, layer, .. }
+        | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerCollapse { comp, layer, .. }
         | Op::SetTextDocument { comp, layer, .. }
         | Op::SetLayerMarkers { comp, layer, .. }
@@ -800,12 +818,38 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 motion_blur: previous,
             })
         }
+        Op::SetLayerAcceptsLights {
+            comp,
+            layer,
+            accepts_lights,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.accepts_lights, *accepts_lights);
+            Ok(Op::SetLayerAcceptsLights {
+                comp: *comp,
+                layer: *layer,
+                accepts_lights: previous,
+            })
+        }
         Op::SetCompMotionBlur { comp, motion_blur } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let previous = std::mem::replace(&mut c.motion_blur, *motion_blur);
             Ok(Op::SetCompMotionBlur {
                 comp: *comp,
                 motion_blur: previous,
+            })
+        }
+        Op::SetCompBackground { comp, background } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.background, *background);
+            Ok(Op::SetCompBackground {
+                comp: *comp,
+                background: previous,
             })
         }
         Op::SetTextDocument {

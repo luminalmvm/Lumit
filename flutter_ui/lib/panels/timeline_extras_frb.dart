@@ -785,6 +785,10 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // Vector art, drawn as the shape tool that usually makes it (K-237).
       BridgeLayerKind.shape => LumitIcon.rectangle,
       BridgeLayerKind.camera => LumitIcon.camera,
+      // A light borrows the aperture glyph (K-360): the icon set has no lamp,
+      // and an iris is at least the right family — something about how light
+      // reaches the sensor rather than about the picture.
+      BridgeLayerKind.light => LumitIcon.aperture,
       // An adjustment layer is a comp-sized effect container, drawn as a solid —
       // the same choice layer_style.dart and the egui frontend make.
       BridgeLayerKind.solid || BridgeLayerKind.adjustment => LumitIcon.solid,

@@ -140,6 +140,81 @@ struct SharpenSimpleParams {
     _pad: [f32; 1],
 }
 
+/// One resolved light wrap (docs/08 §3.28, K-358): the background's light
+/// spilled around the foreground's edge. A zero width, intensity or mix is the
+/// bit-exact passthrough — there is no band to fill.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightWrapOp {
+    /// How far the wrap reaches inside the edge, raster pixels — and the
+    /// radius the background is softened by, which are the same distance.
+    pub width_px: f32,
+    /// Gain on the spill before it is screened on.
+    pub intensity: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightWrapParams {
+    w: u32,
+    h: u32,
+    intensity: f32,
+    mix_amt: f32,
+}
+
+/// One resolved sprite flare (docs/08 §3.29, K-359) — the art-directed flare,
+/// placed from a light position rather than from the picture's bright pixels.
+/// Mirrors `lumit_core::fx::cpu::SpriteFlareParams`; this crate never depends
+/// on `lumit-core` (docs/05 §architecture), so the shape is restated rather
+/// than shared.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpriteFlareOp {
+    /// Where the light is, in raster pixels.
+    pub light: [f32; 2],
+    /// Master gain; 0 is the bit-exact passthrough.
+    pub intensity: f32,
+    /// Scene-linear RGB every element is multiplied by.
+    pub tint: [f32; 3],
+    pub glow_size: f32,
+    pub glow_intensity: f32,
+    pub ghosts: u32,
+    pub ghost_spacing: f32,
+    pub ghost_size: f32,
+    pub ghost_intensity: f32,
+    pub streak_length: f32,
+    pub streak_intensity: f32,
+    pub streak_angle_deg: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The sprite flare's uniform block (docs/08 §3.29, K-359) — field for field
+/// what `fx_sprite_flare.wgsl` declares.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SpriteFlareParams {
+    w: u32,
+    h: u32,
+    light_x: f32,
+    light_y: f32,
+    intensity: f32,
+    tint_r: f32,
+    tint_g: f32,
+    tint_b: f32,
+    glow_size: f32,
+    glow_intensity: f32,
+    ghosts: u32,
+    ghost_spacing: f32,
+    ghost_size: f32,
+    ghost_intensity: f32,
+    streak_length: f32,
+    streak_intensity: f32,
+    streak_angle_deg: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
+}
+
 /// One resolved glow (docs/08 §3.3, v1 core): bright-pass with a soft knee,
 /// the shared gaussian on the leftover light, additive recombine. The
 /// radius is already in raster pixels; intensity 0 is the neutral point
@@ -350,6 +425,118 @@ impl FxEngine {
             &self.sharpen_combine,
             &blurred,
             src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        out
+    }
+
+    /// **Sprite flare** (docs/08 §3.29, K-359): the art-directed flare, drawn
+    /// from a light POSITION rather than from the picture's bright pixels — so
+    /// it cannot flicker on footage, because there is no threshold to cross.
+    ///
+    /// One procedural pass, no inputs but the layer itself. Intensity 0 and
+    /// Mix 0 are the bit-exact passthrough, matching the CPU reference's
+    /// short-circuit.
+    pub fn sprite_flare(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        p: &SpriteFlareOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-sprite-flare-out");
+        self.dispatch(
+            ctx,
+            &self.sprite_flare,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&SpriteFlareParams {
+                w,
+                h,
+                light_x: p.light[0],
+                light_y: p.light[1],
+                intensity: p.intensity,
+                tint_r: p.tint[0],
+                tint_g: p.tint[1],
+                tint_b: p.tint[2],
+                glow_size: p.glow_size,
+                glow_intensity: p.glow_intensity,
+                ghosts: p.ghosts,
+                ghost_spacing: p.ghost_spacing,
+                ghost_size: p.ghost_size,
+                ghost_intensity: p.ghost_intensity,
+                streak_length: p.streak_length,
+                streak_intensity: p.streak_intensity,
+                streak_angle_deg: p.streak_angle_deg,
+                mix_amt: p.mix,
+                _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+
+    /// **Light wrap** (docs/08 §3.28, K-358): spill the background's light
+    /// around the foreground's edge, so a keyed subject sits *in* the plate
+    /// rather than on it.
+    ///
+    /// Four passes, of which two are the ordinary gaussian: blur the
+    /// background over the wrap's width to get the spill, blur the foreground
+    /// over the same width to get its softened matte (only the alpha is
+    /// wanted, and blurring the whole thing gets it for nothing), fold the two
+    /// into one texture, then screen the spill onto the edge band. The
+    /// `lumit_core::fx::cpu::light_wrap` reference does the same four steps in
+    /// the same order.
+    ///
+    /// A zero width, intensity or mix is the bit-exact passthrough — there is
+    /// no band to fill — and the caller short-circuits before reaching here.
+    pub fn light_wrap(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        background: &wgpu::Texture,
+        op: &LightWrapOp,
+    ) -> wgpu::Texture {
+        let blur = BlurOp {
+            radius_px: op.width_px,
+            // Repeat the edge pixel, so a subject touching the frame border
+            // wraps with the plate rather than with black.
+            edge: 1,
+            mix: 1.0,
+        };
+        let spill = self.blur(ctx, background, w, h, &blur);
+        let soft = self.blur(ctx, src, w, h, &blur);
+        let params = LightWrapParams {
+            w,
+            h,
+            intensity: op.intensity,
+            mix_amt: op.mix,
+        };
+        let packed = work_texture(ctx, w, h, "fx-light-wrap-packed");
+        self.dispatch(
+            ctx,
+            &self.light_wrap_pack,
+            &spill,
+            &soft,
+            &packed,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
+        );
+        let out = work_texture(ctx, w, h, "fx-light-wrap-out");
+        self.dispatch(
+            ctx,
+            &self.light_wrap_combine,
+            src,
+            &packed,
             &out,
             w,
             h,

@@ -197,6 +197,8 @@ impl FxEngine {
             include_str!("../fx_sharpen_simple.wgsl"),
             "fx-sharpen-simple",
         );
+        let light_wrap_mod = module(include_str!("../fx_light_wrap.wgsl"), "fx-light-wrap");
+        let sprite_flare_mod = module(include_str!("../fx_sprite_flare.wgsl"), "fx-sprite-flare");
         let rgb_split_mod = module(include_str!("../fx_rgbsplit.wgsl"), "fx-rgb-split");
         let spectral_mod = module(include_str!("../fx_spectral.wgsl"), "fx-spectral-split");
         let chromatic_mod = module(
@@ -213,6 +215,7 @@ impl FxEngine {
         let matte_key_mod = module(include_str!("../fx_matte_key.wgsl"), "fx-matte-key");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
+        let lighting_mod = module(include_str!("../fx_lighting.wgsl"), "fx-lighting");
         let temperature_mod = module(include_str!("../fx_temperature.wgsl"), "fx-temperature");
         let invert_mod = module(include_str!("../fx_invert.wgsl"), "fx-invert");
         let tint_mod = module(include_str!("../fx_tint.wgsl"), "fx-tint");
@@ -236,6 +239,9 @@ impl FxEngine {
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
         let sharpen_simple = pipeline(&sharpen_simple_mod, "fx-sharpen-simple", "sharpen_simple");
+        let sprite_flare = pipeline(&sprite_flare_mod, "fx-sprite-flare", "sprite_flare");
+        let light_wrap_pack = pipeline(&light_wrap_mod, "fx-light-wrap-pack", "pack");
+        let light_wrap_combine = pipeline(&light_wrap_mod, "fx-light-wrap", "combine");
         let rgb_split = pipeline(&rgb_split_mod, "fx-rgb-split", "rgb_split");
         let spectral_split = pipeline(&spectral_mod, "fx-spectral-split", "spectral_split");
         let chromatic_aberration = pipeline(
@@ -250,6 +256,7 @@ impl FxEngine {
         let matte_key = pipeline(&matte_key_mod, "fx-matte-key", "matte_key");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
+        let lighting = pipeline(&lighting_mod, "fx-lighting", "lighting");
         let temperature = pipeline(&temperature_mod, "fx-temperature", "temperature");
         let invert = pipeline(&invert_mod, "fx-invert", "invert");
         let tint = pipeline(&tint_mod, "fx-tint", "tint");
@@ -314,7 +321,7 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
-        let lens_flare = super::LensFlareFx::new(ctx);
+        let lens_flare = super::LazyFlare::spawn(ctx);
         Self {
             lens_flare,
             blur,
@@ -323,6 +330,9 @@ impl FxEngine {
             sharpen_unpremultiply,
             sharpen_combine,
             sharpen_simple,
+            sprite_flare,
+            light_wrap_pack,
+            light_wrap_combine,
             rgb_split,
             spectral_split,
             chromatic_aberration,
@@ -333,6 +343,7 @@ impl FxEngine {
             matte_key,
             vignette,
             exposure,
+            lighting,
             temperature,
             invert,
             tint,

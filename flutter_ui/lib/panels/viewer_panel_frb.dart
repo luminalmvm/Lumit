@@ -28,6 +28,7 @@
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -57,6 +58,7 @@ import '../state/timecode.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/dropper_overlay.dart';
 import '../widgets/time_readout.dart';
@@ -72,6 +74,7 @@ import 'viewer_camera.dart';
 import 'viewer_paint.dart';
 import 'viewer_progress_bar.dart';
 import 'viewer_type.dart';
+import 'viewer_region.dart';
 import 'viewer_zoom.dart';
 
 /// The magnifications the picker offers. `null` means fit-to-panel, which is
@@ -95,7 +98,6 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// the panel as it is resized.
   double? _zoom;
   ViewerChannel _channel = ViewerChannel.rgb;
-  bool _grid = true;
 
   /// Whether the layer controls — the wireframe boxes, the handles and the
   /// hover highlight — are drawn over the picture (K-217). On by default,
@@ -325,7 +327,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
           builder: (context, tier, _) => _Toolbar(
             zoom: _zoom,
             channel: _channel,
-            grid: _grid,
+            // Session state rather than panel state (K-352): the engine has to
+            // be told when it flips, and [LumitUiState] is what talks to it.
+            grid: ui.viewerGrid,
             wireframes: _wireframes,
             look: ui.viewerLook,
             showToneMap: ui.workspace.interface.showToneMap,
@@ -336,12 +340,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             settings: settings,
             comp: comp,
             tier: tier,
+            background: ui.model.heldBackground,
             // The magnification menu is a jump to a named place, so it flies
             // there like every other zoom (K-218) — from whatever is on screen,
             // which is what the measured rectangle in the layout builder knows.
             onZoom: (z) => _goToZoom(z, Offset.zero, from: _shownScale),
             onChannel: (c) => setState(() => _channel = c),
-            onGrid: () => setState(() => _grid = !_grid),
+            onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
             onWireframes: () => setState(() => _wireframes = !_wireframes),
             onPlayPause: _togglePlay,
             onSeek: (f) => _seek(comp, ui, f),
@@ -397,7 +402,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
                 comp: comp,
                 uiState: ui,
                 fitted: fitted,
-                grid: _grid,
+                grid: ui.viewerGrid,
                 wireframes: _wireframes,
                 channel: _channel,
                 compSize: size,
@@ -498,7 +503,15 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       (constraints.maxWidth - drawn.width) / 2,
       (constraints.maxHeight - drawn.height) / 2,
     );
-    return (centre + pan) & drawn;
+    // Snapped to the device-pixel grid before anyone sees it: the
+    // checkerboard is painted anti-aliased while the platform texture is not,
+    // so a fractional edge bled a soft row of board out under the picture at
+    // some zooms. Snapping here rather than at a call site keeps the
+    // invariant wherever the rect travels.
+    return snapToDevicePixels(
+      (centre + pan) & drawn,
+      MediaQuery.devicePixelRatioOf(context),
+    );
   }
 
   /// One wheel notch is ~12 % in or out, smooth on a trackpad (the delta is
@@ -660,12 +673,18 @@ class _Stage extends StatelessWidget {
     final revision = model.heldRevision;
     // Where the keyed masks actually are at the frame on screen (K-342). Held
     // against the document and the playhead, so this costs nothing on a hover
-    // and re-asks only when one of the two has moved.
-    uiState.animatedMaskPaths.refresh(
-      comp: comp,
-      frame: uiState.playheadFrame.value,
-      revision: revision,
-    );
+    // and re-asks only when one of the two has moved — and only when some
+    // layer actually has a mask to draw. The read model already knows that
+    // without a call, and on a maskless comp the old unconditional ask was a
+    // bridge call per playhead move for an answer that is always empty, which
+    // is exactly what this method's budget (K-184) exists to stop.
+    if (model.heldLayers.any((entry) => entry.info.masks.isNotEmpty)) {
+      uiState.animatedMaskPaths.refresh(
+        comp: comp,
+        frame: uiState.playheadFrame.value,
+        revision: revision,
+      );
+    }
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     double? still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
 
@@ -917,6 +936,17 @@ class _Stage extends StatelessWidget {
               outline: t.surface0,
               accent: t.accent,
               onChanged: onChanged,
+            ),
+            // The region of interest (K-362): the outline whenever one is set,
+            // and — only while armed — the drag that sweeps a new one. Above
+            // the layer controls for the same reason the Zoom tool is: while a
+            // region is being swept, the whole picture is the target.
+            ViewerRegionLayer(
+              arming: uiState.armingRegion,
+              fitted: fitted,
+              region: uiState.regionOfInterest,
+              accent: t.accent,
+              onRegion: uiState.setRegionOfInterest,
             ),
             // Over the layer controls, and inert unless the Zoom tool is
             // armed: while it is, the whole picture is its target and no
@@ -1313,7 +1343,16 @@ class _MissingBadgeState extends State<_MissingBadge> {
   Future<void> _probe() async {
     var count = 0;
     for (final f in widget.footage) {
-      if (await f.getStatus() == LumitMediaStatus.missing) count++;
+      // A probe outlives the document it was started for: opening a project
+      // clears the engine's registry, and every reference held from the
+      // outgoing one throws from here on. There is no missing media in a
+      // document that is gone — drop the count and wait to be rebuilt with the
+      // new project's footage.
+      try {
+        if (await f.getStatus() == LumitMediaStatus.missing) count++;
+      } catch (_) {
+        return;
+      }
     }
     if (mounted && count != _missing) setState(() => _missing = count);
   }
@@ -1433,6 +1472,19 @@ ColorFilter? channelFilterFor(ViewerChannel channel) => switch (channel) {
 Rect checkerArea(Rect picture, Size panel) =>
     picture.intersect(Offset.zero & panel);
 
+/// [rect] with every edge on a whole device pixel.
+///
+/// The picture and its checkerboard are given the same rectangle, but they
+/// rasterise it differently — the board through an anti-aliased canvas, the
+/// platform texture without — so a fractional edge showed as a soft row of
+/// board sticking out under the picture. Snapping the shared rectangle is
+/// what makes "the same rectangle" true on screen and not just in the layout.
+Rect snapToDevicePixels(Rect rect, double dpr) {
+  double snap(double v) => (v * dpr).roundToDouble() / dpr;
+  return Rect.fromLTRB(
+      snap(rect.left), snap(rect.top), snap(rect.right), snap(rect.bottom));
+}
+
 
 /// The transparency checkerboard behind the picture.
 ///
@@ -1504,6 +1556,7 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<ViewerChannel> onChannel;
   final VoidCallback onGrid;
   final VoidCallback onWireframes;
+
   final ValueChanged<double> onStops;
   final VoidCallback onToneMap;
   final VoidCallback onPlayPause;
@@ -1519,6 +1572,12 @@ class _Toolbar extends StatelessWidget {
   /// across the boundary for each of them.
   final int tier;
 
+  /// The comp's background colour, off the held read model
+  /// ([CompModel.heldBackground]) for the same reason as [tier]: given, not
+  /// asked for, because this bar rebuilds for each shown frame. Null before
+  /// the model's first read, which the swatch draws as black.
+  final F32Array4? background;
+
   const _Toolbar({
     required this.zoom,
     required this.channel,
@@ -1533,6 +1592,7 @@ class _Toolbar extends StatelessWidget {
     required this.settings,
     required this.comp,
     required this.tier,
+    required this.background,
     required this.onZoom,
     required this.onChannel,
     required this.onGrid,
@@ -1596,6 +1656,47 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
+          // The preview resolution (docs/07 §2.2 item 2): how many pixels the
+          // engine is asked to make, beside the magnification it is so easily
+          // mistaken for. Muted while adaptive playback is choosing the tier
+          // itself — a choice something else is making is not yours to make.
+          const SizedBox(
+            width: 76,
+            child: _ResolutionDropdown(),
+          ),
+          const SizedBox(width: 6),
+          // Region of interest (K-362). Lit while a region is in force or a
+          // drag is armed for one, so working on a corner of a shot is never
+          // a state you can be in without being told; the same click clears a
+          // region that exists.
+          Builder(builder: (context) {
+            final ui = context.watch<LumitUiState>();
+            final set = ui.regionOfInterest != null;
+            final arming = ui.armingRegion;
+            return LumitTooltip(
+              message: set
+                  ? l10n.tipClearRegionOfInterest
+                  : arming
+                      ? l10n.tipDragRegionOfInterest
+                      : l10n.tipRegionOfInterest,
+              child: HouseButton(
+                key: const ValueKey('viewer-region'),
+                small: true,
+                frameless: true,
+                // A region that exists is cleared; otherwise the next drag on
+                // the picture is armed to sweep one out.
+                onPressed: () => set
+                    ? ui.setRegionOfInterest(null)
+                    : ui.armingRegion = !arming,
+                child: lumitIcon(
+                  LumitIcon.rectangle,
+                  size: iconSize,
+                  color: set || arming ? t.accent : t.textSecondary,
+                ),
+              ),
+            );
+          }),
+          const SizedBox(width: 6),
           SizedBox(
             width: 76,
             child: BareDropdown<ViewerChannel>(
@@ -1606,6 +1707,8 @@ class _Toolbar extends StatelessWidget {
               onChanged: onChannel,
             ),
           ),
+          const SizedBox(width: 6),
+          _BackgroundSwatch(comp: comp, background: background),
           const SizedBox(width: 6),
           LumitTooltip(
             message: l10n.tipTransparencyGrid,
@@ -1911,6 +2014,113 @@ String get _transportName => switch (_transport) {
       BridgeViewerTransport.dmaBuf => l10n.transportDmaBuf,
       BridgeViewerTransport.readBack => l10n.transportReadBack,
     };
+
+/// The composition's background colour, on the bar (docs/07 §2.2 item 10,
+/// K-357).
+///
+/// **A document edit, unlike everything else on this half of the bar.** The
+/// exposure, the tone map and the transparency grid are ways of *looking*;
+/// this is what the comp is actually drawn onto and what an export writes
+/// there, so it goes through an op and Ctrl+Z undoes it. It sits beside the
+/// grid button because the two answer the same question from opposite sides —
+/// what is behind the picture — and finding one without the other is what
+/// makes a black comp confusing.
+class _BackgroundSwatch extends StatelessWidget {
+  final CompositionReference comp;
+
+  /// The colour to show, off the held read model — never asked for here:
+  /// this swatch rebuilds with the bar, once per arriving frame (K-184).
+  final F32Array4? background;
+  const _BackgroundSwatch({required this.comp, required this.background});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final state = Provider.of<LumitState>(context, listen: false);
+    // Off the read model, handed down by the bar — a document change
+    // refreshes the model and rebuilds this from the new colour.
+    final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
+    int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
+    final shown = documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
+
+    return LumitTooltip(
+      message: l10n.tipCompBackground,
+      child: GestureDetector(
+        key: const ValueKey('viewer-background'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          final box = context.findRenderObject();
+          if (box is! RenderBox) return;
+          await showColourPicker(
+            context: context,
+            position: box.localToGlobal(Offset(0, box.size.height + 6)),
+            initial: PickedColour.of(shown),
+            // Chosen as a display colour, like a solid's, so the fields read
+            // 0–255 rather than scene-linear floats.
+            scale: ColourScale.bytes,
+            presets: t.backgroundPresets,
+            onCommit: (picked) {
+              try {
+                comp.setBackground(
+                  rgba: F32Array4(Float32List.fromList([
+                    picked.r.toDouble(),
+                    picked.g.toDouble(),
+                    picked.b.toDouble(),
+                    1.0,
+                  ])),
+                );
+              } catch (_) {
+                return;
+              }
+              state.notifyDocumentChanged();
+            },
+          );
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: 22,
+            height: 14,
+            decoration: BoxDecoration(
+              color: shown,
+              border: Border.all(color: t.hairlineStrong),
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The preview resolution, on the bar (docs/07 §2.2 item 2).
+///
+/// The same choice the View menu's Resolution rows make — [LumitUiState] holds
+/// it, so the menu tick and this face cannot disagree. Disabled while playback
+/// is adaptive: the engine is walking the degradation ladder itself, and a
+/// dropdown that claimed the choice while something else made it would be a
+/// control that lies.
+class _ResolutionDropdown extends StatelessWidget {
+  const _ResolutionDropdown();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context);
+    final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
+    return LumitTooltip(
+      message: adaptive
+          ? l10n.tipPreviewResolutionAdaptive
+          : l10n.tipPreviewResolution,
+      child: BareDropdown<PreviewResolution>(
+        key: const ValueKey('viewer-resolution'),
+        value: ui.previewResolution,
+        options: PreviewResolution.values,
+        label: (resolution) => resolution.title,
+        onChanged: adaptive ? null : ui.setPreviewResolution,
+      ),
+    );
+  }
+}
 
 /// Which of the two playback behaviours is in force — the name of the mode and
 /// nothing else (K-287).

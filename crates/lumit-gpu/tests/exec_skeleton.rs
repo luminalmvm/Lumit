@@ -243,6 +243,7 @@ impl KernelExecutor for GpuKernels {
                     seed,
                     1.0,
                     1,
+                    None,
                 );
                 drop(frames);
                 Ok(self.frames.borrow_mut().push(out))

@@ -1566,8 +1566,10 @@ cast of real flares comes from.
 
 **Algorithm sketch** (full detail in the impl note):
 1. **Bake** (CPU, on parameter change only, cached): parse the selected .lens
-   prescription; enumerate every two-surface bounce pair, filter by interface
-   and an on-axis brightness probe, rank brightest-first; bake the
+   prescription; enumerate every two-surface bounce pair — and, under a
+   reflectance-product prefilter, the best four-bounce paths (K-368) —
+   filter by interface and an on-axis brightness probe, rank the two kinds
+   brightest-first in one list; bake the
    **starburst sprite** (Fourier amplitude of the iris image under a Fresnel
    propagation term, integrated across the visible spectrum with CIE
    weights); close the **auto-exposure loop** by rendering a thumbnail.
@@ -1575,8 +1577,9 @@ cast of real flares comes from.
    a regular grid of rays over the entrance pupil — each corner weighted by
    the iris mask (blades, roundness, softness) — refracts through every
    surface with per-surface Fresnel/MgF₂-coating weights (the FlareSim
-   three-phase walk, K-261), reflecting at the pair's two surfaces, landing
-   on the focus-shifted sensor.
+   three-phase walk, K-261), reflecting at the path's two surfaces — or, for
+   a four-bounce path, at its four (K-368) — landing on the focus-shifted
+   sensor.
 3. **Rasterise** (GPU raster, additive): each live grid cell draws as two
    triangles at density `launch cell area ÷ landed area` (energy
    conservation — a ghost focused small burns bright; fold caustics blow up
@@ -1729,6 +1732,63 @@ aperture **dirt / scratches** overlays and an **image aperture**; the
 **lens designer** window; the **Lights** source wiring (waits on light
 layers); an **Occlusion layer** reference. Every shipped parameter is
 stable when they land.
+
+### 3.28 Light wrap — the background's light spilled round a keyed edge
+
+The oldest trick in compositing, and the cheapest way to make a keyed subject stop looking
+pasted on. In a real camera the light behind a subject spills round its edges — off the
+hair, along the shoulders — and a matte cut in software has none of it, which is most of
+what makes a composite read as fake.
+
+**Background** names the layer whose light spills (normally the plate the subject was keyed
+onto — a layer-input parameter, the same machinery as Depth of field's depth pass and the
+Lens flare's matte, [impl/layer-input.md](impl/layer-input.md)). **Width** is how far the
+wrap reaches inside the edge, in px@comp, and is also the radius the background is softened
+by — they are the same distance. **Intensity** gains the spill; **Mix** fades the whole
+effect.
+
+**How it finds the edge, and why it needs no mask.** The foreground's own alpha is the
+edge. Blurring a solid matte leaves it 1 deep inside, about a half right at the outline and
+less beyond it, so `1 − blurred` is zero in the middle and rises toward the edge — that is
+the band, doubled to reach full strength at the outline and multiplied by the original
+alpha so it can never paint on transparent pixels. Painting outside the matte would grow a
+halo round the subject, which is the classic way to get this effect wrong, and the oracle
+asserts against it directly.
+
+The spill is **screened** on rather than added, so a bright plate brightens the edge toward
+itself rather than past white. Width 0, Intensity 0, Mix 0 and an unset Background are each
+the bit-exact passthrough (the labelled-no-op rule every layer-input effect follows).
+
+Implementation: four passes, two of which are the ordinary gaussian — blur the background
+for the spill, blur the foreground for its softened matte (only the alpha is wanted, and
+blurring the whole thing gets it for nothing), fold the two into one texture, screen. The
+CPU reference does the same four steps in the same order, so the twins agree by
+construction rather than by resemblance.
+
+### 3.29 Sprite flare — the art-directed flare
+
+A **deliberately separate effect** from §3.27's physical simulation, not a mode of it: the
+two answer different questions and mixing them is what made the first plan for this
+muddled. §3.27 asks *what would this lens actually do*; this one asks *draw me a flare
+here*.
+
+Everything is placed from the light's **position** — a **Glow** on it, a train of iris
+**Ghosts** marching along the line from the light through the frame's centre (which is
+where a real lens puts its reflections, mirrored about the optical axis, so the train swings
+to the far side of the middle as the light crosses frame), and an anamorphic **Streak**
+through it. Ghost spacing is a *fraction* of the light→centre distance, so the train
+stretches and gathers as the light moves rather than sliding rigidly.
+
+**There is no bright-pass, and that is the point.** Nothing is read from the picture's
+brightness, so there is no threshold for a source to cross and nothing to pop in or out as
+grain moves — the complaint that sent §3.27's Matte mode back to the drawing board on
+footage. The oracle asserts it directly: nudging the light by a pixel may not change any
+pixel by more than a small bound.
+
+One procedural pass, no inputs but the layer itself, so it is Cheap. Intensity 0 and Mix 0
+are the bit-exact passthrough. Everything with a distance is px@comp (K-260) and shrinks
+with the preview raster, the light's position included — or the flare would slide between
+preview and export.
 
 ---
 

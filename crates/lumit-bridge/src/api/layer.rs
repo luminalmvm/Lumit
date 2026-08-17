@@ -39,6 +39,9 @@ pub struct BridgeLayerSwitches {
     /// Shy (docs/07 §4.2): hidden from the Timeline's list while the comp's
     /// shy filter is on. Never changes what renders.
     pub shy: bool,
+    /// Accepts lights (K-361): whether the comp's Light layers shade this one.
+    /// Defaults on, and does nothing at all in a comp with no lights.
+    pub accepts_lights: bool,
 }
 
 /// One vertex of a mask's path (K-222): where it sits in **layer space**, and
@@ -497,6 +500,8 @@ pub enum BridgeLayerSwitch {
     MotionBlur,
     Collapse,
     Shy,
+    /// K-361: whether the comp's Light layers shade this one.
+    AcceptsLights,
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.
@@ -532,6 +537,9 @@ pub enum BridgeLayerKind {
     /// generated Dart enum would otherwise carry a member called `null`, which
     /// is a Dart reserved word (K-206); `lumit-core` keeps `LayerKind::Null`.
     NullLayer,
+    /// A Light layer (K-360): a source of light other layers see. Draws no
+    /// pixels of its own, like a Camera.
+    Light,
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -724,6 +732,7 @@ pub(crate) fn read_layer_info(
             K::Adjustment => BridgeLayerKind::Adjustment,
             K::Shape { .. } => BridgeLayerKind::Shape,
             K::Null => BridgeLayerKind::NullLayer,
+            K::Light { .. } => BridgeLayerKind::Light,
         },
         switches: BridgeLayerSwitches {
             visible: s.visible,
@@ -735,6 +744,7 @@ pub(crate) fn read_layer_info(
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            accepts_lights: s.accepts_lights,
         },
         blend: lumit_core::model::BlendMode::ALL
             .iter()
@@ -2470,6 +2480,7 @@ impl LayerReference {
             LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
+            | LayerKind::Light { .. }
             | LayerKind::Sequence { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => return Ok(None),
@@ -2497,6 +2508,7 @@ impl LayerReference {
             K::Adjustment => BridgeLayerKind::Adjustment,
             K::Shape { .. } => BridgeLayerKind::Shape,
             K::Null => BridgeLayerKind::NullLayer,
+            K::Light { .. } => BridgeLayerKind::Light,
         })
     }
 
@@ -2514,6 +2526,7 @@ impl LayerReference {
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            accepts_lights: s.accepts_lights,
         })
     }
 
@@ -2566,6 +2579,11 @@ impl LayerReference {
                 comp,
                 layer,
                 shy: on,
+            },
+            BridgeLayerSwitch::AcceptsLights => lumit_core::Op::SetLayerAcceptsLights {
+                comp,
+                layer,
+                accepts_lights: on,
             },
         })
     }

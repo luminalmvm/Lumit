@@ -58,4 +58,29 @@ void main() {
       expect(area.isEmpty, isTrue);
     });
   });
+
+  // The board and the picture are given the same rectangle, but a fractional
+  // one rasterises differently through an anti-aliased canvas than through the
+  // platform texture — a soft row of board stuck out under the picture at some
+  // zooms. Snapping the shared rectangle to whole device pixels is the fix.
+  group('snapToDevicePixels', () {
+    test('lands every edge on a whole device pixel', () {
+      final snapped = snapToDevicePixels(
+          const Rect.fromLTRB(10.3, 20.7, 410.5, 320.2), 1.0);
+      expect(snapped, const Rect.fromLTRB(10, 21, 411, 320));
+    });
+
+    test('snaps to the device grid, not the logical one', () {
+      // At 150 % scaling a device pixel is two thirds of a logical one.
+      final snapped =
+          snapToDevicePixels(const Rect.fromLTRB(0, 0, 100.2, 50.4), 1.5);
+      expect(snapped.right * 1.5, closeTo((100.2 * 1.5).roundToDouble(), 1e-9));
+      expect(snapped.bottom * 1.5, closeTo((50.4 * 1.5).roundToDouble(), 1e-9));
+    });
+
+    test('whole pixels pass through untouched', () {
+      const whole = Rect.fromLTRB(10, 20, 410, 320);
+      expect(snapToDevicePixels(whole, 2.0), whole);
+    });
+  });
 }

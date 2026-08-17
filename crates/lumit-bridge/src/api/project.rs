@@ -8,7 +8,7 @@ use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
     footage::FootageReference,
     project_item::{item_reference, ItemReference},
-    state::{WorkerResponseStream, PROJECTS},
+    state::{WorkerResponseStream, PROJECTS, STREAMS},
     worker_thread, BridgeError,
 };
 
@@ -45,6 +45,38 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn start_worker(&self, on_reponse: WorkerResponseStream) {
         worker_thread::run_worker(self.clone(), on_reponse);
+    }
+
+    /// Close this project: forget it in both registries, so every later call
+    /// through this reference answers `InvalidProject` — and, with the state
+    /// dropped, the request channel its render worker waits on is dropped too.
+    /// The worker sees the disconnect, stops, and everything it held — most of
+    /// all its renderer, a whole GPU device — is freed with it.
+    ///
+    /// [`LumitBridgeState::open_project`] already does this wholesale for every
+    /// open project; this is the same farewell for one. Closing a project that
+    /// is already gone is not an error: it is closed, which is what was asked.
+    ///
+    /// This is what stops a long-lived process from accumulating one worker and
+    /// one GPU device per project it has ever made. The frb test suite was the
+    /// proof: a test process makes a project per test, and without a close the
+    /// Linux CI runner ran out of memory under the pile of live renderers.
+    #[frb(sync)]
+    pub fn close(&self) -> Result<(), BridgeError> {
+        // One registry at a time, never nested — the lock order rule in
+        // `state.rs`. The state's last strong reference is usually the one
+        // removed here; binding it keeps the drop (and the worker channel's
+        // disconnect) outside both registry locks.
+        let removed = {
+            let mut p = PROJECTS.write().map_err(|_| BridgeError::WriteFailed)?;
+            p.remove(&self.id)
+        };
+        {
+            let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
+            s.remove(&self.id);
+        }
+        drop(removed);
+        Ok(())
     }
 
     #[frb(sync)]

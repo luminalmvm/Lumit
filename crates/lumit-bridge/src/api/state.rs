@@ -362,6 +362,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::RemoveLayer { comp, .. }
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
+        | Op::SetCompBackground { comp, .. }
         | Op::SetWorkArea { comp, .. }
         | Op::SetCompMarkers { comp, .. } => (Some(*comp), None, false),
 
@@ -380,6 +381,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
         | Op::SetLayerMotionBlur { comp, layer, .. }
+        | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerShy { comp, layer, .. }
         | Op::SetLayerLocked { comp, layer, .. }
         | Op::SetLayerLabel { comp, layer, .. }
@@ -506,7 +508,11 @@ impl LumitBridgeState {
         }
     }
 
-    #[frb(sync)]
+    /// Deliberately **not** `#[frb(sync)]`, unlike its `new_project` sibling:
+    /// reading a `.lum` parses a whole document and stats every media file it
+    /// names, and on the UI isolate that froze the window for as long as it
+    /// took. Async puts it on a worker thread, which is what lets Dart hold the
+    /// previous document on screen behind a progress bar until this returns.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,

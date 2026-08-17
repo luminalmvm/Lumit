@@ -66,6 +66,10 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
 4. **Effect stack** — top-to-bottom ([08-EFFECTS.md](08-EFFECTS.md)). Each effect sees the
    output of the one above it, in working space, premultiplied unless it declares otherwise
    (§3.4).
+4.5. **Lighting** — if the layer's **Accepts lights** switch is on and the composition holds
+   Light layers, the layer's picture is shaded by them (§1.8). After effects, because a light
+   should fall on the finished layer rather than on an intermediate; before the transform,
+   because the shading is computed on the layer's own plane.
 5. **Transform** — anchor point, position, scale, rotation, opacity as one 4×4 matrix (K-023),
    concatenated with the parent chain. Filtering is bilinear (draft) or bicubic (full quality),
    always on premultiplied pixels.
@@ -193,6 +197,41 @@ the layer's quad edge, and that is what this addresses.
 
 The *how* — the traps in the composite loop as it stands, and the test plan — is
 [impl/anti-aliasing.md](impl/anti-aliasing.md).
+
+### 1.8 Lighting (K-361)
+
+A composition's **Light layers** ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.5, K-360) shade
+every layer whose **Accepts lights** switch is on. The pass is not an effect — it has no
+entry in [08-EFFECTS.md](08-EFFECTS.md), no `Resolved` variant and no place in a stack,
+because it is not something added to a layer but something the composition does to it.
+`lumit_core::lighting` is the reference implementation and `fx_lighting.wgsl` its twin,
+compared by test as every kernel is (docs/08 §1.6).
+
+**The surface.** Every pixel of a layer shares one normal: the direction its own plane faces.
+A 2.5D compositor has no per-pixel normals, and deriving them from luminance is a
+content-dependent quality cliff. For a softbox raking across footage the flat-plane answer is
+not an approximation of the right one — it *is* the right one. A layer without the 3D switch
+is shaded at z = 0 with no out-of-plane rotation, matching where the compositor actually
+draws it rather than what its transform happens to hold.
+
+**Area lights.** How brightly a flat surface is lit by a flat glowing rectangle is exact and
+closed-form: the cosine-weighted fraction of the surface's sky that the rectangle covers,
+summed one term per edge. No sampling, no noise, four `acos` calls. The rectangle is clipped
+to the surface's horizon first — the half of a light that has sunk behind a surface cannot
+light it — which is why the sum runs over a polygon of up to five corners rather than a flat
+four. This integral is the identity-matrix case of Linearly Transformed Cosines; K-361
+records why the fitted matrix tables that would buy specular are deliberately not here.
+
+**Point and spot lights** take the cosine law and nothing else, attenuated by the light's
+`falloff_px` and, for a spot, softened across the outer tenth of its cone. There is no inverse
+square: measured in comp pixels it is a number with no meaning, and `falloff_px` already says
+where the light stops.
+
+**Light adds, it does not replace** — the picture is multiplied by `1 + light`, so an unlit
+pixel is untouched and nothing is ever driven to black by the arrival of a light elsewhere.
+A composition with no Light layers produces an empty light list, the pass never runs, and the
+frame is byte-for-byte what it was before lighting existed. Eight lights shade one layer; the
+nearest win, chosen by a total order so two runs agree.
 
 ## 2. ROI and DoD
 

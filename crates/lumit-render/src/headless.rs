@@ -157,6 +157,17 @@ pub struct HeadlessRenderer {
     /// the promise is a property of the code's shape rather than a rule anyone
     /// has to remember — and `an_export_ignores_the_viewer_view` pins it.
     view: lumit_gpu::DisplayParams,
+    /// Whether the fronted comp's own background colour is left out of the
+    /// composite, so pixels nothing covers stay transparent and the Viewer's
+    /// transparency grid shows through them (K-352). The Viewer sets it to
+    /// follow its grid button; like [`Self::view`] it is a way of *looking*,
+    /// and the export renderer — which nobody calls this on — always draws
+    /// the backdrop.
+    transparent_background: bool,
+    /// The Viewer's region of interest as comp fractions (K-362), or `None`
+    /// for the whole frame. Preview-only: the export renderer is never given
+    /// one, the same construction that keeps the preview scale out of files.
+    region: Option<[f32; 4]>,
     /// The Windows zero-copy Viewer targets (K-177): **one per size, kept and
     /// reused**, most recently used last.
     ///
@@ -524,6 +535,8 @@ impl HeadlessRenderer {
             watching: false,
             measuring: false,
             view: lumit_gpu::DisplayParams::NEUTRAL,
+            transparent_background: false,
+            region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
             shared: Vec::new(),
             #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -626,6 +639,67 @@ impl HeadlessRenderer {
         self.view = view;
     }
 
+    /// Leave the fronted comp's background colour out of the composite, so
+    /// pixels nothing covers stay transparent and the Viewer's transparency
+    /// grid shows through them (K-352). A way of looking, like the display
+    /// view above — the export renderer never has this called on it, so an
+    /// export always draws the backdrop.
+    ///
+    /// The flag is folded into the frame's name (see [`Self::named_under_view`]):
+    /// the two backdrops are two different pictures, and a frame banked under
+    /// one must never be served as the other.
+    pub fn set_transparent_background(&mut self, transparent: bool) {
+        self.transparent_background = transparent;
+    }
+
+    /// Composite only a sub-rectangle of the fronted comp — the Viewer's
+    /// **region of interest** (K-362, docs/07 §2.2). Given as fractions of the
+    /// comp (`[u0, v0, u1, v1]`, top-left to bottom-right) so the caller never
+    /// has to know which raster the engine will settle on; `None` clears it.
+    ///
+    /// A way of looking, like the two above: the export renderer is never sent
+    /// one, which is what keeps a region from ever reaching a file. The flag is
+    /// folded into the frame's name — a cropped frame is not the full frame,
+    /// and serving one for the other would put a corner of the picture on
+    /// screen as though it were all of it.
+    ///
+    /// Degenerate input (inverted, empty, out of range, not finite) clears the
+    /// region rather than faulting: a drag that ends where it began is a
+    /// gesture, not an error.
+    pub fn set_region(&mut self, region: Option<[f32; 4]>) {
+        self.region = region.filter(|r| {
+            r.iter().all(|v| v.is_finite())
+                && r[0] >= 0.0
+                && r[1] >= 0.0
+                && r[2] <= 1.0
+                && r[3] <= 1.0
+                && r[2] - r[0] > 1e-3
+                && r[3] - r[1] > 1e-3
+                // A region covering the whole comp is no region at all, and
+                // saying so keeps its frames sharing the full frame's names.
+                && (r[0] > 0.0 || r[1] > 0.0 || r[2] < 1.0 || r[3] < 1.0)
+        });
+    }
+
+    /// The region of interest, as fractions of the comp; `None` is the whole
+    /// frame.
+    #[must_use]
+    pub fn region(&self) -> Option<[f32; 4]> {
+        self.region
+    }
+
+    /// The region in comp pixels for a `w`×`h` composition, rounded out to
+    /// whole pixels so the window never lands on a fraction of one.
+    fn region_px(&self, w: u32, h: u32) -> Option<lumit_gpu::Region> {
+        let r = self.region?;
+        let (fw, fh) = (w as f32, h as f32);
+        let x = (r[0] * fw).floor().clamp(0.0, fw - 1.0);
+        let y = (r[1] * fh).floor().clamp(0.0, fh - 1.0);
+        let rw = (r[2] * fw).ceil().clamp(1.0, fw) - x;
+        let rh = (r[3] * fh).ceil().clamp(1.0, fh) - y;
+        (rw >= 1.0 && rh >= 1.0).then_some(lumit_gpu::Region { x, y, w: rw, h: rh })
+    }
+
     /// A content name with the Viewer's own way of looking folded in.
     ///
     /// Neutral returns the name untouched — byte-for-byte what
@@ -634,14 +708,27 @@ impl HeadlessRenderer {
     /// the same hash the name was built with, under its own tag so a look can
     /// never be confused for content.
     fn named_under_view(&self, base: u128) -> u128 {
-        if self.view.is_neutral() {
+        if self.view.is_neutral() && !self.transparent_background && self.region.is_none() {
             return base;
         }
         let mut h = blake3::Hasher::new();
         h.update(b"view/");
         h.update(&base.to_le_bytes());
         h.update(&self.view.gain.to_bits().to_le_bytes());
-        h.update(&[u8::from(self.view.tone_map)]);
+        h.update(&[
+            u8::from(self.view.tone_map),
+            u8::from(self.transparent_background),
+        ]);
+        // The region (K-362). A cropped frame is a different picture of a
+        // different size, so it takes a different name — which is exactly what
+        // lets scrubbing inside a region use the cache at all, rather than
+        // refusing to name frames while one is set.
+        if let Some(r) = self.region {
+            h.update(b"roi/");
+            for v in r {
+                h.update(&v.to_bits().to_le_bytes());
+            }
+        }
         let bytes = h.finalize();
         let mut k = [0u8; 16];
         k.copy_from_slice(&bytes.as_bytes()[..16]);
@@ -876,11 +963,34 @@ impl HeadlessRenderer {
             }
             let draws =
                 crate::build::build_comp_draws(doc, comp, t, &pixels_by_layer, &mut visited);
-            let background = comp.background.0.map(f64::from);
+            // The comp's backdrop is a way of viewing, not a layer (K-241);
+            // with the transparency grid up the Viewer asks for none at all,
+            // so what nothing covers arrives with zero alpha and the grid
+            // shows through it (K-352).
+            let background = if self.transparent_background {
+                [0.0; 4]
+            } else {
+                comp.background.0.map(f64::from)
+            };
             if let Some(w) = &watcher {
                 w.compositing(draws.len() as u32);
             }
-            let linear = realiser.realise(comp.camera_pose(t), cw, ch, background, &draws);
+            // The region of interest (K-362): composite only the window the
+            // Viewer asked for. `realise_region` refuses it — and composites
+            // the whole frame — where an adjustment or a motion-blurring layer
+            // stages through a comp-sized intermediate, so the picture is the
+            // same either way and only the work differs. The crop below then
+            // makes the returned texture the region's size regardless, so
+            // everything downstream sees one shape.
+            let roi = self.region_px(cw, ch);
+            let linear =
+                realiser.realise_region(comp.camera_pose(t), cw, ch, background, &draws, roi);
+            let linear = match roi {
+                Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
+                    crop_texture(&self.gpu, &linear, r, realiser.render_scale, (cw, ch))
+                }
+                _ => linear,
+            };
             if let Some(w) = &watcher {
                 w.presenting();
             }
@@ -2109,6 +2219,68 @@ impl SourceProbes for ProbeView<'_> {
     }
 }
 
+/// Copy a sub-rectangle out of a finished composite (K-362), so a region of
+/// interest returns a region-sized texture even on the frames where the
+/// realiser had to composite the whole thing.
+///
+/// A straight texel copy, not a resample: the crop cannot change a single
+/// pixel of what it keeps, which is what makes "with a region" and "without
+/// one, then cropped" the same picture rather than nearly the same one.
+fn crop_texture(
+    ctx: &lumit_gpu::GpuContext,
+    src: &wgpu::Texture,
+    region: lumit_gpu::Region,
+    scale: f32,
+    comp: (u32, u32),
+) -> wgpu::Texture {
+    let (mut tw, mut th) = region.target_size(scale);
+    tw = tw.min(src.width());
+    th = th.min(src.height());
+    // Where the window starts on the raster actually rendered. The ratio is
+    // taken from that raster rather than from the render scale, so however
+    // `scaled_size` rounded, the copy stays inside the source.
+    let sx = (region.x * src.width() as f32 / comp.0.max(1) as f32).round() as u32;
+    let sy = (region.y * src.height() as f32 / comp.1.max(1) as f32).round() as u32;
+    let sx = sx.min(src.width().saturating_sub(tw));
+    let sy = sy.min(src.height().saturating_sub(th));
+    let out = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("comp-frame-cropped"),
+        size: wgpu::Extent3d {
+            width: tw,
+            height: th,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: src.format(),
+        usage: src.usage(),
+        view_formats: &[],
+    });
+    let mut enc = ctx.encoder("roi-crop");
+    enc.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: src,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: sx, y: sy, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfo {
+            texture: &out,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width: tw,
+            height: th,
+            depth_or_array_layers: 1,
+        },
+    );
+    drop(enc);
+    out
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -2316,6 +2488,52 @@ mod tests {
         assert_eq!(alpha, 255, "the solid is opaque");
     }
 
+    /// **The transparency grid can see through an empty comp (K-352).** The
+    /// comp's backdrop is opaque black by default, so every pixel nothing
+    /// covers used to reach the Viewer with alpha 1 and the checkerboard
+    /// behind the picture could never show — even with every layer hidden.
+    /// With the flag on, the interactive path leaves the backdrop out and
+    /// uncovered pixels arrive with zero alpha; off again, the backdrop is
+    /// back. Fails without the `transparent_background` branch in
+    /// `preview_display_texture_fmt`.
+    ///
+    /// An export stays opaque the same way it stays neutral (see
+    /// `an_export_ignores_the_viewer_view`): `export::run` builds its own
+    /// renderer, and nothing ever calls `set_transparent_background` on it.
+    #[test]
+    fn the_transparent_background_flag_uncovers_the_grid() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Empty", 8, 8);
+        let store = DocumentStore::new(doc);
+        let doc = store.snapshot();
+        let q = Quality::default();
+
+        let (rgba, w, h) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("opaque render");
+        let idx = (((h / 2) * w + w / 2) * 4) as usize;
+        assert_eq!(rgba[idx + 3], 255, "born opaque: the backdrop is drawn");
+
+        r.set_transparent_background(true);
+        let (rgba, _, _) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("transparent render");
+        assert_eq!(rgba[idx + 3], 0, "nothing covers this pixel, so no alpha");
+
+        r.set_transparent_background(false);
+        let (rgba, _, _) = r
+            .render_preview(&doc, comp_id, 0, q, 1.0)
+            .expect("opaque again");
+        assert_eq!(rgba[idx + 3], 255, "grid down, backdrop back");
+    }
+
     /// `scale` below 1 downsamples the output buffer; the centre stays the solid
     /// colour, proving the resize path is wired and does not corrupt the frame.
     #[test]
@@ -2441,6 +2659,26 @@ mod tests {
             r.frame_key(&doc, comp_id, 0, q),
             neutral,
             "returning to neutral returns the frame's own name"
+        );
+
+        // The backdrop is part of the picture too (K-352): a frame composited
+        // without it must never be served as one composited with it, so the
+        // transparency-grid flag names frames apart exactly as a view does.
+        r.set_transparent_background(true);
+        let transparent = r.frame_key(&doc, comp_id, 0, q);
+        assert!(
+            transparent.is_some(),
+            "a transparent backdrop still names the frame"
+        );
+        assert!(
+            !seen.contains(&transparent),
+            "the two backdrops are two different pictures"
+        );
+        r.set_transparent_background(false);
+        assert_eq!(
+            r.frame_key(&doc, comp_id, 0, q),
+            neutral,
+            "backdrop back, name back — frames banked opaque are hits again"
         );
     }
 
@@ -2819,8 +3057,10 @@ mod tests {
                 pupil_mm: 1.0,
                 start_z_mm: 0.0,
                 energy_gain: 1.0,
+                reflectance: Vec::new(),
                 starburst: Vec::new(),
                 sb_res: 1,
+                sb_fields: 1,
             }) as lumit_gpu::fx::FlareBake;
             parts.fx.warm_flare_bake(0xfeed_face, &bake)
         };
@@ -2830,6 +3070,67 @@ mod tests {
         assert!(
             r.frame_key(&doc, comp_id, 0, Quality::default()).is_none(),
             "while a lens is baking, no frame may be named"
+        );
+    }
+
+    /// A bake that has **finished** must read as finished from an idle
+    /// thread — with no frame render in between (the K-350 follow-up fix).
+    ///
+    /// The regression this pins: `bake_pending` used to read the in-flight
+    /// set, which only a frame render's `collect` cleared — so after the
+    /// bake thread finished, the worker's republish tick saw "still pending"
+    /// forever, never re-made the picture, and the lens on screen stayed one
+    /// change behind until the user moved the playhead. The user's words:
+    /// "if I change the lens most of the time it doesn't even update until
+    /// I switch frame."
+    #[test]
+    fn a_landed_bake_reads_as_landed_without_a_frame_render() {
+        let r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        r.set_deferred_flare_bakes(true);
+        let queued = {
+            let Some(parts) = r.parts.as_ref() else {
+                return;
+            };
+            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
+                surfaces: Vec::new(),
+                ghosts: Vec::new(),
+                spreads: Vec::new(),
+                sensor_z_mm: 0.0,
+                focal_mm: 1.0,
+                native_fstop: 1.0,
+                pupil_mm: 1.0,
+                start_z_mm: 0.0,
+                energy_gain: 1.0,
+                reflectance: Vec::new(),
+                starburst: Vec::new(),
+                sb_res: 1,
+                sb_fields: 1,
+            }) as lumit_gpu::fx::FlareBake;
+            parts.fx.warm_flare_bake(0xdead_beef, &bake)
+        };
+        if !queued {
+            return; // no bake thread on this machine
+        }
+        // The bake itself is trivial; give the thread a moment to run it.
+        // Polling with a deadline rather than one sleep, so the test is fast
+        // when the machine is and honest when it is loaded.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while r.flare_bake_pending() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "a finished bake must stop reading as pending without any                  frame render — the republish tick depends on exactly this"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(
+            r.flare_bake_generation() >= 2,
+            "queued and landed both move the generation"
         );
     }
 

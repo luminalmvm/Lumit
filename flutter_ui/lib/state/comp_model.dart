@@ -82,6 +82,13 @@ class CompModel extends ChangeNotifier {
     return _revision;
   }
 
+  /// The comp's background colour off the held copy, scene-linear RGBA, or
+  /// null before the first read. For the Viewer bar's swatch, which rebuilds
+  /// on every arriving frame: the colour rides in the model rather than being
+  /// asked for per rebuild (K-184). Writes go through
+  /// `CompositionReference.setBackground`; the change refreshes this model.
+  F32Array4? get heldBackground => _model?.background;
+
   /// The copy in hand, and the revision it was read at, **without asking the
   /// engine anything** (K-230).
   ///

@@ -263,15 +263,44 @@ class LumitState extends ChangeNotifier {
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 
-  void openProject(String path) {
+  /// True from the moment a document starts being read until the Viewer has
+  /// something to show of it. The shell draws its progress bar over the
+  /// previous project and swaps nothing until this goes back to false.
+  ///
+  /// **It covers the picture, not just the read.** Reading the file is the
+  /// first half; the second is the new project's render worker starting and
+  /// serving a frame, and a shell that filled its panels between the two read
+  /// as an editor that had loaded and then sat there. Everything appears
+  /// together instead — which is what an application loading looks like.
+  /// [previewReady] is what ends it.
+  final ValueNotifier<bool> opening = ValueNotifier(false);
+
+  /// The Viewer has something to show, or there is nothing for it to show —
+  /// either way the shell can come out from behind its progress bar.
+  ///
+  /// Called on the first sign of life from the new project's worker (any reply
+  /// at all, not only a frame: a project whose first render faults must not
+  /// leave the interface covered), and by the session restore when it fronts no
+  /// composition, which is a project with no picture to wait for.
+  void previewReady() {
+    if (opening.value) opening.value = false;
+  }
+
+  Future<void> openProject(String path) async {
+    // One at a time: the change sink below is a single pending field, and two
+    // opens in flight would have the second take the first's.
+    if (opening.value) return;
+    opening.value = true;
     // Null means the file would not open; the previous project stays loaded
     // rather than the app being left with none.
-    final opened =
-        LumitBridgeState.openProject(path: path, onChangeStream: _changeSink());
+    final opened = await LumitBridgeState.openProject(
+        path: path, onChangeStream: _changeSink());
     if (opened == null) {
       postNotice(l10n.couldNotOpen(path), error: true);
+      opening.value = false;
       return;
     }
+    // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
   }
 
@@ -289,6 +318,15 @@ class LumitState extends ChangeNotifier {
   /// it started the worker but dropped the returned stream, so no rendered frame
   /// ever reached the Viewer for a new project.
   void _adopt(ProjectReference opened) {
+    // The project being replaced is closed, not abandoned: left in the
+    // engine's registry it would keep its render worker — and that worker's
+    // whole GPU device — alive for as long as the process runs. `openProject`
+    // already cleared the registry wholesale before this runs, and close is
+    // idempotent, so the open path pays nothing for the repeat.
+    final previous = project;
+    if (previous != null && previous.internalid != opened.internalid) {
+      previous.close();
+    }
     project = opened;
     // The comp list is cached per document (K-184) and invalidated when the
     // item tree changes — but adopting another project is not a change to the
@@ -1185,10 +1223,10 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// A getter, not a field, because two separate things decide it: the panel
   /// measures itself ([reportViewerScale]) and the user chooses a preview
-  /// resolution ([previewResolution]). Multiplying them here means a change to
+  /// resolution ([previewResolution]). Resolving them here means a change to
   /// either is in force on the very next render request, with nothing to keep
   /// in step.
-  double get viewerScale => _panelScale * previewResolution.scale;
+  double get viewerScale => previewResolution.scaleFor(_panelScale);
 
   /// The scale the *panel* implies, last time the Viewer laid itself out.
   double _panelScale = 1.0;
@@ -1201,24 +1239,35 @@ class LumitUiState extends ChangeNotifier {
     _panelScale = scale > 1.0 ? 1.0 : scale;
   }
 
-  /// How many pixels the engine is asked for, as a fraction of composition
-  /// resolution (docs/07 §2.2 item 2, glossary §5).
-  ///
-  /// Full until something says otherwise. Shell-wide rather than per
-  /// composition, and not written down: §2.2 wants it stored per comp in the
-  /// project, alongside a bar dropdown that also offers Third and Auto, and
-  /// neither is built (docs/TODO.md). What *is* built is the thing that
-  /// matters — a real raster reduction that never reaches the export.
-  PreviewResolution previewResolution = PreviewResolution.full;
+  /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
+  /// item 2). Per comp because it is a way of *working on* one — a heavy shot
+  /// wants Quarter while the title card beside it does not — and it rides the
+  /// session blob beside [viewerLooks] rather than the document, because
+  /// choosing it is not an edit and must never reach an export (glossary §5).
+  final Map<String, PreviewResolution> previewResolutions = {};
 
-  /// Choose the preview resolution, and ask for the frame again — the setting
-  /// changes what the *next* frame is made of, so without the ask the picture
-  /// would not change until something else moved.
+  /// How many pixels the engine is asked for, for the fronted comp.
+  ///
+  /// Auto until something says otherwise: it renders what the panel can show,
+  /// which is what the Viewer has always in fact done.
+  PreviewResolution get previewResolution =>
+      previewResolutions[_selectedComp?.internalid.toString()] ??
+      PreviewResolution.auto;
+
+  /// Choose the preview resolution for the fronted comp, and ask for the frame
+  /// again — the setting changes what the *next* frame is made of, so without
+  /// the ask the picture would not change until something else moved.
   void setPreviewResolution(PreviewResolution resolution) {
-    if (previewResolution == resolution) return;
-    previewResolution = resolution;
+    final id = _selectedComp?.internalid.toString();
+    if (id == null || previewResolution == resolution) return;
+    if (resolution == PreviewResolution.auto) {
+      previewResolutions.remove(id);
+    } else {
+      previewResolutions[id] = resolution;
+    }
     // The View menu ticks the one in force, so the bar has to be rebuilt.
     notifyListeners();
+    rememberSession();
     requestFrame();
   }
 
@@ -1379,6 +1428,10 @@ class LumitUiState extends ChangeNotifier {
       model.refresh();
     });
     sub = state.onWorkerResponse.listen((msg) {
+      // Any reply at all means the new project's worker is up and answering,
+      // which is what the opening card is waiting on. Not the frame alone: a
+      // first render that faults would otherwise leave the shell covered.
+      state.previewReady();
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
           previewTier.value = frame.field0.tier;
@@ -1534,9 +1587,88 @@ class LumitUiState extends ChangeNotifier {
     return (stops: stored.stops, toneMap: false);
   }
 
-  /// The last look actually sent to the engine, so a neutral push onto an
-  /// already-neutral renderer can be skipped. A worker is born neutral.
-  ViewerLook _pushedLook = neutralLook;
+  /// The whole look the engine was last told — exposure, tone map and the
+  /// transparency grid — or null when a freshly adopted worker has been told
+  /// nothing yet. One record for the three, because they travel as one
+  /// message ([pushViewerLook]) and a push can be skipped only when *all* of
+  /// it is already in force.
+  ({double stops, bool toneMap, bool grid, String roi})? _pushedView;
+
+  /// The Viewer's **region of interest** per comp (K-362): the sub-rectangle
+  /// the engine composites, as comp fractions `[u0, v0, u1, v1]`. Rides the
+  /// session beside [previewResolutions] rather than the document, for the
+  /// same reason — choosing where to look is not an edit, and must never reach
+  /// an export.
+  final Map<String, List<double>> regionsOfInterest = {};
+
+  /// Whether the next drag on the picture sweeps out a region of interest
+  /// (K-362). View state rather than panel state only because two widgets need
+  /// it — the bar that arms it and the layer that takes the drag — and
+  /// threading a transient flag between them through the stage is more
+  /// machinery than the flag is worth. Never saved: arming is a thing you are
+  /// in the middle of.
+  bool _armingRegion = false;
+  bool get armingRegion => _armingRegion;
+  set armingRegion(bool on) {
+    if (_armingRegion == on) return;
+    _armingRegion = on;
+    notifyListeners();
+  }
+
+  /// The fronted comp's region, or null for the whole frame.
+  List<double>? get regionOfInterest {
+    final id = _selectedComp?.internalid.toString();
+    return id == null ? null : regionsOfInterest[id];
+  }
+
+  /// Set (or with null, clear) the fronted comp's region and re-render. A
+  /// region that is not four numbers, is inside-out, or covers everything is
+  /// no region — the engine says the same, and agreeing here keeps the button's
+  /// lit state honest.
+  void setRegionOfInterest(List<double>? region) {
+    final id = _selectedComp?.internalid.toString();
+    if (id == null) return;
+    final ok = region != null &&
+        region.length == 4 &&
+        region.every((v) => v.isFinite) &&
+        region[2] - region[0] > 0.001 &&
+        region[3] - region[1] > 0.001 &&
+        (region[0] > 0 || region[1] > 0 || region[2] < 1 || region[3] < 1);
+    if (ok) {
+      regionsOfInterest[id] = [
+        region[0].clamp(0.0, 1.0),
+        region[1].clamp(0.0, 1.0),
+        region[2].clamp(0.0, 1.0),
+        region[3].clamp(0.0, 1.0),
+      ];
+    } else {
+      regionsOfInterest.remove(id);
+    }
+    _armingRegion = false;
+    notifyListeners();
+    rememberSession();
+    pushViewerLook();
+  }
+
+  /// Whether the Viewer's transparency grid is up (K-352). While it is, the
+  /// engine leaves the comp's background colour out of the composite, so
+  /// pixels nothing covers arrive transparent and the grid shows through.
+  ///
+  /// Held here rather than in the Viewer panel because the engine has to be
+  /// told: it rides [pushViewerLook]'s one look message, and project adoption
+  /// clears [_pushedView] so a worker just born — which starts opaque — is
+  /// told afresh on the first front.
+  bool viewerGrid = true;
+
+  /// Flip the transparency grid. The push and the re-render are
+  /// [pushViewerLook]'s: the grid is part of the one look message, and the
+  /// change of record is what makes it ask for the frame again.
+  void setViewerGrid(bool on) {
+    if (viewerGrid == on) return;
+    viewerGrid = on;
+    notifyListeners();
+    pushViewerLook();
+  }
 
   /// Set the exposure, leaving the tone map as it is; and the mirror of it.
   ///
@@ -1565,27 +1697,43 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Tell the engine what the Viewer is looking through, and ask for the frame
-  /// again — a setting changes what the *next* frame looks like, so without the
-  /// ask the picture would not move until something else moved it.
+  /// Tell the engine what the Viewer is looking through — exposure, tone map
+  /// and the transparency grid, one message carrying the whole look — and ask
+  /// for the frame again, because a setting changes what the *next* frame is
+  /// made of.
   ///
-  /// Neutral onto a renderer already neutral is nothing to say and nothing to
-  /// undo, so it is skipped — which is every fronting in a session where
-  /// nobody has touched either control, and the renderer is born neutral. The
-  /// re-render is the expensive half: fronting a comp asks for its frame
-  /// anyway, and asking twice is a whole extra composite each time.
+  /// A look the renderer already holds ([_pushedView]) is nothing to say and
+  /// nothing to re-render, so it is skipped — which is every fronting where
+  /// nothing changed, and what keeps an exposure drag to one message per
+  /// actual movement. The record clears on project adoption, because a new
+  /// worker is born neutral-and-opaque and must be told afresh.
   void pushViewerLook() {
     final comp = selectedComp;
     if (comp == null) return;
     final look = viewerLook;
-    if (look == neutralLook && _pushedLook == neutralLook) return;
-    _pushedLook = look;
+    final roi = regionOfInterest;
+    final target = (
+      stops: look.stops,
+      toneMap: look.toneMap,
+      grid: viewerGrid,
+      // Compared as text: a record holding a list compares by identity, so two
+      // equal regions would look different and re-push on every fronting.
+      roi: roi?.join(',') ?? '',
+    );
+    if (target == _pushedView) return;
     try {
-      comp.setDisplayView(stops: look.stops, toneMap: look.toneMap);
+      comp.setViewerLook(
+        stops: target.stops,
+        toneMap: target.toneMap,
+        transparentBackground: target.grid,
+        region: roi == null ? null : Float32List.fromList(roi),
+      );
     } catch (_) {
-      // No worker yet, or a comp that has gone. The next change asks again.
+      // No worker yet, or a comp that has gone. The next change asks again —
+      // and _pushedView stays as it was, so the ask is not skipped.
       return;
     }
+    _pushedView = target;
     requestFrame();
   }
 
@@ -1626,6 +1774,12 @@ class LumitUiState extends ChangeNotifier {
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
         viewerLooks: Map.of(viewerLooks),
+        previewResolutions: {
+          for (final e in previewResolutions.entries) e.key: e.value.name,
+        },
+        regionsOfInterest: {
+          for (final e in regionsOfInterest.entries) e.key: List.of(e.value),
+        },
       );
 
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
@@ -1688,8 +1842,11 @@ class LumitUiState extends ChangeNotifier {
       clearSelection();
       playheadFrame.value = 0;
       viewerLooks.clear();
-      // A new project is a new worker, and a new worker is born neutral.
-      _pushedLook = neutralLook;
+      previewResolutions.clear();
+      // A new project is a new worker, and a new worker is born knowing
+      // nothing of this session's look — the null record is what makes the
+      // first front tell it everything, the grid included.
+      _pushedView = null;
       setSelectedComp(null);
 
       final path = project?.path();
@@ -1713,6 +1870,22 @@ class LumitUiState extends ChangeNotifier {
       viewerLooks.addEntries(
         session.viewerLooks.entries.where((e) => known.containsKey(e.key)),
       );
+      // Same rule for the per-comp resolutions, plus: a name this build does
+      // not have (a project written by a newer one) simply reads as Auto
+      // rather than stopping the project from opening.
+      for (final e in session.previewResolutions.entries) {
+        if (!known.containsKey(e.key)) continue;
+        for (final r in PreviewResolution.values) {
+          if (r.name == e.value && r != PreviewResolution.auto) {
+            previewResolutions[e.key] = r;
+          }
+        }
+      }
+      // The regions, checked against the comps that actually loaded — the
+      // same rule every other id in a session gets (K-362).
+      for (final e in session.regionsOfInterest.entries) {
+        if (known.containsKey(e.key)) regionsOfInterest[e.key] = List.of(e.value);
+      }
       for (final id in session.openComps) {
         final comp = known[id];
         if (comp != null) openComps.add(comp.internalid);
@@ -1732,6 +1905,11 @@ class LumitUiState extends ChangeNotifier {
       }
     } finally {
       _restoring = false;
+      // A project that opens with no composition fronted has no picture to
+      // wait for, so the opening card would stand for ever waiting on a frame
+      // nobody is going to ask for. In the `finally` because every early
+      // return above is one of those cases.
+      if (selectedComp == null) _app.previewReady();
     }
   }
 
@@ -1990,6 +2168,10 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   bool _handleKey(KeyEvent event) {
     if (!mounted) return false;
+    // The overlay swallows the pointer; keys are routed globally rather than
+    // through the tree, so they have to be swallowed here. A command aimed at
+    // the document being replaced has nothing left to run against.
+    if (context.read<LumitState>().opening.value) return true;
     return _onKey(
             context.read<LumitState>(), context.read<LumitUiState>(), event) ==
         KeyEventResult.handled;
@@ -2004,7 +2186,20 @@ class _LumitAppViewState extends State<LumitAppView> {
     // falls back to the enclosing scope rather than to nothing.
     return FocusScope(
       autofocus: true,
-      child: Column(
+      child: Stack(children: [
+        _shell(uiState, state),
+        // Over everything while a document is being read (see OpeningOverlay):
+        // the shell behind it is still the previous project and swaps in one go.
+        ValueListenableBuilder<bool>(
+          valueListenable: state.opening,
+          builder: (context, opening, _) =>
+              opening ? const OpeningOverlay() : const SizedBox.shrink(),
+        ),
+      ]),
+    );
+  }
+
+  Widget _shell(LumitUiState uiState, LumitState state) => Column(
         children: [
           LumitMenuBarFrb(app: state),
           // The tools, under the menu and above everything else — where a
@@ -2023,9 +2218,7 @@ class _LumitAppViewState extends State<LumitAppView> {
           // progress and Cancel, reachable without the dialogue open.
           const StatusLineFrb(),
         ],
-      ),
-    );
-  }
+      );
 
   /// Which keymap context the focused panel is. Panels with no bindings of
   /// their own resolve to `Global`, which is also the fallback for every other

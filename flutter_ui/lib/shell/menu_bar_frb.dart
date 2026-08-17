@@ -617,6 +617,12 @@ List<MenuSection> lumitMenus(
           MenuEntry(l10n.menuSolid, onComp((c) => c.addSolidLayer())),
           MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer())),
           MenuEntry(l10n.menuCamera, onComp((c) => c.addCameraLayer())),
+          // The three light kinds are their own rows rather than one row and
+          // a dropdown: which kind you want is known before you make it, and
+          // an area light is a different thing to reach for than a point.
+          MenuEntry(l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0))),
+          MenuEntry(l10n.menuSpotLight, onComp((c) => c.addLightLayer(kind: 1))),
+          MenuEntry(l10n.menuAreaLight, onComp((c) => c.addLightLayer(kind: 2))),
           MenuEntry(l10n.menuAdjustment, onComp((c) => c.addAdjustmentLayer())),
           MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer())),
           MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
@@ -740,6 +746,8 @@ List<MenuSection> lumitMenus(
             MenuEntry(
               resolution.title,
               () => ui.setPreviewResolution(resolution),
+              // Only three of the five have a chord of their own (§15);
+              // Auto and Third are menu and bar only.
               action: resolution.action,
               checked: ui.previewResolution == resolution,
             ),
@@ -917,7 +925,7 @@ Future<void> openProjectFrb(LumitState app,
     {Future<String?> Function()? picker}) async {
   final path = await (picker ?? pickProjectToOpen)();
   if (path == null) return;
-  app.openProject(path);
+  await app.openProject(path);
 }
 
 Future<void> importFootageFrb(LumitState app,

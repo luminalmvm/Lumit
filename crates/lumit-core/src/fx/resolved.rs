@@ -182,6 +182,13 @@ impl ShakeSample {
 /// One effect, resolved to plain numbers at a frame — the flat form both the
 /// WGSL kernels (lumit-gpu) and the CPU references below consume.
 #[derive(Debug, Clone, Copy, PartialEq)]
+// Clippy would have the largest variant boxed. It cannot be: `Resolved` is
+// `Copy` by design — plain old data with no owned allocations, so a resolved
+// stack can be hashed byte-for-byte into the frame key (K-143) and copied into
+// a GPU uniform without a clone. `Box` is not `Copy`, so taking the advice
+// would cost the determinism guarantee to save a few hundred bytes on a
+// per-frame, per-layer value that never lives in a long array.
+#[allow(clippy::large_enum_variant)]
 pub enum Resolved {
     Blur {
         /// Kernel half-width in *pixels of the target raster* (the caller
@@ -246,6 +253,20 @@ pub enum Resolved {
         amount: f32,
         /// Neighbour distance in raster pixels (T15): 1 = a 3×3 kernel.
         radius: f32,
+        /// 0..1.
+        mix: f32,
+    },
+    /// Sprite flare (docs/08 §3.29, K-359): the art-directed flare, placed
+    /// from a light position rather than from the picture's bright pixels.
+    SpriteFlare(crate::fx::cpu::SpriteFlareParams),
+    /// Light wrap (docs/08 §3.28, K-358): the background's light spilled
+    /// around the foreground's edge. Consumes a layer-input slot — the
+    /// referenced Background layer — exactly as Depth of field's depth does.
+    LightWrap {
+        /// How far the wrap reaches inside the edge, raster pixels.
+        width_px: f32,
+        /// Gain on the spill before it is screened on.
+        intensity: f32,
         /// 0..1.
         mix: f32,
     },
@@ -765,6 +786,17 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
             Resolved::Sharpen { radius_px, .. } => *radius_px *= f,
             // SharpenSimple's radius is a fixed 3x3 kernel scale, not px.
             Resolved::SharpenSimple { .. } => {}
+            Resolved::LightWrap { width_px, .. } => *width_px *= f,
+            Resolved::SpriteFlare(p) => {
+                // Every distance the flare draws with is px@comp, so all of
+                // them shrink together with the preview raster (K-266) — the
+                // light's position included, or the whole flare would slide.
+                p.light[0] *= f;
+                p.light[1] *= f;
+                p.glow_size *= f;
+                p.ghost_size *= f;
+                p.streak_length *= f;
+            }
             Resolved::RgbSplit { amount_px, .. } => *amount_px *= f,
             Resolved::SpectralSplit { amount_px, .. } => *amount_px *= f,
             Resolved::ChromaticAberration { amount_px, .. } => *amount_px *= f,
@@ -1011,6 +1043,48 @@ fn resolve_one(
             Some(Resolved::SharpenSimple {
                 amount,
                 radius,
+                mix,
+            })
+        }
+        "sprite_flare" => {
+            let tint = e.colour_at("tint", lt).unwrap_or([1.0; 4]);
+            Some(Resolved::SpriteFlare(crate::fx::cpu::SpriteFlareParams {
+                // px@comp through the §2.3 preview factor, exactly as the
+                // physical flare's light is (K-260).
+                light: [
+                    fl("light_x").unwrap_or(640.0) as f32 * px_scale,
+                    fl("light_y").unwrap_or(360.0) as f32 * px_scale,
+                ],
+                intensity: (fl("intensity").unwrap_or(1.0) as f32).max(0.0),
+                tint: [
+                    (tint[0] as f32).max(0.0),
+                    (tint[1] as f32).max(0.0),
+                    (tint[2] as f32).max(0.0),
+                ],
+                glow_size: (fl("glow_size").unwrap_or(120.0) as f32).max(0.0) * px_scale,
+                glow_intensity: (fl("glow_intensity").unwrap_or(1.0) as f32).max(0.0),
+                ghosts: (fl("ghosts").unwrap_or(6.0).round() as i64)
+                    .clamp(0, crate::fx::cpu::SPRITE_FLARE_MAX_GHOSTS as i64)
+                    as u32,
+                ghost_spacing: (fl("ghost_spacing").unwrap_or(0.35) as f32).max(0.0),
+                ghost_size: (fl("ghost_size").unwrap_or(60.0) as f32).max(0.0) * px_scale,
+                ghost_intensity: (fl("ghost_intensity").unwrap_or(0.35) as f32).max(0.0),
+                streak_length: (fl("streak_length").unwrap_or(300.0) as f32).max(0.0) * px_scale,
+                streak_intensity: (fl("streak_intensity").unwrap_or(0.5) as f32).max(0.0),
+                streak_angle_deg: fl("streak_angle").unwrap_or(0.0) as f32,
+                mix: (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0),
+            }))
+        }
+        "light_wrap" => {
+            // px@comp like every distance parameter (K-260), through the
+            // §2.3 preview factor so a half-resolution preview wraps by the
+            // same visible width the export will.
+            let width_px = (fl("width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
+            let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
+            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            Some(Resolved::LightWrap {
+                width_px,
+                intensity,
                 mix,
             })
         }
@@ -1336,6 +1410,11 @@ fn resolve_one(
             // Transform-anchor convention (K-260: point params are pixels).
             let lx = fl("light_x").unwrap_or(640.0) as f32 * px_scale;
             let ly = fl("light_y").unwrap_or(360.0) as f32 * px_scale;
+            // Source size (K-355): the half-extent of an area light, in the
+            // same px@comp the position uses, so it rides the same preview
+            // factor. Zero is the point source the effect has always had.
+            let sw = (fl("source_width").unwrap_or(0.0) as f32).max(0.0) * px_scale;
+            let sh = (fl("source_height").unwrap_or(0.0) as f32).max(0.0) * px_scale;
             let intensity = (fl("intensity").unwrap_or(1.0) as f32).max(0.0);
             // Library index (K-261; out-of-range clamps inside lens_entry).
             // A pre-K-264 save's index pointed into the old 1299-lens
@@ -1390,12 +1469,58 @@ fn resolve_one(
             let max_ghosts = (fl("max_ghosts").unwrap_or(60.0).round() as i64).clamp(0, 200);
             let dispersion = (fl("dispersion").unwrap_or(1.0) as f32).max(0.0);
             let coating = (fl("coating").unwrap_or(0.75) as f32).clamp(0.0, 1.0);
+            // The per-element coatings (K-371): one Choice row per glass
+            // element, `coating_el1` upwards. A row the panel never showed
+            // (this lens has fewer elements) reads its default and leaves the
+            // prescription's own column alone, so an unset row and a missing
+            // row are the same thing.
+            let mut coating_elements = [crate::fx::lens_flare::COATING_AS_FILE;
+                crate::fx::lens_flare::MAX_COATING_ELEMENTS];
+            for (i, slot) in coating_elements.iter_mut().enumerate() {
+                let id = crate::fx::lens_flare::COATING_ELEMENT_IDS[i];
+                *slot = (fl(id).unwrap_or(0.0).round().max(0.0) as u32)
+                    .min(crate::fx::lens_flare::COATING_DESIGNS - 1);
+            }
             let sb_intensity = (fl("starburst_intensity").unwrap_or(1.0) as f32).max(0.0);
             let scale = (fl("scale").unwrap_or(1.0) as f32).clamp(0.05, 20.0);
             let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+            // Lights mode (K-360): the comp's own Light layers, resolved here
+            // because the expression context already carries the document, the
+            // comp and the time — everything needed, and nothing new to
+            // thread. Positions and extents go in RASTER pixels, so they ride
+            // the same preview factor the Manual position does and
+            // `manual_light` turns both into fractions in one place.
+            let mut lights =
+                [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES];
+            let mut light_count = 0u32;
+            if source == 2 {
+                let ec = &expression_context;
+                if let Some(owner) = ec.comp.and_then(|id| ec.document.comp(id)) {
+                    for resolved in owner.lights_at(ec.comp_time) {
+                        if light_count as usize >= crate::fx::lens_flare::MAX_SOURCES {
+                            break;
+                        }
+                        lights[light_count as usize] = crate::fx::lens_flare::FlareLight {
+                            pos: [
+                                resolved.position.0 as f32 * px_scale,
+                                resolved.position.1 as f32 * px_scale,
+                            ],
+                            rgb: resolved.colour,
+                            extent: [
+                                resolved.half_size.0 as f32 * px_scale,
+                                resolved.half_size.1 as f32 * px_scale,
+                            ],
+                        };
+                        light_count += 1;
+                    }
+                }
+            }
             Some(Resolved::LensFlare(
                 crate::fx::lens_flare::LensFlareParams {
                     light: [lx, ly],
+                    source_size: [sw, sh],
+                    lights,
+                    light_count,
                     intensity,
                     lens,
                     fstop,
@@ -1404,6 +1529,7 @@ fn resolve_one(
                     aperture_rotation_deg: aperture_rotation,
                     roundness,
                     aperture_softness,
+                    coating_elements,
                     ghost_intensity,
                     ghost_softness,
                     max_ghosts: max_ghosts as u32,

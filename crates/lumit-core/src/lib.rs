@@ -5,6 +5,7 @@
 pub mod anim;
 pub mod expression;
 pub mod fx;
+pub mod lighting;
 pub mod lut;
 pub mod markers;
 pub mod mask;

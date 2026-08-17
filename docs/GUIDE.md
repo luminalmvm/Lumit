@@ -97,7 +97,12 @@ fixed job (the full table is in [05-ARCHITECTURE.md](05-ARCHITECTURE.md)):
   some engineer breaking this rule. In Lumit it's structural: the UI thread hands work to
   others and carries on drawing.
 - **Worker threads** are the render farm: they evaluate frames, run effects, do maths.
-  There are roughly as many as your CPU has cores.
+  There are roughly as many as your CPU has cores. Each open project also has one
+  **render worker** of its own, which owns a whole GPU connection — so a project that
+  stops being shown is **closed**, not abandoned: closing it tells its worker to stop and
+  give that connection back. Nothing enforced this for a long time, and every project a
+  session ever made quietly kept a live worker; the test suite (one project per test)
+  piled up enough of them to run the CI machine out of memory, which is how it was caught.
 - **Dedicated threads** exist for decoding video, disk IO, and audio — because those jobs
   must never wait behind anything else (audio especially: if its thread is ever late, you
   *hear* it).
@@ -582,6 +587,123 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   blades, which Lumit gets by taking a Fourier transform of the iris shape — an
   established bit of optics maths — so an 8-blade iris genuinely makes an 8-spike star,
   and the spikes fringe into rainbows because each wavelength bends by a different amount.
+  That star is not the same shape everywhere in the frame. Look through a lens from an
+  angle, rather than straight down the barrel, and the round hole you see is not round —
+  the metal rims at the front and the back of the barrel overlap it from opposite sides
+  and pinch it into a pointed oval, the shape photographers call a **cat's eye** (it is
+  the same effect that squashes out-of-focus background highlights into lemon slices near
+  the edges of a picture). Light bends around *that* shape, not the iris, so a real
+  starburst squashes and leans as the light moves out towards a corner. Lumit works out
+  the shape of the hole at eight angles across the frame when you pick a lens, and each
+  light in the shot reads the two that bracket where it actually sits, turned to point
+  the right way. A light dead centre gets exactly the star it always got.
+  The ghosts have an edge problem of their own, and it is the opposite kind of
+  physics. If you cut a hole in card and shine a torch through it, the patch of
+  light on the wall does not have a clean border: right at the rim there is a
+  set of fine bright and dark rings, and the brightest of them is brighter than
+  the middle of the patch. That is light bending round the edge of the hole,
+  and a real ghost — which is just an out-of-focus picture of the iris — has
+  exactly the same shimmer at its rim. Almost every flare in software draws
+  ghosts with a stencil edge instead, which is a large part of why they read as
+  fake. Lumit works the rings out properly, and how coarse they are is not a
+  stylistic choice: it follows from how big that particular ghost is and how open
+  the iris is, by one line of arithmetic.
+  The first attempt at this got the *scale* badly wrong, and it is worth
+  recording why, because the mistake was visible from across the room. The rings
+  were produced by running the same Fourier maths the starburst uses, at a ladder
+  of six settings. That machinery has a hard ceiling — reaching finer rings needs
+  a transform sixteen times bigger — and real ghost rings are hundreds of times
+  finer than the ceiling. So every ghost was drawn with rings far too coarse, and
+  rings coarse enough are not a rim effect at all: they are broad bright and dark
+  bands across the *whole* ghost. With big ghosts filling the frame, the picture
+  picked up a faint concentric pattern over the entire shot. The fix was to stop
+  computing the whole pattern and use the textbook formula for what happens at
+  the *edge* alone, which is exact at the scales real ghosts actually have, costs
+  nothing, and cannot touch the middle of a ghost at all — the interior is flat
+  by construction now, not by luck.
+  **The weave that was actually there.** Underneath all of the above sat a
+  plainer fault, and it is worth explaining because it looked like optics and
+  was not. The effect fires a grid of rays through the lens and each one lands
+  somewhere on the picture, where it deposits its light spread over a small
+  patch — brightest at the middle, fading to nothing at the patch's edge, so
+  that neighbouring patches blend into a smooth sheet. Except they didn't
+  blend: each patch faded to zero exactly where the next one *started*, so
+  every patch was an island with a hairline of darkness around it. Add up a
+  grid of those and you get a woven mesh of dark lines printed over the whole
+  picture, a bright cross where the grid's own axes run through each ghost, and
+  little stair-steps along every rim. The total amount of light was exactly
+  right, which is why every test the effect had went on passing — they all
+  measured how much light there was, and none measured whether it was smooth.
+  The fix is that each patch now reaches further, out past where its neighbour
+  sits, so they overlap and add up to an even sheet. That took two goes. The
+  first used a simple triangular fade, which adds up to exactly the right total
+  — but leaves a faint crease where one patch hands over to the next, and the
+  eye is remarkably good at finding creases; it is the same reason a
+  smooth-shaded model can still show its polygon edges. The second uses a
+  gently curved fade that hands over without a crease at all. Measured on a
+  real frame, the leftover texture went from about 16% of the local brightness,
+  to 2.4%, to 1.9%. It costs nine times as much drawing per ray, which is the
+  honest price of not printing the ray grid onto the picture.
+
+  A caution worth passing on: the first fix had a test, and the test passed. It
+  laid out an even grid of identical rays and checked the result came out flat
+  — which is exactly the case the simple fade handles perfectly. Real ghosts
+  are stretched and uneven, and that is where it fell down. The test now
+  measures a real flare instead.
+
+  **Adding up in the right precision.** One more fault sat underneath, and it
+  is a nice illustration of how a thing can be wrong while every test says it
+  is right. The light from each ray is *added* into the picture, and a bright
+  pixel might have a few thousand rays landing on it. That adding-up was done
+  in a 16-bit number format — fine for storing a colour, but when you add a
+  tiny amount to a large running total in 16 bits, the tiny amount can be too
+  small to change the total at all, and simply vanishes. It vanishes more the
+  brighter the pixel already is, so the effect was quietly darkening its own
+  highlights by about four percent in the middle of the frame. The sum is now
+  kept off to one side in a whole-numbers format — counting in steps of about
+  a millionth — and written into the picture once at the end. One rounding
+  instead of thousands. Whole numbers matter for a second reason: the rays are
+  added up by thousands of parallel threads in whatever order they finish, and
+  ordinary decimals give slightly different totals depending on that order,
+  which would mean the same project rendering two different pictures. Whole
+  numbers add up the same however they are shuffled. The first attempt used
+  decimals and did exactly that; the tests caught it the same day.
+
+  **Big soft patches are painted coarse, then smoothed.** A ray that lands on a
+  big defocused ghost spreads its light over a big patch — sometimes hundreds of
+  pixels across — and painting every one of those pixels for every one of
+  hundreds of thousands of rays is where the effect's time actually went: the
+  cost of a ghost was its whole area, over and over, once per ray. So the
+  canvas the rays paint on is now a stack: the full-resolution picture on top,
+  and under it a half-size copy, a quarter-size one, and so on. A small sharp
+  patch is painted on the top layer exactly as before; a patch too big to
+  afford is painted on whichever smaller layer brings it down to a sensible
+  number of pixels, and at the end the layers are enlarged and added together.
+  Enlarging a coarse layer smooths it — which is fine, because the only
+  patches sent down there were big soft ones whose own softness is far
+  coarser than the smoothing. A patch is never blurred by more than about a
+  twenty-fourth of its own size, which the eye cannot find on a defocused
+  ghost. The payoff on a real frame was better than tenfold, and it is the
+  reason turning a flare dial no longer saturates the graphics card.
+
+  **Every element gets its own coating.** Look at a photograph of a real flare
+  and the ghosts are not one colour: there is a blue one next to a purple one
+  next to an amber one. That is the lens, not an effect. A coating works by
+  cancelling reflections at some wavelength, so what the surface still reflects
+  is the *opposite* colour — cancel the green and you see magenta come back — and
+  a lens maker does not cut every element the same. Lumit therefore offers a
+  coating choice per piece of glass in the lens, and it shows exactly as many
+  rows as that lens has pieces: four for a Tessar, eighteen for a 70-200 zoom.
+  Each choice is a real coating design of its kind, and the colours in the menu
+  are not names somebody liked — they were measured off the maths, across the
+  visible spectrum, and only designs that come out both distinctly coloured and
+  dimmer than bare glass (as a real coating must be) made it in. Leaving a row
+  at "As the lens file" changes nothing, which is where they all start.
+  One honest consequence: a big soft ghost's rings are so fine that the effect
+  cannot draw them without them turning into a moiré pattern, so it doesn't try —
+  it draws their average, which is a plain soft edge. Tight bright ghosts, which
+  is where a photograph actually shows a ringed rim, keep theirs. That is the
+  right way round, and the previous behaviour was precisely the wrong way round.
   The expensive maths (the Fourier transforms, the iris image) runs once on the CPU when
   you change a parameter and is remembered; only the ray shooting and drawing happen per
   frame, which is what keeps it scrubbable. When it's doing too much, the dials to reach
@@ -682,9 +804,12 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   one the original research paper used: give the brightness to the CORNERS
   (each corner averages the panels around it) and let the graphics card blend
   smoothly across every panel — the seams simply cease to exist. The jagged
-  outlines got the standard cure, multisampling: the card checks four points
-  per pixel instead of one at the edges of shapes, which is how every game
-  smooths its edges. And the triangular notches in the bright rims turned out to
+  outlines got the standard cure, multisampling: four points checked per pixel
+  instead of one at the edges of shapes, which is how every game smooths its
+  edges. (Lumit later had to stop asking the *card* to do that counting and do
+  it in its own arithmetic instead — same four points, same result, but
+  repeatable. See "the flare that would not draw the same picture twice"
+  below.) And the triangular notches in the bright rims turned out to
   be panels the code was *throwing away* out of caution — an earlier bug made
   long thin panels dangerous to draw, so they were dropped, and every dropped
   one left a bite mark in a rim. They are safe to draw now that brightness is
@@ -814,6 +939,228 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   own black background and hides the layer, which is what "Black" was for —
   the flare as a separate element you Screen back on in another comp — so a
   project saved with Black opens on Normal.
+
+  **The flare that would not draw the same picture twice (K-353).** Lumit
+  holds itself to a rule: the same composition, the same frame, the same
+  settings must produce *the same pixels* — that is what lets a frame be
+  cached, and what makes the preview a promise about the export. The lens
+  flare had quietly stopped keeping it. Render the same flare twice and a few
+  hundred pixels came back a hair different, in different places each time,
+  and the test that says so had been failing for months without anyone knowing
+  which part was to blame.
+
+  The answer came from crossing things off. The ray tracing was innocent —
+  ask it for the same rays twice and every one lands in exactly the same
+  place. The blur was innocent; so was the starburst. It even happened with a
+  single ghost of a single colour, so it was not a matter of adding up too
+  many things. What was left was the *drawing* — and specifically the four-
+  points-per-pixel smoothing described further up. Asking the graphics card to
+  keep four half-precision numbers per pixel and add light into them turns out
+  not to be repeatable on this hardware: the card is free to do that
+  arithmetic in a slightly different order each time, and half-precision
+  numbers are small enough to notice.
+
+  So Lumit stopped asking. The smoothing is still there and still uses the
+  same four points — the flare does the counting itself, in its own
+  arithmetic, which is repeatable by construction. It also happens to be the
+  *exact* calculation the slow reference implementation already did, so the
+  two now agree because they are the same sum rather than because one
+  resembles the other. Two details had to come with it: shapes are grown by a
+  pixel before drawing (otherwise a sliver of light that passes between pixel
+  centres is never asked about at all, and a third of the flare's brightness
+  went missing), and that growing pushes the *edges* outward rather than the
+  corners — a folded sliver's corners lie almost in a line, so pushing them
+  apart lengthens it without ever making it thicker. And the biggest single
+  piece of memory the effect owned, about 66 MB on a large frame, was the
+  card's four-points-per-pixel canvas; it is gone.
+
+  **Why flares used to jump, and why lights now have a size (K-355).** Point
+  the flare at footage — at a street lamp, a window, a practical in shot — and
+  it used to twitch. The reason was that Lumit asked a very narrow question of
+  the picture: *which single pixel here is brightest?* That pixel became the
+  light. But inside a real lamp, the brightest pixel is a lottery: sensor
+  noise and the odd sparkle move it from one frame to the next, so the light
+  hopped about inside something that had not moved, and the whole flare
+  hopped with it.
+
+  Lumit now asks a better question: *where is the light, on average?* Every
+  lit pixel is weighed, and the light is placed at the balance point of all of
+  them — its centre of brightness. One pixel going forty times too bright
+  moves that balance point by less than a pixel, so the jitter is simply gone.
+  The same change gives a light its *colour* from the average of what is lit
+  rather than from its hottest speck, so a sparkle can no longer tint a flare.
+
+  And once you are weighing every lit pixel, you also know **how big the light
+  is** — and that turns out to matter enormously. A real flare from a strip
+  light does not look like a flare from a star: its ghosts are little images
+  of the strip, stretched the way the strip is. So a big light has to flare
+  as a shape, not as a dot.
+
+  In Manual mode this is two dials, **Source width** and **Source height**,
+  measured in pixels from the centre outward. Leave them at zero and you have
+  the pinpoint star the effect always drew. When the flare is reading a layer
+  instead, it measures the size itself from the picture.
+
+  **Why a softbox flares as one smooth shape (K-367).** The obvious way to
+  flare a big light is to treat it as a handful of small ones side by side:
+  work out the flare for, say, twenty-five points spread across the softbox,
+  each carrying its share of the brightness, and add them up. That is what
+  Lumit did at first, and it has a giveaway that the owner spotted straight
+  away — you can *see the twenty-five*. Wherever a ghost is smaller than the
+  gap between those points, you get twenty-five little irises laid out in a
+  grid instead of one soft rectangle. Using more points only shrinks the gap;
+  it never closes it. It also costs twenty-five times the work.
+
+  What Lumit does now is quietly better and, oddly, cheaper. The flare is
+  already worked out by firing thousands of rays through the lens — a fine
+  spray covering the front of the glass. Each of those rays is now told to
+  come from *its own point* of the light: one ray from the top-left corner of
+  the softbox, the next from somewhere near the middle, the next from the
+  right-hand edge, and so on, spread evenly over the whole panel by a fixed,
+  repeatable pattern. No two rays start from the same place, so there is
+  nothing for copies to form out of — and because each ray already spreads
+  its light over the little patch its neighbours bracket, and its neighbours
+  now come from quite different parts of the softbox, that patch grows to
+  cover exactly the gap a copy would have sat in. The result is one smooth
+  bar for a tube, one smooth rectangle for a window, one smooth disc for a
+  bulb.
+
+  Two nice consequences. A big light now costs the same as a small one —
+  nothing was added to the ray count, the size was folded into rays that were
+  being fired anyway. And a light of zero size offsets every ray by exactly
+  nothing, so every flare you have already built renders the same as before,
+  right down to the last bit.
+
+  The **starburst** — the spiky glint on the light itself — has to be handled
+  separately, because it is not traced at all: it is a picture worked out once
+  and stamped down. The saving grace is that its shape does not change as the
+  light moves, only where it sits, so a starburst from a big soft source is
+  just the small one smeared across that source. Lumit stamps it in a
+  three-by-three grid over the panel, each at a third of a third of the
+  brightness, which comes to the same thing. A softbox gets a broad soft
+  glare where a bare bulb gets a pinpoint star — and a point of light still
+  gets exactly one stamp, unchanged.
+
+  **Why ghosts change colour as a light crosses the frame (K-356).** Every
+  glass surface in a lens is coated to stop it reflecting — that is what the
+  faint purple or green sheen on a lens front element is. Those coatings are
+  the reason lens flare is coloured at all: what little light *does* bounce
+  back off each surface has been filtered by them, so a ghost is tinted by
+  the coating that made it.
+
+  A coating works by interference: light bouncing off the front of a
+  microscopically thin film and light bouncing off its back arrive slightly
+  out of step, and cancel. How far out of step depends on the wavelength —
+  which is why a coating kills some colours better than others — *and* on the
+  angle the light arrives at, because a slanted path through the film is a
+  longer path. So as a light moves toward the edge of frame and its rays hit
+  the glass more steeply, the colour the coating suppresses shifts. That is
+  the real-world effect of a flare going magenta on one side of the frame and
+  green on the other.
+
+  Lumit used to model this with a single film, which can only ever cancel one
+  colour, so ghosts could only be tinted one way. It now solves real
+  multi-layer stacks properly — the standard optics calculation, layer by
+  layer, for both wavelength and angle. Modern lenses use several layers
+  precisely to get two or more cancelled colours, which is where their
+  characteristic look comes from, and that is now what Lumit draws.
+
+  One honest limit: a lens prescription tells you *how many* layers a surface
+  has, never the recipe — those are trade secrets, and the research is
+  unanimous that real coatings can only be measured, not guessed. So Lumit
+  uses the textbook design for each layer count. The behaviour is right; the
+  exact tint of a specific real lens would need that lens photographed and
+  fitted.
+
+  **Tracing three colours and measuring twenty-four (K-364).** The catch with
+  the coatings above is that their effect swings up and down several times
+  across the visible spectrum — a stack cancels one colour, passes the next,
+  cancels another. Lumit was tracing three wavelengths and reading the coating
+  at each, which is three readings of a curve with five wiggles in it: the
+  answer depended on where the three landed, not on the shape of the curve.
+
+  The fix separates two things that used to travel together. *Where* a ray
+  goes barely changes with colour — glass bends red and blue by very slightly
+  different amounts, and that smooth difference is all the geometry cares
+  about — so the path is still traced three times. *How much energy* the ray
+  keeps is where the wiggles live, so each traced ray now carries eight
+  separate energy readings, spread across its share of the spectrum, and each
+  one reads the coating at its own wavelength. Even the lowest quality setting
+  therefore samples colour twenty-four times where it sampled three, for
+  almost no extra tracing.
+
+  The coating maths itself no longer runs per ray at all. Once per lens, the
+  reflectance of every surface is worked out ahead of time onto a small grid —
+  every 5 nm across the visible, at sixteen angles — and the ray simply looks
+  its answer up. Both halves of Lumit do this identically, the one on the
+  processor and the one on the graphics card, so they still agree ray for ray;
+  the card's copy got faster in the bargain, because a table lookup is cheaper
+  than the layer-by-layer calculation it replaced.
+
+  **Every ray now paints its own little patch (K-366).** Until this change the
+  flare was drawn as a net: neighbouring rays were joined into four-cornered
+  panels and the panels were painted. That works beautifully where the light
+  spreads out smoothly, and it is wrong exactly where a flare is at its most
+  beautiful — at a *fold*, the bright rim or arc where the lens crushes a whole
+  band of rays onto one line. At a fold the light doubles back on itself, so a
+  panel joining four rays across it stretches over two places at once and comes
+  out as a hair-thin sliver. Every rescue the flare has ever grown — puffing up
+  panels too small to see, throwing away the slivers, reining in stray corners,
+  growing every shape by a pixel before drawing it — existed to survive that one
+  bad join, and each one moved the problem somewhere else: notched rims one
+  release, faint lines across the picture another, blocky facets a third.
+
+  So the rays are no longer joined at all. Each ray asks its four neighbours
+  where *they* landed, works out how big a patch of the picture its own share of
+  the light covers, and dabs that share over the patch — brightest in the middle,
+  fading to nothing at the edge, like a soft round brush stroke of exactly the
+  right size. The total light in a dab is always the light the ray carried, so
+  nothing is gained or lost however the patch is stretched. And a fold is now
+  simply many dabs landing on top of one another, which is the honest answer:
+  that *is* what a fold is. All the rescue machinery is deleted rather than
+  patched again, including the growing-by-a-pixel from the fix above — a dab
+  fades out on its own, so there is no hard edge left to smooth.
+
+  Two knobs stay. A dab is never allowed to be thinner than about three quarters
+  of a pixel, so a caustic line comes out as a line instead of a dotted row of
+  misses; and there is still a ceiling on how bright a fold may get (about 333
+  times), because a fold's brightness genuinely runs away in the maths while a
+  real photograph's does not. Ghost bodies look as they did; rims and arcs are
+  cleaner. Because the picture does move, the effect's version number steps up,
+  which is how Lumit records that an old project renders a little differently.
+
+  **The ghosts of the ghosts (K-368).** A ghost is light that bounced off two
+  glass surfaces on its way through the lens. But light that has bounced twice
+  can bounce twice more and still land on the sensor, and that is what produces
+  the *chains* of doubled blobs old lenses are famous for. Lumit used to ignore
+  those four-bounce paths, on the reasonable grounds that each one carries about
+  a hundred-thousandth of what a two-bounce ghost does. The catch is the sun:
+  it is about a hundred thousand times brighter than an ordinary highlight, so
+  the two cancel out — and a few of these paths happen to focus their light into
+  a tight spot rather than spreading it into a wash, which makes them visible
+  even when they are faint. On old uncoated glass, where every surface reflects
+  a full four per cent instead of a fraction of one, they are not faint at all.
+
+  The difficulty is counting. A lens with twenty-seven surfaces has a few
+  hundred two-bounce paths — easy to try them all — but around a hundred
+  thousand four-bounce ones, and each trial costs real work. So Lumit sorts them
+  first by a cheap estimate that can only ever be *too generous*: multiply
+  together how reflective the four surfaces are at their most reflective. The
+  best fifteen hundred by that estimate are then tested properly, exactly the
+  way the two-bounce ghosts are tested, and whatever survives is ranked into the
+  same single list with them. Because the cheap estimate only decides which
+  paths get *measured* — never how bright anything renders — being generous with
+  it is safe: the worst it can do is spend a measurement on a path that turns
+  out to be dim.
+
+  What falls out is pleasingly close to the real world. On the modern
+  multicoated cine primes the extra paths exist but never rank high enough to
+  draw, because the lens has so many ordinary ghosts ahead of them — which is
+  precisely why modern lenses look clean. On a 1927 Biotar, which runs out of
+  ordinary ghosts after forty-five of them, over a hundred of the four-bounce
+  paths make the cut and the flare gains the doubled train that glass really
+  has. Old projects gain those ghosts, so the effect's version number steps up
+  again.
 - **RGB split gains a Wavelength mode** (K-090's quality-tier pattern: where the smooth
   look is optional, it hides behind a Bool next to the fast one). Off — the default —
   the split is three tinted samples: the first colour pulled one way, the third the
@@ -2702,6 +3049,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   resolution you've chosen (Full, Half, Auto…). The quick draft frames are shown but never
   saved into the frame cache, so the cache only ever holds full-quality frames, and the
   background pre-rendering pauses while you scrub so it doesn't compete for the disc and CPU.
+  One bug here is worth recording because the symptom pointed away from the
+  cause. Frames are filed under a *name* made from everything that went into
+  them, and the preview resolution is part of that name — a half-size frame and
+  a full-size one are two different pictures. Playback is allowed to quietly
+  drop the resolution to keep time, and that decision stuck around after
+  playback stopped. So the background filling went on making full-size frames
+  while every scrub asked for half-size ones, and the two never met: the cache
+  bar went green, and scrubbing onto a green frame still re-rendered it. The
+  resolution drop is playback's business alone now, and a still frame is made at
+  the size you asked for.
+
 - **Dragging a value — or a keyframe — updates the picture live.** When you drag a value like
   Position or Scale, the viewport follows your drag immediately, before the edit is written
   down. Dragging a keyframe in the graph editor does the same: the picture shows what the curve
@@ -3477,6 +3835,44 @@ cannot report a module that took its time or came up degraded. Noted in
 engine behind it at all falls back to a canned list, so the placeholder still
 opens on something honest rather than a blank rectangle.
 
+### Opening a project, and why the old one stays on screen
+
+Opening a `.lum` is not a small read. The engine parses the whole document and
+then checks every media file it names is where the file says it is, and on a
+large project that is long enough to notice. Two things follow from it, both in
+`LumitState.openProject` in `main.dart`.
+
+**The read happens away from the interface.** `open_project` is one of the few
+bridge calls that is deliberately *not* marked `sync`: a sync call runs on the
+same thread that draws, so a slow one freezes the window until it is done, to the
+point where Windows offers to close the program for you. Unmarked, frb runs it on
+a worker thread and hands Dart a promise, and the interface keeps drawing.
+
+**Nothing changes over until all of it is ready — including the picture.** While
+the read is running, the `opening` flag is up and the shell covers itself with a
+card and a moving bar (`OpeningOverlay` in `shell/splash.dart`). Behind the card
+the panels are still drawing the *previous* document — that is deliberate. The
+alternative is watching an editor come apart and reassemble panel by panel as
+the new document arrives.
+
+The card does not lift when the document is in. It lifts when the Viewer has
+something to show of it, or when the session restore says there is nothing to
+show — a project that opens with no composition fronted. Panels filling while
+the preview was still coming read as a slow editor; everything arriving at once
+reads as an application loading (K-351). What ends it is `previewReady`, called
+on the first reply from the new project's render worker: any reply, not the
+frame alone, so a first render that fails cannot leave the shell covered for
+good.
+
+There is a subtlety worth knowing, because it caused a bug. Opening a project
+clears the engine's registry of open projects, so **every handle Dart is holding
+dies at that moment** — including any question already asked and not yet
+answered. The missing-file badge in the Viewer asks each footage layer whether
+its file is still there, one round trip each; if the document is replaced while
+those answers are in flight, the rest of them come back as errors. They are
+caught and dropped rather than reported: there is no missing media in a document
+that is gone, and the panel is about to be rebuilt from the new one anyway.
+
 ### The bridge
 
 `crates/lumit-bridge` builds to one shared library the app loads at startup. It
@@ -3663,6 +4059,35 @@ computing, so the bake thread takes everything waiting, keeps the newest, and dr
 rest before they start — the same "is my work still wanted" habit the rest of the engine
 has.
 
+### The six and a half seconds nobody was using (K-351)
+
+A shader is a small program the graphics card runs, and the card's driver has to
+translate ours into its own instructions before any of them can run. That
+translation happens when Lumit starts a render worker, not when the shader was
+written, and for most of Lumit's forty-odd kernels it takes a few milliseconds
+each.
+
+The lens flare is not most kernels. Its ray tracer is by a distance the largest
+shader in the program, and on a real card its pipelines take about six and a half
+seconds to compile — which the render worker paid *before it would answer its
+first request*. Every project paid it: a project with one empty composition, a
+project with no flare in it anywhere, every time one was opened. It was almost
+the whole of the wait between opening a project and seeing a picture.
+
+So the flare's pipelines are now built on a thread of their own (`LazyFlare` in
+`lumit-gpu`) while the rest of the engine gets on with the first frame, and the
+first frame that actually draws a flare waits for that thread — by which time,
+in practice, it finished long ago. Nothing about what the effect draws changes;
+only when the compiling happens. Worker start went from 7.7 seconds to 1.1.
+
+If you want to see the numbers on your own machine,
+`crates/lumit-render/examples/first_frame_probe.rs` is the stopwatch that found
+this, and it prints each part of a renderer's start-up in turn:
+
+```
+cargo run --release -p lumit-render --features shared-texture --example first_frame_probe
+```
+
 ### How the picture reaches the screen
 
 Video frames are far too large to pass through function calls sixty times a
@@ -3771,6 +4196,237 @@ tidy and read as a fault — leave the tone map on and the whole cache ladder is
 switched off for the session, with nothing on screen to say so. Naming each look
 separately costs only that several looks compete for the same budget, which the
 tiers already know how to sort out by eviction.
+
+**The transparency grid is a way of looking too (K-352).** The checkerboard the
+Viewer draws behind the picture can only show through pixels that are actually
+transparent, and for a long time none were: the comp being looked at was always
+composited onto its own background colour at full alpha, so even an empty comp
+arrived as solid black. While the grid button is on, the engine now leaves that
+backdrop out entirely — what nothing covers stays transparent, and the board
+shows through it, which is the whole point of the button. It follows every rule
+the exposure does — in fact it travels in the same message: the engine is told
+the whole look (exposure, tone map, grid) in one call, so it can never hold
+half of one. Folded into the frame's cache name like the rest (an opaque frame
+and a see-through frame are two different pictures), and never sent to an
+export, which always draws the backdrop.
+
+### Light layers, and why an area light matters (K-360)
+
+Lumit now has **Light layers** — Layer ▸ New ▸ Point light, Spot light or Area
+light. A light draws nothing itself. Like a Camera, it is a thing the *other*
+layers react to; you will not see it in the picture, only what it does.
+
+It is placed with the ordinary transform, which means it animates, parents to a
+Null and drags about exactly like any other layer. There was no need to invent
+a special way to move a light, so there isn't one.
+
+**The area light is the one worth knowing about.** A point light is a
+mathematical dot — it has a position and nothing else. An area light is a
+*rectangle* with a real width and height: a softbox, a window, a strip light,
+the long tube over a kitchen counter. Real lights have size, and size is what
+makes their reflections look the way they do.
+
+Right now the thing that reads lights is the Lens flare, in its **Lights**
+source mode: instead of you placing the flare by hand, or the effect hunting
+for bright pixels, it flares from the actual lights in your composition. And
+because an area light knows how big it is, the flare draws it as its own
+shape — a strip light's ghosts come out as bars, not as circles. That fell out
+of work already done: the machinery that measures and samples a source's extent
+was built earlier for detected sources, so a light with a size simply walks
+into it.
+
+Move the light, and the flare follows. Animate it, and the flare animates. That
+is the point of making a light a layer rather than a number inside an effect.
+
+### What runs on the GPU, what runs on the CPU, and why lens changes felt slow
+
+A fair question came up: "why aren't we doing all of this on the GPU?" The answer is that
+the expensive every-frame work — tracing rays through the lens, drawing the ghosts,
+detecting sources in a matte — already *is* on the GPU. What runs on the CPU is the
+**bake**: the work done once per lens change, not per frame. Ranking which ghost pairs are
+bright enough to draw, computing the starburst's diffraction pattern, measuring each
+ghost's size. Those are functions of the lens, not of the frame, so doing them per frame
+would be waste wherever they ran — and on the CPU they are deterministic by construction,
+which the caches that name frames depend on.
+
+Three things made that split *feel* broken, and all three are fixed:
+
+- **The development build ran the engine unoptimised.** `flutter run` builds a debug app,
+  and the Rust engine inherited that — every bake was about sixteen times slower than the
+  released code would be. A one-second lens change became twenty-three. The engine's maths
+  crates are now compiled fully optimised even in a debug app.
+- **The bake used one core.** The ray tracing inside it now runs across all of them —
+  producing bit-identical numbers, just sooner. A lens change bakes in roughly a sixth of
+  the time it did, on top of the build fix.
+- **A finished bake could go unnoticed.** The Viewer deliberately keeps showing the old
+  lens while the new one bakes (a wait you can watch, not a freeze) — but the "is it done?"
+  check could only be answered by rendering a frame, and nothing rendered a frame until it
+  was done. So the picture sat one lens behind until you moved the playhead. The check no
+  longer needs a frame, and the picture replaces itself the moment the optics are ready.
+
+### The region of interest — working on one corner (K-362)
+
+On a heavy shot every preview frame costs the whole frame, even when you are
+fiddling with one corner of it. The **region of interest** lets you say: just
+this rectangle, please.
+
+Click the rectangle button on the Viewer bar, drag a box on the picture, and
+that is all the engine composites until you clear it — click the same button
+again. The region stays outlined the whole time it is in force, because the one
+genuinely bad outcome here is forgetting you set one and wondering why the rest
+of the shot has gone.
+
+**What it saves, honestly.** The composite, the display encode and the handover
+to the screen — the per-frame costs that scale with how many pixels there are.
+It does **not** save the effect stack. Effects run on each layer at that
+layer's own size, before the layers are combined, and none of them knows or
+cares which part of the result you are looking at. So a region helps most where
+the frame is large and the layers are many; it helps least where one layer has
+an expensive blur on it.
+
+Two situations quietly opt out: a composition with an **adjustment layer**, and
+a layer with **motion blur** on. Both work by building a full-size intermediate
+picture first, and cutting a window out of that halfway through would give a
+wrong result rather than a fast one. In those cases the frame is made whole and
+the region is cut from it afterwards — you see exactly the same picture, it
+just did not save anything. Nothing tells you, because there is nothing to tell:
+the picture is identical either way.
+
+The region belongs to the composition, not the project. It rides the session
+alongside the preview resolution, so it is where you left it when you come back
+and it can never end up in an exported file.
+
+### Lights that actually light things (K-361)
+
+A Light layer used to be something the Lens flare read. Now it is also
+something your **footage** reads: turn on a layer's **Accepts lights** switch —
+it is on by default — and the composition's lights fall across it.
+
+Point a big area light at a piece of footage from slightly off to one side and
+you get the thing this is for: a soft gradient raking across the shot, brighter
+where the light faces it squarely, easing off toward the edges. That is what a
+softbox does in a room, and it is what sells a composited element as belonging
+in the same space as the plate behind it.
+
+**How it knows.** There is a piece of geometry, several hundred years old, that
+answers this exactly. Stand on the surface being lit and look up. The light is
+a rectangle somewhere in your sky. How brightly you are lit is simply *how much
+of your sky that rectangle covers* — with light arriving from near the horizon
+counting for less, because it arrives at a slant and smears over more surface.
+And that quantity has a closed-form answer: add up one number per edge of the
+rectangle, four edges, done.
+
+That last part is why this is fast. There is no ray tracing, no sampling, no
+noise to clean up. Four small calculations per pixel and the answer is not an
+estimate of the right number — it *is* the right number. It is the same
+calculation the games industry uses for area lights, in the case where the
+surface is matte rather than shiny.
+
+**Two decisions you will notice.**
+
+*Light adds; it does not take away.* Dropping a light into a composition can
+only ever brighten things. A physically strict renderer would say that anything
+the light does not reach receives nothing and should therefore be black — true
+of a dark room, useless in a compositor, where the picture underneath is
+already lit by whatever was in the shot. So the light is added on top of what
+is there. A happy consequence: a composition with no lights in it is
+untouched — not "almost identical", but the same file, byte for byte, as before
+any of this existed. Every project you have ever saved still renders exactly as
+it did.
+
+*A layer is lit as the flat plane it is.* Lumit is 2.5D: a layer is a flat card
+in space, and the whole card faces one direction. So the whole card is lit as
+one surface. It does not know that the footage on it shows a face with a nose
+on it — nothing tells it where the surface bulges, and guessing from brightness
+goes wrong the moment someone wears a white shirt. A softbox raking across a
+card is honest and it is what the geometry really is; the alternative is a
+guess that looks impressive until it doesn't.
+
+One thing that catches people: **a light in the same plane as the layer does
+nothing at all.** That is correct, not a bug — a strip light lying flat on a
+table throws no light *along* the table. Give the light some z, so it sits in
+front of the layer, and it will do something. New lights come with a size but
+no depth, so this is the first knob to reach for.
+
+The switch is in the Timeline's render column, alongside the 3D and motion-blur
+switches, marked with the same icon as a Light layer. Turn it off on a layer you
+want the lights to leave alone.
+
+### Two lens flares, and why there are two (K-359)
+
+Lumit has a **Lens flare** and a **Sprite flare**, and they are not two
+attempts at the same thing.
+
+**Lens flare** is a simulation. It has a real lens inside it — the actual glass
+elements of a real photographic lens, their curvatures and spacings — and it
+traces light bouncing between those surfaces. The flare it draws is whatever
+that lens would genuinely do. That is why it takes work to render, and why it
+behaves in ways you did not design: ghosts change colour as the light crosses
+frame, the train stretches at the edges, the starburst is the true diffraction
+pattern of the aperture. You are photographing something.
+
+**Sprite flare** is a drawing. You tell it where the light is, and it draws a
+glow, a row of ghosts and a streak. Nothing is simulated and nothing is read
+off the picture — which means it does exactly what you set, every frame,
+forever. It is cheap, and it never surprises you.
+
+Reach for the first when you want the shot to look photographed. Reach for the
+second when you want a specific look and want it to stay put. Neither is a
+fallback for the other, and both stay.
+
+The ghosts in the sprite version march along the line from the light through
+the *middle of the frame*, which is not an arbitrary choice — that is where a
+real lens throws them, because they are reflections about the lens's own axis.
+Move the light left and the ghosts swing right. Their spacing is a proportion
+of that distance rather than a fixed number of pixels, so the train gathers as
+the light nears the centre and stretches as it leaves — which is the thing that
+makes it read as a lens rather than as a row of circles.
+
+### Light wrap — why a cut-out looks pasted on, and the fix (K-358)
+
+Key a person off a green screen, drop them on a new background, and something
+is wrong even when the matte is perfect. The reason is light. In a real shot
+the background is *behind* them, and its light spills round the edges of them —
+catching the hair, grazing a shoulder, softening the outline. A matte cut in
+software has none of that. The edge is a clean line where two pictures meet,
+and the eye reads it instantly as two pictures.
+
+**Light wrap** puts the spill back. You point it at the background layer and
+give it a **Width** — how far, in pixels, the light should creep in from the
+edge. It blurs the background over that distance and lays that glow into a band
+just inside the subject's outline: strongest right at the edge, gone a few
+pixels in, and nothing at all out where the subject isn't.
+
+Two details make it behave rather than fight you. It finds the edge from the
+subject's own matte, so there is no mask to draw. And it *screens* the light on
+rather than adding it, which means a very bright background brightens the edge
+towards itself and stops — it cannot blow out to white, which is what makes a
+naive version look radioactive.
+
+It is deliberately a small effect. Width and **Intensity** are the two dials
+worth touching; leave Width at zero and nothing happens at all.
+
+**Auto, Full, and the difference between them (K-357).** The Viewer bar's
+resolution dropdown says how many pixels the engine is asked to *make* — which
+is not the same as how big the picture is drawn. **Auto** makes only the pixels
+the current magnification can actually show, so a Viewer in a small panel is
+cheap; it is the default because it is what Lumit has always quietly done.
+**Full** makes them all, whatever the panel is showing, which is what you want
+when you are judging fine detail. **Half**, **Third** and **Quarter** are real
+reductions of the composition — Half makes a quarter of the pixels — for when a
+shot is too heavy to preview smoothly. None of them can reach an export.
+
+The choice belongs to the **composition**, not to Lumit: a heavy effects shot
+can sit at Quarter while the title card in the next tab stays at Auto, and each
+remembers its own. It is remembered with the project but is not part of the
+work, so it makes no undo step.
+
+**The background swatch** sits next to the transparency grid button, and the
+two are opposite sides of one question — what is behind the picture. The grid
+is a way of *looking* (it changes nothing about the composition). The swatch
+changes the composition itself: it is the colour the picture is drawn onto, it
+travels in the file, it comes out in the export, and Ctrl+Z undoes it. Black
+and white are one click each, since that is what it is nearly always set to.
 
 **The cache bar** under the time ruler shows what is held: mint at the current
 preview resolution, dimmed mint only at a coarser one, steel-blue on disk,

@@ -859,6 +859,59 @@ pub fn run_ops(
                     );
                 }
             }
+            Resolved::SpriteFlare(p) => {
+                tex = fx.sprite_flare(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::SpriteFlareOp {
+                        light: p.light,
+                        intensity: p.intensity,
+                        tint: p.tint,
+                        glow_size: p.glow_size,
+                        glow_intensity: p.glow_intensity,
+                        ghosts: p.ghosts,
+                        ghost_spacing: p.ghost_spacing,
+                        ghost_size: p.ghost_size,
+                        ghost_intensity: p.ghost_intensity,
+                        streak_length: p.streak_length,
+                        streak_intensity: p.streak_intensity,
+                        streak_angle_deg: p.streak_angle_deg,
+                        mix: p.mix,
+                    },
+                );
+            }
+            Resolved::LightWrap {
+                width_px,
+                intensity,
+                mix,
+            } => {
+                // Shares the layer-input counter with Dof (K-358): both are
+                // enumerated by `build.rs`'s one `layer_input_param`
+                // predicate, so one counter keeps the slots and the ops in
+                // step. An absent Background — unset, missing or cyclic — is
+                // the passthrough, the labelled no-op every layer-input
+                // effect follows.
+                let background = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
+                dof_i += 1;
+                if let Some(background) = background {
+                    if *width_px > 0.0 && *intensity > 0.0 && *mix > 0.0 {
+                        tex = fx.light_wrap(
+                            ctx,
+                            &tex,
+                            w,
+                            h,
+                            background,
+                            &lumit_gpu::fx::LightWrapOp {
+                                width_px: *width_px,
+                                intensity: *intensity,
+                                mix: *mix,
+                            },
+                        );
+                    }
+                }
+            }
             Resolved::Dof {
                 focus,
                 range,
@@ -947,16 +1000,44 @@ pub fn run_ops(
                 let grid = lf::detail_base(tier_base, p.detail);
                 let lambda_count = lf::detail_lambda(tier_lambda, p.detail);
                 let energy = p.ghost_intensity;
-                let lambdas = lf::lambda_weights(lambda_count, p.dispersion)
-                    .into_iter()
-                    .map(|(nm, rgb)| (nm, [rgb[0] * energy, rgb[1] * energy, rgb[2] * energy]))
-                    .collect();
+                // The traced bands with their eight radiometric sub-samples
+                // (K-364), Ghost intensity folded into every sub-weight —
+                // the bake's auto-exposure gain joins it GPU-side.
+                let bands: Vec<lumit_gpu::fx::FlareBand> =
+                    lf::spectral_bands(lambda_count, p.dispersion)
+                        .into_iter()
+                        .map(|b| lumit_gpu::fx::FlareBand {
+                            traced_nm: b.traced_nm,
+                            sub_idx: b.sub_idx,
+                            sub_rgb: b
+                                .sub_rgb
+                                .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
+                        })
+                        .collect();
                 let op = lumit_gpu::fx::LensFlareOp {
                     // Raster pixels → fraction here, where the raster is
                     // known (K-260: the parameter is px@comp).
                     light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
+                    // Manual mode's lights: ONE entry per light, size and all
+                    // (K-367). An area source is no longer replicated into
+                    // point samples — every ray integrates the extent itself,
+                    // so the extent travels with the light.
+                    manual_lights: lf::manual_light(p, w, h)
+                        .iter()
+                        .map(|l| {
+                            [
+                                l.pos[0],
+                                l.pos[1],
+                                l.rgb[0],
+                                l.rgb[1],
+                                l.rgb[2],
+                                l.extent[0],
+                                l.extent[1],
+                            ]
+                        })
+                        .collect(),
                     intensity: p.intensity,
-                    lambdas,
+                    bands,
                     max_ghosts: p.max_ghosts,
                     coating: p.coating,
                     focus_m: p.focus_m,
@@ -1045,8 +1126,10 @@ pub fn run_ops(
                             pupil_mm: b.pupil_mm,
                             start_z_mm: b.start_z_mm,
                             energy_gain: b.energy_gain,
+                            reflectance: b.reflectance.clone(),
                             starburst: b.starburst,
                             sb_res: lf::STARBURST_RES,
+                            sb_fields: lf::STARBURST_FIELDS as u32,
                         }
                     }) as lumit_gpu::fx::FlareBake),
                     &probe,

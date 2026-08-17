@@ -152,6 +152,11 @@ pub struct BridgeCompModel {
     /// their own motion-blur switch actually blur. Drawn by the Timeline's
     /// master button; written through `set_motion_blur_enabled`.
     pub motion_blur_enabled: bool,
+    /// The comp's background colour, scene-linear RGBA — what the Viewer
+    /// bar's swatch shows. In the model so a bar that rebuilds on every
+    /// arriving frame reads the held copy rather than asking the engine per
+    /// rebuild (K-184); writes still go through `set_background`.
+    pub background: [f32; 4],
     pub layers: Vec<BridgeLayerEntry>,
 }
 
@@ -354,6 +359,7 @@ impl CompositionReference {
             fps_num: comp.frame_rate.num(),
             fps_den: comp.frame_rate.den(),
             motion_blur_enabled: comp.motion_blur.enabled,
+            background: comp.background.0,
             layers: comp
                 .layers
                 .iter()
@@ -392,6 +398,34 @@ impl CompositionReference {
                 frame_rate,
                 duration,
                 background: comp.background,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
+    /// item 10). What the composite is drawn onto where nothing covers it, and
+    /// what an export writes there — distinct from the Viewer's transparency
+    /// grid (K-352), which only decides whether that backdrop is *drawn*.
+    #[frb(sync)]
+    #[must_use]
+    pub fn background(&self) -> [f32; 4] {
+        self.composition()
+            .map(|c| c.background.0)
+            .unwrap_or([0.0, 0.0, 0.0, 1.0])
+    }
+
+    /// Set this composition's background colour — one op, one undo step
+    /// (K-357). A document edit that reaches the export, unlike the Viewer's
+    /// preview-only grid.
+    #[frb(sync)]
+    pub fn set_background(&self, rgba: [f32; 4]) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetCompBackground {
+                comp: self.id,
+                background: lumit_core::model::LinearColour(rgba),
             })
             .map_err(BridgeError::OpError)?;
         Ok(())
@@ -905,6 +939,51 @@ impl CompositionReference {
             lumit_core::model::LayerKind::Camera {
                 zoom: Property::fixed(f64::from(comp.width) * 50.0 / 36.0),
             },
+            comp.duration.0,
+            TransformGroup {
+                position_x: Property::fixed(f64::from(comp.width) * 0.5),
+                position_y: Property::fixed(f64::from(comp.height) * 0.5),
+                ..TransformGroup::default()
+            },
+        );
+        self.add_at_top(layer)
+    }
+
+    /// Add a Light layer at the comp centre (K-360).
+    ///
+    /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
+    /// because that is the shape every other frb choice takes. An **area**
+    /// light starts at a tenth of the comp's width and height, which is a
+    /// softbox rather than a pinprick: a light with no size would draw exactly
+    /// as a point one and leave nothing to discover.
+    #[frb(sync)]
+    pub fn add_light_layer(&self, kind: u32) -> Result<LayerReference, BridgeError> {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{LightDef, LightKind, TransformGroup};
+
+        let comp = self.composition()?;
+        let kind = match kind {
+            1 => LightKind::Spot,
+            2 => LightKind::Area,
+            _ => LightKind::Point,
+        };
+        let half = |v: u32| Property::fixed(f64::from(v) * 0.1);
+        let light = Box::new(LightDef {
+            kind,
+            half_size: match kind {
+                LightKind::Area => [half(comp.width), half(comp.height)],
+                _ => [Property::zero(), Property::zero()],
+            },
+            ..LightDef::default()
+        });
+        let name = match kind {
+            LightKind::Point => "Point light",
+            LightKind::Spot => "Spot light",
+            LightKind::Area => "Area light",
+        };
+        let layer = crate::edits::base_layer(
+            name.into(),
+            lumit_core::model::LayerKind::Light { light },
             comp.duration.0,
             TransformGroup {
                 position_x: Property::fixed(f64::from(comp.width) * 0.5),
@@ -1481,20 +1560,40 @@ impl CompositionReference {
         ))
     }
 
-    /// Set what the Viewer looks *through*: `stops` of exposure and whether the
-    /// tone map is engaged (K-314, docs/07 §2.2 items 12-13).
+    /// Set what the Viewer looks *through*, whole: `stops` of exposure and
+    /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
+    /// whether the comp's background colour is left out of the composite so
+    /// the transparency grid can show through what nothing covers (K-352).
     ///
-    /// **Preview only.** It moves the display encode of every frame the session
-    /// renderer composites from here on and nothing else — no document, no op,
-    /// no undo step. An export builds its own renderer and this is never sent
-    /// to it, so the export is neutral by construction.
+    /// **Preview only.** It moves how every frame the session renderer makes
+    /// from here on is composited and display-encoded, and nothing else — no
+    /// document, no op, no undo step. An export builds its own renderer and
+    /// this is never sent to it, so an export is neutral and draws the
+    /// backdrop by construction.
     ///
-    /// The frontend follows this with its ordinary request for the frame under
-    /// the playhead: a setting changes what the *next* frame looks like, and
-    /// without an ask the picture would not move until something else did.
+    /// One call carrying the whole look, so the renderer can never hold half
+    /// of one. The frontend follows a *change* with its ordinary request for
+    /// the frame under the playhead: a setting changes what the next frame is
+    /// made of, and without an ask the picture would not move until something
+    /// else did.
     #[frb(sync)]
-    pub fn set_display_view(&self, stops: f64, tone_map: bool) -> Result<(), BridgeError> {
-        self.dispatch(WorkerRequest::SetDisplayView { stops, tone_map })
+    pub fn set_viewer_look(
+        &self,
+        stops: f64,
+        tone_map: bool,
+        transparent_background: bool,
+        region: Option<Vec<f32>>,
+    ) -> Result<(), BridgeError> {
+        // A region arrives as a list because that is what crosses the bridge
+        // cleanly; anything that is not four numbers is no region, which is
+        // also how "cleared" is said.
+        let region = region.and_then(|r| <[f32; 4]>::try_from(r.as_slice()).ok());
+        self.dispatch(WorkerRequest::SetViewerLook {
+            stops,
+            tone_map,
+            transparent_background,
+            region,
+        })
     }
 
     /// Stop playing, and silence the sound. Harmless when nothing is playing.
