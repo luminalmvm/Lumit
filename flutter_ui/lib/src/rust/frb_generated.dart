@@ -8078,15 +8078,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCompModel dco_decode_bridge_comp_model(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return BridgeCompModel(
       durationFrames: dco_decode_i_64(arr[0]),
       fps: dco_decode_f_64(arr[1]),
       fpsNum: dco_decode_u_32(arr[2]),
       fpsDen: dco_decode_u_32(arr[3]),
       motionBlurEnabled: dco_decode_bool(arr[4]),
-      layers: dco_decode_list_bridge_layer_entry(arr[5]),
+      background: dco_decode_f_32_array_4(arr[5]),
+      layers: dco_decode_list_bridge_layer_entry(arr[6]),
     );
   }
 
@@ -10237,6 +10238,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_fpsNum = sse_decode_u_32(deserializer);
     var var_fpsDen = sse_decode_u_32(deserializer);
     var var_motionBlurEnabled = sse_decode_bool(deserializer);
+    var var_background = sse_decode_f_32_array_4(deserializer);
     var var_layers = sse_decode_list_bridge_layer_entry(deserializer);
     return BridgeCompModel(
         durationFrames: var_durationFrames,
@@ -10244,6 +10246,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         fpsNum: var_fpsNum,
         fpsDen: var_fpsDen,
         motionBlurEnabled: var_motionBlurEnabled,
+        background: var_background,
         layers: var_layers);
   }
 
@@ -12731,6 +12734,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.fpsNum, serializer);
     sse_encode_u_32(self.fpsDen, serializer);
     sse_encode_bool(self.motionBlurEnabled, serializer);
+    sse_encode_f_32_array_4(self.background, serializer);
     sse_encode_list_bridge_layer_entry(self.layers, serializer);
   }
 

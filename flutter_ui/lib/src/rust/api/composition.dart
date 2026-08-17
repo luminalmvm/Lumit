@@ -72,6 +72,12 @@ class BridgeCompModel {
   /// their own motion-blur switch actually blur. Drawn by the Timeline's
   /// master button; written through `set_motion_blur_enabled`.
   final bool motionBlurEnabled;
+
+  /// The comp's background colour, scene-linear RGBA — what the Viewer
+  /// bar's swatch shows. In the model so a bar that rebuilds on every
+  /// arriving frame reads the held copy rather than asking the engine per
+  /// rebuild (K-184); writes still go through `set_background`.
+  final F32Array4 background;
   final List<BridgeLayerEntry> layers;
 
   const BridgeCompModel({
@@ -80,6 +86,7 @@ class BridgeCompModel {
     required this.fpsNum,
     required this.fpsDen,
     required this.motionBlurEnabled,
+    required this.background,
     required this.layers,
   });
 
@@ -90,6 +97,7 @@ class BridgeCompModel {
       fpsNum.hashCode ^
       fpsDen.hashCode ^
       motionBlurEnabled.hashCode ^
+      background.hashCode ^
       layers.hashCode;
 
   @override
@@ -102,6 +110,7 @@ class BridgeCompModel {
           fpsNum == other.fpsNum &&
           fpsDen == other.fpsDen &&
           motionBlurEnabled == other.motionBlurEnabled &&
+          background == other.background &&
           layers == other.layers;
 }
 

@@ -340,6 +340,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             settings: settings,
             comp: comp,
             tier: tier,
+            background: ui.model.heldBackground,
             // The magnification menu is a jump to a named place, so it flies
             // there like every other zoom (K-218) — from whatever is on screen,
             // which is what the measured rectangle in the layout builder knows.
@@ -672,12 +673,18 @@ class _Stage extends StatelessWidget {
     final revision = model.heldRevision;
     // Where the keyed masks actually are at the frame on screen (K-342). Held
     // against the document and the playhead, so this costs nothing on a hover
-    // and re-asks only when one of the two has moved.
-    uiState.animatedMaskPaths.refresh(
-      comp: comp,
-      frame: uiState.playheadFrame.value,
-      revision: revision,
-    );
+    // and re-asks only when one of the two has moved — and only when some
+    // layer actually has a mask to draw. The read model already knows that
+    // without a call, and on a maskless comp the old unconditional ask was a
+    // bridge call per playhead move for an answer that is always empty, which
+    // is exactly what this method's budget (K-184) exists to stop.
+    if (model.heldLayers.any((entry) => entry.info.masks.isNotEmpty)) {
+      uiState.animatedMaskPaths.refresh(
+        comp: comp,
+        frame: uiState.playheadFrame.value,
+        revision: revision,
+      );
+    }
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     double? still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
 
@@ -1565,6 +1572,12 @@ class _Toolbar extends StatelessWidget {
   /// across the boundary for each of them.
   final int tier;
 
+  /// The comp's background colour, off the held read model
+  /// ([CompModel.heldBackground]) for the same reason as [tier]: given, not
+  /// asked for, because this bar rebuilds for each shown frame. Null before
+  /// the model's first read, which the swatch draws as black.
+  final F32Array4? background;
+
   const _Toolbar({
     required this.zoom,
     required this.channel,
@@ -1579,6 +1592,7 @@ class _Toolbar extends StatelessWidget {
     required this.settings,
     required this.comp,
     required this.tier,
+    required this.background,
     required this.onZoom,
     required this.onChannel,
     required this.onGrid,
@@ -1694,7 +1708,7 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          _BackgroundSwatch(comp: comp),
+          _BackgroundSwatch(comp: comp, background: background),
           const SizedBox(width: 6),
           LumitTooltip(
             message: l10n.tipTransparencyGrid,
@@ -2013,20 +2027,19 @@ String get _transportName => switch (_transport) {
 /// makes a black comp confusing.
 class _BackgroundSwatch extends StatelessWidget {
   final CompositionReference comp;
-  const _BackgroundSwatch({required this.comp});
+
+  /// The colour to show, off the held read model — never asked for here:
+  /// this swatch rebuilds with the bar, once per arriving frame (K-184).
+  final F32Array4? background;
+  const _BackgroundSwatch({required this.comp, required this.background});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final state = Provider.of<LumitState>(context, listen: false);
-    // Read once per build off the reference, not through a listener: the bar
-    // rebuilds when the document changes anyway, and the colour is one field.
-    List<double> rgba;
-    try {
-      rgba = comp.background();
-    } catch (_) {
-      rgba = const [0.0, 0.0, 0.0, 1.0];
-    }
+    // Off the read model, handed down by the bar — a document change
+    // refreshes the model and rebuilds this from the new colour.
+    final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
     int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
     final shown = documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
 

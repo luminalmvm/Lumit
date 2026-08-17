@@ -8463,6 +8463,7 @@ impl SseDecode for crate::api::composition::BridgeCompModel {
         let mut var_fpsNum = <u32>::sse_decode(deserializer);
         let mut var_fpsDen = <u32>::sse_decode(deserializer);
         let mut var_motionBlurEnabled = <bool>::sse_decode(deserializer);
+        let mut var_background = <[f32; 4]>::sse_decode(deserializer);
         let mut var_layers =
             <Vec<crate::api::composition::BridgeLayerEntry>>::sse_decode(deserializer);
         return crate::api::composition::BridgeCompModel {
@@ -8471,6 +8472,7 @@ impl SseDecode for crate::api::composition::BridgeCompModel {
             fps_num: var_fpsNum,
             fps_den: var_fpsDen,
             motion_blur_enabled: var_motionBlurEnabled,
+            background: var_background,
             layers: var_layers,
         };
     }
@@ -11442,6 +11444,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::composition::BridgeCompModel 
             self.fps_num.into_into_dart().into_dart(),
             self.fps_den.into_into_dart().into_dart(),
             self.motion_blur_enabled.into_into_dart().into_dart(),
+            self.background.into_into_dart().into_dart(),
             self.layers.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -13719,6 +13722,7 @@ impl SseEncode for crate::api::composition::BridgeCompModel {
         <u32>::sse_encode(self.fps_num, serializer);
         <u32>::sse_encode(self.fps_den, serializer);
         <bool>::sse_encode(self.motion_blur_enabled, serializer);
+        <[f32; 4]>::sse_encode(self.background, serializer);
         <Vec<crate::api::composition::BridgeLayerEntry>>::sse_encode(self.layers, serializer);
     }
 }

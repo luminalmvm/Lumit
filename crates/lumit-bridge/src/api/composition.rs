@@ -152,6 +152,11 @@ pub struct BridgeCompModel {
     /// their own motion-blur switch actually blur. Drawn by the Timeline's
     /// master button; written through `set_motion_blur_enabled`.
     pub motion_blur_enabled: bool,
+    /// The comp's background colour, scene-linear RGBA — what the Viewer
+    /// bar's swatch shows. In the model so a bar that rebuilds on every
+    /// arriving frame reads the held copy rather than asking the engine per
+    /// rebuild (K-184); writes still go through `set_background`.
+    pub background: [f32; 4],
     pub layers: Vec<BridgeLayerEntry>,
 }
 
@@ -354,6 +359,7 @@ impl CompositionReference {
             fps_num: comp.frame_rate.num(),
             fps_den: comp.frame_rate.den(),
             motion_blur_enabled: comp.motion_blur.enabled,
+            background: comp.background.0,
             layers: comp
                 .layers
                 .iter()

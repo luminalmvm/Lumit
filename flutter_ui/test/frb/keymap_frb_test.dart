@@ -445,7 +445,11 @@ void main() {
       expect(actions, contains(zoom.action));
     }
     for (final resolution in PreviewResolution.values) {
-      expect(actions, contains(resolution.action));
+      // Auto and Third have no chord of their own (docs/07 §15 names three
+      // tiers), so `action` is null for them by design — nothing to look up.
+      final action = resolution.action;
+      if (action == null) continue;
+      expect(actions, contains(action));
     }
   }, skip: !engineAvailable);
 }
