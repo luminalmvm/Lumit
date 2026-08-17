@@ -199,6 +199,14 @@ class _StopsPreviewProgressState extends State<_StopsPreviewProgress> {
   // created. That is precisely how `cache_bar_frb_test` went red on main while
   // passing everywhere else: it was not its timer.
   addTearDown(uiState.dispose);
+  // Close the engine project when the test is over. Each one left open keeps
+  // its render worker — and that worker's whole GPU device — alive for the
+  // rest of the test process, and a file with fifty tests piled up fifty
+  // renderers: on the Linux CI runner's software Vulkan those all live in
+  // ordinary memory, which is how the runner ran out of it mid-suite.
+  // Teardowns run last-registered-first, so this runs before uiState.dispose;
+  // the worker's response stream simply ends, which every listener survives.
+  addTearDown(() => state.project?.close());
   return (state: state, uiState: uiState);
 }
 

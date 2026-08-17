@@ -318,6 +318,15 @@ class LumitState extends ChangeNotifier {
   /// it started the worker but dropped the returned stream, so no rendered frame
   /// ever reached the Viewer for a new project.
   void _adopt(ProjectReference opened) {
+    // The project being replaced is closed, not abandoned: left in the
+    // engine's registry it would keep its render worker — and that worker's
+    // whole GPU device — alive for as long as the process runs. `openProject`
+    // already cleared the registry wholesale before this runs, and close is
+    // idempotent, so the open path pays nothing for the repeat.
+    final previous = project;
+    if (previous != null && previous.internalid != opened.internalid) {
+      previous.close();
+    }
     project = opened;
     // The comp list is cached per document (K-184) and invalidated when the
     // item tree changes — but adopting another project is not a change to the

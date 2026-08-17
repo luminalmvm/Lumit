@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1787199434;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -776990634;
 
 // Section: executor
 
@@ -7032,6 +7032,36 @@ fn wire__crate__api__project__project_reference_cache_location_impl(
         },
     )
 }
+fn wire__crate__api__project__project_reference_close_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "project_reference_close",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::project::ProjectReference::close(&api_that)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__project__project_reference_get_items_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -10863,7 +10893,7 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        217 => wire__crate__api__project__project_reference_save_impl(
+        218 => wire__crate__api__project__project_reference_save_impl(
             port,
             ptr,
             rust_vec_len,
@@ -11072,39 +11102,40 @@ fn pde_ffi_dispatcher_sync_impl(
 205 => wire__crate__api__project__project_reference_anti_aliasing_in_use_impl(ptr, rust_vec_len, data_len),
 206 => wire__crate__api__project__project_reference_autosave_impl(ptr, rust_vec_len, data_len),
 207 => wire__crate__api__project__project_reference_cache_location_impl(ptr, rust_vec_len, data_len),
-208 => wire__crate__api__project__project_reference_get_items_impl(ptr, rust_vec_len, data_len),
-209 => wire__crate__api__project__project_reference_history_impl(ptr, rust_vec_len, data_len),
-210 => wire__crate__api__project__project_reference_import_footage_impl(ptr, rust_vec_len, data_len),
-211 => wire__crate__api__project__project_reference_is_dirty_impl(ptr, rust_vec_len, data_len),
-212 => wire__crate__api__project__project_reference_new_composition_impl(ptr, rust_vec_len, data_len),
-213 => wire__crate__api__project__project_reference_next_comp_name_impl(ptr, rust_vec_len, data_len),
-214 => wire__crate__api__project__project_reference_path_impl(ptr, rust_vec_len, data_len),
-215 => wire__crate__api__project__project_reference_redo_impl(ptr, rust_vec_len, data_len),
-216 => wire__crate__api__project__project_reference_restore_journal_impl(ptr, rust_vec_len, data_len),
-218 => wire__crate__api__project__project_reference_set_anti_aliasing_impl(ptr, rust_vec_len, data_len),
-219 => wire__crate__api__project__project_reference_set_cache_location_impl(ptr, rust_vec_len, data_len),
-220 => wire__crate__api__project__project_reference_set_ui_state_impl(ptr, rust_vec_len, data_len),
-221 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
-222 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
-223 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
-224 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
-225 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
-226 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
-227 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
-228 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
-229 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
-230 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
-231 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
-232 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
-233 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
-234 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
-235 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-236 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-237 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-238 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-239 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-240 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-241 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+208 => wire__crate__api__project__project_reference_close_impl(ptr, rust_vec_len, data_len),
+209 => wire__crate__api__project__project_reference_get_items_impl(ptr, rust_vec_len, data_len),
+210 => wire__crate__api__project__project_reference_history_impl(ptr, rust_vec_len, data_len),
+211 => wire__crate__api__project__project_reference_import_footage_impl(ptr, rust_vec_len, data_len),
+212 => wire__crate__api__project__project_reference_is_dirty_impl(ptr, rust_vec_len, data_len),
+213 => wire__crate__api__project__project_reference_new_composition_impl(ptr, rust_vec_len, data_len),
+214 => wire__crate__api__project__project_reference_next_comp_name_impl(ptr, rust_vec_len, data_len),
+215 => wire__crate__api__project__project_reference_path_impl(ptr, rust_vec_len, data_len),
+216 => wire__crate__api__project__project_reference_redo_impl(ptr, rust_vec_len, data_len),
+217 => wire__crate__api__project__project_reference_restore_journal_impl(ptr, rust_vec_len, data_len),
+219 => wire__crate__api__project__project_reference_set_anti_aliasing_impl(ptr, rust_vec_len, data_len),
+220 => wire__crate__api__project__project_reference_set_cache_location_impl(ptr, rust_vec_len, data_len),
+221 => wire__crate__api__project__project_reference_set_ui_state_impl(ptr, rust_vec_len, data_len),
+222 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
+223 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
+224 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
+225 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
+226 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
+227 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
+228 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
+229 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
+230 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
+231 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
+232 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
+233 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
+234 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
+235 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
+236 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+237 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+238 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+239 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+240 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+241 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+242 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }

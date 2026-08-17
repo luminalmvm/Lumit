@@ -97,7 +97,12 @@ fixed job (the full table is in [05-ARCHITECTURE.md](05-ARCHITECTURE.md)):
   some engineer breaking this rule. In Lumit it's structural: the UI thread hands work to
   others and carries on drawing.
 - **Worker threads** are the render farm: they evaluate frames, run effects, do maths.
-  There are roughly as many as your CPU has cores.
+  There are roughly as many as your CPU has cores. Each open project also has one
+  **render worker** of its own, which owns a whole GPU connection — so a project that
+  stops being shown is **closed**, not abandoned: closing it tells its worker to stop and
+  give that connection back. Nothing enforced this for a long time, and every project a
+  session ever made quietly kept a live worker; the test suite (one project per test)
+  piled up enough of them to run the CI machine out of memory, which is how it was caught.
 - **Dedicated threads** exist for decoding video, disk IO, and audio — because those jobs
   must never wait behind anything else (audio especially: if its thread is ever late, you
   *hear* it).

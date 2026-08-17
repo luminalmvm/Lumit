@@ -5581,3 +5581,38 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
         "a mask that is not animated must not be listed"
     );
 }
+
+/// A closed project is forgotten, and the channel its worker waits on is
+/// dropped with it — which is how the worker learns to stop. Without this,
+/// every project a process ever makes keeps a live render worker and its GPU
+/// device until the process dies; the frb test suite piles up one per test,
+/// and the Linux CI runner ran out of memory under them.
+#[test]
+fn a_closed_project_is_forgotten_and_its_worker_channel_disconnects() {
+    let project = LumitBridgeState::new_project(None).expect("project");
+
+    // Stand in for `run_worker`: park the sender in the state, exactly where
+    // the real worker's request channel lives, and keep the receiving end —
+    // the worker's seat. Only `close` may drop that sender.
+    let (sender, receiver) = std::sync::mpsc::channel::<crate::api::worker_thread::WorkerRequest>();
+    {
+        let state = project.state().expect("state");
+        let mut state = state.write().expect("write");
+        state.sender = Some(sender);
+    }
+
+    project.close().expect("closed");
+
+    // Forgotten: every later call through the reference is a calm error.
+    assert!(project.state().is_err(), "a closed project must be gone");
+    assert!(
+        matches!(
+            receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Disconnected)
+        ),
+        "the worker's channel must disconnect when the project closes"
+    );
+
+    // Closing again is not an error: it is closed, which is what was asked.
+    project.close().expect("closing a closed project is fine");
+}
