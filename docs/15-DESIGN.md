@@ -443,10 +443,11 @@ failure.
   envelope at 80% opacity on `surface_2`, with the RMS core drawn solid inside it; on selected
   clips the envelope brightens to `text_secondary` (still to come). Waveforms never render in
   `accent` — they are content, not state, and the lane that did borrow `accent` was corrected
-  when this grouping became real tokens. The **multiwave** stack (K-280, K-284) adds three band
-  colours beside `rest`, drawn **over one another in one lane around one centre line** and so
-  ranked by *brightness* rather than by hue — the bass a dim broad body, the treble bright and
-  thin over it, which is how the reference reads: one silhouette with its inside showing.
+  when this grouping became real tokens. The **multiwave** stack (K-280, K-284, K-382) adds three band
+  colours beside `rest`, drawn **over one another in one lane** and so ranked by *brightness*
+  rather than by hue — one silhouette with its inside showing. Painted back to front from the
+  pale end of the ramp (treble, middle, bass), each band lifted 1–4 px above the one behind
+  it (8% of the row, clamped) so none can hide inside another.
   `waveform.low` `#3c5c66`, `waveform.mid` `#6d9aa6`, `waveform.high` `#d4f0f6` on a dark
   scheme; on a light one the ramp runs the other way (`#9dbac2` / `#598794` / `#14333c`),
   because *darker* is what stands out on white. Band strokes are opaque — three softened

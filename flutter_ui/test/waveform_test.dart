@@ -141,9 +141,9 @@ void main() {
     });
 
     /// The stack is drawn *through* the wave, not beside it: every band shares
-    /// one lane and one centre line, so what you read is one silhouette with
-    /// its inside showing rather than three small waveforms.
-    test('a multiwave stack shares one lane and one centre line', () {
+    /// one lane, so what you read is one silhouette with its inside showing
+    /// rather than three small waveforms boxed into thirds.
+    test('a multiwave stack shares one lane', () {
       final painter = WaveformPainter(
         peaks: peaks(
           start: 0,
@@ -159,20 +159,22 @@ void main() {
       );
       final lines = strokes(painter, const Size(24, 30));
       expect(lines, isNotEmpty);
-      for (final line in lines) {
-        // Every stroke straddles the middle of the whole lane.
-        expect(line.a.dy, lessThanOrEqualTo(15));
-        expect(line.b.dy, greaterThanOrEqualTo(15));
-      }
-      // And all three bands are present, none of them boxed into a third.
+      // All three bands present, and every one of them spanning most of the
+      // lane rather than a third of it.
       for (final c in [colours.low, colours.mid, colours.high]) {
-        expect(lines.where((l) => sameHue(l.colour, c)), isNotEmpty);
+        final band = lines.where((l) => sameHue(l.colour, c));
+        expect(band, isNotEmpty);
+        final top = band.map((l) => math.min(l.a.dy, l.b.dy)).reduce(math.min);
+        final bottom =
+            band.map((l) => math.max(l.a.dy, l.b.dy)).reduce(math.max);
+        expect(bottom - top, greaterThan(30 * 0.5),
+            reason: 'a band uses the lane, not a third of it');
       }
     });
 
-    /// Back to front: bass first, treble last, so the transients land *on top*
-    /// of the body rather than under it.
-    test('the treble is drawn over the bass, not beneath it', () {
+    /// Back to front: treble first, bass last, so each darker band lands in
+    /// front of the paler one behind it and the two read as two shapes.
+    test('the pale band is drawn behind the darker one', () {
       final painter = WaveformPainter(
         peaks: peaks(
           start: 0,
@@ -188,8 +190,67 @@ void main() {
       );
       final lines = strokes(painter, const Size(12, 30));
       int firstOf(Color c) => lines.indexWhere((l) => sameHue(l.colour, c));
-      expect(firstOf(colours.low), lessThan(firstOf(colours.mid)));
-      expect(firstOf(colours.mid), lessThan(firstOf(colours.high)));
+      // High is the palest of the ramp, low the darkest.
+      expect(firstOf(colours.high), lessThan(firstOf(colours.mid)));
+      expect(firstOf(colours.mid), lessThan(firstOf(colours.low)));
+    });
+
+    /// Each band sits a little above the one behind it. Three concentric waves
+    /// of one sound agree most of the time and hide each other where they do;
+    /// the offset keeps a sliver of each visible whatever the others do.
+    test('each band of the stack is raised above the one behind it', () {
+      double lowestOf(WaveformPainter p, Size size, Color c) => strokes(p, size)
+          .where((l) => sameHue(l.colour, c))
+          .map((l) => math.max(l.a.dy, l.b.dy))
+          .reduce(math.max);
+
+      for (final fromBottom in [false, true]) {
+        final painter = WaveformPainter(
+          peaks: peaks(
+            start: 0,
+            end: 1,
+            bands: 3,
+            values: [...loud(4), ...loud(4), ...loud(4)],
+          ),
+          originSeconds: 0,
+          secondsPerPixel: 1 / 12,
+          left: 0,
+          right: 12,
+          colours: colours,
+          style: WaveformStyle(multiwave: true, fromBottom: fromBottom),
+        );
+        const size = Size(12, 30);
+        // Drawn back to front, each higher than the last: the one at the back
+        // sits lowest, the one in front sits highest.
+        final back = lowestOf(painter, size, colours.high);
+        final middle = lowestOf(painter, size, colours.mid);
+        final front = lowestOf(painter, size, colours.low);
+        expect(middle, lessThan(back), reason: 'fromBottom: $fromBottom');
+        expect(front, lessThan(middle), reason: 'fromBottom: $fromBottom');
+      }
+    });
+
+    /// The fan costs the wave some height, and it must come out of the reach
+    /// rather than off the top of the row.
+    test('the raised bands still fit inside the row', () {
+      final painter = WaveformPainter(
+        peaks: peaks(
+          start: 0,
+          end: 1,
+          bands: 3,
+          values: [...loud(4), ...loud(4), ...loud(4)],
+        ),
+        originSeconds: 0,
+        secondsPerPixel: 1 / 12,
+        left: 0,
+        right: 12,
+        colours: colours,
+        style: const WaveformStyle(multiwave: true, fromBottom: true),
+      );
+      for (final line in strokes(painter, const Size(12, 30))) {
+        expect(math.min(line.a.dy, line.b.dy), greaterThanOrEqualTo(0));
+        expect(math.max(line.a.dy, line.b.dy), lessThanOrEqualTo(30));
+      }
     });
 
     /// A band in the stack is drawn solid; three softened envelopes over one
@@ -306,7 +367,7 @@ void main() {
       }
     });
 
-    test('the stack stands on the floor too, still ranked by brightness', () {
+    test('the stack stands on the floor too, fanned up from it', () {
       final painter = WaveformPainter(
         peaks: peaks(
           start: 0,
@@ -323,11 +384,15 @@ void main() {
       );
       final lines = strokes(painter, const Size(24, 30));
       expect(lines, isNotEmpty);
-      for (final line in lines) {
+      // The band at the back sits on the floor; the rest are fanned above it,
+      // and none of them hangs below it.
+      final back = lines.where((l) => sameHue(l.colour, colours.high));
+      for (final line in back) {
         expect(math.max(line.a.dy, line.b.dy), closeTo(29, 0.01));
       }
-      int firstOf(Color c) => lines.indexWhere((l) => sameHue(l.colour, c));
-      expect(firstOf(colours.low), lessThan(firstOf(colours.high)));
+      for (final line in lines) {
+        expect(math.max(line.a.dy, line.b.dy), lessThanOrEqualTo(29.01));
+      }
     });
 
     /// Centred is the default, and unchanged — the wave people already read.
