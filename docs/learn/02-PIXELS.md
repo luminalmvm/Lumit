@@ -49,12 +49,52 @@ flowchart LR
    sub-frame below-stacks for Posterize Time and accumulation motion blur.
 5. **Realise** (`realise.rs`) — `Realiser` walks the draw list on the GPU inside one
    submit per frame: upload → linearise → `fxops::run_ops` (each `Resolved` op becomes
-   a kernel call) → matte/mask/motion-blur → `Compositor::composite_seeded`.
+   a kernel call) → lighting → matte/mask/motion-blur → `Compositor::composite_seeded`.
+
+**Lighting sits between steps 4 and 5** of docs/06's numbering — step 4.5, after a layer's
+effects and before it is placed (K-361). It is deliberately *not* an effect: it has no
+schema, no stack row and no place in the Add-effect menu, because a light is a layer
+elsewhere in the comp rather than a control on this one. `build.rs` resolves the comp's
+Light layers and hangs the relevant ones on each draw; `lighting_op` in `realise.rs` turns
+that into the pass's parameters, and returns `None` when the list is empty — which it is
+unless the comp holds lights and this layer's **Accepts lights** switch is on. Empty means
+the pass never runs, which is how a comp with no lights stays byte-for-byte what it was.
 
 Two drivers call this. The bridge's worker thread owns a `HeadlessRenderer`
 (`headless.rs`) for preview. `export::start` spawns its own thread with its **own**
 renderer on its **own** GPU device. Both run the same walk at the same resolution
 rules. A test matrix pins preview == export bit-for-bit (K-031).
+
+## A region of interest
+
+`Realiser::realise` is a thin call onto `realise_region` with no region.
+Given one (K-362), the composite writes only that window of the composition: the
+comp-pixels-to-NDC mapping shifts and the target is sized to the region, so the returned
+texture is the region's size. The camera matrix is untouched — it projects comp space, and
+a window on the result cannot change perspective — and pixel density is unchanged, so
+every px@comp parameter in the frame still means what it meant.
+
+Preview only. `HeadlessRenderer::set_region` is a Viewer setting; the exporter is never
+handed one, the same way the preview scale and the Viewer's exposure never reach a file.
+
+Two things about it are easy to get wrong:
+
+- **Two stagings refuse the window.** An adjustment layer runs its effects on the composite
+  of everything below it, and a motion-blurring layer averages sub-frame copies into a
+  comp-sized texture. Both are written against the comp raster, so `region_is_safe` drops
+  the region and the caller crops the finished frame instead. The picture is identical
+  either way; only the work differs. A test asserts that equivalence, because working
+  inside a region that quietly renders something else is working on a lie.
+- **A region saves the composite, not the effect stack.** Effects run per layer at the
+  layer's own size, untouched. Culling layers that miss the region is the upgrade path, and
+  is not done, because a layer that appears to miss it can still reach it through an
+  adjustment layer's blur.
+
+Frames rendered through a region are still named: `named_under_view` folds the rectangle
+into the key alongside the Viewer's look and the transparent-background flag. Refusing to
+name them would empty the cache exactly when it is wanted, since scrubbing inside a region
+is the whole use case. A region covering the whole comp is refused as no region at all, so
+the ordinary case keeps sharing full-frame names.
 
 ## Naming frames: the content hash
 

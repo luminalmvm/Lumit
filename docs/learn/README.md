@@ -24,7 +24,6 @@ First the map, then the language you need, then the area you are changing.
 | [RUST.md](RUST.md) | Rust, taught from Lumit's own code |
 | [FLUTTER.md](FLUTTER.md) | Dart and Flutter, taught from Lumit's own code |
 | [WGSL.md](WGSL.md) | GPU thinking and WGSL, taught from Lumit's own shaders |
-| [PENDING.md](PENDING.md) | What the open pull requests change. Delete the file when they merge |
 
 ## How these docs cite code
 
@@ -34,6 +33,7 @@ a doc and the code disagree, the code moved. Fix the doc.
 
 ## Status
 
-Living documents. The area guides describe current `main` only. Anything not yet
-merged lives in [PENDING.md](PENDING.md), so there is one file to delete rather than
-a stale paragraph in six.
+Living documents. The area guides describe current `main` only. If a batch of work is
+in flight and would leave several guides half-true, write it up in one temporary
+`PENDING.md` beside them instead, so there is one file to delete on merge rather than a
+stale paragraph in six.

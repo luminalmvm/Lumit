@@ -28,6 +28,14 @@ Note the package-name trap: the Rust crate directory is `lumit-bridge`, but the
 package Flutter builds is `lumit_bridge` (underscore). `cargo build -p lumit-bridge`
 matches nothing.
 
+**A debug build is not an unoptimised build here.** The root `Cargo.toml` sets `opt-level = 1`
+for the dev profile, 2 for dependencies, and **3 for `lumit-core`, `lumit-eval`, `lumit-gpu`
+and `lumit-render`** individually. Cargokit maps a Flutter debug run onto the cargo dev
+profile, and at opt-level 1 the lens flare's CPU bake measured about 16× slower — a
+one-second lens change became twenty-three. Those four crates are where the hot loops live,
+so they pay the compile time and nothing else does. The trade is that stepping through engine
+internals in a debugger is unpleasant; the tests are how this project is worked on.
+
 ## Three things regenerate
 
 | You edit | Then run | Which writes |

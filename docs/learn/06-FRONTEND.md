@@ -30,7 +30,7 @@ flowchart TD
     A[main] --> B[tidyAfterUpdate<br/>sweep a half-finished self-update]
     B --> C[BridgeLib.init<br/>load the Rust library]
     C --> D[LumitState + newProject]
-    D --> E[open .lum from argv, if any]
+    D --> E[open .lum from argv, if any<br/>async: OpeningOverlay holds the old document]
     E --> F[runApp → LumitAppNew]
     F --> G[BootGate splash]
     G --> H[menu bar / tool bar / DockWidget / status line]
@@ -39,6 +39,11 @@ flowchart TD
 `LumitAppNew` is a `MaterialApp` used only for infrastructure — there is no Material
 chrome. It provides `LumitState` and `LumitUiState`, wraps everything in `ThemeScope`
 and `UiScaleView`.
+
+Opening a project is async on the Rust side, so Dart has a state for it: an `opening`
+notifier and the `OpeningOverlay` in `shell/splash.dart`. What matters is what it *hides* —
+the previous document is still on screen while the new one parses, and panels reading a
+document that is halfway replaced is the failure it exists to prevent.
 
 ## Who owns state
 
@@ -106,6 +111,24 @@ and each published frame says which frame it is (K-181).
 Tools and gizmos are overlay layers, inert unless armed. Geometry is pure:
 `ViewerLayerMap` converts layer ↔ screen both ways. In-flight gestures preview by
 rebuilding the box, not by re-reading the document.
+
+`ViewerRegionLayer` (`panels/viewer_region.dart`) is the region of interest, and a good
+example of the overlay pattern. It does two jobs in one widget on purpose: while armed a drag
+sweeps out a new region, and whether armed or not an existing region is outlined — so it is
+never possible to be looking at a corner of a shot without being told. Rectangles leave here
+as fractions of the picture, never pixels, because the engine's raster changes with preview
+resolution. A drag too small to mean anything reports `null`, which reads as "clear", so one
+control both sets and clears.
+
+Two Viewer settings are **per composition** and live in the session, not the document
+(K-357): the preview resolution tier and the region. `SavedSession.previewResolutions`
+(`state/workspace.dart`) is a map keyed by comp. A heavy shot wants Quarter while the title card beside it does not, and
+choosing how coarsely to preview is a way of working on a comp rather than an edit to it — no
+op, no undo step, and it can never reach an export. An unrecognised tier name reads as Auto
+rather than refusing the project. Note what the tiers now mean: Auto renders only the pixels
+the current magnification can display (the default, and what the Viewer always in fact did),
+Full means composition resolution whatever the panel is showing, and Half/Third/Quarter are
+taken as asked rather than multiplied by the panel's own scale.
 
 **The graph editor** evaluates curves in Dart (`graph_maths.dart`). That code is a
 line-for-line port of the engine's AE-style cubic, and golden tests hold it to the

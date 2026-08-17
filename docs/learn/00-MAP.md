@@ -88,6 +88,7 @@ Each name links to the source. Each guide covers the crates it names.
 | Crate | One line | Guide |
 |---|---|---|
 | [`lumit-core`](../../crates/lumit-core/src/) | The document model and the four rational time types. Pure data. No IO, no GPU, no threads. | [01](01-CORE.md) |
+| [`lumit-fx-macros`](../../crates/lumit-fx-macros/src/) | A proc-macro crate, used only by `lumit-core`: `#[derive(Effect)]` writes an effect's schema and parameter reader from one struct. | [01](01-CORE.md) |
 | [`lumit-eval`](../../crates/lumit-eval/src/) | "Nova": frame keys, graph compiler, cancellation epochs, worker pool, scheduler core. | [02](02-PIXELS.md) |
 | [`lumit-render`](../../crates/lumit-render/src/) | The pixel pass: decode planning, draw lists, compositor driving, export, the headless renderer. | [02](02-PIXELS.md) |
 | [`lumit-cache`](../../crates/lumit-cache/src/) | "Nebula": RAM + disk frame cache, content-hash keys, byte-budget eviction. | [02](02-PIXELS.md) |
@@ -165,6 +166,7 @@ Each row names the first file to open.
 | Save format, autosave | `crates/lumit-project` | [01-CORE.md](01-CORE.md) |
 | How a frame gets rendered | `crates/lumit-render` | [02-PIXELS.md](02-PIXELS.md) |
 | An effect's look (GPU) | `crates/lumit-gpu/src/fx_*.wgsl` | [03-GPU.md](03-GPU.md) |
+| An effect's controls | `lumit-core/src/fx/effects/` if it has moved, `fx/builtins.rs` if not | [01-CORE.md](01-CORE.md) |
 | Decoding, formats | `crates/lumit-media` | [04-MEDIA-AUDIO.md](04-MEDIA-AUDIO.md) |
 | Playback sync, audio | `crates/lumit-audio` | [04-MEDIA-AUDIO.md](04-MEDIA-AUDIO.md) |
 | What the UI can ask the engine | `crates/lumit-bridge/src/api/` | [05-BRIDGE.md](05-BRIDGE.md) |

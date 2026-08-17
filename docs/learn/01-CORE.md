@@ -23,7 +23,8 @@ Specs: [03-DATA-MODEL.md](../03-DATA-MODEL.md), [04-RETIMING.md](../04-RETIMING.
 | `src/markers.rs`, `src/mask.rs`, `src/shape.rs`, `src/paint.rs` | Markers, masks, shape layers, paint strokes (each with its CPU rasteriser) |
 | `src/pixels.rs`, `src/lut.rs` | sRGB conversion, CPU blending helpers, `.cube` LUT parsing |
 | `src/expression.rs` (+ `expression/{math,comp,layer}.rs`) | Rhai expressions |
-| `src/fx/` | Effect schemas, parameter resolution, CPU reference implementations |
+| `src/lighting.rs` | The CPU oracle for shading a layer with the comp's Light layers |
+| `src/fx/` | Effect schemas, the effect registry, parameter resolution, CPU reference implementations |
 | `src/preset.rs` | `.lumfx` presets |
 
 ## Rational time
@@ -48,6 +49,27 @@ Folders reference children by id. A `Composition` holds `Vec<Layer>` with index 
 top. A `Layer` is: id, name, `LayerKind`, a span in `CompTime`, and a `TransformGroup`
 of 11 `Property` scalars. A `Layer` also holds matte, parent, masks, paint, effects,
 switches, optional retime, and blend mode.
+
+One `LayerKind` is worth naming on its own. `LayerKind::Light { light: Box<LightDef> }`
+(K-360) is a layer that emits rather than one that draws: `LightKind` is Point, Spot or
+Area, and `LightDef` carries animatable colour, intensity, falloff distance, spot cone
+angle and — for an Area light — a half-width and half-height in comp pixels (half, so it
+measures from the centre outward like the flare's own source dials). The *placement* is
+deliberately not in
+`LightDef`; a light sits at its layer's ordinary transform, so it animates and parents
+like everything else. `LightDef` is boxed because eight extra `Property` channels would
+otherwise be paid for by every layer in every comp. On the receiving side, every layer
+carries an `accepts_lights: bool` switch, on by default.
+
+`lighting.rs` is the CPU half of what those lights do, and it is the reference the WGSL
+twin is tested against. Two things about it are choices rather than physics. Light
+**adds**: the shaded result is the picture times `1 + light`, so a layer no light reaches
+is untouched and a comp with no lights renders byte-for-byte as it did before lights
+existed. And a layer has **one** normal — the direction its plane faces — because a 2.5D
+compositor has no per-pixel normals and inventing them from luminance is a quality cliff.
+For an Area light the answer is closed-form (the diffuse form factor: one term per edge of
+the rectangle, exact, no sampling); Points and Spots fall back to the ordinary cosine law.
+`MAX_LIT_LIGHTS` caps one pass at eight, nearest kept.
 
 Three durable rules:
 
@@ -108,12 +130,65 @@ depth 100. A failed script evaluates to −1.0 (or "" for text), never a failed 
 
 ## Effects
 
-Today the catalogue is a static `BUILTINS: &[EffectSchema]` (`fx/builtins.rs`).
-`instantiate` copies defaults into an `EffectInstance`. `resolve_stack` evaluates
-every animatable parameter at layer time into flat `Resolved` ops. Those ops are
-plain numbers. Both `fx/cpu.rs` (the CPU reference, and the GPU's test oracle,
-K-019) and `lumit-gpu`'s WGSL kernels consume them. Preview equals export because
-both read the same resolution (K-031).
+`fx/builtins.rs` holds the catalogue as a static `BUILTINS: &[EffectSchema]` — 35 entries,
+in Add-effect menu order (K-137). `instantiate` copies a schema's defaults into an
+`EffectInstance`. `resolve_stack` evaluates every animatable parameter at layer time into
+flat `Resolved` ops, which are plain numbers. Both `fx/cpu.rs` (the CPU reference, and the
+GPU's test oracle, K-019) and `lumit-gpu`'s WGSL kernels consume them. Preview equals
+export because both read the same resolution (K-031).
+
+That is the shipping path, and it is being replaced underneath. Read
+`docs/impl/effect-registry.md` before touching any of it.
+
+### An effect declared once (K-381)
+
+The complaint the new machinery answers: an effect was written down five or six times — a
+schema literal in `builtins.rs`, a variant of `Resolved`, an arm of `resolve_one`, an arm
+of `cpu::apply`, an arm of `run_ops`, and `rescale_px` if it held a length. Three of those
+matches were exhaustive, which made `Resolved` a compile-time chokepoint: every effect that
+would ever exist had to be known when `lumit-core` was built. That is an awkward property
+for a program that intends to host OFX plugins, and the sets had already quietly drifted
+apart.
+
+Four pieces replace it:
+
+| Where | What it does |
+|---|---|
+| `crates/lumit-fx-macros/` | A proc-macro crate. `#[derive(Effect)]` reads one plain struct — the `#[effect(...)]` header, then one attribute per field (`#[slider]`, `#[toggle]`, `#[choice]`, `#[colour]`, `#[dial]`, `#[counter]`, `#[seed]`, `#[file]`, `#[layer]`) — and writes both the `EffectSchema` and a typed reader for it. A field with no attribute is a compile error, so a parameter cannot be half-declared. Labels default to the field name in sentence case |
+| `fx/registry.rs` | `EffectDef`, the trait an effect implements (its schema, its CPU reference, whether it is an image op at all), plus `Catalogue`, which looks one up by `match_name` |
+| `fx/catalogue.rs` | Registration, as a written list: `catalogue![SaturationDef, VibrancyDef, …]`. Nine lines today |
+| `fx/params.rs` | The resolved form: a bag of `(ParamId, Value)` pairs instead of a closed enum |
+
+An effect's own file is then short enough to read whole — `fx/effects/contrast.rs` is a
+struct with two annotated fields and one `apply_cpu` that calls the existing `cpu::contrast`.
+Nothing about any effect's *maths* changed.
+
+Two details in `params.rs` carry the weight, and both exist to keep properties the old
+`Resolved` enum had for free:
+
+- **A key is a number, not a string.** `ParamId` is the FNV-1a 64 hash of the parameter's
+  stable snake_case id, computed in a `const fn`, so a built-in's ids are compile-time
+  constants and a lookup compares two `u64`s. Every parameter of one layer's whole stack
+  lives contiguously in a single `ResolvedStack` arena; a `ResolvedFx` borrows the run that
+  is its own and stays `Copy`. That is one allocation per stack — one *fewer* than the
+  `Vec<Resolved>` it replaces.
+- **The frame key is fed field by field.** `Resolved` was hashed byte-wise (K-143), which
+  `Value` cannot be: it has padding, and a padding byte in a cache key is a wrong picture
+  that only reproduces on one machine. `ResolvedStack::feed_hash` writes the effect name,
+  its version, then each parameter's id, a tag byte and its live bytes.
+
+Every numeric parameter also declares a `Unit` (`Raw`, `PctDiag`, `Px`, `Degrees`,
+`Seconds`). That is what turns the old per-variant `rescale_px` into one generic pass
+(`rescale_spatial`): an effect can no longer be *forgotten* there, which is how a preview
+raster and a full-size export come to disagree.
+
+**State of the migration.** Nine effects have moved — the colour family: saturation,
+vibrancy, exposure, hue shift, contrast, gamma, temperature, invert, tint. The render path
+still runs on `Resolved`, and `builtins.rs` plus `resolved.rs` stay authoritative for
+all 35. While that lasts, `BUILTINS` remains the union, and a test holds each generated
+declaration field-for-field identical to the hand-written literal it will replace — which
+is what makes the port mechanical rather than a rewrite. Adding a *new* effect during the
+transition still needs the old sites; migrating one is a commit that changes no pixel.
 
 ## Saving: lumit-project
 
@@ -136,3 +211,8 @@ Retime → property Retime, K-249). Details: [10-FILE-FORMAT.md](../10-FILE-FORM
   bytes.
 - `retime: None` skips the map entirely. An identity map does not. A clip's
   identity map starts at `source_in`, not zero.
+- **Two effect catalogues are live at once** during the K-381 migration. A change to a
+  migrated effect's schema belongs in `fx/effects/<name>.rs`; the literal in `builtins.rs`
+  must move with it or the identity test fails. Twenty-six effects have only the literal.
+- A new numeric parameter needs its `Unit`. `Raw` on something spatial compiles, renders
+  correctly at full size, and is wrong at every preview resolution.

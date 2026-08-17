@@ -20,7 +20,7 @@ Attributes shape what Dart sees:
 
 | Attribute | Effect |
 |---|---|
-| `#[frb(sync)]` | Runs on Dart's UI isolate. Only for fast calls — `save` is deliberately async |
+| `#[frb(sync)]` | Runs on Dart's UI isolate. Only for fast calls — `save` and `open_project` are deliberately async |
 | *(none)* | Async on frb's shared worker pool |
 | `#[frb(non_opaque)]` | Struct/enum mirrored into Dart fields |
 | `#[frb(opaque)]` | Stays a Rust-held handle (e.g. `BridgeEffectInstance`) |
@@ -34,6 +34,13 @@ Dart holds small reference handles — `ProjectReference { id }`,
 `CompositionReference { project, id }`, `LayerReference { project, comp, layer }` —
 and calls methods on them. No document snapshot ever crosses the seam. Readers ask
 the handle (`comp.get_layers()`, `layer.get_switches()`).
+
+`new_project` is sync; `open_project` is **not**, and the asymmetry is deliberate. Reading a
+`.lum` parses a whole document and stats every media file it names, which on the UI isolate
+froze the window for as long as that took. Async puts it on a worker thread, which is what
+lets Dart keep the previous document on screen behind a progress state until it returns. A
+`.lum` that will not open comes back as `Ok(None)` rather than an error: an unopenable file is
+the file picker's problem, and Dart shows its own notice.
 
 ## State and locks
 
@@ -62,6 +69,14 @@ Drags do not commit. `render_frame_with_preview` and its siblings
 (`…with_transform_`, `…with_text_`, `…with_paint_`, `…with_mask_`, `…with_retime`)
 patch an engine-side clone per tick. Mouse-up commits once. `set_effects` refuses a
 reordered stack (`StaleEffectStack`) rather than guessing.
+
+Because every call to `render_frame_with_preview` is by definition a live drag, the worker
+also renders those ticks small: `realtime.rs` picks the finest divisor of 1/2/3/4 whose
+raster fits a 640×360 pixel budget, floored at Quarter (K-383). Dragging a Depth of field
+radius otherwise left the picture seconds behind the pointer. This is a decision taken before
+the first tick, not the adaptive tier, which needs a dozen measured frames and would still
+stall the first drag. The rule lives here rather than in Dart so no new drag call site can
+forget it, and a release comes back through `render_frame` at the Viewer's own scale.
 
 Every keyframe crosses on the **composition's clock**. Conversion by the layer's
 `start_offset` happens at the seam (K-213).
@@ -94,6 +109,22 @@ sequenceDiagram
     S->>D: stream event
     D->>T: register as external texture<br/>(viewer_texture_controller.dart → platform runner)
 ```
+
+**A still frame and a playback frame decide their quality separately** (K-372), and the two
+functions in `api/worker_thread.rs` say which is which. `still_quality(scale)` is the scale the
+caller asked for, full stop. `playback_quality(scale, mode, tier)` coarsens it by the
+adaptive tier, and only when the run is Adaptive. When one function served both, scrubbing
+after a playback run inherited whatever tier the run had drifted to — so the frame was made
+at a scale nothing else would ask for, and every lookup missed. The idle background fill
+derives its names through `still_quality` too, or it banks frames the scrub cannot find.
+
+Two other things the Viewer sets rather than edits: `set_viewer_look` carries the whole look
+in one call — exposure stops, tone map, transparent background, and the region of interest as
+`[u0, v0, u1, v1]`. One call for all four, so the renderer can never hold half a look. The
+region crosses as **fractions of the picture**, never pixels, because which pixel a point is
+depends on the raster the engine settles on and that changes with preview resolution.
+Anything that is not four sensible numbers *is* "no region": a drag that ends where it began
+is a gesture, not an error. None of this is an op, and none of it reaches an export.
 
 The only pixel payloads that cross as bytes are bounded stills: thumbnails,
 256×256 scope traces, ≤129×129 colour-dropper windows (capped engine-side).

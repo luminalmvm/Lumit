@@ -117,9 +117,11 @@ display, scrub slider, resolution picker as decode-time downsampling, latest-win
 background preview engine with end-to-end tests) are in. Remaining for slice-5 completion —
 updated 04:00: **lumit-gpu now exists** with the linearise/display pipeline pair and the
 §7 colour round-trip golden passing on Metal (every byte value within 1 LSB; formats do
-the gamma, shaders contain none). Still to do: route the Viewer through it (register the
-display texture with egui via eframe's render state — an app-layer change) and the NV12
-plane path once decode stops pre-converting via swscale.
+the gamma, shaders contain none). At the time, the remaining slice-5 work was: route the
+Viewer through it (register the display texture with egui via eframe's render state — an
+app-layer change) and the NV12 plane path once decode stops pre-converting via swscale.
+Those items died with the egui frontend (K-182) and are **not** live work — the living
+backlog is [TODO.md](../TODO.md).
 
 ## Slice 6 — playback + audio (runs: Gate 0 demo)
 

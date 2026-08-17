@@ -45,11 +45,13 @@ These sit above everything else: they are what the editor feels like in the hand
 
 ## Now - the effect registry migration (K-381, docs/impl/effect-registry.md §6)
 
-The refactor is landing in batches; these are the batches that have not landed. Delete each
-line as its batch lands.
+The machinery landed in PR #99 - the derive macro, the registry, the parameter bag, and the
+first colour effects are declared through it. What is left is the per-family migration on
+top, in batches; these are the batches that have not landed. Delete each line as its batch
+lands.
 
-- **Migrate the remaining colour family** - `temperature`, `hue_shift`, `vibrancy`, `tint`,
-    `colour_balance`, `vignette`. Mechanical: schema, resolve arm, CPU arm, `run_ops` arm.
+- **Migrate the remaining colour family** - `colour_balance`, `vignette`. Mechanical:
+    schema, resolve arm, CPU arm, `run_ops` arm.
 - **Rewire the render path to `ResolvedStack`** - `build.rs`, `draw.rs`, `realise.rs` and
     `fxops.rs` carry `Vec<Resolved>` today. Until this lands, a migrated effect's declaration
     is generated but its frame still resolves through the old enum, so the two paths must
@@ -295,17 +297,15 @@ imported theme travels with the user rather than the machine's settings.
     left" — the workers the earlier tests spun up exhaust the device, so the
     failing set shifts run to run and every member passes alone. Whatever fixes
     the contention should make that message impossible, not rarer.
-    **It has now grown past individual tests into the job.** Through the whole of
-    PR #97 the `flutter frontend (Linux build + analyze + test)` job never once
-    completed: every run reached `timeline_panel_frb_test.dart`, logged
-    `vkAllocateMemory failed: A device memory allocation has failed` over and
-    over, and was killed with "the runner has received a shutdown signal" — a
-    re-run of the same job on the same commit died the same way, so it is
-    persistent rather than flaky. Say plainly what that costs: `flutter analyze`
-    passes, but **the Dart test suite is unverified on that branch**, because the
-    macOS Flutter job beside it is `flutter build macos` — a build gate, not the
-    tests. Anything relying on "CI is green on the frontend" is relying on a
-    check that did not run.
+    The job itself is healthy again: the `flutter frontend (Linux build + analyze
+    + test)` job could not complete at all mid-PR #97 (every run reached
+    `timeline_panel_frb_test.dart`, logged `vkAllocateMemory failed`, and was
+    killed), and PR #97 merged with it green after two root-cause fixes — a
+    project that stops being shown is closed and its render worker stops with it
+    (`ProjectReference::close()`, so per-test workers and GPU devices no longer
+    pile up), and the frame-name memo is cleared on `SetViewerLook`. So the Dart
+    suite *is* verified on CI; what remains open is the order-dependence itself,
+    for which `flutter test --concurrency=1` (ci.yml) is still the mitigation.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and K-254 gave the bare digits to the numbered
     markers. Needs its own chord or a modal reading.
@@ -378,13 +378,6 @@ controls have landed. What is left:
 should stay empty. Measuring a 1080p pair on the GPU costs ~8 ms; reading 37 MB
 of stored field off an SSD costs more. It would be a cache slower than the thing
 it caches. The RAM tier (`DEFAULT_FLOW_CACHE_BYTES`) is the one that pays.
-
-**The LUT effect's GPU path ignores a non-default domain**
-([impl/lut.md](impl/lut.md) §3 status): `fx_lut.wgsl` skips the
-`DOMAIN_MIN`/`DOMAIN_MAX` remap the CPU oracle applies, so such a cube renders
-silently wrong. Pass the six domain floats through `LutParams`, or refuse
-non-default-domain cubes as a labelled no-op. The LUT caches also key by path
-alone - no mtime, no LRU bound (§4).
 
 **Localisation follow-ups (K-303).** The seam is built and the strings are out of the
 code (`flutter_ui/lib/l10n/`, `crowdin.yml`); what is left is other people's turn and

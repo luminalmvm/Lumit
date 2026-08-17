@@ -41,7 +41,8 @@ complete standalone module, compiled at engine construction via `include_str!`
 the CPU function it mirrors. `tests/wgsl_validates.rs` runs naga over every shader,
 so a broken shader fails on a machine with no GPU (K-263).
 
-Four bind-group layouts cover ~37 effects:
+Four bind-group layouts cover the ~35 catalogue effects. The lens flare and the lighting
+pass build their own, because neither is a one-kernel image op:
 
 | Layout | Bindings |
 |---|---|
@@ -53,6 +54,80 @@ Four bind-group layouts cover ~37 effects:
 Every dispatch is `div_ceil(w, 8) × div_ceil(h, 8)`. Parameters travel as
 `#[repr(C)] bytemuck::Pod` structs mirrored field-for-field with the WGSL struct,
 hand-padded to 16-byte rows.
+
+Two passes in this crate are not effects at all, and it is worth knowing why. `fx/lighting.rs` and
+`fx_lighting.wgsl` shade a layer with the comp's Light layers (K-361): no `Resolved`
+variant, no docs/08 entry, called directly by the realiser between a layer's stack and its
+composite. `scope.wgsl` is the same sort of thing for measurement. Both restate their types
+locally, because an engine GPU crate does not depend on the model crate — and for lighting
+the oracle it is compared against is `lumit_core::lighting`.
+
+## The lens flare
+
+Worth its own section: it is the only effect here that is a small pipeline rather than a
+kernel, and the one place the usual rules bend. `fx/lens_flare.rs` drives five shaders.
+Read `docs/impl/lens-flare.md` first.
+
+```mermaid
+flowchart LR
+    DT["detect<br/>(Matte mode only)"] --> TR[trace] --> SB[build splats] --> DP[deposit] --> RS[resolve] --> BL["blur<br/>(optional)"] --> CB[combine]
+    BK[CPU bake<br/>on its own thread] -.textures.-> CB
+```
+
+1. **Detect** — in Matte mode the flare's sources are found on the card: two small kernels
+   pick the brightest points of the matte layer.
+2. **Trace** — a few hundred thousand tiny ray programs push light through the chosen lens,
+   once per source. Wavelength bands, ghost pairs and four-bounce ghosts are all rays here.
+3. **Build splats** — each surviving ray becomes a footprint: a centre and two half-axes in
+   flare-buffer pixels, with its peak colour.
+4. **Deposit** — each footprint is accumulated over the pixels it covers. Big splats deposit
+   into a **pyramid** of half-size levels (K-380) so that one enormous splat cannot cost
+   more than a bounded number of writes.
+5. **Resolve** — the accumulator is written into the fp16 flare buffer, once.
+6. **Blur**, when Ghost softness asks for it — a separable box blur over the flare buffer,
+   horizontal + vertical × 3 to approximate a Gaussian.
+7. **Combine** — the flare buffer plus the baked starburst sprite are laid over the picture.
+
+Three of its choices explain most of the code:
+
+- **The slow maths never runs here.** The Fourier transforms that give the starburst and the
+  ghost-edge diffraction are baked on the CPU (`lumit_core::fx::lens_flare`) and arrive as
+  textures, cached by parameter hash. `lumit-gpu` stays `lumit-core`-free in production, so
+  the caller converts and hands over a `FlareBakeData`.
+- **The bake has its own thread** (K-350). `Baker` owns a queue and a finished channel; a key
+  already in flight is not queued twice, and a machine that will not give us a thread bakes
+  inline instead. A frame whose bake has not landed renders live and banks nothing rather
+  than caching an incomplete picture.
+- **The accumulator is fixed-point integers, not floats** (K-375/K-377). Until K-375 the
+  deposit was an additive hardware raster of one quad per ray, straight into the fp16 flare
+  buffer — and adding a small increment to a large fp16 running sum systematically loses
+  everything under half an ULP of the sum. Measured against the f32 CPU reference the middle
+  of the frame came out 4.5 % dim. WGSL has no float atomics, and a compare-and-swap loop
+  over the bit pattern is exact per add but sums in whatever order the threads race to,
+  which is not deterministic. Integer addition *is* associative, so every deposit rounds to
+  a fixed step and `atomicAdd`s exactly: one rounding at the resolve instead of thousands,
+  and the same picture every time.
+
+The flare's long-running bit-stability failure was two separate versions of that same lesson,
+and both are worth carrying to any other scatter pass. **Hardware 4× multisampling was the
+first** (K-353): additively blending fp16 into a multisample target came back a few ULPs
+different each run, in different places. The antialiasing was kept and the hardware dropped —
+barycentric coordinates are affine in screen position, so a fragment can evaluate its own
+coverage exactly instead of sampling it. That also deleted the effect's largest allocation, a
+~66 MB multisample texture at a 1080p flare buffer. **The fp16 accumulation was the second**,
+above. The general shape: if many threads add into one place, ask what the *order* and the
+*precision* of those adds are, because a GPU promises neither.
+
+Its pipelines compile on a background thread (`LazyFlare`), because they are built from the
+device alone and nothing needs them until the first flare is drawn. That took worker start
+from about 7.7 s to 1.1 s. The two per-frame questions — is a bake pending, what generation
+are we on — ask `ready()` rather than `get()`, so neither can be the thing that waits for a
+compile.
+
+Two sibling effects share the neighbourhood without sharing the machinery:
+`fx_sprite_flare.wgsl` draws a flare where you put one (K-359 — a different question from
+"what would this lens do", deliberately a separate effect), and `fx_light_wrap.wgsl` screens
+a blurred background over the inside of a foreground's alpha edge.
 
 ## Pixel format and colour
 
@@ -133,5 +208,10 @@ motion blur, Datamosh.
 - **Fixed-function surprises.** A pipeline bakes its sample count. Copies cannot
   cross sample counts. ANGLE silently refuses non-BGRA legacy share handles, which
   gives a black Viewer with no error anywhere.
-- **A long submission trips the OS watchdog** and kills the device. The lens flare
-  splits command buffers at 48 M ray-surface steps.
+- **A long submission trips the OS watchdog** and kills the device. The lens flare splits
+  command buffers on a cost model that counts the trace's ray–surface steps *and* the
+  deposit's pixels (K-379): a wide, soft flare is nearly all deposit, so pacing on the trace
+  alone let exactly that case run long.
+- **No float atomics in WGSL**, and a CAS loop over an f32 sums in thread-race order. Any
+  scatter that many threads add into needs integer atomics on a fixed-point accumulator if
+  the picture is to be the same twice (K-375).

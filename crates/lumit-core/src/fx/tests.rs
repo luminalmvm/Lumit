@@ -8530,7 +8530,7 @@ fn custom_name_roundtrips_and_defaults_to_none() {
 /// lens so the 23-second report can be reproduced or ruled out. Run with
 /// `cargo test -p lumit-core --release bake_timing -- --ignored --nocapture`.
 #[test]
-#[ignore]
+#[ignore = "by-hand perf probe, not part of the suite"]
 fn bake_timing_probe() {
     for lens in 0..crate::fx::lens_library::LENS_LIBRARY.len() as u32 {
         let p = crate::fx::lens_flare::LensFlareParams {
