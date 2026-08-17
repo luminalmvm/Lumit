@@ -9671,3 +9671,28 @@ vectors (the resolve taps whole `vec3`s). Both failures presented as a silently 
 garbage flare with the validation error only visible on stderr. The accumulator's old
 clamp to the scratch budget is also gone: level 0 must hold every pixel of the flare
 buffer, and the clamp was silently truncating it past 2K rasters.
+
+## K-382 — Three overlaid waves need a paint order and a fan
+
+**DECIDED** (2026-08-06, landed 2026-08-17 — the commit sat unpushed). K-284 put the
+multiwave's three bands in one lane, which is right, but drawing them concentric and
+brightest-last was two mistakes at once.
+
+**Paint order: treble first, bass last.** The bands were drawn dim to bright, so the palest
+one landed on top — and a pale shape over a darker one does not read as two shapes, it
+swallows what is under it. Reversed, every darker band sits in *front* of a paler one and the
+layering is legible. Fixed by band index rather than worked out from the colours: a theme may
+put the ramp anywhere, and a picture that reorders itself depending on the palette is a
+picture nobody can learn to read.
+
+**A fan, not a stack of concentric rings.** Three bands of one sound agree with each other
+most of the time — that is what makes them one sound — so drawn about a common baseline they
+hide inside one another wherever they agree, which is exactly where the reader is trying to
+tell them apart. Each band is therefore lifted slightly above the one behind it: 8% of the
+row's height, clamped to 1–4 px, so a 22 px lane fans by under two pixels and a tall clip by
+four. The lift is taken out of the wave's own reach rather than off the top of the row, so a
+full-scale signal still fits. It applies to both baselines (K-285) — centred, the three
+centre lines fan up; standing on the floor, the three floors do.
+
+Both are drawing decisions only: nothing about the fetched peaks changes, and the single wave
+is untouched.

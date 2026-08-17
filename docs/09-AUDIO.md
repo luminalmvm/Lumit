@@ -110,12 +110,17 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Multiwave** (K-280, redrawn by K-284): alongside the plain wave, the sound is split into
   three bands — bass (below 200 Hz), middle, treble (above 2 kHz) — with 24 dB/octave
   filters, and each is summarised the same way. The lane draws all three **over one another
-  around one centre line**, ranked dim to bright as the frequency climbs: the bass fills a
-  soft broad body and the treble lands as bright thin spikes on top of it. So what is in a
-  loud passage is visible where one wave would be a solid block — the kick in the body, the
-  hats in the highlights — and a cut can be aimed at either. Overlaid rather than in three
-  separate lanes, because the point is to see inside the wave you are already reading, and
-  because three lanes in a 22 px row are six pixels each and say nothing. On by default;
+  in one lane**, ranked dim to bright as the frequency climbs. So what is in a loud passage is
+  visible where one wave would be a solid block, and a cut can be aimed at the kick or at the
+  hats. Overlaid rather than in three separate lanes, because the point is to see inside the
+  wave you are already reading, and because three lanes in a 22 px row are six pixels each and
+  say nothing. Two rules keep three overlaid waves legible (K-382): they are drawn **treble
+  first and bass last**, so the pale end of the ramp sits behind and each darker band lands in
+  front of a paler one (a dark shape on a pale one reads as two shapes; the reverse swallows
+  what is under it), and **each is lifted slightly above the one behind it** — proportional to
+  the row, 1–4 px — because three concentric waves of one sound agree most of the time and
+  hide each other where they do. The lift comes out of the wave's own height, never off the
+  top of the row. On by default;
   Settings ▸ Interface ▸ Editing ▸ *Waveforms show the frequency stack* returns the single
   wave.
 - **Where the wave sits** is a second, independent choice (K-285). Centred about silence by
