@@ -2003,6 +2003,16 @@ mod render_below_at_tests {
         }
     }
 
+    // The one blur op's radius in raster pixels. Blur lives in the registry
+    // (docs/impl/effect-registry.md §2.1), so its numbers come back out of the
+    // arena through its own typed reader rather than out of a `Resolved` variant.
+    fn blur_radius_px(fx: &lumit_core::fx::ResolvedOps) -> f32 {
+        use lumit_core::fx::{effects::blur::Blur, EffectMetadata};
+        let op = fx.bags.get(0).expect("expected a blur op");
+        assert_eq!(op.def.schema().match_name, "blur");
+        Blur::read(op.params).packed().0
+    }
+
     // An adjustment layer carrying a Posterize Time effect (everything-below) at
     // the given posterised frame rate.
     fn posterize_adjustment(rate: f64) -> Layer {
@@ -2152,10 +2162,7 @@ mod render_below_at_tests {
         );
         // The blur, opting out, resolves at the frame time 0.35 (35% of diag).
         let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-        let radius = match tb.draws[0].fx.ops.first() {
-            Some(lumit_core::fx::Resolved::Blur { radius_px, .. }) => *radius_px,
-            other => panic!("expected a blur op, got {other:?}"),
-        };
+        let radius = blur_radius_px(&tb.draws[0].fx);
         assert!(
             (radius - 0.35 * diag).abs() < 0.5,
             "blur must hold at the frame time 0.35 ({}), got {radius}",
@@ -2230,10 +2237,7 @@ mod render_below_at_tests {
         );
         // The blur resolves at the held time 0.3 (30% of diag), not 0.35.
         let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-        let radius = match d.fx.ops.first() {
-            Some(lumit_core::fx::Resolved::Blur { radius_px, .. }) => *radius_px,
-            other => panic!("expected a blur op, got {other:?}"),
-        };
+        let radius = blur_radius_px(&d.fx);
         assert!(
             (radius - 0.30 * diag).abs() < 0.5,
             "blur held at the grid time 0.3 ({}); got {radius}",

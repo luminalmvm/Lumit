@@ -11,76 +11,12 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // are the passthrough rather than a silent half-effect.
         Resolved::LightWrap { .. } => {}
         Resolved::SpriteFlare(p) => sprite_flare(rgba, w, h, p),
-        Resolved::Blur {
-            radius_px,
-            edge,
-            mix,
-        } => blur_gaussian(rgba, w, h, *radius_px, *edge, *mix),
-        Resolved::DirBlur {
-            length_px,
-            angle_deg,
-            edge,
-            mix,
-        } => blur_directional(rgba, w, h, *length_px, *angle_deg, *edge, *mix),
-        Resolved::RadialBlur {
-            centre_frac,
-            amount_px,
-            spin,
-            edge,
-            mix,
-        } => blur_radial(rgba, w, h, *centre_frac, *amount_px, *spin, *edge, *mix),
-        Resolved::Sharpen {
-            amount,
-            radius_px,
-            threshold,
-            luma_only,
-            mix,
-        } => sharpen(
-            rgba, w, h, *amount, *radius_px, *threshold, *luma_only, *mix,
-        ),
-        Resolved::SharpenSimple {
-            amount,
-            radius,
-            mix,
-        } => sharpen_simple(rgba, w, h, *amount, *radius, *mix),
-        Resolved::RgbSplit {
-            amount_px,
-            angle_deg,
-            scale,
-            tints,
-            mix,
-        } => rgb_split(rgba, w, h, *amount_px, *angle_deg, *scale, *tints, *mix),
-        Resolved::SpectralSplit {
-            amount_px,
-            angle_deg,
-            radial,
-            samples,
-            tints,
-            mix,
-        } => spectral_split(
-            rgba, w, h, *amount_px, *angle_deg, *radial, *samples, *tints, *mix,
-        ),
-        Resolved::ChromaticAberration {
-            amount_px,
-            tints,
-            mix,
-        } => chromatic_aberration(rgba, w, h, *amount_px, *tints, *mix),
         Resolved::Flash {
             strength,
             colour,
             mix,
         } => flash(rgba, *strength, *colour, *mix),
         Resolved::MatteKey(p) => matte_key(rgba, p),
-        Resolved::Vignette {
-            amount,
-            radius,
-            softness,
-            roundness,
-            ramp,
-            mix,
-        } => vignette(
-            rgba, w, h, *amount, *radius, *softness, *roundness, *ramp, *mix,
-        ),
         Resolved::Transform {
             anchor,
             position,

@@ -19,15 +19,26 @@
 //! one to be identical for every effect that has moved.
 
 use super::effects::{
-    colour_balance::ColourBalanceDef, contrast::ContrastDef, exposure::ExposureDef,
-    gamma::GammaDef, hue_shift::HueShiftDef, invert::InvertDef, saturation::SaturationDef,
-    temperature::TemperatureDef, tint::TintDef, vibrancy::VibrancyDef,
+    blur::BlurDef, chromatic_aberration::ChromaticAberrationDef, colour_balance::ColourBalanceDef,
+    contrast::ContrastDef, directional_blur::DirectionalBlurDef, exposure::ExposureDef,
+    gamma::GammaDef, hue_shift::HueShiftDef, invert::InvertDef, radial_blur::RadialBlurDef,
+    rgb_split::RgbSplitDef, saturation::SaturationDef, sharpen::SharpenDef,
+    sharpen_simple::SharpenSimpleDef, temperature::TemperatureDef, tint::TintDef,
+    vibrancy::VibrancyDef, vignette::VignetteDef,
 };
 
 crate::catalogue![
+    BlurDef,
+    DirectionalBlurDef,
+    RadialBlurDef,
+    SharpenDef,
+    SharpenSimpleDef,
+    RgbSplitDef,
+    ChromaticAberrationDef,
     ColourBalanceDef,
     SaturationDef,
     VibrancyDef,
+    VignetteDef,
     ExposureDef,
     HueShiftDef,
     ContrastDef,

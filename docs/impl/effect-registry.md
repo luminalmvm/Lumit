@@ -106,14 +106,21 @@ match:
 | Unit | Meaning | Resolve does |
 |---|---|---|
 | `Raw` | a plain number (a mix, a gamma) | nothing |
-| `PctDiag` | % of the comp diagonal (docs/08 §2.3) | × `diag_px / 100`, then × `px_scale` |
+| `PctDiag` | % of the comp diagonal (docs/08 §2.3) | × `diag_px / 100` |
 | `Px` | already pixels of the target raster | × `px_scale` |
 | `Degrees` | an angle | nothing |
 | `Seconds` | a duration | nothing (rational time is resolved upstream) |
 
+`diag_px` reaches the resolve step **already scaled by the preview factor**, which is why
+`PctDiag` does not multiply by `px_scale` a second time — the hand-written arms did exactly
+this, and doing both would shrink a preview radius twice.
+
 `rescale_px` becomes one generic pass over the bag: rescale every value whose declared unit
 is `PctDiag` or `Px`. An effect cannot forget to be rescaled, which was possible before and
-is how a preview raster and a full-size export could disagree.
+is how a preview raster and a full-size export could disagree. **Radial blur's Amount is a
+case in point**: the old `rescale_px` skipped it on the mistaken grounds that the whole op
+was frame-relative, so an adjustment stack under reduced-resolution preview blurred too far.
+Declaring the unit fixed it without anyone deciding to — which is the point of declaring it.
 
 **docs/08 §2.3 is unchanged by this** — a raw "pixels of whatever buffer I was handed"
 parameter is still forbidden. `Px` means px@comp on the way in, and the resolve step is the
@@ -201,7 +208,15 @@ pub trait EffectDef: Sync + 'static {
 ```
 
 `pack` is deliberately not generic: an effect that needs to fold an aperture into eight
-blade normals does it here, once, for both the GPU and the CPU path.
+blade normals does it here, once, for both the GPU and the CPU path. As built it is an
+inherent `packed()` on the parameter struct rather than a trait method, so each effect
+returns its own shape and no `Packed` union has to exist.
+
+**An effect with a mode fork returns an enum, not a tuple.** A *quality tier* (K-090) —
+RGB split's and chromatic aberration's Wavelength toggle — runs a different kernel with a
+different uniform, which is why those effects had two `Resolved` variants each before they
+moved. `packed()` answering with a small enum keeps the fork in one place: the CPU
+reference and the GPU wrapper both match on it, so neither can decide the mode for itself.
 
 ### 2.5 The GPU half (`lumit-render/src/gpufx.rs`)
 
@@ -334,7 +349,12 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    `resolve_one` arm, its `cpu::apply` arm and its `run_ops` arm.
 3. The awkward ones last, and each on its own: `dof` (23 parameters, folded aperture),
    `shake` (sub-frame samples), `lens_flare` (50 parameters, bakes, a matte input),
-   `matte_key`, `motion_blur`, `datamosh`.
+   `matte_key`, `motion_blur`, `datamosh`. **`flash`, `scanlines` and `block_glitch` join
+   that list** — not for their size but for their seam: each derives a number from the
+   *layer time* at resolve (Scanlines' roll offset, Block glitch's discretised tick), and
+   Flash also reads the §1.4 marker context and its Trigger property's whole keyframe track.
+   `resolve_into_arena` evaluates declared parameters and nothing else, so migrating them
+   means widening `EffectDef` with a resolve-time hook first — a decision, not a batch.
 4. Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body.
 5. Dynamic parameters, then spare parameters, then the panel affordances for both.
 
@@ -353,9 +373,16 @@ Catalogue sweeps (these are the guards that the old arrangement lacked):
    catalogue. While the migration runs it is scoped to the migrated effects; when the last
    batch lands it covers `BUILTINS`, with the two orchestration-only effects named
    explicitly as the exceptions.
-4. `every_parameter_declares_a_unit` and `only_pct_diag_and_px_rescale` — the generic
-   `rescale_px` replacement moves exactly the values the old match moved. Golden-tested
-   against a table of the old behaviour, per effect, so the port is provable.
+4. `every_parameter_declares_a_unit`, `only_spatial_values_rescale`,
+   `a_migrated_spatial_parameter_rescales_as_the_old_op_did` and
+   `the_stylise_family_rescales_once_in_each_unit` (all in `lumit-core/src/fx/tests.rs`) —
+   the generic `rescale_px` replacement moves exactly the values the old match moved.
+   Golden-tested against a table of the old behaviour: the first names every spatial
+   parameter in the catalogue *and* its unit, so a new one has to be written down; the third
+   drives the real `ResolvedOps::rescale_px` on a resolved blur and pins the radius the old
+   `Resolved::Blur` arm would have carried; the fourth does the same for both units at once
+   and pins that each is scaled **once** on the way in — a half-resolution resolve followed
+   by a further halving is a quarter of the authored width, not an eighth.
 5. `the_generated_schema_matches_the_hand_written_one` — during the migration only, and
    deleted with the last batch: for each migrated effect, `Effect::SCHEMA` equals the
    `BUILTINS` literal it replaces, field for field. This is what makes the port mechanical

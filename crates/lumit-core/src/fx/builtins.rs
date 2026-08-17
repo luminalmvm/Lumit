@@ -112,7 +112,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "radius",
                 label: "Radius",
                 // % of the comp diagonal (§2.3), so half-res preview matches.
@@ -150,7 +150,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "length",
                 label: "Length",
                 // The full streak length, % diag (§2.3). Unbounded above
@@ -207,7 +207,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "amount",
                 label: "Amount",
                 // Peak tap spread, % diag (§2.3), reached at the farthest
@@ -299,7 +299,7 @@ pub const BUILTINS: &[EffectSchema] = &[
                 },
             },
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "radius",
                 label: "Radius",
                 // % of the comp diagonal (§2.3) — the width of the detail
@@ -672,7 +672,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::PctDiag,
                 id: "amount",
                 label: "Amount",
                 // % of the comp diagonal (§2.3); the impact-frame staple is
@@ -832,7 +832,7 @@ pub const BUILTINS: &[EffectSchema] = &[
         },
         params: &[
             ParamSchema {
-                unit: Unit::Raw,
+                unit: Unit::Px,
                 id: "amount",
                 label: "Amount",
                 // px@comp (§2.3): peak channel offset, reached at the

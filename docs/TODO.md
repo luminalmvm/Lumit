@@ -52,10 +52,22 @@ colour effects resolve, grade and dispatch through the registry, and the render 
 left is the per-family migration on top, in batches; these are the batches that have not
 landed. Delete each line as its batch lands.
 
-- **Migrate `vignette`** - the last of the colour family. Mechanical: schema, resolve arm,
-    CPU arm, `run_ops` arm.
-- **Migrate the blur, stylise and temporal families**, then the awkward six on their own:
-    `dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`, `datamosh`.
+- **Migrate the rest of the stylise family, and the temporal one**, then the awkward six on
+    their own: `dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`, `datamosh`. What has
+    landed: the blur family (`blur`, `directional_blur`, `radial_blur`, `sharpen`,
+    `sharpen_simple`), the first batch with spatial units, so `PctDiag` and the generic
+    rescale are exercised by `a_migrated_spatial_parameter_rescales_as_the_old_op_did`; then
+    `vignette`, `rgb_split` and `chromatic_aberration`, which brought the first `Px`
+    parameter and the first *mode fork* (an effect whose Wavelength toggle picks a different
+    kernel, packed as an enum rather than a tuple).
+- **`flash`, `scanlines` and `block_glitch` need the seam widened first**, so they were held
+    back from the stylise batch. Each derives a number from the *layer time* at resolve -
+    Scanlines' roll offset, Block glitch's discretised tick - and Flash reads the §1.4 marker
+    context and its Trigger property's whole keyframe track, none of which
+    `resolve_into_arena` carries: it evaluates declared parameters and nothing else. Either
+    `EffectDef` gains a hook that runs at resolve with the time and the marker context, or
+    those three keep their arms until the end. Decide before the temporal family, which has
+    the same shape (Echo, Datamosh and Posterize time are all time-derived).
 - **Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body**,
     and with them the migration-only `the_generated_schema_matches_the_hand_written_one`.
 - **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed

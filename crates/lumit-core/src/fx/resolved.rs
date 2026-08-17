@@ -199,72 +199,6 @@ pub enum Resolved {
     /// Nothing produces this yet: the carrier lands before the first effect
     /// moves, so every consumer already has the arm it will need.
     Registry { op: u32 },
-    Blur {
-        /// Kernel half-width in *pixels of the target raster* (the caller
-        /// converts from % diagonal using the raster it renders at, §2.3).
-        radius_px: f32,
-        /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
-        edge: u32,
-        /// 0..1.
-        mix: f32,
-    },
-    DirBlur {
-        /// Full streak length in raster pixels.
-        length_px: f32,
-        /// Streak direction, degrees (0° = +x, y-down raster).
-        angle_deg: f32,
-        /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
-        edge: u32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Blur's Radial mode (docs/08 §3.8): rays from, or a tangent to the
-    /// arc about, a centre — see the schema's status note for why both
-    /// reduce to a pure linear scale of (position − centre) with no
-    /// division or runtime trig.
-    RadialBlur {
-        /// Centre as a *fraction* of the raster (not raster pixels):
-        /// resolve_stack carries only diag_px, not separate width/height,
-        /// so the CPU/GPU function scales this by its own w/h — exactly
-        /// how RGB split's radial mode already derives the frame centre.
-        centre_frac: [f32; 2],
-        /// Peak tap spread in raster pixels, reached at the frame's
-        /// farthest corner from Centre (half the raster diagonal away).
-        amount_px: f32,
-        /// True = Spin (tangent direction), false = Zoom (radial direction).
-        spin: bool,
-        /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
-        edge: u32,
-        /// 0..1.
-        mix: f32,
-    },
-    Sharpen {
-        /// Fraction of the detail signal added back (0..3 = 0–300%).
-        amount: f32,
-        /// The internal gaussian's half-width, in raster pixels.
-        radius_px: f32,
-        /// Linear-light detail magnitude below which nothing is added.
-        threshold: f32,
-        /// True: sharpen the Rec. 709 luma only (no chroma fringing).
-        luma_only: bool,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Sharpen (docs/08 §3.9, K-138): a plain 3×3 high-pass convolution scaled
-    /// by `amount`, on unpremultiplied colour (§2.2), alpha untouched — the
-    /// radius-free sibling of [`Resolved::Sharpen`] (the Unsharp mask). `out =
-    /// u + amount·(4·u − up − down − left − right)` per RGB channel with
-    /// clamp-addressed neighbours, clamped ≥ 0 and re-premultiplied. `amount`
-    /// 0 (or `mix` 0) is the bit-exact passthrough.
-    SharpenSimple {
-        /// High-pass strength; 0 is the neutral point (1 = the classic 5/−1
-        /// kernel).
-        amount: f32,
-        /// Neighbour distance in raster pixels (T15): 1 = a 3×3 kernel.
-        radius: f32,
-        /// 0..1.
-        mix: f32,
-    },
     /// Sprite flare (docs/08 §3.29, K-359): the art-directed flare, placed
     /// from a light position rather than from the picture's bright pixels.
     SpriteFlare(crate::fx::cpu::SpriteFlareParams),
@@ -276,61 +210,6 @@ pub enum Resolved {
         width_px: f32,
         /// Gain on the spill before it is screened on.
         intensity: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    RgbSplit {
-        /// Peak tap offset in raster pixels.
-        amount_px: f32,
-        /// Shift direction, degrees (0° = +x, y-down raster).
-        angle_deg: f32,
-        /// Per-tap displacement scale (FX-9), `[t0, t1, t2]`: each tap shifts
-        /// by `amount_px · scale[t]` — taps 0/1 along −offset, tap 2 along
-        /// +offset. `[1, 0, 1]` is the classic split (the neutral default).
-        scale: [f32; 3],
-        /// The three taps' tints (T17), `[[r,g,b]; 3]`: each tap is sampled in
-        /// full colour and multiplied by its tint, then summed. Defaults red /
-        /// green / blue reproduce the classic channel-separated split bit-for-bit.
-        tints: [[f32; 3]; 3],
-        /// 0..1.
-        mix: f32,
-    },
-    /// The RGB split's Wavelength mode (docs/08 §3.6, K-090): its own
-    /// variant, exactly as Blur's Directional mode is — so the classic
-    /// mode's path stays byte-identical. Chromatic aberration's own
-    /// Wavelength mode (K-144) reuses this variant with `radial: true`.
-    SpectralSplit {
-        /// Peak spectral offset in raster pixels.
-        amount_px: f32,
-        /// Linear-mode shift direction, degrees (0° = +x, y-down raster).
-        angle_deg: f32,
-        /// True: offsets grow from the frame centre instead.
-        radial: bool,
-        /// The number of spectral taps (FX-9/K-144), clamped 3..=64. The taps
-        /// (weight + offset fraction) are rebuilt from this by
-        /// [`super::spectral_taps`] on both the CPU and GPU paths, so the enum
-        /// stays `Copy` and both consume identical numbers.
-        samples: i32,
-        /// The three-colour picker driving the dispersion gradient (A1/K-163):
-        /// `tints[0]` at the −offset end, `tints[1]` at centre, `tints[2]` at
-        /// +offset. `spectral_taps` builds the per-tap colours from these, so
-        /// the picker now controls the Wavelength fringe (default red/green/blue).
-        tints: [[f32; 3]; 3],
-        /// 0..1.
-        mix: f32,
-    },
-    /// Chromatic aberration (docs/08 §3.15): a dedicated, always-radial
-    /// sibling of RGB split's own Radial mode — always centred on the
-    /// frame, no angle or linear mode of its own.
-    ChromaticAberration {
-        /// Peak channel offset in raster pixels, reached at the corner
-        /// distance from the frame centre.
-        amount_px: f32,
-        /// The three radial taps' tints (P2/K-143), `[[r,g,b]; 3]` at
-        /// fractions −1 / 0 / +1. Defaults red / green / blue reproduce the
-        /// classic R-outward / B-inward / G-anchor split bit-for-bit (each
-        /// tint keeps only its own channel of its tap).
-        tints: [[f32; 3]; 3],
         /// 0..1.
         mix: f32,
     },
@@ -349,25 +228,6 @@ pub enum Resolved {
     /// maths are continuous everywhere (no hard step), so the §1.6 oracle holds; the
     /// default green screen colour keys out of the box, and Mix 0 is the identity.
     MatteKey(MatteKeyParams),
-    /// Vignette (docs/08 §3.14): darkens toward black away from the frame
-    /// centre. `radius`/`softness` are read against the Roundness-blended
-    /// distance metric [`cpu::vignette`] computes from `w`/`h` — no raster
-    /// conversion happens here, unlike the %-diag family, because the
-    /// metric is already resolution-relative by construction.
-    Vignette {
-        /// 0..1: darkening strength; 0 is the neutral point.
-        amount: f32,
-        /// 0..1: the clear centre's reach.
-        radius: f32,
-        /// ≥ 0: feather width beyond radius, open above (K-135).
-        softness: f32,
-        /// 0..1: 1 = circular, 0 = follows the frame's aspect.
-        roundness: f32,
-        /// Gamma on the falloff (T16): 1 = plain smoothstep, ≠ 1 curves it.
-        ramp: f32,
-        /// 0..1.
-        mix: f32,
-    },
     Transform {
         /// Anchor point, raster pixels (converted from px@comp, §2.3).
         anchor: [f32; 2],
@@ -696,14 +556,6 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
     }
     for op in ops {
         match op {
-            Resolved::Blur { radius_px, .. } => *radius_px *= f,
-            Resolved::DirBlur { length_px, .. } => *length_px *= f,
-            // Radial blur's centre is a frame fraction; only the legacy
-            // strength is per-frame-relative too. Nothing in pixels.
-            Resolved::RadialBlur { .. } => {}
-            Resolved::Sharpen { radius_px, .. } => *radius_px *= f,
-            // SharpenSimple's radius is a fixed 3x3 kernel scale, not px.
-            Resolved::SharpenSimple { .. } => {}
             Resolved::LightWrap { width_px, .. } => *width_px *= f,
             Resolved::SpriteFlare(p) => {
                 // Every distance the flare draws with is px@comp, so all of
@@ -715,13 +567,7 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
                 p.ghost_size *= f;
                 p.streak_length *= f;
             }
-            Resolved::RgbSplit { amount_px, .. } => *amount_px *= f,
-            Resolved::SpectralSplit { amount_px, .. } => *amount_px *= f,
-            Resolved::ChromaticAberration { amount_px, .. } => *amount_px *= f,
-            Resolved::Flash { .. }
-            | Resolved::MatteKey(_)
-            | Resolved::Vignette { .. }
-            | Resolved::Lut { .. } => {}
+            Resolved::Flash { .. } | Resolved::MatteKey(_) | Resolved::Lut { .. } => {}
             Resolved::Transform {
                 anchor, position, ..
             } => {
@@ -1002,87 +848,6 @@ fn resolve_one(
     // expressions existed.
     let fl = |id: &str| e.float_at_with_context(id, lt, expression_context.clone());
     match e.effect.match_name.as_str() {
-        "blur" => {
-            // Gaussian blur (docs/08 §3.8, K-137). match_name "blur" is kept,
-            // so a project saved with the old mode-driven blur — whatever mode
-            // it stored — loads here as Gaussian at its Radius, byte-identically
-            // (its now-unread mode/length/centre params are simply ignored).
-            // Fixed Repeat edge (K-137 dropped the Gaussian Edges control; 1 was
-            // its default).
-            let radius_pct = fl("radius")? as f32;
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Blur {
-                radius_px: (radius_pct / 100.0 * diag_px).max(0.0),
-                edge: 1,
-                mix,
-            })
-        }
-        "directional_blur" => {
-            // Directional blur (docs/08 §3.8, K-137): Length/Angle only, fixed
-            // Repeat edge (the Edges control is Radial's alone now).
-            let length_pct = fl("length").unwrap_or(0.0) as f32;
-            let angle_deg = fl("angle").unwrap_or(0.0) as f32;
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::DirBlur {
-                length_px: (length_pct / 100.0 * diag_px).max(0.0),
-                angle_deg,
-                edge: 1,
-                mix,
-            })
-        }
-        "radial_blur" => {
-            // Radial blur (docs/08 §3.8, K-137): Centre/Amount/Type, plus the
-            // family's own Edges control (kept only here).
-            let cx = (fl("centre_x").unwrap_or(50.0) / 100.0) as f32;
-            let cy = (fl("centre_y").unwrap_or(50.0) / 100.0) as f32;
-            let amount_pct = fl("amount").unwrap_or(0.0) as f32;
-            let spin = !matches!(e.param("radial_type"), Some(EffectValue::Choice(1)));
-            // The reusable Edges control (P3, K-145): the stored Choice maps
-            // through EdgesMode (clamped to the known set, default Repeat).
-            let edge = match e.param("edge") {
-                Some(EffectValue::Choice(c)) => {
-                    EdgesMode::from_code((*c).min(2)).unwrap_or(EdgesMode::Repeat)
-                }
-                _ => EdgesMode::Repeat,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::RadialBlur {
-                centre_frac: [cx, cy],
-                amount_px: (amount_pct / 100.0 * diag_px).max(0.0),
-                spin,
-                edge: edge.code(),
-                mix,
-            })
-        }
-        "sharpen" => {
-            let amount = (fl("amount")? as f32 / 100.0).clamp(0.0, 3.0);
-            let radius_pct = fl("radius")? as f32;
-            let threshold = (fl("threshold").unwrap_or(0.05) as f32).clamp(0.0, 1.0);
-            let luma_only = match e.param("luminance_only") {
-                Some(EffectValue::Bool(b)) => *b,
-                _ => true,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Sharpen {
-                amount,
-                radius_px: (radius_pct / 100.0 * diag_px).max(0.0),
-                threshold,
-                luma_only,
-                mix,
-            })
-        }
-        "sharpen_simple" => {
-            // The plain 3×3 sharpen (docs/08 §3.9, K-138): Amount is a raw
-            // high-pass strength (not a per-cent), clamped ≥ 0.
-            let amount = (fl("amount")? as f32).max(0.0);
-            let radius = (fl("radius").unwrap_or(1.0) as f32).max(1.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::SharpenSimple {
-                amount,
-                radius,
-                mix,
-            })
-        }
         "sprite_flare" => {
             let tint = e.colour_at("tint", lt).unwrap_or([1.0; 4]);
             Some(Resolved::SpriteFlare(crate::fx::cpu::SpriteFlareParams {
@@ -1123,104 +888,6 @@ fn resolve_one(
                 width_px,
                 intensity,
                 mix,
-            })
-        }
-        "rgb_split" => {
-            let amount_pct = fl("amount")? as f32;
-            let angle_deg = fl("angle").unwrap_or(0.0) as f32;
-            // Instances saved before the Wavelength mode existed carry
-            // no such parameter and resolve as the classic split.
-            let wavelength = match e.param("wavelength") {
-                Some(EffectValue::Bool(b)) => *b,
-                _ => false,
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            let amount_px = (amount_pct / 100.0 * diag_px).max(0.0);
-            // The three tap tints (T17/K-161): absent on pre-feature projects →
-            // the classic red / green / blue, which reproduce the historical
-            // channel-separated split and, in Wavelength mode (A1/K-163), a
-            // red→green→blue dispersion.
-            let tint = |id: &str, default: [f64; 4]| -> [f32; 3] {
-                let c = e.colour_at(id, lt).unwrap_or(default);
-                [c[0] as f32, c[1] as f32, c[2] as f32]
-            };
-            let tints = [
-                tint("channel_colour_1", [1.0, 0.0, 0.0, 1.0]),
-                tint("channel_colour_2", [0.0, 1.0, 0.0, 1.0]),
-                tint("channel_colour_3", [0.0, 0.0, 1.0, 1.0]),
-            ];
-            Some(if wavelength {
-                // Wavelength mode ignores the per-tap scales; its tap count is
-                // the Samples parameter (absent on pre-feature projects → the
-                // default 16, denser than the historical 9). RGB split is now
-                // linear-only (T17), so the spectral sibling is never radial here.
-                // The picker drives the dispersion gradient (A1/K-163).
-                let samples = fl("samples").unwrap_or(16.0).round() as i32;
-                Resolved::SpectralSplit {
-                    amount_px,
-                    angle_deg,
-                    radial: false,
-                    samples,
-                    tints,
-                    mix,
-                }
-            } else {
-                // Per-tap scales (FX-9): per cent → factor. Absent on
-                // pre-feature projects → the classic 1 / 0 / 1 defaults.
-                let scale = |id: &str, default: f64| (fl(id).unwrap_or(default) / 100.0) as f32;
-                Resolved::RgbSplit {
-                    amount_px,
-                    angle_deg,
-                    scale: [
-                        scale("red_amount", 100.0),
-                        scale("green_amount", 0.0),
-                        scale("blue_amount", 100.0),
-                    ],
-                    // Normalised per channel (K-167): aligned regions pass
-                    // through unchanged; the picker tints only the fringes.
-                    tints: super::normalise_tint_columns(tints),
-                    mix,
-                }
-            })
-        }
-        "chromatic_aberration" => {
-            let amount_px = (fl("amount").unwrap_or(4.0) as f32 * px_scale).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            // Wavelength mode (K-144) reuses RGB split's spectral machinery as
-            // a radial spectral split; off (and absent on pre-feature
-            // projects) keeps the three tinted radial taps.
-            let wavelength = matches!(e.param("wavelength"), Some(EffectValue::Bool(true)));
-            // The three channel colours (P2/K-143): absent on pre-feature
-            // projects → the classic red / green / blue, which reproduce the
-            // historical R-outward / B-inward / G-anchor split and, in Wavelength
-            // mode (A1/K-163), a red→green→blue dispersion.
-            let tint = |id: &str, default: [f64; 4]| -> [f32; 3] {
-                let c = e.colour_at(id, lt).unwrap_or(default);
-                [c[0] as f32, c[1] as f32, c[2] as f32]
-            };
-            let tints = [
-                tint("channel_colour_1", [1.0, 0.0, 0.0, 1.0]),
-                tint("channel_colour_2", [0.0, 1.0, 0.0, 1.0]),
-                tint("channel_colour_3", [0.0, 0.0, 1.0, 1.0]),
-            ];
-            Some(if wavelength {
-                let samples = fl("samples").unwrap_or(16.0).round() as i32;
-                Resolved::SpectralSplit {
-                    amount_px,
-                    angle_deg: 0.0,
-                    radial: true,
-                    samples,
-                    tints,
-                    mix,
-                }
-            } else {
-                Resolved::ChromaticAberration {
-                    amount_px,
-                    // Normalised per channel (K-167), like RGB split's classic
-                    // mode: only the misaligned fringes take the colours.
-                    tints: super::normalise_tint_columns(tints),
-                    mix,
-                }
             })
         }
         "flash" => {
@@ -1305,24 +972,6 @@ fn resolve_one(
                 replace_colour: colour("replace_colour", [0.5, 0.5, 0.5, 1.0]),
                 mix,
             }))
-        }
-        "vignette" => {
-            let amount = (fl("amount").unwrap_or(0.5) as f32).clamp(0.0, 1.0);
-            let radius = (fl("radius").unwrap_or(0.75) as f32).clamp(0.0, 1.0);
-            // Floored at 0, open above (K-135): softness > 1 is a legal wider
-            // feather in the normalised metric, no upper clamp.
-            let softness = (fl("softness").unwrap_or(0.5) as f32).max(0.0);
-            let roundness = (fl("roundness").unwrap_or(1.0) as f32).clamp(0.0, 1.0);
-            let ramp = (fl("ramp").unwrap_or(1.0) as f32).max(0.05);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Vignette {
-                amount,
-                radius,
-                softness,
-                roundness,
-                ramp,
-                mix,
-            })
         }
         "lut" => {
             // Only Mix is Copy-carried; the `.cube` file's parsed cube is a

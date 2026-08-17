@@ -9814,3 +9814,23 @@ shape contents, text, paint, and the Viewer gizmos.
 mid-drag with the button still down keeps the coarse frame until release. That
 needs a per-gesture idle timer at every drag call site, which is a new mechanism
 for a case the release already covers a moment later.
+
+## K-384 — Radial blur's Amount rescales with the preview raster, because it was always pixels
+
+**DECIDED** (2026-08-17). The one output change in the registry migration's blur batch,
+recorded on its own because **no effect's maths changes in this refactor** is the batch
+rule (docs/impl/effect-registry.md §6) and this is the exception that proves it.
+
+The old `rescale_px` listed Radial blur as "nothing in pixels" and left `amount_px`
+alone — but `amount_px` is raster pixels, and the kernel divides it by the actual
+raster's half-diagonal. So a stack resolved at comp size and re-run on a reduced
+preview blurred too far by the inverse of the preview factor: a K-266 miss, invisible
+at full size and on every oracle (which render one raster), visible as a preview that
+blurs harder than the export.
+
+Declaring the parameter's true unit (`PctDiag`) fixes it structurally: the resolve
+step converts, the generic rescale moves every spatial value, and the old behaviour
+is no longer expressible — which is also why this rode the migration commit rather
+than landing as the two commits §6 asks for. The unit system cannot state the bug.
+`the_stylise_family_rescales_once_in_each_unit` and
+`a_migrated_spatial_parameter_rescales_as_the_old_op_did` pin the corrected rule.

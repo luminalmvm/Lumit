@@ -3525,8 +3525,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each generated entry against the hand-written one it replaces and fails if they differ by
   so much as a default value — which is what makes it a move rather than a rewrite.
 
-  The first batch — the ten colour effects (Colour balance, Saturation, Vibrancy, Exposure,
-  Hue shift, Contrast, Gamma, Temperature, Invert, Tint) — has moved. While the rest catch up, a
+  Eighteen effects have moved so far, in three batches: the ten colour ones first (Colour
+  balance, Saturation, Vibrancy, Exposure, Hue shift, Contrast, Gamma, Temperature, Invert,
+  Tint), then the five blur ones (Gaussian blur, Directional blur, Radial blur, Sharpen,
+  Simple sharpen), then Vignette, RGB split and Chromatic aberration. While the rest catch up, a
   layer's stack is read **two ways at once**: the effects that have moved keep their
   controls in the shared list of numbers, and the ones that haven't still have a slot each.
   A single ordered list decides what runs when, so an effect that has moved and one that

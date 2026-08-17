@@ -359,15 +359,14 @@ fn instantiate_carries_declared_defaults() {
 fn resolve_stack_evaluates_converts_and_skips_dead_effects() {
     let mut e = instantiate("blur").unwrap();
     // 1.5% of a 1000px diagonal = 15px.
-    let r = resolve_stack(&[e.clone()], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Blur {
-            radius_px: 15.0,
-            edge: 1,
-            mix: 1.0
-        }]
+    let b = resolve_migrated::<effects::blur::Blur>(
+        &[e.clone()],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
     );
+    assert_eq!(b.packed(), (15.0, 1, 1.0));
     e.enabled = false;
     assert!(resolve_stack(&[e.clone()], 0.0, 1000.0, 1.0, &MarkerContext::NONE).is_empty());
     e.enabled = true;
@@ -443,32 +442,27 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
             p.value = EffectValue::Float(ramp.clone());
         }
     }
-    let radius_of = |r: &[Resolved]| match r.first() {
-        Some(Resolved::Blur { radius_px, .. }) => *radius_px,
-        _ => panic!("expected a blur"),
-    };
+    // Blur has moved to the registry, so its radius comes back out of the
+    // arena through its own typed reader rather than out of a variant.
+    fn radius_of(e: &EffectInstance) -> f32 {
+        let ops = super::resolve_stack_temporal(
+            std::slice::from_ref(e),
+            0.2,
+            0.8,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let fx = ops.bags.get(0).expect("the blur op");
+        effects::blur::Blur::read(fx.params).radius
+    }
     // Sample time 0.2 (radius 20% → 200px of a 1000px diagonal), frame time 0.8
     // (80% → 800px). With the flag ON (the default) the effect samples the held
     // time; with it OFF it holds at the frame time.
-    let sampled = resolve_stack_temporal(
-        std::slice::from_ref(&e),
-        0.2,
-        0.8,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert!((radius_of(&sampled) - 200.0).abs() < 0.01);
+    assert!((radius_of(&e) - 200.0).abs() < 0.01);
     e.sample_temporally = false;
-    let held = resolve_stack_temporal(
-        std::slice::from_ref(&e),
-        0.2,
-        0.8,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert!((radius_of(&held) - 800.0).abs() < 0.01);
+    assert!((radius_of(&e) - 800.0).abs() < 0.01);
     // Equal times ⇒ byte-identical to resolve_stack (ordinary render unchanged),
     // whatever the flag.
     assert_eq!(
@@ -1348,17 +1342,9 @@ fn sharpen_instantiates_and_resolves() {
         Some(EffectValue::Bool(true))
     ));
     // 0.4% of a 1000px diagonal = 4px; amount 60% = 0.6.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Sharpen {
-            amount: 0.6,
-            radius_px: 4.0,
-            threshold: 0.05,
-            luma_only: true,
-            mix: 1.0
-        }]
-    );
+    let s =
+        resolve_migrated::<effects::sharpen::Sharpen>(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(s.packed(), (0.6, 4.0, 0.05, true, 1.0));
 }
 
 /// A step edge for sharpen tests: left half dark, right half bright,
@@ -1476,16 +1462,22 @@ fn rgb_split_instantiates_and_resolves() {
         Some([0.0, 0.0, 1.0, 1.0])
     );
     // 0.4% of a 1000px diagonal = 4px.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    let s = resolve_migrated::<effects::rgb_split::RgbSplit>(
+        &[e],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
     assert_eq!(
-        r,
-        vec![Resolved::RgbSplit {
+        s.packed(),
+        effects::rgb_split::Split::Classic {
             amount_px: 4.0,
             angle_deg: 0.0,
             scale: [1.0, 0.0, 1.0],
-            tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 }
 
@@ -1502,44 +1494,40 @@ fn rgb_split_per_channel_amounts_scale_each_channel() {
             _ => {}
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
+    let split = |e: &EffectInstance| {
+        resolve_migrated::<effects::rgb_split::RgbSplit>(
+            std::slice::from_ref(e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        )
+        .packed()
+    };
     assert_eq!(
-        r,
-        vec![Resolved::RgbSplit {
+        split(&e),
+        effects::rgb_split::Split::Classic {
             amount_px: 4.0,
             angle_deg: 0.0,
             scale: [1.5, -0.5, 0.0],
-            tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 
     // A legacy instance missing the per-tap params still resolves to the
     // classic 1 / 0 / 1 scales and red / green / blue tints.
     e.params
         .retain(|p| !matches!(p.id.as_str(), "red_amount" | "green_amount" | "blue_amount"));
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::RgbSplit {
+        split(&e),
+        effects::rgb_split::Split::Classic {
             amount_px: 4.0,
             angle_deg: 0.0,
             scale: [1.0, 0.0, 1.0],
-            tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 }
 
@@ -1615,59 +1603,47 @@ fn rgb_split_wavelength_bool_selects_the_variant() {
         e.param("wavelength"),
         Some(EffectValue::Bool(false))
     ));
-    let classic = Resolved::RgbSplit {
+    let classic = effects::rgb_split::Split::Classic {
         amount_px: 4.0,
         angle_deg: 0.0,
         scale: [1.0, 0.0, 1.0],
-        tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        tints: RGB_TINTS,
         mix: 1.0,
     };
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(r, vec![classic]);
+    let split = |e: &EffectInstance| {
+        resolve_migrated::<effects::rgb_split::RgbSplit>(
+            std::slice::from_ref(e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        )
+        .packed()
+    };
+    assert_eq!(split(&e), classic);
 
-    // Wavelength on: the same numbers arrive as SpectralSplit, carrying the
+    // Wavelength on: the same numbers pack as the spectral mode, carrying the
     // default Samples (16).
     for p in &mut e.params {
         if p.id == "wavelength" {
             p.value = EffectValue::Bool(true);
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::SpectralSplit {
+        split(&e),
+        effects::rgb_split::Split::Spectral {
             amount_px: 4.0,
             angle_deg: 0.0,
-            radial: false,
             samples: 16,
-            tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 
     // A legacy instance (saved before the Bool existed) has no
     // wavelength parameter and still resolves as the classic split.
     e.params.retain(|p| p.id != "wavelength");
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(r, vec![classic]);
+    assert_eq!(split(&e), classic);
 }
 
 /// The default channel tints — red / green / blue — that reproduce the
@@ -1697,15 +1673,26 @@ fn chromatic_aberration_instantiates_and_resolves() {
     ));
     // px@comp, not % diag: diag_px does not enter the conversion, unlike
     // rgb_split's own Amount — only the preview-resolution px_scale does.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(
-        r,
-        vec![Resolved::ChromaticAberration {
+        chromatic_fringe(&e, 1.0),
+        effects::chromatic_aberration::Fringe::Classic {
             amount_px: 4.0,
             tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
+}
+
+/// One chromatic aberration instance's packed form at preview factor `px_scale`.
+fn chromatic_fringe(e: &EffectInstance, px_scale: f32) -> effects::chromatic_aberration::Fringe {
+    resolve_migrated::<effects::chromatic_aberration::ChromaticAberration>(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        px_scale,
+        &MarkerContext::NONE,
+    )
+    .packed()
 }
 
 #[test]
@@ -1713,14 +1700,13 @@ fn chromatic_aberration_amount_scales_with_the_preview_factor() {
     let e = instantiate("chromatic_aberration").unwrap();
     // Half preview (px_scale 0.5): px@comp parameters scale down with
     // it, exactly like Glitch's Block size (§2.3).
-    let r = resolve_stack(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
     assert_eq!(
-        r,
-        vec![Resolved::ChromaticAberration {
+        chromatic_fringe(&e, 0.5),
+        effects::chromatic_aberration::Fringe::Classic {
             amount_px: 2.0,
             tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 }
 
@@ -1736,23 +1722,14 @@ fn chromatic_aberration_wavelength_reuses_the_spectral_split() {
             _ => {}
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::SpectralSplit {
+        chromatic_fringe(&e, 1.0),
+        effects::chromatic_aberration::Fringe::Spectral {
             amount_px: 4.0,
-            angle_deg: 0.0,
-            radial: true,
             samples: 32,
-            tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 }
 
@@ -1809,14 +1786,15 @@ fn wavelength_mode_honours_the_channel_picker() {
             _ => {}
         }
     }
-    let r = resolve_stack(
+    let packed = resolve_migrated::<effects::rgb_split::RgbSplit>(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
-    );
-    let Resolved::SpectralSplit { tints, .. } = r[0] else {
+    )
+    .packed();
+    let effects::rgb_split::Split::Spectral { tints, .. } = packed else {
         panic!("expected a spectral split");
     };
     assert_eq!(tints[0], [1.0, 1.0, 0.0], "colour 1 → yellow end");
@@ -1839,16 +1817,9 @@ fn chromatic_aberration_custom_channel_colours_resolve_as_tints() {
             ]);
         }
     }
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::ChromaticAberration {
+        chromatic_fringe(&e, 1.0),
+        effects::chromatic_aberration::Fringe::Classic {
             amount_px: 4.0,
             // Normalised per channel (K-167): r column 1 + 0.5 → 2/3, 1/3;
             // g column 0.25 alone → 1; b column 0.75 + 1 → 3/7, 4/7.
@@ -1858,24 +1829,17 @@ fn chromatic_aberration_custom_channel_colours_resolve_as_tints() {
                 [0.0, 0.0, 1.0 / 1.75]
             ],
             mix: 1.0
-        }]
+        }
     );
 
     e.params.retain(|p| !p.id.starts_with("channel_colour_"));
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
     assert_eq!(
-        r,
-        vec![Resolved::ChromaticAberration {
+        chromatic_fringe(&e, 1.0),
+        effects::chromatic_aberration::Fringe::Classic {
             amount_px: 4.0,
             tints: RGB_TINTS,
             mix: 1.0
-        }]
+        }
     );
 }
 
@@ -2718,24 +2682,17 @@ fn vignette_instantiates_and_resolves() {
     assert_eq!(e.float_at("radius", 0.0), Some(0.75));
     assert_eq!(e.float_at("softness", 0.0), Some(0.5));
     assert_eq!(e.float_at("roundness", 0.0), Some(1.0));
-    let r = resolve_stack(
-        std::slice::from_ref(&e),
-        0.0,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-    );
-    assert_eq!(
-        r,
-        vec![Resolved::Vignette {
-            amount: 0.5,
-            radius: 0.75,
-            softness: 0.5,
-            roundness: 1.0,
-            ramp: 1.0,
-            mix: 1.0,
-        }]
-    );
+    let packed = |e: &EffectInstance| {
+        resolve_migrated::<effects::vignette::Vignette>(
+            std::slice::from_ref(e),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        )
+        .packed()
+    };
+    assert_eq!(packed(&e), (0.5, 0.75, 0.5, 1.0, 1.0, 1.0));
 
     // K-135: Softness is open above, so 1.5 resolves un-clamped (Amount,
     // Radius and Roundness keep their 0..1 caps).
@@ -2755,17 +2712,7 @@ fn vignette_instantiates_and_resolves() {
             p.value = EffectValue::Float(Property::fixed(1.5));
         }
     }
-    assert_eq!(
-        resolve_stack(&[wide], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Vignette {
-            amount: 0.5,
-            radius: 0.75,
-            softness: 1.5,
-            roundness: 1.0,
-            ramp: 1.0,
-            mix: 1.0,
-        }]
-    );
+    assert_eq!(packed(&wide), (0.5, 0.75, 1.5, 1.0, 1.0, 1.0));
 }
 
 #[test]
@@ -3108,41 +3055,27 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         gaussian.param("mode").is_none(),
         "the mode control is gone (K-137)"
     );
-    let r = resolve_stack(
+    let b = resolve_migrated::<effects::blur::Blur>(
         std::slice::from_ref(&gaussian),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::Blur {
-            radius_px: 15.0, // 1.5% of a 1000px diagonal
-            edge: 1,
-            mix: 1.0
-        }]
-    );
+    // 1.5% of a 1000px diagonal = 15px.
+    assert_eq!(b.packed(), (15.0, 1, 1.0));
 
     // Directional blur reads Length/Angle (10% of 1000 = 100px), fixed Repeat.
     let dir = instantiate("directional_blur").unwrap();
     assert_eq!(dir.float_at("length", 0.0), Some(10.0));
-    let r = resolve_stack(
+    let d = resolve_migrated::<effects::directional_blur::DirectionalBlur>(
         std::slice::from_ref(&dir),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::DirBlur {
-            length_px: 100.0,
-            angle_deg: 0.0,
-            edge: 1,
-            mix: 1.0
-        }]
-    );
+    assert_eq!(d.packed(), (100.0, 0.0, 1, 1.0));
 
     // Radial blur reads Centre/Amount/Type/Edges: Centre resolves to a
     // *fraction* (30/70%, unconverted — resolve_stack has no width/height to
@@ -3156,23 +3089,14 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
             _ => {}
         }
     }
-    let r = resolve_stack(
+    let rb = resolve_migrated::<effects::radial_blur::RadialBlur>(
         std::slice::from_ref(&radial),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::RadialBlur {
-            centre_frac: [0.3, 0.7],
-            amount_px: 80.0,
-            spin: true,
-            edge: 1,
-            mix: 1.0
-        }]
-    );
+    assert_eq!(rb.packed(), ([0.3, 0.7], 80.0, true, 1, 1.0));
 
     // The Type choice flips Spin/Zoom; Edges is honoured (Mirror = 2).
     for p in &mut radial.params {
@@ -3182,21 +3106,31 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
             _ => {}
         }
     }
-    let r = resolve_stack(
+    let rb = resolve_migrated::<effects::radial_blur::RadialBlur>(
         std::slice::from_ref(&radial),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert!(matches!(
-        r[..],
-        [Resolved::RadialBlur {
-            spin: false,
-            edge: 2,
-            ..
-        }]
-    ));
+    let (_, _, spin, edge, _) = rb.packed();
+    assert!(!spin, "Type 1 is Zoom");
+    assert_eq!(edge, 2, "Edges Mirror is honoured");
+    // An out-of-range Choice clamps to Mirror rather than falling back, exactly
+    // as the old arm's `(*c).min(2)` did.
+    for p in &mut radial.params {
+        if p.id == "edge" {
+            p.value = EffectValue::Choice(9);
+        }
+    }
+    let rb = resolve_migrated::<effects::radial_blur::RadialBlur>(
+        std::slice::from_ref(&radial),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(rb.packed().3, 2);
 
     // A project saved with the old combined blur (a "blur" instance carrying
     // mode/length/angle/edge) loads as Gaussian at its Radius — the leftover
@@ -3212,21 +3146,15 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         value: EffectValue::Choice(0),
         extra: serde_json::Map::new(),
     });
-    let r = resolve_stack(
+    let b = resolve_migrated::<effects::blur::Blur>(
         std::slice::from_ref(&legacy),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::Blur {
-            radius_px: 15.0,
-            edge: 1, // fixed Repeat, not the stored edge
-            mix: 1.0
-        }]
-    );
+    // Fixed Repeat, not the stored edge.
+    assert_eq!(b.packed(), (15.0, 1, 1.0));
 }
 
 #[test]
@@ -3237,23 +3165,26 @@ fn sharpen_simple_instantiates_and_resolves() {
     assert_eq!(e.effect.match_name, "sharpen_simple");
     assert_eq!(e.float_at("amount", 0.0), Some(1.0));
     assert_eq!(e.float_at("mix", 0.0), Some(100.0));
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::SharpenSimple {
-            amount: 1.0,
-            radius: 1.0,
-            mix: 1.0
-        }]
+    let s = resolve_migrated::<effects::sharpen_simple::SharpenSimple>(
+        &[e],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
     );
+    assert_eq!(s.packed(), (1.0, 1.0, 1.0));
 
     // The Unsharp mask keeps its own match_name and resolves as before.
     let unsharp = instantiate("sharpen").unwrap();
     assert_eq!(unsharp.effect.match_name, "sharpen");
-    assert!(matches!(
-        resolve_stack(&[unsharp], 0.0, 1000.0, 1.0, &MarkerContext::NONE)[..],
-        [Resolved::Sharpen { .. }]
-    ));
+    let u = resolve_migrated::<effects::sharpen::Sharpen>(
+        &[unsharp],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(u.packed(), (0.6, 4.0, 0.05, true, 1.0));
 }
 
 #[test]
@@ -5909,9 +5840,9 @@ fn lens_flare_custom_lens_file_overrides_and_degrades() {
 fn resolved_px_fields_rescale_for_a_different_raster() {
     use crate::fx::{rescale_px, Resolved};
     let mut ops = vec![
-        Resolved::Blur {
-            radius_px: 10.0,
-            edge: 0,
+        Resolved::LightWrap {
+            width_px: 10.0,
+            intensity: 1.0,
             mix: 1.0,
         },
         Resolved::LensFlare(crate::fx::lens_flare::LensFlareParams {
@@ -5921,8 +5852,13 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
     ];
     rescale_px(&mut ops, 0.5);
     match &ops[0] {
-        Resolved::Blur { radius_px, mix, .. } => {
-            assert_eq!(*radius_px, 5.0, "px fields scale");
+        Resolved::LightWrap {
+            width_px,
+            intensity,
+            mix,
+        } => {
+            assert_eq!(*width_px, 5.0, "px fields scale");
+            assert_eq!(*intensity, 1.0, "unitless fields do not");
             assert_eq!(*mix, 1.0, "unitless fields do not");
         }
         other => panic!("unexpected {other:?}"),
@@ -5935,14 +5871,14 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
         other => panic!("unexpected {other:?}"),
     }
     // Factor 1 is exactly a no-op.
-    let mut same = vec![Resolved::Blur {
-        radius_px: 7.0,
-        edge: 0,
+    let mut same = vec![Resolved::LightWrap {
+        width_px: 7.0,
+        intensity: 1.0,
         mix: 1.0,
     }];
     rescale_px(&mut same, 1.0);
     match &same[0] {
-        Resolved::Blur { radius_px, .. } => assert_eq!(*radius_px, 7.0),
+        Resolved::LightWrap { width_px, .. } => assert_eq!(*width_px, 7.0),
         other => panic!("unexpected {other:?}"),
     }
 }
@@ -8819,11 +8755,13 @@ fn withdrawing_an_op_leaves_no_parameters_behind() {
 #[test]
 fn only_spatial_values_rescale() {
     // The colour family declares no spatial parameters, so a rescale is a no-op
-    // for it. (The batch that migrates the blur family extends this with the
-    // radius that *does* move — docs/impl/effect-registry.md §7 test 4.)
+    // for it; the blur family's radius is the first that does move.
     let mut stack = ResolvedStack::new();
     stack.begin(&effects::exposure::ExposureDef, Uuid::now_v7());
     stack.push(effects::exposure::Exposure::STOPS, Value::Float(2.0));
+    stack.begin(&effects::blur::BlurDef, Uuid::now_v7());
+    stack.push(effects::blur::Blur::RADIUS, Value::Float(10.0));
+    stack.push(effects::blur::Blur::MIX, Value::Float(80.0));
     stack.rescale_spatial(0.5);
     let op = stack.get(0).expect("the op");
     assert_eq!(
@@ -8831,10 +8769,196 @@ fn only_spatial_values_rescale() {
         2.0,
         "stops are not a length and must not follow the raster"
     );
-    assert!(BUILTIN_DEFS
+    let blur = stack.get(1).expect("the blur op");
+    assert_eq!(
+        blur.params.float(effects::blur::Blur::RADIUS, 0.0),
+        5.0,
+        "a PctDiag radius resolved to pixels follows the raster"
+    );
+    assert_eq!(
+        blur.params.float(effects::blur::Blur::MIX, 0.0),
+        80.0,
+        "the Mix is not a length"
+    );
+}
+
+/// docs/impl/effect-registry.md §7 test 4, deferred from the plumbing stage: a
+/// spatial parameter in the arena rescales under [`ResolvedOps::rescale_px`]
+/// **exactly** as the old `Resolved` op did.
+///
+/// This is the one property the migration could silently lose. K-266's repair —
+/// a stack resolved against the comp raster and then run on a smaller preview
+/// target — reaches the arena through `ResolvedOps::rescale_px`, which calls
+/// both halves; if a blur declared `Unit::Raw` it would render at full-size
+/// radii on a half-size preview, which is precisely the bug that was fixed for
+/// the flare. So the golden values are written out: the old table said "radius
+/// scales, mix does not", and both are checked through the public entry point
+/// rather than through `rescale_spatial` directly.
+#[test]
+fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
+    // 1.5 % of a 1000 px diagonal = 15 px, the comp-raster resolve.
+    let e = instantiate("blur").expect("blur is a built-in");
+    let mut ops = super::resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    let radius = |ops: &super::ResolvedOps| -> f32 {
+        effects::blur::Blur::read(ops.bags.get(0).expect("the blur op").params)
+            .packed()
+            .0
+    };
+    assert_eq!(radius(&ops), 15.0);
+
+    // Half-resolution preview: the old `rescale_px` multiplied `radius_px` by
+    // the factor, and so must the arena.
+    ops.rescale_px(0.5);
+    assert_eq!(radius(&ops), 7.5, "the radius follows the preview raster");
+    assert_eq!(
+        effects::blur::Blur::read(ops.bags.get(0).expect("the blur op").params)
+            .packed()
+            .2,
+        1.0,
+        "the Mix does not"
+    );
+
+    // Resolving directly against the smaller raster must land in the same
+    // place — which is the whole point of the correction (K-266).
+    let direct = super::resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        500.0,
+        0.5,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    assert_eq!(radius(&direct), radius(&ops));
+
+    // Factor 1 is exactly a no-op, as it was for the variants.
+    let mut same = super::resolve_stack(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    same.rescale_px(1.0);
+    assert_eq!(radius(&same), 15.0);
+}
+
+/// The stylise family's own half of the same property, for **both** spatial
+/// units: RGB split's Amount is `PctDiag` (divided by 100 and multiplied by the
+/// diagonal at resolve) and chromatic aberration's is `Px` (multiplied by the
+/// preview factor at resolve). Each must be scaled **exactly once** on the way
+/// in and exactly once again by [`ResolvedOps::rescale_px`] — which is what the
+/// old arms and `rescale_px` did between them.
+///
+/// The failure this pins is silent: declaring the unit *and* converting again in
+/// `packed` would multiply twice, and a half-resolution preview would fringe at
+/// a quarter of the width the export does with nothing on screen to say so.
+#[test]
+fn the_stylise_family_rescales_once_in_each_unit() {
+    let resolve = |name: &str, px_scale: f32| {
+        let e = instantiate(name).unwrap_or_else(|| panic!("{name} is a built-in"));
+        super::resolve_stack(
+            &[e],
+            0.0,
+            1000.0,
+            px_scale,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+    };
+    // RGB split, % diag: 0.4 % of a 1000 px diagonal is 4 px.
+    let amount = |ops: &super::ResolvedOps| -> f32 {
+        match effects::rgb_split::RgbSplit::read(ops.bags.get(0).expect("the op").params).packed() {
+            effects::rgb_split::Split::Classic { amount_px, .. } => amount_px,
+            other => panic!("expected the classic split, got {other:?}"),
+        }
+    };
+    let mut ops = resolve("rgb_split", 1.0);
+    assert_eq!(amount(&ops), 4.0);
+    ops.rescale_px(0.5);
+    assert_eq!(amount(&ops), 2.0, "% diag follows the preview raster");
+
+    // Chromatic aberration, px@comp: the authored 4 px, scaled by the preview
+    // factor at resolve and by the repair factor afterwards — once each, so a
+    // half-resolution resolve followed by a further halving is a quarter of the
+    // authored width, not an eighth.
+    let ca = |ops: &super::ResolvedOps| -> f32 {
+        match effects::chromatic_aberration::ChromaticAberration::read(
+            ops.bags.get(0).expect("the op").params,
+        )
+        .packed()
+        {
+            effects::chromatic_aberration::Fringe::Classic { amount_px, .. } => amount_px,
+            other => panic!("expected the classic fringe, got {other:?}"),
+        }
+    };
+    let mut full = resolve("chromatic_aberration", 1.0);
+    assert_eq!(ca(&full), 4.0);
+    full.rescale_px(0.5);
+    assert_eq!(ca(&full), 2.0, "px@comp follows the preview raster");
+    // Resolving directly against the smaller raster lands in the same place —
+    // the whole point of the K-266 correction.
+    assert_eq!(ca(&resolve("chromatic_aberration", 0.5)), ca(&full));
+    let mut half = resolve("chromatic_aberration", 0.5);
+    half.rescale_px(0.5);
+    assert_eq!(ca(&half), 1.0, "scaled once at resolve, once by the repair");
+    // Factor 1 is exactly a no-op, as it was for the variants.
+    let mut same = resolve("chromatic_aberration", 1.0);
+    same.rescale_px(1.0);
+    assert_eq!(ca(&same), 4.0);
+}
+
+/// Every parameter the catalogue declares says what its number means, and only
+/// the two raster-following units are treated as lengths — the guard that stops
+/// a spatial parameter being declared `Raw` and quietly skipping the rescale.
+#[test]
+fn every_parameter_declares_a_unit() {
+    let spatial: Vec<(&str, &str)> = BUILTIN_DEFS
         .iter()
-        .flat_map(|d| d.schema().params)
-        .all(|p| !p.unit.is_spatial()));
+        .flat_map(|d| {
+            d.schema()
+                .params
+                .iter()
+                .map(move |p| (d.schema().match_name, p))
+        })
+        .filter(|(_, p)| p.unit.is_spatial())
+        .map(|(name, p)| (name, p.id))
+        .collect();
+    // The blur family's %-diagonal lengths, RGB split's own, and chromatic
+    // aberration's px@comp Amount — nothing else. Radial blur's Centre is a
+    // fraction of the frame, Sharpen's neighbour distance is a kernel stride,
+    // and every Vignette distance is read in a metric derived from the raster's
+    // own w/h, so none of them follows the raster — exactly what the old
+    // `rescale_px` match said about them.
+    assert_eq!(
+        spatial,
+        vec![
+            ("blur", "radius"),
+            ("directional_blur", "length"),
+            ("radial_blur", "amount"),
+            ("sharpen", "radius"),
+            ("rgb_split", "amount"),
+            ("chromatic_aberration", "amount"),
+        ]
+    );
+    // The two units are not interchangeable: % diag divides by the diagonal,
+    // px@comp multiplies by the preview factor, and declaring the wrong one
+    // renders the right effect at the wrong size.
+    let unit_of = |name: &str, id: &str| {
+        BUILTIN_DEFS
+            .get(name)
+            .and_then(|d| d.schema().params.iter().find(|p| p.id == id))
+            .map(|p| p.unit)
+    };
+    assert_eq!(unit_of("rgb_split", "amount"), Some(Unit::PctDiag));
+    assert_eq!(unit_of("chromatic_aberration", "amount"), Some(Unit::Px));
 }
 
 /// Two kinds holding the same number must not hash alike, or a Choice of 1 and a

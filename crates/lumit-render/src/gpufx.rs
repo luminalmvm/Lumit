@@ -48,9 +48,17 @@ pub trait GpuEffect: Sync + 'static {
 /// menu reads the catalogue, not this), so it follows the catalogue's for the
 /// benefit of anyone reading the two side by side.
 static GPU_EFFECTS: &[&dyn GpuEffect] = &[
+    &Blur,
+    &DirectionalBlur,
+    &RadialBlur,
+    &Sharpen,
+    &SharpenSimple,
+    &RgbSplit,
+    &ChromaticAberration,
     &ColourBalance,
     &Saturation,
     &Vibrancy,
+    &Vignette,
     &Exposure,
     &HueShift,
     &Contrast,
@@ -77,6 +85,296 @@ pub fn gpu_effect(match_name: &str) -> Option<&'static dyn GpuEffect> {
 /// catalogue.
 pub fn gpu_effect_names() -> impl Iterator<Item = &'static str> {
     GPU_EFFECTS.iter().map(|g| g.match_name())
+}
+
+struct Blur;
+impl GpuEffect for Blur {
+    fn match_name(&self) -> &'static str {
+        "blur"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (radius_px, edge, mix) = effects::blur::Blur::read(p).packed();
+        fx.blur(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BlurOp {
+                radius_px,
+                edge,
+                mix,
+            },
+        )
+    }
+}
+
+struct DirectionalBlur;
+impl GpuEffect for DirectionalBlur {
+    fn match_name(&self) -> &'static str {
+        "directional_blur"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (length_px, angle_deg, edge, mix) =
+            effects::directional_blur::DirectionalBlur::read(p).packed();
+        // The unit direction and the tap count are derived here exactly as the
+        // old `run_ops` arm derived them, from the same two numbers the CPU
+        // reference derives them from.
+        let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, angle_deg);
+        fx.dir_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::DirBlurOp {
+                dx,
+                dy,
+                length_px,
+                taps: lumit_core::fx::cpu::dir_blur_taps(length_px),
+                edge,
+                mix,
+            },
+        )
+    }
+}
+
+struct RadialBlur;
+impl GpuEffect for RadialBlur {
+    fn match_name(&self) -> &'static str {
+        "radial_blur"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (centre_frac, amount_px, spin, edge, mix) =
+            effects::radial_blur::RadialBlur::read(p).packed();
+        fx.radial_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::RadialBlurOp {
+                centre_frac,
+                amount_px,
+                taps: lumit_core::fx::cpu::radial_blur_taps(amount_px),
+                spin,
+                edge,
+                mix,
+            },
+        )
+    }
+}
+
+struct Sharpen;
+impl GpuEffect for Sharpen {
+    fn match_name(&self) -> &'static str {
+        "sharpen"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (amount, radius_px, threshold, luma_only, mix) =
+            effects::sharpen::Sharpen::read(p).packed();
+        fx.sharpen(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::SharpenOp {
+                amount,
+                radius_px,
+                threshold,
+                luma_only,
+                mix,
+            },
+        )
+    }
+}
+
+struct SharpenSimple;
+impl GpuEffect for SharpenSimple {
+    fn match_name(&self) -> &'static str {
+        "sharpen_simple"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (amount, radius, mix) = effects::sharpen_simple::SharpenSimple::read(p).packed();
+        fx.sharpen_simple(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::SharpenSimpleOp {
+                amount,
+                radius,
+                mix,
+            },
+        )
+    }
+}
+
+struct RgbSplit;
+impl GpuEffect for RgbSplit {
+    fn match_name(&self) -> &'static str {
+        "rgb_split"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        // The Wavelength tier runs a different kernel, which is why the effect's
+        // `packed` answers with a mode rather than a tuple. The offset vector and
+        // the spectral basis are derived here exactly as the old `run_ops` arms
+        // derived them, from the same numbers the CPU reference derives them from.
+        match effects::rgb_split::RgbSplit::read(p).packed() {
+            effects::rgb_split::Split::Classic {
+                amount_px,
+                angle_deg,
+                scale,
+                tints,
+                mix,
+            } => {
+                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, angle_deg);
+                fx.rgb_split(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::RgbSplitOp {
+                        dx,
+                        dy,
+                        scale,
+                        tints,
+                        mix,
+                    },
+                )
+            }
+            effects::rgb_split::Split::Spectral {
+                amount_px,
+                angle_deg,
+                samples,
+                tints,
+                mix,
+            } => {
+                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, angle_deg);
+                let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+                fx.spectral_split(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::SpectralSplitOp {
+                        dx,
+                        dy,
+                        amount_px,
+                        radial: false,
+                        basis,
+                        count,
+                        mix,
+                    },
+                )
+            }
+        }
+    }
+}
+
+struct ChromaticAberration;
+impl GpuEffect for ChromaticAberration {
+    fn match_name(&self) -> &'static str {
+        "chromatic_aberration"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        match effects::chromatic_aberration::ChromaticAberration::read(p).packed() {
+            effects::chromatic_aberration::Fringe::Classic {
+                amount_px,
+                tints,
+                mix,
+            } => fx.chromatic_aberration(
+                ctx,
+                tex,
+                w,
+                h,
+                &lumit_gpu::fx::ChromaticAberrationOp {
+                    amount_px,
+                    tints,
+                    mix,
+                },
+            ),
+            // The radial spectral split (K-144): the old arm passed angle 0.0,
+            // so the offset vector is the same `(amount_px, 0)` it always was.
+            effects::chromatic_aberration::Fringe::Spectral {
+                amount_px,
+                samples,
+                tints,
+                mix,
+            } => {
+                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, 0.0);
+                let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+                fx.spectral_split(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    &lumit_gpu::fx::SpectralSplitOp {
+                        dx,
+                        dy,
+                        amount_px,
+                        radial: true,
+                        basis,
+                        count,
+                        mix,
+                    },
+                )
+            }
+        }
+    }
 }
 
 struct ColourBalance;
@@ -150,6 +448,39 @@ impl GpuEffect for Vibrancy {
     ) -> Tex {
         let (amount, mix) = effects::vibrancy::Vibrancy::read(p).packed();
         fx.vibrancy(ctx, tex, w, h, &lumit_gpu::fx::VibrancyOp { amount, mix })
+    }
+}
+
+struct Vignette;
+impl GpuEffect for Vignette {
+    fn match_name(&self) -> &'static str {
+        "vignette"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) -> Tex {
+        let (amount, radius, softness, roundness, ramp, mix) =
+            effects::vignette::Vignette::read(p).packed();
+        fx.vignette(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::VignetteOp {
+                amount,
+                radius,
+                softness,
+                roundness,
+                ramp,
+                mix,
+            },
+        )
     }
 }
 
