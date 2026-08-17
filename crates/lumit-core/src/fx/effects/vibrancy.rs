@@ -33,6 +33,21 @@ pub struct Vibrancy {
     pub mix: f32,
 }
 
+impl Vibrancy {
+    /// The numbers the kernel multiplies by (docs/impl/effect-registry.md
+    /// §2.4). Both render paths read this one method, so the CPU reference and
+    /// the WGSL kernel cannot drift apart.
+    ///
+    /// Floored at 0 (neutral), open above (K-135): the per-pixel factor
+    /// extrapolates cleanly, so no upper clamp.
+    pub fn packed(self) -> (f32, f32) {
+        (
+            (self.amount / 100.0).max(0.0),
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
+    }
+}
+
 /// Vibrancy's behaviour.
 pub struct VibrancyDef;
 
@@ -42,13 +57,7 @@ impl EffectDef for VibrancyDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Vibrancy::read(p);
-        // Floored at 0 (neutral), open above (K-135): the per-pixel factor
-        // extrapolates cleanly, so no upper clamp.
-        cpu::vibrance(
-            rgba,
-            (v.amount / 100.0).max(0.0),
-            (v.mix / 100.0).clamp(0.0, 1.0),
-        );
+        let (amount, mix) = Vibrancy::read(p).packed();
+        cpu::vibrance(rgba, amount, mix);
     }
 }

@@ -14,6 +14,7 @@
 //! `builtins.rs` and `resolved.rs` and are listed there. `catalogue.rs` names
 //! the ones that have.
 
+pub mod colour_balance;
 pub mod contrast;
 pub mod exposure;
 pub mod gamma;

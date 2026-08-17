@@ -3525,6 +3525,25 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each generated entry against the hand-written one it replaces and fails if they differ by
   so much as a default value — which is what makes it a move rather than a rewrite.
 
+  The first batch — the ten colour effects (Colour balance, Saturation, Vibrancy, Exposure,
+  Hue shift, Contrast, Gamma, Temperature, Invert, Tint) — has moved. While the rest catch up, a
+  layer's stack is read **two ways at once**: the effects that have moved keep their
+  controls in the shared list of numbers, and the ones that haven't still have a slot each.
+  A single ordered list decides what runs when, so an effect that has moved and one that
+  hasn't can sit next to each other on a layer and nothing notices. Two other things
+  changed with them. The step that works out an effect's numbers at a frame is now **one
+  loop for all of them** — it reads the effect's own block of controls and asks the project
+  for each value in turn — instead of a hand-written passage per effect. And the code that
+  hands the work to the graphics card now **looks the effect up by name** rather than
+  matching on a slot, which is the door third-party effects will one day come through.
+
+  The sums each effect does before the graphics card sees the numbers — turning "Saturation
+  250 %" into a factor of 2.5, or a temperature into two channel gains — now live in one
+  place per effect, and both the graphics-card path and the plain reference version read
+  that one place. That matters more than it sounds: the test that proves the two agree
+  compares their *pictures*, so it would never have noticed the two doing the division
+  differently. One copy cannot disagree with itself.
+
 ## 5. Making a change safely (the recipe)
 
 1. **Find the doc first.** Specs (`docs/00–16`) say what the behaviour should be; impl

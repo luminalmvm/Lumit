@@ -574,7 +574,7 @@ pub fn build_comp_draws_at(
             rgba: Vec::new(),
             tex_w: nested.width,
             tex_h: nested.height,
-            fx: Vec::new(),
+            fx: Default::default(),
             lut_files: Vec::new(),
             nested: Some(nested),
         })
@@ -656,7 +656,7 @@ pub fn build_comp_draws_at(
                 lut_files(&src.effects, slt),
             )
         } else {
-            (Vec::new(), Vec::new())
+            Default::default()
         };
         Some(DofInputDraw {
             rgba,
@@ -868,8 +868,7 @@ pub fn build_comp_draws_at(
                 // blends back by coverage — masks × opacity, placed by the
                 // transform. A dead stack contributes nothing at all.
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-                let (fx_ids, fx): (Vec<Uuid>, Vec<lumit_core::fx::Resolved>) = if layer.switches.fx
-                {
+                let (fx_ids, fx) = if layer.switches.fx {
                     // The §1.4 marker context, built by the same shared
                     // constructor export uses (K-031). Effects flagged
                     // sample_temporally == false resolve at the frame time in a
@@ -884,10 +883,8 @@ pub fn build_comp_draws_at(
                         &markers,
                         context.clone(),
                     )
-                    .into_iter()
-                    .unzip()
                 } else {
-                    (Vec::new(), Vec::new())
+                    Default::default()
                 };
                 // Posterize Time everything-below (docs/08 §3.25): the below
                 // stack re-rendered at the held time, built by the shared
@@ -919,7 +916,7 @@ pub fn build_comp_draws_at(
                     pixels_by_layer,
                     visited,
                 );
-                if fx.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
+                if fx.ops.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
                     continue;
                 }
 
@@ -1046,7 +1043,7 @@ pub fn build_comp_draws_at(
             // None / Masks or when the source's fx switch is off.
             let (fx, lut_files) = if nested.is_some() {
                 // The nested render already ran every layer's own stack.
-                (Vec::new(), Vec::new())
+                Default::default()
             } else if mr.source.folds_effects() && src.switches.fx {
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = m_w as f32 / m_nat.0.max(1.0);
@@ -1064,7 +1061,7 @@ pub fn build_comp_draws_at(
                     lut_files(&src.effects, mlt),
                 )
             } else {
-                (Vec::new(), Vec::new())
+                Default::default()
             };
             Some(MatteDraw {
                 rgba: m_rgba,
@@ -1100,7 +1097,7 @@ pub fn build_comp_draws_at(
         // Radius units are % of the comp diagonal (docs/08 §2.3); the effect
         // runs on the layer's decoded texture, so scale the diagonal by
         // decode/natural to stay honest under reduced-resolution preview.
-        let (fx_ids, fx): (Vec<Uuid>, Vec<lumit_core::fx::Resolved>) = {
+        let (fx_ids, fx) = {
             let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
             let scale = match &source {
                 DrawSource::Pixels { tex_w, .. } => *tex_w as f32 / natural.0.max(1.0),
@@ -1126,10 +1123,8 @@ pub fn build_comp_draws_at(
                     &markers,
                     context.clone(),
                 )
-                .into_iter()
-                .unzip()
             } else {
-                (Vec::new(), Vec::new())
+                Default::default()
             }
         };
         // Effects ON a Precomp layer run on the nested comp's raster, and that
@@ -2157,7 +2152,7 @@ mod render_below_at_tests {
         );
         // The blur, opting out, resolves at the frame time 0.35 (35% of diag).
         let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-        let radius = match tb.draws[0].fx.first() {
+        let radius = match tb.draws[0].fx.ops.first() {
             Some(lumit_core::fx::Resolved::Blur { radius_px, .. }) => *radius_px,
             other => panic!("expected a blur op, got {other:?}"),
         };
@@ -2235,7 +2230,7 @@ mod render_below_at_tests {
         );
         // The blur resolves at the held time 0.3 (30% of diag), not 0.35.
         let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-        let radius = match d.fx.first() {
+        let radius = match d.fx.ops.first() {
             Some(lumit_core::fx::Resolved::Blur { radius_px, .. }) => *radius_px,
             other => panic!("expected a blur op, got {other:?}"),
         };
@@ -2250,7 +2245,7 @@ mod render_below_at_tests {
         );
         // The Posterize itself has no per-pixel op — only the blur survives.
         assert_eq!(
-            d.fx.len(),
+            d.fx.ops.len(),
             1,
             "posterize resolves to nothing; only the blur"
         );

@@ -34,6 +34,24 @@ pub struct Saturation {
     pub mix: f32,
 }
 
+impl Saturation {
+    /// The numbers the kernel multiplies by: the per-cent controls as plain
+    /// factors (docs/impl/effect-registry.md §2.4).
+    ///
+    /// Both render paths read this one method, so the CPU reference and the
+    /// WGSL kernel cannot drift apart — the §1.6 oracle only checks the kernel
+    /// against the reference, never the two conversions against each other.
+    ///
+    /// Floored at 0 (greyscale), open above (K-135): the luma/colour mix
+    /// extrapolates past 200 % cleanly, so no upper clamp.
+    pub fn packed(self) -> (f32, f32) {
+        (
+            (self.saturation / 100.0).max(0.0),
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
+    }
+}
+
 /// Saturation's behaviour.
 pub struct SaturationDef;
 
@@ -43,13 +61,7 @@ impl EffectDef for SaturationDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Saturation::read(p);
-        // Floored at 0 (greyscale), open above (K-135): the luma/colour mix
-        // extrapolates past 200 % cleanly, so no upper clamp.
-        cpu::saturate(
-            rgba,
-            (v.saturation / 100.0).max(0.0),
-            (v.mix / 100.0).clamp(0.0, 1.0),
-        );
+        let (saturation, mix) = Saturation::read(p).packed();
+        cpu::saturate(rgba, saturation, mix);
     }
 }

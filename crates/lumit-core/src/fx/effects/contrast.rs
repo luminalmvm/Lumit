@@ -32,6 +32,21 @@ pub struct Contrast {
     pub mix: f32,
 }
 
+impl Contrast {
+    /// The factor the kernel multiplies by, and the mix
+    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
+    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
+    ///
+    /// k = contrast per cent / 100; hard min 0 (no inversion), unbounded above
+    /// — the schema's own honest shape.
+    pub fn packed(self) -> (f32, f32) {
+        (
+            (self.contrast / 100.0).max(0.0),
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
+    }
+}
+
 /// Contrast's behaviour.
 pub struct ContrastDef;
 
@@ -41,13 +56,7 @@ impl EffectDef for ContrastDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Contrast::read(p);
-        // k = contrast per cent / 100; hard min 0 (no inversion), unbounded
-        // above — the schema's own honest shape.
-        cpu::contrast(
-            rgba,
-            (v.contrast / 100.0).max(0.0),
-            (v.mix / 100.0).clamp(0.0, 1.0),
-        );
+        let (k, mix) = Contrast::read(p).packed();
+        cpu::contrast(rgba, k, mix);
     }
 }

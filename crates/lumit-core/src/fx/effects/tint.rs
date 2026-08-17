@@ -35,6 +35,20 @@ pub struct Tint {
     pub mix: f32,
 }
 
+impl Tint {
+    /// The two mapped colours and the mix (docs/impl/effect-registry.md §2.4).
+    /// They are scene-linear RGB, alpha ignored; both render paths read this
+    /// one method, so the CPU reference and the WGSL kernel cannot drift apart.
+    pub fn packed(self) -> ([f32; 3], [f32; 3], f32) {
+        let rgb = |c: [f32; 4]| [c[0], c[1], c[2]];
+        (
+            rgb(self.black),
+            rgb(self.white),
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
+    }
+}
+
 /// Tint's behaviour.
 pub struct TintDef;
 
@@ -44,15 +58,7 @@ impl EffectDef for TintDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Tint::read(p);
-        // The two mapped colours are scene-linear RGB; alpha is ignored, and the
-        // CPU reference and the WGSL kernel read the identical numbers.
-        let rgb = |c: [f32; 4]| [c[0], c[1], c[2]];
-        cpu::tint(
-            rgba,
-            rgb(v.black),
-            rgb(v.white),
-            (v.mix / 100.0).clamp(0.0, 1.0),
-        );
+        let (black, white, mix) = Tint::read(p).packed();
+        cpu::tint(rgba, black, white, mix);
     }
 }

@@ -190,6 +190,15 @@ impl ShakeSample {
 // per-frame, per-layer value that never lives in a long array.
 #[allow(clippy::large_enum_variant)]
 pub enum Resolved {
+    /// A migrated effect: its parameters live in the stack's
+    /// [`ResolvedStack`] arena (`op` is the index of its op there), not in a
+    /// variant of their own. The Vec keeps ordering authority — the arena is
+    /// only the bag — so the two halves of a [`ResolvedOps`] stay in step
+    /// (docs/impl/effect-registry.md §2.3).
+    ///
+    /// Nothing produces this yet: the carrier lands before the first effect
+    /// moves, so every consumer already has the arm it will need.
+    Registry { op: u32 },
     Blur {
         /// Kernel half-width in *pixels of the target raster* (the caller
         /// converts from % diagonal using the raster it renders at, §2.3).
@@ -334,30 +343,6 @@ pub enum Resolved {
         /// 0..1.
         mix: f32,
     },
-    ColourBalance {
-        /// Added per channel after gain (raises or crushes the blacks).
-        lift: [f32; 3],
-        /// Per-channel mid-tone exponent's base; 1 is neutral, > 0.
-        gamma: [f32; 3],
-        /// Per-channel linear multiplier; 1 is neutral.
-        gain: [f32; 3],
-        /// 0..1.
-        mix: f32,
-    },
-    Saturation {
-        /// Factor about Rec. 709 luma: 0 = greyscale, 1 = neutral, 2 =
-        /// doubled, and open above (K-135) — the maths extrapolates.
-        saturation: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    Vibrancy {
-        /// Per-pixel saturation-boost weight (K-152): 0 = neutral, higher lifts
-        /// less-saturated pixels more. Open above (K-135), floored at 0.
-        amount: f32,
-        /// 0..1.
-        mix: f32,
-    },
     /// Matte key (docs/08 §3.21, K-121/K-154): a Keylight-style colour-difference
     /// keyer. The op carries its full parameter bundle ([`MatteKeyParams`]) so the
     /// CPU reference and the WGSL kernel consume the identical numbers (K-031). The
@@ -380,73 +365,6 @@ pub enum Resolved {
         roundness: f32,
         /// Gamma on the falloff (T16): 1 = plain smoothstep, ≠ 1 curves it.
         ramp: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Exposure (docs/08 §3.16): RGB × `factor` (= 2^stops), alpha untouched.
-    /// `factor` 1.0 is the neutral point.
-    Exposure {
-        /// Linear gain, 2^stops.
-        factor: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Hue shift (docs/08 §3.17, K-136): a row-major linear 3×3 colour matrix,
-    /// computed host-side — either the constant-luminance rotation (Preserve
-    /// luminance on) or the plain-RGB spin (off). The kernel is matrix-general,
-    /// so both modes share one op. Identity is the neutral point.
-    HueShift {
-        /// Row-major 3×3: `[m00,m01,m02, m10,m11,m12, m20,m21,m22]`.
-        m: [f32; 9],
-        /// 0..1.
-        mix: f32,
-    },
-    /// Contrast (docs/08 §3.18): the affine grade `(in − 0.5) × k + 0.5` per
-    /// RGB channel on unpremultiplied colour, alpha untouched. `k` 1.0
-    /// (Contrast 100 %) is the neutral point.
-    Contrast {
-        /// Contrast factor, `contrast_percent / 100`; 1.0 is neutral.
-        k: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Gamma (docs/08 §3.19): the per-channel power curve
-    /// `out = pow(max(in, 0), 1/gamma)` on unpremultiplied colour, alpha
-    /// untouched. `gamma` 1.0 is the neutral point.
-    Gamma {
-        /// Gamma value; the curve raises to `1/gamma`. 1.0 is neutral,
-        /// clamped ≥ 0.01 so the reciprocal stays finite.
-        gamma: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Temperature (docs/08 §3.20): a warm/cool white balance as a per-channel
-    /// R/B gain in scene-linear light, computed host-side, alpha untouched.
-    /// Gains `(1.0, 1.0)` (Temperature 0) are the neutral point.
-    Temperature {
-        /// Scene-linear red gain, `max(0, 1 + 0.75·(temperature/100))`.
-        gain_r: f32,
-        /// Scene-linear blue gain, `max(0, 1 − 0.75·(temperature/100))`.
-        gain_b: f32,
-        /// 0..1.
-        mix: f32,
-    },
-    /// Invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − in.rgb` per RGB
-    /// channel on unpremultiplied colour, alpha untouched. No neutral value —
-    /// invert always inverts — so only Mix 0 is the identity.
-    Invert {
-        /// 0..1.
-        mix: f32,
-    },
-    /// Tint (docs/08 §3.24): a luminance duotone. `out.rgb = black + (white −
-    /// black)·luma(in)` with Rec.709 luma on the unpremultiplied colour, alpha
-    /// untouched. The two mapped colours resolve to scene-linear RGB at frame
-    /// time; Mix 0 is the identity.
-    Tint {
-        /// Scene-linear RGB the darkest input maps to.
-        black: [f32; 3],
-        /// Scene-linear RGB the brightest input maps to.
-        white: [f32; 3],
         /// 0..1.
         mix: f32,
     },
@@ -801,18 +719,8 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
             Resolved::SpectralSplit { amount_px, .. } => *amount_px *= f,
             Resolved::ChromaticAberration { amount_px, .. } => *amount_px *= f,
             Resolved::Flash { .. }
-            | Resolved::ColourBalance { .. }
-            | Resolved::Saturation { .. }
-            | Resolved::Vibrancy { .. }
             | Resolved::MatteKey(_)
             | Resolved::Vignette { .. }
-            | Resolved::Exposure { .. }
-            | Resolved::HueShift { .. }
-            | Resolved::Contrast { .. }
-            | Resolved::Gamma { .. }
-            | Resolved::Temperature { .. }
-            | Resolved::Invert { .. }
-            | Resolved::Tint { .. }
             | Resolved::Lut { .. } => {}
             Resolved::Transform {
                 anchor, position, ..
@@ -869,7 +777,34 @@ pub fn rescale_px(ops: &mut [Resolved], f: f32) {
                 p.light[0] *= f;
                 p.light[1] *= f;
             }
+            // A migrated effect keeps no pixel field here: its parameters sit
+            // in the arena, which declares its own units, so
+            // `ResolvedStack::rescale_spatial` moves them —
+            // `ResolvedOps::rescale_px` calls both halves together so neither
+            // can be forgotten.
+            Resolved::Registry { .. } => {}
         }
+    }
+}
+
+/// A layer's stack resolved at one frame, in both the forms the hybrid period
+/// needs: the `Vec` of flat variants that still carries the ordering, and the
+/// arena the migrated effects keep their parameters in
+/// (docs/impl/effect-registry.md §2.3). `bags` is empty until the first effect
+/// migrates, so nothing downstream changes yet.
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedOps {
+    pub ops: Vec<Resolved>,
+    pub bags: ResolvedStack,
+}
+
+impl ResolvedOps {
+    /// Rescale both halves for a stack resolved against one raster and run on
+    /// another (K-266) — the one entry point, so a caller cannot rescale the
+    /// variants and forget the arena.
+    pub fn rescale_px(&mut self, f: f32) {
+        rescale_px(&mut self.ops, f);
+        self.bags.rescale_spatial(f);
     }
 }
 
@@ -880,12 +815,10 @@ pub fn resolve_stack(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> Vec<Resolved> {
-    effects
-        .iter()
-        .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-        .filter_map(|e| resolve_one(e, lt, diag_px, px_scale, markers, context.clone()))
-        .collect()
+) -> ResolvedOps {
+    // The same walk, handed one time for every effect: when `sample_lt ==
+    // frame_lt` the temporal branch cannot fire, so this is the plain resolve.
+    resolve_stack_temporal_named(effects, lt, lt, diag_px, px_scale, markers, context).1
 }
 
 /// Resolve a layer's live stack for a held/sub-frame re-render (docs/impl/
@@ -904,17 +837,15 @@ pub fn resolve_stack_temporal(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> Vec<Resolved> {
+) -> ResolvedOps {
     resolve_stack_temporal_named(
         effects, sample_lt, frame_lt, diag_px, px_scale, markers, context,
     )
-    .into_iter()
-    .map(|(_, op)| op)
-    .collect()
+    .1
 }
 
-/// [`resolve_stack_temporal`] with each op paired with the id of the effect
-/// instance it came from.
+/// [`resolve_stack_temporal`] with the id of the effect instance behind each
+/// op, 1:1 and in order with `ops`.
 ///
 /// **Why the ids matter.** A [`Resolved`] op is a flat bag of numbers: by
 /// design it has forgotten which effect wrote it, because the kernels do not
@@ -933,19 +864,125 @@ pub fn resolve_stack_temporal_named(
     px_scale: f32,
     markers: &MarkerContext,
     context: Arc<ExpressionContext>,
-) -> Vec<(Uuid, Resolved)> {
-    effects
+) -> (Vec<Uuid>, ResolvedOps) {
+    let mut ids = Vec::new();
+    let mut out = ResolvedOps::default();
+    for e in effects
         .iter()
         .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-        .filter_map(|e| {
-            let lt = if e.sample_temporally {
-                sample_lt
-            } else {
-                frame_lt
-            };
-            resolve_one(e, lt, diag_px, px_scale, markers, context.clone()).map(|op| (e.id, op))
-        })
-        .collect()
+    {
+        let lt = if e.sample_temporally {
+            sample_lt
+        } else {
+            frame_lt
+        };
+        // A migrated effect (docs/impl/effect-registry.md §6) is looked up in
+        // the catalogue and resolved by the one generic loop below; anything
+        // still carrying a variant of its own goes through `resolve_one`. The
+        // `Vec` keeps the ordering either way, so the two halves of the stack
+        // cannot get out of step.
+        if let Some(def) = BUILTIN_DEFS.get(&e.effect.match_name) {
+            resolve_into_arena(
+                def,
+                e,
+                lt,
+                diag_px,
+                px_scale,
+                &mut out.bags,
+                context.clone(),
+            );
+            let op = (out.bags.len() - 1) as u32;
+            out.ops.push(Resolved::Registry { op });
+            ids.push(e.id);
+        } else if let Some(op) = resolve_one(e, lt, diag_px, px_scale, markers, context.clone()) {
+            out.ops.push(op);
+            ids.push(e.id);
+        }
+    }
+    (ids, out)
+}
+
+/// Evaluate every parameter a migrated effect declares into the stack's arena
+/// (docs/impl/effect-registry.md §3, step 1).
+///
+/// **In plain terms.** This is the loop that replaces thirty-odd hand-written
+/// resolve arms. It walks the effect's own declaration, asks the instance for
+/// each control's value at this frame — through the expression context, exactly
+/// as the hand-written arms did — converts it by the unit the declaration
+/// states, and drops the pair into the bag. No effect has resolve code of its
+/// own any more; what used to sit in its arm (the clamps, the `exp2`, the hue
+/// matrix) now sits in the effect's `packed` method, called once at dispatch by
+/// whichever of the two render paths is running.
+///
+/// The bag carries **schema-space** numbers — Saturation 100 means 100 per
+/// cent, not a factor of 1 — because that is what the effect's typed reader and
+/// its declared default are written in. Only two conversions happen here, and
+/// both are about *rasters* rather than about the effect:
+///
+/// - `PctDiag` becomes pixels of the raster in play, `v / 100 × diag_px`. The
+///   caller has already scaled `diag_px` by the preview factor, which is why
+///   `px_scale` does not appear again — the old arms did exactly this.
+/// - `Px` is px@comp on the way in (docs/08 §2.3 forbids anything else), so it
+///   is multiplied by `px_scale` to reach the same raster.
+///
+/// Both are what [`ResolvedStack::rescale_spatial`] moves again if the stack is
+/// later reused at another size, which is the symmetry the old `rescale_px`
+/// had.
+fn resolve_into_arena(
+    def: &'static dyn EffectDef,
+    e: &EffectInstance,
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+    bags: &mut ResolvedStack,
+    context: Arc<ExpressionContext>,
+) {
+    bags.begin(def, e.id);
+    for p in def.schema().params {
+        // A number the instance does not carry reads its declared default: a
+        // project saved before the parameter existed simply renders (K-258).
+        let spatial = |v: f64| -> f32 {
+            let v = v as f32;
+            match p.unit {
+                Unit::PctDiag => v / 100.0 * diag_px,
+                Unit::Px => v * px_scale,
+                Unit::Raw | Unit::Degrees | Unit::Seconds => v,
+            }
+        };
+        let value = match p.kind {
+            ParamKind::Float { default, .. } | ParamKind::Angle { default, .. } => {
+                Value::Float(spatial(
+                    e.float_at_with_context(p.id, lt, context.clone())
+                        .unwrap_or(default),
+                ))
+            }
+            ParamKind::Int { default, .. } => Value::Int(
+                e.float_at_with_context(p.id, lt, context.clone())
+                    .map_or(default as i32, |v| v.round() as i32),
+            ),
+            ParamKind::Bool { default } => Value::Bool(e.bool_of(p.id).unwrap_or(default)),
+            ParamKind::Choice { default, .. } => Value::Choice(match e.param(p.id) {
+                Some(EffectValue::Choice(c)) => *c,
+                _ => default,
+            }),
+            ParamKind::Colour { default, .. } => {
+                Value::Colour(e.colour_at(p.id, lt).unwrap_or(default).map(|c| c as f32))
+            }
+            ParamKind::Seed => Value::Int(match e.param(p.id) {
+                Some(EffectValue::Seed(s)) => *s as i32,
+                _ => 0,
+            }),
+            // A File slot and a Layer binding are decided by the *caller*, which
+            // is the only thing that knows which cube loaded or which layer was
+            // rendered (docs/impl/layer-input.md); they are threaded beside the
+            // op exactly as they are today. No migrated effect declares one yet,
+            // and `no_migrated_effect_declares_a_kind_the_arena_cannot_carry`
+            // fails the moment one does — a silent default would be a picture
+            // quietly rendering without its LUT.
+            ParamKind::File { .. } | ParamKind::Layer { .. } => continue,
+        };
+        bags.push(ParamId::new(p.id), value);
+    }
 }
 
 /// Resolve one effect instance to its flat [`Resolved`] op at layer time `lt`,
@@ -1223,33 +1260,6 @@ fn resolve_one(
                 mix,
             })
         }
-        "colour_balance" => {
-            let rgb = |id: &str, neutral: f64| -> [f32; 3] {
-                let c = e.colour_at(id, lt).unwrap_or([neutral; 4]);
-                [c[0] as f32, c[1] as f32, c[2] as f32]
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::ColourBalance {
-                lift: rgb("lift", 0.0),
-                gamma: rgb("gamma", 1.0).map(|g| g.max(0.01)),
-                gain: rgb("gain", 1.0),
-                mix,
-            })
-        }
-        "saturation" => {
-            // Floored at 0 (greyscale), open above (K-135): the luma/colour
-            // mix extrapolates past 200 % cleanly, so no upper clamp.
-            let saturation = (fl("saturation").unwrap_or(100.0) as f32 / 100.0).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Saturation { saturation, mix })
-        }
-        "vibrancy" => {
-            // Floored at 0 (neutral), open above (K-135): the per-pixel factor
-            // extrapolates cleanly, so no upper clamp.
-            let amount = (fl("amount").unwrap_or(0.0) as f32 / 100.0).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Vibrancy { amount, mix })
-        }
         "matte_key" => {
             // Keylight-style colour-difference keyer (K-154, superseding the
             // K-121 chroma-distance key). Every colour resolves to a scene-linear
@@ -1311,81 +1321,6 @@ fn resolve_one(
                 softness,
                 roundness,
                 ramp,
-                mix,
-            })
-        }
-        "exposure" => {
-            let stops = fl("stops").unwrap_or(0.0);
-            let factor = 2f64.powf(stops) as f32;
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Exposure { factor, mix })
-        }
-        "hue_shift" => {
-            let angle = fl("angle").unwrap_or(0.0);
-            // Preserve luminance (K-136): on (default, and absent on old
-            // projects) → the Rec.709 constant-luminance rotation; off → the
-            // plain-RGB spin about the grey axis. The bool only picks which
-            // host-computed matrix is carried, so CPU and GPU stay in parity.
-            let preserve = !matches!(
-                e.param("preserve_luminance"),
-                Some(EffectValue::Bool(false))
-            );
-            let m = if preserve {
-                hue_matrix(angle)
-            } else {
-                hue_matrix_rgb(angle)
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::HueShift { m, mix })
-        }
-        "contrast" => {
-            // k = contrast_percent / 100; hard min 0 (no inversion),
-            // unbounded above — the schema's own honest shape.
-            let k = (fl("contrast").unwrap_or(100.0) as f32 / 100.0).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Contrast { k, mix })
-        }
-        "gamma" => {
-            // Hard floor 0.01 keeps 1/gamma finite; no ceiling — the
-            // schema's own honest shape.
-            let gamma = (fl("gamma").unwrap_or(1.0) as f32).max(0.01);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Gamma { gamma, mix })
-        }
-        "temperature" => {
-            // k = Temperature / 100, clamped to the ±2 hard range (±200). The
-            // stronger ±0.75·k gain (K-135) makes full deflection a decisive
-            // orange/blue; the gains floor at 0 so an extreme never drives a
-            // channel negative. Computed here so the CPU reference and the
-            // WGSL kernel multiply by byte-identical f32 factors (§1.6);
-            // Temperature 0 → k 0 → gains exactly (1.0, 1.0), the neutral
-            // point (the .max(0.0) leaves 1.0 untouched).
-            let k = (fl("temperature").unwrap_or(0.0) as f32 / 100.0).clamp(-2.0, 2.0);
-            let gain_r = (1.0 + 0.75 * k).max(0.0);
-            let gain_b = (1.0 - 0.75 * k).max(0.0);
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Temperature {
-                gain_r,
-                gain_b,
-                mix,
-            })
-        }
-        "invert" => {
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Invert { mix })
-        }
-        "tint" => {
-            // The two mapped colours resolve to scene-linear RGB at frame
-            // time (alpha ignored); the CPU reference and the WGSL kernel
-            // read the identical numbers.
-            let rgb = |id: &str, default: [f64; 4]| -> [f32; 3] {
-                let c = e.colour_at(id, lt).unwrap_or(default);
-                [c[0] as f32, c[1] as f32, c[2] as f32]
-            };
-            let mix = (fl("mix").unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
-            Some(Resolved::Tint {
-                black: rgb("black", [0.0, 0.0, 0.0, 1.0]),
-                white: rgb("white", [1.0, 1.0, 1.0, 1.0]),
                 mix,
             })
         }

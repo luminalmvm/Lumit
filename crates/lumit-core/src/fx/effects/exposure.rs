@@ -29,6 +29,23 @@ pub struct Exposure {
     pub mix: f32,
 }
 
+impl Exposure {
+    /// The linear gain the kernel multiplies by, and the mix
+    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
+    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
+    ///
+    /// `2f64.powf` rather than `f64::exp2`, because that is the call the resolve
+    /// arm made before the effect moved to the registry: the two agree to well
+    /// within the §1.6 tolerance, but they are not obliged to agree in the last
+    /// bit, and a migration must not change a single one.
+    pub fn packed(self) -> (f32, f32) {
+        (
+            2f64.powf(f64::from(self.stops)) as f32,
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
+    }
+}
+
 /// Exposure's behaviour.
 pub struct ExposureDef;
 
@@ -38,11 +55,7 @@ impl EffectDef for ExposureDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Exposure::read(p);
-        cpu::exposure(
-            rgba,
-            f64::from(v.stops).exp2() as f32,
-            (v.mix / 100.0).clamp(0.0, 1.0),
-        );
+        let (factor, mix) = Exposure::read(p).packed();
+        cpu::exposure(rgba, factor, mix);
     }
 }

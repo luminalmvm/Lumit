@@ -203,21 +203,24 @@ pub trait EffectDef: Sync + 'static {
 `pack` is deliberately not generic: an effect that needs to fold an aperture into eight
 blade normals does it here, once, for both the GPU and the CPU path.
 
-### 2.5 The GPU half (`lumit-render/src/fx/<name>.rs`)
+### 2.5 The GPU half (`lumit-render/src/gpufx.rs`)
 
 `lumit-gpu` only dev-depends on `lumit-core` (docs/05), so the GPU dispatch table cannot
-live beside the schema. It lives in `lumit-render`, which depends on both, and is keyed by
+live beside the schema. It lives in `lumit-render`, which depends on both — one module for
+all of them, not a file per effect, because each wrapper is a few lines — and is keyed by
 the same `match_name`:
 
 ```rust
 pub trait GpuEffect: Sync + 'static {
     fn match_name(&self) -> &'static str;
-    fn run(&self, cx: &mut FxCx<'_>, src: Texture, p: Params<'_>) -> Texture;
+    fn run(&self, fx: &FxEngine, ctx: &GpuContext, tex: &Tex, w: u32, h: u32, p: Params<'_>)
+        -> Tex;
 }
 ```
 
-`run_ops`' exhaustive match becomes a lookup. A test asserts the two registries agree: every
-schema that resolves has exactly one `GpuEffect`, and every `GpuEffect` names a schema.
+`run_ops`' exhaustive match becomes a lookup. `every_migrated_effect_has_a_gpu_entry`
+asserts the two registries agree: every schema that resolves has exactly one `GpuEffect`,
+and every `GpuEffect` names a schema.
 
 ### 2.6 Registration is a list, not a `ctor`
 
@@ -346,8 +349,10 @@ Catalogue sweeps (these are the guards that the old arrangement lacked):
 
 1. `every_builtin_declares_a_unique_match_name` — and a unique `ParamId` per parameter.
 2. `every_schema_has_a_def_and_every_def_has_a_schema` — the core registry is a bijection.
-3. `every_image_effect_has_a_gpu_entry` — the `lumit-render` table agrees with `BUILTINS`,
-   with the two orchestration-only effects named explicitly as the exceptions.
+3. `every_migrated_effect_has_a_gpu_entry` — the `lumit-render` table agrees with the
+   catalogue. While the migration runs it is scoped to the migrated effects; when the last
+   batch lands it covers `BUILTINS`, with the two orchestration-only effects named
+   explicitly as the exceptions.
 4. `every_parameter_declares_a_unit` and `only_pct_diag_and_px_rescale` — the generic
    `rescale_px` replacement moves exactly the values the old match moved. Golden-tested
    against a table of the old behaviour, per effect, so the port is provable.

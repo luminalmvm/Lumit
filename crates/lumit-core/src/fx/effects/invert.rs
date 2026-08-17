@@ -27,6 +27,15 @@ pub struct Invert {
     pub mix: f32,
 }
 
+impl Invert {
+    /// The mix the kernel blends by (docs/impl/effect-registry.md §2.4) — the
+    /// whole of Invert's host maths, since 1 − c takes no parameter of its own.
+    /// Both render paths read this one method.
+    pub fn packed(self) -> f32 {
+        (self.mix / 100.0).clamp(0.0, 1.0)
+    }
+}
+
 /// Invert's behaviour.
 pub struct InvertDef;
 
@@ -36,7 +45,6 @@ impl EffectDef for InvertDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Invert::read(p);
-        cpu::invert(rgba, (v.mix / 100.0).clamp(0.0, 1.0));
+        cpu::invert(rgba, Invert::read(p).packed());
     }
 }

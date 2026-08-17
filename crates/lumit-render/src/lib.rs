@@ -55,6 +55,8 @@ pub mod diskio;
 pub mod draw;
 pub mod export;
 pub mod fxops;
+/// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
+pub mod gpufx;
 pub mod headless;
 pub mod media_index;
 pub mod plan;

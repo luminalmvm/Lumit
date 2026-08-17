@@ -51,6 +51,13 @@ impl HueShift {
             hue_matrix_rgb(f64::from(self.angle))
         }
     }
+
+    /// The matrix the kernel multiplies by, and the mix
+    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
+    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
+    pub fn packed(self) -> ([f32; 9], f32) {
+        (self.matrix(), (self.mix / 100.0).clamp(0.0, 1.0))
+    }
 }
 
 /// Hue shift's behaviour.
@@ -62,7 +69,7 @@ impl EffectDef for HueShiftDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = HueShift::read(p);
-        cpu::hue_shift(rgba, v.matrix(), (v.mix / 100.0).clamp(0.0, 1.0));
+        let (m, mix) = HueShift::read(p).packed();
+        cpu::hue_shift(rgba, m, mix);
     }
 }

@@ -46,16 +46,14 @@ These sit above everything else: they are what the editor feels like in the hand
 ## Now - the effect registry migration (K-381, docs/impl/effect-registry.md §6)
 
 The machinery landed in PR #99 - the derive macro, the registry, the parameter bag, and the
-first colour effects are declared through it. What is left is the per-family migration on
-top, in batches; these are the batches that have not landed. Delete each line as its batch
-lands.
+first colour effects are declared through it. The colour batch then moved for real: the ten
+colour effects resolve, grade and dispatch through the registry, and the render path carries
+`ResolvedOps` (the ordering `Vec` plus the arena) rather than `Vec<Resolved>` alone. What is
+left is the per-family migration on top, in batches; these are the batches that have not
+landed. Delete each line as its batch lands.
 
-- **Migrate the remaining colour family** - `colour_balance`, `vignette`. Mechanical:
-    schema, resolve arm, CPU arm, `run_ops` arm.
-- **Rewire the render path to `ResolvedStack`** - `build.rs`, `draw.rs`, `realise.rs` and
-    `fxops.rs` carry `Vec<Resolved>` today. Until this lands, a migrated effect's declaration
-    is generated but its frame still resolves through the old enum, so the two paths must
-    keep agreeing (the generated-schema test is the guard).
+- **Migrate `vignette`** - the last of the colour family. Mechanical: schema, resolve arm,
+    CPU arm, `run_ops` arm.
 - **Migrate the blur, stylise and temporal families**, then the awkward six on their own:
     `dof`, `shake`, `lens_flare`, `matte_key`, `motion_blur`, `datamosh`.
 - **Delete `Resolved`, `resolve_one`, `rescale_px` and the hand-written `BUILTINS` body**,

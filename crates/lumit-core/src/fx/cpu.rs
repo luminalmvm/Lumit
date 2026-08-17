@@ -70,14 +70,6 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
             colour,
             mix,
         } => flash(rgba, *strength, *colour, *mix),
-        Resolved::ColourBalance {
-            lift,
-            gamma,
-            gain,
-            mix,
-        } => colour_balance(rgba, *lift, *gamma, *gain, *mix),
-        Resolved::Saturation { saturation, mix } => saturate(rgba, *saturation, *mix),
-        Resolved::Vibrancy { amount, mix } => vibrance(rgba, *amount, *mix),
         Resolved::MatteKey(p) => matte_key(rgba, p),
         Resolved::Vignette {
             amount,
@@ -89,17 +81,6 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         } => vignette(
             rgba, w, h, *amount, *radius, *softness, *roundness, *ramp, *mix,
         ),
-        Resolved::Exposure { factor, mix } => exposure(rgba, *factor, *mix),
-        Resolved::HueShift { m, mix } => hue_shift(rgba, *m, *mix),
-        Resolved::Contrast { k, mix } => contrast(rgba, *k, *mix),
-        Resolved::Gamma { gamma: g, mix } => gamma(rgba, *g, *mix),
-        Resolved::Temperature {
-            gain_r,
-            gain_b,
-            mix,
-        } => temperature(rgba, *gain_r, *gain_b, *mix),
-        Resolved::Invert { mix } => invert(rgba, *mix),
-        Resolved::Tint { black, white, mix } => tint(rgba, *black, *white, *mix),
         Resolved::Transform {
             anchor,
             position,
@@ -231,6 +212,39 @@ pub fn apply(rgba: &mut [f32], w: u32, h: u32, fx: &Resolved) {
         // is staged in the lumit-gpu tests (trace at ULP, frame at the
         // perceptual bound) against `lens_flare::cpu_flare`/`cpu_combine`.
         Resolved::LensFlare(..) => {}
+        // A migrated effect's parameters live in the stack's arena, which this
+        // single-op entry point has no way to receive — exactly as Light wrap's
+        // background and Depth of field's depth pass do not reach it. The
+        // dispatch that *does* have the arena is [`apply_stack`]; here the op is
+        // the passthrough, never a silent half-effect.
+        Resolved::Registry { .. } => {}
+    }
+}
+
+/// Apply a whole resolved stack to an RGBA f32 image (premultiplied, linear
+/// light), in place — the CPU-degradation rung (K-019) and the parity oracle's
+/// entry point.
+///
+/// This is [`apply`] plus the one thing a single op cannot carry: the arena a
+/// migrated effect's parameters live in (docs/impl/effect-registry.md §3, step
+/// 4). An effect that has moved to the registry is dispatched through its own
+/// [`EffectDef::apply_cpu`](super::EffectDef::apply_cpu) with its bag; an effect
+/// that still carries a variant goes through [`apply`], which is the same
+/// picture it always rendered.
+pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedOps) {
+    for op in &ops.ops {
+        match op {
+            Resolved::Registry { op } => {
+                // A dangling index cannot happen — resolve pushes the variant
+                // and the bag together — but engine crates do not panic on a
+                // caller's mistake (14-ENGINEERING-RULES §4), so an absent bag
+                // is the passthrough.
+                if let Some(fx) = ops.bags.get(*op as usize) {
+                    fx.def.apply_cpu(rgba, w, h, fx.params);
+                }
+            }
+            other => apply(rgba, w, h, other),
+        }
     }
 }
 

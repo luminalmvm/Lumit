@@ -32,6 +32,17 @@ pub struct Gamma {
     pub mix: f32,
 }
 
+impl Gamma {
+    /// The gamma the kernel raises by, and the mix
+    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
+    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
+    ///
+    /// Hard floor 0.01 keeps 1/gamma finite; no ceiling.
+    pub fn packed(self) -> (f32, f32) {
+        (self.gamma.max(0.01), (self.mix / 100.0).clamp(0.0, 1.0))
+    }
+}
+
 /// Gamma's behaviour.
 pub struct GammaDef;
 
@@ -41,8 +52,7 @@ impl EffectDef for GammaDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Gamma::read(p);
-        // Hard floor 0.01 keeps 1/gamma finite; no ceiling.
-        cpu::gamma(rgba, v.gamma.max(0.01), (v.mix / 100.0).clamp(0.0, 1.0));
+        let (gamma, mix) = Gamma::read(p).packed();
+        cpu::gamma(rgba, gamma, mix);
     }
 }

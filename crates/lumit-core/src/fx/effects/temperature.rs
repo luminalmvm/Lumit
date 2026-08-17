@@ -50,6 +50,14 @@ impl Temperature {
         let k = (self.temperature / 100.0).clamp(-2.0, 2.0);
         ((1.0 + 0.75 * k).max(0.0), (1.0 - 0.75 * k).max(0.0))
     }
+
+    /// The two gains the kernel multiplies by, and the mix
+    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
+    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
+    pub fn packed(self) -> (f32, f32, f32) {
+        let (gain_r, gain_b) = self.gains();
+        (gain_r, gain_b, (self.mix / 100.0).clamp(0.0, 1.0))
+    }
 }
 
 /// Temperature's behaviour.
@@ -61,8 +69,7 @@ impl EffectDef for TemperatureDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let v = Temperature::read(p);
-        let (gain_r, gain_b) = v.gains();
-        cpu::temperature(rgba, gain_r, gain_b, (v.mix / 100.0).clamp(0.0, 1.0));
+        let (gain_r, gain_b, mix) = Temperature::read(p).packed();
+        cpu::temperature(rgba, gain_r, gain_b, mix);
     }
 }

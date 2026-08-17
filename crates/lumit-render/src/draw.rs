@@ -42,7 +42,7 @@ pub struct MatteDraw {
     /// Temporal inputs (neighbours/flow/depth) are not fed through an
     /// effects-and-masks matte in v1, so an echo or flow effect on the matte
     /// source degrades to a still (documented boundary).
-    pub fx: Vec<lumit_core::fx::Resolved>,
+    pub fx: lumit_core::fx::ResolvedOps,
     /// The matte source's `lut` file paths, 1:1 and in order with the `Resolved::
     /// Lut` ops in `fx` (as for a layer's own `lut_files`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
@@ -75,7 +75,7 @@ pub struct DofInputDraw {
     /// depth source is `EffectsAndMasks` (K-142, mirroring the matte). Empty for
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
-    pub fx: Vec<lumit_core::fx::Resolved>,
+    pub fx: lumit_core::fx::ResolvedOps,
     /// The depth layer's `lut` file paths, 1:1 with the `Resolved::Lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
@@ -206,7 +206,7 @@ pub struct CompLayerDraw {
     /// The layer's live effect stack, resolved to plain numbers at this
     /// frame (docs/08; radius already in texture pixels). Applied to the
     /// linear source texture after masks, before the transform.
-    pub fx: Vec<lumit_core::fx::Resolved>,
+    pub fx: lumit_core::fx::ResolvedOps,
     /// The effect *instance* id behind each op in `fx`, 1:1 and in order
     /// (`lumit_core::fx::resolve_stack_temporal_named`). Only the profiler
     /// reads it: a measured millisecond has to land on the row of the stack

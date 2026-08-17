@@ -222,7 +222,7 @@ pub fn run_ops(
     tex: Tex,
     w: u32,
     h: u32,
-    ops: &[Resolved],
+    ops: &lumit_core::fx::ResolvedOps,
     neighbours: &[(i32, Tex)],
     flow_field: Option<&Tex>,
     luts: &[Option<LoadedLut>],
@@ -242,7 +242,7 @@ pub fn run_ops(
     let mut lut_i = 0usize;
     let mut dof_i = 0usize;
     let mut flare_i = 0usize;
-    for op in ops {
+    for op in &ops.ops {
         // Only a *profiled* render reads a clock here, and it reads it either
         // side of a fence — see crate::profile on why an unfenced span would
         // time the paperwork rather than the work.
@@ -429,49 +429,6 @@ pub fn run_ops(
                     },
                 );
             }
-            Resolved::ColourBalance {
-                lift,
-                gamma,
-                gain,
-                mix,
-            } => {
-                tex = fx.colour_balance(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::ColourBalanceOp {
-                        lift: *lift,
-                        gamma: *gamma,
-                        gain: *gain,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Saturation { saturation, mix } => {
-                tex = fx.saturation(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::SaturationOp {
-                        saturation: *saturation,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Vibrancy { amount, mix } => {
-                tex = fx.vibrancy(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::VibrancyOp {
-                        amount: *amount,
-                        mix: *mix,
-                    },
-                );
-            }
             Resolved::MatteKey(p) => {
                 tex = fx.matte_key(
                     ctx,
@@ -514,81 +471,6 @@ pub fn run_ops(
                         softness: *softness,
                         roundness: *roundness,
                         ramp: *ramp,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Exposure { factor, mix } => {
-                tex = fx.exposure(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::ExposureOp {
-                        factor: *factor,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::HueShift { m, mix } => {
-                tex = fx.hue_shift(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::HueShiftOp { m: *m, mix: *mix },
-                );
-            }
-            Resolved::Contrast { k, mix } => {
-                tex = fx.contrast(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::ContrastOp { k: *k, mix: *mix },
-                );
-            }
-            Resolved::Gamma { gamma, mix } => {
-                tex = fx.gamma(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::GammaOp {
-                        gamma: *gamma,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Temperature {
-                gain_r,
-                gain_b,
-                mix,
-            } => {
-                tex = fx.temperature(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::TemperatureOp {
-                        gain_r: *gain_r,
-                        gain_b: *gain_b,
-                        mix: *mix,
-                    },
-                );
-            }
-            Resolved::Invert { mix } => {
-                tex = fx.invert(ctx, &tex, w, h, &lumit_gpu::fx::InvertOp { mix: *mix });
-            }
-            Resolved::Tint { black, white, mix } => {
-                tex = fx.tint(
-                    ctx,
-                    &tex,
-                    w,
-                    h,
-                    &lumit_gpu::fx::TintOp {
-                        black: *black,
-                        white: *white,
                         mix: *mix,
                     },
                 );
@@ -1134,6 +1016,21 @@ pub fn run_ops(
                     }) as lumit_gpu::fx::FlareBake),
                     &probe,
                 );
+            }
+            // A migrated effect (docs/impl/effect-registry.md §2.5): the
+            // variant holds only its place in the stack, so the parameters
+            // come out of `ops.bags` and the kernel out of the GPU table,
+            // looked up by the effect's own name. An op with no bag or no
+            // table entry (an orchestration-only effect) passes the texture
+            // through — the convention a missing LUT or flow field already
+            // uses, never a fault (engine crates do not panic,
+            // 14-ENGINEERING-RULES §4).
+            Resolved::Registry { op } => {
+                if let Some(resolved) = ops.bags.get(*op as usize) {
+                    if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
+                        tex = gpu.run(fx, ctx, &tex, w, h, resolved.params);
+                    }
+                }
             }
         }
 

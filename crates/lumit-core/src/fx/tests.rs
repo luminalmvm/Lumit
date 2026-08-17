@@ -8,7 +8,10 @@ use crate::model::{Composition, EffectInstance, EffectNamespace, EffectValue, La
 // These tests are about *parameter resolution*, not about expressions, so they
 // call the resolvers without an expression context and get the detached one.
 // Shadowing the two entry points here keeps that out of every call below —
-// otherwise the same argument would be spelled out ninety times.
+// otherwise the same argument would be spelled out ninety times. They also
+// unwrap the `ResolvedOps` carrier to the `Vec` of variants the assertions below
+// read; a *migrated* effect resolves into the arena instead, and the tests for
+// those read it back through `resolve_migrated`.
 fn resolve_stack(
     effects: &[EffectInstance],
     lt: f64,
@@ -24,6 +27,7 @@ fn resolve_stack(
         markers,
         Arc::new(ExpressionContext::detached()),
     )
+    .ops
 }
 
 fn resolve_stack_temporal_named(
@@ -34,7 +38,7 @@ fn resolve_stack_temporal_named(
     px_scale: f32,
     markers: &MarkerContext,
 ) -> Vec<(uuid::Uuid, Resolved)> {
-    super::resolve_stack_temporal_named(
+    let (ids, resolved) = super::resolve_stack_temporal_named(
         effects,
         sample_lt,
         frame_lt,
@@ -42,7 +46,8 @@ fn resolve_stack_temporal_named(
         px_scale,
         markers,
         Arc::new(ExpressionContext::detached()),
-    )
+    );
+    ids.into_iter().zip(resolved.ops).collect()
 }
 
 fn resolve_stack_temporal(
@@ -62,6 +67,39 @@ fn resolve_stack_temporal(
         markers,
         Arc::new(ExpressionContext::detached()),
     )
+    .ops
+}
+
+/// Resolve a one-effect stack whose effect has moved to the registry, and read
+/// its bag back through the effect's own typed reader
+/// (docs/impl/effect-registry.md §3).
+///
+/// The assertions these tests used to make — "100 % resolves to a factor of 1"
+/// — are now assertions about the effect's `packed`, because that is where the
+/// conversion moved; the resolve step's job is to put the *authored* number in
+/// the bag, which this checks on the way past.
+fn resolve_migrated<T: EffectMetadata>(
+    effects: &[EffectInstance],
+    lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+    markers: &MarkerContext,
+) -> T {
+    let ops = super::resolve_stack(
+        effects,
+        lt,
+        diag_px,
+        px_scale,
+        markers,
+        Arc::new(ExpressionContext::detached()),
+    );
+    assert_eq!(ops.ops.len(), 1, "expected exactly one resolved op");
+    assert!(
+        matches!(ops.ops[0], Resolved::Registry { op: 0 }),
+        "a migrated effect resolves to an arena op, got {:?}",
+        ops.ops[0]
+    );
+    T::read(ops.bags.get(0).expect("the migrated op").params)
 }
 
 // Posterize time (docs/08 §3.25): the held comp time snaps down to the coarser
@@ -2086,42 +2124,36 @@ fn colour_balance_instantiates_and_resolves_neutral() {
     assert_eq!(e.colour_at("lift", 0.0), Some([0.0, 0.0, 0.0, 1.0]));
     assert_eq!(e.colour_at("gamma", 0.0), Some([1.0; 4]));
     assert_eq!(e.colour_at("gain", 0.0), Some([1.0; 4]));
-    let r = resolve_stack(
+    let v: effects::colour_balance::ColourBalance = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::ColourBalance {
-            lift: [0.0; 3],
-            gamma: [1.0; 3],
-            gain: [1.0; 3],
-            mix: 1.0
-        }]
-    );
+    assert_eq!(v.packed(), ([0.0; 3], [1.0; 3], [1.0; 3], 1.0));
+
+    // A gamma of 0 would make the reciprocal exponent infinite; the floor is
+    // host maths, so both render paths get the same 0.01.
+    let floored = effects::colour_balance::ColourBalance {
+        gamma: [0.0, 0.0, 0.0, 1.0],
+        ..v
+    };
+    assert_eq!(floored.packed().1, [0.01; 3]);
 }
 
 #[test]
 fn saturation_instantiates_and_resolves_neutral() {
     let e = instantiate("saturation").unwrap();
     assert_eq!(e.float_at("saturation", 0.0), Some(100.0));
-    let r = resolve_stack(
+    let v: effects::saturation::Saturation = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::Saturation {
-            saturation: 1.0,
-            mix: 1.0
-        }]
-    );
+    assert_eq!(v.packed(), (1.0, 1.0));
 
     // K-135: the hard ceiling is open, so a heavy 400 % resolves to 4.0 —
     // no clamp to 200 — and the schema declares the open range.
@@ -2141,13 +2173,9 @@ fn saturation_instantiates_and_resolves_neutral() {
             p.value = EffectValue::Float(Property::fixed(400.0));
         }
     }
-    assert_eq!(
-        resolve_stack(&[heavy], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Saturation {
-            saturation: 4.0,
-            mix: 1.0
-        }]
-    );
+    let heavy: effects::saturation::Saturation =
+        resolve_migrated(&[heavy], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(heavy.packed(), (4.0, 1.0));
 }
 
 #[test]
@@ -2155,20 +2183,14 @@ fn vibrancy_instantiates_and_resolves_neutral() {
     let e = instantiate("vibrancy").unwrap();
     // Default 0 = neutral (K-152): a fresh Vibrancy is the bit-exact identity.
     assert_eq!(e.float_at("amount", 0.0), Some(0.0));
-    let r = resolve_stack(
+    let v: effects::vibrancy::Vibrancy = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::Vibrancy {
-            amount: 0.0,
-            mix: 1.0
-        }]
-    );
+    assert_eq!(v.packed(), (0.0, 1.0));
 
     // K-135: the ceiling is open, so a heavy 250 % resolves to 2.5 — no clamp.
     let s = schema("vibrancy").unwrap();
@@ -2187,13 +2209,9 @@ fn vibrancy_instantiates_and_resolves_neutral() {
             p.value = EffectValue::Float(Property::fixed(250.0));
         }
     }
-    assert_eq!(
-        resolve_stack(&[heavy], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Vibrancy {
-            amount: 2.5,
-            mix: 1.0
-        }]
-    );
+    let heavy: effects::vibrancy::Vibrancy =
+        resolve_migrated(&[heavy], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(heavy.packed(), (2.5, 1.0));
 }
 
 #[test]
@@ -2284,15 +2302,10 @@ fn matte_key_migrates_pre_k154_projects() {
 fn exposure_instantiates_resolves_and_gains_light() {
     let e = instantiate("exposure").unwrap();
     assert_eq!(e.float_at("stops", 0.0), Some(0.0));
-    // 0 stops resolves to a neutral factor of 1.0.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Exposure {
-            factor: 1.0,
-            mix: 1.0
-        }]
-    );
+    // 0 stops packs to a neutral factor of 1.0.
+    let v: effects::exposure::Exposure =
+        resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(v.packed(), (1.0, 1.0));
     // The CPU reference: 0 stops is identity; +1 stop (factor 2) doubles
     // RGB and leaves alpha alone; Mix 0 is the identity at any factor.
     let mut neutral = vec![0.4_f32, 0.5, 0.6, 1.0];
@@ -2310,26 +2323,19 @@ fn exposure_instantiates_resolves_and_gains_light() {
 fn temperature_instantiates_resolves_and_warms_and_cools() {
     let e = instantiate("temperature").unwrap();
     assert_eq!(e.float_at("temperature", 0.0), Some(0.0));
-    // Temperature 0 resolves to neutral gains of exactly 1.0 each.
-    let r = resolve_stack(
+    // Temperature 0 packs to neutral gains of exactly 1.0 each.
+    let v: effects::temperature::Temperature = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(
-        r,
-        vec![Resolved::Temperature {
-            gain_r: 1.0,
-            gain_b: 1.0,
-            mix: 1.0
-        }]
-    );
+    assert_eq!(v.packed(), (1.0, 1.0, 1.0));
     // K-135: the range widens to ±150 slider / ±200 hard, with the stronger
-    // ±0.75·k gain. +100 resolves to gains (1.75, 0.25): red boosted, blue
-    // cut hard. −100 is the mirror (0.25, 1.75). The resolve step owns the
-    // gain formula.
+    // ±0.75·k gain. +100 packs to gains (1.75, 0.25): red boosted, blue
+    // cut hard. −100 is the mirror (0.25, 1.75). The effect owns the gain
+    // formula (`Temperature::gains`), so both render paths read one copy.
     let s = schema("temperature").unwrap();
     let temp = s.params.iter().find(|p| p.id == "temperature").unwrap();
     assert!(matches!(
@@ -2346,44 +2352,29 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
             p.value = EffectValue::Float(Property::fixed(100.0));
         }
     }
-    assert_eq!(
-        resolve_stack(&[warm], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Temperature {
-            gain_r: 1.75,
-            gain_b: 0.25,
-            mix: 1.0
-        }]
-    );
+    let warm: effects::temperature::Temperature =
+        resolve_migrated(&[warm], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(warm.packed(), (1.75, 0.25, 1.0));
     // At the +200 hard extreme the blue gain would be 1 − 1.5 = −0.5; the
-    // resolver floors it at 0 (never a negative channel), red at 2.5.
+    // pack floors it at 0 (never a negative channel), red at 2.5.
     let mut hot = e.clone();
     for p in &mut hot.params {
         if p.id == "temperature" {
             p.value = EffectValue::Float(Property::fixed(200.0));
         }
     }
-    assert_eq!(
-        resolve_stack(&[hot], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Temperature {
-            gain_r: 2.5,
-            gain_b: 0.0,
-            mix: 1.0
-        }]
-    );
+    let hot: effects::temperature::Temperature =
+        resolve_migrated(&[hot], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(hot.packed(), (2.5, 0.0, 1.0));
     let mut cool = e;
     for p in &mut cool.params {
         if p.id == "temperature" {
             p.value = EffectValue::Float(Property::fixed(-100.0));
         }
     }
-    assert_eq!(
-        resolve_stack(&[cool], 0.0, 1000.0, 1.0, &MarkerContext::NONE),
-        vec![Resolved::Temperature {
-            gain_r: 0.25,
-            gain_b: 1.75,
-            mix: 1.0
-        }]
-    );
+    let cool: effects::temperature::Temperature =
+        resolve_migrated(&[cool], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(cool.packed(), (0.25, 1.75, 1.0));
     // The CPU reference: neutral gains are the bit-exact identity; a warm
     // shift (gains 1.5 / 0.5) boosts red and cuts blue, green and alpha
     // untouched; Mix 0 is the identity at any gains.
@@ -2403,8 +2394,8 @@ fn invert_instantiates_resolves_and_inverts() {
     let e = instantiate("invert").unwrap();
     // The only parameter is Mix, defaulting to 100 %.
     assert_eq!(e.float_at("mix", 0.0), Some(100.0));
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(r, vec![Resolved::Invert { mix: 1.0 }]);
+    let v: effects::invert::Invert = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(v.packed(), 1.0);
 
     // The CPU reference: an opaque pixel inverts as 1 − c, alpha untouched.
     let mut opaque = vec![0.2_f32, 0.5, 0.9, 1.0];
@@ -2441,16 +2432,9 @@ fn tint_instantiates_resolves_and_maps_luma() {
     let e = instantiate("tint").unwrap();
     assert_eq!(e.colour_at("black", 0.0), Some([0.0, 0.0, 0.0, 1.0]));
     assert_eq!(e.colour_at("white", 0.0), Some([1.0, 1.0, 1.0, 1.0]));
-    // Defaults resolve to black→black, white→white (a greyscale mapping).
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Tint {
-            black: [0.0, 0.0, 0.0],
-            white: [1.0, 1.0, 1.0],
-            mix: 1.0
-        }]
-    );
+    // Defaults pack to black→black, white→white (a greyscale mapping).
+    let v: effects::tint::Tint = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(v.packed(), ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1.0));
 
     // The CPU reference: default black→black / white→white maps every pixel
     // to its own Rec.709 luma in all three channels (a greyscale).
@@ -2502,8 +2486,8 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
         e.param("preserve_luminance"),
         Some(&EffectValue::Bool(true))
     );
-    // 0° resolves to the identity matrix.
-    let r = resolve_stack(
+    // 0° packs to the identity matrix.
+    let v: effects::hue_shift::HueShift = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
@@ -2511,11 +2495,8 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
         &MarkerContext::NONE,
     );
     assert_eq!(
-        r,
-        vec![Resolved::HueShift {
-            m: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-            mix: 1.0
-        }]
+        v.packed(),
+        ([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], 1.0)
     );
     // Identity is bit-exact identity.
     let mut a = vec![0.4_f32, 0.5, 0.6, 1.0];
@@ -2546,10 +2527,10 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
 
 #[test]
 fn hue_shift_preserve_luminance_toggle_picks_the_matrix_branch() {
-    // K-136: Preserve luminance off resolves to the plain-RGB rotation
+    // K-136: Preserve luminance off packs to the plain-RGB rotation
     // (equal-weight spin about the grey axis); on keeps the Rec.709
-    // constant-luminance one. The resolve step owns the branch; the kernel
-    // is matrix-general, so both share one op.
+    // constant-luminance one. The effect owns the branch (`HueShift::matrix`);
+    // the kernel is matrix-general, so both modes share one pass.
     let mut off = instantiate("hue_shift").unwrap();
     for p in &mut off.params {
         match p.id.as_str() {
@@ -2558,19 +2539,14 @@ fn hue_shift_preserve_luminance_toggle_picks_the_matrix_branch() {
             _ => {}
         }
     }
-    assert_eq!(
-        resolve_stack(
-            std::slice::from_ref(&off),
-            0.0,
-            1000.0,
-            1.0,
-            &MarkerContext::NONE
-        ),
-        vec![Resolved::HueShift {
-            m: hue_matrix_rgb(90.0),
-            mix: 1.0
-        }]
+    let off: effects::hue_shift::HueShift = resolve_migrated(
+        std::slice::from_ref(&off),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
     );
+    assert_eq!(off.packed(), (hue_matrix_rgb(90.0), 1.0));
     // Preserve on (the default) at the same angle uses the Rec.709 matrix,
     // and the two matrices genuinely differ.
     let mut on = instantiate("hue_shift").unwrap();
@@ -2579,19 +2555,14 @@ fn hue_shift_preserve_luminance_toggle_picks_the_matrix_branch() {
             p.value = EffectValue::Float(Property::fixed(90.0));
         }
     }
-    assert_eq!(
-        resolve_stack(
-            std::slice::from_ref(&on),
-            0.0,
-            1000.0,
-            1.0,
-            &MarkerContext::NONE
-        ),
-        vec![Resolved::HueShift {
-            m: hue_matrix(90.0),
-            mix: 1.0
-        }]
+    let on: effects::hue_shift::HueShift = resolve_migrated(
+        std::slice::from_ref(&on),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
     );
+    assert_eq!(on.packed(), (hue_matrix(90.0), 1.0));
     assert_ne!(
         hue_matrix(90.0),
         hue_matrix_rgb(90.0),
@@ -2638,9 +2609,10 @@ fn hue_shift_preserve_luminance_toggle_picks_the_matrix_branch() {
 fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
     let e = instantiate("contrast").unwrap();
     assert_eq!(e.float_at("contrast", 0.0), Some(100.0));
-    // 100 % resolves to a neutral factor of 1.0.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(r, vec![Resolved::Contrast { k: 1.0, mix: 1.0 }]);
+    // 100 % packs to a neutral factor of 1.0.
+    let v: effects::contrast::Contrast =
+        resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(v.packed(), (1.0, 1.0));
 
     // Neutral (k 1.0) is the bit-exact identity; Mix 0 is too at any k.
     let mut n = vec![0.4_f32, 0.5, 0.6, 1.0];
@@ -2686,15 +2658,9 @@ fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
 fn gamma_is_neutral_at_one_and_curves_per_channel() {
     let e = instantiate("gamma").unwrap();
     assert_eq!(e.float_at("gamma", 0.0), Some(1.0));
-    // Default 1.0 resolves to a neutral gamma.
-    let r = resolve_stack(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(
-        r,
-        vec![Resolved::Gamma {
-            gamma: 1.0,
-            mix: 1.0
-        }]
-    );
+    // Default 1.0 packs to a neutral gamma.
+    let v: effects::gamma::Gamma = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
+    assert_eq!(v.packed(), (1.0, 1.0));
 
     // Neutral (gamma 1.0) is the bit-exact identity; Mix 0 is too at any
     // gamma (a short-circuit, not a reliance on pow(x, 1) == x).
@@ -6473,7 +6439,7 @@ fn lens_flare_params_evaluate_expressions_in_context() {
         comp_time: 3.0,
         ..ExpressionContext::detached()
     });
-    let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context);
+    let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context).ops;
     let [Resolved::LensFlare(p)] = ops.as_slice() else {
         panic!("lens_flare must resolve to exactly one op");
     };
@@ -8890,31 +8856,32 @@ fn the_frame_key_separates_a_value_from_its_number() {
     assert_eq!(hash(Value::Float(0.25)), hash(Value::Float(0.25)));
 }
 
-/// The CPU reference reached through the registry is the same picture as the one
-/// reached through the old dispatch — the acceptance test for a migrated effect.
+/// A stack carrying a migrated effect is dispatched to that effect's own CPU
+/// reference, and renders what the old `Resolved::Exposure` arm rendered.
+///
+/// The old arm is gone, so its numbers are written out here instead: +1 stop is
+/// a factor of 2, Mix 100 % is 1. That is the whole of what the arm did before
+/// calling [`cpu::exposure`], and pinning it is what makes the port checkable
+/// after the variant has been deleted.
 #[test]
 fn a_registered_effect_renders_what_the_old_dispatch_rendered() {
     let source: Vec<f32> = (0..16).map(|i| i as f32 / 16.0).collect();
 
     let mut through_registry = source.clone();
-    let entries = [
-        (effects::exposure::Exposure::STOPS, Value::Float(1.0)),
-        (effects::exposure::Exposure::MIX, Value::Float(100.0)),
-    ];
-    effects::exposure::ExposureDef.apply_cpu(&mut through_registry, 2, 2, Params::new(&entries));
+    let mut ops = ResolvedOps::default();
+    ops.bags
+        .begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
+    ops.bags
+        .push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
+    ops.bags
+        .push(effects::exposure::Exposure::MIX, Value::Float(100.0));
+    ops.ops.push(Resolved::Registry { op: 0 });
+    cpu::apply_stack(&mut through_registry, 2, 2, &ops);
 
-    let mut through_the_enum = source.clone();
-    cpu::apply(
-        &mut through_the_enum,
-        2,
-        2,
-        &Resolved::Exposure {
-            factor: 2.0,
-            mix: 1.0,
-        },
-    );
+    let mut through_the_old_numbers = source.clone();
+    cpu::exposure(&mut through_the_old_numbers, 2.0, 1.0);
 
-    assert_eq!(through_registry, through_the_enum);
+    assert_eq!(through_registry, through_the_old_numbers);
 }
 
 /// The kinds beyond a plain slider read back as themselves: a colour as four
@@ -8981,23 +8948,38 @@ fn the_host_side_maths_moved_without_changing() {
     }
 }
 
-/// Every migrated effect renders through the registry exactly what it rendered
-/// through the old dispatch — the acceptance criterion for a batch.
+/// Every migrated effect, dispatched through the registry, renders exactly what
+/// the old `Resolved` arm rendered — the acceptance criterion for a batch.
+///
+/// The old arms are deleted, so the numbers they used to compute are written out
+/// here as literal calls to the same `cpu::` reference. That is the port made
+/// checkable: the left-hand side goes the whole way round the new path (arena →
+/// [`cpu::apply_stack`] → [`EffectDef::apply_cpu`] → the effect's `packed`), and
+/// the right-hand side is the arm's arithmetic transcribed by hand. If the
+/// migration changed a clamp, a divisor or a formula, these disagree.
 #[test]
 fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     let source: Vec<f32> = (0..64).map(|i| (i % 17) as f32 / 17.0).collect();
-    let both = |def: &dyn EffectDef, entries: &[(ParamId, Value)], old: Resolved| {
-        let mut new = source.clone();
-        def.apply_cpu(&mut new, 4, 4, Params::new(entries));
-        let mut legacy = source.clone();
-        cpu::apply(&mut legacy, 4, 4, &old);
-        assert_eq!(
-            new,
-            legacy,
-            "{} renders differently through the registry",
-            def.schema().match_name
-        );
-    };
+    let both =
+        |def: &'static dyn EffectDef, entries: &[(ParamId, Value)], old: &dyn Fn(&mut Vec<f32>)| {
+            let mut new = source.clone();
+            let mut ops = ResolvedOps::default();
+            ops.bags.begin(def, uuid::Uuid::now_v7());
+            for (id, value) in entries {
+                ops.bags.push(*id, *value);
+            }
+            ops.ops.push(Resolved::Registry { op: 0 });
+            cpu::apply_stack(&mut new, 4, 4, &ops);
+
+            let mut legacy = source.clone();
+            old(&mut legacy);
+            assert_eq!(
+                new,
+                legacy,
+                "{} renders differently through the registry",
+                def.schema().match_name
+            );
+        };
 
     both(
         &effects::saturation::SaturationDef,
@@ -9008,10 +8990,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             ),
             (effects::saturation::Saturation::MIX, Value::Float(80.0)),
         ],
-        Resolved::Saturation {
-            saturation: 2.5,
-            mix: 0.8,
-        },
+        &|p| cpu::saturate(p, 2.5, 0.8),
     );
     both(
         &effects::vibrancy::VibrancyDef,
@@ -9019,23 +8998,23 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             (effects::vibrancy::Vibrancy::AMOUNT, Value::Float(120.0)),
             (effects::vibrancy::Vibrancy::MIX, Value::Float(100.0)),
         ],
-        Resolved::Vibrancy {
-            amount: 1.2,
-            mix: 1.0,
-        },
+        &|p| cpu::vibrance(p, 1.2, 1.0),
+    );
+    both(
+        &effects::exposure::ExposureDef,
+        &[(effects::exposure::Exposure::STOPS, Value::Float(1.5))],
+        // The old arm's `2f64.powf(stops) as f32`, at the same stops.
+        &|p| cpu::exposure(p, 2f64.powf(1.5) as f32, 1.0),
     );
     both(
         &effects::contrast::ContrastDef,
         &[(effects::contrast::Contrast::CONTRAST, Value::Float(160.0))],
-        Resolved::Contrast { k: 1.6, mix: 1.0 },
+        &|p| cpu::contrast(p, 1.6, 1.0),
     );
     both(
         &effects::gamma::GammaDef,
         &[(effects::gamma::Gamma::GAMMA, Value::Float(2.2))],
-        Resolved::Gamma {
-            gamma: 2.2,
-            mix: 1.0,
-        },
+        &|p| cpu::gamma(p, 2.2, 1.0),
     );
     both(
         &effects::temperature::TemperatureDef,
@@ -9043,19 +9022,13 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             effects::temperature::Temperature::TEMPERATURE,
             Value::Float(60.0),
         )],
-        Resolved::Temperature {
-            gain_r: 1.0 + 0.75 * 0.6,
-            gain_b: 1.0 - 0.75 * 0.6,
-            mix: 1.0,
-        },
+        // The old arm's gains: k = 60/100, 1 ± 0.75·k, floored at 0.
+        &|p| cpu::temperature(p, 1.0 + 0.75 * 0.6, 1.0 - 0.75 * 0.6, 1.0),
     );
     both(
         &effects::hue_shift::HueShiftDef,
         &[(effects::hue_shift::HueShift::ANGLE, Value::Float(120.0))],
-        Resolved::HueShift {
-            m: hue_matrix(120.0),
-            mix: 1.0,
-        },
+        &|p| cpu::hue_shift(p, hue_matrix(120.0), 1.0),
     );
     both(
         &effects::tint::TintDef,
@@ -9069,15 +9042,35 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
                 Value::Colour([1.0, 0.9, 0.6, 1.0]),
             ),
         ],
-        Resolved::Tint {
-            black: [0.05, 0.0, 0.1],
-            white: [1.0, 0.9, 0.6],
-            mix: 1.0,
-        },
+        &|p| cpu::tint(p, [0.05, 0.0, 0.1], [1.0, 0.9, 0.6], 1.0),
     );
     both(
         &effects::invert::InvertDef,
         &[(effects::invert::Invert::MIX, Value::Float(100.0))],
-        Resolved::Invert { mix: 1.0 },
+        &|p| cpu::invert(p, 1.0),
     );
+}
+
+/// The arena can carry a number, a switch, a choice and a colour, but a LUT's
+/// file slot and a layer reference's binding are decided by the *caller* —
+/// `resolve_into_arena` skips those kinds, because it has no way to know which
+/// cube loaded or which layer was rendered.
+///
+/// While no migrated effect declares one that is a correct silence. The moment
+/// one does, this fails: the alternative is a Tint that quietly renders without
+/// its LUT because the reader took a default.
+#[test]
+fn no_migrated_effect_declares_a_kind_the_arena_cannot_carry() {
+    for def in BUILTIN_DEFS.iter() {
+        for p in def.schema().params {
+            assert!(
+                !matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. }),
+                "{}'s {} is a {:?}, which resolve_into_arena drops — thread it \
+                 beside the op before migrating this effect",
+                def.schema().match_name,
+                p.id,
+                p.kind
+            );
+        }
+    }
 }
