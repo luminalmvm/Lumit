@@ -61,7 +61,11 @@ jobs:
     env:
       # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the
       # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
-      FFMPEG_ASSET: ffmpeg-n7.1-latest-win64-gpl-shared-7.1
+      # Pinned to a dated autobuild, not the rolling "latest" tag: latest rotated
+      # its n7.1 assets out on 2026-08-17 and every job 404'd. A dated tag's
+      # assets are immutable; moving to FFmpeg 8 is a crate-feature migration,
+      # not a URL edit.
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-win64-gpl-shared-7.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -74,7 +78,7 @@ jobs:
       - name: Install FFmpeg 7.1 (BtbN shared build)
         shell: pwsh
         run: |
-          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$env:FFMPEG_ASSET.zip"
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/$env:FFMPEG_ASSET.zip"
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
           Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
           $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
@@ -125,7 +129,7 @@ jobs:
       # The same BtbN "shared, GPL" n7.1 build the Windows job takes, so all
       # three platforms link an identical FFmpeg. The distro's own is 6.x,
       # which the crate's `ffmpeg7_1` feature does not match.
-      FFMPEG_ASSET: ffmpeg-n7.1-latest-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
       # This runner installs Mesa's lavapipe below, so every GPU test MUST run
       # here: a missing adapter is a broken runner, not a machine without a
       # graphics card, and `lumit_gpu::no_adapter` turns the polite skip into a
@@ -158,7 +162,7 @@ jobs:
             libwayland-dev mesa-vulkan-drivers libclang-18-dev
       - name: Install FFmpeg 7.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -215,7 +219,7 @@ jobs:
     env:
       # The same BtbN "shared, GPL" n7.1 build the other jobs take, so the
       # bridge .so links the identical FFmpeg lumit-media expects.
-      FFMPEG_ASSET: ffmpeg-n7.1-latest-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -241,7 +245,7 @@ jobs:
       # env exports), so the bridge's `media` feature links here identically.
       - name: Install FFmpeg 7.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -429,7 +433,7 @@ jobs:
     name: bridge codegen is fresh (generate produces no diff)
     runs-on: ubuntu-latest
     env:
-      FFMPEG_ASSET: ffmpeg-n7.1-latest-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -454,7 +458,7 @@ jobs:
             libwayland-dev mesa-vulkan-drivers libclang-18-dev
       - name: Install FFmpeg 7.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
