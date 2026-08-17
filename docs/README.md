@@ -8,6 +8,12 @@ This folder is the specification and reference set for Lumit. Start here.
 tour of what each crate does, with Rust and threading explained in editing terms.
 It is large; use its section index rather than reading straight through.
 
+**If you are new to the codebase *and* intend to change it**, read
+[learn/](learn/) - the onboarding set: one doc per area of the repo, plus
+[learn/RUST.md](learn/RUST.md), [learn/FLUTTER.md](learn/FLUTTER.md) and
+[learn/WGSL.md](learn/WGSL.md), each teaching the language from Lumit's own code.
+GUIDE.md explains what the code does; these explain how to write it.
+
 **If you want to change how the frontend and engine talk**, read
 [17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md) - the single source of truth for
 the front/back boundary.
@@ -57,6 +63,9 @@ Keeping these separate is what stops the set from rotting:
 
 ## Subfolders
 
+- [learn/](learn/) - the onboarding set: an area-by-area tour of the codebase with
+diagrams, and one teaching doc each for Rust, Flutter/Dart and WGSL, written from
+real excerpts of this repository. Start at [learn/README.md](learn/README.md).
 - [impl/](impl/) - implementation notes for the genuinely hard, low-level parts
 (rational time, cubic solving, wgpu patterns, hardware decode, the scheduler,
 optical flow, OFX hosting, beat detection, expressions, LUTs, layer inputs,
