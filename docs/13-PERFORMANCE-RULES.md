@@ -361,7 +361,11 @@ application depends on, run by the CI job **`performance gates (ratio vs baselin
   a checked-in baseline **for that runner's operating system**
   (`crates/lumit-bench/baselines/<os>.json`, a previous run's own output) and fails at 1.6x
   worse. Baselines are regenerated exactly like `crates/lumit-core/fx-labels.txt`: run the
-  harness, replace the file, commit on purpose. A measurement under 1 ms is not gated on
+  harness, replace the file, commit on purpose. On a software rasteriser the span-scaled
+  scenarios (B6, B7, B11) measure a fraction of the work area (`BENCH_SPAN_FRACTION`,
+  stamped into every results file): the full span burned CI's whole time limit on the fill
+  alone. A run and its baseline must carry the same fraction — the compare refuses a
+  mismatch outright, exactly as it refuses a foreign operating system. A measurement under 1 ms is not gated on
   ratio (a warm frame costs microseconds, where a factor is noise), and a baseline from
   another operating system is refused rather than used. Where a baseline does not exist yet
   the job prints the fresh numbers, warns, and does not pretend to be a gate.

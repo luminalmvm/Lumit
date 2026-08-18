@@ -120,6 +120,29 @@ const REFINE_SAMPLES: usize = 5;
 const WARM_FRAMES: u64 = 48;
 /// How many times B5 replays that window.
 const WARM_LAPS: u64 = 5;
+
+/// The fraction of the work area the span-scaled scenarios measure, in
+/// per cent: `BENCH_SPAN_FRACTION`, clamped 1..=100, default 100.
+///
+/// Why it exists: B6, B7 and B11 render cold frames of a deliberately heavy
+/// comp, and on a software rasteriser (CI's lavapipe) the full 20 s span ran
+/// past the job's two-hour timeout. A fraction is honest where a timeout is
+/// not, because the ratio gate only ever compares a run against a baseline
+/// carrying the SAME fraction - the stamp rides the results file and
+/// `baseline::compare` refuses a mismatch, exactly as it refuses a foreign OS.
+/// B3, B4 and B5 stay unscaled: single-frame latencies and a warm replay are
+/// already cheap.
+pub fn span_fraction() -> u64 {
+    std::env::var("BENCH_SPAN_FRACTION")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or(100, |v| v.clamp(1, 100))
+}
+
+/// `count` scaled by [`span_fraction`], never below one frame.
+fn span_scaled(count: u64) -> u64 {
+    (count * span_fraction() / 100).max(1)
+}
 /// A second of playback, which is what B6 and B7 report the rate of.
 const PLAY_FRAMES: u64 = 60;
 
@@ -288,7 +311,7 @@ impl Harness {
     fn cold_playback(&self, budget: &'static str, quality: Quality) -> Result<Measurement, String> {
         let mut r = self.cold()?;
         let (start, end) = self.work_area();
-        let count = PLAY_FRAMES.min((end - start) as u64);
+        let count = span_scaled(PLAY_FRAMES.min((end - start) as u64));
         let t = Instant::now();
         for i in 0..count {
             r.render_prepared(&self.doc, self.comp, start as u64 + i, quality, false, true)?;
@@ -314,7 +337,8 @@ impl Harness {
     pub fn b11_idle_fill(&self) -> Result<Measurement, String> {
         let mut r = self.cold()?;
         let (start, end) = self.work_area();
-        let order = fill_walk_order(start, start, end);
+        let mut order = fill_walk_order(start, start, end);
+        order.truncate(span_scaled(order.len() as u64) as usize);
         let t = Instant::now();
         for frame in &order {
             r.render_prepared(&self.doc, self.comp, *frame as u64, HALF, false, true)?;

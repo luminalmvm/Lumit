@@ -231,16 +231,16 @@ jobs:
   performance:
     name: performance gates (ratio vs baseline)
     runs-on: ubuntu-latest
-    # Lavapipe is a software rasteriser and B11 alone renders the whole
-    # twenty-second work area — 1200 frames, which is under two minutes on a real
-    # card and will be a great deal more than that here. The limit is so a
-    # pathological run fails visibly in two hours rather than burning the
-    # six-hour default. If it starts tripping honestly — rather than through a
-    # regression — the fix is a smaller work area for the harness on a software
-    # adapter, not a bigger number here.
-    timeout-minutes: 120
+    # Lavapipe is a software rasteriser, so the span-scaled scenarios measure a
+    # tenth of the work area (BENCH_SPAN_FRACTION below): the first full-span
+    # run burned the entire two-hour limit on B11's 1200 frames alone. A
+    # fraction is honest where a bigger timeout is not — the ratio gate only
+    # ever compares this runner against a baseline measured at the same
+    # fraction, and the harness refuses a mismatch outright.
+    timeout-minutes: 60
     env:
       FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      BENCH_SPAN_FRACTION: "10"
       # A missing adapter is a broken runner here, exactly as in the `linux` job:
       # a benchmark that measured nothing must not report green.
       LUMIT_REQUIRE_GPU: 1

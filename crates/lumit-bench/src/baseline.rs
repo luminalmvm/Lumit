@@ -53,12 +53,21 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 6] = [
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,
 /// once a copy of it is committed, the baseline it is judged against.
+fn default_span_fraction() -> u64 {
+    100
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Baseline {
     /// `std::env::consts::OS` of the machine that produced it. Compared before
     /// anything else: Windows numbers against a macOS baseline would be a gate
     /// that fires on the operating system.
     pub os: String,
+    /// The `BENCH_SPAN_FRACTION` the numbers were measured at (see
+    /// `scenarios::span_fraction`). A run and its baseline must agree, or the
+    /// ratio compares a tenth of a fill against the whole of one.
+    #[serde(default = "default_span_fraction")]
+    pub span_fraction: u64,
     /// Budget name to [`Measurement::value_ms`].
     pub results: BTreeMap<String, f64>,
 }
@@ -69,6 +78,7 @@ impl Baseline {
     pub fn from_results(results: &[Measurement]) -> Self {
         Self {
             os: std::env::consts::OS.to_string(),
+            span_fraction: crate::scenarios::span_fraction(),
             results: results
                 .iter()
                 .map(|m| (m.budget.to_string(), m.value_ms))
@@ -129,6 +139,15 @@ pub fn compare(
             baseline.os
         ));
     }
+    if baseline.span_fraction != crate::scenarios::span_fraction() {
+        return Err(format!(
+            "baseline was measured at span fraction {} but this run is at {}: the two are \
+             different measurements; regenerate the baseline at the fraction this \
+             environment uses",
+            baseline.span_fraction,
+            crate::scenarios::span_fraction()
+        ));
+    }
     Ok(results
         .iter()
         .map(|m| {
@@ -177,6 +196,7 @@ mod tests {
     fn baseline(os: &str) -> Baseline {
         Baseline {
             os: os.into(),
+            span_fraction: 100,
             results: [("B3".to_string(), 40.0), ("B7".to_string(), 30.0)]
                 .into_iter()
                 .collect(),
@@ -189,6 +209,20 @@ mod tests {
             value_ms,
             frames: 1,
         }
+    }
+
+    #[test]
+    fn a_foreign_span_fraction_is_refused_not_compared() {
+        let base = Baseline {
+            os: std::env::consts::OS.to_string(),
+            span_fraction: 7,
+            results: std::collections::BTreeMap::new(),
+        };
+        let err = compare(&base, &[], 1.6).unwrap_err();
+        assert!(
+            err.contains("span fraction"),
+            "a tenth of a fill must never be judged against the whole of one: {err}"
+        );
     }
 
     #[test]
@@ -225,6 +259,7 @@ mod tests {
         // fifty microseconds, which nothing can see.
         let base = Baseline {
             os: std::env::consts::OS.into(),
+            span_fraction: 100,
             results: [("B5".to_string(), 0.01)].into_iter().collect(),
         };
         let verdicts = compare(&base, &[result("B5", 0.05)], DEFAULT_GATE_FACTOR).unwrap();
