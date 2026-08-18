@@ -515,22 +515,24 @@ private items around them. Property tests generate inputs:
 
 Test names in this repo are sentences describing the guarantee. Follow that.
 
-Pure functions get table tests, which is why the scheduler is deliberately pure:
+Pure functions get table tests, which is why the scheduler's arithmetic is kept
+separate from the loop that runs it:
 
 ```rust
-// crates/lumit-eval/src/schedule.rs — `next_frame_to_schedule`
-pub fn next_frame_to_schedule<T>(
-    clock_frame: u64,
-    target_frame: u64,
-    ring: &FrameRing<T>,
-    already_scheduled: impl Fn(u64) -> bool,
-) -> Option<u64> {
-    if target_frame < clock_frame {
-        return None;
-    }
-    (clock_frame..=target_frame).find(|&n| !ring.contains(n) && !already_scheduled(n))
+// crates/lumit-bridge/src/playback.rs — `lookahead_frames`
+pub(crate) fn lookahead_frames(p95_cost: Option<f64>, fps: f64) -> usize {
+    let frames = match p95_cost {
+        Some(cost) if fps > 0.0 => (2.0 * cost * fps).ceil() as usize,
+        _ => 0,
+    };
+    frames.clamp(8, 16)
 }
 ```
+
+No clock, no GPU, no ring — just numbers in and a number out, so the test is a list
+of cases. `lumit-eval/src/schedule.rs` is the same idea taken further: the whole
+realtime tier controller is a struct of `f64`s, and its tests drive it with made-up
+frame costs.
 
 ## Reading order in this repo
 

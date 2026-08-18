@@ -151,14 +151,20 @@ with no GPU and no codecs. Today it drives real kernels only in
 `lumit-gpu/tests/exec_skeleton.rs`. The shipped path is the draw-list renderer above.
 
 Live from this crate today: `comp_frame_key` (all cache naming) and `schedule.rs`
-(the playback decisions).
+(the realtime tier controller).
 
-`schedule.rs` is deliberately pure, with no clocks and no threads. Every rule is
-therefore a table test: `FrameRing` (the shelf of rendered frames, which presents
-the newest due frame), `Lookahead` (`clamp(round(2 × p95 cost × fps), 8, 16)`), and
-`RealtimeController` (EWMA cost vs budget, which drops a preview tier immediately
-above 0.9× budget and rises only after 12 consecutive frames under 0.4×). The bridge
-wraps `RealtimeController` as the shipped adaptive-resolution picker.
+`schedule.rs` is deliberately pure, with no clocks and no threads, so its one rule is
+a table test: `RealtimeController` (EWMA cost vs budget, which drops a preview tier
+immediately above 0.9× budget and rises only after 12 consecutive frames under 0.4×).
+`lumit-bridge/src/realtime.rs` runs one for the session and feeds it measured render
+costs; it is the shipped adaptive-resolution picker.
+
+The rest of the playback loop is in `lumit-bridge`, where the clock and the GPU are:
+`playback.rs` has `CostWindow` (p95 over the last 32 renders) and `lookahead_frames`
+(`clamp(2 × p95 × fps, 8, 16)`), and the worker's `Playback` owns the render-ahead
+ring of `PreparedFrame`s with `present_choice` (front-on-a-grid for every-frame, newest
+frame the clock has reached for adaptive) and `pre_roll_done` (audio waits for three
+banked frames or 150 ms).
 
 ## Traps
 

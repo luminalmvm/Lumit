@@ -487,7 +487,7 @@ over 10 minutes, the underrun ladder). Re-run
 1080p60 fixture and a Windows device, so it is run by hand.
 
 **Settings pages not built ([07-UI-SPEC.md](07-UI-SPEC.md) §15):**
-colour-management; preview-mode (Cached/Realtime) toggle; CUDA on/off;
+colour-management; preview-mode (Every frame/Adaptive) toggle; CUDA on/off;
 plugins/decoder page; autosave interval/keep; export defaults (preset + filename
 template). Each lands wired to the engine through the bridge, not as a Dart-side
 setting nothing reads.

@@ -2985,63 +2985,67 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the adapters the full layer vocabulary (transforms, masks, retimes, effects) and then
   switching preview and export over. Until then the shipped renderer in `lumit-render` keeps
   drawing the picture.
-- **Two ways to play back (`lumit-eval::schedule::cached_step`, K-171)** — the important
-  distinction between the two preview modes. In **Cached** mode (the default), Lumit shows you
-  *every* frame and never skips: the playhead only moves on to the next frame once that frame
-  has finished rendering, and no faster than real time. So if a comp is heavy and rendering is
-  slower than real time, playback simply slows down to match — you see every frame, just not at
-  full speed — and once a stretch is rendered it plays back at true speed from the cache. Sound
-  pauses while a frame is being waited for (so it never runs ahead of a frozen picture) and
-  plays during smooth realtime replay. One subtlety a tester caught: the app only gets to move
-  the playhead when the screen refreshes, and refreshes never land exactly on a frame boundary —
-  if the pace timer restarted "from now" at each step, the few spare milliseconds were thrown
-  away every frame, the picture crept along slower than true speed, and the sound (which runs on
-  the audio hardware's own clock) drifted ahead and kept getting yanked back. The fix is the
-  metronome trick (`cached_pace_carry`): the leftover is *carried into the next frame's window*,
-  so over any stretch the picture holds exactly true speed and stays with the sound. A genuine
-  freeze (dragging the window, say) is not "repaid" — the timer re-anchors rather than
-  fast-forwarding. And the rule for *when sound runs* is readiness, not history (the owner's
-  second report — audio used to sit out a quarter-second "warm-up" even on a fully cached run):
-  sound plays exactly when the coming quarter-second of frames is already cached, so a ready
-  run has audio from its very first frame, a still-rendering stretch stays silent rather than
-  flapping on and off at the render's crawling edge, and after a stall it rejoins the moment
-  the road ahead is paved. In **Realtime** mode, the opposite trade: the clock never
-  waits, and when frames can't keep up Lumit drops the preview *resolution* to stay in time
-  rather than slowing down. The stepping decision — advance, or hold and render, and whether
-  sound should be playing — is a plain tested function; the messy wiring (the audio clock, the
-  render requests) lives in the UI and just asks it what to do each screen refresh.
-  The way realtime keeps from freezing is a small but important rule: it renders **one frame
-  at a time and never throws that render away just because the clock moved on**. It asks for a
-  frame, lets it finish however long it takes, shows it, times it — and only *then* asks for
-  the next one, at wherever the clock has reached by that point (skipping the frames in
-  between). The timing of each finished frame is what tells the resolution controller to drop a
-  notch when things are slow. The earlier version re-asked for a new frame every screen refresh,
-  so under load each render was abandoned before it finished: nothing ever completed, the
-  controller was never told how slow things were, and the picture sat frozen. Rendering one
-  un-abandoned frame at a time fixes both — the picture always moves forward, and the
-  resolution actually adapts. (A cached frame still shows instantly and for free, without
-  waiting on any render.) The "how slow was that frame" measurement is taken on the worker
-  thread as the actual decode time, *not* as the time from asking to seeing — the latter
-  would fold in how often the screen happens to refresh (~16 ms), making even a cheap comp
-  look exactly one refresh slow and walking the resolution down for no reason. One honest
-  limit worth knowing: dropping the preview resolution makes the *compositing and effects*
-  cheaper, but video *decoding* costs about the same whatever size you view it at (the whole
-  frame is decoded, then shrunk). So on a comp whose cost is mostly raw footage decoding,
-  realtime can still look a little choppy even at a low resolution — the smooth path there is
-  Cached mode, which renders ahead and then replays from memory. Truly smoothing realtime for
-  decode-heavy comps needs *rendering ahead* (a shelf of frames prepared before their time
-  comes), which is the `FrameRing` machinery that is built and tested but not yet wired in.
-- **The frame scheduler's brain (`lumit-eval::schedule`)** — the decision rules for
-  smooth playback, written as plain arithmetic so tests can prove them. During playback
-  Lumit renders frames ahead of the playhead onto a small shelf; each screen refresh
-  takes the newest shelf frame whose time has come, quietly binning ones the clock has
-  passed, and simply holds the last picture if rendering falls behind (sound never
-  waits). How far ahead to render adapts to how slow frames have actually been, between
-  8 and 16 frames. And in realtime mode, frames too slow for the frame budget drop to a
-  coarser preview resolution within a frame or two, earning it back only after a
-  sustained cheap stretch — quick to worsen, slow to improve, so the picture never
-  flickers between qualities. None of the real machinery (threads, the audio clock, the
-  GPU) lives here yet; this is the referee, and the players arrive later.
+- **Two ways to play back (K-171)** — the important distinction between the two preview
+  modes, and both of them now run *inside the engine*. The frontend says "play from here"
+  and paints what arrives; the worker thread does the deciding, because every decision
+  (which frame is next, has the clock passed it, may this mode skip) needs the cost of the
+  frame just finished, and the frontend has none of that. It used to guess — a Flutter
+  ticker polled the audio clock each screen refresh and asked for a frame — which was a
+  scheduler living on the far side of the FFI boundary from everything it schedules
+  against (K-181).
+  In **Cached** mode (labelled *Every frame*, the default) Lumit shows you *every* frame and
+  never skips: frames go out in order, one per composition period, and never faster —
+  however full the cache is, a 60 fps comp plays at 60. If the comp is heavy and rendering
+  is slower than real time, playback simply falls behind — you see every frame, just not at
+  full speed — and once a stretch is rendered it replays at true speed from the cache. Sound
+  is stopped whenever the picture drops off the composition's rate (so it never runs ahead
+  of a picture that has fallen out of time with it) and rejoins after eight pictures in a
+  row have gone out on time.
+  In **Realtime** mode (labelled *Adaptive*) the opposite trade: the clock never waits. The
+  frame shown is the newest rendered frame the clock has reached, the ones it has already
+  passed are binned rather than shown late, and when frames cannot keep up Lumit drops the
+  preview *resolution* to stay in time rather than slowing down.
+  Both modes ride the same machinery, described in the next bullet.
+- **Rendering ahead: the ring, and the referee that is left (`lumit-bridge::playback` plus
+  `lumit-eval::schedule`)** — how playback stays smooth. The worker no longer renders a
+  frame and shows it in the same breath. It renders *ahead* of the clock into a **ring**: a
+  small queue of finished frames still sitting on the graphics card, each shown ("presented"
+  — one cheap copy) only when it is due. The slack is the whole point. A span of cheap or
+  cached frames fills the ring, and when an expensive frame comes along it spends the banked
+  time instead of stalling the picture. This is what makes decode-heavy comps watchable:
+  dropping the preview resolution makes *compositing* cheaper but video *decoding* costs
+  about the same whatever size you view it at, so the only real answer to heavy footage is
+  to have decoded it already.
+  Four rules do the work, and each is plain arithmetic with its own test:
+  - **How far ahead to render** is not guessed. The worker keeps the last 32 render costs
+    and takes the 95th percentile — sized by what the *slow* frames cost, since absorbing
+    the occasional slow frame is the entire job — then renders `2 × that × fps` frames
+    ahead, never fewer than 8 and never more than 16. The floor keeps a cushion even on
+    cheap comps; the ceiling is the memory bill (at worst 16 display frames held at once).
+  - **Which frame to show now.** Cached mode always takes the front of the ring, on a
+    *grid* of due times: a frame that goes out a millisecond late leaves the next one due
+    at its grid time, so loop overhead is absorbed instead of compounding. (Restarting the
+    stopwatch at each frame instead added every scrap of lateness to every frame, and a
+    60 fps comp could never actually reach 60.) Realtime mode takes the newest queued frame
+    the clock has reached and discards the passed ones.
+  - **Sound waits for a pre-roll.** Starting the audio the instant play is pressed means it
+    runs while the first frame is still being composited — sound already tens of
+    milliseconds in before there is anything to see, and then a jump as the picture catches
+    up. The sound starts once three frames are banked, or after 150 ms whatever happens, so
+    a heavy comp never sits in silence waiting.
+  - **What resolution to render at**, in realtime mode — and this is the piece `lumit-eval`
+    still owns, as a deliberately pure function of numbers with no clock, no threads and no
+    GPU anywhere near it. It watches a smoothed average of recent render costs against the
+    frame budget: above 0.9 of the budget it drops a preview tier immediately (Full → Half →
+    Third → Quarter); below 0.4 of it, and only after twelve consecutive such frames, it
+    earns one back. Quick to worsen, slow to improve, with a wide dead band between the two
+    thresholds — that is what stops the picture flickering between qualities — and a rise
+    that has to be reversed straight away doubles the patience required before trying again.
+    `lumit-bridge::realtime` runs one of these for the session and feeds it the measured
+    cost of each genuine GPU render. The cost measured is the worker's own render time, not
+    the time from asking to seeing: the latter folds in how often the screen happens to
+    refresh (~16 ms), which would make even a cheap comp look exactly one refresh slow and
+    walk the resolution down for nothing.
 - **Preview resolution never changes where things are.** To keep the picture responsive,
   Lumit can decode footage smaller than its true size — and "Auto" resolution decodes at
   exactly the size the layer is shown on screen, so it gets sharper as you zoom in. That is
