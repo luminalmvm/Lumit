@@ -504,6 +504,15 @@ the rasteriser to `skrifa` is its own piece of work with its own glyph-metric te
 `bincode` 1.x, `paste` and `smartstring` (via rhai, retired 2026-08-11 in favour of
 compact_str/smol_str) leave when the dependencies that pull them update.
 
+**The FFmpeg 8 migration is finished and parked as draft PR #102.** rsmpeg's
+`ffmpeg8` feature, zero source changes, decode proven byte-identical over real
+frames on 7.1 and 8.1 (software and D3D11VA). Blocked on macOS only: Homebrew
+has no `ffmpeg@8` formula and plain `ffmpeg` is already 9.x, which no published
+rsmpeg supports. Unblock: homebrew-core ships `ffmpeg@8`, or someone with a Mac
+proves `brew extract --version=8.x ffmpeg <tap>`; then rebase, flip the
+version gate, one green run, merge. Until then main stays on the immutable
+n7.1.1 dated pin.
+
 **A genuinely FFmpeg-free build is not possible yet (K-273).** `lumit_bridge
 --no-default-features` compiles the bridge's own decode paths out, but `lumit-render` and
 `lumit-audio` depend on `lumit-media` unconditionally, so the library is still linked and
