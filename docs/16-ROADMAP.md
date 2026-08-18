@@ -115,8 +115,11 @@ chosen so none of this requires a rewrite.
 
 Every gate below is subject to [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §10 (the
 definition of done) and the CI performance gates of
-[13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.3. A regression blocks a merge, phase
-work notwithstanding.
+[13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.3 — which are the job **`performance
+gates (ratio vs baseline)`**, running the headless harness against the checked-in baseline
+for that runner (K-389). A regression blocks a merge, phase work notwithstanding. The five
+budgets that job cannot reach (B1, B2, B8, B9, B10) are release checks, not merge gates,
+until the instrumentation in [TODO.md](TODO.md) lands.
 
 ## Open questions
 

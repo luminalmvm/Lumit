@@ -3614,6 +3614,60 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   of it. A composition with no lights at all flares with nothing, rather than falling back
   to the draggable point and putting a flare somewhere nobody asked for.
 
+### The benchmark harness — `crates/lumit-bench` (K-389)
+
+[13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) makes promises with numbers in them: a
+scrub shows *something* within 50 ms, the twenty-second work area caches in under a minute,
+a cached comp plays at sixty. A promise nobody measures is a slogan, so this crate is the
+stopwatch.
+
+It is a **development** crate — the app never loads it, nothing depends on it, and it does
+not exist in the shipped `.dll`. It has three parts:
+
+- **The media.** Rather than commit forty megabytes of video to a public repository, it asks
+  ffmpeg for the clips: two twenty-second 1080p60 H.264 test patterns and a tone, generated
+  once into a scratch directory and reused after that. The `.cube` grade is written out as
+  text.
+- **The composition.** §1 of the performance rules describes one specific comp in a
+  paragraph — two footage layers, one of them retimed to 40% with flow; a title; a Sequence
+  layer of four clips; an adjustment layer with a LUT and a grade; a glow; motion blur on
+  two layers; a luma matte; an audio layer with volume keyframes. That paragraph is built in
+  code, layer by layer, through the same document model the editor edits. Everything about
+  it is fixed — even the internal identifiers are derived from the layer names rather than
+  the clock, because those identifiers feed the name a finished frame is filed under, and a
+  benchmark whose frames are named differently every run is measuring a cache that never
+  hits.
+- **The six scenarios.** Each does one thing the editor does, with a stopwatch around it:
+  jump the playhead (B3), let the frame sharpen to full quality (B4), replay a stretch that
+  is already cached (B5), play from cold at reduced and at full resolution (B6, B7), and
+  fill the whole work area from cold (B11). Each prints one number.
+
+Two details decide whether those numbers mean anything. The first: drawing a frame *hands
+work to the graphics card* rather than doing it, so a stopwatch stopped straight afterwards
+has timed the paperwork. The latency measurements therefore wait for the card before
+stopping the clock; the throughput ones deliberately do not, because real playback works
+ahead of its own clock and that overlap is part of the speed. The second: **cold** means a
+brand-new renderer — no compiled shaders, no open files, nothing cached — built for that
+scenario and thrown away after it.
+
+**What the numbers are compared against.** Not the budgets, most of the time. The budgets
+belong to a named machine (a desktop with an RTX 3060 in it), and the robots that check
+every change run on shared rented machines with no real graphics card at all, where "50 ms"
+would fail for reasons that have nothing to do with Lumit. So the harness measures, and the
+check compares the run with **a set of numbers recorded earlier on that same kind of
+machine**, failing only when something is 1.6 times worse than it was. That catches a real
+regression — those are factors, not percentages — and ignores a noisy afternoon. The
+recorded numbers are a file in the repository, regenerated deliberately and committed like
+any other change. Only on the reference machine itself (a switch says so) are the absolute
+budgets asserted. A measurement smaller than a millisecond a frame is never failed on ratio
+at all: serving an already-cached frame costs about ten *millionths* of a second, where a
+factor of two is the operating system blinking.
+
+Five budgets are missing from that list and cannot be here: how smooth the interface itself
+is (B1, B2) needs the real window; export speed (B8) needs the encoder; recovering from a
+graphics driver reset (B9) and audio/picture sync (B10) need a running application. Those
+stay manual checks, tracked in [TODO.md](TODO.md).
+
 ## 5. Making a change safely (the recipe)
 
 1. **Find the doc first.** Specs (`docs/00–16`) say what the behaviour should be; impl

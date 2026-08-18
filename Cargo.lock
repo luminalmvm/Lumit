@@ -1473,6 +1473,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-bench"
+version = "0.2.0"
+dependencies = [
+ "lumit-core",
+ "lumit-gpu",
+ "lumit-render",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "lumit-cache"
 version = "0.2.0"
 dependencies = [

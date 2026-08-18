@@ -213,6 +213,106 @@ jobs:
       - name: Release-mode compile check
         run: cargo check --workspace --release
 
+  # The headless performance harness (crates/lumit-bench, K-389). It builds
+  # docs/13-PERFORMANCE-RULES.md §1's reference comp over ffmpeg-generated media
+  # and times six budgets — B3, B4, B5, B6, B7, B11.
+  #
+  # It does NOT assert docs/13 §2's absolute numbers. Those belong to the
+  # reference desktop; this is a shared virtual machine whose "graphics card" is
+  # Mesa's lavapipe, and "50 ms" here would fail for reasons that have nothing to
+  # do with Lumit. Instead the run is compared with a baseline recorded earlier on
+  # this same runner class, and fails only past 1.6x worse. The absolute budgets
+  # are asserted only where LUMIT_REFERENCE_HW=1 is set, which no runner sets.
+  #
+  # Setup is the `linux` job's, minus the pieces a headless engine benchmark does
+  # not touch (no GTK, no Flutter): FFmpeg 7.1 for lumit-media *and* for the `ffmpeg`
+  # CLI the harness generates its clips with, libclang 18 for bindgen, and
+  # mesa-vulkan-drivers for the Vulkan adapter.
+  performance:
+    name: performance gates (ratio vs baseline)
+    runs-on: ubuntu-latest
+    # Lavapipe is a software rasteriser and B11 alone renders the whole
+    # twenty-second work area — 1200 frames, which is under two minutes on a real
+    # card and will be a great deal more than that here. The limit is so a
+    # pathological run fails visibly in two hours rather than burning the
+    # six-hour default. If it starts tripping honestly — rather than through a
+    # regression — the fix is a smaller work area for the harness on a software
+    # adapter, not a bigger number here.
+    timeout-minutes: 120
+    env:
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      # A missing adapter is a broken runner here, exactly as in the `linux` job:
+      # a benchmark that measured nothing must not report green.
+      LUMIT_REQUIRE_GPU: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev
+      # Identical to the `linux` job's — see there for why the .pc prefixes are
+      # rewritten and why this exports PKG_CONFIG_PATH rather than the override.
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      # Released, always: the harness's own loop is only comparable with itself
+      # when the whole thing is optimised, and a debug number means nothing.
+      #
+      # With a baseline present the binary gates itself (it reads BENCH_BASELINE,
+      # compares, and exits non-zero past the factor). With none — which is every
+      # run until the first set of numbers is committed — the gate cannot run, and
+      # a gate that cannot run says so rather than passing quietly: the numbers are
+      # printed with the one command that turns them into a baseline, and the job
+      # goes yellow.
+      - name: Run the harness (gated against this runner's baseline)
+        env:
+          BENCH_OUT: bench-results.json
+        run: |
+          base=crates/lumit-bench/baselines/linux.json
+          if [ -f "$base" ]; then
+            BENCH_BASELINE="$base" cargo run --release -p lumit-bench
+          else
+            cargo run --release -p lumit-bench
+            echo "::warning::No performance baseline for linux: the harness measured, nothing gated it. Commit $base to turn this job into a gate."
+            {
+              echo "### No baseline for this runner"
+              echo
+              echo 'Copy the numbers below into `'"$base"'` and commit them (they are'
+              echo 'regenerated exactly like `crates/lumit-core/fx-labels.txt` — run the'
+              echo 'harness, replace the file, commit on purpose). From then on this job'
+              echo 'fails when a budget is 1.6x worse than what is committed.'
+              echo
+              echo '```json'
+              cat bench-results.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Kept whatever the verdict: a failing run's numbers are the whole point of
+      # looking at it, and a passing run's are what the next baseline is made from.
+      - name: Keep the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-linux
+          path: bench-results.json
+          if-no-files-found: warn
+
   flutter-linux:
     name: flutter frontend (Linux build + analyze + test)
     runs-on: ubuntu-latest

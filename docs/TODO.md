@@ -527,12 +527,30 @@ counts its depth either. Also owed from that hunt: nothing reports how deep the 
 is running, so a machine whose disk cannot keep up degrades silently (frames simply stop
 reaching disk).
 
-**The performance harness and its CI gates are not built**
-([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.3): no reference comp in the
-repository, no headless benchmark scenarios, no budget gates per merge. The per-node
-profiler (§7.1) now has its first visible piece - the render-time column (K-276) - and the
-rest of it (continuous timestamp-query collection, the recording mode, the panel) is in the
-entry above.
+**What the performance harness still cannot measure** (K-389 built it: `crates/lumit-bench`
+drives the reference comp headless through B3, B4, B5, B6, B7 and B11, and the job
+`performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Five
+budgets are outside its reach and remain manual release checks, each needing its own
+instrumentation:
+
+- **B1 and B2 — UI frame time and input acknowledgement.** They belong to the Flutter
+    thread, which no engine-side harness has. Wants frame timing recorded in the app
+    (`SchedulerBinding`'s frame callbacks) and a way to drive an interaction from a test,
+    so "8 ms during a drag" becomes a number rather than a feeling.
+- **B8 — export throughput.** The encoder is not in the harness. A timed export of the
+    same reference comp at the YouTube 1080p60 preset is the measurement; it needs hardware
+    encode present to mean anything, which no runner has.
+- **B9 — device loss to preview resumed.** Needs a real device to lose.
+- **B10 — A/V drift during playback.** Needs the audio device and the clock the player
+    actually runs on.
+
+Also owed: **a floor-class runner** (§7.3's Iris Xe-class machine, the standing open
+question), and **the reference-hardware pin** — the absolute budgets are asserted only under
+`LUMIT_REFERENCE_HW=1`, so until a self-hosted runner sets it, nothing in CI checks a
+budget's actual number. A **stress comp** (4K, 20 layers) and the per-effect cost-class
+benchmarks of §7.3 are unbuilt too. The per-node profiler (§7.1) now has its first visible
+piece - the render-time column (K-276) - and the rest of it (continuous timestamp-query
+collection, the recording mode, the panel) is in the entry above.
 
 **CI coverage the Flutter port left thin:**
 - **macOS and Windows CI do not require an adapter.** `LUMIT_REQUIRE_GPU` turns

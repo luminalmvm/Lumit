@@ -9907,3 +9907,66 @@ floats are. Two changes, taken together:
 The alternative — teaching derived values to rescale — would have given `derived.*`
 ids a second contract (a unit table living nowhere) for exactly one consumer.
 Deriving the value that has no unit is smaller and cannot drift.
+
+## K-389 — The harness measures in absolute numbers and CI gates on the ratio to a baseline
+
+**DECIDED** (2026-08-18). Implements [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)
+§7.3 on the hardware that exists. It supersedes nothing: §2's budgets remain the truth,
+and this entry is about who is allowed to assert them.
+
+§7.3 asks CI to run the harness "on a reference-desktop-class runner" and fail a build
+that breaks a budget. There is no such runner. A GitHub runner is a shared virtual
+machine whose graphics card is Mesa's lavapipe — a software rasteriser — and asserting
+"a scrub shows something within 50 ms" there would fail for reasons that have nothing to
+do with Lumit, on a machine that is not the one §1 names. §14's open question ("perf
+gates need pinned hardware") is the same observation. Waiting for pinned hardware would
+have meant no measurement at all in the meantime, which is how a budget quietly becomes
+a slogan.
+
+So the harness and the gate are separated:
+
+- **The harness measures.** It emits one absolute number per budget as JSON
+  (`{"budget":"B3","value_ms":…,"frames":…}`) and judges nothing. Absolute numbers stay
+  absolute; they are simply not compared with the reference desktop's on a machine that
+  is not it.
+- **CI gates on the ratio to a checked-in baseline, per runner operating system.** A
+  baseline is a previous run's own output, committed on purpose and regenerated the way
+  `crates/lumit-core/fx-labels.txt` is: run the harness, replace the file, commit the
+  change. A budget fails at **1.6x worse than its baseline**. That catches a real
+  regression — a lost cache tier, an accidental full-resolution decode, a pipeline
+  recompiled every frame are all factors, not percentages — while a noisy afternoon on a
+  shared machine is not a factor. §7.3's "more than 10%" is the number for a quiet
+  machine and stays the aim; 10% on a runner would be a coin toss, and a gate that fails
+  at random is one everyone learns to re-run. A measurement under **1 ms** is never
+  failed on ratio: serving a warm frame costs about ten microseconds, where a factor of
+  two is the scheduler blinking and nothing a user could see hides underneath.
+  Comparison across operating systems is refused outright rather than attempted.
+- **The absolute budgets are asserted only under `LUMIT_REFERENCE_HW=1`**, which is set
+  on §1's reference desktop and on nothing else — no runner sets it, and neither does
+  the owner's development box, which is not that machine either. The day a self-hosted
+  reference runner exists, setting the variable there is the whole change: §7.3's
+  original design switches on, and the ratio gate keeps running beside it.
+
+**The reference comp is built in code**, not committed. §1 describes it in a paragraph —
+1080p60, twenty seconds, two H.264 footage layers with one retimed to 40% through flow, a
+text layer, a Sequence layer of four clips, an adjustment layer carrying a 3D LUT and
+curves, a glow, motion blur on two layers, a luma matte, an audio layer with volume
+keyframes — and that paragraph is assembled through `lumit-core` and `lumit-render`
+directly, with no bridge and no Flutter, over synthetic clips the harness asks ffmpeg for
+at startup (the pattern the media tests already use). Committing forty megabytes of video
+to a public repository to measure a cache was the alternative.
+
+**Which budgets a headless harness can reach.** B3 (scrub latency), B4 (refine to full),
+B5 (warm playback), B6 (cold adaptive playback), B7 (cold full-resolution playback) and
+B11 (idle fill of the work area) are measured here. **B1 and B2** are UI-thread budgets
+and need the real window; **B8** needs the encoder; **B9** is device loss; **B10** is A/V
+drift. Those five remain manual or real-window checks and [TODO.md](TODO.md) keeps them —
+naming them here so that "the harness is green" is never mistaken for "every budget is
+enforced".
+
+**Home**: `crates/lumit-bench`, a development crate. It is a workspace member so `fmt`,
+`clippy` and `test` cover it, and nothing depends on it — the shipped library is
+`lumit-bridge`, which has never heard of it — so it cannot reach the application's
+dependency tree. Its binary is what CI runs (job `performance gates (ratio vs
+baseline)`); each scenario is also an `#[ignore]`d test, for measuring one budget while
+working on it.
