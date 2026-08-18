@@ -306,13 +306,18 @@ jobs:
       # the exportable allocation the DMA-BUF path needs, so every Viewer frame
       # is dropped at the publish step and none reaches Dart. Zero-copy is the
       # only transport (K-183), so the six tests that wait for a frame skip
-      # here — see `test/frb/frb_test_support.dart`, and docs/TODO.md for what
-      # that costs.
+      # here — see `test/frb/frb_test_support.dart`.
+      #
+      # --concurrency=1 was the mitigation while every test process leaked one
+      # engine worker and GPU device per test: parallel processes together
+      # exhausted the runner. ProjectReference::close() ended the pile-up
+      # (70017d2b), and four frb files run green in parallel on a real machine
+      # — this branch is the Linux proof.
       - name: flutter test
         working-directory: flutter_ui
         env:
           LUMIT_NO_ZERO_COPY_VIEWER: "1"
-        run: flutter test --concurrency=1
+        run: flutter test
       # Lint the Linux DMA-BUF zero-copy Viewer path (K-177): the Vulkan/ash
       # export code in `lumit-gpu/src/shared_linux.rs` lives behind
       # `shared-texture-linux` and cfg(target_os = "linux"), so it is only ever
