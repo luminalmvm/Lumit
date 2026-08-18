@@ -7,7 +7,7 @@
 #
 #   packaging/macos/make-dmg.sh [version]
 #
-# Needs: flutter, rust, and `brew install ffmpeg@7 dylibbundler create-dmg`
+# Needs: flutter, rust, and `brew install ffmpeg dylibbundler create-dmg`
 # (create-dmg optional - without it the image has no drag-to-Applications
 # window dressing).
 #
@@ -41,8 +41,17 @@ command -v dylibbundler >/dev/null || {
     echo "dylibbundler not found - brew install dylibbundler" >&2
     exit 1
 }
-ffprefix="$(brew --prefix ffmpeg@7 2>/dev/null)" || {
-    echo "ffmpeg@7 not found - brew install ffmpeg@7" >&2
+ffprefix="$(brew --prefix ffmpeg 2>/dev/null)" || {
+    echo "ffmpeg not found - brew install ffmpeg" >&2
+    exit 1
+}
+# The dylibs bundled here have to be the same major the bridge generated its
+# bindings from (crates/lumit-media pins rsmpeg's ffmpeg8 feature). A mismatch
+# does not announce itself - it ships an .app that reads FFmpeg's structures at
+# the wrong offsets - so refuse rather than bundle it (K-389).
+ffmajor="$(brew list --versions ffmpeg | awk '{print $2}' | cut -d. -f1)"
+[ "$ffmajor" = "8" ] || {
+    echo "Homebrew ffmpeg is $ffmajor.x; this build needs 8.x (see docs/TODO.md)" >&2
     exit 1
 }
 

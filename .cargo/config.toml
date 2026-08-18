@@ -8,8 +8,8 @@
 # before a fresh clone would build. Two of them did.
 #
 # The arrangement now: each platform points the build at FFmpeg from outside this file.
-# macOS exports FFMPEG_PKG_CONFIG_PATH at the keg-only ffmpeg@7 (CI does it per job,
-# developers per shell — docs/GUIDE.md §8). Linux needs nothing: the distro's FFmpeg 7
+# macOS exports FFMPEG_PKG_CONFIG_PATH at the Homebrew ffmpeg formula (CI does it per job,
+# developers per shell — docs/GUIDE.md §8). Linux needs nothing: the distro's FFmpeg 8
 # development packages sit on pkg-config's default search path, which is exactly what
 # rusty_ffmpeg probes when the variable is unset. Windows uses FFMPEG_LIBS_DIR /
 # FFMPEG_INCLUDE_DIR (rusty_ffmpeg's pkg-config branch is cfg(not(windows)), so it never

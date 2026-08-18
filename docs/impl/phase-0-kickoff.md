@@ -29,7 +29,7 @@ lumit/
 ```
 
 Dependencies (take the latest compatible releases; majors as of writing): `wgpu` 24+,
-`egui`/`eframe`/`egui_dock` matching set, `winit` via eframe, `rsmpeg` (+ FFmpeg 7 shared
+`egui`/`eframe`/`egui_dock` matching set, `winit` via eframe, `rsmpeg` (+ FFmpeg 8 shared
 libs per [media-io.md](media-io.md) §1), `cpal`, `crossbeam-channel`, `arc-swap`, `rayon`,
 `serde`/`serde_json`, `zip`, `uuid` (v7 feature), `proptest` + `insta` (dev). Workspace
 lints from day one: `unwrap_used = "deny"` and `expect_used = "deny"` for the engine crates
@@ -101,6 +101,13 @@ Windows with the `media` feature on. The recipe:
 
 Windows CI now runs the full `clippy --workspace --all-targets` + `test --workspace` gate,
 media included — the shipping target no longer trails macOS.
+
+**Version note (2026-08-18):** the two recipes above are as they stood; the pinned FFmpeg
+is now **8.1**, not 7.1, and `crates/lumit-media/Cargo.toml` selects rsmpeg's `ffmpeg8`
+feature. Nothing else in the recipe moved — same BtbN shared/GPL build, same variables,
+same LLVM 18 pin — but the asset name and the crate feature must agree on the major, so
+read the current versions from `docs/GUIDE.md` and `.github/workflows/ci.yml` rather than
+from this dated note.
 
 ## Slice 5 — decode → Viewer (runs: you can SEE footage)
 

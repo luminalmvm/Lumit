@@ -69,13 +69,13 @@ Lumit can check for updates and installs them automatically or when you want.
 ## Building from source
 
 Rust stable (pinned by `rust-toolchain.toml`) plus two external dependencies:
-**FFmpeg 7.x** for media, and **LLVM 18** for the binding generator — newer LLVM
+**FFmpeg 8.x** for media, and **LLVM 18** for the binding generator — newer LLVM
 silently generates broken bindings, so 18 is pinned on every platform.
 
 <details>
 <summary><b>Windows</b> (my primary development platform)</summary>
 
-Unzip a [BtbN FFmpeg 7.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)
+Unzip a [BtbN FFmpeg 8.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)
 under `%USERPROFILE%\ffmpeg\`, then:
 
 ```powershell
@@ -89,9 +89,9 @@ cargo test --workspace
 <summary><b>macOS</b></summary>
 
 ```sh
-brew install ffmpeg@7
-# The formula is keg-only, so point the build at it (K-204):
-export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg@7)/lib/pkgconfig"
+brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
+# Point the build at it (K-204):
+export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
 ```
 </details>

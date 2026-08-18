@@ -43,7 +43,10 @@ A new Flutter FFI plugin project.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    # ffmpeg@7 is keg-only (deliberately not linked), so its lib directory has to
+    # FFmpeg 8 has no Homebrew formula yet (see ci.yml's macOS note): these
+    # paths cover a future ffmpeg@8 keg and a brew-extract tap, and stop naming
+    # ffmpeg@7 - linking 7's dylibs into 8-shaped bindings is a struct-layout
+    # mismatch that compiles. Keg-only formulas' lib directories have to
     # be named outright. Homebrew's prefix differs by architecture — /opt/homebrew
     # on Apple Silicon, /usr/local on Intel — and ld ignores a -L directory that
     # does not exist, so naming both covers either machine.
@@ -60,7 +63,7 @@ A new Flutter FFI plugin project.
     # invoking cargo's linker. A new Rust dependency that needs another framework
     # fails at link time with undefined symbols, and nothing points back here.
     'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/liblumit_bridge.a ' \
-      '-L/opt/homebrew/opt/ffmpeg@7/lib -L/usr/local/opt/ffmpeg@7/lib ' \
+      '-L/opt/homebrew/opt/ffmpeg@8/lib -L/usr/local/opt/ffmpeg@8/lib ' \
       '-lavcodec -lavdevice -lavfilter -lavformat -lavutil -lswresample -lswscale ' \
       '-framework AudioUnit -framework CoreAudio -framework CoreFoundation ' \
       '-framework IOSurface -framework Foundation -framework QuartzCore ' \

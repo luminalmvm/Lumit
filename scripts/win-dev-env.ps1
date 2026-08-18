@@ -3,12 +3,12 @@
     Set up the environment variables Lumit's media crate needs to build on Windows.
 
 .DESCRIPTION
-    lumit-media links FFmpeg 7.1 through rsmpeg. On Windows, rusty_ffmpeg's build
+    lumit-media links FFmpeg 8.1 through rsmpeg. On Windows, rusty_ffmpeg's build
     script links the import libraries named by FFMPEG_LIBS_DIR / FFMPEG_INCLUDE_DIR
     and generates its FFI with bindgen, which needs libclang (LIBCLANG_PATH). At run
     time the FFmpeg DLLs (and the ffmpeg CLI used by the test fixtures) must be on PATH.
 
-    This script finds a BtbN FFmpeg 7.1 "shared, GPL" build and an LLVM install, then
+    This script finds a BtbN FFmpeg 8.1 "shared, GPL" build and an LLVM install, then
     exports those variables for the current shell. Pass -Persist to also write them to
     your user environment so every new terminal has them.
 
@@ -19,8 +19,8 @@
     The extracted FFmpeg build directory (the folder containing bin\, lib\, include\).
     If omitted, the script searches, in order:
       $env:KIRIKO_FFMPEG_DIR
-      %USERPROFILE%\ffmpeg\ffmpeg-n7.1-*-win64-gpl-shared-*
-      C:\ffmpeg\ffmpeg-n7.1-*-win64-gpl-shared-*
+      %USERPROFILE%\ffmpeg\ffmpeg-n8.1-*-win64-gpl-shared-*
+      C:\ffmpeg\ffmpeg-n8.1-*-win64-gpl-shared-*
 
 .PARAMETER Persist
     Also store the variables at User scope (like setx) so future shells inherit them.
@@ -35,7 +35,7 @@
 
 .NOTES
     Get the FFmpeg build from https://github.com/BtbN/FFmpeg-Builds/releases (the
-    "ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip" asset) and extract it under
+    "ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip" asset) and extract it under
     %USERPROFILE%\ffmpeg\. Install LLVM 18 (winget install LLVM.LLVM --version 18.1.8):
     bindgen 0.71 mis-generates opaque structs against very new libclang, so pin 18.
     See docs/GUIDE.md "Building on Windows" and docs/impl/phase-0-kickoff.md slice 4.
@@ -56,7 +56,7 @@ function Find-FfmpegDir {
     foreach ($base in @("$env:USERPROFILE\ffmpeg", 'C:\ffmpeg')) {
         if (Test-Path $base) {
             $match = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -like 'ffmpeg-n7.1-*win64-gpl-shared*' } |
+                Where-Object { $_.Name -like 'ffmpeg-n8.1-*win64-gpl-shared*' } |
                 Sort-Object Name -Descending | Select-Object -First 1
             if ($match) { $candidates += $match.FullName }
         }
@@ -84,8 +84,8 @@ function Find-LibclangDir {
 $ff = Find-FfmpegDir -Explicit $FfmpegDir
 if (-not $ff) {
     Write-Error @"
-Could not find an FFmpeg 7.1 shared/GPL build.
-Download ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip from
+Could not find an FFmpeg 8.1 shared/GPL build.
+Download ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip from
 https://github.com/BtbN/FFmpeg-Builds/releases and extract it under %USERPROFILE%\ffmpeg\,
 or pass -FfmpegDir <path-to-the-extracted-folder>.
 "@
