@@ -121,6 +121,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   @override
   void initState() {
     super.initState();
+    // The dialogue opens on the delivery preset rather than a blank Custom:
+    // docs/06 §7.5 names YouTube 1080p60 the preset default, and a fresh
+    // dialogue showing "Custom" with a bit rate of 0 read as broken. The
+    // stamp sets codec and bit rate only, so a comp of any size is safe;
+    // picking Custom afterwards is one dropdown away.
+    _applyPreset('youtube_1080p60');
     // The defaults are the composition's facts, read once as the dialogue
     // opens: its own rate, and the work area when one is set (the standing
     // export range, K-037) else the whole comp.

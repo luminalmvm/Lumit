@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -6323,7 +6324,7 @@ class _OutlineRowState extends State<_OutlineRow> {
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
         value: current < modes.length ? current : 0,
         options: [for (var i = 0; i < modes.length; i++) i],
-        label: (i) => modes[i],
+        label: (i) => engineLabel(modes[i]),
         onChanged: (i) {
           layer.setBlend(index: i);
           widget.onChanged();

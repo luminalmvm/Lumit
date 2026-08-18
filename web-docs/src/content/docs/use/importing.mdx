@@ -5,12 +5,8 @@ sidebar:
   order: 2
 ---
 
-import Shot from "../../../components/Shot.astro";
-
 Everything you import becomes an **asset** in the Project panel. An asset that points
 at a media file is a **footage item**.
-
-<Shot file="interpretation.png" caption="A footage item's interpretation settings." />
 
 Lumit never modifies the file on disk. The project stores a reference to the path,
 plus how to interpret it.
@@ -31,14 +27,14 @@ Lumit says *folder*, never *bin*.
 
 ## Interpretation
 
-Lumit reads the frame rate, alpha, and colour space from the file. When the file is
-wrong or ambiguous, override it:
+Lumit reads the frame rate, alpha, and colour space from the file and uses what it
+finds.
 
-- **Frame rate** - override the rate the file declares.
-- **Alpha** - straight or premultiplied.
-- **Colour space** - the tag Lumit should assume.
-
-An override changes every layer that uses the asset.
+:::note[Not built yet]
+Overriding that reading - forcing a frame rate, choosing straight or premultiplied
+alpha, assuming a different colour space - is planned but not built. There is nowhere
+to set it today.
+:::
 
 ## Missing files
 

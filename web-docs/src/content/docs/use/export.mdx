@@ -5,32 +5,21 @@ sidebar:
   order: 18
 ---
 
-import Shot from "../../../components/Shot.astro";
-
 **Export** writes a deliverable file. Lumit says *export* for what you produce, and
 *render* only for what the engine does internally.
-
-<Shot file="export-queue.png" caption="The export queue: one item writing, one waiting." />
 
 ## Export a composition
 
 1. Select the composition.
-2. Choose **File ▸ Export**, or press `Ctrl+M` to add it to the export queue.
-3. Set the preset and destination.
+2. Choose **File ▸ Export**, or press `Ctrl+Alt+M`.
+3. Set the format, preset, range, and destination.
 4. Start it.
 
-The range defaults to the [work area](/use/preview/); you can widen it to the full
-comp or set a custom in and out.
-
-## The export queue
-
-Exports run through a queue. Queue several items and let them run - each item keeps
-its own range, preset, output folder, and filename. An item snapshots the composition
-when it is queued, so edits you make afterwards do not change what it writes.
+One composition is exported at a time, from the dialogue.
 
 ## Export does not block you
 
-Export runs away from the interface. You can keep editing while the queue writes.
+Export runs away from the interface. You can keep editing while it writes.
 
 ## Presets
 
@@ -57,8 +46,9 @@ Export may **bake** internally - flattening retimes, rasterising, pre-compositin
 go faster. Baking happens inside the export pipeline and never alters your project.
 
 :::note[Not built yet]
-ProRes and DNxHR intermediate codecs, free width and height (sizes are preset-driven
-today), and an export priority control are planned but not built.
+An export queue - several items queued up, each with its own range, preset and
+filename - is planned but not built. So are ProRes and DNxHR intermediate codecs,
+free width and height (sizes are preset-driven today), and an export priority control.
 :::
 
 ## Related

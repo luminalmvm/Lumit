@@ -1,0 +1,114 @@
+// Manual screenshots, sweep 1: workspace.png and viewer.png.
+//
+// Stages a plausible project through the real engine, shows the real editor,
+// photographs it, and quits. See `shots_common.dart` for why a sweep is an app
+// entrypoint rather than an integration test.
+//
+//   cargo build -p lumit_bridge
+//   cd flutter_ui
+//   $env:LUMIT_SHOTS=1   # PowerShell; LUMIT_SHOTS=1 elsewhere
+//   flutter run -d windows -t tool/shots/shots_1.dart
+
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+
+import 'shots_common.dart';
+
+Future<void> main() async {
+  final (state, ui) = await bootLumit();
+  final project = state.project!;
+
+  // A comp that looks like somebody's evening: 1920×1080, 25 fps, ten seconds.
+  final comp = project.newComposition(
+    name: 'Opening titles',
+    settings: const BridgeCompSettings(
+      name: 'Opening titles',
+      width: 1920,
+      height: 1080,
+      fpsNum: 25,
+      fpsDen: 1,
+      duration: BridgeRational(num: 10, den: 1),
+    ),
+  );
+
+  // Bottom of the stack upwards: each call puts its layer on top of the last.
+  // The fixture files are named the way the layers should read, so nothing
+  // needs renaming afterwards.
+  for (final file in ['Music.wav', 'Gameplay.mp4', 'Title card.mp4']) {
+    comp.addFootageLayer(
+      footage: project.importFootage(path: '$fixtures/$file'),
+      asSequence: false,
+    );
+  }
+  // Imported but not placed — a project usually has one of those, and the
+  // later sweeps need a still in the Project panel.
+  project.importFootage(path: '$fixtures/Logo.png');
+
+  // The top layer: the words the comp is named after, low in frame. A text
+  // layer is what somebody would actually have on top of a title sequence,
+  // and it gives the Viewer's gizmo something legible to sit around.
+  final title = comp.addTextLayer();
+  title.rename(name: 'Title');
+  title.setText(
+    document: const BridgeTextDocument(
+      text: 'Northern lights',
+      size: 140,
+      fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+    ),
+  );
+  // The anchor is where the starter document's centre was, so a longer line
+  // runs off to the right of it unless Position is pulled back.
+  title.setTransforms(props: const [
+    BridgeTransformProp.positionX,
+    BridgeTransformProp.positionY,
+  ], values: const [
+    BridgeScalar.static_(490),
+    BridgeScalar.static_(840),
+  ]);
+
+  final layers = comp.getLayers();
+  // The panels show a layer's own name, which starts as the file's. Names
+  // without extensions are what somebody an hour into the job would have.
+  for (final (index, name)
+      in ['Title', 'Title card', 'Gameplay', 'Music'].indexed) {
+    layers[index].rename(name: name);
+  }
+  // The title card half-dissolved over the footage, which is what the picture
+  // would actually look like at this point in a cut.
+  layers[1].setTransform(
+    prop: BridgeTransformProp.opacity,
+    value: const BridgeScalar.static_(55),
+  );
+
+  ui.setSelectedComp(comp);
+  ui.playheadFrame.value = 48;
+
+  runApp(shotRoot(LumitAppNew(state, ui)));
+
+  // Size the window before anything is photographed: the shots want a real
+  // working window, not the runner's 1280×720 default.
+  await pause(2);
+  await sizeWindow(1720, 1000);
+  await pause(6);
+
+  // Shot 1 — the whole workspace: Viewer, Timeline and Project docked.
+  await captureUi('workspace.png');
+
+  // Shot 2 — the Viewer with a layer selected and its transform gizmo up.
+  // Selection is what raises the gizmo; the Selection tool is armed by default
+  // and so is the wireframes switch.
+  ui.setSelection([title]);
+  await pause(3);
+  // Cropped to the Viewer and its bar: the caption is about the Viewer, and a
+  // gizmo lost in a full-window shot is not "showing".
+  await captureUi('viewer.png',
+      crop: const Rect.fromLTWH(373, 56, 990, 604));
+
+  exit(0);
+}

@@ -48,7 +48,7 @@ vocabularies. One word means one thing here.
 | Not this | This | Why |
 | --- | --- | --- |
 | Track | Layer | "Track" imports editing semantics that do not match a layer stack. |
-| Velocity | Speed | Kept only as the graph editor's label for the Retime derivative. |
+| Velocity | Speed | Never shown; the graph editor’s derivative lens is labelled Speed. |
 | Time remap | Retime | The After Effects name for one view of Retime. |
 | Bin | Folder | A Premiere word. |
 | CTI | Playhead | |

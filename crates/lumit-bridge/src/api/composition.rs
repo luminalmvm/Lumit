@@ -114,9 +114,13 @@ pub(crate) fn core_marker(
 /// selected.
 #[frb(sync)]
 pub fn list_blend_modes() -> Vec<String> {
+    // The display name (sentence case, docs/15), never the Debug variant name:
+    // "Colour burn", not "ColourBurn". The frontend translates each through
+    // its engine-label table (K-303), so what crosses here must be exactly
+    // what fx-labels.txt lists.
     lumit_core::model::BlendMode::ALL
         .iter()
-        .map(|mode| format!("{mode:?}"))
+        .map(|mode| mode.name().to_owned())
         .collect()
 }
 

@@ -633,6 +633,11 @@ void main() {
 
       expect(find.byKey(const ValueKey('export-audio')), findsOneWidget);
       expect(find.byKey(const ValueKey('export-bitrate')), findsOneWidget);
+      // The dialogue opens on the delivery preset, not a blank Custom
+      // (docs/06 §7.5): a fresh export showing a bit rate of 0 read as
+      // broken, and the preset's 16 Mb/s stamp is the proof it applied.
+      expect(find.textContaining('16'), findsOneWidget,
+          reason: "the YouTube 1080p60 preset's bit rate is stamped on open");
       expect(find.byKey(const ValueKey('export-audio-rate')), findsOneWidget,
           reason: 'audio has its own rate once audio is on');
 

@@ -38,9 +38,12 @@ Colour 1
 Colour 2
 Colour 3
 Colour balance
+Colour burn
+Colour dodge
 Confidence
 Contrast
 Darken
+Darker colour
 Datamosh
 Decay
 Depth channel
@@ -119,10 +122,12 @@ Green
 Hard
 Hard colour
 Hard light
+Hard mix
 High
 Highlight exposure
 Highlight threshold
 Highlights
+Hue
 Hue shift
 In front
 Intensity
@@ -141,10 +146,14 @@ Light wrap
 Light x
 Light y
 Lighten
+Lighter colour
 Lights
 Line period
+Linear burn
+Linear light
 Luminance
 Luminance only
+Luminosity
 Manual
 Manual light
 Map black to
@@ -167,6 +176,7 @@ Overlay
 Per-axis wobble
 Phase
 Phase offset
+Pin light
 Position x
 Position y
 Posterize time
@@ -247,6 +257,7 @@ Utility
 Vibrancy
 View
 Vignette
+Vivid light
 Wavelength
 Width
 X amount

@@ -13,9 +13,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `camera.png` | [/use/camera/](/use/camera/) | A camera layer over 3D layers. |
 | `effect-controls.png` | [/panels/effect-controls/](/panels/effect-controls/) | Effect Controls, with two effects on one layer. |
 | `effect-menu.png` | [/use/effects/](/use/effects/) | The Effect menu, category by category. |
-| `export-queue.png` | [/use/export/](/use/export/) | The export queue: one item writing, one waiting. |
 | `hierarchy.png` | [/panels/hierarchy/](/panels/hierarchy/) | The Hierarchy panel, with a precomp twirled open. |
-| `interpretation.png` | [/use/importing/](/use/importing/) | A footage item's interpretation settings. |
 | `keyframes-lane.png` | [/use/keyframes/](/use/keyframes/) | Keyframes on a property lane. |
 | `keymap.png` | [/reference/shortcuts/](/reference/shortcuts/) | The keymap editor in Settings. |
 | `markers-ruler.png` | [/use/markers/](/use/markers/) | Comp markers and beat markers on the Timeline ruler. |
@@ -39,7 +37,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `new-composition.png` | [/start/first-composition/](/start/first-composition/) | The new composition dialogue. |
 | `project-panel.png` | [/panels/project/](/panels/project/) | The Project panel, holding footage, a folder and a composition. |
 | `scopes.png` | [/panels/scopes/](/panels/scopes/) | The waveform and vectorscope reading the current frame. |
-| `speed-ramp.png` | [/use/retime/](/use/retime/) | A speed ramp in the graph editor, seen through the Velocity lens. |
+| `speed-ramp.png` | [/use/retime/](/use/retime/) | A speed ramp in the graph editor, seen through the Speed lens. |
 | `timeline-lanes.png` | [/panels/timeline/](/panels/timeline/) | A layer twirled open, showing its properties and their keyframes. |
 | `timeline-outline.png` | [/panels/timeline/](/panels/timeline/) | The outline columns, left to right. |
 | `timeline.png` | [/panels/timeline/](/panels/timeline/) | The Timeline: outline on the left, lanes on the right. |
@@ -47,3 +45,13 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `toolbar.png` | [/panels/toolbar/](/panels/toolbar/) | The toolbar. One tool is armed at a time; groups open a flyout. |
 | `viewer-bar.png` | [/panels/viewer/](/panels/viewer/) | The Viewer bar. |
 | `viewer.png` | [/panels/viewer/](/panels/viewer/) | The Viewer, with a layer selected and its transform gizmo showing. |
+
+## Waiting on the feature
+
+Two shots were asked for before the thing they show existed, so they are off the list
+until it does:
+
+- `export-queue.png` - there is no export queue. Export is a single dialogue that
+  writes one composition.
+- `interpretation.png` - footage interpretation is not built. There is nowhere to
+  override a file's frame rate, alpha, or colour space.

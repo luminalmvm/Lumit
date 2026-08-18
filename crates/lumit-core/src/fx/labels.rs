@@ -54,6 +54,12 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for category in FxCategory::ALL {
         out.insert(category.label().to_owned());
     }
+    // The blend modes cross the same seam: `list_blend_modes` sends each
+    // mode's display name for the Timeline's dropdown, and a name with no
+    // table entry ships in English inside a translated application.
+    for mode in crate::model::BlendMode::ALL {
+        out.insert(mode.name().to_owned());
+    }
     out
 }
 

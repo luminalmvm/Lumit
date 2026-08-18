@@ -31,7 +31,7 @@ Importing an After Effects project is on the roadmap; it is not built yet.
 | --- | --- |
 | Event | **Clip**, inside a [Sequence layer](/use/sequence-layers/) |
 | Track | **Layer**; the Sequence layer is the Vegas-style row you cut on |
-| Velocity envelope | **Retime**, edited in the speed graph of the graph editor |
+| Velocity envelope | **Retime**, edited through the Speed lens of the graph editor |
 | Cursor | **Playhead** |
 | Split | The **razor** tool, on the [toolbar](/panels/toolbar/) |
 
