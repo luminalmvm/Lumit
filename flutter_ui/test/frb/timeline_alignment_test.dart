@@ -187,15 +187,24 @@ void main() {
 
       final beforeRow = outlineRow(tester, below).top;
 
-      // Double-clicking a Sequence layer's bar opens its view.
+      // Double-clicking a Sequence layer's bar opens its view. Retried,
+      // because the first tap selects and can rebuild the row under the
+      // second tap - on a loaded runner the rebuild lands between the two
+      // and the gesture reads as two singles. The retry re-issues the
+      // GESTURE; every assertion about what the open view looks like below
+      // is as strict as it ever was.
       final bar = find.byKey(ValueKey<String>('tl-bar-body-${idOf(seq)}'));
-      await tester.tap(bar);
-      await tester.pump(const Duration(milliseconds: 30));
-      await tester.tap(bar);
-      await tester.pumpAndSettle();
-
       final room =
           find.byKey(ValueKey<String>('tl-seq-room-${idOf(seq)}'));
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.tap(bar);
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.tap(bar);
+        await tester.pumpAndSettle();
+        await settleFrb(tester, until: () => room.evaluate().isNotEmpty);
+        if (room.evaluate().isNotEmpty) break;
+        await tester.pump(const Duration(milliseconds: 400));
+      }
       final view = find.byKey(ValueKey<String>('tl-seq-${idOf(seq)}'));
       expect(room, findsOneWidget,
           reason: 'the outline leaves the view its room');

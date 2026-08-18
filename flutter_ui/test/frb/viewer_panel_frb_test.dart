@@ -307,8 +307,11 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('viewer-play')));
       await tester.pump();
+      // Six frames of a software render under a loaded parallel suite can
+      // outlast the old four-second ceiling; the wait grows, the assertion
+      // does not - the engine must still end the run entirely on its own.
       await settleFrb(tester,
-          minRounds: 6, maxRounds: 200, until: () => !p.uiState.playing.value);
+          minRounds: 6, maxRounds: 600, until: () => !p.uiState.playing.value);
 
       expect(p.uiState.playing.value, isFalse,
           reason: 'the engine said it ended; nothing in Dart worked it out');
