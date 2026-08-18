@@ -5126,5 +5126,49 @@
   "workspaceRetiming": "Retiming",
   "@workspaceRetiming": {
     "description": "The name of a panel arrangement, tuned for shaping how things move: the Easing panel down the right and a tall Timeline. 'Retiming' is the gerund of the Lumit term Retime — keep it a noun for the kind of work."
+  },
+  "blendColourBurn": "Colour burn",
+  "@blendColourBurn": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendColourDodge": "Colour dodge",
+  "@blendColourDodge": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendDarkerColour": "Darker colour",
+  "@blendDarkerColour": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendHardMix": "Hard mix",
+  "@blendHardMix": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendHue": "Hue",
+  "@blendHue": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendLighterColour": "Lighter colour",
+  "@blendLighterColour": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendLinearBurn": "Linear burn",
+  "@blendLinearBurn": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendLinearLight": "Linear light",
+  "@blendLinearLight": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendLuminosity": "Luminosity",
+  "@blendLuminosity": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendPinLight": "Pin light",
+  "@blendPinLight": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "blendVividLight": "Vivid light",
+  "@blendVividLight": {
+    "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   }
 }
