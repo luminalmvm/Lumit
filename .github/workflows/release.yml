@@ -201,14 +201,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      # Mirrors ci.yml's `check` job, including the FFmpeg-8 problem it
-      # documents: Homebrew has no ffmpeg@8, so this takes the plain formula and
-      # will fail to link until one exists (K-389). The explicit pkg-config
-      # override stays either way (K-204).
-      - name: Install FFmpeg 8 and dylibbundler
-        run: |
-          brew install ffmpeg dylibbundler create-dmg
-          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg)/lib/pkgconfig" >> "$GITHUB_ENV"
+      # Mirrors ci.yml's macOS jobs: FFmpeg 8.1.2 from a formula extracted out
+      # of homebrew-core's history, built once and cached, with the major
+      # asserted before anything links against it (K-389). The action exports
+      # FFMPEG_PKG_CONFIG_PATH (K-204) and creates the opt prefix make-dmg.sh
+      # probes for.
+      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
+        uses: ./.github/actions/ffmpeg8-macos
+      - name: Install the packaging tools
+        run: brew install dylibbundler create-dmg
       - uses: Swatinem/rust-cache@v2
       - uses: subosito/flutter-action@v2
         with:

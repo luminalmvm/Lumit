@@ -43,10 +43,12 @@ A new Flutter FFI plugin project.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    # FFmpeg 8 has no Homebrew formula yet (see ci.yml's macOS note): these
-    # paths cover a future ffmpeg@8 keg and a brew-extract tap, and stop naming
-    # ffmpeg@7 - linking 7's dylibs into 8-shaped bindings is a struct-layout
-    # mismatch that compiles. Keg-only formulas' lib directories have to
+    # FFmpeg 8 has no Homebrew formula yet (see ci.yml's macOS note and K-389),
+    # so these paths cover both shapes: a future real ffmpeg@8 keg, and the
+    # 8.1.2 formula extracted out of homebrew-core's history, whose keg is named
+    # ffmpeg@8.1.2. Neither names ffmpeg@7 any more - linking 7's dylibs into
+    # 8-shaped bindings is a struct-layout mismatch that compiles. Keg-only
+    # formulas' lib directories have to
     # be named outright. Homebrew's prefix differs by architecture — /opt/homebrew
     # on Apple Silicon, /usr/local on Intel — and ld ignores a -L directory that
     # does not exist, so naming both covers either machine.
@@ -64,6 +66,7 @@ A new Flutter FFI plugin project.
     # fails at link time with undefined symbols, and nothing points back here.
     'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/liblumit_bridge.a ' \
       '-L/opt/homebrew/opt/ffmpeg@8/lib -L/usr/local/opt/ffmpeg@8/lib ' \
+      '-L/opt/homebrew/opt/ffmpeg@8.1.2/lib -L/usr/local/opt/ffmpeg@8.1.2/lib ' \
       '-lavcodec -lavdevice -lavfilter -lavformat -lavutil -lswresample -lswscale ' \
       '-framework AudioUnit -framework CoreAudio -framework CoreFoundation ' \
       '-framework IOSurface -framework Foundation -framework QuartzCore ' \

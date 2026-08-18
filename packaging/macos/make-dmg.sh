@@ -7,9 +7,10 @@
 #
 #   packaging/macos/make-dmg.sh [version]
 #
-# Needs: flutter, rust, and `brew install ffmpeg dylibbundler create-dmg`
-# (create-dmg optional - without it the image has no drag-to-Applications
-# window dressing).
+# Needs: flutter, rust, `brew install dylibbundler create-dmg`, and an FFmpeg
+# 8 keg (see below and K-389; `brew install ffmpeg` alone is 9.x now, which
+# this refuses). create-dmg is optional - without it the image has no
+# drag-to-Applications window dressing.
 #
 # The bundling is the same move the Windows installer makes with the FFmpeg
 # DLLs: the bridge links the shared FFmpeg, so the libraries must travel with
@@ -41,17 +42,32 @@ command -v dylibbundler >/dev/null || {
     echo "dylibbundler not found - brew install dylibbundler" >&2
     exit 1
 }
-ffprefix="$(brew --prefix ffmpeg 2>/dev/null)" || {
-    echo "ffmpeg not found - brew install ffmpeg" >&2
-    exit 1
-}
 # The dylibs bundled here have to be the same major the bridge generated its
 # bindings from (crates/lumit-media pins rsmpeg's ffmpeg8 feature). A mismatch
 # does not announce itself - it ships an .app that reads FFmpeg's structures at
-# the wrong offsets - so refuse rather than bundle it (K-389).
-ffmajor="$(brew list --versions ffmpeg | awk '{print $2}' | cut -d. -f1)"
-[ "$ffmajor" = "8" ] || {
-    echo "Homebrew ffmpeg is $ffmajor.x; this build needs 8.x (see docs/TODO.md)" >&2
+# the wrong offsets - so find 8.x on purpose rather than take whatever `ffmpeg`
+# resolves to today, which is already 9.x (K-389).
+#
+# Three places 8.x can live, in order of preference: a real ffmpeg@8 keg if
+# Homebrew ever ships one, the 8.1.2 formula extracted out of homebrew-core's
+# history (.github/actions/ffmpeg8-macos builds and links exactly this prefix),
+# and the plain formula on a machine that still has 8.x installed. The test is
+# libavutil's own version - 60.x is FFmpeg 8's, and it is what will be linked,
+# unlike a formula name.
+ffprefix=""
+for p in "$(brew --prefix)/opt/ffmpeg@8" \
+         "$(brew --prefix)/opt/ffmpeg@8.1.2" \
+         "$(brew --prefix ffmpeg 2>/dev/null || true)"; do
+    [ -n "$p" ] && [ -f "$p/lib/pkgconfig/libavutil.pc" ] || continue
+    ver="$(awk -F': *' '/^Version:/{print $2}' "$p/lib/pkgconfig/libavutil.pc")"
+    case "$ver" in
+        60.*) ffprefix="$p"; echo "FFmpeg 8 (libavutil $ver) at $p"; break ;;
+    esac
+done
+[ -n "$ffprefix" ] || {
+    echo "No FFmpeg 8 keg found (looked for libavutil 60.x under ffmpeg@8," >&2
+    echo "ffmpeg@8.1.2 and ffmpeg). See docs/02-DECISIONS.md K-389 - the route" >&2
+    echo "is 'brew extract --version=8.1.2 ffmpeg <tap>' then a source build." >&2
     exit 1
 }
 
@@ -146,6 +162,27 @@ for bin in "$app/Contents/MacOS/Lumit" $(find "$app/Contents/Frameworks" -type f
         install_name_tool -add_rpath "$rp" "$bin"
     done
 done
+
+# Prove the .app is self-contained rather than assume it. dylibbundler is
+# recursive, but a dependency it could not resolve is one line of its output and
+# a crash on a machine without Homebrew - which is every machine this image is
+# built for. Same scan as the fixup loop above, run again on the finished
+# bundle: nothing inside it may still name a Homebrew path.
+leftover=""
+for bin in $(find "$app/Contents" -type f ! -name "*.png" ! -name "*.json" ! -name "*.plist"); do
+    if otool -L "$bin" 2>/dev/null | tail -n +2 | grep -Eq '/opt/homebrew/|/usr/local/(opt|Cellar)/'; then
+        leftover="$leftover $bin"
+    fi
+done
+if [ -n "$leftover" ]; then
+    echo "Not self-contained - these still link Homebrew and would fail to launch" >&2
+    echo "on a machine without it:" >&2
+    for b in $leftover; do
+        echo "  $b" >&2
+        otool -L "$b" | grep -E '/opt/homebrew/|/usr/local/(opt|Cellar)/' >&2
+    done
+    exit 1
+fi
 
 # Re-sign everything; the install-name rewrites above invalidated the
 # signatures the build produced.

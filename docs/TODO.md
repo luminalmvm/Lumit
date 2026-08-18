@@ -189,12 +189,17 @@ holding a `SmoothZoom` and reading its value, with no design left in it.
 - **`ProjectReference::state()` hands the raw `Arc<RwLock<…>>` out**, so a caller
     can hold a project lock as long as it likes and in any order. The order is
     written down and tested; nothing enforces it at the type level.
-- **macOS cannot build against FFmpeg 8** (K-389). Homebrew has no `ffmpeg@8`
-    formula and its plain `ffmpeg` is already 9.x, which no published rsmpeg
-    supports; the macOS jobs install plain `ffmpeg` behind a major-version gate
-    that fails loudly rather than link mismatched bindings. Retire this when
-    Homebrew ships `ffmpeg@8` (swap the formula back and restore the keg-only
-    `FFMPEG_PKG_CONFIG_PATH` wording), or when rsmpeg gains an `ffmpeg9` feature.
+- **The macOS FFmpeg 8 route has never run on a Mac** (K-389). Homebrew has no
+    `ffmpeg@8` formula and its plain `ffmpeg` is already 9.x, so
+    `.github/actions/ffmpeg8-macos` extracts 8.1.2 out of homebrew-core's
+    history, builds it from source and caches the keg. Every macOS job and the
+    release DMG now take it, and its final step refuses anything whose
+    libavutil is not 60.x. What is owed is **one green run on a real macOS
+    runner**: the branch was written on Windows, so the extract, the source
+    build, the cache-restore path and its receipt-driven dependency reinstall
+    are all reasoned rather than observed. Retire the action outright when
+    Homebrew ships `ffmpeg@8` (name the keg and delete it), or when rsmpeg
+    gains an `ffmpeg9` feature.
 - **The macOS IOSurface Viewer path is unproven** - CI links the bundle but
     nobody has launched the .app (K-033).
 - **The macOS .app is not relocatable** - the podspec links Homebrew FFmpeg by
@@ -202,7 +207,7 @@ holding a `SmoothZoom` and reading its value, with no design left in it.
     names rewritten (K-033).
 - **The macOS build is single-architecture** - `pkg-config-rs` refuses to
     cross-compile and a keg holds one architecture, so `ARCHS` is pinned to the
-    runner's. A universal bundle needs both `ffmpeg` kegs and per-slice `-L`
+    runner's. A universal bundle needs both `ffmpeg@8.1.2` kegs and per-slice `-L`
     flags (K-033), plus a decision on whether Intel macs are supported at all.
 - **The iOS podspec is misnamed** - `rust_lib_lumit_flutter` against a pubspec
     name of `lumit_bridge`. Same fix macOS took; iOS has no target and no CI job.

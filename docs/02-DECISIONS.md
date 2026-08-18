@@ -9933,13 +9933,36 @@ Three things this entry exists to record:
   clip was decoded under 7.1 and 8.1, software and D3D11VA, and all four blake3
   sets match byte for byte. That is the oracle this migration turned on, and a
   future major bump is expected to clear the same bar before it lands.
-- **macOS cannot build today.** Homebrew has no `ffmpeg@8` formula (only @2.8,
-  @4, @5, @6, @7) and its plain `ffmpeg` has already moved to 9.0.1, which no
-  published rsmpeg supports — 0.18.0+ffmpeg.8.0 is the newest, and there is no
-  `ffmpeg9` feature anywhere. The macOS jobs therefore install plain `ffmpeg`
-  behind a major-version gate that fails loudly rather than linking 8-shaped
-  bindings against 9-shaped libraries, which would be undefined behaviour that
-  compiles. Deliberately **not** solved by leaving macOS on `ffmpeg@7`: a
-  mismatched major is the one failure mode worse than a red job. It resolves
-  when Homebrew ships `ffmpeg@8`, or when rsmpeg learns FFmpeg 9 and Lumit
-  follows; docs/TODO.md carries it until then.
+- **macOS gets 8.1.2 from an extracted formula, built from source and cached.**
+  Homebrew has no `ffmpeg@8` formula (only @2.8, @4, @5, @6, @7) and its plain
+  `ffmpeg` has already moved to 9.0.1, which no published rsmpeg supports —
+  0.18.0+ffmpeg.8.0 is the newest, and there is no `ffmpeg9` feature anywhere.
+  There is no bottle to reach for. But homebrew-core's git history still holds
+  the 8.1.2 formula (last touched by commit c7348004c5, "ffmpeg: update 8.1.2_1
+  bottle"), and `brew extract --version=8.1.2 ffmpeg <tap>` lifts it back out
+  into a local tap. That is the route macOS takes:
+  `.github/actions/ffmpeg8-macos` taps, extracts, builds from source
+  (`--build-from-source` is deliberate — an extracted formula can still carry
+  homebrew-core's `bottle` block, whose binaries were built for the `ffmpeg`
+  keg path and not for `ffmpeg@8.1.2`), and caches the finished keg on
+  os+architecture+version so only the first run pays the twenty-to-forty-minute
+  build. The keg's runtime dependencies are *not* cached with it — they live in
+  their own kegs, and libavcodec names them by absolute path — so a cache hit
+  reinstalls the list recorded in the keg's own install receipt from bottles.
+  Because the cache-restore path never taps anything, the opt symlink
+  (`…/opt/ffmpeg@8.1.2`) is made directly rather than by `brew link`; that is
+  the fixed path the podspec's `-L` flags and `make-dmg.sh` both name.
+
+  **Nothing falls back.** The last step of the action reads `libavutil.pc` from
+  the keg that will actually be linked and fails unless it is 60.x, which is
+  FFmpeg 8's and the ABI rsmpeg's `ffmpeg8` bindings were generated for.
+  Linking 8-shaped bindings against 9-shaped libraries is undefined behaviour
+  that compiles, and staying on `ffmpeg@7` to keep the job green would have
+  been the same mistake in the other direction: a mismatched major is the one
+  failure mode worse than a red job. `make-dmg.sh` applies the same test by
+  probing three prefixes in order — a future real `ffmpeg@8` keg, the extracted
+  `ffmpeg@8.1.2`, and plain `ffmpeg` — and taking the first whose libavutil is
+  60.x. The formula name is a hint; the `.pc` version is the evidence.
+
+  This retires when Homebrew ships `ffmpeg@8` (drop the action, name the keg),
+  or when rsmpeg learns FFmpeg 9 and Lumit follows.
