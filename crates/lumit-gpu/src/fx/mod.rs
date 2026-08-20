@@ -13,26 +13,32 @@ use crate::{GpuContext, WORKING_FORMAT};
 mod blur;
 mod colour;
 mod common;
+mod distort;
 mod dof;
 mod engine;
+mod generate;
 mod lens_flare;
 mod lighting;
 mod split;
 mod stylise;
 mod temporal;
+mod utility;
 
 pub use blur::*;
 pub use colour::*;
 pub use common::*;
+pub use distort::*;
 // `dof` exposes its `impl FxEngine` methods, which are reachable without a
 // re-export — but it also houses the `DofOp` parameter struct that carries the
 // effect's two dozen scalars, and a public type does need naming.
 pub use dof::*;
+pub use generate::*;
 pub use lens_flare::*;
 pub use lighting::*;
 pub use split::*;
 pub use stylise::*;
 pub use temporal::*;
+pub use utility::*;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -76,6 +82,169 @@ pub struct FxEngine {
     hue_shift: wgpu::ComputePipeline,
     contrast: wgpu::ComputePipeline,
     gamma: wgpu::ComputePipeline,
+    /// Curves (docs/08 §3.30, K-396): the per-channel monotone-cubic tone
+    /// curve. Shares the ordinary pointwise layout — the knots and their
+    /// tangents arrive in the uniform, already fitted host-side.
+    curves: wgpu::ComputePipeline,
+    /// Levels (docs/08 §3.31): per-channel input/output black and white with
+    /// gamma, both reciprocals precomputed host-side.
+    levels: wgpu::ComputePipeline,
+    /// Brightness (docs/08 §3.32, K-397): AE's Brightness & Contrast pair as
+    /// one affine grade about the mid-grey pivot Contrast uses.
+    brightness: wgpu::ComputePipeline,
+    /// Hue and saturation (docs/08 §3.33): the master adjustment and six
+    /// weighted colour ranges, through an HSV round trip.
+    hue_saturation: wgpu::ComputePipeline,
+    /// Posterize (docs/08 §3.58, K-404): the tone ladder cut into steps, the
+    /// rungs spaced in a square root of the light so they land where a person
+    /// sees them.
+    posterize: wgpu::ComputePipeline,
+    /// Threshold (docs/08 §3.59): every pixel to black or to white, across a
+    /// crossing that is never a bare step.
+    threshold: wgpu::ComputePipeline,
+    /// Tritone (docs/08 §3.60): three colours mapped onto the tone range.
+    tritone: wgpu::ComputePipeline,
+    /// Photo filter (docs/08 §3.61): a coloured glass in front of the lens,
+    /// with the exposure optionally put back afterwards.
+    photo_filter: wgpu::ComputePipeline,
+    /// Black and white (docs/08 §3.62): the exact grey/secondary/primary
+    /// decomposition under six weights.
+    black_and_white: wgpu::ComputePipeline,
+    /// Shadow highlight (docs/08 §3.63), the second pass: the local lift and
+    /// pull, steered by the luma of the blurred picture. The blur itself is
+    /// [`Self::blur`], reused for the third time — after §3.43's softening and
+    /// §3.57's distance field — and here it is a *question*, never a colour.
+    shadow_highlight: wgpu::ComputePipeline,
+    /// Fill (docs/08 §3.34, K-398): the layer's own coverage flooded with one
+    /// colour.
+    fill: wgpu::ComputePipeline,
+    /// Gradient (docs/08 §3.35): the linear or radial two-colour ramp.
+    gradient: wgpu::ComputePipeline,
+    /// Noise (docs/08 §3.36): per-pixel uniform or gaussian grain.
+    noise: wgpu::ComputePipeline,
+    /// Fractal noise (docs/08 §3.37): the seeded multi-octave generator, and
+    /// the WGSL twin of the shared `lumit_core::fx::noise` core the
+    /// displacement family will reuse.
+    fractal_noise: wgpu::ComputePipeline,
+    /// Beam (docs/08 §3.73): a tapered shaft of light between two points. One
+    /// capsule a pixel.
+    beam: wgpu::ComputePipeline,
+    /// Lightning (docs/08 §3.74): a forked bolt. The first kernel in the
+    /// catalogue whose *geometry* arrives in the uniform, already built — the
+    /// randomness does not vary per pixel, so it does not belong in the kernel.
+    lightning: wgpu::ComputePipeline,
+    /// Radio waves (docs/08 §3.75): shapes emitted from a point and expanding.
+    /// §3.71's sector solve, done once for a unit shape and scaled per wave.
+    radio_waves: wgpu::ComputePipeline,
+    /// Vegas (docs/08 §3.76): marching lights along the picture's contours. The
+    /// contour is a level set rather than an edge detector's output, which is
+    /// what makes Width a width in pixels.
+    vegas: wgpu::ComputePipeline,
+    /// The shared path drawing (docs/08 §3.78 Scribble, §3.79 Stroke and §3.76
+    /// Vegas' Mask/Path source): a maximum over capsules that arrive already
+    /// built, and the fifth reader of `fx_noise_core.wgsl` — Scribble's waver
+    /// displaces the paper rather than the geometry.
+    ///
+    /// One pipeline for three effects, because what differs between them is
+    /// where the line goes and that is decided on the CPU (K-408).
+    path_draw: wgpu::ComputePipeline,
+    /// Add grain (docs/08 §3.77): film grain laid on by tone. The fourth reader
+    /// of the shared `fx_noise_core.wgsl`.
+    add_grain: wgpu::ComputePipeline,
+    /// Turbulent displace (docs/08 §3.38): the fractal-driven warp, and the
+    /// second reader of the shared `fx_noise_core.wgsl`. One of the kernels that
+    /// claim the K-395 matte inside their own maths — it scales the
+    /// displacement.
+    turbulent_displace: wgpu::ComputePipeline,
+    /// Tile (docs/08 §3.39): one rectangle of the picture stamped across the
+    /// frame.
+    tile: wgpu::ComputePipeline,
+    /// Offset (docs/08 §3.40): the frame slid, wrapping round.
+    offset: wgpu::ComputePipeline,
+    /// Mirror (docs/08 §3.41): one half reflected onto the other.
+    mirror: wgpu::ComputePipeline,
+    /// Lens distort (docs/08 §3.42): barrel and pincushion by field of view.
+    lens_distort: wgpu::ComputePipeline,
+    /// Corner pin (docs/08 §3.48): the picture pulled onto four points, through
+    /// the inverse of the homography they define.
+    corner_pin: wgpu::ComputePipeline,
+    /// Displacement map (docs/08 §3.49): another layer's channels push this one.
+    /// The seventh kernel to claim the K-395 matte inside its own maths, and the
+    /// second (after Set matte) for which the matte is the effect's subject.
+    displacement_map: wgpu::ComputePipeline,
+    /// Polar coordinates (docs/08 §3.50): the frame bent into a circle, and the
+    /// exact inverse map back.
+    polar_coordinates: wgpu::ComputePipeline,
+    /// Twirl (docs/08 §3.51): the picture wrung round a point.
+    twirl: wgpu::ComputePipeline,
+    /// Spherize (docs/08 §3.52): a glass ball held over the picture.
+    spherize: wgpu::ComputePipeline,
+    /// Ripple (docs/08 §3.53): rings spreading from a point.
+    ripple: wgpu::ComputePipeline,
+    /// Wave warp (docs/08 §3.54): a travelling wave across the frame.
+    wave_warp: wgpu::ComputePipeline,
+    /// Bezier warp (docs/08 §3.55): the frame's four edges bent, inverted per
+    /// pixel by Newton's method — the first kernel in the catalogue to *solve*
+    /// for its sample position rather than compute one.
+    bezier_warp: wgpu::ComputePipeline,
+    /// Warp (docs/08 §3.56): the thirteen bend presets, one kernel.
+    warp: wgpu::ComputePipeline,
+    /// Roughen edges (docs/08 §3.57), the second pass: the blurred alpha re-cut
+    /// at a threshold the §3.37 fractal field wobbles. The blur itself is
+    /// [`Self::blur`], reused exactly as Drop shadow reuses it — and here the
+    /// blurred alpha *is* the distance field. The fourth reader of
+    /// `fx_noise_core.wgsl`.
+    roughen_edges: wgpu::ComputePipeline,
+    /// Median (docs/08 §3.64, K-405): the true middle value of a neighbourhood,
+    /// selected by a compare-exchange network so that nothing branches on a
+    /// value and the four channels come out of one sweep. The catalogue's only
+    /// `heavy` single-pass kernel.
+    median: wgpu::ComputePipeline,
+    /// Mosaic (docs/08 §3.65): the frame in flat blocks, every boundary an
+    /// integer division.
+    mosaic: wgpu::ComputePipeline,
+    /// Find edges (docs/08 §3.66): a Sobel gradient per channel, taken on the
+    /// perceptual value so the lines land where a person would draw them.
+    find_edges: wgpu::ComputePipeline,
+    /// Emboss (docs/08 §3.67): the picture as grey relief, lit from Direction.
+    emboss: wgpu::ComputePipeline,
+    /// Texturize (docs/08 §3.68): §3.67's relief taken from another layer and
+    /// multiplied into this one. The second kernel after Light wrap to read a
+    /// layer of its own beside the universal Matte row.
+    texturize: wgpu::ComputePipeline,
+    /// Broadcast safe (docs/08 §3.69): the composite signal's amplitude measured
+    /// and clamped, or the pixels that fail keyed out.
+    broadcast_safe: wgpu::ComputePipeline,
+    /// Channel blur (docs/08 §3.45): the separable gaussian with a radius per
+    /// channel. Its own kernel rather than a fourth mode of [`Self::blur`] —
+    /// four weight tables cannot be one table, and widening the shipped blur's
+    /// uniform would put its byte-for-byte guarantee at risk for nothing.
+    channel_blur: wgpu::ComputePipeline,
+    /// Drop shadow (docs/08 §3.43), the combine pass: the softened shape read
+    /// at the offset, painted and composited *under* the layer. The softening
+    /// itself is [`Self::blur`], reused exactly as the Glow and Light wrap
+    /// reuse it.
+    drop_shadow: wgpu::ComputePipeline,
+    /// Set matte (docs/08 §3.44): another layer's channel becomes this layer's
+    /// alpha. The sixth kernel to claim the K-395 matte inside its own maths,
+    /// and the only one for which the matte *is* the output rather than a
+    /// modifier of it.
+    set_matte: wgpu::ComputePipeline,
+    /// Linear wipe (docs/08 §3.46): a straight edge swept across the frame.
+    linear_wipe: wgpu::ComputePipeline,
+    /// Radial wipe (docs/08 §3.47): a wedge swept round a centre.
+    radial_wipe: wgpu::ComputePipeline,
+    /// Venetian blinds (docs/08 §3.70): §3.46's straight edge, folded into one
+    /// slat so that one edge becomes a rank of them.
+    venetian_blinds: wgpu::ComputePipeline,
+    /// Iris wipe (docs/08 §3.71): a polygon or a star opened out of the middle.
+    /// The shape is never rasterised — the pixel's angle is folded into one
+    /// sector, which reduces the whole boundary to a straight edge.
+    iris_wipe: wgpu::ComputePipeline,
+    /// Card wipe (docs/08 §3.72): the frame as a grid of cards, turning away.
+    /// The first kernel to put a camera in front of a pixel, and it *inverts*
+    /// the projection rather than drawing it — Lumit's effects gather.
+    card_wipe: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18/K-165): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
@@ -89,12 +258,23 @@ pub struct FxEngine {
     echo_accumulate: wgpu::ComputePipeline,
     echo_mix: wgpu::ComputePipeline,
     motion_blur: wgpu::ComputePipeline,
+    /// The dominant-motion tile reduction Motion blur runs first (K-390,
+    /// docs/impl/optical-flow.md §4.5 item 3): one thread per tile, reducing
+    /// the flow field to the confidence-weighted longest vector per tile. Its
+    /// own [`Self::mb_tile_layout`] because the tile texture is rgba32float —
+    /// those vectors are judged bit-for-bit against an f32 oracle.
+    mb_tilemax: wgpu::ComputePipeline,
     /// Datamosh (docs/08 §3.12, K-104): shares [`Self::mb_layout`]/`mb_pl`
     /// with Motion blur — both need exactly three sampled inputs (the
     /// current frame, one extra neighbour-derived texture, and a flow
     /// field) plus a storage output and a uniform.
     datamosh: wgpu::ComputePipeline,
     adjust: wgpu::ComputePipeline,
+    /// The generic Matte dissolve (K-395, docs/08 §2.6): one pass after any
+    /// effect that was handed a matte, lerping its output back towards its
+    /// input by the matte's luma. Shares [`Self::adjust_layout`] — three
+    /// sampled inputs, a storage output, one uniform.
+    matte_mix: wgpu::ComputePipeline,
     /// 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). Its own pipeline and
     /// [`Self::lut_layout`]: the shared two sampled inputs (src, orig) plus
     /// the cube as a fifth binding — a 3D texture, the first effect to need
@@ -113,11 +293,15 @@ pub struct FxEngine {
     /// The adjustment blend's own layout: three sampled inputs (below,
     /// processed, coverage) where every effect kernel takes two.
     adjust_layout: wgpu::BindGroupLayout,
-    /// Flow motion blur's own layout: the shared two inputs (src, orig) plus
-    /// the flow-field texture — the one extra sampled input this kernel
-    /// needs. Also Datamosh's layout (see [`Self::datamosh`]): its three
-    /// sampled inputs (current, previous, flow) fit the same shape.
+    /// Flow motion blur's own layout: three sampled inputs — the source (which
+    /// doubles as the unprocessed original for Mix, this being a single pass),
+    /// the dominant-motion tiles and the flow field. Also Datamosh's layout
+    /// (see [`Self::datamosh`]): its three sampled inputs (current, previous,
+    /// flow) fit the same shape.
     mb_layout: wgpu::BindGroupLayout,
+    /// The tile reduction's layout (see [`Self::mb_tilemax`]): the flow field
+    /// in (0), the rgba32float tile texture out (1), the uniform (2).
+    mb_tile_layout: wgpu::BindGroupLayout,
     /// The LUT lookup's own layout (see [`Self::lut`]): src (0), orig (1),
     /// the storage output (2), the uniform (3) and the 3D cube texture (4).
     lut_layout: wgpu::BindGroupLayout,
@@ -197,6 +381,32 @@ impl FxEngine {
         h: u32,
         params: &[u8],
     ) {
+        self.dispatch_matted(ctx, pipeline, src, orig, None, dst, w, h, params)
+    }
+
+    /// [`Self::dispatch`] with a **Matte** bound (K-395, docs/08 §2.6) — the
+    /// two kernels that claim the matte inside their own maths (the Gaussian
+    /// blur's radius, the Glow's seed gate) instead of taking the generic
+    /// dissolve.
+    ///
+    /// `None` binds `src` in the matte's place. A texture binding cannot be left
+    /// empty and a dummy 1×1 would be a second allocation per dispatch; the
+    /// kernels never read it, because the uniform they were handed says the
+    /// matte is off. That is the same "bound but not read" convention the `orig`
+    /// slot already uses on the passes that pass `src` twice.
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_matted(
+        &self,
+        ctx: &GpuContext,
+        pipeline: &wgpu::ComputePipeline,
+        src: &wgpu::Texture,
+        orig: &wgpu::Texture,
+        matte: Option<&wgpu::Texture>,
+        dst: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        params: &[u8],
+    ) {
         use wgpu::util::DeviceExt;
         let ubuf = ctx
             .device
@@ -230,6 +440,12 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: ubuf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(
+                        &matte.unwrap_or(src).create_view(&Default::default()),
+                    ),
                 },
             ],
         });

@@ -164,8 +164,9 @@ Future<void> main() async {
 
   Rect panelBox() {
     final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(2, ruler.top - 28, ruler.right + 4,
-        boxOf('tl-zoom-slider')!.bottom + 8);
+    return Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+        ruler.right + 4 + paneCardInset,
+        boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
   }
 
   // ---- Shot: a Sequence layer, clips cut back-to-back ---------------------

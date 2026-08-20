@@ -582,6 +582,11 @@ class _WorkspaceStrip extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
     final active = ui.workspace.activePreset;
+    // Round's filled pill (K-394, §12.1): five names, one in force, which is
+    // exactly the segmented option the cue is about — and accent *text* is the
+    // "reads from a tint" it replaces. Sharp keeps the accent word: passing
+    // `active` there would give it a fill it has never had.
+    final round = t.shape == ThemeShape.round;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -597,11 +602,12 @@ class _WorkspaceStrip extends StatelessWidget {
               // they were squeezed out of sight, leaving a button that could be
               // pressed and not read (K-236).
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              active: round && preset == active,
               onPressed: () => ui.workspace.applyWorkspacePreset(preset),
               child: Text(
                 preset.title,
                 style: preset == active
-                    ? t.body.copyWith(color: t.accent)
+                    ? t.body.copyWith(color: round ? t.surface0 : t.accent)
                     : t.body.copyWith(color: t.textSecondary),
               ),
             ),

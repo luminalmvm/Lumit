@@ -1,0 +1,84 @@
+---
+title: Emboss
+description: "Treats the picture as a surface with height and lights it from one side, giving the stamped-metal grey relief."
+---
+
+Emboss is a **Stylise** effect.
+
+## What it is for
+
+The picture is treated as a surface with height, lit from one direction, and what
+comes back is the stamped-metal look: a flat grey sheet with the frame's edges
+raised out of it, bright on the side facing the light and dark on the other.
+
+It is grey on purpose — After Effects' Emboss suppresses colour and so does this.
+The everyday uses are a pressed-metal or letterpress title, a fake bump map to
+combine with the original picture through a [blend mode](/use/blend-modes/), and
+a quick way to see the shape of detail that is hiding in the shadows.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 45° | - |
+| **Relief** | Slider | 0 to 20; higher by typing | 2 | Pixels at composition size |
+| **Contrast** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Direction** — where the light is, measured from straight up and going
+  clockwise, the same convention [Drop shadow](/effects/stylise/drop-shadow/)
+  uses. The slope facing it is the bright one. Turning it 180° swaps every
+  highlight for a shadow, which reads as the relief being pressed in rather than
+  raised out.
+- **Relief** — how far apart the two points being compared are, in pixels at
+  composition size, which is how thick the relief reads. Small values give a fine
+  etched edge; large ones give a soft, deep, almost three-dimensional swell.
+- **Contrast** — the gain on the relief. 0 is a flat grey card; 100 is the
+  shipped look; above 150 the highlights and shadows run to white and black and
+  the picture reads as a hard stamp.
+- **Mix** — how much of the relief replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Relief 0 is flat grey, not "off".** With no separation between the two points
+being compared there is no relief to see, and the honest answer is the surface
+with no light on it. Use **Mix** to turn the effect down.
+
+**To get the colour back, blend it.** Emboss on a duplicate of the layer, set
+that copy's blend mode to Overlay or Soft light, and the colour underneath comes
+through with the relief on top. That is the standard recipe and it looks far
+better than any "keep colour" switch would.
+
+**For a coloured relief**, put a [Tint](/effects/colour/tint/) or a
+[Tritone](/effects/colour/tritone/) after it — the grey is a perfect input for
+both.
+
+**Direction and Relief are the same two dials as a bevel.** Animating Direction
+slowly makes the light travel across the frame, which is the "light sweep across
+a metal logo" move; keep Relief still while you do it, or the metal appears to
+change thickness.
+
+**Transparency is untouched**, so an embossed title stays a title rather than
+becoming a grey rectangle.
+
+## Related
+
+- [Find edges](/effects/stylise/find-edges/)
+- [Texturize](/effects/stylise/texturize/)
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

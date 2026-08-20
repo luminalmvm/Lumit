@@ -292,12 +292,25 @@ pub(super) fn splitmix32(mut x: u32) -> u32 {
 /// discretisation of local time that gives block glitching its per-frame
 /// pop rather than a continuous wobble.
 pub fn block_hash01(seed: u32, channel: u32, bx: i32, by: i32, tick: i32) -> f32 {
+    (lattice_hash(seed, channel, bx, by, tick) >> 8) as f32 / 16_777_216.0
+    // top 24 bits, /2^24 → exact in f32
+}
+
+/// The integer half of [`block_hash01`]: `(seed, channel, x, y, z)` folded
+/// through [`splitmix32`] into one `u32`.
+///
+/// Named separately because the noise core ([`super::noise`], docs/08 §3.37)
+/// wants the raw bits — Perlin picks a gradient by `hash % 12`, which a float in
+/// `[0, 1)` can only get back to by multiplying and flooring. Block glitch's
+/// hash is *this* function with the top 24 bits taken, unchanged, so the two
+/// cannot drift and neither can their WGSL twins.
+pub fn lattice_hash(seed: u32, channel: u32, x: i32, y: i32, z: i32) -> u32 {
     let mut h = seed;
     h = splitmix32(h ^ channel);
-    h = splitmix32(h ^ (bx as u32));
-    h = splitmix32(h ^ (by as u32));
-    h = splitmix32(h ^ (tick as u32));
-    (h >> 8) as f32 / 16_777_216.0 // top 24 bits, /2^24 → exact in f32
+    h = splitmix32(h ^ (x as u32));
+    h = splitmix32(h ^ (y as u32));
+    h = splitmix32(h ^ (z as u32));
+    h
 }
 
 /// Glitch's fixed, unexposed block-glitch update rate (docs/08 §3.12

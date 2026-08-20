@@ -32,6 +32,14 @@ export default defineConfig({
         { label: "Start here", autogenerate: { directory: "start" } },
         { label: "Using Lumit", autogenerate: { directory: "use" } },
         { label: "The panels", autogenerate: { directory: "panels" } },
+        // One page per effect, generated from the engine's own catalogue by
+        // scripts/gen-effect-pages.mjs. Long, so it starts collapsed, and each
+        // category is its own collapsed subgroup.
+        {
+          label: "Effects",
+          collapsed: true,
+          autogenerate: { directory: "effects", collapsed: true },
+        },
         { label: "How Lumit works", autogenerate: { directory: "engine" } },
         { label: "Reference", autogenerate: { directory: "reference" } },
       ],

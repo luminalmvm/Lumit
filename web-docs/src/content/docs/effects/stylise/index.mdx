@@ -1,0 +1,89 @@
+---
+title: "Stylise"
+description: "Changing how the picture looks — glow, flare, relief, blocks and drawn edges."
+sidebar:
+  order: 0
+---
+
+## What this family does
+
+Everything in this family changes **how the picture looks** rather than where it
+is or what colour a pixel is. Two groups sit under that heading, and it is worth
+knowing which you are in.
+
+**The ones that add light** — a bloom, a flare, a wrap, a strobe — put energy
+into the frame that the footage did not contain, and they depend on Lumit's
+headroom above white (see below).
+
+**The ones that redraw the surface** — [Median](/effects/stylise/median/),
+[Mosaic](/effects/stylise/mosaic/), [Find edges](/effects/stylise/find-edges/),
+[Emboss](/effects/stylise/emboss/), [Texturize](/effects/stylise/texturize/),
+[Roughen edges](/effects/stylise/roughen-edges/) and
+[Drop shadow](/effects/stylise/drop-shadow/) — leave the exposure alone and change
+what the frame is *made of*: flat blocks, drawn outlines, grey relief, a printed
+surface, a chewed edge, a cast shadow.
+
+- [Glow](/effects/stylise/glow/) blooms the picture's own bright areas outward.
+  It is the one to reach for first, and the one that does the most work per
+  control.
+- [Lens flare](/effects/stylise/lens-flare/) simulates a real photographic lens —
+  ghosts traced through an actual prescription, a starburst that is the true
+  diffraction pattern of the aperture. It is the expensive, physically honest
+  one.
+- [Sprite flare](/effects/stylise/sprite-flare/) draws a flare instead of
+  simulating one: a glow, a train of ghosts and an anamorphic streak, placed
+  where you say. It is cheap, art-directed and completely predictable.
+- [Light wrap](/effects/stylise/light-wrap/) spills a background's light around a
+  keyed subject's edges, which is most of what stops a composite looking pasted
+  on.
+- [Flash](/effects/stylise/flash/) is the strobe: a hit of colour on a beat, or
+  on a keyframe.
+
+## Why these need light above white
+
+Lumit works in scene-linear light, where values brighter than white are legal and
+carry real information. That is what these effects depend on. A glow blooms
+proportionally to how far a pixel is *above* its threshold, so a highlight at
+four times white blooms four times as hard as one just over it — which is the
+difference between a bloom that reads as light and one that reads as a blurred
+grey smear.
+
+The practical consequence: keep the [Colour](/effects/colour/) effects that clip
+or compress highlights *after* these, not before. A grade that flattens the
+brights first leaves a glow nothing to find.
+
+## Which flare
+
+Both flare effects place light from a point, and they answer different
+questions. Lens flare asks *what would this lens actually do*, and its answer
+changes with the f-stop, the focus and the glass. Sprite flare asks *draw me a
+flare here*, and its answer is whatever you set. When you need a flare that
+behaves like a camera's, take the first; when you need one that does exactly the
+same thing every time and costs almost nothing, take the second.
+
+## The effects
+
+{/* GENERATED:list - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+- [Sprite flare](/effects/stylise/sprite-flare/)
+- [Light wrap](/effects/stylise/light-wrap/)
+- [Flash](/effects/stylise/flash/)
+- [Glow](/effects/stylise/glow/)
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Roughen edges](/effects/stylise/roughen-edges/)
+- [Median](/effects/stylise/median/)
+- [Mosaic](/effects/stylise/mosaic/)
+- [Find edges](/effects/stylise/find-edges/)
+- [Emboss](/effects/stylise/emboss/)
+- [Texturize](/effects/stylise/texturize/)
+
+{/* END GENERATED */}
+
+## Related
+
+- [All effects](/effects/)
+- [Effects](/use/effects/)
+- [Colour](/effects/colour/)
+- [Blend modes](/use/blend-modes/)
+- [Mattes](/use/mattes/)

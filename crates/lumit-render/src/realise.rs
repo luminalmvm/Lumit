@@ -213,9 +213,12 @@ impl Realiser<'_> {
                         &[],
                         &[],
                         &[],
-                        // A depth or flare-matte input's own stack is part of
-                        // the effect that reads it, not a row of its own: its
-                        // cost is inside that layer's span already.
+                        // No mask paths through a referenced layer's own stack
+                        // (K-408) — the same v1 boundary its mattes take.
+                        &[],
+                        // A matte's own stack is part of the effect that reads
+                        // it, not a row of its own: its cost is inside that
+                        // layer's span already.
                         None,
                     )
                 };
@@ -330,7 +333,7 @@ impl Realiser<'_> {
             // comp-sized composite, so its depth inputs resample to comp size.
             let luts = self.load_luts(&l.lut_files);
             let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th);
-            let flare_mattes = self.render_layer_inputs(&l.flare_mattes, tw, th);
+            let mattes = self.render_layer_inputs(&l.mattes, tw, th);
             let flare_lens = self.load_flare_lens(&l.flare_lens_files);
             // The stack was resolved against the comp raster; this render
             // target may be smaller (reduced-resolution preview), and every
@@ -381,8 +384,9 @@ impl Realiser<'_> {
                 None,
                 &luts,
                 &layer_inputs,
-                &flare_mattes,
                 &flare_lens,
+                &mattes,
+                &l.mask_paths,
                 fx_ms.as_mut(),
             );
             let coverage = self.coverage_texture(camera, width, height, l);
@@ -583,7 +587,7 @@ impl Realiser<'_> {
                 // stack's consuming ops (§3.22, §3.28); the same render export
                 // runs (K-031).
                 let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h);
-                let flare_mattes = self.render_layer_inputs(&l.flare_mattes, w, h);
+                let mattes = self.render_layer_inputs(&l.mattes, w, h);
                 let flare_lens = self.load_flare_lens(&l.flare_lens_files);
                 // A stack resolved against a raster wider than the one it is
                 // about to run on (a Precomp layer's, under reduced-resolution
@@ -610,8 +614,9 @@ impl Realiser<'_> {
                     flow.as_ref(),
                     &luts,
                     &layer_inputs,
-                    &flare_mattes,
                     &flare_lens,
+                    &mattes,
+                    &l.mask_paths,
                     fx_ms.as_mut(),
                 )
             };
@@ -705,6 +710,9 @@ impl Realiser<'_> {
                             &luts,
                             &[],
                             &[],
+                            &[],
+                            // As above: a referenced layer's own stack walks no
+                            // mask path in v1 (K-408).
                             &[],
                             // A matte's own stack is part of the layer it
                             // gates, not a row of its own.

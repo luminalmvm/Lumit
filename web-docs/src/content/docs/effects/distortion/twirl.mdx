@@ -1,0 +1,78 @@
+---
+title: Twirl
+description: "Wrings the picture round a point, hardest in the middle and easing out to nothing at the rim."
+---
+
+Twirl is a **Distortion** effect.
+
+## What it is for
+
+Spinning a circular patch of the picture around its own centre so that straight
+lines become spirals. The twist is strongest at the middle and fades to nothing at
+the edge of the circle, so the effect blends into the untouched picture rather
+than leaving a visible ring.
+
+The obvious use is the whirlpool — water, smoke, a galaxy. The less obvious ones
+are more common: a Twirl animated from a large angle to zero is a classic reveal
+for a logo or a title, and a small Twirl on a noise layer turns straight streaks
+into curling wisps for use as a displacement map or a matte.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 90° | - |
+| **Radius** | Slider | 0 to 100; higher by typing | 30 | Per cent of the composition diagonal |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Angle** — how far the middle is turned. Positive turns the picture clockwise
+  on screen. Past about 180° the centre starts to smear rather than turn, which is
+  a look in itself; for a clean spiral stay under a full turn.
+- **Radius** — how wide the twirled circle is, as a percentage of the composition
+  diagonal. Because it is a percentage rather than a pixel count, the same value
+  covers the same part of the picture whatever size the composition is, and a
+  half-resolution preview matches the export.
+- **Centre X** and **Centre Y** — where the middle of the twirl sits, in pixels at
+  composition size. A fresh Twirl starts in the middle of the frame.
+- **Mix** — how much of the twirled picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Nothing outside the radius moves, at all.** The twist eases to exactly zero at
+the rim, so you can drop a Twirl on a full frame and be certain the rest of the
+shot is untouched. That also means stacking several Twirls at different centres
+and radii is safe and is the usual way to build a churning surface.
+
+**Animate the Angle, not the Radius.** Radius changing over time makes the
+boundary of the circle sweep across the picture, and the eye follows it. Angle
+changing over time makes the picture itself move, which is what you want. For a
+reveal, keyframe Angle from something large down to 0 with an ease out.
+
+**Its circle never reaches outside itself.** Turning a point about the centre does
+not change its distance from the centre, so a Twirl can only ever rearrange what
+is already inside its own circle. If part of that circle hangs off the frame, the
+missing part comes back transparent.
+
+## Related
+
+- [Spherize](/effects/distortion/spherize/)
+- [Polar coordinates](/effects/distortion/polar-coordinates/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

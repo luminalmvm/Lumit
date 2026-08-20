@@ -1,0 +1,87 @@
+---
+title: Polar coordinates
+description: "Wraps the frame around its own centre, or unrolls a circle into a straight strip."
+---
+
+Polar coordinates is a **Distortion** effect.
+
+## What it is for
+
+Turning straight things into round things, and round things into straight ones.
+
+**Rectangular to polar** wraps the picture around the middle of the frame: the top
+row of the picture becomes a tiny circle at the centre, the bottom row becomes the
+outermost ring, and the left and right edges meet in a seam pointing straight up.
+It is how a panorama becomes a "tiny planet", how a bar of light becomes a halo,
+and how a scrolling strip of text becomes a spinning ring.
+
+**Polar to rectangular** is the exact opposite: it unrolls whatever surrounds the
+centre into a flat strip. Point it at a circular logo, a clock face or a
+[Radial wipe](/effects/transition/radial-wipe/) and you get its contents laid out
+left to right by angle.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Conversion** | Dropdown | Rectangular to polar · Polar to rectangular | Rectangular to polar | - |
+| **Interpolation** | Slider | 0 to 100 | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Conversion** — which way the picture is bent. The two are exact opposites of
+  one another: put a Rectangular to polar and a Polar to rectangular on top of each
+  other, both at Interpolation 100, and you get the picture back.
+- **Interpolation** — how far along the bend the effect has gone. This is not a
+  fade. At 50 the frame is genuinely *half bent* — every pixel is drawn from
+  half-way along its own journey into the circle — so keyframing it from 0 to 100
+  makes the picture curl up rather than dissolving into a curled copy of itself.
+  It is the control to animate.
+- **Mix** — the ordinary blend of the finished result over the original. At 50 you
+  see the bent picture *and* the flat one at once, which is a different look and
+  occasionally the one you want.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The seam points straight up.** The left and right edges of the picture end up
+next to each other at twelve o'clock. If the join shows, put an
+[Offset](/effects/distortion/offset/) above the Polar coordinates and slide the
+picture sideways until the two edges match, or make the source seamless in the
+first place.
+
+**The middle is where detail goes to die.** In Rectangular to polar the entire top
+row of the picture is squeezed onto a handful of pixels at the centre. That is
+inherent to the transform, not a shortcoming: put something plain — sky, a
+gradient, a solid colour — along the top of your source and the centre of the
+planet will look clean.
+
+**Corners are covered, so the frame stays full.** The wrapping radius reaches the
+frame's corners rather than only its edges, which is why a tiny planet fills the
+frame instead of leaving four bald corners. The cost is that the very bottom of
+the source is seen only near the corners.
+
+**Unrolling can run out of picture.** Polar to rectangular reads from a circle
+wider than the frame is tall, so parts of the strip have nothing to read and come
+out transparent. Put the content you care about near the centre of frame, or scale
+it down first.
+
+## Related
+
+- [Twirl](/effects/distortion/twirl/)
+- [Offset](/effects/distortion/offset/)
+- [Radial wipe](/effects/transition/radial-wipe/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

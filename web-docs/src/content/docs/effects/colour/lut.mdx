@@ -1,0 +1,79 @@
+---
+title: "LUT"
+description: "Apply a grade authored elsewhere, from a .cube file."
+---
+
+LUT is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Applies a **look-up table** — a grade someone has already built, stored as a
+file. A LUT is a table of colour-in to colour-out, so it can express a whole
+grade, including moves no combination of sliders here would reproduce, in one
+step.
+
+This is how you use a bought or shared look pack, how you match a grade that was
+established in another application, and how a house style travels between
+projects without being rebuilt each time.
+
+Put it late in the stack. A LUT expects a picture that has already been brought
+to a sensible exposure and balance; applied to an under-exposed plate it grades
+the mistake as faithfully as it grades everything else. Correct first, then
+look.
+
+It does nothing at all until you choose a file, and says so rather than
+failing — the one effect that is allowed to sit inert, because a file you must
+supply cannot have a sensible default.
+
+The file can be changed over time, but only by stepping from one to another
+rather than by blending: two grades cannot be part-way mixed into a third
+meaningfully, so only hold keyframes apply. See
+[Keyframes](/use/keyframes/).
+
+:::caution[Two limits worth knowing]
+The table is applied to the scene-linear working picture as it is, with no
+conversion into the space the LUT was authored for. A LUT built for
+display-encoded or log input will therefore not land the way its author
+intended; the ones that behave predictably are those authored against linear
+input.
+
+Only 3D tables are read. A one-dimensional table is treated as no file at all.
+And the file is remembered by its path rather than its contents, so editing a
+LUT on disk while the project is open will not take effect until Lumit is
+reopened.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **File** | File | `.cube` | None | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **File** — the .cube file to apply. Choosing one is what switches the effect
+  on; leaving it unset, or pointing it at a file that has been moved, deleted or
+  cannot be read, leaves the picture untouched rather than causing an error.
+- **Mix** — how much of the graded picture replaces the original. This is the
+  strength control for a LUT: most look packs are built stronger than a montage
+  wants, and easing them back here is the normal way to use them.
+
+## Related
+
+- [Colour balance](/effects/colour/colour-balance/)
+- [Contrast](/effects/colour/contrast/)
+- [Keyframes](/use/keyframes/)
+- [Presets](/use/presets/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

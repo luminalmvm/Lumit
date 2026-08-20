@@ -1,0 +1,72 @@
+---
+title: Fill
+description: "Replace a layer's colour with one flat colour, keeping its shape and its edges."
+---
+
+Fill is a **Generate** effect.
+
+## What it is for
+
+Flooding a layer with a single colour without losing what makes it that layer.
+
+The shape stays: a title keeps its letterforms, a mask keeps its curve, a keyed
+subject keeps its outline, and every soft edge stays soft. Only the colour is
+replaced. That is because the layer's transparency is what decides where the
+colour goes, and Fill never touches it — a pixel that was half covered comes out
+half covered in the new colour, which is why the result has clean edges rather
+than the jagged stencil a threshold would give.
+
+Reach for it when the same artwork is wanted in a different colour and you would
+rather not go back to the source, when a shape needs to become a flat silhouette,
+or when a keyed element has to be reduced to a solid so it can be blurred into a
+shadow.
+
+If you want the colour to *vary* across the frame rather than sit flat, that is
+[Gradient](/effects/generate/gradient/); if you want to keep the picture and just
+push it toward a colour, that is [Tint](/effects/colour/tint/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Colour** — the colour the layer becomes. It is scene-linear and the range
+  runs past 1, so a fill can be brighter than white and will bloom under a
+  [Glow](/effects/stylise/glow/) the way a real light source would. The colour
+  swatch's own transparency is ignored; the layer decides that.
+- **Mix** — how much of the fill replaces the original. At 0 nothing changes; at
+  50 the layer is half its own colour and half the fill, which is the way to
+  ease a fill in over time. This is where an imported After Effects Fill's
+  Opacity ends up — the two are the same number.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Filling one mask rather than the whole layer** is not something this effect
+does. After Effects' Fill can be aimed at a single mask and then needs its own
+feather controls to soften the hard mask edge that results. The same picture here
+comes from putting the Fill on the layer that carries the shape, and softness
+from a [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) after it. An
+imported mask-targeted Fill is reported rather than approximated.
+
+## Related
+
+- [Gradient](/effects/generate/gradient/)
+- [Tint](/effects/colour/tint/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

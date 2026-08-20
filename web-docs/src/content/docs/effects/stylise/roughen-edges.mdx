@@ -1,0 +1,115 @@
+---
+title: Roughen edges
+description: "Chews the outline of a shape with a cloud of fractal noise, so a clean cut-out stops looking cut out."
+---
+
+Roughen edges is a **Stylise** effect.
+
+## What it is for
+
+The outline of a shape gets eaten into by a cloud of noise, so a clean cut-out
+stops looking cut out. Nothing inside the shape moves — this changes only where
+the shape stops.
+
+Three shapes of chewing are on offer: **Roughen** is a soft irregular edge,
+**Cut** takes hard bites out of it, and **Spiky** grows sharp points. Turn
+**Colour edge** on and the chewed border is painted, which is how a burnt or
+photocopied edge is made.
+
+The everyday uses are torn paper, burnt film, grime on a key, rust and corrosion,
+an ink-stamped title, and taking the plastic off a logo.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Edge type** | Dropdown | Roughen · Cut · Spiky | Roughen | - |
+| **Border** | Slider | 0 to 500; higher by typing | 40 | Pixels at composition size |
+| **Edge sharpness** | Slider | 0 to 100 | 70 | - |
+| **Fractal influence** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Scale** | Slider | 1 to 2000; higher by typing | 100 | Pixels at composition size |
+| **Offset x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Offset y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Complexity** | Slider, whole numbers | 1 to 10 | 2 | - |
+| **Evolution** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | - |
+| **Cycle evolution** | Checkbox | On or off | Off | - |
+| **Cycle** | Slider, whole numbers | 1 to 30 | 1 | - |
+| **Colour edge** | Checkbox | On or off | Off | - |
+| **Edge colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Evolution options** groups **Cycle evolution**, **Cycle**, and starts closed.
+- **Cycle** is editable while **Cycle evolution** is on.
+- **Edge colour** is editable while **Colour edge** is on.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Edge type** — **Roughen** for a soft irregular outline, **Cut** for hard bites
+  with a crisp edge, **Spiky** for sharp points.
+- **Border** — how deep the chewing reaches, in pixels at composition size. It also
+  sets the width of the band the effect works in, so raising it makes the chewing
+  both deeper and broader. **0** turns the effect off exactly.
+- **Edge sharpness** — how crisp the chewed edge is. 100 is hard, 0 fades away
+  across the whole border. Ignored when Edge type is Cut, which is always hard.
+- **Fractal influence** — how far the noise moves the outline. 0 does not turn the
+  effect off; it re-cuts the outline where it already was, which sharpens a soft
+  matte. Above 100 the bites reach as deep as the band allows.
+- **Scale** — the size of one lump of noise, in pixels at composition size. Small
+  values give a fine crumbly edge, large ones give a few big bites.
+- **Offset x** and **Offset y** — where the noise pattern sits. Animate them to
+  drift the chewing along the edge.
+- **Complexity** — how many octaves of detail are summed. Two reads as torn paper;
+  more reads as corrosion.
+- **Evolution** — turn it and the noise churns through itself rather than sliding.
+  One full turn is one step through the pattern.
+- **Cycle evolution** and **Cycle** — make Evolution loop seamlessly after a whole
+  number of turns, so an animation can be tiled end to end.
+- **Colour edge** and **Edge colour** — paint the chewed band in one colour. Edge
+  colour is scene-linear and can go above 1 for a border that glows.
+- **Seed** — which noise pattern this instance uses. Two Roughen edges on two
+  layers should have different seeds, or they will chew identically.
+- **Mix** — how much of the roughened picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**It needs an outline to work on.** A full-frame opaque layer has no edge except
+the frame's own, and that is what gets chewed — which is a real look, but probably
+not the one you meant. Put the effect on a title, a shape, a logo, or a keyed
+layer.
+
+**The middle of the shape is never touched**, at any setting. The chewing is
+confined to a band around the outline whose width is Border, so no amount of
+Fractal influence will punch a hole in the middle of a solid layer.
+
+**Border does two jobs.** It is both how deep a bite can be and how wide the band
+is. If the chewing looks too shallow, raise Border rather than Fractal influence;
+if it looks too broad, lower Border and raise Fractal influence to keep the depth.
+
+**Colour edge paints the band, not the whole shape.** The colour is strongest right
+on the outline and fades away inward and outward, which is how a burnt or scorched
+edge behaves. For a flat colour across the whole shape, use
+[Fill](/effects/generate/fill/).
+
+**Nothing here reads the clock.** The pattern is a function of Seed and Evolution
+only, so the same frame roughens the same way in the preview and in the export,
+and on every machine.
+
+## Related
+
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

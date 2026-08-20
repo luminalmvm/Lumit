@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -106,9 +107,14 @@ Future<void> main() async {
   ui.setSelection([title]);
   await pause(3);
   // Cropped to the Viewer and its bar: the caption is about the Viewer, and a
-  // gizmo lost in a full-window shot is not "showing".
+  // gizmo lost in a full-window shot is not "showing". Measured off the panel
+  // rather than typed in, because Round insets the content by the pane card's
+  // padding and parts the bar from the picture — a crop of fixed numbers is a
+  // crop that only fits one of the two shapes.
+  // The Viewer is a bare pane — it carries no tab strip — so the crop grows to
+  // its pane card and no further.
   await captureUi('viewer.png',
-      crop: const Rect.fromLTWH(373, 56, 990, 604));
+      crop: boxOfType(ViewerPanelFrb)!.inflate(paneCardInset + 2));
 
   exit(0);
 }

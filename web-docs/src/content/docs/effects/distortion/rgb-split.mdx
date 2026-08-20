@@ -1,0 +1,92 @@
+---
+title: "RGB split"
+description: "Offset the colour channels along one angle — the impact fringe."
+---
+
+RGB split is a [Distortion](/effects/distortion/) effect.
+
+## What it is for
+
+Takes three samples of the picture, offset from one another along a straight
+line, and tints each one. With the default colours that comes out as the
+familiar red-and-blue fringe: red pulled one way, blue the other, and green left
+where it is.
+
+This is the impact-frame staple. A frame or two of a large offset on a hit,
+animated back to nothing, reads as force in a way that almost nothing else this
+cheap does. Held small and constant it is instead a subtle analogue imperfection
+that stops a graphic feeling too clean.
+
+The colours are yours to change. Because each tap is sampled in full colour and
+then tinted, setting them to something other than red, green and blue gives a
+fringe in those colours — a cyan and magenta split, a warm and cool one — while
+the default primaries reproduce the classic channel-separated look exactly.
+
+Custom colours only recolour the places where the three taps *disagree*, which
+is the fringe itself. Flat areas of the picture, where all three taps land on
+the same colour, pass through at their original brightness rather than being
+tinted, so choosing unusual colours does not wash the whole frame.
+
+For a fringe that grows radially out of the frame's centre instead of running
+along one angle, use
+[Chromatic aberration](/effects/distortion/chromatic-aberration/), which is this
+effect's always-radial sibling.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 10; up to 25 by typing | 0.4 | Per cent of the composition diagonal |
+| **Angle** | Slider | -180 to 180; down to -3600 and up to 3600 by typing | 0 | - |
+| **Red** | Slider | -200 to 200; any value by typing | 100 | - |
+| **Green** | Slider | -200 to 200; any value by typing | 0 | - |
+| **Blue** | Slider | -200 to 200; any value by typing | 100 | - |
+| **Colour 1** | Colour | Each channel 0 to 1, scene-linear | 1, 0, 0, 1 | - |
+| **Colour 2** | Colour | Each channel 0 to 1, scene-linear | 0, 1, 0, 1 | - |
+| **Colour 3** | Colour | Each channel 0 to 1, scene-linear | 0, 0, 1, 1 | - |
+| **Wavelength** | Checkbox | On or off | Off | - |
+| **Samples** | Slider | 3 to 64 | 16 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how far the taps are offset, across the composition diagonal so it
+  survives a resize. This is the control to animate on a beat.
+- **Angle** — which way the split runs. Horizontal is the familiar one; vertical
+  reads quite differently, and an animated angle spins the fringe around the
+  subject.
+- **Red**, **Green** and **Blue** — per-tap scales on the offset, as percentages,
+  so the three taps can fringe by different amounts. Red and Blue displace in
+  opposite directions and Green sits at the anchor, which is why the defaults
+  give the classic split. Bring Green off zero to knock the middle tap off its
+  anchor too, and the whole picture starts to smear rather than just its edges.
+  These apply to the ordinary mode only, not to Wavelength.
+- **Colour 1**, **Colour 2** and **Colour 3** — the tints on the three taps. In
+  the ordinary mode they colour the three taps directly. With Wavelength on they
+  become a gradient across the offset instead, from the first at one end through
+  the second in the middle to the third at the far end.
+- **Wavelength** — switches from three discrete taps to a smooth dispersion. At
+  small offsets the two look much alike; at large ones the three-tap version
+  reads as three stacked copies while this reads as a continuous spectral fringe.
+  It costs more, so turn it on when the offset is big enough to need it.
+- **Samples** — how many taps fill the offset while Wavelength is on. More is
+  smoother and slower; it has no effect in the ordinary mode.
+- **Mix** — how much of the split picture replaces the original.
+
+## Related
+
+- [Chromatic aberration](/effects/distortion/chromatic-aberration/)
+- [Block glitch](/effects/distortion/block-glitch/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

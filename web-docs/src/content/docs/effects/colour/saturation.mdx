@@ -1,0 +1,64 @@
+---
+title: "Saturation"
+description: "Scale how colourful the picture is, evenly."
+---
+
+Saturation is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+How colourful the picture is. At zero it is greyscale; at the neutral point it
+passes through unchanged; above that the colours intensify.
+
+The scale is even: every pixel's colourfulness is multiplied by the same amount,
+whether it started grey or vivid. That is what you want for an overall lift or
+for a deliberate desaturated look, and it is what you do not want when the
+picture already has saturated areas that will clip while the muted ones are
+still catching up. For that,
+[Vibrancy](/effects/colour/vibrancy/) is the better tool.
+
+Common uses: a modest lift so a montage reads punchier than the capture, a
+heavy pull-down for a moody or monochrome section, and taking a layer to
+greyscale so it can serve as a matte or a texture rather than as a picture.
+
+It scales colour about the picture's own brightness, using the standard
+broadcast weighting, so pulling saturation out leaves brightness where it was
+rather than darkening the greens and lightening the blues.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Saturation** | Slider | 0 to 400; higher by typing | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Saturation** — the multiplier on colourfulness, as a percentage. Zero is
+  greyscale and the neutral point passes through untouched. There is no real
+  ceiling: the slider reaches a heavy boost and typing goes further, because the
+  mix between grey and colour keeps extrapolating past it — which is a
+  legitimate, if aggressive, look.
+- **Mix** — how much of the adjusted picture replaces the original. Between this
+  and the control above there are two ways to get a half-strength result; they
+  are not the same, since Mix blends against the untouched picture while
+  Saturation moves the target.
+
+## Related
+
+- [Vibrancy](/effects/colour/vibrancy/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Hue shift](/effects/colour/hue-shift/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

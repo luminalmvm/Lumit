@@ -174,7 +174,7 @@ banked frames or 150 ms).
 - **Parked disk writes need two questions**: `contains()` and `is_pending()`.
   Without the second, the idle backup re-offered the same frame forever (the 81 GB
   incident, K-277).
-- **The parallel slot lists** (`lut_files`, `dof_inputs`, `flare_mattes`,
+- **The parallel slot lists** (`lut_files`, `dof_inputs`, `mattes`,
   `flare_lens_files`) are 1:1 with the stack's `Resolved` ops. A second filter
   anywhere silently binds LUTs to the wrong ops.
 - **Unnameable beats misnamed.** When in doubt (unprobed footage, pending bake) a

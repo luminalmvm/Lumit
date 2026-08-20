@@ -29,6 +29,13 @@ const double _cell = 13;
 const double _pad = 6;
 const double _barHeight = 20;
 
+/// The corner of the outline round the region about to be averaged. Its own
+/// number rather than the control radius it used to borrow: under Round a
+/// control is a capsule (K-394), and this is a **mark** drawn over pixels, not
+/// a surface — a square region ringed at half its own width would be a circle.
+/// The value is the one Sharp always drew it at, so Sharp is untouched.
+const double _regionRadius = 4;
+
 /// The hairline round the whole viewfinder. Counted in the size below because
 /// a border is laid out *inside* the box: leaving it out is two pixels the
 /// content does not have, which the grid then overflows by.
@@ -148,7 +155,7 @@ class DropperViewfinder extends StatelessWidget {
                   hairline: t.hairline,
                   accent: t.accent,
                   empty: t.surface2,
-                  regionRadius: t.tokens.controlRadius,
+                  regionRadius: _regionRadius,
                 ),
               ),
             ),
@@ -174,12 +181,12 @@ class DropperViewfinder extends StatelessWidget {
     final covered = held != null && windowCovers(held, centre.$1, centre.$2);
     final sample =
         covered ? sampleFromWindow(held, region, centre.$1, centre.$2) : null;
-    final round = t.shape == ThemeShape.round;
     return Container(
       decoration: BoxDecoration(
         color: t.surface2,
-        borderRadius: BorderRadius.circular(
-            round ? _barHeight / 2 : t.tokens.controlRadius),
+        // The capsule this used to spell out by hand under Round is what the
+        // control radius now *is* there (K-394), so one read covers both.
+        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -299,8 +306,8 @@ class _GridPainter extends CustomPainter {
     }
 
     // The region that will be averaged: solid, so it is unmistakably not one of
-    // the dashed rules. Its corners take the theme's control radius, so it is
-    // rounded under the round shape and square under the sharp one.
+    // the dashed rules. Its corners are barely rounded and the same under both
+    // shapes — see [_regionRadius].
     final n = region.clamp(1, dropperGrid);
     final from = (dropperGrid - n) / 2 * cell;
     final box = Rect.fromLTWH(from, from, n * cell, n * cell).deflate(0.8);

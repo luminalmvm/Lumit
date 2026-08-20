@@ -1,0 +1,109 @@
+---
+title: "Sprite flare"
+description: "The drawn flare: a glow, a train of ghosts and an anamorphic streak."
+---
+
+Sprite flare is a [Stylise](/effects/stylise/) effect.
+
+## What it is for
+
+A flare that is drawn rather than simulated. You give it a position, and it puts
+a glow there, marches a train of ghosts along the line from that point through
+the centre of the frame, and lays an anamorphic streak across it.
+
+It is deliberately a separate effect from
+[Lens flare](/effects/stylise/lens-flare/) rather than a mode of it, because the
+two answer different questions. That one asks what a real lens would do; this one
+asks you what you want and does exactly that, every time, for almost no cost.
+
+Reach for it when the flare is a design element: on a title, over a graphic, on a
+tracked point in a montage where predictability matters more than physics. Reach
+for the simulated one when the flare has to behave like glass.
+
+Two things make it read as a flare rather than as three overlapping shapes. The
+ghosts march through the frame's *centre*, which is where a real lens puts its
+reflections — so as the light crosses the middle of frame the train swings round
+to the far side, exactly as it should. And their spacing is a fraction of the
+distance from the light to the centre, so the train stretches and gathers as the
+light moves rather than sliding along rigidly.
+
+**Nothing is read from the picture.** There is no brightness threshold for a
+source to cross, so nothing pops in and out as grain or motion changes the frame
+underneath. That predictability is the point of the effect.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
+| **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Glow size** | Slider | 0 to 800; higher by typing | 120 | Pixels at composition size |
+| **Glow intensity** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Ghosts** | Slider, whole numbers | 0 to 16 | 6 | - |
+| **Ghost spacing** | Slider | 0 to 1.5; higher by typing | 0.35 | - |
+| **Ghost size** | Slider | 0 to 400; higher by typing | 60 | Pixels at composition size |
+| **Ghost intensity** | Slider | 0 to 2; higher by typing | 0.35 | - |
+| **Streak length** | Slider | 0 to 2000; higher by typing | 300 | Pixels at composition size |
+| **Streak intensity** | Slider | 0 to 2; higher by typing | 0.5 | - |
+| **Streak angle** | Slider | -180 to 180; any value by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Glow** groups **Glow size**, **Glow intensity**.
+- **Ghosts** groups **Ghosts**, **Ghost spacing**, **Ghost size**, **Ghost intensity**.
+- **Streak** groups **Streak length**, **Streak intensity**, **Streak angle**.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Light x** and **Light y** — where the light is, in pixels. Both are open past
+  the frame's edges, because a light just off-screen still throws its ghosts
+  across the picture, and that is much of what this effect is for. Animate the
+  pair and the whole flare follows the light.
+- **Intensity** — the master gain on everything the effect draws. At zero nothing
+  is added at all, so this is the control to keyframe.
+- **Tint** — the colour of the whole flare. It is scene-linear and can be set
+  above white, which pushes the flare hotter than the plate beneath it.
+- **Mix** — how much of the flared picture replaces the original.
+
+The **Glow** group is the halo on the light itself:
+
+- **Glow size** — its radius, in pixels.
+- **Glow intensity** — its gain. Turn it down to nothing when you want only the
+  ghost train and the streak.
+
+The **Ghosts** group is the train of iris shapes:
+
+- **Ghosts** — how many discs march along the axis. None is a legal setting.
+- **Ghost spacing** — how far apart they sit, as a fraction of the distance from
+  the light to the centre of frame rather than as a fixed length. That is what
+  makes the train behave: it stretches as the light moves out and gathers as it
+  comes in.
+- **Ghost size** — their base radius, in pixels.
+- **Ghost intensity** — their gain. Ghosts read best well below the glow; at equal
+  strength the train stops looking like reflections and starts looking like a row
+  of circles.
+
+The **Streak** group is the anamorphic bar through the light:
+
+- **Streak length** — how far it reaches from the light, in pixels.
+- **Streak intensity** — its gain.
+- **Streak angle** — which way it runs. Horizontal is the anamorphic look that
+  most people picture when they think of a lens streak.
+
+## Related
+
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Glow](/effects/stylise/glow/)
+- [Transform](/effects/utility/transform/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

@@ -544,6 +544,19 @@ pub enum EffectValue {
     /// layer degrades to unset (a labelled no-op), never an error. Static in
     /// v1 — a layer reference does not keyframe.
     Layer(Option<Uuid>),
+    /// A reference to one of the **owning layer's masks**, whose *geometry* an
+    /// effect walks (K-408, docs/08 §1.2): the mask id, or `None` for the
+    /// "First mask" entry, which resolves to whichever mask is first at render
+    /// time. A `Some` id that no longer names a mask on the layer degrades to
+    /// the effect's no-op, never an error. Static in v1, exactly as a layer
+    /// reference is — the *shape* animates (the mask's own path keyframes),
+    /// which mask is named does not.
+    ///
+    /// Deliberately not an [`EffectValue::Layer`] holding a mask id: the two
+    /// are different things, and the walks that look for referenced layers —
+    /// the frame key's, the decode planner's — would each have to learn which
+    /// ids were secretly masks.
+    MaskPath(Option<Uuid>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case
@@ -672,6 +685,18 @@ impl EffectInstance {
     pub fn layer_ref(&self, id: &str) -> Option<Uuid> {
         match self.param(id)? {
             EffectValue::Layer(l) => *l,
+            _ => None,
+        }
+    }
+
+    /// A mask-path parameter's named mask id, or `None` when the parameter is
+    /// absent, not a mask path, or on the "First mask" entry (K-408). `None`
+    /// is not "no mask": which mask it comes to is
+    /// [`crate::mask::mask_path_at`]'s answer, and depends on the schema's
+    /// `self_default` and on what the layer actually carries.
+    pub fn mask_ref(&self, id: &str) -> Option<Uuid> {
+        match self.param(id)? {
+            EffectValue::MaskPath(m) => *m,
             _ => None,
         }
     }

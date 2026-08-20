@@ -1,0 +1,65 @@
+---
+title: Brightness
+description: "Lift or drop the picture, and spread or flatten it, in one effect."
+---
+
+Brightness is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Adds light to every pixel, and spreads the picture about mid-grey — the two
+knobs After Effects keeps together under Brightness & Contrast, in one effect
+with the same names and the same neutral point of zero.
+
+It exists as its own effect rather than as a mode of
+[Contrast](/effects/colour/contrast/) so that a project imported from After
+Effects lands as one effect with one animated pair, the way it was authored,
+instead of being split across two entries with two different spellings of the
+same idea. Lumit's own Contrast is untouched and still reads as a percentage
+where 100 is neutral; this one is signed, where 0 is neutral.
+
+Brightness is a straight addition in linear light, so it lifts the shadows as
+much as the highlights — flatter than [Exposure](/effects/colour/exposure/),
+which multiplies and therefore leaves black where it was. That difference is the
+reason to keep both: exposure for a photographic correction, brightness for a
+deliberate wash.
+
+Highlights are never clipped on the way through.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Brightness** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Contrast** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Brightness** — light added to every channel. At full deflection either way
+  it is a whole unit of scene-linear light, which is a lot; small numbers are the
+  usual ones.
+- **Contrast** — the spread about mid-grey. Zero passes the picture through, −100
+  flattens the frame to grey, +100 doubles the spread, and there is no ceiling
+  above.
+- **Mix** — how much of the graded picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Contrast](/effects/colour/contrast/)
+- [Exposure](/effects/colour/exposure/)
+- [Levels](/effects/colour/levels/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

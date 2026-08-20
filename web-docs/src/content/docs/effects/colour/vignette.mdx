@@ -1,0 +1,75 @@
+---
+title: "Vignette"
+description: "Darken toward the edges, to hold the eye in the middle."
+---
+
+Vignette is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Darkens the frame away from its centre. It is the oldest attention trick there
+is: the eye goes to the brightest part of the picture, so pulling the corners
+down keeps it on the subject.
+
+A light one is invisible and does its work anyway — most graded footage carries
+one. A heavy one is a look in its own right, and pushed far enough it becomes a
+soft round mask through which the shot is seen, which is a serviceable
+lens-scope or spyglass effect.
+
+It darkens the picture and its transparency together as a single multiply, so it
+sits happily on a layer that will be composited rather than on a full-frame
+plate only.
+
+The shape is described in a distance measured from the centre and normalised to
+the frame, so it survives a composition resize without being re-set.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 1 | 0.5 | - |
+| **Radius** | Slider | 0 to 1 | 0.75 | - |
+| **Softness** | Slider | 0 to 2; higher by typing | 0.5 | - |
+| **Roundness** | Slider | 0 to 1 | 1 | - |
+| **Ramp** | Slider | 0.2 to 4; down to 0.05 and higher by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how dark the darkened region gets. At zero the picture passes
+  through untouched. This is the control to animate if you want the vignette to
+  breathe with the music.
+- **Radius** — how far the clear middle reaches before darkening starts. Small
+  values close the vignette in toward the centre; large ones push it out to the
+  corners so only the very edges are touched.
+- **Softness** — the width of the fade between clear and dark. Narrow is a hard
+  circular edge, which reads as a mask; wide is the gradual falloff that reads as
+  a lens. It can be pushed past the frame's own corner distance for a very
+  gradual wash, which is why it has no ceiling.
+- **Roundness** — whether the shape is a true circle or follows the frame's own
+  proportions. Fully round is a circle, which on a wide frame leaves the left and
+  right edges darker than the top and bottom; at zero it becomes an ellipse that
+  reaches every edge equally.
+- **Ramp** — the shape of the falloff curve, as distinct from its width. At the
+  neutral point it is the plain smooth fade. Above it, the darkening arrives
+  later and then more suddenly; below it, earlier and more gently. Reach for this
+  when the width is right but the vignette is drawing attention to itself.
+- **Mix** — how much of the darkened picture replaces the original.
+
+## Related
+
+- [Exposure](/effects/colour/exposure/)
+- [Glow](/effects/stylise/glow/)
+- [Masks](/use/masks/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

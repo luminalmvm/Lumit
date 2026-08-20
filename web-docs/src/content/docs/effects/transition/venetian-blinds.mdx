@@ -1,0 +1,83 @@
+---
+title: Venetian blinds
+description: "Closes the frame with a rank of slats, like a window blind."
+---
+
+Venetian blinds is a **Transition** effect.
+
+## What it is for
+
+Taking the layer away in stripes. The frame is cut into slats of equal width and
+every slat opens from its own middle at the same moment, so the picture closes
+the way a window blind does.
+
+As a transition it wants **Completion** keyframed from 0 to 100 and it is done —
+one of the two or three moves that reads instantly as a change of scene without
+anybody having to think about it. At a fixed value it is something else
+entirely: a rank of hard stripes over a title, a shutter, a set of louvres to
+put a light behind.
+
+It is [Linear wipe](/effects/transition/linear-wipe/) repeated. Everything that
+wipe does — the direction convention, the clean start and finish, the feather —
+works here in exactly the same way; the only difference is that there are many
+edges instead of one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Completion** | Slider | 0 to 100 | 50 | - |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Width** | Slider | 1 to 500; higher by typing | 20 | Pixels at composition size |
+| **Feather** | Slider | 0 to 500; higher by typing | 0 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Completion** — how far the slats have closed, 0 to 100. At 0 the frame is
+  untouched exactly; at 100 it is gone. It starts at 50 so the effect shows you
+  what it does the moment you add it, and at 50 exactly half of every slat has
+  gone.
+- **Direction** — which way the slats run, measured from straight up and turning
+  clockwise. At 0° they are horizontal and the frame closes from the top and
+  bottom of each slat; at 90° they are vertical.
+- **Width** — how wide one slat is, in pixels at composition size. Small numbers
+  give a fine grille; large ones give a few broad bands, which is usually the
+  better transition because the eye can follow it.
+- **Feather** — how soft each slat's edges are, in pixels. A feather wider than
+  the slat itself turns the effect into a gentle overall fade, which is
+  occasionally what you want and more often a sign the width is too small.
+- **Mix** — how much of the effect takes hold, as distinct from how far the
+  blinds have closed. See [Linear wipe](/effects/transition/linear-wipe/).
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**There is no centre, and there does not need to be.** The slats sit on the
+middle of the frame. Moving a rank of identical stripes by one slat gives back
+exactly the picture you started with, so a centre control would only ever be a
+way of nudging the phase — Direction and Width are the whole geometry. (After
+Effects has no centre here either.)
+
+**Width is measured at composition size**, not in raster pixels, so a
+Half-resolution preview shows the same slats as the export rather than twice as
+many.
+
+## Related
+
+- [Linear wipe](/effects/transition/linear-wipe/)
+- [Iris wipe](/effects/transition/iris-wipe/)
+- [Card wipe](/effects/transition/card-wipe/)
+- [Transition](/effects/transition/)
+- [Effects](/use/effects/)

@@ -97,6 +97,20 @@ class HouseButton extends StatefulWidget {
   /// (K-319). Pair it with [primary] so what Enter will do is visible.
   final bool autofocus;
 
+  /// The chosen one of a set — a tab, a mode chip, a segmented option.
+  ///
+  /// Under Round this is K-394's **filled accent pill**: `accent` fill and the
+  /// label in `surface0`, the far end of the ramp from the text, which is the
+  /// dark label on a dark scheme and the light one on a light scheme without
+  /// either being spelled out twice. Under Sharp it stays the accent *tint*
+  /// the tool bar already arms a tool with — the state contrast is the shape's
+  /// difference, not a colour change (Sharp's geometry and treatment are
+  /// untouched).
+  ///
+  /// [primary] is a different thing: that is what `Enter` would press, this is
+  /// which of several is currently in force.
+  final bool active;
+
   const HouseButton({
     super.key,
     required this.child,
@@ -106,6 +120,7 @@ class HouseButton extends StatefulWidget {
     this.padding,
     this.primary = false,
     this.autofocus = false,
+    this.active = false,
   });
 
   @override
@@ -131,8 +146,19 @@ class _HouseButtonState extends State<HouseButton> {
     final enabled = widget.onPressed != null;
     Color? fill;
     Color? edge;
+    // The label, when the fill under it decides what colour it has to be.
+    Color? label;
     if (!enabled) {
       fill = widget.frameless ? null : t.surface2;
+    } else if (widget.active) {
+      // Ahead of hover and press: which one is in force must not blink off
+      // under the pointer. Hover lifts it to `accentHover` instead.
+      final round = t.shape == ThemeShape.round;
+      fill = round
+          ? (_hover || _down ? t.accentHover : t.accent)
+          : t.accent.withValues(alpha: _hover || _down ? 0.24 : 0.16);
+      edge = round ? null : t.accent;
+      if (round) label = t.surface0;
     } else if (_down) {
       fill = t.hairlineStrong;
       edge = t.accent;
@@ -187,7 +213,9 @@ class _HouseButtonState extends State<HouseButton> {
           ),
           child: DefaultTextStyle(
             style: enabled
-                ? t.bodyPrimary
+                ? (label == null
+                    ? t.bodyPrimary
+                    : t.bodyPrimary.copyWith(color: label))
                 : t.body.copyWith(color: t.textDisabled),
             child: widget.child,
           ),

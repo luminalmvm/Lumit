@@ -37,24 +37,59 @@ blur. Drag an effect up or down the stack to reorder it.
 Put the effect on an **adjustment layer**. It then applies to the composite of
 everything below it. See [Layers](/use/layers/).
 
+## Every effect has a Matte
+
+At the bottom of every effect's controls sits one row in the same place on all of
+them: a layer picker labelled **Matte**, with an **Invert** checkbox beside it.
+Point it at a layer and that layer's brightness decides how much of the effect
+each pixel gets - white in full, black not at all, grey part way. Invert reads it
+the other way round. Leave it unset, which is the default, and nothing extra
+happens or costs anything.
+
+This is not the same as masking the effect. A mask hides what an effect did; a
+matte drives the effect itself, and a handful of effects mean something deeper by
+it than strength. Their own pages say so in the parameter table:
+
+- **Gaussian blur** narrows its radius, so grey is genuinely less soft rather
+  than a wide blur faded back.
+- **Turbulent displace** scales its push, so grey is warped a little rather than
+  fully warped and shown faintly.
+- **Glow** gates which pixels may seed the halo, so light still spills outward
+  from them.
+- **Depth of field** reads it as a depth pass, so mid-grey can be perfectly sharp.
+- **Lens flare** reads it as where to find its light sources.
+- **Set matte** reads it as the alpha itself, which is the whole effect.
+
+The matte layer is rendered on its own at this composition's size, so nothing
+needs aligning, and the **Layer source** dropdown beside the picker decides
+whether you read that layer raw, with its masks, or with its own effects applied.
+Point the row at the layer the effect is *on* and it reads that layer's own
+picture at that point in the stack.
+
 ## The built-in roster
 
-Thirty-three effects ship today.
+Fifty-three effects ship today. Each has its own page under
+[Effects](/effects/), with a full parameter table.
 
-**Blur and sharpen** - Gaussian blur, Directional blur, Radial blur, Sharpen, Unsharp
-mask, Depth of field.
+**Blur and sharpen** - Channel blur, Depth of field, Directional blur, Gaussian
+blur, Radial blur, Sharpen, Unsharp mask.
 
-**Colour** - Colour balance, Contrast, Exposure, Gamma, Hue shift, Invert, LUT,
-Saturation, Temperature, Tint, Vibrancy, Vignette.
+**Colour** - Brightness, Colour balance, Contrast, Curves, Exposure, Gamma, Hue
+and saturation, Hue shift, Invert, Levels, LUT, Saturation, Temperature, Tint,
+Vibrancy, Vignette.
 
-**Distortion** - Block glitch, Chromatic aberration, Datamosh, RGB split, Scanlines,
-Shake.
+**Distortion** - Block glitch, Chromatic aberration, Datamosh, Lens distort,
+Mirror, Offset, RGB split, Scanlines, Shake, Tile, Turbulent displace.
 
-**Stylise** - Flash, Glow, Lens flare.
+**Generate** - Fill, Fractal noise, Gradient, Noise.
+
+**Stylise** - Drop shadow, Flash, Glow, Lens flare, Light wrap, Sprite flare.
 
 **Temporal** - Echo, Fast motion blur, Motion blur, Posterize time.
 
-**Utility** - Matte key, Transform.
+**Transition** - Linear wipe, Radial wipe.
+
+**Utility** - Matte key, Set matte, Transform.
 
 **Matte key** is Lumit's keyer: pull a greenscreen or a chosen colour to
 transparency, with threshold and softness controls.
@@ -79,5 +114,6 @@ Plugin hosting is specified but not built.
 
 ## Related
 
+- [Every effect, one page each](/effects/)
 - [Layers](/use/layers/)
 - [Keyframes](/use/keyframes/)

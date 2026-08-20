@@ -1,0 +1,85 @@
+---
+title: Photo filter
+description: "Warms or cools the picture as a coloured glass on the lens would, without changing the exposure."
+---
+
+Photo filter is a **Colour** effect.
+
+## What it is for
+
+Before white balance was a menu, a photographer screwed a coloured glass onto
+the front of the lens to warm a shot up or cool it down. This is that glass.
+Twenty named filters ship — the warming and cooling filters photographers know
+by their numbers, eight plain colours, sepia, four deep ones and an underwater —
+plus **Custom**, which takes any colour you like.
+
+Reach for it when a shot is too blue or too orange and you want the fix to be
+one control rather than three, or when you want a whole montage to sit under one
+consistent cast.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Filter** | Dropdown | Warming filter (85) · Warming filter (LBA) · Warming filter (81) · Cooling filter (80) · Cooling filter (LBB) · Cooling filter (82) · Red · Orange · Yellow · Green · Cyan · Blue · Violet · Magenta · Sepia · Deep red · Deep blue · Deep emerald · Deep yellow · Underwater · Custom | Warming filter (85) | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 0.85, 0.35, 0.05, 1 | - |
+| **Density** | Slider | 0 to 100 | 25 | - |
+| **Preserve luminosity** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Colour** is editable while **Filter** is set to Custom.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Filter** — which glass. The three **warming** filters take a blue cast off
+  and are the ones to reach for on an overcast exterior; the three **cooling**
+  filters take an orange cast off and suit tungsten interiors. The plain colours
+  and the deep ones are for effect rather than correction.
+- **Colour** — the glass's own colour, used when Filter is set to Custom. It is
+  scene-linear, so picking a colour from a reference frame with the eyedropper
+  gives you that frame's cast.
+- **Density** — how strong the glass is. **0** turns the effect off exactly; 25
+  is a gentle correction; 100 is the full filter, which on a deep colour is very
+  strong indeed.
+- **Preserve luminosity** — put the exposure back after the filter. On, the
+  picture changes colour and not brightness. Off, the filter costs light exactly
+  as a real one does, which is what you want if you are simulating the glass
+  rather than correcting with it.
+- **Mix** — how much of the filtered picture replaces the original. Density and
+  Mix do similar things at low values; use Density for the strength of the glass
+  and Mix to blend the whole effect back.
+- **Matte** and **Invert** — filter only part of the frame; see
+  [Effects](/use/effects/).
+
+## Notes
+
+**Preserve luminosity is what makes a filter a filter.** With it off, a deep red
+at full density is nearly a black frame, because a red glass really does stop
+most of the light. With it on, the brightness you started with is restored, so
+you are choosing a colour rather than an exposure. It is on by default.
+
+**The twenty named filters are Lumit's own colours under the familiar names.**
+The designations — 85, LBA, 81, 80, LBB, 82 — are the photographic ones and mean
+what they always have; the exact chromaticities are ours, so an imported After
+Effects project converts look for look rather than value for value.
+
+**For a warmth control with a temperature scale**, use
+[Temperature](/effects/colour/temperature/), which thinks in kelvin.
+Photo filter thinks in glass.
+
+## Related
+
+- [Temperature](/effects/colour/temperature/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Tint](/effects/colour/tint/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

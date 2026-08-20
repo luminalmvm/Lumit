@@ -119,11 +119,15 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 }
                 crate::model::EffectValue::File(f) => visit(&f.index),
                 // Carry no animation: a bool, a dropdown choice, a random
-                // seed and a layer reference are all static in v1 (docs/03 §8).
+                // seed, a layer reference and a mask-path reference are all
+                // static in v1 (docs/03 §8). A mask path's *shape* animates,
+                // but it animates on the mask, not here — this value is only
+                // which mask (K-408).
                 crate::model::EffectValue::Bool(_)
                 | crate::model::EffectValue::Choice(_)
                 | crate::model::EffectValue::Seed(_)
-                | crate::model::EffectValue::Layer(_) => {}
+                | crate::model::EffectValue::Layer(_)
+                | crate::model::EffectValue::MaskPath(_) => {}
             }
         }
     }
@@ -151,7 +155,8 @@ fn for_each_property_mut(
                 crate::model::EffectValue::Bool(_)
                 | crate::model::EffectValue::Choice(_)
                 | crate::model::EffectValue::Seed(_)
-                | crate::model::EffectValue::Layer(_) => {}
+                | crate::model::EffectValue::Layer(_)
+                | crate::model::EffectValue::MaskPath(_) => {}
             }
         }
     }

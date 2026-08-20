@@ -362,6 +362,11 @@ pub enum BridgeParamKind {
         filter_name: String,
     },
     Layer,
+    /// One of the **owning layer's masks**, whose geometry the effect walks
+    /// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
+    /// "First mask" as the unset entry; the mask names come from the read model
+    /// the panel already holds, so the row costs no call of its own.
+    MaskPath,
 }
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
@@ -441,6 +446,11 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                 // (K-288) — the panel draws the same picker either way, and
                 // the value it edits already carries the layer id.
                 ParamKind::Layer { .. } => BridgeParamKind::Layer,
+                // `self_default` is an engine-side resolution detail here too
+                // (K-408): the panel always offers "First mask" as its unset
+                // entry, and what an unset row comes to is the render's answer,
+                // not a control the panel draws differently.
+                ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
             },
         })
         .collect()
@@ -823,6 +833,10 @@ pub enum BridgeEffectValue {
     Seed(u32),
     File(BridgeFileParam),
     Layer(Option<Uuid>),
+    /// Which of the owning layer's masks an effect walks (K-408): the mask id,
+    /// or `None` for "First mask". The *geometry* never crosses — the render
+    /// flattens it engine-side, beside the op.
+    MaskPath(Option<Uuid>),
 }
 
 impl BridgeEffectValue {
@@ -852,6 +866,7 @@ impl BridgeEffectValue {
                 index: BridgeScalar::read_at(&file.index, offset),
             }),
             EffectValue::Layer(layer) => BridgeEffectValue::Layer(*layer),
+            EffectValue::MaskPath(mask) => BridgeEffectValue::MaskPath(*mask),
         }
     }
 
@@ -914,6 +929,10 @@ impl BridgeEffectValue {
             }
             (BridgeEffectValue::Layer(layer), EffectValue::Layer(target)) => {
                 *target = layer;
+                Ok(())
+            }
+            (BridgeEffectValue::MaskPath(mask), EffectValue::MaskPath(target)) => {
+                *target = mask;
                 Ok(())
             }
             _ => Err(BridgeError::ParamKindMismatch),

@@ -230,22 +230,42 @@ pub struct CompLayerDraw {
     /// ops — the caller loads each path and passes the parallel `luts` to
     /// `run_ops`. No GPU work happens here; these are just the strings.
     pub lut_files: Vec<Option<String>>,
-    /// The layer inputs of the layer's enabled built-in `dof` and `light_wrap`
-    /// effects (docs/08 §3.22, §3.28, docs/impl/layer-input.md). Because
-    /// `resolve_stack` keeps the same filter and order and each of those
-    /// effects always resolves to exactly one op, this list is 1:1 and in order
-    /// with the stack's layer-input-consuming
-    /// ops — the caller renders each one alone at comp size and passes the
-    /// parallel `layer_inputs` to `run_ops`. A [`LayerInputDraw::Layer`]
-    /// carries the referenced layer's source pixels; the GPU render happens in
+    /// The layer inputs of the layer's enabled built-in `light_wrap` effects
+    /// (docs/08 §3.28, docs/impl/layer-input.md) — a *plate*, not a matte, which
+    /// is why it is still its own list. Because `resolve_stack` keeps the same
+    /// filter and order and the effect always resolves to exactly one op, this
+    /// list is 1:1 and in order with the stack's layer-input-consuming ops — the
+    /// caller renders each one alone at comp size and passes the parallel
+    /// `layer_inputs` to `run_ops`. A [`LayerInputDraw::Layer`] carries the
+    /// referenced layer's source pixels; the GPU render happens in
     /// `realise_segment`.
     pub dof_inputs: Vec<LayerInputDraw>,
-    /// The Lens flare Matte sources (docs/08 §3.27, K-257), 1:1 with the
-    /// stack's `lens_flare` ops, in the same shape the DoF depth
-    /// inputs take. [`LayerInputDraw::Absent`] when the reference is unset,
-    /// dangling or the Source type is not Matte — the effect then detects
-    /// nothing, never faults.
-    pub flare_mattes: Vec<LayerInputDraw>,
+    /// **Every op's Matte** (K-395, docs/08 §2.6): one slot per op whose effect
+    /// declares a matte parameter — which is every op — 1:1 and in stack order
+    /// with them. [`LayerInputDraw::Absent`] when the row is unset or the
+    /// reference is dangling, which runs nothing at all and leaves the effect
+    /// exactly as it was before K-395 (K-258).
+    ///
+    /// One list for all four meanings: the generic strength dissolve, Depth of
+    /// field's depth pass, the Lens flare's source matte, and the blur and
+    /// glow's own readings. What differs between them is which parameter the
+    /// reference is stored under and who consumes the texture, and the schema's
+    /// `MatteRole` answers both — so nothing here needs to know.
+    pub mattes: Vec<LayerInputDraw>,
+    /// **Every path op's mask** (K-408, docs/08 §1.2): one flattened polyline
+    /// per op whose effect declares a [`ParamKind::MaskPath`](lumit_core::fx::
+    /// ParamKind::MaskPath) row, 1:1 and in stack order with them — the same
+    /// one-predicate, one-order rule [`Self::mattes`] follows, with its own
+    /// counter because its predicate is a different one (most effects take a
+    /// matte; almost none takes a path).
+    ///
+    /// Flattened here rather than on the GPU because it is geometry, not
+    /// pixels: the vertices are the layer's, and the tolerance is a constant in
+    /// px@comp, so the same document at the same frame produces the same
+    /// polyline at any preview raster. An empty polyline is the effect's
+    /// documented no-op — an unset row, a mask since deleted, a layer with no
+    /// masks — and never a fault.
+    pub mask_paths: Vec<lumit_core::mask::MaskPolyline>,
     /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
     /// effects (K-264), 1:1 with the stack's `lens_flare` ops —
     /// None = unset. The caller reads and hashes each file and passes the

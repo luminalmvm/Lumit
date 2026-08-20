@@ -181,8 +181,9 @@ Future<void> main() async {
   /// outline runs to the window's left edge.
   Rect panelBox() {
     final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(
-        2, ruler.top - 28, ruler.right + 4, boxOf('tl-zoom-slider')!.bottom + 8);
+    return Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+        ruler.right + 4 + paneCardInset,
+        boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
   }
 
   // ---- Shot: the Timeline, outline left and lanes right -------------------
@@ -222,7 +223,15 @@ Future<void> main() async {
   await captureUi(
     'blend-modes.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, 384, boxOf('tl-ruler')!.left + 40, 960),
+    // Sideways the outline the caption is about; up and down the list itself,
+    // which is as tall as its rows — and Round's rows are taller than Sharp's,
+    // so a band of fixed numbers cut the last modes off.
+    crop: () {
+      final list =
+          openPopup()!.expandToInclude(boxOf('tl-blend-$cardId')!.inflate(12));
+      return Rect.fromLTRB(
+          2, list.top, boxOf('tl-ruler')!.left + 40, list.bottom);
+    }(),
   );
   // Close it again — the click on empty ground a person would use.
   await tapAt(const Offset(240, 560), settle: 1.2);

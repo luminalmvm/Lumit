@@ -1,0 +1,156 @@
+---
+title: Fractal noise
+description: "The cloud, smoke and turbulence generator — soft blobs with smaller blobs on top, animated by depth."
+---
+
+Fractal noise is a **Generate** effect.
+
+## What it is for
+
+Making a repeatable pattern of soft blobs, with smaller blobs laid over the big
+ones, and smaller ones over those. That description sounds thin and the effect is
+not: clouds, smoke, mist, water caustics, grunge and rust, fire, dust, organic
+wipes, and — above all — the maps that drive *other* effects are all this one
+picture with different numbers in it.
+
+Two ideas do most of the work.
+
+**Layers of detail.** One layer of noise is a lava lamp. Six layers, each half
+the size and a bit fainter than the one before, is a cloud, because that is how
+real surfaces are built: big shapes with finer shapes on them all the way down.
+**Complexity** is how many layers, **Sub influence** how much each one counts
+for, **Sub scaling** how much smaller each one is.
+
+**Depth, not reshuffling.** The pattern is three-dimensional and you are looking
+at a slice of it. **Evolution** moves the slice through the third dimension, so
+animating it makes the pattern churn and drift the way smoke does, rather than
+flickering into an unrelated pattern every frame. One full turn of the dial
+moves one step deeper.
+
+The most valuable use is as a **matte source**. Put a Fractal noise on a solid,
+point another effect's Matte row at that solid, and the effect now varies across
+the frame with a shape no slider could describe — a blur that is soft in patches,
+a grade that moves like weather. That is what half of the After Effects world is
+built out of, and it is why this landed before the distortion effects that read
+it.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Noise type** | Dropdown | Value · Perlin | Perlin | - |
+| **Fractal type** | Dropdown | Basic · Turbulent | Turbulent | - |
+| **Invert noise** | Checkbox | On or off | Off | - |
+| **Contrast** | Slider | 0 to 400; higher by typing | 100 | - |
+| **Brightness** | Slider | -200 to 200; any value by typing | 0 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Uniform scaling** | Checkbox | On or off | On | - |
+| **Scale** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
+| **Scale width** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
+| **Scale height** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
+| **Offset x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Offset y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Complexity** | Slider, whole numbers | 1 to 10 | 6 | - |
+| **Sub influence** | Slider | 0 to 100; higher by typing | 60 | - |
+| **Sub scaling** | Slider | 5 to 100 | 55 | - |
+| **Evolution** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | - |
+| **Cycle evolution** | Checkbox | On or off | Off | - |
+| **Cycle** | Slider, whole numbers | 1 to 30 | 1 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Transform** groups **Rotation**, **Uniform scaling**, **Scale**, **Scale width**, **Scale height**, **Offset x**, **Offset y**.
+- **Sub settings** groups **Sub influence**, **Sub scaling**, and starts closed.
+- **Evolution options** groups **Cycle evolution**, **Cycle**, and starts closed.
+- **Scale** is editable while **Uniform scaling** is on.
+- **Scale width** is editable while **Uniform scaling** is off.
+- **Scale height** is editable while **Uniform scaling** is off.
+- **Cycle** is editable while **Cycle evolution** is on.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Noise type** — **Perlin** is the smooth, rounded, cloud-like pattern most
+  people picture. **Value** is the cheaper cousin: the same idea built from
+  corner values rather than corner slopes, which gives a slightly squarer, more
+  woven look. Perlin for clouds, Value when you want the grid to show a little.
+- **Fractal type** — **Basic** adds the layers as they are, giving soft billows.
+  **Turbulent** folds each layer about its middle first, which turns the smooth
+  midtones into creases and gives the ropey, smoke-and-flame look. Turbulent is
+  the default and is usually what a displacement map wants.
+- **Invert noise** — flips the finished pattern, light for dark, after Contrast
+  and Brightness. (The **Invert** further down the panel is the matte's, not
+  this one's.)
+- **Contrast** — how hard the pattern pushes toward black and white. At 0 it
+  flattens to grey; at 100 it is left alone; above that the midtones squeeze out
+  and the pattern breaks into distinct light and dark regions, which is how a
+  cloud becomes a hard-edged organic wipe.
+- **Brightness** — lifts or lowers the whole pattern after Contrast. Between them
+  these two are the aim on any matte use: raise Contrast until the shapes are
+  crisp, then set Brightness to decide how much of the frame is white.
+- **Rotation** — turns the pattern under the frame. Useful when Scale width and
+  Scale height have stretched it into streaks and the streaks need to run
+  diagonally.
+- **Uniform scaling** — on, one **Scale** sizes the pattern both ways. Off,
+  **Scale width** and **Scale height** size it separately, which is how a cloud
+  becomes horizontal streaks or vertical rain.
+- **Scale**, **Scale width**, **Scale height** — the size of one blob, in pixels
+  at composition size. This is a real length, not a percentage of something
+  unnamed: 200 means roughly a 200-pixel blob on any composition, at any preview
+  resolution.
+- **Offset x** and **Offset y** — where the pattern sits. Animate them to drift
+  the whole field across the frame, which combined with Evolution gives cloud
+  that both travels and churns.
+- **Complexity** — how many layers of detail. 1 is smooth blobs; 6 is a cloud;
+  10 is as fine as it goes. Each extra layer costs time, so leave it low if the
+  fine detail is going to be blurred away anyway.
+- **Sub influence** — how loud each layer is compared with the one before, as a
+  percentage. Low values leave the big shapes dominant and the result smooth;
+  100 makes every layer equally loud, which is noise rather than a surface.
+- **Sub scaling** — how much smaller each layer is than the one before. 50 is the
+  textbook halving; the default 55 is a shade gentler, which is where After
+  Effects sits and where clouds look most natural.
+- **Evolution** — the depth dial. Keyframe it to animate the pattern. One full
+  turn moves one step, so a slow drift is a few turns over the length of a shot;
+  spinning it fast makes the pattern boil.
+- **Cycle evolution** and **Cycle** — make Evolution loop. With Cycle at 3, the
+  pattern at 0 turns and the pattern at 3 turns are the *same picture*, so
+  animating Evolution from 0 to 1080° gives a clip that tiles end to end with no
+  seam. The loop is exact at every Complexity.
+- **Seed** — which pattern this instance draws. Two Fractal noises with the same
+  settings and different seeds are two different clouds.
+- **Mix** — how much of the pattern replaces the original picture.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**It fills the whole frame, opaquely.** The layer's own transparency is not
+consulted, so a Fractal noise on a shape does not take the shape. Put it on a
+solid and shape it with a mask, or drive it with a Matte.
+
+**The pattern is the same on every machine and every run**, which is what makes
+it usable at all: an export today and an export next year are identical to the
+bit, and the preview you graded against is the frame you get.
+
+**A note on scale and After Effects.** After Effects gives Scale as a percentage
+of a size it never names, so the same number means different things on different
+compositions. Here it is a length, which survives a resize and a change of
+preview resolution. An imported Fractal Noise has its percentage converted, and
+the import reports it as a converted value rather than an exact one.
+
+## Related
+
+- [Noise](/effects/generate/noise/)
+- [Gradient](/effects/generate/gradient/)
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

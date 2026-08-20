@@ -328,6 +328,38 @@ fn feed_effect_stack(
                         }
                     }
                 }
+                EffectValue::MaskPath(named) => {
+                    // **Which** mask, by its position on the layer — never its
+                    // id, because identity never feeds a key (a duplicated comp
+                    // shares its original's cache). The mask's own vertices are
+                    // already here: `feed_layer` hashes every mask, so editing
+                    // the shape renames the frame whether or not an effect
+                    // walks it. And the flattening tolerance is a constant
+                    // (K-408), so the polyline cannot vary a frame's identity
+                    // on its own — which is the whole of "the frame key covers
+                    // it for free". What is left is the choice, and a choice
+                    // that changed the picture without changing the key would
+                    // be a stale frame nobody could explain.
+                    let self_default = lumit_core::fx::BUILTINS
+                        .iter()
+                        .find(|s| s.match_name == e.effect.match_name)
+                        .and_then(lumit_core::fx::EffectSchema::mask_path)
+                        .is_some_and(|(_, sd)| sd);
+                    match lumit_core::mask::mask_index_for_path_param(
+                        &marker_layer.masks,
+                        *named,
+                        self_default,
+                    ) {
+                        Some(i) => {
+                            h.update(&[1]);
+                            h.update(&(i as u32).to_le_bytes());
+                        }
+                        // Nothing to walk: the effect's documented no-op.
+                        None => {
+                            h.update(&[0]);
+                        }
+                    }
+                }
                 EffectValue::Layer(lref) => {
                     // The referenced layer is rendered alone at comp size as
                     // this effect's auxiliary input (a depth pass for depth
@@ -1866,6 +1898,63 @@ mod tests {
             key(&doc, &bypassed, 1.0),
             "a bypassed source stack contributes nothing, like the flag alone"
         );
+    }
+
+    /// **Which mask an effect walks is content** (K-408).
+    ///
+    /// The geometry needs no help from this arm — `feed_layer` already hashes
+    /// every mask, so editing the shape renames the frame — and the flattening
+    /// tolerance is a constant, so the polyline cannot vary a frame's identity
+    /// on its own. What is left is the *choice*, and a choice that changed the
+    /// picture without changing the key would be a stale frame nobody could
+    /// explain. Hashed by the mask's **position** rather than its id, the rule
+    /// every other arm follows — identity never feeds a key.
+    #[test]
+    fn which_mask_an_effect_walks_names_the_frame() {
+        use lumit_core::{
+            mask::Mask,
+            model::{EffectParam, EffectValue},
+        };
+
+        let doc = Document::new();
+        let mut layer = text_layer("m", 0.0, 10.0, 0.0);
+        layer.masks = vec![
+            Mask::rectangle(0.0, 0.0, 10.0, 10.0),
+            Mask::ellipse(40.0, 40.0, 6.0, 6.0),
+        ];
+        let (first, second) = (layer.masks[0].id, layer.masks[1].id);
+        // No built-in declares a path row yet (K-408 landed the seam ahead of
+        // its consumers), so the value is put on a real effect by hand — which
+        // is exactly what the hash walk sees: it reads the stored value, not
+        // the schema.
+        let walking = |named: Option<uuid::Uuid>| {
+            let mut l = layer.clone();
+            let mut fx = lumit_core::fx::instantiate("blur").expect("a built-in");
+            fx.params.push(EffectParam {
+                id: "path".into(),
+                value: EffectValue::MaskPath(named),
+                extra: serde_json::Map::new(),
+            });
+            l.effects = vec![fx];
+            comp_with(vec![l])
+        };
+
+        let on_first = key(&doc, &walking(Some(first)), 1.0);
+        let on_second = key(&doc, &walking(Some(second)), 1.0);
+        assert_ne!(on_first, on_second, "the choice never reached the key");
+        assert_eq!(
+            on_first,
+            key(&doc, &walking(Some(first)), 1.0),
+            "not stable"
+        );
+
+        // A mask since deleted is the effect's no-op, and so is a row naming
+        // nothing where the schema does not default to the first — both feed
+        // the same "nothing to walk" marker, which is honest: they render the
+        // same picture.
+        let gone = key(&doc, &walking(Some(uuid::Uuid::now_v7())), 1.0);
+        assert_eq!(gone, key(&doc, &walking(None), 1.0));
+        assert_ne!(gone, on_first);
     }
 
     /// An Effects-and-masks DoF depth input (K-142) folds the depth layer's own

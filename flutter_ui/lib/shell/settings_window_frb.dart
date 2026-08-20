@@ -235,7 +235,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   child: Center(
                     child: Text(
                       page.label,
-                      style: _page == page ? t.bodyPrimary : t.body,
+                      // The selected page has always been an accent fill; what
+                      // Round adds is K-394's label flip on top of one (§12.1).
+                      style: _page != page
+                          ? t.body
+                          : t.shape == ThemeShape.round
+                              ? t.bodyPrimary.copyWith(color: t.surface0)
+                              : t.bodyPrimary,
                     ),
                   ),
                 ),

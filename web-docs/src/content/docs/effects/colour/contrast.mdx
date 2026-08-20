@@ -1,0 +1,61 @@
+---
+title: "Contrast"
+description: "Spread the picture about mid-grey, or compress it."
+---
+
+Contrast is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Pushes the picture away from mid-grey, or pulls it toward it. Raising contrast
+sends the darks darker and the brights brighter; lowering it flattens everything
+toward the middle.
+
+This is the punch control. Game capture is often flat, and a modest lift here is
+most of what makes a montage feel graded. Lowering contrast is just as useful:
+flattening a background layer is a quick way to make a foreground read against
+it, and a heavily flattened plate is the starting point for a film-style look
+where the black point is lifted deliberately.
+
+The pivot is a plain mid-grey, so the control behaves like the contrast slider
+in a photo editor — symmetric about the middle — rather than like a light
+meter's grey card. Highlights are never clipped on the way through, so pushing
+contrast hard and then pulling exposure back down recovers the detail.
+
+For a change that affects mid-tones without touching the two ends, use
+[Gamma](/effects/colour/gamma/) instead.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Contrast** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Contrast** — the spread. At the neutral point the picture passes through
+  untouched; below it everything converges on mid-grey, and at zero the whole
+  frame is flat grey. Above it the picture expands away from the middle, and
+  there is no ceiling, so a deliberately crushed look is a matter of typing a
+  larger number.
+- **Mix** — how much of the graded picture replaces the original.
+
+## Related
+
+- [Gamma](/effects/colour/gamma/)
+- [Exposure](/effects/colour/exposure/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

@@ -664,6 +664,44 @@ panels sharing tabs) stay square-cornered under Round — the docking container 
 to round a tab bar's own container, and patching it for this alone isn't
 planned.
 
+### 12.1 Round v2 — the bubble commit (K-394)
+
+Round v1 rounded corners; v2 commits to the shape, on cues from a reference the owner
+picked (OUTLOUD's Lyrica editor) — cues, not a copy. All of it is `ShapeTokens` reads
+and shape-conditional widget geometry; colours, strings and Sharp are untouched.
+
+- **Stadium controls.** Under Round, a button, chip, tab, dropdown or timecode chip is a
+  full capsule: radius = half its own height (`control_radius` becomes the stadium
+  sentinel under Round rather than a number that approximates one). The transport's
+  buttons additionally sit together inside one pill container on the Viewer bar. Under
+  Round that whole bar is a tile of its own **below** the picture — parted from it by the
+  tile gap, with the canvas showing through, and never laid over the frame — while staying
+  inside the Viewer panel, so docking or moving the panel carries it; Sharp keeps the bar
+  welded to the panel's bottom edge.
+- **Bigger cards.** `card_radius` 14 → 18 and `float_radius` 12 → 16, so a menu is not
+  squarer than the card that spawned it.
+- **Filled-pill actives.** The active tab / mode chip / segmented option fills with
+  `accent` and its label flips to `surface0` — the far end of the ramp from the text,
+  which is the dark label on a dark scheme and the light one on a light scheme without
+  either being spelled out twice (Round on Light exists, §12). Inactive stays ghost.
+  This is the reference's loudest cue: state reads at a glance from fill, not from text
+  tint.
+- **Dot slider thumbs.** The thin track with a round thumb on it, which `HouseSlider`
+  already drew — under both shapes, and still does. Recorded as a cue the reference and
+  Lumit happened to agree on, not as a change: nothing shipped for it, and making it
+  Round-only would have taken the dot away from Sharp for no reason.
+- **Capsule bars.** Timeline layer bars and Sequence clips draw with stadium ends under
+  Round (at the bar's own height). Keyframe diamonds, the playhead and the rulers do
+  not change — they are marks, not surfaces.
+- **The header dot.** Each panel header carries a small accent dot under Round — the
+  reference's quiet live-mark. Decorative, never a status light; it does not blink,
+  fill or change colour.
+
+Rejected cues, with the reasons (K-394): uppercase panel titles (voice is sentence case,
+K-005) and the reference's light shell around dark cards (the dark-first surround rules
+of §2 and the neutral Viewer pasteboard, K-203, are binding — an inverted shell is a
+different theme, not a shape).
+
 ## 13. New-panel checklist
 
 The Lumit equivalent of the household §9 checklist. Every new panel or feature MUST satisfy:

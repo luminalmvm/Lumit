@@ -20,6 +20,15 @@ use lumit_fx_macros::Effect;
     // The Radius slider's own maximum (its own effect now, no longer sharing
     // the family's largest reach).
     roi = PaddedPctDiag(25.0),
+    // K-395: the blur claims the injected Matte row inside its own maths — see
+    // the `matte` doc below for what it means. The generic strength dissolve
+    // does not also run.
+    matte = (
+        "matte",
+        "scales the blur radius per pixel: white blurs at the full Radius, grey \
+         blurs narrowly, black not at all — a blur whose width varies across \
+         the frame, which a strength dissolve cannot produce",
+    ),
 )]
 pub struct Blur {
     /// Kernel half-width, % of the comp diagonal (§2.3), so a half-res preview

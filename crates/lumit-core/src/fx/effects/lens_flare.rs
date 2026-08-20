@@ -16,9 +16,12 @@
 //! Three things arrive from outside the bag, and each has its own reason:
 //!
 //! - **The Matte source and the `.lens` file** are a picture and a file, so only
-//!   the render knows whether either turned up. They come beside the op as this
-//!   effect's aux pair ([`AuxKind::FlareInputs`](crate::gpufx), K-387) — one
-//!   counter for the two, because they are enumerated together in `build.rs`.
+//!   the render knows whether either turned up, and each comes beside the op on
+//!   its own list (K-387). The prescription is this effect's `AuxKind::LensFile`.
+//!   The Matte is no longer the flare's private business: since K-395 it is the
+//!   Matte row every effect has, arriving on the one matte carriage, and the
+//!   flare is simply one of the four that claim it inside their own maths —
+//!   here it decides *where the light sources are*, not how strong the flare is.
 //! - **Lights mode's sources** (K-360) are the comp's own Light layers at this
 //!   frame, which is not a parameter anyone could slide: they are read at resolve
 //!   time through the expression context — which already carries the document,
@@ -260,6 +263,17 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // An additive light overlay, the Glow shape.
     premultiplied = true,
     groups = LENS_FLARE_GROUPS,
+    // K-395: the flare already declares a parameter called `matte`, and it means
+    // something deeper than strength — it is where the flare *detects its
+    // sources*. Naming the id claims it inside the flare's own maths and puts it
+    // on the one matte carriage; because the row is declared below, none is
+    // injected over the top of it.
+    matte = (
+        "matte",
+        "where the flare looks for its light sources, in Matte source mode: the \
+         parts of the matte brighter than Detect threshold are the lights, and \
+         everything else contributes nothing",
+    ),
 )]
 pub struct LensFlare {
     /// Where the light is, px@comp (K-260: point parameters are PIXELS, the
@@ -684,7 +698,11 @@ pub struct LensFlare {
     /// the GPU pass as half of this effect's aux pair (K-387). The row exists
     /// because the panel needs it; the trace never asks the bag whether it is
     /// bound, because a missing matte simply detects no sources.
-    #[layer(label = "Matte layer", self_default = true)]
+    ///
+    /// **Labelled "Matte", not "Matte layer"** (K-395): the uniform row's word,
+    /// shared with every other effect's matte. The stored id was already `matte`,
+    /// so nothing but the label moves.
+    #[layer(label = "Matte", self_default = true)]
     pub matte: bool,
 
     /// The absolute scene-linear luma a pixel must EXCEED to flare (K-363): at 1.0

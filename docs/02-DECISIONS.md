@@ -9970,3 +9970,1000 @@ enforced".
 dependency tree. Its binary is what CI runs (job `performance gates (ratio vs
 baseline)`); each scenario is also an `#[ignore]`d test, for measuring one budget while
 working on it.
+
+## K-390 — Flow learns census matching and edge-held boundaries; the blur learns to scatter
+
+**DECIDED** (2026-08-18). docs/impl/optical-flow.md §4.5 carries the full shape. The
+measured brief (§5.5): flow beats a crossfade decisively on game capture and loses on
+line art by worst-block SSIM, with the causes diagnosed — no evidence in flats, and
+smoothing that diffuses across boundaries. The fix is method, not knobs: a ternary
+census matching cost in the inverse search (illumination-invariant, edge-concentrated
+evidence), a fast-bilateral-solver-shaped edge-aware densification of the field guided
+by the picture with confidence as the data weight, and a Guertin-class feature-aware
+reconstruction for Fast motion blur (tile-max/neighbour-max dominant directions,
+confidence-weighted taps, adaptive counts, ±1 central difference, destination
+fixed point, curved trails on High).
+
+Model-free deliberately: learned flow stays a plugin-era question (§0's backend seam
+already reserves the slot). Acceptance is the existing harness — worst-5% block SSIM
+up on animation, strictly not down on gameplay — and the CPU/WGSL oracles stay
+op-for-op through every change. Normal/High tiers ship regardless of cost; the owner's
+one-second-a-frame ceiling decides whether High is ever the default.
+
+**Postscript (2026-08-19): what shipped, and what was measured out.** The programme
+ran to the end and **one of its three items ships**. Item 3, the Guertin-class blur
+reconstruction, landed **in full** (K-392) — tile-max and neighbour-max dominant
+directions, McGuire-weighted taps, adaptive counts, curved trails on High, and the
+confidence reversal — with only the ±1 central difference deferred for a seam reason
+K-392 names. Item 1 (census matching) and item 2 (edge-aware densification) are both
+**reverted; the flow engine ships this round exactly as it entered**, SSD inverse
+search and §1 step 3 densification, byte-for-byte in both backends. Item 1 missed the
+bar by 0.0073 on game capture (impl §5.5.1); K-393's per-patch refinement of it moved
+the miss to 0.0002 on the cinematic and still did not clear it (§5.5.2); item 2 lost
+on four of the five clips and its code, its `FlowSettings::dense_iters` field, its
+`VectorDetail` mapping and its WGSL kernel are deleted (K-391, §4.6). No shipped
+`.lum` ever carried `dense_iters`, so removing it is a no-op for project
+compatibility.
+
+That is a **no-ship on the flow half, recorded as a result rather than a failure**.
+The bar this entry set — worst-5% up on animation, strictly not down on game capture
+— is the reason the tree is not now carrying a slower, three-branch inverse search
+that trades the footage the project exists for (K-002) against line art. What the
+campaign leaves is the blur, the harness (`flow_quality.rs`, `clip_cadence.rs`,
+`blur_proof.rs`) and four sections of measurements: line art's problem is missing
+evidence, field-space smoothing cannot manufacture it, census can but costs precision
+where evidence is plentiful, and the two costs cannot be hard-switched between without
+paying at the boundary. A later attempt starts from that instead of from a prediction.
+
+## K-391 — Edge-aware densification is measured, and does not ship
+
+**DECIDED** (2026-08-19). K-390's item 2 — a fast-bilateral-solver-shaped solve of the
+finished flow field against the picture's luma edges, confidence as the data weight — was
+built (CPU reference, WGSL twin, oracle parity green at both ping-pong parities), measured,
+and **deleted**. docs/impl/optical-flow.md §4.6 carries the tables.
+
+It fails K-390's own acceptance bar on four of the five owner clips, at every λ and ζ
+tried. Worst-5% block SSIM moves +0.005 at best on the anime clip and −0.011, −0.013,
+−0.023 and −0.016 on cartoon, gameplay, cinematic and synthetic; the gentlest setting that
+keeps anything of the anime gain still costs gameplay −0.006, past the −0.005 no-regression
+limit. Anime is the only clip whose best column is the one where the pass does *most*;
+on the other four the optimum is the setting nearest to switched off.
+
+The reason is structural rather than a tuning miss, which is why no further sweep is
+owed: by this point the field has already been regularised by variational refinement
+using real photometric evidence, and this pass regularises it again using none — only luma
+similarity and the field's own values. It cannot add information, only exchange one
+smoothing for another, so it can win only where refinement had nothing to go on and must
+lose wherever refinement was right. This is the same trade §5.5 recorded and removed once
+before (0.036 of gameplay for 0.012 of animation); the numbers are smaller and the verdict
+is the same.
+
+**Deleted rather than parked disabled**, which was this entry's first ruling and the wrong
+one. A pass no setting reaches, a kernel nothing dispatches and a `FlowSettings` field no
+shipped `.lum` can carry is a dead knob that every later reader has to re-derive the verdict
+on; the tables in §4.6 are the reproducible record, and a future item 2 must be
+**evidence-bearing** rather than field-space — a different pass, not this one re-enabled, so
+it loses nothing by starting from the numbers instead of the skeleton. `dense_iters`, its
+`VectorDetail` mapping, `densify_edge` and the ping-pong buffers are all out of the tree.
+The line-art problem is missing evidence, which is item 1's department: census matching
+moved the same anime measure 0.697 → 0.7025 — and did not clear its own bar either
+(K-393). Item 3 (feature-aware blur reconstruction) is untouched by this and shipped.
+Arrangement decided along the way: densification composed with §1 step 4's bilateral blur
+rather than replacing it (measured better on both animation clips), so that blur stays
+unconditional.
+
+## K-392 — The blur scatters, and low confidence borrows instead of freezing
+
+**DECIDED** (2026-08-19). K-390's item 3, shipped. docs/impl/optical-flow.md §4.7 carries
+the shape and the measurements. Fast motion blur becomes a two-pass Guertin-class
+reconstruction: a 16 px tile reduction of the flow field, then a gather that alternates
+between the neighbourhood's dominant direction and the pixel's own, McGuire-weighted
+(cone + cone + cylinder) so a fast object smears over the still background it passes.
+Tap counts are adaptive (§4's `S = ceil(‖v‖/2)`), which demotes the schema's `Samples`
+from a count to a cap. `MbQuality` (Normal/High) buys half the tap spacing and curved
+trails; it is the **only** method choice a user sees, per K-390 — one method adapts
+internally and there is no picker. The `View` enum gains Dominant motion, one new
+user-facing string (`fxDominantMotion`), K-303 treatment complete; Quality/Normal/High
+were already in the table.
+
+**Confidence changes job, and this is the reversal.** v1 multiplied the streak by
+confidence, so an uncertain pixel collapsed to no blur and read as a frozen speck amid
+motion. It now *blends*: an uncertain pixel borrows its neighbourhood's motion at 0.6
+strength. Zero blur survives only where the tile itself is still, which is the owner's
+stated rule. `cpu_motion_blur_still_and_zero_shutter_are_passthrough` was rewritten
+accordingly — "zero confidence does not blur" was v1's contract and is now false by
+design.
+
+**Borrowing and scattering are not the same summary, and treating them as one was a real
+defect** — caught on footage, not in review. An extremum is right for "what is the fastest
+thing near me" and wrong for "what is my neighbourhood doing"; used for both, neighbouring
+tiles won unrelated wild vectors and cartoon.mp4 f200 (fast zoom, 70% of pixels below half
+confidence) came out in rectangular patches of differently-angled blur. The borrow now
+samples the tile field bilinearly between tile centres: continuous, so no tile edge shows,
+and self-cancelling under disagreement, so the blur backs off where there is no consensus
+to borrow.
+
+**Two things did not land, deliberately.** The **±1 central difference** cannot be built at
+the current seam: `CompJob::flow_neighbour` is one `Option<i32>`, `CompLayerPixels::flow_field`
+one `Option<(Vec<f32>, Vec<f32>, Vec<f32>)>`, and `AuxSlot::FlowField` one texture — the −1
+source frame is not even decoded for this effect (`temporal = &[0, 1]`). Adding it means a
+second flow measurement, a second decoded neighbour and a second field threaded through
+decode → build → draw → realise → fxops → the bind group; it is a render-crate change, not a
+kernel one, and it is not free (2× flow on a scrub, ~1× amortised on linear playback, since
+the pair measured at frame N is the pair frame N+1 wants). Left to its own change. **Jitter**
+was dropped: adaptive taps already hold the ≤ 2 px spacing banding needs, and a hash required
+to agree bit-for-bit across Rust and WGSL is a parity hazard bought for nothing.
+
+**Known limitation, recorded rather than tuned away.** Without a depth buffer the
+foreground/background weighting is symmetric, so a *small* static object entirely surrounded
+by fast motion receives its neighbours' smear (cartoon f200's burnt-in logo, 0.37 → 8.95).
+Large static regions are unaffected — the gameplay clip's desktop moves 0.014 of 255 against
+3.99 inside the moving viewport. The fix, if ever wanted, is a depth input, not a constant.
+
+## K-393 - The matching cost is chosen per patch, the bar is still not met, and the cost change is reverted
+
+**DECIDED** (2026-08-19). §5.5.1's named fix, built and measured:
+docs/impl/optical-flow.md §5.5.2 carries the tables. The inverse search no longer
+picks census or SSD per build; each 8x8 patch picks its own from the Hessian trace
+`h11 + h22`, which the step already sums and which *is* SSD's discrimination (the
+second-order term of the SSD cost about its own minimum). Per pixel and rooted, it
+is compared against one named constant, `CENSUS_GRAD_RMS`; below it the patch is
+census-scored, at or above it SSD-scored, and the chosen cost carries that patch's
+ballot, its keep-or-revert semantics, its residual and its validity test. No
+setting reaches the constant; both backends compute it identically; the sweep's two
+ends reproduce §5.5.1's before and after columns, which is the implementation's own
+proof that an SSD-mode patch is bit-for-bit the old engine.
+
+**It does not clear K-390's acceptance bar.** One content-blind sweep - octaves
+0.01 to 0.16 closed to half-octaves, all five clips at once - and the best row,
+tau = 0.0566, meets three of four conditions: anime +0.0012, cartoon +0.0045,
+gameplay -0.0043, cinematic **-0.0052** against a -0.005 allowance. No row meets
+all four, and the frontier's shape says none can: game capture falls monotonically
+with tau while the cinematic is U-shaped with its minimum mid-grid, so the two
+clips' admissible windows (tau <= 0.063 and tau <= 0.019 or >= 0.070) do not
+intersect, and the low branch is closed anyway because anime is still down at
+tau <= 0.04.
+
+**Why it was worth putting up anyway.** Against K-390 as measured the miss moves
+from 0.0023 on game capture - the footage the project exists for (K-002), which
+the bar was written strict to protect - to 0.0002 on the cinematic, a tenth the
+size and inside the harness's own scatter. Both animation clips still rise, game
+capture recovers 0.0030 of the 0.0073 census cost it, and the synthetic clip goes
+from -0.0059 to +0.0026. It is the same trade three times smaller and aimed at a
+less important clip.
+
+**Ruling: reverted to global SSD, and the flow ships unchanged this round.** A
+smaller miss is not a met bar, and 0.0002 is exactly the size of miss that a bar
+exists to refuse without argument - accept it once and the next campaign's
+0.0002s compound into the 0.036-for-0.012 trade §5.5 already recorded and removed.
+Census, the per-patch selector, `CENSUS_GRAD_RMS`, `HUBER_DELTA` and the census
+constants are all out of the tree in both backends; `inverse_search` is
+byte-for-byte the function it was before K-390. Nothing about the reasoning is
+lost - impl §5.5.1 and §5.5.2 keep both tables, both frontiers and the reading,
+which is the whole return on the stage.
+
+**The follow-up the numbers name, not taken here.** A hard switch costs most where
+patches sit near the threshold, because the field becomes a patchwork of two
+estimators with different biases voting together in densification - which is
+exactly where the grainy cinematic sits and exactly where its minimum is. Blending
+the two costs across a band, or hysteresis so a patch's mode agrees with its
+neighbours', is the indicated move; both need the two costs on a common scale,
+which is a design question and a second measurement, so neither is smuggled in.
+
+**Test coverage moved with it, and left with it.** Perlin's finest octave is a 10 px
+period, so every patch of the two analytic parity scenes was census-scored at this
+threshold and the SSD branch would have gone unproven; `gpu_matches_the_cpu_oracle`
+gained a translated 16 px checkerboard, 92% SSD by patch. That scene went out with
+the revert and any second attempt at a two-cost inverse search needs it back. A flat
+cel with a hard outline is the tempting scene and the wrong one - its interior
+constrains nothing, so it fails CPU/GPU parity at every threshold including
+tau = infinity, where the code is exactly K-390's.
+
+## K-394 — Round commits to the bubble: stadium controls, bigger cards, filled-pill actives
+
+**DECIDED** (2026-08-19, owner-directed from a reference the owner likes: OUTLOUD's
+Lyrica editor). The Round shape (K-092) floats its cards but stops at "slightly
+rounded" — 8px controls on 14px cards read as Sharp with the corners sanded, and the
+owner judges it under-differentiated. Round v2 takes cues, not a copy:
+
+- **Controls become stadiums.** Buttons, chips, tabs, dropdowns and the transport
+  cluster under Round are full capsules (radius = half the control's height), and the
+  transport's buttons sit together inside one pill container. Sharp is untouched.
+- **Cards grow.** `card_radius` 14 → 18, `float_radius` 12 → 16; the gap/inset system
+  stands as K-092 built it.
+- **The active state is a filled pill.** An active tab or mode chip fills with the
+  accent and flips its label to `surface0` — the far end of the ramp from the text, so
+  it is the dark label on a dark scheme and the light one on a light scheme (Round on
+  Light exists) — instead of tinting its text; the state contrast is most of what makes
+  the reference read as designed.
+- **Slider dot thumbs were already ours.** `HouseSlider` has always drawn a round thumb
+  on a thin track, under both shapes. The cue is recorded because the reference shares
+  it, but nothing changes for it: making the dot Round-only would take it away from
+  Sharp, which this decision does not touch.
+- **Timeline bars round their ends** under Round: layer bars and Sequence clips draw
+  as capsules (stadium ends at the bar's own height), Sharp keeps its rectangles.
+- **Panel headers gain a small accent dot** under Round — the reference's quiet
+  live-mark, adopted because it costs nothing and reads as identity.
+
+Two cues were considered and rejected, recorded so they are not re-litigated: the
+reference's uppercase panel titles (sentence case is the voice, K-005) and its light
+window shell around dark cards (the dark-first surround rules and the neutral Viewer
+pasteboard are binding, §2 and K-203; inverting the shell is a different theme, not a
+shape). Everything lands as `ShapeTokens`/theme reads — a hex outside the theme module
+is still a defect — and the strings change not at all.
+
+## K-395 — Every effect can be driven by a matte, through one uniform row
+
+**DECIDED** (2026-08-19, an original project goal of the owner's). Every built-in effect
+gains a **Matte** input: a layer whose luma drives the effect per pixel — distinct from
+masking an effect's *result*, because it feeds the effect itself, and what "drives"
+means may differ per effect. The full shape lives in docs/08-EFFECTS.md §2.6 (new).
+
+- **The row is uniform everywhere**: one row holding the layer picker and an **Invert**
+  checkbox beside it, labelled "Matte" / "Invert". Effects that already had the idea
+  under other names — Depth of field's depth layer, the Lens flare's matte source —
+  adopt the same row treatment and labels; their stored parameter ids do not change
+  (a save is a save, K-065), only their presentation and prose.
+- **The default semantic is strength**: unless an effect declares better, the matte
+  scales the effect's per-pixel mix — matte 1 applies fully, 0 leaves the source, in
+  one generic post-lerp implemented once beside the registry dispatch. That makes the
+  row *meaningful on all 35 effects from day one*.
+- **Effects may override with a deeper meaning** where the matte belongs inside the
+  maths: displacement-class effects scale their vectors before sampling; Depth of
+  field keeps its focus-depth meaning; the flare keeps source detection. An override
+  documents its meaning in the schema prose (and so in the manual, which generates
+  parameter tables from the schema).
+- **Mechanically**: the derive injects the pair (an `#[effect]`-level default, so no
+  declaration repeats it and none can forget it); the K-387 aux seam carries the matte
+  as a per-op optional layer input, rendered alone at the effect's raster exactly as
+  DoF's input is; absent matte = today's behaviour byte-for-byte (K-258 backfill:
+  defaults are unset + false).
+
+**Postscript (2026-08-20): shipped, in full.** Every built-in carries the row. The derive
+injects the `matte` / `matte_invert` pair at `#[effect]` level, so no declaration repeats
+it and none can forget it — `every_effect_carries_a_matte_row` walks the catalogue and
+fails on the first effect that declares none. The default semantic is one generic
+post-lerp written once beside the registry dispatch (`cpu::matte_mix` and its WGSL twin
+`fx_matte_mix.wgsl`), op-for-op as §1.6 requires.
+
+**Four effects claim the matte inside their own maths**, and only four: Gaussian blur
+scales its radius per pixel (grey blurs narrowly, which a dissolve cannot produce), Glow
+gates which pixels may seed the halo before the bright pass (so light still spills outward
+across dark matte), Depth of field keeps its depth meaning, and the Lens flare keeps source
+detection. Each documents that meaning in its schema, which is what the manual's parameter
+tables print — the test refuses an override that does not.
+
+**The consolidation is the part worth recording.** Depth of field's depth pass and the
+flare's matte source were two private lists; both now ride the one matte carriage, their
+stored parameter ids unchanged (`depth`, `matte` — a save is a save, K-065), so what
+changed for those two effects is presentation and prose, not their files. The K-387 aux
+carriage is left holding exactly one thing, Light wrap's Background. The list is 1:1 with
+the resolved ops that declare a matte, in order, which is the invariant that keeps a matte
+from driving the wrong effect.
+
+**K-258 was proven three ways, not asserted.** On the resolve side an instance stripped of
+both parameters — which is precisely what every saved project is — resolves to the same
+bag as a fresh one. On the picture side a real three-effect stack (a gather, a pointwise
+op and a multi-pass) renders the same *bits* on the GPU with the pair stripped and with the
+row unset, which is what rules out the tempting near-identity of running the dissolve
+unconditionally at k = 1: that costs a full-frame pass per effect and requantises through
+another fp16 store. And end to end, a document whose Exposure is driven by a half-frame
+matte lifts the lit half in full and leaves the dark half byte-identical to the untouched
+source. Absent matte is not a cheap lerp; it is no pass at all.
+
+**No new strings.** The row reuses the `fxMatte` and `fxInvert` entries the flare and Depth
+of field already had, which is what "the row is uniform everywhere" buys — thirty-five
+effects gained a control and Crowdin is owed nothing for it. The campaign left the flow
+engine untouched (`lumit-flow` has no diff), so K-390's recorded figures stand unmoved.
+
+## K-396 — Curves stores five knots a channel, not a point list
+
+**DECIDED** (2026-08-20, with the colour batch of the AE-parity wave, docs/08 §3.30).
+After Effects stores `ADBE CurvesCustom` as **arbitrary data**: a per-channel list of
+control points, as many as the user dragged, in a private serialisation. Arbitrary data
+is not interpolable, so AE itself only ever *holds* a curve between keyframes — a curve
+does not animate there, it steps.
+
+Lumit's parameter kinds (docs/08 §1.1) are float, int, bool, enum, angle, colour, point,
+seed, file and layer. None of them is "a list of points that grows", and adding one would
+need a value type, a keyframe interpolation, a bridge shape and a panel widget before a
+single pixel changed — and would still only step.
+
+So **Curves v1 is twenty ordinary Floats**: five knots on each of Master, Red, Green and
+Blue, at the fixed inputs 0, 0.25, 0.5, 0.75 and 1, each holding that channel's *output*
+there. Every one keyframes and takes an expression, which is more than AE's own blob can
+say. The shape between knots is a **monotone cubic** (Fritsch–Carlson), fitted host-side
+in `Curves::packed` so the CPU reference and the WGSL kernel evaluate the same tangents
+and neither fits a spline per pixel; the limiter is what stops a lifted highlight knot
+ringing a dark halo into a roll-off, which an unlimited Catmull–Rom would.
+
+Three consequences, all accepted:
+
+- **A knot cannot slide sideways.** The curve is shaped by moving outputs, not by placing
+  points. Five knots at quarter spacing is enough for the S, the crush, the lift and the
+  per-channel split, which is what the effect is for.
+- **The import samples rather than carries** (docs/11 §5). A fixed-kind parameter could
+  not have carried an arbitrary point list under any design; the conversion evaluates
+  AE's spline at the five inputs and is reported as *mapped*, not lossless.
+- **The panel drawing twenty rows is not the stored form.** A drawn curve editor lands
+  through `customEffectRows` (the per-effect hook `effect_controls_panel_frb.dart` asks
+  first) and changes what the panel *draws*, not what a project stores — so a curve
+  authored today survives it.
+
+Reversing this later means adding a genuine curve parameter kind, and that is a decision
+about the data model and the bridge, not about this effect.
+
+## K-397 — Brightness & Contrast is a sibling effect, not a mode of Contrast
+
+**DECIDED** (2026-08-20), resolving the open question in
+docs/impl/ae-effect-parity.md. AE's `ADBE Brightness & Contrast 2` maps to **Brightness**,
+a new effect in the Colour category carrying both of AE's sliders under AE's names and
+AE's neutral point of zero (docs/08 §3.32). The existing one-knob **Contrast** (§3.18) is
+untouched.
+
+The alternative — folding both into Contrast behind a mode switch — was rejected on three
+counts, in increasing weight:
+
+1. **The import needs one effect.** AE's is a single effect with two properties that
+   animate together; splitting it across two Lumit effects would split one keyframed pair
+   across two stack entries and make the import report explain a shape nobody authored.
+2. **The two knobs are not the same knob.** Lumit's Contrast is a per cent where 100 is
+   neutral; AE's is signed, where 0 is. One control cannot be both without one of the two
+   spellings changing meaning, and a save is a save (K-065).
+3. **Menu hygiene loses to honesty.** A mode switch that silently re-scales an existing
+   slider reads fine in a menu and wrong in a project file. Two small effects that each do
+   one thing is what K-090's shape rule asks for anyway.
+
+Brightness is an affine grade about the same mid-grey pivot Contrast uses —
+`(u + Brightness÷100 − 0.5)·(1 + Contrast÷100) + 0.5` — so it declares
+`alpha mode: unpremultiplied` for the same reason Contrast does, and highlights are never
+clipped. It is deliberately *not* Exposure: an addition lifts the shadows as much as the
+highlights, where a multiply leaves black where it was, and that difference is the reason
+both exist.
+
+## K-398 — Generate is the seventh effect category
+
+**DECIDED** (2026-08-20), extending K-090's category list. The Add-effect menu gains
+**Generate**, between Distortion and Stylise, for the effects that *make* pixels rather
+than change them: **Fill** (§3.34), **Gradient** (§3.35), **Noise** (§3.36) and **Fractal
+noise** (§3.37). The six categories K-090 named are otherwise untouched, and no existing
+effect moves.
+
+The alternative was to file the four under Stylise, which is where a generator ends up in
+a catalogue that has nowhere else to put it. It was rejected because a category is a
+promise about *what a thing does to your picture*, and these four do not answer that
+question — three of them ignore the incoming picture entirely. A menu whose Stylise
+flyout contains both Glow and Fractal noise has stopped grouping and started listing, and
+the cost of the honest answer is one enum variant, one label and one translated string.
+
+Two consequences worth recording:
+
+- **The category set is not closed, but it is not free either.** A seventh category is a
+  seventh flyout in every menu that groups by category, a seventh section in the manual,
+  and a seventh word to translate. The bar for an eighth is the one this cleared: a
+  family of effects that already exists and that no current category describes without
+  lying.
+- **"Generate" is the word, not "Generators".** Sentence case, singular, matching the
+  voice of the other six (docs/01 §9, docs/15).
+
+## K-399 — The distort batch: a fifth matte override, and how a resampling kernel is judged
+
+**DECIDED** (2026-08-20), with the distort batch (docs/08 §3.38–§3.42: Turbulent displace,
+Tile, Offset, Mirror, Lens distort). Two things in it are decision-sized; the rest is spec
+and lives in docs/08.
+
+**Turbulent displace is the fifth effect to claim the matte inside its own maths** (K-395).
+Its matte scales the *displacement vector* before the sample, so a grey matte warps the
+picture less rather than showing a fully-warped copy blended over an unwarped one — which
+is two of every edge, and is what the generic dissolve gives. K-395's DECIDED text names
+this case in advance ("displacement-class effects scale their vectors before sampling"), so
+the rule is unchanged; what this supersedes is only the **count** in that entry's
+2026-08-20 postscript, which said four. It is five, and the enumeration in
+`every_effect_carries_a_matte_row` is where a sixth would have to be argued for. The claim
+is held by picture as well as by tolerance: under a flat quarter matte a lit pixel must
+travel about a quarter as far as it does at full matte, which a dissolve cannot do at all
+(it leaves the pixel where it was, only fainter).
+
+**A kernel whose real output is a sample position is judged on absolute difference over a
+smooth corpus, not in fp16 ULPs over the hard-edged one** (docs/08 §1.6). Every effect in
+this batch decides *where to read from* and then takes one bilinear tap. Where the two
+paths contract a multiply-add differently — a dot product fused on the GPU and not on the
+CPU, which is legal on both — the position moves in its last bits, and a hard edge
+multiplies that into a whole pixel of colour while a smooth picture does not. Measured: the
+same Mirror kernel reads 31 fp16 ULP on the alpha-edge corpus and under 2 × 10⁻³ absolute
+on the smooth one, and the arithmetic is identical in both. The ULP metric was measuring
+the size of the edge. Offset alone kept it, because its arithmetic has no expression to
+fuse. This is a **testing** decision and not a licence: the kernels are still written
+op-for-op against the CPU reference, and the effects that grade colour rather than move it
+are still held to ULPs.
+
+A corollary is recorded here because it looks like a violation of §1.6 and is not: **Lens
+distort runs one transcendental per pixel** (`tan` forward, `atan` reversed). The
+catalogue's rotations arrive as host-computed cosine/sine pairs precisely because WGSL's
+trigonometry is not correctly rounded — but here the angle *is* a function of the pixel and
+cannot be lifted out of the loop. The one call that can be (`tan(fov ÷ 2)`) is. The rest is
+admitted in docs/08 §3.42 rather than hidden, and is exactly what the paragraph above
+exists to measure.
+
+## K-400 — Transition is an eighth category, and Set matte's matte is its output
+
+**DECIDED** (2026-08-20), with the utility and transition batch (docs/08 §3.43–§3.47: Drop
+shadow, Set matte, Channel blur, Linear wipe, Radial wipe). Two things in it are
+decision-sized; the rest is spec and lives in docs/08.
+
+**An eighth category, Transition**, between Temporal and Utility, for the effects that
+remove the picture progressively so a cut can be made out of one: **Linear wipe** (§3.46)
+and **Radial wipe** (§3.47) today, and AE's Iris wipe, Venetian blinds and Card wipe when
+Tier B lands. K-398's postscript set the bar for an eighth — "a family of effects that
+already exists and that no current category describes without lying" — and this clears it
+the same way Generate did. A wipe is not a stylisation (it adds nothing) and not a utility
+(a utility is a tool, and this is a *shot transition*, the thing an editor reaches for by
+that name); filing it under either would be listing rather than grouping. The cost is
+again one enum variant, one label and one translated string. **"Transition" is the word,
+not "Transitions"** — sentence case, singular, matching the other seven (docs/01 §9).
+
+**Set matte is the sixth effect to claim the matte inside its own maths** (K-395), and
+that resolves the open question docs/impl/ae-effect-parity.md carried: *whether Set matte
+belongs in Utility or is a documented pattern of K-395's row.* It is **both, and those
+were never two answers.** The effect lives in Utility and its source is the universal
+Matte row, under the `Own` role — because what its matte supplies is the alpha itself, not
+an amount of some other effect. It is the first override for which the matte is the
+*output* rather than a modifier of one, and the picture proves it: under a disc matte, Set
+matte gives a disc-shaped picture, where the generic strength dissolve gives the whole
+frame with a faint ring at the matte's own soft edge. That is not a difference of degree.
+
+Two smaller things are recorded here because they look like violations and are not.
+
+**A kernel whose real output is a *threshold on a position* is judged like one whose
+output is a position** (K-399, docs/08 §1.6). Both wipes reduce to a signed distance — a
+dot product for the linear one, an `atan2` and an angular wrap for the radial — divided by
+a feather that may be narrower than a pixel. Where the two paths contract that dot product
+differently, a difference of 10⁻⁶ in the distance becomes a visible difference at the edge,
+exactly as it does for a sample position; so the wipes take K-399's smooth corpus and its
+absolute-difference tolerance. Measured worst: 9.5 × 10⁻⁴ across both effects' whole
+sweeps, against a 2 × 10⁻³ bound. Set matte, which computes no position at all, stays on
+fp16 ULPs and measures 1.
+
+**The angular wrap uses `floor(x + ½)` and never `round`.** Rust rounds halves away from
+zero and WGSL rounds them to even; the two disagree on exactly the pixels that sit on the
+wedge's boundary, which is the set of pixels a wipe is *about*. Written once in
+`cpu::radial_wipe_keep` and mirrored op-for-op, it is a one-line trap that would otherwise
+have shown up as a single flickering pixel and been blamed on the driver.
+
+## K-401 — Parity means importable, never confined: AE's parts are the floor, not the ceiling
+
+**DECIDED** (2026-08-20, owner's standing rule). The AE parity programme exists so the
+import can convert real projects, and that requires every effect to carry AE's
+parameters with AE-mappable semantics — the floor. It does not require looking
+identical to After Effects or stopping at AE's parameter set — there is no ceiling.
+Where Lumit can render an effect better, or a parameter beyond AE's would genuinely
+improve it, take it: the owner's example is grain, which can look nicer than AE's
+while still carrying every part AE's has so an imported instance maps cleanly.
+
+The one discipline this adds: an effect's AE-mappable subset stays identifiable —
+docs/11's table maps AE parameters onto ours, and an import must be able to set ONLY
+that subset and get a faithful conversion, with Lumit's extras at their neutral
+defaults. An extra parameter whose default is not neutral would silently change every
+imported project, which is the failure this rule's discipline exists to prevent.
+Applies retroactively: any shipped effect that was confined to AE's shape out of
+caution may grow past it whenever an improvement is real.
+
+## K-402 — Displacement map's matte is its map, and a guarded texture fetch is not guarded
+
+**DECIDED** (2026-08-20), with Wave 2's Distort I batch (docs/08 §3.48–§3.52: Corner pin,
+Displacement map, Polar coordinates, Twirl, Spherize). Four things in it are decision-sized;
+the rest is spec and lives in docs/08.
+
+**Displacement map is the seventh effect to claim the matte inside its own maths** (K-395),
+and the second — after Set matte (K-400) — for which the matte is the effect's *subject*
+rather than a modifier of one: the layer on the Matte row **is** the displacement field. AE
+has a picker of its own for it; adding a second layer reference beside a row that already
+names a layer and renders it at this raster would have been a seam bought for nothing. The
+choice pays a second dividend that was not the reason for it: AE's *Displacement Map
+Behaviour* (Centre Map / Stretch Map to Fit / Tile Map) exists only because AE hands the
+effect the map layer at the map's own size. The matte carriage renders it at **this**
+effect's raster, so "stretch to fit" is the only behaviour there has ever been, and the
+other two are reported by the import rather than approximated.
+
+**A guarded out-of-range texture fetch is not guarded.** Every kernel in the distort family
+carries a copy of the same helper — "fetch the texel at (x, y), or transparent if that is
+outside the frame" — written as a bounds check with an early return before `textureLoad`.
+A texture fetch has no side effects, so the compiler may hoist it above the branch, and on
+this machine's Windows backend the hoisted out-of-range fetch returns a **live alpha lane**
+with a zero colour. The symptom is a pixel that should be empty arriving opaque with the
+right colour, and it appears only where *all four* bilinear taps are outside, which is why
+no shipped kernel's oracle had caught it: Polar coordinates is the first whose samples leave
+the frame in bulk. The rule from here: **clamp the coordinate into the frame, fetch that,
+and choose between it and transparent afterwards** (`select`) — no fetch is ever out of
+range, so nothing is undefined, and it costs one instruction. The five new kernels do this.
+**The older copies of the pattern are unchanged and are a known defect** (Mirror, Tile, Lens
+distort, Drop shadow, Transform, Shake and the blur family): their oracles pass today
+because their corpora do not drive every tap outside at once, which is a statement about the
+tests rather than about the kernels.
+
+**Spherize splits AE's one signed Radius into a length and a signed Bulge.** AE's control is
+a radius in raster pixels that passes through zero to mean "inside out". One control cannot
+be both a resolution-independent length (docs/08 §2.3, so it survives a resize) and a signed
+quantity whose zero is the neutral — the same shape of argument K-397 settled for
+Brightness, and it lands the same way: two controls, each meaning one thing. Radius is
+`% diag`, Bulge is a per cent from −100 to 100, and the import converts AE's magnitude to
+one and its sign to the other, losing nothing.
+
+**Two more exact-inverse pairs, and both are tested as such.** Polar coordinates' two
+conversions and Spherize's bulge and pinch each compose to the identity (to resampling
+error), because each is written as a genuine inverse function — `sin` against `asin` for the
+sphere — rather than as a coefficient with a minus sign in front of it. Lens distort's
+Reverse (§3.42) was the first; the property is worth stating as a family rule, because a
+negated coefficient *looks* like an undo in a still frame and is not one, and the difference
+only shows up when somebody stacks the pair.
+
+A corollary, recorded because it looks like an unnecessary branch and is not: **Spherize
+short-circuits at Bulge 0**, as Lens distort short-circuits at Field of view 0. Without it
+the sample scale falls out of the blend as `ρ ÷ ρ`, which this backend compiles as a
+reciprocal-multiply and answers a hair under 1 — a whole picture of resampling softness for
+an effect the user has turned off.
+
+## K-403 — A speed control cannot be deterministic, and a solver must be allowed to fail and made to prove itself
+
+**DECIDED** (2026-08-20), with Wave 2's Distort II batch (docs/08 §3.53–§3.57: Ripple, Wave
+warp, Bezier warp, Warp, Roughen edges). Four things in it are decision-sized; the rest is
+spec and lives in docs/08.
+
+**AE's Wave Speed has no Lumit equivalent, and its absence is the faithful conversion.**
+Ripple and Wave Warp both animate themselves in After Effects from a control measured in
+cycles per second, which is read off the composition clock. Lumit cannot have one: docs/08
+§2.4 requires that the same frame render the same picture every time, and a clock-driven
+effect makes the preview and the export disagree, makes two machines exporting the same
+project disagree, and makes a cached frame a lie about its own contents. Both effects
+instead carry an **angle the timeline animates** — Evolution on §3.53, Phase on §3.54 — where
+one full turn is one whole wave, and the import writes AE's speed as two linear keyframes of
+`360 × speed` degrees a second. This is the first time a *missing* control has been the
+correct import, and it generalises: any AE parameter whose unit contains "per second" is a
+keyframe here, not a slider.
+
+**Bezier warp is the first kernel in the catalogue that solves rather than computes**, and a
+solver carries two obligations a closed-form map does not. It must be **allowed to give up**:
+a Coons patch dragged until it folds over itself has no single answer for the pixels in the
+fold, so the Newton iteration stops on a singular Jacobian rather than dividing by zero —
+K-402's degenerate-quad rule (docs/08 §3.48), which is itself the house rule of
+14-ENGINEERING-RULES §4. And its answer must be **checked**. Outside the patch there is no
+answer at all, and an unchecked iteration wanders until it happens to land in `0..1`, which
+draws a scatter of stray opaque pixels across the empty part of the frame — a defect that
+reads exactly like a driver bug and is not one. The fix is one more patch evaluation asking
+"does this answer solve the problem?", and discarding it when the residual exceeds a pixel.
+**The rule from here: an iterative kernel verifies its result before it uses it.** The cost
+is one evaluation; the alternative is confetti.
+
+Two corollaries of the same effect, both in §3.55. AE's **Quality** on Bezier Warp buys
+smaller triangles because AE draws the patch as a mesh; Lumit inverts the patch per pixel, so
+the same slider buys Newton steps instead — the number converts unchanged and means "more
+accurate" on both, which is the most that can honestly be claimed. And **a sample landing
+within a thousandth of a pixel of its own centre is snapped to it**, so an unbent region of a
+bent frame is bit-exact rather than resampled. §3.42's Field of view 0 and §3.52's Bulge 0
+short-circuit the same complaint at one setting each (K-402's last note); this answers it
+everywhere, for one comparison, four orders of magnitude below anything a resampler could
+show.
+
+**A blurred alpha is a distance field, and reusing the shipped blur for one is the second
+time a kernel has paid for another.** Roughen edges has to know, per pixel, how far it is
+from the shape's outline in order to chew a Border-deep bite out of it. A real distance
+transform is a separate algorithm with its own passes and its own tie-breaking; blurring the
+picture by Border gives the same information for nothing, because the half-way contour of a
+blurred alpha sits exactly where the edge was and the ramp either side of it is Border wide.
+The effect therefore blurs (the §3.8 gaussian, unchanged — the same reuse §3.43's softening
+makes, K-400) and re-cuts the result at a threshold the §3.37 fractal field wobbles. The
+companion decision is that **the wobble is weighted by the band itself**: deep inside a solid
+layer the blurred alpha is 1, and one low octave would otherwise punch a hole in the middle
+of the shape. Weighted, the chewing is confined to the band, which is both correct and what
+Border's name promises.
+
+**A dropdown that multiplies two independent choices together is one control too few.** AE's
+Roughen Edges ships seven Edge Types, which are three shapes (Roughen, Cut, Spiky) times a
+colour flag, plus Photocopy. Lumit ships the three shapes as **Edge type** and the flag as
+**Colour edge**, with an Edge colour beside it (§3.57). The conversion is lossless in both
+directions, and the split buys what the multiplied form cannot give: either half can be
+animated, read or expressed on its own. AE's Photocopy converts to Cut with Colour edge on
+and is reported as an approximation. This is K-397's shape of argument a second time — one
+control, one meaning — arriving from the opposite direction.
+
+A note that is not a decision but has cost time twice now and is written down for the third
+occasion: **every one of these kernels is a gather**, so a map that reads *further out*
+makes the picture *smaller*. Warp's thirteen styles are named for what the picture does, so
+the five swelling ones (Arch, Bulge, Fish, Fisheye, Inflate) subtract their coefficient where
+the bending ones add theirs. Written the natural-looking way round, a style called Bulge
+pinches at a positive Bend, which is the one thing a named preset may not do.
+
+## K-404 — A tone control belongs where the eye is, and a quantiser needs an exactly-rounded curve
+
+**DECIDED, 2026-08-20.** Wave 2's Stylise I batch — Posterize (docs/08 §3.58), Threshold
+(§3.59), Tritone (§3.60), Photo filter (§3.61), Black and white (§3.62) and Shadow highlight
+(§3.63), all six in the **Colour** category, where After Effects also files them. The
+catalogue stands at **69**. Five decisions came out of the batch, and the first two are one
+decision seen from two sides.
+
+**Every control that names a *place on the tone range* is placed perceptually, not in
+light.** Posterize's rungs, Threshold's Level, Tritone's three stops and Shadow highlight's
+midtone pivot are all statements about where a person sees the middle of the picture, and in
+scene-linear light (docs/08 §2.1) the middle is 0.25 rather than 0.5 — the working space is a
+count of photons and the eye is not. Spacing eight posterize rungs evenly *in light* puts six
+of them above mid-grey, which bands the highlights to pieces and leaves the shadows a smooth
+ramp: not what a posterize is for, and not the picture After Effects gives, AE quantising an
+8-bit display value. So all four controls run through one shared curve
+(`lumit_core::fx::cpu::perceptual`), and the import converts through it rather than passing
+AE's number straight in. The general rule: **a grade's *operation* is done in light; a
+grade's *control* is placed where the eye is**, and §3.18's linear pivot is not a
+counter-example — it is the middle of an operation, where this is the middle of a judgement.
+
+**That curve is a square root, and the reason is the oracle rather than the picture.** A
+quantiser's output is a *step*, so the two render paths disagreeing by one bit about which
+side of a rung a value falls on is a whole rung of colour, not a last-bit difference — K-399's
+rule about a threshold, arriving on a colour effect where nothing moves at all. `sqrt` is a
+single correctly-rounded instruction on both the CPU and the GPU; `pow(u, 1/2.2)` is a
+polynomial each vendor writes differently, and a difference of one ULP in it is a visible band
+edge that moves between the preview and the export. Between a gamma of 2.0 and sRGB's 2.2
+there is no visible difference in where eight bands land, and between an exactly agreed answer
+and an approximately agreed one there is a flickering test. **Choose the transfer function
+your oracle can prove, not the one the textbook prefers.** The same reasoning fixes the
+rounding: `floor(x + ½)` is written out in both paths, because WGSL's `round` breaks a tie to
+even and Rust's breaks it away from zero.
+
+**A blurred picture can be a question rather than an answer, and that is what "local" means.**
+Shadow highlight is the first effect in the Colour family that reads a pixel's neighbours. It
+blurs the picture at Radius — the shipped §3.8 gaussian for the **third** time, after §3.43's
+softening and §3.57's distance field — and uses only the *luma* of the result, and only to
+decide **whether this pixel is being treated as a shadow**. No colour is ever taken from the
+blur, so nothing is softened and no detail is borrowed. That is the whole of local adaptation:
+a white shirt button inside a dark jacket is lifted with the jacket instead of being singled
+out, because the question asked about the button was about the jacket. Two consequences worth
+recording. The lift is a **multiply, not a per-pixel gamma** — monotone, no clamp, no inverse,
+no `pow` a pixel, and the mask is what makes the effect adaptive rather than the exponent. And
+Lumit ships **one Radius where AE ships two**: a second full-frame gaussian is a great deal of
+work for the softness of a mask, and the import averages AE's pair and reports it.
+
+**An effect that decides its own settings from the frame is not an effect, and the omission is
+the decision.** AE's Shadow/Highlight defaults to Auto Amounts, which reads the frame's
+histogram, and smooths that reading across neighbouring frames with Temporal Smoothing and
+Scene Detect. The first half is a whole-frame reduction, the second reads frames the effect is
+not given, and together they produce a grade whose answer at a frame depends on the shot
+around it — which cannot be scrubbed backwards, cannot be judged on a still, and is a
+different programme from a tone control. Lumit ships neither; an imported instance arrives with
+AE's default manual pair written in and the report says so. This is §3.53's missing speed
+control in another costume (K-403): **the faithful conversion of a control that cannot be
+deterministic is sometimes no control at all.**
+
+**A weight set has to be provably harmless on a neutral.** Black and white's six sliders work
+on an *exact* decomposition — every colour is a grey, plus one secondary, plus one primary,
+and the three parts sum back to the colour they came from — rather than on a nearest-primary
+weighting. Two things fall out that a weighted-sum scheme cannot have: on a grey pixel every
+difference is zero, so the six sliders do nothing at all and a neutral-heavy shot does not
+drift while one colour is tuned; and the six branches agree wherever two channels are equal,
+because the term that distinguishes them is zero there, so a gradient has no seam. The same
+shape of argument as §3.33's hat functions summing to one, arrived at from the other end.
+
+One note that is not a decision. **Photo filter's twenty named filters are Lumit's own
+chromaticities under Adobe's names** — Adobe's values are not published — so the import is a
+look-for-look conversion reported as mapped, exactly as §3.56's thirteen Warp styles are. The
+Wratten designations in the names (85, LBA, 81, 80, LBB, 82) are photographic terms and are
+not translated, which is the second entry in the label table to say so after the Lens flare's
+lens library (K-303).
+
+## K-405 — A selection has to be data-oblivious, an honest cap is a hard one, and a coordinate is a threshold too
+
+**DECIDED, 2026-08-20.** Wave 2's Stylise II batch — Median (docs/08 §3.64), Mosaic (§3.65),
+Find edges (§3.66), Emboss (§3.67) and Texturize (§3.68) in **Stylise**, and Broadcast safe
+(§3.69) in **Utility**. The catalogue stands at **75**. Five decisions came out of it.
+
+**A kernel may not branch on a pixel's value, so a median is a compare-exchange network.**
+Median is the first effect in the catalogue whose answer is *chosen* rather than computed:
+the middle value of the window, which every textbook finds with a quickselect. A quickselect
+cannot be one of Lumit's kernels. It diverges every lane in a warp, and — the part that
+actually decides it — it executes a *different sequence of comparisons* on the CPU and on the
+GPU, which §1.6 has no way to hold to agreement: two paths that compare in different orders
+can pick different samples, and one sample apart is a visibly different pixel. What both
+paths run instead is a network: sweep the window once, carry the `⌈N ÷ 2⌉` smallest values
+seen so far in a sorted array, and insert each new sample by bubbling it down with `min`/`max`
+pairs. Nothing branches, the two paths execute identical comparisons, and because `min` and
+`max` are exact and a sorted set does not depend on insertion order, the answers are
+bit-identical *even though the two paths sweep different windows* — the GPU always sweeps the
+widest one and pads with a value above every pixel, because a padded insertion is provably a
+no-op. Two things fall out worth keeping. `min`/`max` on a vector are componentwise, so the
+three colour channels and the alpha are selected **simultaneously**, four medians for one
+network. And the general rule: **where an effect has to choose rather than compute, write the
+choice as a fixed sequence of exact operations, not as a search.**
+
+**A cap you can type past is not a cap.** Median's sweep costs `(2r+1)⁴ ÷ 2` compare-exchanges
+a pixel — 45 at radius 1, 325 at 2, 1 225 at 3, 17 000 at 6. AE's Radius goes to 50. Lumit's
+stops at 3, and stops **hard**: the slider's `hard_max` is 3, not a soft limit that a typed
+value could exceed (docs/08 §1.2 lets a slider be exceeded by typing, and this is the case
+where that must not be true). The alternative — accept any number and clamp it silently —
+was rejected because a control that answers a different question from the one it was asked is
+worse than a control that refuses. This is the catalogue's only `heavy` single-pass kernel and
+its cost class says so; the AE import writes 3 and **reports the instance as approximated**,
+which makes it the first conversion in docs/11's table limited by a *budget* rather than by a
+semantic.
+
+**K-399's rule about a threshold applies to a coordinate, and the answer is integer
+arithmetic.** Mosaic decides which block a pixel is in. Written the obvious way — `floor(x ÷
+block_width)` — a pixel whose division comes out exact lands in different blocks on the two
+paths, and a whole block of colour changes. Every boundary and every sample position in Mosaic
+is therefore computed in **integers**: `(x · blocks) ÷ len` and back, with the stratified
+sample at `lo + (2k·span + span) ÷ 2n`. Integer division has no tie to break. The companion
+decision is that **the averaged mode samples the block rather than reading it**: a true mean of
+a block of a 1080p frame at the default grid is 3 500 taps redone by all 3 500 pixels, so at
+most an 8×8 stratified grid is read — which is the same flat colour on any block worth
+mosaicking, and is an *exact* mean on any block under eight pixels across, where the grid
+covers everything. Bounding a reduction is not an approximation when the bound is above the
+point where the answer stops changing.
+
+**A gradient belongs on the perceptual value too, which is K-404's rule reaching an effect
+that is not a grade.** Find edges and Emboss both difference their neighbours, and both do it
+in `√` light rather than in light. In scene-linear the step from 3.0 to 4.0 in a sunlit sky is
+a larger number than the step from 0.01 to 0.05 in a shadow, though the eye sees the second
+and not the first: a Sobel taken in light draws the specular highlights and nothing else, and
+a relief taken in light is all highlight and no shadow. K-404 stated the rule for a control's
+*placement* on the tone range; this is the same rule for a *difference* taken across it, and
+it is what makes Find edges read as a pencil drawing and Emboss as AE's grey relief rather
+than as maps of where the picture is brightest.
+
+**A second layer is not always the matte, and the fitting question has one answer.** Texturize
+takes a layer, as §3.49's Displacement map does, and does **not** take it on the Matte row. The
+distinction is worth stating because it will come up again: a displacement map has nothing
+else it could be, so the row that names a layer is the whole of that effect's input; a texture
+is not, because an editor wants to press a canvas into a layer *and* limit the pressing to a
+region, and one row cannot say both. So Texturize declares its own Texture row (Light wrap's
+Background, §3.28, is the precedent) and keeps the generic §2.6 strength matte. **The test is
+whether the effect has a second thing to say about *where*.** The related decision is
+Placement. The layer carriage renders a referenced layer alone at this raster, so "stretch to
+fit" is what it does and always did — §3.49 disposed of AE's Displacement Map Behaviour on
+exactly that ground. Texturize keeps AE's three names by splitting the question: **Scale** (a
+Lumit control) says how big one copy of the texture is, and **Placement** says only what
+happens *outside* that copy — hold the edge, repeat, or leave it untextured. At Scale 100 all
+three coincide, and that one case is AE's Stretch Texture to Fit exactly, which is why Scale
+defaults to 100 and why the import converts the choice and reports only the size.
+
+Two notes that are not decisions. **Broadcast safe is named for what it does**, docs/01 §9,
+rather than for AE's Broadcast Colors; it ships all four of AE's treatments, including the two
+diagnostic views, because seeing *which* pixels are illegal is half of why anyone reaches for
+it. Its kernel is the only one in the family that writes its luma out longhand instead of
+using `dot` — two of its four modes turn that number into a **threshold on the alpha**, so a
+fused multiply-add taken by one path and not the other is a pixel keyed out on one and kept on
+the other. And **`target` is a WGSL reserved keyword**: a module that uses one does not
+compile, silently, into a texture of zeros — the pipeline is still created and the dispatch
+still runs. The §1.6 oracle caught it at 15 584 fp16 ULP, which is worth knowing as the shape
+that failure takes.
+
+## K-406 — A gather can hold a camera, a shape can be one sector, and a control the projection hides is a control that must go
+
+**DECIDED, 2026-08-20.** Wave 2's Transitions batch — Venetian blinds (docs/08 §3.70), Iris
+wipe (§3.71) and Card wipe (§3.72), all three in **Transition**, which completes the category
+K-400 opened. The catalogue stands at **78**. Four decisions came out of it.
+
+**A projective flip belongs in a gather, because its inverse is one division.** Card wipe is
+the first effect in the catalogue to put a camera in front of a pixel, and the obvious way to
+build one is the wrong way here: transform the rectangle, rasterise it, composite the result.
+Lumit's effects gather (docs/08 §1.1) — a pixel asks where it should read from — so the kernel
+solves the projection **backwards** instead. A one-point projection of a rotating card,
+`f = s·cos θ·D ÷ (D − s·sin θ)`, is a Möbius map in `s`; it inverts to
+`s = f·D ÷ (D·cos θ + f·sin θ)`, one divide, exactly. That single fact is what makes a card
+wipe a cheap one-pass kernel with no geometry pipeline behind it, and it generalises: **before
+building a scatter, check whether the map inverts in closed form.** §3.55's Bezier warp is the
+case where it does not and Newton has to run; this is the case where it does. The
+foreshortening the solved `s` produces then divides the cross-axis coordinate, which is what
+makes a card *turn* rather than merely squash.
+
+**The camera is fixed and has no controls, and the omission is the conversion.** AE's Card
+Wipe carries Camera Position, Corner Pins, Composite Camera, a Lighting group, a Material
+group and two jitters — all of it there to place one *shared* 3D camera in front of the grid.
+Lumit keeps cameras on the composition (docs/06) and has never had one on an effect, so every
+card is projected in its own local frame from a fixed viewing distance of three card
+half-widths. This is the same shape of ruling as K-403's missing Wave Speed and §3.63's absent
+Auto Amounts: **the faithful conversion of a control Lumit cannot honour is to not have it and
+to say so**, rather than to approximate it into something that will disagree with the original
+in a way nobody can predict. AE's Back Layer and Card Scale go the same way; a card that turns
+to nothing is AE's own picture with an empty back layer. What survives the cut is chosen by one
+test — **is it still visible?** Flip Direction only means something because the perspective is
+there; in a flat squash it would be a control that does nothing, which is a defect wearing a
+name (K-405's Broadcast safe naming, from the other end).
+
+**A rotationally symmetric shape is one sector, and the fold makes the feather a width.** Iris
+wipe never rasterises its polygon. A regular polygon and a star are both a single wedge
+repeated round a circle, so the pixel's angle folds into one wedge and mirrors about that
+wedge's bisector, and the entire boundary — six sides or sixty-four — becomes **one straight
+edge** whose two vertices the host solved once. The distance to it is a dot product. Two things
+follow that are worth carrying to the next shape effect. The plain polygon and the star are the
+*same expression*, differing only in where the host puts the second vertex, so the toggle costs
+nothing per pixel and cannot drift between the two cases. And the number that comes out is a
+**true perpendicular distance in pixels**, so Feather is a width — which is precisely the
+problem §3.47's radial feather had to clamp its way around, avoided rather than solved.
+
+**Both ends of an animated range must be tested for, not arrived at.** Card wipe's flip runs
+`θ = t·½π`, and `cos(½π)` in `f32` is 6·10⁻⁸ rather than zero — enough that at Completion 100
+every card would leave a hairline of quarter-strength pixels down its spine. The progress `t`
+is clamped, so both paths test `t ≤ 0` (pass the pixel through) and `t ≥ 1` (clear it) instead
+of trusting the trigonometry to land. This is the general form of §3.42's and §3.52's
+short-circuits — which were about an effect the user had turned *off* — extended to the far
+end of the range, and it is what lets the effect claim an exactly empty frame rather than
+nearly one.
+
+Three deliberate divergences from AE, all recorded in docs/08. **Venetian blinds' Width is a
+length in px@comp** (§2.3, §3.38 decision 5's reasoning again) where AE's is raster pixels, and
+its Completion defaults to 50 for §3.46's reason. **Iris wipe's two radii are per cents of the
+comp diagonal** while its centre is px@comp — §3.51's split of a *size* (which must survive a
+reframe) from a *place* (which the user clicks), stated once more because the mixture inside
+one effect looks like an inconsistency and is not. And **Card wipe's Flip Order loses AE's
+Gradient entry**, which reads its order from a gradient layer: §3.68's test asks whether the
+effect has a second thing to say about *where*, a card wipe plainly does, and so the one layer
+row it has stays the universal Matte. Randomness and Seed cover what is left of the intent, and
+a gradient order can arrive later on a row of its own without moving anything.
+
+One note that is not a decision: **`active` is a WGSL reserved keyword**, and like K-405's
+`target` it fails at module creation rather than at runtime. The batch's own kernel names its
+short-circuit flag `has_shape`.
+
+## K-407 — Randomness that does not vary per pixel does not belong in the kernel, and a clock a control replaces is a clock that never lies
+
+**DECIDED, 2026-08-20.** Wave 2's Draw and grain batch — Beam (docs/08 §3.73), Lightning
+(§3.74), Radio waves (§3.75), Vegas (§3.76) and Add grain (§3.77), all five in **Generate**,
+which is where §3.36 Noise already sits for the same reason: what they do to a frame is put
+something *on* it rather than change the colour of what is there. The catalogue stands at
+**83**. Two of AE's seven Tier B draw effects — **Scribble** and **Stroke** — are not built,
+and the reason is a missing seam rather than a decision; it is recorded below and in
+docs/impl/ae-effect-parity.md. Five decisions came out of the five that landed.
+
+**If the randomness does not vary per pixel, it does not belong in the kernel.** A lightning
+bolt is a recursive displacement of a straight line, and the obvious build re-derives it for
+every pixel so that each can measure its distance to the result — about two hundred hashes a
+pixel, two million times a frame, for a shape that is *the same shape for all of them*.
+Lightning instead builds the bolt once in Rust, in `packed()`, into a list of at most 192
+straight segments carried in the uniform; the kernel is then a plain minimum over capsules with
+no hashing at all. Three things follow. It is a few hundred multiplications a frame instead of
+a few hundred million. **It disposes of §1.6 for free** — both paths are handed the identical
+numbers, so there is no second implementation of the generator that could disagree with the
+first, and the oracle only has to hold the *drawing* to agreement. And the parameter struct
+that crosses the boundary stops being a bag of scalars and becomes a small piece of geometry,
+which is a shape the registry (docs/impl/effect-registry.md §2.4) always allowed and nothing
+had yet needed. The rule to carry: **ask whether the random thing varies per pixel before
+writing a hash into a kernel.** Card wipe's per-card shuffle (K-406) genuinely does — every
+pixel is in a different card — and stayed. A bolt does not.
+
+**A clock becomes a control, and the control is better than the clock.** Radio waves is an
+emitter: AE's version knows what second it is and throws out a wave accordingly. §2.4 forbids
+that, so Lumit's **Time** is an ordinary parameter in seconds that the timeline animates, with
+Frequency, Expansion, Lifespan and Spin all keeping their per-second units and meaning what
+they say against *that* Time. Keyframed linearly it is AE's effect exactly; held, it freezes
+the whole set of waves mid-flight; scrubbed backwards, every wave returns to where it was. This
+is the third time a missing rate has been the faithful conversion (K-403's Wave Speed on both
+Ripple and Wave warp, §3.63's Auto Amounts) and the first where **the replacement is richer
+than the original**: a rate cannot be varied and a keyframed second can, so Lumit's version can
+do slow motion and a freeze that AE's cannot. Beam's Time and Length are the same idea one step
+simpler, and Add grain's Animate switch is the degenerate case — a rate with only two useful
+values, which is a switch.
+
+**A stroke needs a contour's direction, and a level set gives one where an edge detector does
+not.** Vegas has to answer two questions per pixel: how far across the contour am I, and how
+far along it. The obvious build thresholds the gradient's magnitude, which answers neither — the
+band's thickness is then decided by how steep the picture happens to be, so Width would do
+nothing on a soft edge and everything on a hard one. Dividing the value's distance from the
+threshold *by* the gradient turns it into a distance in **pixels**, which is Width's unit, and
+costs one division; the same expression switches the effect off where the picture is flat,
+because a vanishing gradient sends the distance to infinity rather than to zero. Two companions
+to that. The gradient is a separable **5×5** Sobel rather than a 3×3, and the two extra taps
+each way are not a refinement: on compressed footage a 3×3 gradient points a different way in
+almost every pixel, and the dashes come out as speckle instead of as a line. And the dash's
+phase is measured **from the middle of the frame**, because an error of ε in the contour's
+direction moves the phase by `|p|·ε` — halving the arm halves the wobble for nothing.
+
+**Softness can be a crossfade between two readings of one field, which is cheaper than a
+blur and correct at both ends.** Add grain's hard reading takes one value per cell — a flat
+square, which is what a grain particle is — and its soft reading interpolates the same lattice
+smoothly. Blending them costs one extra hash and gives a control whose 0 is a sharp scan-grain
+and whose 100 is a soft organic mottle, both of which are looks somebody wants. A real blur
+would have been a second full-frame pass for a control nobody keyframes. The companion is that
+**Monochrome is a lane, not an average**: the three channels read the noise core's `channel`
+argument — the same decorrelation the fractal sum uses for its octaves — so colour grain is
+three independent fields and mono grain is one field read three times, and neither is the other
+filtered.
+
+**A colour a control names must be a colour somebody can see.** Beam's Softness is the share of
+the half-width the rim occupies, and the obvious build ramps the inside colour to the outside
+one across exactly that band — which reaches the outside colour at the beam's own edge, where
+the pixel is half-covered and about to disappear. The Outside colour control would then be
+a control that names a colour nobody ever sees at full strength. The crossover takes the rim's
+**inner half** instead, so the outer half is solid rim and the control means what it says. The
+general form, worth carrying: **when a gradient's endpoint coincides with a coverage's
+endpoint, the endpoint is not reachable** — put the gradient inside the coverage.
+
+Five deliberate divergences from AE, all recorded in docs/08. **Beam's two thicknesses and Add
+grain's Size are lengths in px@comp** (§2.3, §3.38 decision 5's reasoning again), as is Radio
+waves' Expansion, which is such a length per second. **Beam's 3D Perspective is not carried** —
+it foreshortens from a camera Lumit keeps on the composition, which is K-406's ruling on Card
+Wipe's camera in a smaller costume. **Four of AE's eight Lightning Types are built**, the other
+four mapping to the nearest and being reported; Alpha Obstacle is not carried at all, being a
+search rather than a formula. **Radio waves ships one Stroke width where AE tapers from a start
+to an end**, the Fade pair carrying what that taper was mostly for, and only the Polygon wave
+type is built. And **Vegas' Segments count becomes a Segment length in px@comp**, because an
+effect that never traces a path has no arc length to count segments around — on a straight
+contour the two are the same picture, and on a tightly curved one Lumit's dashes drift in phase
+where AE's stay evenly spaced. All five took the generic strength matte (K-395): none wants the
+matte as its *subject*, and what a matte says on a draw effect is *where the drawing is*, which
+is what a dissolve says.
+
+**Scribble, Stroke and Vegas' Mask/Path half are blocked on a seam that does not exist, and it
+is named here so the next attempt does not rediscover it.** All three read their layer's **mask
+paths** — not the coverage a mask produces, the *geometry*: Scribble fills a path with strokes
+at an angle, Stroke walks a path with a brush between a start and an end per cent, and AE's
+Vegas can march segments round a path it has traced. Nothing in Lumit's effect boundary carries
+that. An effect is handed resolved parameters (`lumit_core::fx::Params` — floats, integers,
+choices, colours, seeds, file slots and layer references) and pictures (`AuxSlot` in
+`lumit-render/src/gpufx.rs` — the K-395 matte, layer inputs, temporal neighbours, a flow field,
+a lens prescription), and `ParamKind` has no vector-geometry variant. The masks themselves live
+on the layer (`lumit_core::mask::Mask`, `Layer::masks`) and are consumed by
+`lumit_core::mask::apply_masks` in `lumit-render/src/build.rs` *after* the effect stack has run,
+as a coverage buffer. Building either effect would therefore mean **a new kind of effect input**
+— a resolved path list, sampled at the frame's time, arriving beside the matte — and that is a
+docs/08 §1.1 and docs/17 change with a serialisation and an animation story of its own, not
+something to force through a float parameter. Until it exists: Scribble's intent is Fill (§3.34)
+inside the mask, and Stroke's nearest honest answer is **Vegas on the layer's alpha**, which
+strokes the *shape* a mask cuts rather than the path itself. Both import as placeholders with
+those suggestions (docs/11).
+
+Two notes that are not decisions. **`active` is a WGSL reserved keyword**, exactly as K-406's
+`target` is, and it fails the same silent way — Beam's short-circuit flag is spelled
+`is_active`. And **a lightning bolt's core and glow are taken as a maximum over the segments,
+never a sum**: every joint is shared by two segments and every fork meets its parent, so a sum
+puts a bright bead at each of them and the bolt reads as a string of pearls.
+
+## K-408 — An effect can be handed a mask's geometry, through one path input kind
+
+**DECIDED** (2026-08-21). The seam Wave 2 stopped on, built deliberately rather than
+around: Scribble, Stroke and Vegas's path half read a mask's *curve*, not its
+coverage, and nothing carried one. Three pieces, mirroring the K-387/K-395 shapes:
+
+- **`ParamKind::MaskPath`** — a parameter naming one of this layer's masks (by mask
+  id, with "First mask" as the self-default the way `#[layer]` has `self_default`).
+  The panel draws it as the layer's masks in a dropdown on the ordinary row system.
+- **The carriage**: at resolve time the named mask's `path_at(t)` is flattened to an
+  arc-length-parameterised polyline (a fixed, documented tolerance in px@comp) and
+  rides beside the op the way K-387's aux slots do — CPU as a slice, GPU as a storage
+  buffer. Absent or empty mask = the effect's documented no-op, degrade never fault.
+- **The frame key** covers it for free where the mask is the layer's own (mask edits
+  rename frames already); the flattening tolerance is a constant, so it cannot vary a
+  frame's identity.
+
+The consumers land with the seam: Scribble (§3.77+1), Stroke, and Vegas's Mask/Path
+source, completing Wave 2's stopped rows. docs/08 §1.1 gains the input kind; the
+bridge surface changes ride docs/17's ordinary process.
+
+## K-409 — The three path effects share one kernel, and coarsen rather than stop
+
+**DECIDED** (2026-08-21). K-408's consumers, landed: **Scribble** (docs/08 §3.78),
+**Stroke** (§3.79) and **Vegas's Mask/Path source** (§3.76), catalogue at 85. Three
+things about how, because each would otherwise be re-derived or undone:
+
+- **One kernel, not three.** They differ entirely in *where the line goes* and hardly
+  at all in *how it is drawn*. Where it goes is decided host-side — a hatch clipped to
+  the mask, a brush trail along it, the mask itself — and what reaches the GPU is
+  identical in all three cases: straight pieces in raster pixels, each carrying its
+  distance along the drawing. §3.76's "a lit share of 2 is a continuous line" already
+  switches the dash off without a branch, so Scribble and Stroke ride Vegas's dash
+  machinery for nothing. One WGSL kernel, one CPU reference, one §1.6 oracle covering
+  all three. This is K-399/§3.74's rule generalised: if it does not vary per pixel it
+  does not belong in the kernel — and once it is out, effects can share the kernel.
+- **Uniform, not storage buffer, and the budget coarsens.** The parity note left the
+  buffer layout to the first consumer; the answer is 512 pieces in a uniform, which is
+  Lightning's array twice over. Past it every consumer **coarsens and never truncates**:
+  the hatch widens its spacing, the dots space out, a long chain straightens. Drawing
+  part of a shape is the failure somebody sees; a slightly coarser whole one is not
+  (docs/14 §4). A storage buffer becomes right the day something wants tens of
+  thousands of pieces, and nothing does.
+- **A dense brush stroke is drawn as the path it sweeps.** The gather-form question the
+  parity note raised — Stroke's brush is a scatter — dissolves: a chain of round stamps
+  spaced under half a brush width apart *is* the swept capsule, to within an eighth of a
+  radius. Below that threshold Stroke draws the trimmed path; above it, separate dots,
+  which is what Spacing is for. No scatter pass, no distance field, no second buffer.
+
+**What is still owed to K-408's seam** is only what a row naming *one* mask cannot say:
+AE's All Masks and Stroke Sequentially, and Scribble's two multi-mask Fill Types. Those
+want a row naming a *set*, and the import reports them rather than guessing. Everything
+else the two effects and the Vegas half needed is carried, and docs/11's Scribble and
+Stroke substitutions are retired.

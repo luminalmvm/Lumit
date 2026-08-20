@@ -1,0 +1,83 @@
+---
+title: "Datamosh"
+description: "Melt the previous frame along the motion of the current one."
+---
+
+Datamosh is a [Distortion](/effects/distortion/) effect.
+
+## What it is for
+
+Imitates what a compressed video does when its reference frames go missing: the
+previous picture keeps being dragged along the current frame's motion, so
+anything moving smears and blooms while anything still stays put.
+
+It is a *look*, not real corruption. Nothing is damaged and nothing is random —
+the same frame always renders the same way, and a preview matches an export.
+
+The character of it is worth understanding, because it is what makes the effect
+worth using over a plain blur: the melt follows the actual motion in the
+footage. A player running across frame drags a smear of the previous scene with
+them; the static background does not move at all. Where the picture is still, or
+where a cut means there is no motion to follow, the melt stops on its own —
+exactly where a real codec would insert a clean frame.
+
+It needs motion to find, so it works on footage layers. On a layer with nothing
+to measure — a solid, a shape, a still — it steps aside and leaves the picture
+alone.
+
+:::note[One flow measurement per layer]
+Measuring motion is expensive, so a layer computes it once per frame and shares
+it. If a layer somehow carries both this effect and
+[Fast motion blur](/effects/temporal/fast-motion-blur/) at the same time,
+whichever comes first in the stack gets the measurement and the other quietly
+does nothing. Put them on separate layers if you need both.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Intensity** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Displacement** | Slider | 1 to 16; higher by typing | 4 | - |
+| **Bloom** | Slider | 0 to 1 | 0.6 | - |
+| **Reset interval** | Slider | 0 to 5; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Intensity** — how much of the melted prediction is laid over the real frame.
+  At zero the picture passes through untouched, which makes this the control to
+  keyframe for a burst. There is no ceiling: pushed past full it extrapolates
+  past the melted frame for a harder tear.
+- **Displacement** — how far the melt reaches, counted in frames of predicted
+  motion. Short values give a trail that resets quickly; long ones accumulate
+  into the full melt where the picture dissolves into streaks of where it used to
+  be.
+- **Bloom** — how much of that reach actually accumulates. Near zero only the
+  nearest step survives, which is a short, quickly-resetting trail. Near full the
+  whole walk averages evenly into a long, blooming smear. This is the
+  accumulates-versus-resets dial, and it changes the character of the effect more
+  than Displacement does.
+- **Reset interval** — how often the melt starts clean, in seconds, imitating a
+  codec's own reference frames. Off, the melt runs continuously. Set, the picture
+  is clean just after each reset and builds to the full melt by the next one,
+  which is the rhythmic pulsing look — and can be tuned to a beat.
+- **Mix** — how much of the moshed picture replaces the original.
+
+## Related
+
+- [Fast motion blur](/effects/temporal/fast-motion-blur/)
+- [Echo](/effects/temporal/echo/)
+- [Block glitch](/effects/distortion/block-glitch/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

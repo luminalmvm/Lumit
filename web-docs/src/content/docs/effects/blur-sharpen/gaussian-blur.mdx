@@ -1,0 +1,59 @@
+---
+title: "Gaussian blur"
+description: "The plain, even softening, and what its two controls mean."
+---
+
+Gaussian blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+The even softening: every pixel's light is spread the same distance in every
+direction. This is the blur to reach for when you have no reason to reach for
+another one.
+
+Typical work: pushing a background back so a foreground subject reads against
+it, taking the hard digital edge off a graphic or a title, softening a plate
+before a grade so compression blocks stop showing, and animating a layer out of
+focus over a few frames as a transition.
+
+It blurs the picture and its transparency together, so a blurred logo or a keyed
+subject softens at its outline rather than growing a bright or dark fringe
+there. Along the frame's own borders it holds the edge pixel, so a full-frame
+blur does not darken toward the sides.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Radius** | Slider | 0 to 25; up to 100 by typing | 1.5 | Per cent of the composition diagonal |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales the blur radius per pixel: white blurs at the full Radius, grey blurs narrowly, black not at all — a blur whose width varies across the frame, which a strength dissolve cannot produce. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Radius** — how far each pixel's light is spread. It is measured as a share of
+  the composition diagonal rather than in pixels, which is what lets the same
+  setting look the same after you resize the composition, and lets a Quarter
+  preview read as the export does. Low values soften; high ones dissolve the
+  picture into fields of colour. Cost barely rises with the number, so a very
+  wide blur is a reasonable thing to ask for.
+- **Mix** — how much of the blurred picture replaces the original. It is the way
+  to ease an effect back without disturbing the setting above it, and it
+  animates, so a layer can come into focus over time from Mix alone.
+
+## Related
+
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Radial blur](/effects/blur-sharpen/radial-blur/)
+- [Depth of field](/effects/blur-sharpen/depth-of-field/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

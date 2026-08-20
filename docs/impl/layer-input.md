@@ -18,7 +18,7 @@ layer's texture is handed to an **effect** instead of the matte stage.
 - `ParamKind::Layer { self_default }` (fx.rs) — declares the effect wants a
   reference to a layer (a depth/aux input). `self_default: true` means a fresh
   instance **added to a layer** starts pointed at that layer (K-288); the Lens
-  flare's Matte layer takes it, DoF's Depth layer does not.
+  flare's Matte row takes it, DoF's does not.
 - `EffectValue::Layer(Option<Uuid>)` (model.rs) — the referenced layer's id, or
   None when unset. Exactly the shape of `MatteRef.layer`, minus channel/invert.
 - Inspector: a **Layer picker** arm — a dropdown of the comp's layers by name
@@ -46,6 +46,30 @@ re-rendered, so there is nothing to choose between), and the frame key feeds a
 distinct marker and stops rather than recursing: this layer's own content is
 already in the key from the walk the parameter sits inside, and an adjustment
 layer's below-composite from the other layers' own entries.
+
+### One carriage since K-395
+
+A layer reference now arrives by one of **two** parallel lists, and which one an effect uses
+is not a table anyone maintains — it falls out of the schema's `MatteRole`
+(docs/impl/effect-registry.md §2.5b):
+
+- **The matte list** carries every effect's Matte row, whatever that effect means by it.
+  Depth of field's `depth` and the Lens flare's `matte` moved onto it when K-395 made them
+  two of the four effects that claim the matte inside their own maths; they had a list each
+  before, and the consolidation is the point — a matte is a matte, and only the *meaning*
+  differs.
+- **The layer-input list** carries what is not a matte. Two effects take one. Light wrap's
+  **Background** is a *plate* whose light spills round the foreground's edge, and
+  Texturize's **Texture** (K-405, docs/08 §3.68) is a surface pressed into the picture;
+  neither is a picture that says how much of the effect each pixel gets, and both sit
+  beside their effect's own (generic) Matte row rather than instead of it. **The test for
+  the next effect that wants a layer**: it belongs here, and not on the Matte row, exactly
+  when the effect still has a second thing to say about *where* — which is why §3.49's
+  displacement map is a matte and §3.68's texture is not.
+
+Everything below applies to both — one helper renders a referenced layer alone at the
+effect's raster, and both lists are counted by the same "the k-th consuming op binds the
+k-th slot" rule, each with its own counter.
 
 ## 2. Threading the referenced layer's texture (mirror mattes + the LUT §8)
 `run_ops` takes only `&[Resolved]` (Copy scalars), so — exactly as the LUT
@@ -209,7 +233,8 @@ Three additions to the DoF effect that read the same threaded depth pass, none
 touching the layer-input plumbing above (they are plain scalar params on the
 effect instance, carried in the resolved bag as ordinary values):
 
-- **Depth invert** (`depth_invert` bool). Applied to the depth *after* it is
+- **Invert** (`depth_invert` bool — the id predates K-395, which relabelled the
+  row and moved it beside the picker). Applied to the depth *after* it is
   read (`d' = 1 - d`) and *before* the circle-of-confusion, the near/far select
   and the Depth-map view — so it swaps near and far consistently everywhere. It
   acts on the resampled depth the kernel reads, so it is orthogonal to

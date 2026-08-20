@@ -8580,6 +8580,10 @@ impl SseDecode for crate::api::effect::BridgeEffectValue {
                 let mut var_field0 = <Option<uuid::Uuid>>::sse_decode(deserializer);
                 return crate::api::effect::BridgeEffectValue::Layer(var_field0);
             }
+            8 => {
+                let mut var_field0 = <Option<uuid::Uuid>>::sse_decode(deserializer);
+                return crate::api::effect::BridgeEffectValue::MaskPath(var_field0);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -9279,6 +9283,9 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
             }
             8 => {
                 return crate::api::effect::BridgeParamKind::Layer;
+            }
+            9 => {
+                return crate::api::effect::BridgeParamKind::MaskPath;
             }
             _ => {
                 unimplemented!("");
@@ -11595,6 +11602,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectValue {
             crate::api::effect::BridgeEffectValue::Layer(field0) => {
                 [7.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::effect::BridgeEffectValue::MaskPath(field0) => {
+                [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -12488,6 +12498,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeParamKind {
             ]
             .into_dart(),
             crate::api::effect::BridgeParamKind::Layer => [8.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::MaskPath => [9.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -13791,6 +13802,10 @@ impl SseEncode for crate::api::effect::BridgeEffectValue {
                 <i32>::sse_encode(7, serializer);
                 <Option<uuid::Uuid>>::sse_encode(field0, serializer);
             }
+            crate::api::effect::BridgeEffectValue::MaskPath(field0) => {
+                <i32>::sse_encode(8, serializer);
+                <Option<uuid::Uuid>>::sse_encode(field0, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -14321,6 +14336,9 @@ impl SseEncode for crate::api::effect::BridgeParamKind {
             }
             crate::api::effect::BridgeParamKind::Layer => {
                 <i32>::sse_encode(8, serializer);
+            }
+            crate::api::effect::BridgeParamKind::MaskPath => {
+                <i32>::sse_encode(9, serializer);
             }
             _ => {
                 unimplemented!("");

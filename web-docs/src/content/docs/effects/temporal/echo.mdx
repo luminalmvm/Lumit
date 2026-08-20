@@ -1,0 +1,72 @@
+---
+title: "Echo"
+description: "Composite a run of earlier frames for trails and speed lines."
+---
+
+Echo is a [Temporal](/effects/temporal/) effect.
+
+## What it is for
+
+Lays a run of the layer's own earlier frames over or behind the present one, each
+fainter than the last. Anything that moves leaves a trail behind it; anything
+still stays exactly as it was.
+
+This is the speed-line and ghosting effect. On a fast pan it is motion made
+visible; on a character crossing frame it is the trailing after-image that
+anime uses constantly; at a low decay with a light blend mode it is a soft
+luminous smear that reads as energy rather than as copies.
+
+The **Mode** control is what decides the character, and it is worth
+experimenting with before touching anything else. The first two entries are
+compositing *orders* — whether each echo sits behind the trail or over it — and
+everything after the divider is a light-combine blend, the same set a layer
+offers. Screen is the default because a screened trail adds light without
+darkening anything, which is what most trails want.
+
+It reads the layer's **source** frames rather than the output of the effects
+above it in the stack, so a grade applied before Echo will not appear in the
+trail. It works on footage layers.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Echoes** | Slider | 1 to 16 | 4 | - |
+| **Decay** | Slider | 0 to 1 | 0.6 | - |
+| **Mode** | Dropdown | Behind · In front · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Screen | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Echoes** — how many earlier frames are laid down. Each is one frame further
+  back, so this is both the length of the trail and the count of copies in it. On
+  a fast-moving subject a few echoes read as a trail; a full run reads as a smear.
+- **Decay** — how quickly each successive echo fades. Each one is multiplied down
+  again, so a low value means the trail is gone after two or three copies while a
+  high one keeps the oldest frames almost as strong as the newest. This is the
+  control that separates a subtle after-image from a long ghosting tail.
+- **Mode** — how each echo is combined into the trail. **Behind** puts each echo
+  behind the ones after it, which gives clean ghosting where the subject stays
+  solid; **In front** lays them over. After the divider come the light-combine
+  blends — Add and Screen build light, Multiply and Darken build shadow,
+  Difference and Exclusion give the inverted, electric look.
+- **Mix** — how much of the trailed picture replaces the original.
+
+## Related
+
+- [Fast motion blur](/effects/temporal/fast-motion-blur/)
+- [Datamosh](/effects/distortion/datamosh/)
+- [Blend modes](/use/blend-modes/)
+- [Retime](/use/retime/)
+- [Temporal](/effects/temporal/)
+- [Effects](/use/effects/)

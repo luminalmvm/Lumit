@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
+    "docs:effects": "node scripts/gen-effect-pages.mjs",
     "build": "astro build",
     "preview": "astro preview"
   },

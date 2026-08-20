@@ -1,0 +1,93 @@
+---
+title: Median
+description: "Replaces every pixel with the middle value of its neighbours, which removes speckle without softening an edge."
+---
+
+Median is a **Stylise** effect.
+
+## What it is for
+
+Every pixel is replaced by the **middle** value of the little square of pixels
+around it: line the neighbours up in order of brightness and take the one in the
+centre.
+
+That one idea does something no blur can. A stray white speck has no neighbours
+agreeing with it, so it never gets anywhere near the middle of the queue and
+disappears completely. A real edge has half its square on each side, so the
+middle value is still on the correct side of the edge, and the edge stays exactly
+where it was and exactly as crisp. Blur softens everything including the edges;
+median removes the specks and leaves the edges alone.
+
+The everyday uses are sensor speckle and single-pixel dropouts, salt-and-pepper
+noise from an aggressive codec, cleaning up a chroma key's fringe, and — at the
+top of the Radius range — a deliberate look: the picture flattens into paint-like
+patches with the outlines still drawn in.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Radius** | Slider | 0 to 3 | 2 | Pixels at composition size |
+| **Operate on alpha** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Radius** — how far the square reaches. 1 is a 3×3 vote and removes single
+  stray pixels; 2 is a 5×5 vote and cleans up small clusters; 3 is a 7×7 vote and
+  starts to read as a look rather than a repair. **0** turns the effect off
+  exactly.
+- **Operate on alpha** — off, the layer's transparency is left exactly as it
+  arrived and only the colour is filtered. On, the transparency is filtered too,
+  which moves the shape's outline. Leave it off unless the speckle is *in* the
+  matte.
+- **Mix** — how much of the filtered picture replaces the original. Useful at 40
+  or 50 for a clean-up that keeps some of the grain.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Radius stops at 3, and it really stops.** Everywhere else in Lumit a slider is
+a suggestion and a number you type is obeyed. Here it is not, and the reason is
+cost: the work grows as roughly the *fourth power* of the radius — about 45
+comparisons per pixel at radius 1, 325 at 2, 1 225 at 3, and seventeen thousand
+at 6. A control that quietly gave you radius 3 when you asked for 30 would be
+answering a different question from the one you asked, so it refuses instead.
+
+**It is the most expensive single pass in the catalogue.** Expect it to slow a
+preview down noticeably at radius 3 on a large composition. Drop the preview
+resolution while you work, or leave it until the grade is settled.
+
+**For a look rather than a repair, stack it.** Two Medians at radius 2 flatten
+further than one at radius 3 and cost less, and the outlines stay crisper. A
+[Find edges](/effects/stylise/find-edges/) or a
+[Posterize](/effects/colour/posterize/) after a Median is where the illustrated
+look comes from.
+
+**It is not a denoiser.** Median removes *outliers* — pixels that disagree with
+everything around them. Even, film-like grain has no outliers to find, so a
+Median will flatten it rather than remove it. That is a different problem and a
+different programme.
+
+**A half-resolution preview medians a half-size window**, because Radius is a
+length in pixels at composition size. That is the same rule every spatial control
+follows, and it means the preview is a fair picture of the export.
+
+## Related
+
+- [Blur](/effects/blur-sharpen/blur/)
+- [Mosaic](/effects/stylise/mosaic/)
+- [Find edges](/effects/stylise/find-edges/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

@@ -1,0 +1,103 @@
+---
+title: Shadow highlight
+description: "Opens up dark regions and holds back bright ones, judging each pixel by how bright its surroundings are."
+---
+
+Shadow highlight is a **Colour** effect.
+
+## What it is for
+
+Someone standing in front of a window comes out as a silhouette: the camera
+exposed for the window, and the face went to nothing. Lifting the whole picture
+would blow the window out. This lifts the dark *regions* and pulls down the
+bright ones, and leaves the rest alone.
+
+The word doing the work is **regions**. Whether a pixel is treated as a shadow
+is decided by how bright its *surroundings* are, not how bright it is — so a
+white shirt button inside a dark jacket is lifted along with the jacket instead
+of being singled out and left behind. That is what makes the result look like a
+better exposure rather than a washed-out one.
+
+Everyday uses: rescuing a backlit interview, opening up crushed blacks in
+graded footage, holding a blown sky, and putting a bit of local contrast into a
+flat log clip.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shadow amount** | Slider | 0 to 100 | 25 | - |
+| **Shadow tonal width** | Slider | 0 to 100 | 50 | - |
+| **Highlight amount** | Slider | 0 to 100 | 25 | - |
+| **Highlight tonal width** | Slider | 0 to 100 | 50 | - |
+| **Radius** | Slider | 0 to 25; up to 100 by typing | 1.5 | Per cent of the composition diagonal |
+| **Colour correction** | Slider | -100 to 100; higher by typing | 20 | - |
+| **Midtone contrast** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **More options** groups **Colour correction**, **Midtone contrast**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shadow amount** — how hard the dark regions are lifted. 100 trebles them.
+- **Shadow tonal width** — how far up the tone range counts as shadow. Low keeps
+  the lift in the deepest darks; high reaches into the midtones and starts to
+  look like an overall brightening.
+- **Highlight amount** — how hard the bright regions are pulled down. 100 takes
+  them to a third.
+- **Highlight tonal width** — how far down the range counts as highlight.
+- **Radius** — how large a neighbourhood decides whether a pixel is in shadow.
+  Small values pick out local contrast and can look gritty; large values behave
+  more like an overall tone curve. It is a per cent of the composition diagonal,
+  so it survives a change of resolution.
+- **Colour correction** — how much saturation is put back where the picture
+  moved. Opening a shadow reads as desaturated; this is the cure. 0 leaves
+  colour exactly alone.
+- **Midtone contrast** — the contrast the two lifts flatten, put back by hand.
+  0 is neutral; a little positive is usually worth having after a strong rescue.
+- **Mix** — how much of the corrected picture replaces the original. This is
+  where an imported After Effects "Blend with original" lands.
+- **Matte** and **Invert** — correct only part of the frame; see
+  [Effects](/use/effects/).
+
+## Notes
+
+**Nothing is softened.** The effect looks at a blurred copy of the picture to
+decide what is a shadow, but it never takes any colour from it — the blur is a
+question, not an answer. Detail comes out exactly as sharp as it went in.
+
+**If you see a halo, lower Radius or lower the amounts.** A bright ring around a
+dark object against a bright background is the signature of a local tone
+correction pushed too far, and it is the one artefact to watch for. The default
+pair is deliberately mild.
+
+**Amounts at 0 turn the effect off exactly**, and it does not even do the blur,
+so a disabled instance costs nothing.
+
+**There is no automatic mode.** After Effects picks its amounts from the frame's
+own histogram and then smooths that choice across neighbouring frames, which
+makes a grade whose answer at one frame depends on the shot around it. Lumit's
+amounts are yours, and stay where you put them; an imported project arrives with
+After Effects' default pair written in.
+
+**For a global lift rather than a local one**, use
+[Levels](/effects/colour/levels/), [Curves](/effects/colour/curves/) or
+[Exposure](/effects/colour/exposure/) — they are cheaper and more predictable
+when the whole picture needs the same treatment.
+
+## Related
+
+- [Curves](/effects/colour/curves/)
+- [Levels](/effects/colour/levels/)
+- [Exposure](/effects/colour/exposure/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

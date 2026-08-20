@@ -1,0 +1,71 @@
+---
+title: Posterize
+description: "Keeps a handful of evenly spaced shades and throws the rest away, so a smooth gradient becomes flat bands of colour."
+---
+
+Posterize is a **Colour** effect.
+
+## What it is for
+
+A photograph has millions of shades. Posterize keeps a handful of them and
+snaps every pixel to the nearest, so a smooth gradient turns into flat bands.
+It is the screen-print and poster look, the first half of a cel-shaded cartoon,
+and a quick way to make footage read as graphic rather than photographic.
+
+Each of the red, green and blue channels is stepped separately, which is why a
+low Levels count gives you bold flat colours rather than a grey staircase.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Levels** | Slider, whole numbers | 2 to 64; up to 255 by typing | 8 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Levels** — how many shades each channel keeps. **2** is a two-tone print,
+  **8** is the poster look, and anything past about 32 is hard to see at all.
+  Animate it to build a picture up out of its own bands.
+- **Mix** — how much of the banded picture replaces the original. Below 100 the
+  bands soften back toward the photograph, which is a gentler version of the
+  same look.
+- **Matte** and **Invert** — band only part of the frame, driven by another
+  layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+**The bands are spread where you can see them.** Lumit works in scene-linear
+light, which is a measure of photons rather than of what the eye does — so
+steps spaced evenly in light would pile up in the highlights and leave the
+shadows almost smooth. The steps here are spaced perceptually instead, so eight
+levels give you eight visible bands rather than two and a gradient.
+
+**Bright highlights keep going.** A specular above white is banded on the same
+ladder rather than snapped down to white, so a posterized picture still has
+values for [Glow](/effects/stylise/glow/) to find.
+
+**It works on the pixel's own colour, not its transparency.** A soft edge stays
+soft: coverage is untouched, so a title does not gain a jagged outline when you
+band it.
+
+**For a two-tone black-and-white stencil**, [Threshold](/effects/colour/threshold/)
+is the effect — Posterize at Levels 2 keeps colour, and Threshold does not.
+
+## Related
+
+- [Threshold](/effects/colour/threshold/)
+- [Tritone](/effects/colour/tritone/)
+- [Posterize time](/effects/temporal/posterize-time/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

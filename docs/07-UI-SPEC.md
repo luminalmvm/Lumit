@@ -1502,6 +1502,18 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   are untouched, and a project saved without a given name is byte-for-byte as it was.
   Parameter rows are **not** renameable — a parameter's name comes from the schema.
 
+  **Two parameters can share one row.** Two conventions fold, and both exist because the
+  pair is one idea and reads worse split in half: an `_x`/`_y` Float neighbour pair draws as
+  one **point row** with a shared stem label and a crosshair pick; and a **Layer** picker
+  draws with its `<id>_invert` switch beside it — the uniform **Matte** row of
+  [08-EFFECTS.md](08-EFFECTS.md) §2.6 (K-395), labelled "Matte" and "Invert", which every
+  effect has and which Depth of field and the Lens flare share rather than keeping private
+  synonyms. The folded switch never also gets a row of its own. Both are pairings by
+  *convention over the schema*, not a table in the panel naming effects: an effect that
+  declares a Layer row and an Invert next to it gets the row, and one that does not, does
+  not. (The Timeline's fold-out lists parameters flat and folds neither, because each row
+  there is a selectable property path.)
+
   **Round shape keeps its bubble** (K-092): the same rows, wrapped in floating-card chrome.
   The two shapes differ in chrome, not in layout.
 

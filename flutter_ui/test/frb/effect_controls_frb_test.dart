@@ -21,6 +21,7 @@ import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf, EffectParamRowFrb;
 import 'package:lumit_flutter/widgets/angle_dial.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'package:lumit_flutter/state/dock.dart';
@@ -167,7 +168,10 @@ void main() {
     testWidgets('an effect heading copies that one effect', (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
-      p.layer.addEffect(name: 'invert');
+      // Not the Invert effect: since K-395 every effect draws an "Invert"
+      // beside its Matte picker, so an effect NAMED Invert makes the heading
+      // ambiguous to find by text. Nothing here is about which effect it is.
+      p.layer.addEffect(name: 'vignette');
       await mount(tester, p);
 
       expect(p.uiState.clipboard.kind, isNull, reason: 'nothing copied yet');
@@ -178,8 +182,8 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-          find.byKey(ValueKey<String>('fx-menu-copy-${second.id()}')));
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-copy-${second.id()}')));
       await tester.pumpAndSettle();
 
       expect(p.uiState.clipboard.kind, ClipboardKind.effects,
@@ -218,8 +222,7 @@ void main() {
       await tester.tap(find.text(effectLabelOf(stack[2].name())));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
-      expect(p.uiState.selectedEffects.value,
-          [for (final e in stack) e.id()],
+      expect(p.uiState.selectedEffects.value, [for (final e in stack) e.id()],
           reason: 'Shift extended the pick down the stack, in stack order');
 
       // And that is what Copy takes: three effects, one .lumfx document.
@@ -238,14 +241,16 @@ void main() {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       final other = p.uiState.selectedComp!.addSolidLayer();
-      other.addEffect(name: 'invert');
+      // Vignette, not Invert: every matte row draws the word "Invert" since
+      // K-395, so the effect of that name is no longer a unique bit of text.
+      other.addEffect(name: 'vignette');
       await mount(tester, p);
       expect(find.text('Gaussian blur'), findsOneWidget);
 
       p.uiState.setSelection([other]);
       await tester.pump();
 
-      expect(find.text('Invert'), findsOneWidget,
+      expect(find.text('Vignette'), findsOneWidget,
           reason: "the panel shows the newly selected layer's stack");
       expect(find.text('Gaussian blur'), findsNothing,
           reason: 'and not the one it was showing before');
@@ -335,7 +340,8 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(ValueKey<String>('fx-menu-up-${second.id()}')));
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-up-${second.id()}')));
       await tester.pumpAndSettle();
       expect(p.layer.getEffects().map((e) => e.name()).toList(),
           before.reversed.toList());
@@ -636,7 +642,9 @@ void main() {
       expect(find.text('Blades'), findsOneWidget);
 
       // The matte rows are hidden while Source is Manual...
-      expect(find.text('Matte layer'), findsNothing);
+      // ("Matte" is this row's label since K-395 — the uniform word. In Manual
+      // the Source dropdown reads "Manual light", so nothing says it at all.)
+      expect(find.text('Matte'), findsNothing);
       expect(find.text('Threshold'), findsNothing);
 
       // ...and appear when Source type switches to Matte.
@@ -646,11 +654,12 @@ void main() {
       p.layer.setEffects(effects: effects);
       p.uiState.model.refresh();
       await tester.pump();
-      expect(find.text('Matte layer'), findsOneWidget);
+      expect(find.text('Matte'), findsNWidgets(2),
+          reason: 'the row label, and the Source dropdown now reading Matte');
       expect(find.text('Threshold'), findsOneWidget);
       expect(find.text('Threshold softness'), findsOneWidget);
 
-      // The Matte layer starts pointed at the layer the effect is ON
+      // The Matte starts pointed at the layer the effect is ON
       // (K-288), and the picker says so. Before this it defaulted to None
       // and the effect sat there detecting nothing until you went hunting
       // for another layer — which on an adjustment layer, whose only
@@ -665,14 +674,14 @@ void main() {
       // Back to Manual: the tint stays, the source-colour toggle and the
       // matte rows go.
       final again = p.layer.getEffects();
-      again.single
-          .setValue(id: 'source_type', value: const BridgeEffectValue.choice(0));
+      again.single.setValue(
+          id: 'source_type', value: const BridgeEffectValue.choice(0));
       p.layer.setEffects(effects: again);
       p.uiState.model.refresh();
       await tester.pump();
       expect(find.text('Light tint'), findsOneWidget);
       expect(find.text('Use source colour'), findsNothing);
-      expect(find.text('Matte layer'), findsNothing);
+      expect(find.text('Matte'), findsNothing);
     });
 
     // Blend (K-289): the Transparent/Black Background pair became a blend
@@ -712,6 +721,99 @@ void main() {
           reason: 'a user .lens file covers everything the palette leaves out');
     });
 
+    /// **The uniform Matte row** (K-395). Every effect can be driven by a
+    /// matte, and the way you say so is the same row everywhere: a layer
+    /// picker with an **Invert** beside it, on ONE row. The effect under test
+    /// is deliberately an arbitrary one — a plain Gaussian blur, which has no
+    /// idea what a matte is — because the point of injecting the pair is that
+    /// no effect had to be told.
+    testWidgets('every effect gets a Matte row, and binding a layer sticks',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final other = p.uiState.selectedComp!.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
+      final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
+      expect(picker, findsOneWidget,
+          reason: 'a blur declares no matte and gets one anyway');
+      expect(find.text('Matte'), findsOneWidget);
+      expect(find.text('Invert'), findsOneWidget);
+
+      // ONE row, not two adjacent ones: the switch is drawn *inside* the
+      // picker's row, and never gets a row of its own.
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey<String>('fx-row-$id-matte')),
+          matching: invert,
+        ),
+        findsOneWidget,
+        reason: 'the Invert sits beside its picker, on the same row',
+      );
+      expect(
+          find.byKey(ValueKey<String>('fx-row-$id-matte_invert')), findsNothing,
+          reason: 'and so has no row of its own to sit on');
+
+      // The switch writes, from where it now lives.
+      await tester.tap(invert);
+      await tester.pumpAndSettle();
+      expect(
+        p.layer.getEffects().single.getValue(id: 'matte_invert'),
+        isA<BridgeEffectValue_Bool>().having((v) => v.field0, 'invert', isTrue),
+        reason: 'ticking Invert reached the document',
+      );
+
+      // And the picker binds a layer, which reads back as that layer.
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(other.getInfo().name).last);
+      await tester.pumpAndSettle();
+      expect(
+        p.layer.getEffects().single.getValue(id: 'matte'),
+        isA<BridgeEffectValue_Layer>()
+            .having((v) => v.field0, 'matte', other.internallayerId),
+        reason: 'the bound matte round-trips through the document',
+      );
+    });
+
+    /// Depth of field owned the idea first, under its own ids (K-065 keeps
+    /// them). K-395 gives it the shared row and the shared words: `depth` is
+    /// labelled **Matte**, `depth_invert` is labelled **Invert**, and the two
+    /// draw as one row rather than one at the top and one three twirls down.
+    testWidgets('depth of field wears the same Matte row, ids unchanged',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'dof');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      expect(find.text('Matte'), findsOneWidget);
+      expect(find.text('Depth layer'), findsNothing,
+          reason: 'the private synonym is gone');
+      expect(find.text('Depth invert'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey<String>('fx-row-$id-depth')),
+          matching: find.byKey(ValueKey<String>('fx-bool-$id-depth_invert')),
+        ),
+        findsOneWidget,
+        reason: 'the same one-row treatment, under the same words',
+      );
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-bool-$id-depth_invert')));
+      await tester.pumpAndSettle();
+      expect(
+        p.layer.getEffects().single.getValue(id: 'depth_invert'),
+        isA<BridgeEffectValue_Bool>().having((v) => v.field0, 'invert', isTrue),
+        reason: 'the stored id did not move with the label',
+      );
+    });
+
     testWidgets('Enter renames the selected effect, and the name persists',
         (tester) async {
       // K-321: an effect instance can carry the user's own name. Enter on the
@@ -745,8 +847,7 @@ void main() {
       // An empty rename clears back to the label.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      await tester.enterText(
-          find.byKey(const ValueKey('fx-rename-field')), '');
+      await tester.enterText(find.byKey(const ValueKey('fx-rename-field')), '');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.layer.getEffects().single.getInfo().customName, isNull);
@@ -812,6 +913,98 @@ void main() {
       expect(greyed, contains('remove_edge_leak'));
       expect(greyed, isNot(contains('focus')));
       expect(greyed, isNot(contains('roundness')));
+    });
+
+    /// **The mask-path row** (K-408): one of *this layer's* masks, by name,
+    /// with **First mask** as the unset entry.
+    ///
+    /// The row is mounted directly with a synthetic parameter rather than
+    /// through one of the three built-ins that now declare one (Scribble,
+    /// Stroke and Vegas's Mask/Path source, K-409), because what is under test
+    /// is the **control**, not any effect: the entries it offers, the words it
+    /// uses, and that picking one reaches the document as a `MaskPath` value
+    /// rather than something else — against a real layer with real masks in a
+    /// real document. Which built-ins declare the row is asserted engine-side,
+    /// in `a_mask_path_row_declares_itself_and_defaults_to_the_first_mask`.
+    testWidgets('a mask-path row lists this layer’s masks, First mask first',
+        (tester) async {
+      final p = withLayer();
+      BridgeMask maskNamed(String name, double x) => BridgeMask(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: name,
+            vertices: [
+              BridgeVertex(
+                  x: x, y: 0, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+              BridgeVertex(
+                  x: x + 10, y: 0, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+              BridgeVertex(
+                  x: x + 10, y: 8, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            ],
+            closed: true,
+            inverted: false,
+            opacity: const BridgeScalar.static_(100),
+            mode: BridgeMaskMode.add,
+            feather: const BridgeScalar.static_(0),
+            expansion: const BridgeScalar.static_(0),
+            pathKeys: const [],
+          );
+      p.layer.addMask(mask: maskNamed('Outline', 0));
+      p.layer.addMask(mask: maskNamed('Highlight', 40));
+      p.uiState.model.refresh();
+
+      // Somewhere to write to, and something to read back from: an ordinary
+      // effect instance, whose value map the row's writes land in.
+      p.layer.addEffect(name: 'blur');
+      final fx = p.layer.getEffects().single;
+      final id = fx.id();
+      BridgeEffectValue? written;
+      const param = BridgeParamInfo(
+        id: 'path',
+        label: 'Path',
+        kind: BridgeParamKind.maskPath(),
+      );
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: EffectParamRowFrb(
+          effectId: id,
+          param: param,
+          value: const BridgeEffectValue.maskPath(),
+          comp: p.uiState.selectedComp!,
+          playheadFrame: 0,
+          onSeek: (_) {},
+          onWrite: (_, __, v) => written = v,
+          onLive: (_, __, ___) {},
+          ownerLayerId: p.layer.internallayerId,
+          ownerLayers: p.uiState.model.layers,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final picker = find.byKey(ValueKey<String>('fx-mask-$id-path'));
+      expect(picker, findsOneWidget);
+      expect(find.text('First mask'), findsOneWidget,
+          reason: 'an unset row means the layer’s first mask, not "None"');
+
+      // Open it: the entry, then this layer’s masks by their own names — and
+      // nothing from any other layer.
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      expect(find.text('Outline'), findsOneWidget);
+      expect(find.text('Highlight'), findsOneWidget);
+
+      await tester.tap(find.text('Highlight').last);
+      await tester.pumpAndSettle();
+      expect(
+        written,
+        isA<BridgeEffectValue_MaskPath>().having(
+          (v) => v.field0,
+          'mask',
+          p.layer.getMasks()[1].id,
+        ),
+        reason: 'picking a mask writes that mask, as a MaskPath value',
+      );
     });
 
     // Without the built library there is nothing to test against; the harness

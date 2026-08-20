@@ -1,0 +1,84 @@
+---
+title: "Glow"
+description: "Bloom the picture's bright areas outward, in real light."
+---
+
+Glow is a [Stylise](/effects/stylise/) effect.
+
+## What it is for
+
+Finds the bright parts of the picture and blooms them outward, the way light
+scatters inside a real lens. Highlights bleed into their surroundings; everything
+below the threshold is left alone.
+
+This is the single most useful effect in the family. It is what makes neon read
+as neon, what gives a muzzle flash weight, and what turns a flat capture into
+something that looks lit. On a montage it usually lives on an adjustment layer,
+so every layer beneath it blooms together as one picture rather than each
+glowing separately.
+
+The reason it looks like light rather than like a blurred grey copy is that it
+works in scene-linear light: a pixel blooms in proportion to how far *above* the
+threshold it sits, so a highlight at several times white blooms far harder than
+one that has only just crossed. Stock glows that work on display-referred pixels
+cannot do that, which is why theirs come out grey.
+
+Because it uses a chain of progressively smaller copies rather than one wide
+blur, a large radius costs close to what a small one does. There is no reason to
+be shy with it.
+
+It blooms transparency along with colour, so a glow spreads over transparent
+areas the way real light does — a bright logo on an empty layer will glow into
+the space around it rather than being cut off at its own edge.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | 0 to 4; higher by typing | 0.8 | - |
+| **Softness** | Slider | 0 to 1 | 0.5 | - |
+| **Radius** | Slider | 0 to 200; higher by typing | 24 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 10; higher by typing | 1 | - |
+| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** gates which pixels may seed the halo, before the bright pass: light only escapes from where the matte is bright, but it still spills outward across dark matte — which fading the finished glow cannot do. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Threshold** — how bright a pixel must be before it blooms. This is the control
+  that decides *what* glows, and it is where to start. Low values bloom most of
+  the picture into a haze; high values pick out only genuine highlights. Values
+  above white are allowed, and useful, when only the truly over-range parts
+  should glow.
+- **Softness** — how abruptly a pixel starts to bloom as it crosses the threshold.
+  A narrow value gives a hard boundary between glowing and not, which can pop as
+  a moving highlight crosses it; widening it eases the transition so brightening
+  areas fade into the bloom.
+- **Radius** — how far the bloom spreads, in pixels. It is authored in real pixels
+  and scaled with the preview resolution, so a draft matches the export. There is
+  no ceiling: a very wide atmospheric bloom is a matter of typing a larger number.
+- **Intensity** — how strong the bloom is when it is added back. At zero the
+  picture passes through untouched, which makes it the control to keyframe for a
+  bloom that swells on a beat.
+- **Tint** — the colour of the bloom. Neutral keeps each highlight's own colour;
+  tinting is how you get a warm haze off a cool picture, or a single-colour bloom
+  regardless of what is glowing.
+- **Mix** — how much of the bloomed picture replaces the original.
+
+## Related
+
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Light wrap](/effects/stylise/light-wrap/)
+- [Exposure](/effects/colour/exposure/)
+- [Layers](/use/layers/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

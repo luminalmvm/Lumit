@@ -1,0 +1,55 @@
+---
+title: "Exposure"
+description: "Brightness in photographic stops."
+---
+
+Exposure is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+The brightness lever, in the unit a camera uses. One stop is a doubling of the
+light, so plus one makes the picture twice as bright and minus one halves it.
+
+This is the first move in most grades: get the picture to a sensible brightness
+before deciding anything about its colour. It is also the cleanest way to match
+two shots captured minutes apart, or to bring a dark capture up without the crushing
+that a contrast control would cause.
+
+It scales the light rather than remapping it, so nothing is clipped on the way
+through. Highlights pushed above white stay above white and keep their detail,
+which matters if anything downstream — a [Glow](/effects/stylise/glow/), a
+[LUT](/effects/colour/lut/) — is going to read them.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Stops** | Slider | -5 to 5; any value by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Stops** — the doubling count. Whole numbers are doublings and halvings, and
+  fractional values are the fine adjustments you will actually spend most of
+  your time on. The slider covers the range worth dragging and you can type
+  further in either direction for a badly exposed source.
+- **Mix** — how much of the exposed picture replaces the original.
+
+## Related
+
+- [Contrast](/effects/colour/contrast/)
+- [Gamma](/effects/colour/gamma/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

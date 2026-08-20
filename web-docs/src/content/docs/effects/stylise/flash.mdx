@@ -1,0 +1,87 @@
+---
+title: "Flash"
+description: "A hit of colour on a beat, a keyframe, or a strobe grid."
+---
+
+Flash is a [Stylise](/effects/stylise/) effect.
+
+## What it is for
+
+Puts a burst of colour over the picture and takes it away again. The white flash
+on a kick drum is half the genre, and this is the effect that does it.
+
+It works three ways, chosen by **Mode**. **Manual** is keyframed: you place hits
+yourself on the Trigger control and each one decays away. **Trigger** takes its
+hits from the composition's beat markers, so a whole sequence flashes in time
+with the music without a single keyframe. **Strobe** does the same but fires only
+every so many beats, for a slower pulse over a fast tempo.
+
+The beat modes need beat markers to exist. Detect them from the audio first — see
+[Markers](/use/markers/) — and with none present the effect simply stays dark
+rather than complaining.
+
+The flash is added in linear light, so a bright flash genuinely blows the
+picture out rather than washing it toward grey, and anything downstream that
+reads highlights — a [Glow](/effects/stylise/glow/), for instance — will see it.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Manual · Trigger · Strobe | Manual | - |
+| **Trigger** | Slider | 0 to 1 | 0 | - |
+| **Duration** | Slider | 0 to 12; higher by typing | 2 | - |
+| **Shape** | Dropdown | Hard · Fade | Hard | - |
+| **Every Nth beat** | Slider | 1 to 8; higher by typing | 1 | - |
+| **Phase offset** | Slider | -8 to 8; any value by typing | 0 | - |
+| **Intensity** | Slider | 0 to 100; up to 400 by typing | 100 | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Decay** | Slider | 10 to 1000; down to 0 and up to 10000 by typing | 120 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode** — Manual for keyframed hits, Trigger for one flash per beat marker,
+  Strobe for one every so many beats.
+- **Trigger** — Manual mode's hits. Each keyframe on it is a hit at that
+  strength, and the flash falls away from there. This control does nothing in the
+  two beat-driven modes.
+- **Duration** — how long a beat-driven flash lasts, in frames. Short is a snap;
+  long enough and the flashes start to overlap into a constant wash.
+- **Shape** — Hard holds the flash at full strength for its whole duration and
+  then cuts, which is the aggressive, strobing option. Fade ramps it down across
+  the same span, which reads as a bloom of light rather than as a switch.
+- **Every Nth beat** — in Strobe mode, how many beats to skip between flashes. Two
+  halves the rate, four quarters it. It has no effect in the other modes.
+- **Phase offset** — shifts beat-driven flashes earlier or later, in frames.
+  Use it when the detected beat sits fractionally off where the hit actually
+  feels, which is common where the snare sits lazily behind the beat.
+- **Intensity** — a scale on the whole envelope, whichever mode produced it. This
+  is the master strength control, and it can be pushed past full for a flash that
+  blows well past white.
+- **Colour** — what colour the flash is. White is the default hit; a colour is how
+  you tie a flash to a palette, and since it is scene-linear it can be set
+  brighter than white.
+- **Decay** — how quickly a Manual hit falls away, in milliseconds. Short is a
+  snap, long is a lingering pulse. It applies to Manual mode only; the beat modes
+  use Duration and Shape instead.
+- **Mix** — how much of the flashed picture replaces the original.
+
+## Related
+
+- [Glow](/effects/stylise/glow/)
+- [Markers](/use/markers/)
+- [Audio](/use/audio/)
+- [Invert](/effects/colour/invert/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

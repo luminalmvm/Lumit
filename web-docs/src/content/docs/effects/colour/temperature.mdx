@@ -1,0 +1,58 @@
+---
+title: "Temperature"
+description: "The one-knob warm and cool shift."
+---
+
+Temperature is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+The warmth lever. Positive values lift red and drop blue, which reads as warmer
+and more like tungsten light; negative does the reverse for a cooler, bluer
+picture. Green is held where it is, because a warm-cool shift is a red-blue
+question and moving green as well is what makes a white balance go strange.
+
+Use it to take a cast off footage that was captured under the wrong balance, to
+match two shots that disagree about what white is, or — animated — to warm a
+montage into a sunset and back.
+
+It is deliberately a single control rather than a full white balance. Full
+deflection is a decisive orange or blue rather than a subtle nudge, so most work
+happens in the middle of the range.
+
+For a cast that is not on the red-to-blue axis — a green cast from strip
+lighting, for instance — use [Colour balance](/effects/colour/colour-balance/),
+which can move each channel independently.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Temperature** | Slider | -150 to 150; down to -200 and up to 200 by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Temperature** — positive is warmer, negative cooler. It is a plain number
+  rather than a figure in kelvin, because it shifts the picture from wherever it
+  already is instead of declaring what the light was.
+- **Mix** — how much of the shifted picture replaces the original.
+
+## Related
+
+- [Colour balance](/effects/colour/colour-balance/)
+- [Tint](/effects/colour/tint/)
+- [Exposure](/effects/colour/exposure/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

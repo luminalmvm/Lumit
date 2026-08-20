@@ -1,0 +1,111 @@
+---
+title: Bezier warp
+description: "Bends the four edges of the picture with twelve draggable points, and fills the inside smoothly."
+---
+
+Bezier warp is a **Distortion** effect.
+
+## What it is for
+
+[Corner pin](/effects/distortion/corner-pin/) lets you drag the four corners of
+the picture and keeps the edges between them straight. Bezier warp gives each
+edge two handles as well, so the edges can bow, and fills the inside smoothly
+between them.
+
+That is what you need to wrap a flat picture onto something curved: a label onto
+a bottle, a graphic onto a curved screen, artwork onto a page as it turns, a
+title onto a banner sagging between two poles.
+
+The four corners carry the same names and the same units Corner pin uses, so
+swapping one effect for the other costs no dragging.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Upper left x** | Slider | 0 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Upper left y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Upper right x** | Slider | 0 to 3840; any value by typing | 1920 | Pixels at composition size |
+| **Upper right y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Lower right x** | Slider | 0 to 3840; any value by typing | 1920 | Pixels at composition size |
+| **Lower right y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
+| **Lower left x** | Slider | 0 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Lower left y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
+| **Top left tangent x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
+| **Top left tangent y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Top right tangent x** | Slider | 0 to 3840; any value by typing | 1280 | Pixels at composition size |
+| **Top right tangent y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Right top tangent x** | Slider | 0 to 3840; any value by typing | 1920 | Pixels at composition size |
+| **Right top tangent y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
+| **Right bottom tangent x** | Slider | 0 to 3840; any value by typing | 1920 | Pixels at composition size |
+| **Right bottom tangent y** | Slider | 0 to 2160; any value by typing | 720 | Pixels at composition size |
+| **Bottom left tangent x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
+| **Bottom left tangent y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
+| **Bottom right tangent x** | Slider | 0 to 3840; any value by typing | 1280 | Pixels at composition size |
+| **Bottom right tangent y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
+| **Left top tangent x** | Slider | 0 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Left top tangent y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
+| **Left bottom tangent x** | Slider | 0 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Left bottom tangent y** | Slider | 0 to 2160; any value by typing | 720 | Pixels at composition size |
+| **Quality** | Slider, whole numbers | 1 to 12 | 8 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Top edge** groups **Top left tangent x**, **Top left tangent y**, **Top right tangent x**, **Top right tangent y**, and starts closed.
+- **Right edge** groups **Right top tangent x**, **Right top tangent y**, **Right bottom tangent x**, **Right bottom tangent y**, and starts closed.
+- **Bottom edge** groups **Bottom left tangent x**, **Bottom left tangent y**, **Bottom right tangent x**, **Bottom right tangent y**, and starts closed.
+- **Left edge** groups **Left top tangent x**, **Left top tangent y**, **Left bottom tangent x**, **Left bottom tangent y**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Upper left**, **Upper right**, **Lower right**, **Lower left** — the four
+  corners, in pixels at composition size. A fresh Bezier warp starts with them on
+  the frame's own corners.
+- **Top edge**, **Right edge**, **Bottom edge**, **Left edge** — each holds the two
+  handles that bow that edge. They start closed, because most work begins with the
+  corners. A handle sits a third of the way along its edge to begin with, which is
+  the arrangement that makes a perfectly straight edge.
+- **Quality** — how hard the effect works to place each pixel exactly. The default
+  of 8 is well past the point where an ordinary warp stops moving; raise it if a
+  very extreme bend looks approximate, lower it only if you are chasing speed.
+- **Mix** — how much of the warped picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The default is exactly the identity.** With every point where it starts, the
+picture comes back untouched — not softened by a resample, but pixel for pixel the
+same. You can leave the effect on a layer while you decide what to do with it.
+
+**Outside the bent shape is transparent.** The point of the effect is the shape,
+so the frame around it is empty rather than smeared. Put whatever should be behind
+it on a layer below.
+
+**Quality is accuracy, not style.** It does not change the shape of the warp, only
+how precisely each pixel finds its place, so it is not a control to animate.
+
+**It cannot do perspective.** A Bezier warp bends edges; it does not make a plane
+recede. If parallel lines in the picture need to converge, use
+[Corner pin](/effects/distortion/corner-pin/) — and note that a Bezier warp with
+its handles left at the thirds *is* a corner pin without the perspective.
+
+**Pull a shape inside out and it stops.** A patch dragged so far that it folds
+over itself has no single answer for the pixels in the fold; those come back
+empty rather than as garbage.
+
+## Related
+
+- [Corner pin](/effects/distortion/corner-pin/)
+- [Warp](/effects/distortion/warp/)
+- [Displacement map](/effects/distortion/displacement-map/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

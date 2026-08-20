@@ -372,6 +372,30 @@ class _GhostPill extends StatelessWidget {
   }
 }
 
+/// The panel header's live-mark under Round (K-394, §12.1): a small accent dot
+/// before the panel's name in its tab.
+///
+/// **Decorative and static.** It never blinks, never fills and never means
+/// anything — it is not a status light, and no state may be routed through it.
+/// Its diameter comes off the type scale (a third of the title's own size)
+/// rather than a pixel count, so it stays a dot beside the word at every UI
+/// scale instead of becoming a bead at one and a blob at another.
+class _HeaderDot extends StatelessWidget {
+  final TextStyle text;
+  final Color colour;
+  const _HeaderDot({required this.text, required this.colour});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = (text.fontSize ?? 11) / 3;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+    );
+  }
+}
+
 class _Divider extends StatefulWidget {
   final bool horizontal;
   final double gap;
@@ -593,13 +617,22 @@ class _TabPillState extends State<_TabPill> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final round = t.shape == ThemeShape.round;
     final Color fill;
     final Color textColour;
     Border? border;
     if (widget.active) {
-      fill = t.surface1;
-      textColour = t.textPrimary;
-      border = Border.all(color: t.accent, width: 1);
+      // Round's filled accent pill (K-394, §12.1): which tab is fronted reads
+      // from the fill, so the accent outline it wore instead has nothing left
+      // to say. The border stays, transparent — a border insets its child, and
+      // dropping it would shrink the active pill by 2 px and shuffle every tab
+      // beside it each time the front tab changed.
+      fill = round ? t.accent : t.surface1;
+      textColour = round ? t.surface0 : t.textPrimary;
+      border = Border.all(
+        color: round ? t.accent.withValues(alpha: 0) : t.accent,
+        width: 1,
+      );
     } else if (_hover) {
       fill = t.surface3;
       textColour = t.textPrimary;
@@ -617,7 +650,23 @@ class _TabPillState extends State<_TabPill> {
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         border: border,
       ),
-      child: Text(widget.title, style: t.bodyStrong.copyWith(color: textColour)),
+      child: round
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Accent, except on the pill that is itself filled with the
+                // accent — the label flips there for the same reason, and an
+                // accent dot on an accent field is not a dot. It is the same
+                // mark either way; nothing about it reports state.
+                _HeaderDot(
+                    text: t.bodyStrong,
+                    colour: widget.active ? textColour : t.accent),
+                const SizedBox(width: 5),
+                Text(widget.title,
+                    style: t.bodyStrong.copyWith(color: textColour)),
+              ],
+            )
+          : Text(widget.title, style: t.bodyStrong.copyWith(color: textColour)),
     );
     return _DragSource(
       panel: widget.panel,

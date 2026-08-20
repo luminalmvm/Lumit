@@ -158,8 +158,10 @@ pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
         FxCategory::BlurSharpen => "blur_sharpen",
         FxCategory::Colour => "colour",
         FxCategory::Distortion => "distortion",
+        FxCategory::Generate => "generate",
         FxCategory::Stylise => "stylise",
         FxCategory::Temporal => "temporal",
+        FxCategory::Transition => "transition",
         FxCategory::Utility => "utility",
     }
 }

@@ -1026,7 +1026,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             &MarkerContext::NONE
         )
         .packed(),
-        (0.5, 16, 1.0, MbView::Rendered)
+        (0.5, 16, 1.0, MbView::Rendered, MbQuality::Normal)
     );
     // A custom stack: 90° halves the streak; Samples rounds and clamps.
     let mut e = instantiate("motion_blur").unwrap();
@@ -1047,7 +1047,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             &MarkerContext::NONE
         )
         .packed(),
-        (0.25, 8, 0.5, MbView::Rendered)
+        (0.25, 8, 0.5, MbView::Rendered, MbQuality::Normal)
     );
     // The View row resolves the diagnostic choices (FX-19).
     let mut e = instantiate("motion_blur").unwrap();
@@ -1056,7 +1056,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             p.value = EffectValue::Choice(2);
         }
     }
-    let (.., view) = resolve_migrated::<effects::motion_blur::MotionBlur>(
+    let (.., view, quality) = resolve_migrated::<effects::motion_blur::MotionBlur>(
         &[e],
         0.0,
         1000.0,
@@ -1065,6 +1065,30 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
     )
     .packed();
     assert_eq!(view, MbView::Confidence);
+    assert_eq!(quality, MbQuality::Normal);
+    // The Quality row resolves the reconstruction tier (K-390); an index no
+    // menu can produce falls back to Normal, never to the expensive tier.
+    for (stored, want) in [
+        (1u32, MbQuality::High),
+        (0, MbQuality::Normal),
+        (7, MbQuality::Normal),
+    ] {
+        let mut e = instantiate("motion_blur").unwrap();
+        for p in e.params.iter_mut() {
+            if p.id == "quality" {
+                p.value = EffectValue::Choice(stored);
+            }
+        }
+        let (.., q) = resolve_migrated::<effects::motion_blur::MotionBlur>(
+            &[e],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        )
+        .packed();
+        assert_eq!(q, want, "stored quality index {stored}");
+    }
 }
 
 #[test]
@@ -1093,6 +1117,7 @@ fn cpu_motion_blur_still_and_zero_shutter_are_passthrough() {
         16,
         1.0,
         MbView::Rendered,
+        MbQuality::Normal,
     );
     assert_eq!(still, img, "still pixels do not blur");
 
@@ -1110,6 +1135,7 @@ fn cpu_motion_blur_still_and_zero_shutter_are_passthrough() {
         16,
         1.0,
         MbView::Rendered,
+        MbQuality::Normal,
     );
     assert_eq!(shut, img, "a closed shutter does not blur");
 
@@ -1126,26 +1152,181 @@ fn cpu_motion_blur_still_and_zero_shutter_are_passthrough() {
         16,
         0.0,
         MbView::Rendered,
+        MbQuality::Normal,
     );
     assert_eq!(mixed, img, "mix 0 is a passthrough");
 
-    // Zero confidence collapses the streak to nothing (FX-19), so even a real
-    // motion and open shutter leave the input bit-exact.
+    // A still *tile* is the one remaining way to get no blur: zero vectors mean
+    // there is nothing for an uncertain pixel to borrow either, so however
+    // suspect the confidence, the output is the bit-exact input.
     let zero = vec![0.0f32; n];
     let mut suspect = img.clone();
     cpu::motion_blur(
         &mut suspect,
         w,
         h,
-        &mu,
-        &mv,
+        &zu,
+        &zv,
         &zero,
         0.5,
         16,
         1.0,
         MbView::Rendered,
+        MbQuality::Normal,
     );
-    assert_eq!(suspect, img, "zero confidence does not blur");
+    assert_eq!(
+        suspect, img,
+        "a still tile does not blur, at any confidence"
+    );
+}
+
+/// The centrepiece of the K-390 reconstruction (docs/impl/optical-flow.md §4.5
+/// item 3), and a straight reversal of v1: **an unconfident pixel inside moving
+/// footage must still be blurred.** v1 scaled the streak by confidence, so a
+/// pixel the flow could not vouch for collapsed to no blur at all and read as a
+/// frozen speck in the middle of a smeared frame — worse to look at than a blur
+/// pointing slightly wrong. Here it borrows its neighbourhood's dominant motion
+/// at a tempered length.
+///
+/// The frame is one moving field at a real speed, split down the middle into a
+/// confident half and a wholly unconfident one, over noise so that any blurring
+/// is measurable as a drop in local variance.
+#[test]
+fn cpu_motion_blur_unconfident_pixels_borrow_the_neighbourhood_rather_than_freezing() {
+    let (w, h) = (64u32, 16u32);
+    let n = (w * h) as usize;
+    // Deterministic noise: a still frame would blur to nothing measurable.
+    let mut img = vec![0.0f32; n * 4];
+    for i in 0..n {
+        let v = ((i * 2654435761) % 251) as f32 / 250.0;
+        img[i * 4..i * 4 + 4].copy_from_slice(&[v, v, v, 1.0]);
+    }
+    // 24 px/frame to the right everywhere — one motion, so the neighbourhood
+    // genuinely has something to lend.
+    let u = vec![24.0f32; n];
+    let v = vec![0.0f32; n];
+    // Left half fully trusted, right half not trusted at all.
+    let conf: Vec<f32> = (0..n)
+        .map(|i| if (i as u32 % w) < w / 2 { 1.0 } else { 0.0 })
+        .collect();
+
+    let mut out = img.clone();
+    cpu::motion_blur(
+        &mut out,
+        w,
+        h,
+        &u,
+        &v,
+        &conf,
+        0.5,
+        32,
+        1.0,
+        MbView::Rendered,
+        MbQuality::Normal,
+    );
+
+    // Mean absolute difference from the input, over a column well inside each
+    // half (away from the seam, where the two behaviours meet and mix).
+    let moved = |x0: u32, x1: u32| {
+        let mut sum = 0.0f64;
+        let mut count = 0u32;
+        for y in 0..h {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 4) as usize;
+                sum += f64::from((out[i] - img[i]).abs());
+                count += 1;
+            }
+        }
+        sum / f64::from(count)
+    };
+    let confident = moved(4, 24);
+    let unconfident = moved(40, 60);
+
+    assert!(
+        confident > 0.05,
+        "the confident half must blur at all: {confident}"
+    );
+    // The point of the test: not "less blur", but blur of the same order —
+    // an unconfident region that reads as a sharp hole is the defect.
+    assert!(
+        unconfident > confident * 0.4,
+        "unconfident pixels must still be visibly blurred, not frozen: \
+         {unconfident} against {confident} in the trusted half"
+    );
+    // Tempered, though — a borrowed vector is a guess, and asserting the full
+    // length would be claiming knowledge the measurement does not have.
+    assert!(
+        unconfident < confident,
+        "the borrowed streak must be tempered below the trusted one: \
+         {unconfident} against {confident}"
+    );
+}
+
+/// Scatter as gather (docs/impl/optical-flow.md §4.5 item 3): a fast object
+/// must smear **over** the still background it passes. v1 gathered along each
+/// pixel's own vector, so a still background pixel gathered only from itself and
+/// stayed razor sharp right up to the moving object's edge — the visible half of
+/// the scatter problem. Here the background pixel also gathers along its
+/// neighbourhood's dominant motion, weighted by whether what it found there was
+/// moving fast enough to have reached it.
+#[test]
+fn cpu_motion_blur_a_fast_object_smears_over_the_still_background() {
+    let (w, h) = (64u32, 16u32);
+    let n = (w * h) as usize;
+    // A black frame with a bright bar in columns 20..28, on a still background.
+    let mut img = vec![0.0f32; n * 4];
+    for y in 0..h {
+        for x in 20..28u32 {
+            let i = ((y * w + x) * 4) as usize;
+            img[i..i + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+        }
+    }
+    // Only the bar moves, and fast; everything else is still. Full confidence
+    // throughout, so this isolates the scatter from the confidence blend.
+    let u: Vec<f32> = (0..n)
+        .map(|i| {
+            let x = i as u32 % w;
+            if (20..28).contains(&x) {
+                32.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let v = vec![0.0f32; n];
+    let conf = vec![1.0f32; n];
+
+    let mut out = img.clone();
+    cpu::motion_blur(
+        &mut out,
+        w,
+        h,
+        &u,
+        &v,
+        &conf,
+        0.5,
+        32,
+        1.0,
+        MbView::Rendered,
+        MbQuality::Normal,
+    );
+
+    // A still background pixel a few pixels ahead of the bar — inside the reach
+    // of a 16 px streak, and pitch black before the blur.
+    let ahead = ((8 * w + 32) * 4) as usize;
+    assert!(
+        out[ahead] > 0.02,
+        "the bar must smear forward onto the still background: {}",
+        out[ahead]
+    );
+    // Far outside the streak's reach, the background is untouched — the smear
+    // has a finite length, it is not a global haze.
+    let far = ((8 * w + 60) * 4) as usize;
+    assert!(
+        out[far] < 1e-4,
+        "beyond the streak the background stays clean: {}",
+        out[far]
+    );
 }
 
 #[test]
@@ -1178,6 +1359,7 @@ fn cpu_motion_blur_smears_along_the_flow() {
         16,
         1.0,
         MbView::Rendered,
+        MbQuality::Normal,
     ); // streak 4px
 
     // Indices on row 0 (a closure keeps clippy's erasing-op lint happy and
@@ -1226,6 +1408,7 @@ fn cpu_motion_blur_view_diagnostics() {
         16,
         1.0,
         MbView::MotionVectors,
+        MbQuality::Normal,
     );
     assert_eq!(&mv[0..4], &[0.5, 0.5, 0.5, 1.0]);
     assert_eq!(&mv[4..8], &[1.0, 0.5, 0.5, 1.0]);
@@ -1243,6 +1426,7 @@ fn cpu_motion_blur_view_diagnostics() {
         16,
         1.0,
         MbView::Confidence,
+        MbQuality::Normal,
     );
     assert_eq!(&cf[0..4], &[1.0, 1.0, 1.0, 1.0]);
     assert_eq!(&cf[4..8], &[0.25, 0.25, 0.25, 1.0]);
@@ -3574,12 +3758,12 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
 
     // Intensity 0 is the bit-exact identity (the neutral pin).
     let mut n = img.clone();
-    cpu::glow(&mut n, w, h, 4.0, 1.0, 0.5, 0.0, [1.0; 4], 1.0);
+    cpu::glow(&mut n, w, h, 4.0, 1.0, 0.5, 0.0, [1.0; 4], 1.0, &[], false);
     assert_eq!(n, img);
 
     // Mix 0 is the exact identity whatever the parameters.
     let mut m0 = img.clone();
-    cpu::glow(&mut m0, w, h, 4.0, 0.2, 0.1, 2.0, [1.0; 4], 0.0);
+    cpu::glow(&mut m0, w, h, 4.0, 0.2, 0.1, 2.0, [1.0; 4], 0.0, &[], false);
     assert_eq!(m0, img);
 
     // A frame entirely below the threshold gains nothing: the halo is
@@ -3590,13 +3774,25 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
         d
     };
     let mut quiet = dim.clone();
-    cpu::glow(&mut quiet, w, h, 4.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0);
+    cpu::glow(
+        &mut quiet,
+        w,
+        h,
+        4.0,
+        1.0,
+        0.5,
+        1.0,
+        [1.0; 4],
+        1.0,
+        &[],
+        false,
+    );
     assert_eq!(quiet, dim);
 
     // The spike blooms: neighbours gain light, the spike itself gains
     // its own halo back (additive, §2.1: nothing clips).
     let mut g = img.clone();
-    cpu::glow(&mut g, w, h, 3.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0);
+    cpu::glow(&mut g, w, h, 3.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[], false);
     assert!(g[at(10, 4)] > img[at(10, 4)], "neighbour catches the halo");
     assert!(g[mid] > img[mid], "the spike gains its own bloom");
 
@@ -3604,14 +3800,26 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     // enough that opaque coverage passes it, the transparent border
     // next to the footprint gains coverage — glow reads as light there.
     let mut a = img.clone();
-    cpu::glow(&mut a, w, h, 3.0, 0.05, 0.0, 1.0, [1.0; 4], 1.0);
+    cpu::glow(&mut a, w, h, 3.0, 0.05, 0.0, 1.0, [1.0; 4], 1.0, &[], false);
     assert!(a[at(1, 4) + 3] > 0.0, "coverage bloomed past the edge");
     assert!(a[at(8, 4) + 3] <= 1.0, "alpha saturates at full coverage");
 
     // Tint colours the halo, not the underlying image: with a red tint,
     // the transparent border gains red light only.
     let mut t = img.clone();
-    cpu::glow(&mut t, w, h, 3.0, 0.05, 0.0, 1.0, [1.0, 0.0, 0.0, 1.0], 1.0);
+    cpu::glow(
+        &mut t,
+        w,
+        h,
+        3.0,
+        0.05,
+        0.0,
+        1.0,
+        [1.0, 0.0, 0.0, 1.0],
+        1.0,
+        &[],
+        false,
+    );
     assert!(t[at(1, 4)] > 0.0, "red halo over the border");
     assert_eq!(t[at(1, 4) + 1], 0.0, "no green in a red-tinted halo");
 }
@@ -4566,12 +4774,7 @@ fn only_an_effect_with_a_derivation_pushes_beyond_its_schema() {
     );
     assert_eq!(
         bag.len(),
-        BUILTIN_DEFS
-            .get("vignette")
-            .expect("vignette is migrated")
-            .schema()
-            .params
-            .len(),
+        bagged_params("vignette"),
         "an effect with no resolve_derived pushes nothing beyond its schema"
     );
 
@@ -4583,12 +4786,7 @@ fn only_an_effect_with_a_derivation_pushes_beyond_its_schema() {
         1.0,
         &MarkerContext::NONE,
     );
-    let schema_len = BUILTIN_DEFS
-        .get("flash")
-        .expect("flash is migrated")
-        .schema()
-        .params
-        .len();
+    let schema_len = bagged_params("flash");
     assert_eq!(bag.len(), schema_len + 1);
     assert_eq!(
         bag[schema_len].0,
@@ -8084,6 +8282,10 @@ fn dof_declares_the_folded_aperture_surface() {
             // toggle three twirls away from the row it governs reads as
             // unrelated to it.
             "depth",
+            // K-395: the Invert that flips the matte sits beside the picker,
+            // on the one uniform row every effect draws. It used to live in the
+            // Depth map twirl; the stored id is untouched (K-065).
+            "depth_invert",
             "focus",
             "use_focus_point",
             "focus_point_x",
@@ -8103,7 +8305,6 @@ fn dof_declares_the_folded_aperture_surface() {
             "exposure",
             // Depth map: how the pass is READ.
             "depth_channel",
-            "depth_invert",
             "gamma",
             "remove_edge_leak",
             "detect_edge_threshold",
@@ -9379,6 +9580,88 @@ fn every_parameter_declares_a_unit() {
     // scaled the *resolved offsets* instead. Declaring the unit puts the scaling
     // one multiply earlier (K-388), which is the same wobble to within the
     // reassociation `shake_amplitude_rescales_as_the_old_offsets_did` bounds.
+    //
+    // The Generate family (K-398) brings nine more px@comp entries and no % diag
+    // ones. Gradient's two **points** must travel together or the ramp slides
+    // when the preview resolution changes; Fractal noise's three **cell sizes**
+    // and its **offset** likewise, and its Scale being a length rather than AE's
+    // per cent of an unnamed base is exactly what lets it be declared at all
+    // (docs/08 §3.37 decision 1). Fill and Noise declare none — neither has a
+    // spatial control.
+    //
+    // The distort batch brings ten more px@comp entries and, again, no % diag
+    // ones. Turbulent displace's **Amount** and **Size** are both lengths, for
+    // §3.37 decision 1's reason applied to a warp: a per cent of an unnamed base
+    // does not survive a resize. Its **Offset** and every other effect's
+    // **centre** are the point pairs K-260 requires be pixels. Tile declares only
+    // its Tile centre — the four per cents beside it are fractions of the raster
+    // and so do not follow it — and Lens distort only its Centre, since a field
+    // of view is an angle.
+    //
+    // The utility and transition batch (K-400) brings seven more, four % diag and
+    // three px@comp. **Channel blur's four radii** are % diag exactly as the
+    // Gaussian blur's is, being the same kernel four times over. **Drop shadow's
+    // Distance and Softness** are px@comp and must travel together, or a
+    // half-resolution preview would move the shadow and not soften it (or the
+    // reverse); its Direction is an angle and its Opacity a per cent, so neither
+    // is here. The **wipes' centres and feathers** are px@comp for K-260's reason
+    // and for the shadow's; their Completion is a per cent of the frame's own
+    // extent, which the kernel derives from the raster it is handed, so it needs
+    // no rescaling and gets none — Tile's four per cents again.
+    //
+    // Wave 2's Distort I batch (docs/08 §3.48-§3.52) brings eighteen more: two
+    // % diag and sixteen px@comp. **Corner pin's eight point coordinates** are
+    // pixels for K-260's reason and must travel together or a half-resolution
+    // preview would pin three corners and stretch the fourth. **Displacement
+    // map's two Amounts** are lengths for §3.38 decision 5's reason, a third
+    // time. **Twirl's and Spherize's radii** are % diag exactly as the blur's
+    // is — a reach into the picture, not a pixel-scale look — while their
+    // centres are px@comp points. Polar coordinates declares none at all: its
+    // centre and its radius scale are both functions of the raster the kernel is
+    // handed (§3.39's precedent), and its Interpolation is a per cent.
+    // Wave 2's Distort II batch (docs/08 §3.53-§3.57) brings twenty-eight more:
+    // three % diag and twenty-five px@comp. **Ripple's Radius, Wave height and
+    // Wave width** are % diag — the whole effect is a reach into the picture, so
+    // all three have to travel together or a resize would change the ripple's
+    // shape rather than its size; its centre is px@comp. **Wave warp's two
+    // lengths** are px@comp (AE's are raster pixels), and its Direction and
+    // Phase are angles. **Bezier warp's twenty-four point coordinates** are
+    // pixels for K-260's reason and must travel together, exactly as Corner
+    // pin's eight do. **Roughen edges' Border, Scale and Offset** are lengths
+    // for §3.37 decision 1's reason a fourth time — its Edge sharpness and
+    // Fractal influence are per cents and are not here. Warp declares none at
+    // all: every one of its controls is a per cent of the frame's own extent,
+    // which the kernel derives from the raster it is handed (§3.39's
+    // precedent).
+    //
+    // Wave 2's Stylise I batch (docs/08 §3.58-§3.63) brings exactly one, and it
+    // is a % diag: **Shadow highlight's Radius**, which is the Gaussian blur's
+    // own control under another name — how large a neighbourhood decides whether
+    // a pixel is in shadow — and so carries the blur's unit and the blur's
+    // default. The other five effects in the batch are pointwise and declare
+    // none: a rung, a cut, a stop, a density and six channel weights are all
+    // positions on the tone range, which has no size.
+    //
+    // Wave 2's Stylise II batch (docs/08 §3.64-§3.69) brings three, all px@comp
+    // and all deliberately pixel-scale looks. **Median's Radius** is the size of
+    // the neighbourhood being voted over — a Half-resolution preview must vote
+    // over half as many raster pixels to despeckle the same picture. **Emboss's
+    // and Texturize's Relief** are the separation between the two taps that make
+    // the relief, which is exactly the kind of pixel-scale look §2.3 names.
+    // Mosaic declares none: its two block counts are counts, and the block's
+    // size in pixels is derived from the raster the kernel is handed (§3.39's
+    // precedent). Find edges and Broadcast safe are pointwise.
+    //
+    // K-408's two consumers (docs/08 §3.78-§3.79) bring four, all px@comp and
+    // all pixel-scale looks. **Scribble's Stroke width, Spacing and Path
+    // overlap** are the pencil's own dimensions and must travel together, or a
+    // half-resolution preview would draw a hatch of a different density from
+    // the export's. **Stroke's Brush size** is Vegas' Width under another name.
+    // Neither declares one for the mask's own vertices, and that is the point of
+    // K-408's tolerance being a constant: the polyline is flattened once in
+    // px@comp and each consumer takes it to its own raster, so the geometry
+    // cannot acquire a second unit. Stroke's Spacing is a per cent *of the
+    // brush*, so it rides on Brush size and is not here.
     assert_eq!(
         spatial,
         vec![
@@ -9398,6 +9681,10 @@ fn every_parameter_declares_a_unit() {
             ("dof", "focus_point_y"),
             ("dof", "near_aperture"),
             ("dof", "far_aperture"),
+            ("channel_blur", "red"),
+            ("channel_blur", "green"),
+            ("channel_blur", "blue"),
+            ("channel_blur", "alpha"),
             ("transform", "anchor_x"),
             ("transform", "anchor_y"),
             ("transform", "position_x"),
@@ -9408,10 +9695,124 @@ fn every_parameter_declares_a_unit() {
             ("block_glitch", "block_amount"),
             ("block_glitch", "channel_offset"),
             ("scanlines", "scanline_period"),
+            ("turbulent_displace", "amount"),
+            ("turbulent_displace", "size"),
+            ("turbulent_displace", "offset_x"),
+            ("turbulent_displace", "offset_y"),
+            ("tile", "tile_centre_x"),
+            ("tile", "tile_centre_y"),
+            ("offset", "shift_x"),
+            ("offset", "shift_y"),
+            ("mirror", "centre_x"),
+            ("mirror", "centre_y"),
+            ("lens_distort", "centre_x"),
+            ("lens_distort", "centre_y"),
+            ("corner_pin", "upper_left_x"),
+            ("corner_pin", "upper_left_y"),
+            ("corner_pin", "upper_right_x"),
+            ("corner_pin", "upper_right_y"),
+            ("corner_pin", "lower_left_x"),
+            ("corner_pin", "lower_left_y"),
+            ("corner_pin", "lower_right_x"),
+            ("corner_pin", "lower_right_y"),
+            ("displacement_map", "horizontal_amount"),
+            ("displacement_map", "vertical_amount"),
+            ("twirl", "radius"),
+            ("twirl", "centre_x"),
+            ("twirl", "centre_y"),
+            ("spherize", "radius"),
+            ("spherize", "centre_x"),
+            ("spherize", "centre_y"),
+            ("ripple", "radius"),
+            ("ripple", "centre_x"),
+            ("ripple", "centre_y"),
+            ("ripple", "wave_height"),
+            ("ripple", "wave_width"),
+            ("wave_warp", "wave_height"),
+            ("wave_warp", "wave_width"),
+            ("bezier_warp", "upper_left_x"),
+            ("bezier_warp", "upper_left_y"),
+            ("bezier_warp", "upper_right_x"),
+            ("bezier_warp", "upper_right_y"),
+            ("bezier_warp", "lower_right_x"),
+            ("bezier_warp", "lower_right_y"),
+            ("bezier_warp", "lower_left_x"),
+            ("bezier_warp", "lower_left_y"),
+            ("bezier_warp", "top_left_tangent_x"),
+            ("bezier_warp", "top_left_tangent_y"),
+            ("bezier_warp", "top_right_tangent_x"),
+            ("bezier_warp", "top_right_tangent_y"),
+            ("bezier_warp", "right_top_tangent_x"),
+            ("bezier_warp", "right_top_tangent_y"),
+            ("bezier_warp", "right_bottom_tangent_x"),
+            ("bezier_warp", "right_bottom_tangent_y"),
+            ("bezier_warp", "bottom_left_tangent_x"),
+            ("bezier_warp", "bottom_left_tangent_y"),
+            ("bezier_warp", "bottom_right_tangent_x"),
+            ("bezier_warp", "bottom_right_tangent_y"),
+            ("bezier_warp", "left_top_tangent_x"),
+            ("bezier_warp", "left_top_tangent_y"),
+            ("bezier_warp", "left_bottom_tangent_x"),
+            ("bezier_warp", "left_bottom_tangent_y"),
+            ("gradient", "start_x"),
+            ("gradient", "start_y"),
+            ("gradient", "end_x"),
+            ("gradient", "end_y"),
+            ("fractal_noise", "scale"),
+            ("fractal_noise", "scale_width"),
+            ("fractal_noise", "scale_height"),
+            ("fractal_noise", "offset_x"),
+            ("fractal_noise", "offset_y"),
+            ("beam", "start_x"),
+            ("beam", "start_y"),
+            ("beam", "end_x"),
+            ("beam", "end_y"),
+            ("beam", "start_thickness"),
+            ("beam", "end_thickness"),
+            ("lightning", "origin_x"),
+            ("lightning", "origin_y"),
+            ("lightning", "direction_x"),
+            ("lightning", "direction_y"),
+            ("lightning", "core_radius"),
+            ("lightning", "glow_radius"),
+            ("radio_waves", "centre_x"),
+            ("radio_waves", "centre_y"),
+            ("radio_waves", "expansion"),
+            ("radio_waves", "stroke_width"),
+            ("vegas", "width"),
+            ("vegas", "segment_length"),
+            ("add_grain", "size"),
+            ("scribble", "stroke_width"),
+            ("scribble", "spacing"),
+            ("scribble", "path_overlap"),
+            ("stroke", "brush_size"),
+            ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
             ("lens_flare", "source_width"),
             ("lens_flare", "source_height"),
+            ("drop_shadow", "distance"),
+            ("drop_shadow", "softness"),
+            ("roughen_edges", "border"),
+            ("roughen_edges", "scale"),
+            ("roughen_edges", "offset_x"),
+            ("roughen_edges", "offset_y"),
+            ("median", "radius"),
+            ("emboss", "relief"),
+            ("texturize", "relief"),
+            ("linear_wipe", "centre_x"),
+            ("linear_wipe", "centre_y"),
+            ("linear_wipe", "feather"),
+            ("radial_wipe", "centre_x"),
+            ("radial_wipe", "centre_y"),
+            ("radial_wipe", "feather"),
+            ("venetian_blinds", "width"),
+            ("venetian_blinds", "feather"),
+            ("iris_wipe", "centre_x"),
+            ("iris_wipe", "centre_y"),
+            ("iris_wipe", "outer_radius"),
+            ("iris_wipe", "inner_radius"),
+            ("iris_wipe", "feather"),
         ]
     );
     // The two units are not interchangeable: % diag divides by the diagonal,
@@ -9473,6 +9874,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         Value::Layer(true),
         Value::File(1),
         Value::Vec4([1.0; 4]),
+        Value::MaskPath(true),
     ];
     let mut tags: Vec<u8> = Vec::new();
     for k in kinds {
@@ -9511,7 +9913,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
 /// the test above walks back over them to reach the tag byte.
 fn payload_len(v: Value) -> usize {
     match v {
-        Value::Bool(_) | Value::Layer(_) => 1,
+        Value::Bool(_) | Value::Layer(_) | Value::MaskPath(_) => 1,
         Value::Float(_) | Value::Int(_) | Value::Choice(_) | Value::File(_) => 4,
         Value::Colour(_) | Value::Vec4(_) => 16,
     }
@@ -9728,7 +10130,21 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             ),
             (effects::glow::Glow::MIX, Value::Float(60.0)),
         ],
-        &|p| cpu::glow(p, 4, 4, 2.0, 0.2, 0.5, 1.5, [1.0, 0.8, 0.5, 1.0], 0.6),
+        &|p| {
+            cpu::glow(
+                p,
+                4,
+                4,
+                2.0,
+                0.2,
+                0.5,
+                1.5,
+                [1.0, 0.8, 0.5, 1.0],
+                0.6,
+                &[],
+                false,
+            )
+        },
     );
     both(
         &effects::transform::TransformDef,
@@ -10044,6 +10460,21 @@ fn the_side_table_batch_stays_a_cpu_passthrough() {
 /// in lumit-render, where both halves are visible. What is pinned here is the
 /// half lumit-core owns — that the bag stays silent, so nobody is tempted to
 /// read the grade out of it.
+/// How many of `name`'s declared parameters reach the resolved bag: every kind
+/// but the two the *caller* decides — a File slot and a Layer binding, which
+/// ride beside the op as aux slots (K-387, and the injected Matte row of K-395
+/// with them).
+fn bagged_params(name: &str) -> usize {
+    BUILTIN_DEFS
+        .get(name)
+        .expect("a built-in")
+        .schema()
+        .params
+        .iter()
+        .filter(|p| !matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. }))
+        .count()
+}
+
 #[test]
 fn the_arena_carries_no_file_slot_or_layer_binding() {
     let lut = instantiate("lut").expect("lut is a built-in");
@@ -10067,12 +10498,721 @@ fn the_arena_carries_no_file_slot_or_layer_binding() {
     );
     assert_eq!(
         bag.len(),
-        declared - 1,
-        "the File row must not reach the arena — the cube is an aux slot"
+        bagged_params("lut"),
+        "neither the File row nor the injected Matte layer row may reach the \
+         arena — both are aux slots"
+    );
+    assert!(
+        bagged_params("lut") < declared,
+        "the skipped rows really are declared"
     );
     assert_eq!(
         resolve_migrated::<effects::lut::Lut>(&[lut], 0.0, 1000.0, 1.0, &MarkerContext::NONE).file,
         None,
         "the typed reader answers `unset`, never a default slot"
+    );
+}
+
+/// **Every effect has a Matte, and nobody had to write it down** (K-395).
+///
+/// The declaration is what makes the row meaningful on all thirty-odd effects
+/// from day one, and the whole point of injecting it is that a new effect cannot
+/// forget it — so the gate is the catalogue itself, not a list kept beside it.
+///
+/// The five that *claim* the matte are named here on purpose. Two of them owned
+/// the concept before K-395 and keep their stored ids (K-065): Depth of field's
+/// `depth`, the Lens flare's `matte`. Three take the injected row and simply mean
+/// something deeper by it: the Gaussian blur scales its radius, the Glow gates
+/// its seed, Turbulent displace scales its displacement vector, Set matte makes
+/// it the alpha and Displacement map makes it the map itself. Adding an eighth is
+/// a deliberate act, and it lands here.
+#[test]
+fn every_effect_carries_a_matte_row() {
+    use crate::fx::MatteRole;
+    for def in BUILTIN_DEFS.iter() {
+        let s = def.schema();
+        let claims = matches!(
+            s.match_name,
+            "dof"
+                | "lens_flare"
+                | "blur"
+                | "glow"
+                | "turbulent_displace"
+                | "set_matte"
+                | "displacement_map"
+        );
+        assert_eq!(
+            !s.matte.generic(),
+            claims,
+            "{} — only Depth of field, the Lens flare, the Gaussian blur, the Glow,              Turbulent displace, Set matte and Displacement map claim the matte              inside their own maths; anything else that wants a deeper meaning must              say so here too",
+            s.match_name
+        );
+        // Every effect takes one, whatever it means by it. `MatteRole::None`
+        // exists for an effect that genuinely cannot be driven by a picture and
+        // nothing declares it — if something ever does, this is where it is
+        // argued for.
+        let param = s
+            .matte
+            .param()
+            .unwrap_or_else(|| panic!("{} declares no matte at all", s.match_name));
+        // An override says what it means, in the schema, which is what the
+        // manual's tables print (K-395, `fx-reference.json`).
+        if let MatteRole::Own { meaning, .. } = s.matte {
+            assert!(
+                meaning.len() > 40 && !meaning.ends_with('.'),
+                "{} — an override must document what its matte means, in one                  sentence without a full stop: {meaning:?}",
+                s.match_name
+            );
+        }
+        let row =
+            s.params.iter().find(|p| p.id == param).unwrap_or_else(|| {
+                panic!("{} names {param} but declares no such row", s.match_name)
+            });
+        assert_eq!(row.label, "Matte", "{}", s.match_name);
+        assert!(
+            matches!(row.kind, ParamKind::Layer { .. }),
+            "{} — a matte is a layer",
+            s.match_name
+        );
+        // K-258's defaults: unset, and its Invert off. A `self_default = true`
+        // on the injected row would point every effect on every layer at its own
+        // input on the day it was added, which is a picture change disguised as
+        // a default. The flare's own row predates that and keeps its `true`
+        // (K-288) — its stored id and its behaviour are both a save's business.
+        if param == MATTE_PARAM && s.match_name != "lens_flare" {
+            assert_eq!(
+                row.kind,
+                ParamKind::Layer {
+                    self_default: false
+                },
+                "{} — a fresh Matte row starts unset",
+                s.match_name
+            );
+        }
+        // The Invert rides beside the picker, under the picker's own id — the
+        // injected `matte_invert`, or Depth of field's older `depth_invert`. The
+        // flare has none, and never had one.
+        let Some(invert) = s.params.iter().find(|p| p.id == format!("{param}_invert")) else {
+            assert_eq!(
+                s.match_name, "lens_flare",
+                "{} has a Matte row with no Invert beside it",
+                s.match_name
+            );
+            continue;
+        };
+        assert_eq!(invert.label, "Invert", "{}", s.match_name);
+        assert_eq!(
+            invert.kind,
+            ParamKind::Bool { default: false },
+            "{} — a fresh Invert starts off",
+            s.match_name
+        );
+    }
+}
+
+/// **The two that opted out still say the same words** (K-395).
+///
+/// "Their stored parameter ids do not change, only their presentation and
+/// prose": Depth of field's depth pass and the Lens flare's source matte keep
+/// `depth`/`depth_invert` and `matte`, and a project saved yesterday still
+/// loads — but on screen they read "Matte" and "Invert", the same row as
+/// everywhere else. The panel pairs a Layer row with `<id>_invert` by
+/// convention, so `depth_invert` sitting NEXT to `depth` is part of the
+/// contract, not a tidying: an Invert three twirls from its picker cannot be
+/// drawn beside it.
+#[test]
+fn the_effects_that_owned_the_matte_first_use_the_uniform_labels() {
+    let label = |effect: &str, id: &str| {
+        schema(effect)
+            .unwrap()
+            .params
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("{effect} lost its {id} row — K-065 says a save is a save"))
+            .label
+    };
+    assert_eq!(label("dof", "depth"), "Matte");
+    assert_eq!(label("dof", "depth_invert"), "Invert");
+    assert_eq!(label("lens_flare", "matte"), "Matte");
+
+    let dof: Vec<&str> = schema("dof").unwrap().params.iter().map(|p| p.id).collect();
+    let picker = dof.iter().position(|id| *id == "depth").unwrap();
+    assert_eq!(
+        dof[picker + 1],
+        "depth_invert",
+        "the Invert must be adjacent to its picker; the panel folds them into one row"
+    );
+}
+
+/// **A project saved before K-395 renders identically** (K-258, the campaign's
+/// hardest invariant, on the resolve side).
+///
+/// An instance stripped of both new parameters — which is exactly what every
+/// saved project is — must resolve to the same bag as a fresh one, bar the
+/// Invert switch reading its declared `false`. Nothing spatial, nothing
+/// numeric, nothing an effect's typed reader consults changes; and because the
+/// dissolve only runs when a matte is *bound*, an unset row is not a lerp by
+/// one, it is no pass at all (the picture half of this is
+/// `an_unbound_matte_is_byte_identical` in lumit-render).
+#[test]
+fn a_pre_matte_instance_resolves_to_the_same_numbers() {
+    for name in ["blur", "saturation", "glow", "vignette"] {
+        let fresh = instantiate(name).expect("a built-in");
+        let mut legacy = fresh.clone();
+        legacy
+            .params
+            .retain(|p| p.id != MATTE_PARAM && p.id != MATTE_INVERT_PARAM);
+        assert_eq!(
+            legacy.params.len() + 2,
+            fresh.params.len(),
+            "{name} — the pair really was there to strip"
+        );
+
+        let a = resolve_bag(
+            std::slice::from_ref(&fresh),
+            0.5,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        let b = resolve_bag(
+            std::slice::from_ref(&legacy),
+            0.5,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        assert_eq!(
+            a, b,
+            "{name} — a saved instance resolves to today's numbers"
+        );
+        assert_eq!(
+            a.iter()
+                .find(|(id, _)| *id == MATTE_INVERT_ID)
+                .map(|(_, v)| *v),
+            Some(Value::Bool(false)),
+            "{name} — and the absent switch reads its declared default"
+        );
+    }
+}
+
+/// The generic strength semantic itself (K-395, docs/08 §2.6), on the CPU side
+/// where the maths are readable: white is the effect in full, black is the
+/// input untouched, grey is part way, and Invert swaps the ends.
+#[test]
+fn the_matte_dissolves_the_effect_by_luma() {
+    let input = vec![0.2f32, 0.4, 0.6, 1.0];
+    let effected = vec![1.0f32, 0.0, 0.5, 0.5];
+    let matte = |v: f32| vec![v, v, v, 1.0];
+
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &matte(1.0), false);
+    assert_eq!(out, effected, "a white matte is today's output, exactly");
+
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &matte(0.0), false);
+    assert_eq!(out, input, "a black matte is a passthrough, exactly");
+
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &matte(1.0), true);
+    assert_eq!(out, input, "Invert turns white into the passthrough");
+
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &matte(0.0), true);
+    assert_eq!(out, effected, "…and black into the effect in full");
+
+    // Half way, and it is the *luma* that drives — a matte that is bright only
+    // in blue barely applies the effect at all (Rec. 709 gives blue 7 %).
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &matte(0.5), false);
+    for c in 0..4 {
+        assert!(
+            (out[c] - (input[c] + effected[c]) * 0.5).abs() < 1e-6,
+            "channel {c}: mid grey is half way"
+        );
+    }
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &[0.0, 0.0, 1.0, 1.0], false);
+    for c in 0..4 {
+        let want = input[c] * (1.0 - 0.0722) + effected[c] * 0.0722;
+        assert!(
+            (out[c] - want).abs() < 1e-6,
+            "channel {c}: blue weighs 0.0722"
+        );
+    }
+
+    // Above white, and below black, both clamp rather than overshooting: an HDR
+    // matte cannot drive the effect past its own output.
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &[8.0, 8.0, 8.0, 1.0], false);
+    assert_eq!(out, effected, "an HDR matte clamps at full strength");
+    let mut out = effected.clone();
+    cpu::matte_mix(&mut out, &input, &[-4.0, -4.0, -4.0, 1.0], false);
+    assert_eq!(out, input, "a negative matte clamps at none");
+}
+
+/// **The `#[mask_path]` attribute produces the row it claims to** (K-408).
+///
+/// Declared here rather than on a shipped effect because the seam landed ahead
+/// of its consumers — Scribble, Stroke and Vegas's Mask/Path source. A derive
+/// arm nobody exercises is an arm that turns out to be broken on the day
+/// somebody first writes it, which is the day it is least welcome.
+#[derive(Debug, Clone, Copy, PartialEq, lumit_fx_macros::Effect)]
+#[effect(
+    match_name = "test_walks_a_path",
+    label = "Walks a path",
+    version = 1,
+    category = Stylise,
+    cost = Cheap,
+    roi = Exact,
+)]
+struct WalksAPath {
+    /// Bare `#[mask_path]`: the self-default is **First mask**, the other way
+    /// round from `#[layer]`'s, because an effect that wants a path wants the
+    /// one path most layers have.
+    #[mask_path]
+    path: bool,
+}
+
+/// The opt-out spelling: a path input that genuinely means nothing until it is
+/// pointed somewhere.
+#[derive(Debug, Clone, Copy, PartialEq, lumit_fx_macros::Effect)]
+#[effect(
+    match_name = "test_maybe_walks_a_path",
+    label = "Maybe walks a path",
+    version = 1,
+    category = Stylise,
+    cost = Cheap,
+    roi = Exact,
+)]
+struct MaybeWalksAPath {
+    #[mask_path(self_default = false, label = "Outline")]
+    path: bool,
+}
+
+#[test]
+fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
+    let schema = <WalksAPath as EffectMetadata>::SCHEMA;
+    // The one predicate both `build.rs` and `run_ops` key on.
+    assert_eq!(schema.mask_path(), Some(("path", true)));
+    let row = schema
+        .params
+        .iter()
+        .find(|p| p.id == "path")
+        .expect("the declared row");
+    assert!(matches!(
+        row.kind,
+        ParamKind::MaskPath { self_default: true }
+    ));
+    assert_eq!(row.label, "Path", "sentence case from the field name");
+    assert_eq!(row.unit, Unit::Raw, "a mask reference is not a measurement");
+
+    // The opt-out, and a label of its own.
+    let maybe = <MaybeWalksAPath as EffectMetadata>::SCHEMA;
+    assert_eq!(maybe.mask_path(), Some(("path", false)));
+    assert_eq!(maybe.params[0].label, "Outline");
+
+    // The bag carries the choice's presence, not the geometry — and the derive's
+    // reader pulls it back out through `Params::mask_named`, so an effect can
+    // read its own row without knowing about the carriage.
+    let id = ParamId::new("path");
+    let bound = [(id, Value::MaskPath(true))];
+    assert!(WalksAPath::read(Params::new(&bound)).path);
+    assert!(!WalksAPath::read(Params::EMPTY).path);
+    // A value of another kind reads as unset rather than as anything else
+    // (K-258's rule, every typed reader).
+    let wrong = [(id, Value::Layer(true))];
+    assert!(!WalksAPath::read(Params::new(&wrong)).path);
+
+    // The seam's consumers have landed (K-408, docs/08 §3.76 §3.78 §3.79), so
+    // the "nothing declares one yet" line this test used to end on is gone; what
+    // stands in its place is that every declared row is one the carriage knows
+    // about, which is `the_mask_path_list_is_one_to_one_with_the_ops_that_
+    // declare_a_path` in lumit-render and the three oracles in lumit-gpu.
+    let consumers: Vec<&str> = BUILTINS
+        .iter()
+        .filter(|s| s.mask_path().is_some())
+        .map(|s| s.match_name)
+        .collect();
+    assert_eq!(consumers, vec!["vegas", "scribble", "stroke"]);
+}
+
+/// A fresh instance's mask-path row is **unset**, which is the "First mask"
+/// entry — not an id written at instantiation the way a self-default layer
+/// reference is (K-408). An effect is usually added before the mask is drawn,
+/// so there is no id to write; resolving it late is also what keeps it pointing
+/// at the first mask when the masks are reordered.
+#[test]
+fn a_fresh_mask_path_row_is_the_first_mask_entry() {
+    assert_eq!(
+        default_param_value(&ParamKind::MaskPath { self_default: true }),
+        EffectValue::MaskPath(None)
+    );
+    assert_eq!(
+        default_param_value(&ParamKind::MaskPath {
+            self_default: false
+        }),
+        EffectValue::MaskPath(None)
+    );
+}
+
+/// **A chain is trimmed by distance along it, not by where it is** (K-408,
+/// docs/08 §3.78) — which is what makes Start and End behave like a pen drawing
+/// the thing, and is the whole reason the pieces carry an arc length.
+#[test]
+fn a_path_chain_is_trimmed_by_the_distance_along_it() {
+    let straight: Vec<[f32; 2]> = (0..=10).map(|i| [i as f32 * 10.0, 0.0]).collect();
+    let mut p = cpu::PathDrawParams::blank();
+
+    cpu::path_chain(&straight, 0.0, 100.0, &mut p);
+    let whole: f32 = (0..p.count as usize)
+        .map(|i| (p.segments[i][2] - p.segments[i][0]).abs())
+        .sum();
+    assert!((whole - 100.0).abs() < 1e-3, "the whole line is 100 long");
+    assert_eq!(p.arcs[0], 0.0, "the first piece starts at nothing along");
+
+    // Half the line is half the length, and it starts where the pen started.
+    cpu::path_chain(&straight, 0.0, 50.0, &mut p);
+    let half: f32 = (0..p.count as usize)
+        .map(|i| (p.segments[i][2] - p.segments[i][0]).abs())
+        .sum();
+    assert!(
+        (half - 50.0).abs() < 1e-3,
+        "End 50 draws half of it, got {half}"
+    );
+    assert_eq!(p.segments[0][0], 0.0);
+
+    // A window in the middle keeps its **absolute** place along, so a dash's
+    // phase does not jump when the ends are pulled in.
+    cpu::path_chain(&straight, 40.0, 60.0, &mut p);
+    assert!(p.count > 0);
+    assert!(
+        (p.arcs[0] - 40.0).abs() < 1e-3,
+        "a trimmed drawing must keep its distance along, got {}",
+        p.arcs[0]
+    );
+
+    // Start above End is the same window, not an empty one — a keyframe pair
+    // that crosses over must not blank the effect.
+    let mut back = cpu::PathDrawParams::blank();
+    cpu::path_chain(&straight, 60.0, 40.0, &mut back);
+    assert_eq!(back.count, p.count);
+    assert_eq!(back.segments[0], p.segments[0]);
+}
+
+/// **Past the budget a chain is coarsened, never cut** (docs/08 §3.78): the
+/// whole shape still draws, with fewer and straighter pieces. A truncation
+/// would draw half a shape, which is the failure somebody notices.
+#[test]
+fn a_chain_past_the_budget_coarsens_rather_than_stopping() {
+    let n = cpu::PATH_PRIMITIVES * 3;
+    let long: Vec<[f32; 2]> = (0..=n).map(|i| [i as f32, 0.0]).collect();
+    let mut p = cpu::PathDrawParams::blank();
+    cpu::path_chain(&long, 0.0, 100.0, &mut p);
+    assert!(p.count as usize <= cpu::PATH_PRIMITIVES, "the budget holds");
+    let last = p.segments[p.count as usize - 1][2];
+    assert!(
+        (last - n as f32).abs() < 1e-3,
+        "the coarsened chain must still reach the end, stopped at {last}"
+    );
+}
+
+/// **A scribble lifts the pen across a hole** (docs/08 §3.78): a line that
+/// crosses a notched shape twice must not be joined through the gap.
+#[test]
+fn a_scribble_lifts_the_pen_across_a_notch() {
+    // A U: two uprights and a floor, so a horizontal line high up crosses it
+    // twice with nothing in between.
+    let u: Vec<[f32; 2]> = vec![
+        [0.0, 0.0],
+        [30.0, 0.0],
+        [30.0, 100.0],
+        [70.0, 100.0],
+        [70.0, 0.0],
+        [100.0, 0.0],
+        [100.0, 130.0],
+        [0.0, 130.0],
+    ];
+    let chain = cpu::scribble_chain(&u, 0.0, 10.0, 0.0);
+    assert!(
+        chain.iter().any(|q| !q[0].is_finite()),
+        "a notched shape must lift the pen at least once"
+    );
+
+    // And with the lifts honoured, nothing is drawn down the middle of the
+    // notch — the hole the U has.
+    let mut p = cpu::PathDrawParams::blank();
+    cpu::path_chain(&chain, 0.0, 100.0, &mut p);
+    p.half_width = 2.0;
+    p.opacity = 1.0;
+    assert!(p.count > 0, "the U must be hatched");
+    // Scanned down a column rather than sampled at a point, because where the
+    // strokes fall between the two is the spacing's business and not this
+    // test's: what matters is that the notch has none of them and the upright
+    // has some.
+    let down = |x: f32| {
+        (5..95)
+            .map(|y| cpu::path_draw_sample(x, y as f32, &p))
+            .fold(0.0f32, f32::max)
+    };
+    assert_eq!(down(50.0), 0.0, "the scribble drew through the notch");
+    assert!(down(15.0) > 0.0, "the scribble missed the U's left upright");
+    assert!(
+        down(85.0) > 0.0,
+        "the scribble missed the U's right upright"
+    );
+
+    // A convex shape needs no lift at all: the pen crosses, hops down the edge,
+    // and comes back, which is what makes it one continuous scribble.
+    let square: Vec<[f32; 2]> = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
+    assert!(
+        cpu::scribble_chain(&square, 0.0, 10.0, 0.0)
+            .iter()
+            .all(|q| q[0].is_finite()),
+        "a convex shape must be one unbroken line"
+    );
+}
+
+/// **A scribble widens its own spacing rather than filling half the shape**
+/// (docs/08 §3.78): the degradation that keeps the picture whole, docs/14 §4.
+#[test]
+fn a_scribble_too_fine_for_its_budget_widens_instead_of_stopping() {
+    let square: Vec<[f32; 2]> = vec![[0.0, 0.0], [1000.0, 0.0], [1000.0, 1000.0], [0.0, 1000.0]];
+    // One stroke every half pixel over a thousand of them: far past the budget.
+    let chain = cpu::scribble_chain(&square, 0.0, 0.5, 0.0);
+    assert!(chain.len() <= cpu::PATH_PRIMITIVES);
+    let lowest = chain
+        .iter()
+        .filter(|q| q[1].is_finite())
+        .fold(f32::INFINITY, |m, q| m.min(q[1]));
+    let highest = chain
+        .iter()
+        .filter(|q| q[1].is_finite())
+        .fold(f32::NEG_INFINITY, |m, q| m.max(q[1]));
+    assert!(
+        lowest < 20.0 && highest > 980.0,
+        "the hatch must still span the shape, got {lowest}..{highest}"
+    );
+}
+
+/// **A brush stroke is the swept path while its stamps overlap, and separate
+/// dots once they do not** (docs/08 §3.79's second decision) — the same picture
+/// either way, and the only form that fits a long path with a fine brush.
+#[test]
+fn a_brush_stroke_changes_shape_when_its_stamps_come_apart() {
+    let mut m = crate::mask::Mask::ellipse(200.0, 200.0, 150.0, 150.0);
+    m.name = "Ring".into();
+    let poly = crate::mask::mask_path_at(std::slice::from_ref(&m), None, true, 0.0);
+    assert!(!poly.is_empty(), "the ellipse must flatten to something");
+
+    let mut close = cpu::PathDrawParams::blank();
+    cpu::stroke_geometry(&poly, 1.0, 20.0, 3.0, 0.0, 100.0, &mut close);
+    // Overlapping: the pieces have length, because they are the path itself.
+    let swept = (0..close.count as usize)
+        .filter(|&i| {
+            (close.segments[i][2] - close.segments[i][0]).abs()
+                + (close.segments[i][3] - close.segments[i][1]).abs()
+                > 1e-3
+        })
+        .count();
+    assert_eq!(
+        swept, close.count as usize,
+        "a continuous stroke must be drawn as the path it sweeps"
+    );
+
+    let mut apart = cpu::PathDrawParams::blank();
+    cpu::stroke_geometry(&poly, 1.0, 20.0, 60.0, 0.0, 100.0, &mut apart);
+    // Well apart: every piece is a stamp, with no length at all.
+    for i in 0..apart.count as usize {
+        let s = apart.segments[i];
+        assert_eq!((s[0], s[1]), (s[2], s[3]), "a dot must have no length");
+    }
+    // And they are spaced by what was asked for, round the path.
+    assert!(apart.count >= 2);
+    assert!(
+        (apart.arcs[1] - apart.arcs[0] - 60.0).abs() < 1e-3,
+        "the dots must be laid at the spacing asked for"
+    );
+
+    // Start and End trim the dots too, and by distance round the path.
+    let mut window = cpu::PathDrawParams::blank();
+    cpu::stroke_geometry(&poly, 1.0, 20.0, 60.0, 25.0, 75.0, &mut window);
+    assert!(window.count < apart.count, "a window must draw fewer dots");
+    assert!(
+        window.arcs[0] > poly.length() * 0.24,
+        "the first dot must start at the Start mark"
+    );
+
+    // An absent mask builds nothing, which is the documented no-op.
+    let mut none = cpu::PathDrawParams::blank();
+    cpu::stroke_geometry(
+        &crate::mask::MaskPolyline::default(),
+        1.0,
+        20.0,
+        3.0,
+        0.0,
+        100.0,
+        &mut none,
+    );
+    assert_eq!(none.count, 0);
+}
+
+/// **A path effect's numbers scale with the raster, and its geometry does not
+/// scale twice** (K-408, docs/08 §2.3): the seam flattens once in px@comp and
+/// each consumer takes it to the raster it is drawing at.
+#[test]
+fn a_path_drawings_geometry_follows_the_preview_factor() {
+    use crate::fx::effects::stroke::Stroke;
+    let m = crate::mask::Mask::ellipse(100.0, 100.0, 60.0, 40.0);
+    let poly = crate::mask::mask_path_at(std::slice::from_ref(&m), None, true, 0.0);
+    let s = Stroke::read(Params::EMPTY);
+
+    let full = s.packed(&poly, 1.0);
+    let half = s.packed(&poly, 0.5);
+    assert!(full.count > 0 && half.count > 0);
+    // The mask's own vertices halve; the brush's width is a declared Px row and
+    // is halved by the resolve step instead, so it is *not* halved again here.
+    assert!(
+        (half.segments[0][0] * 2.0 - full.segments[0][0]).abs() < 1e-3,
+        "the polyline must follow the raster"
+    );
+    assert_eq!(
+        half.half_width, full.half_width,
+        "a declared Px row is scaled at resolve, never a second time here"
+    );
+}
+
+/// **The point a distance along a path is a lookup, not a re-measurement**
+/// (K-408): every consumer asks the polyline and gets the same answer.
+#[test]
+fn a_polyline_answers_where_a_distance_along_it_lands() {
+    let m = crate::mask::Mask::ellipse(0.0, 0.0, 50.0, 50.0);
+    let poly = crate::mask::mask_path_at(std::slice::from_ref(&m), None, true, 0.0);
+    let len = poly.length();
+    assert!(len > 250.0, "a circle of radius 50 is about 314 round");
+
+    // The ends, and a distance past either of them, which clamps rather than
+    // wrapping or panicking.
+    assert_eq!(poly.point_at(0.0), poly.points[0]);
+    assert_eq!(poly.point_at(len), *poly.points.last().expect("closed"));
+    assert_eq!(poly.point_at(-5.0), poly.point_at(0.0));
+    assert_eq!(poly.point_at(len * 2.0), poly.point_at(len));
+
+    // Every point of a circle is its radius from the centre, whatever fraction
+    // of the way round it is asked for.
+    for k in 0..=20 {
+        let q = poly.point_at(len * k as f32 / 20.0);
+        let r = q[0].hypot(q[1]);
+        assert!((r - 50.0).abs() < 0.5, "at {k}/20 the radius was {r}");
+    }
+
+    // An empty polyline answers rather than panicking (docs/14 §4).
+    assert_eq!(
+        crate::mask::MaskPolyline::default().point_at(3.0),
+        [0.0, 0.0]
+    );
+}
+
+/// **Vegas' Mask/Path half greys the rows that stop meaning anything**, and its
+/// contour half greys the mask (docs/08 §3.76, K-408). The render reads the same
+/// two predicates to decide whether to flatten a path at all, so this is not a
+/// cosmetic claim.
+#[test]
+fn vegas_offers_a_mask_only_while_it_is_reading_one() {
+    use crate::fx::effects::vegas::Vegas;
+    let schema = &<Vegas as EffectMetadata>::SCHEMA;
+    assert_eq!(schema.mask_path(), Some(("path", true)));
+
+    let on_a_contour = instantiate("vegas").expect("vegas");
+    let mut on_a_path = on_a_contour.clone();
+    for prop in &mut on_a_path.params {
+        if prop.id == "source" {
+            prop.value = EffectValue::Choice(Vegas::SOURCE_MASK_PATH);
+        }
+    }
+    assert!(param_enabled(&on_a_path, "path"));
+    assert!(!param_enabled(&on_a_path, "threshold"));
+    assert!(!param_enabled(&on_a_contour, "path"));
+    assert!(param_enabled(&on_a_contour, "threshold"));
+}
+
+/// **The raster factor and the waver's tick reach the bag** (K-408, K-409). The
+/// three path effects each read a number at draw time that no row carries: how
+/// many raster pixels a comp pixel is, since the seam hands its vertices over in
+/// px@comp, and — for Scribble — where in the waver's evolution this frame sits.
+/// Both are pushed by `resolve_derived`, and nothing else in the chain would
+/// notice if they stopped being: `packed` would quietly fall back to its
+/// defaults and the drawing would come out at the wrong size on a Half preview.
+#[test]
+fn a_path_effect_is_told_the_raster_and_the_clock_at_resolve() {
+    use crate::fx::effects::{scribble::Scribble, stroke::Stroke, vegas::Vegas};
+
+    let at = |name: &str, lt: f64, px_scale: f32| {
+        let e = instantiate(name).expect(name);
+        resolve_bag(
+            std::slice::from_ref(&e),
+            lt,
+            1000.0,
+            px_scale,
+            &MarkerContext::NONE,
+        )
+    };
+    let float = |bag: &[(ParamId, Value)], id: ParamId| Params::new(bag).float(id, f32::NAN);
+
+    for (name, id) in [
+        ("scribble", Scribble::DERIVED_PX_SCALE),
+        ("stroke", Stroke::DERIVED_PX_SCALE),
+        ("vegas", Vegas::DERIVED_PX_SCALE),
+    ] {
+        assert_eq!(
+            float(&at(name, 0.0, 0.5), id),
+            0.5,
+            "{name} was not told the raster"
+        );
+        assert_eq!(
+            float(&at(name, 0.0, 1.0), id),
+            1.0,
+            "{name} was not told the raster"
+        );
+    }
+
+    // Scribble's tick: Static holds at nothing whatever the clock says, and the
+    // default wiggle type *is* Static, so a fresh instance never moves.
+    let tick = |lt: f64| float(&at("scribble", lt, 1.0), Scribble::DERIVED_TICK);
+    assert_eq!(tick(0.0), 0.0);
+    assert_eq!(
+        tick(2.5),
+        0.0,
+        "a fresh Scribble is Static and must not move"
+    );
+
+    // Jagged floors, Wiggly drifts — the one line of arithmetic that separates
+    // the three (docs/08 §3.78's third decision), read back through the bag.
+    let with_type = |kind: u32, lt: f64| {
+        let mut e = instantiate("scribble").expect("scribble");
+        for prop in &mut e.params {
+            if prop.id == "wiggle_type" {
+                prop.value = EffectValue::Choice(kind);
+            }
+        }
+        let bag = resolve_bag(
+            std::slice::from_ref(&e),
+            lt,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        float(&bag, Scribble::DERIVED_TICK)
+    };
+    // Wiggles per second defaults to 8, so a quarter of a second is two wiggles.
+    assert_eq!(
+        with_type(1, 0.25),
+        2.0,
+        "Jagged must snap on a whole wiggle"
+    );
+    assert_eq!(with_type(1, 0.30), 2.0, "and hold there until the next one");
+    assert!(
+        (with_type(2, 0.30) - 2.4).abs() < 1e-4,
+        "Wiggly must drift between them"
     );
 }

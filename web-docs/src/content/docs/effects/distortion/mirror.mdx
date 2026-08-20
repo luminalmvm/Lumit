@@ -1,0 +1,78 @@
+---
+title: Mirror
+description: "Reflects one half of the frame onto the other, about a line you place and turn."
+---
+
+Mirror is a **Distortion** effect.
+
+## What it is for
+
+Drawing a line through the picture and replacing everything on one side of it
+with the reflection of what is on the other. **Centre** places the line, **Angle**
+turns it and decides which side is replaced.
+
+One Mirror is a symmetry. Several stacked at different angles is a kaleidoscope,
+and that is the usual reason to reach for it: three or four Mirrors turned 45° or
+60° apart will turn almost any footage into a spinning mandala, and animating the
+angles makes it breathe.
+
+The quieter uses are just as common — squaring off a lopsided background,
+extending a set that only exists on one side of frame, or building a symmetrical
+title element out of an asymmetrical one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Centre X** and **Centre Y** — where the reflection line passes through. By
+  default it is the middle of the frame. Sliding it along the line's own
+  direction changes how much of the picture survives: move it left and less of
+  the left half is kept, and more of the frame is reflection.
+- **Angle** — which way the line runs, and which side gets replaced. At 0° the
+  line is vertical and the **right** half becomes a mirror of the left; at 180°
+  it is still vertical but the **left** half is replaced instead. 90° mirrors
+  the bottom onto the top. A positive angle turns the line clockwise on screen.
+- **Mix** — how much of the reflected picture replaces the original. Below 100
+  the two are blended, so the reflected half shows through the original — a
+  ghosted symmetry rather than a hard one.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The reflection can run out of picture.** Put the centre near an edge and the
+half being replaced asks for content from beyond the frame, where there is none;
+those pixels come out transparent. That is deliberate — repeating the border
+pixel outward would smear it into a fan, which reads as a fault rather than as a
+mirror. If you need the frame filled, move the centre back toward the middle or
+put something behind the layer.
+
+**Stacking is how you build a kaleidoscope.** Each Mirror only ever does one
+reflection, so the pattern comes from the sequence: try 0°, then 90°, then 45°,
+all on the frame centre, and animate a [Transform](/effects/utility/transform/)
+underneath the stack so the source drifts through the symmetry.
+
+## Related
+
+- [Tile](/effects/distortion/tile/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Transform](/effects/utility/transform/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

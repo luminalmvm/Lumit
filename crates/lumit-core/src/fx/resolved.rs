@@ -8,8 +8,9 @@ use crate::{
 use uuid::Uuid;
 
 /// The Fast motion blur output view (docs/08 §3.2, FX-19): the finished blurred
-/// picture, or a diagnostic look at the motion field or the confidence that
-/// tapers the streak length. A per-pixel choice the kernel branches on last.
+/// picture, or a diagnostic look at the motion field, the confidence that
+/// steers the streak, or the dominant motion the reconstruction borrows in the
+/// places confidence is low. A per-pixel choice the kernel branches on last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MbView {
     /// The blurred picture (the default).
@@ -18,19 +19,72 @@ pub enum MbView {
     /// still) — for checking the motion the smear follows.
     MotionVectors,
     /// The per-pixel confidence as greyscale (white = trusted, black = suspect)
-    /// — for seeing where the streak fades out.
+    /// — for seeing where the streak is steered by its neighbourhood instead of
+    /// by its own vector.
     Confidence,
+    /// The tile/neighbour-max dominant motion, colour-coded on the same scale as
+    /// [`MbView::MotionVectors`] (docs/impl/optical-flow.md §4.5 item 3) — the
+    /// blocky field an uncertain pixel borrows its direction from. Flipping
+    /// between this and Motion vectors is how the borrow is checked by eye.
+    TileMax,
 }
 
 impl MbView {
     /// The kernel's integer code for this view (0 Rendered, 1 Motion vectors, 2
-    /// Confidence), so the CPU oracle and the WGSL uniform agree.
+    /// Confidence, 3 Dominant motion), so the CPU oracle and the WGSL uniform
+    /// agree.
     pub fn code(self) -> i32 {
         match self {
             MbView::Rendered => 0,
             MbView::MotionVectors => 1,
             MbView::Confidence => 2,
+            MbView::TileMax => 3,
         }
+    }
+}
+
+/// The Fast motion blur reconstruction tier (docs/impl/optical-flow.md §4.5
+/// "Tiers", K-390). **The only choice a user sees** — there is no method
+/// picker; one method adapts internally, and this buys it more work per pixel.
+///
+/// # In plain terms
+///
+/// Normal spaces the samples along a streak about two pixels apart and draws
+/// each streak straight. High halves the spacing (smoother long streaks) and
+/// re-reads the motion field partway along each streak so a streak can *bend* —
+/// which is what a spinning or swinging object's smear actually does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MbQuality {
+    /// Straight streaks, samples ~2 px apart (the default).
+    Normal,
+    /// Curved streaks (the field is re-sampled along the trail) and samples
+    /// ~1 px apart.
+    High,
+}
+
+impl MbQuality {
+    /// The kernel's integer code (0 Normal, 1 High), so the CPU oracle and the
+    /// WGSL uniform agree.
+    pub fn code(self) -> i32 {
+        match self {
+            MbQuality::Normal => 0,
+            MbQuality::High => 1,
+        }
+    }
+
+    /// Pixels between adjacent taps along a streak — §4's `S = ceil(‖v‖ / 2)`
+    /// adaptive-tap rule, with High halving the step.
+    pub fn tap_spacing(self) -> f32 {
+        match self {
+            MbQuality::Normal => 2.0,
+            MbQuality::High => 1.0,
+        }
+    }
+
+    /// Whether the field is re-sampled partway along each streak (curved
+    /// trails, §4's destination-flow fixed point applied per tap).
+    pub fn curved(self) -> bool {
+        matches!(self, MbQuality::High)
     }
 }
 
@@ -338,16 +392,19 @@ fn resolve_into_arena(
                 Some(EffectValue::Seed(s)) => *s as i32,
                 _ => 0,
             }),
-            // A File slot and a Layer binding are decided by the *caller*, which
-            // is the only thing that knows which cube loaded or which layer was
-            // rendered (docs/impl/layer-input.md); they are threaded beside the
-            // op as an aux slot instead (K-387, docs/impl/effect-registry.md
+            // A File slot, a Layer binding and a mask's geometry are decided by
+            // the *caller*, which is the only thing that knows which cube
+            // loaded, which layer was rendered or which masks the layer carries
+            // (docs/impl/layer-input.md); they are threaded beside the op as an
+            // aux slot instead (K-387, K-408, docs/impl/effect-registry.md
             // §2.5a), so the bag deliberately carries nothing for them. An
             // effect declaring one must declare the list it consumes:
             // `a_side_table_effect_declares_the_list_it_consumes` in
             // lumit-render fails the moment one does not, and a silent default
             // here would be a picture quietly rendering without its LUT.
-            ParamKind::File { .. } | ParamKind::Layer { .. } => continue,
+            ParamKind::File { .. } | ParamKind::Layer { .. } | ParamKind::MaskPath { .. } => {
+                continue
+            }
         };
         bags.push(ParamId::new(p.id), value);
     }

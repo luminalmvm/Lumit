@@ -6,9 +6,11 @@
 //! it, what shape the iris is, how hard the highlights bloom, and how the depth
 //! pass is read. The one thing that is *not* a number is the depth pass itself —
 //! a whole picture, the referenced layer rendered alone at this raster — so it
-//! arrives beside the resolved op as this effect's aux slot (K-387), off the same
-//! counter Light wrap uses, because `build.rs` enumerates both with one
-//! predicate. An unset, missing or cyclic reference leaves the slot empty and the
+//! arrives beside the resolved op (K-387). **It is this effect's Matte** (K-395):
+//! the same row every effect has, under this effect's older stored id (`depth`,
+//! K-065) and with the deeper meaning this effect declares — a depth, not a
+//! strength. It therefore rides the one matte carriage rather than a list of its
+//! own. An unset, missing or cyclic reference leaves the slot empty and the
 //! effect is the labelled no-op every layer-input effect follows.
 //!
 //! Whether a depth pass arrived is itself part of the maths: with none, the rows
@@ -53,9 +55,11 @@ pub const DOF_GROUPS: &[ParamGroup] = &[
         // round it runs, and how hard the blur answers to it. Where focus *is*
         // lives above, beside the rows that set it.
         label: "Depth map",
+        // `depth_invert` used to sit here. K-395 moved it up beside the picker,
+        // where every effect's Invert now lives; the group is a contiguous run
+        // of declared rows, so it leaves the list as well as the struct.
         params: &[
             "depth_channel",
-            "depth_invert",
             "gamma",
             "remove_edge_leak",
             "detect_edge_threshold",
@@ -129,6 +133,18 @@ pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
     premultiplied = true, // the aperture gathers premultiplied colour (fx_dof.wgsl)
     groups = DOF_GROUPS,
     enabled_when = DOF_ENABLED_WHEN,
+    // K-395: Depth of field claims the matte inside its own maths, under a
+    // deeper meaning — the matte is a *depth* pass, and it decides focus rather
+    // than strength. It keeps `depth` as its stored id (a save is a save,
+    // K-065), so nothing is injected; only its row treatment and prose adopt the
+    // uniform shape. Naming the id here is what puts it on the one matte
+    // carriage every effect uses, instead of a private list of its own.
+    matte = (
+        "depth",
+        "a depth pass, not a strength: its luma is how far away each pixel is, \
+         and the blur widens with the distance from the focus depth — so a \
+         mid-grey matte can be perfectly sharp",
+    ),
 )]
 pub struct Dof {
     /// The layer whose depth channel is the depth pass (0 = near, 1 = far by
@@ -143,8 +159,26 @@ pub struct Dof {
     /// at the GPU pass as its aux slot instead (K-387). The row exists because the
     /// panel needs it, and whether it is bound reaches [`Dof::packed`] as an
     /// argument.
-    #[layer(label = "Depth layer", self_default = false)]
+    ///
+    /// **Labelled "Matte", not "Depth layer"** (K-395): every effect's matte row
+    /// is one row with one word on it, and an effect that already owned the idea
+    /// adopts the shared label rather than keeping a private synonym. The stored
+    /// id stays `depth` — a save is a save (K-065) — and the meaning stays the
+    /// deeper one this effect declares: focus, not strength.
+    #[layer(label = "Matte", self_default = false)]
     pub depth: bool,
+
+    /// Invert the depth pass (d' = 1 − d) before the circle of confusion, swapping
+    /// near and far — the owner's "tick to invert the depth" box (Frischluft /
+    /// DOF PRO both offer it). Off (default) keeps the historical reading, so old
+    /// projects are unchanged. Continuous, so the §1.6 ULP oracle still holds.
+    ///
+    /// **This IS the uniform pair's Invert** (K-395), so it is labelled "Invert"
+    /// and sits beside the picker on the Matte row rather than down in the Depth
+    /// map twirl where it used to live. Presentation and prose only: the stored
+    /// id is still `depth_invert`.
+    #[toggle(label = "Invert", default = false)]
+    pub depth_invert: bool,
 
     // The depth Layer input's sampling mode (K-142) is not a schema parameter:
     // the inspector renders a source combobox beside the Layer picker (None /
@@ -350,13 +384,6 @@ pub struct Dof {
     /// alpha is ordinary enough to deserve the pick.
     #[choice(options = *CHANNEL_OPTIONS, default = 0)]
     pub depth_channel: u32,
-
-    /// Invert the depth pass (d' = 1 − d) before the circle of confusion, swapping
-    /// near and far — the owner's "tick to invert the depth" box (Frischluft /
-    /// DOF PRO both offer it). Off (default) keeps the historical reading, so old
-    /// projects are unchanged. Continuous, so the §1.6 ULP oracle still holds.
-    #[toggle(default = false)]
-    pub depth_invert: bool,
 
     /// **The gamma on the depth axis** — the depth distance rescaled before the
     /// ramp, which decides how hard the blur answers to a small change in depth,

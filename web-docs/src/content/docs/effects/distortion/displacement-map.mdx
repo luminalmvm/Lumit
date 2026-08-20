@@ -1,0 +1,91 @@
+---
+title: Displacement map
+description: "Pushes this layer's pixels around using the brightness of another layer as a map."
+---
+
+Displacement map is a **Distortion** effect.
+
+## What it is for
+
+Warping one layer with the *shape of another*. Point the **Matte** row at a layer
+— that layer is the map — and every pixel is pushed according to how bright the
+map is underneath it. Bright pushes one way, dark the other, mid-grey does not
+move at all.
+
+It is the effect behind heat haze over a road, water refracting what is under it,
+glass distorting a background, a logo rippling as a wave passes through it, and
+text being pushed around by a painted gradient. Anywhere the warp has to *line up*
+with something — a rendered pass, a ripple you drew, another layer's luminance —
+this is the one to reach for.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Horizontal channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Red | - |
+| **Horizontal amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
+| **Vertical channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Green | - |
+| **Vertical amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** is the displacement map: the chosen channels of the matte layer say which way and how far each pixel is pushed, mid-grey meaning no push at all — the effect's subject rather than a strength applied to one. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Matte** — **the map**, and the one control the effect cannot work without.
+  Until you pick a layer here, Displacement map does nothing at all. That layer is
+  rendered on its own at this composition's size, so you never have to worry about
+  fitting it.
+- **Horizontal channel** and **Vertical channel** — which part of the map steers
+  which direction. The defaults read **Red** for sideways and **Green** for up and
+  down, which is how a purpose-made map is normally painted; choose **Luminance**
+  when the map is a plain grey picture such as a [Fractal
+  noise](/effects/generate/fractal-noise/) or a ramp.
+- **Horizontal amount** and **Vertical amount** — how far a push can go, in pixels
+  at composition size. A map channel at full white pushes the whole amount one
+  way, full black the whole amount the other, and mid-grey nothing. Set one to
+  zero to confine the warp to a single axis — vertical only for a heat shimmer,
+  horizontal only for a glass ripple. Negative values simply read the map the
+  other way round on that axis.
+- **Edges** — what a pixel pushed in from beyond the frame reads. **Repeat**, the
+  default, smears the border pixel and keeps the frame full; **Transparent** eats
+  a bite out of the edge; **Mirror** reflects the picture back, which hides the
+  seam best on a textured plate.
+- **Mix** — how much of the warped picture replaces the original.
+- **Invert** — reads the map the other way round, which reverses every push.
+
+## Notes
+
+**Mid-grey means "do not move".** This is the single most useful thing to know
+about the effect. If your map is mostly black, everything will be shoved hard in
+one direction; grade it so its middle sits around 50 % grey and the warp will move
+*about* its rest position instead of away from it.
+
+**The map is a layer, so it can be anything.** A Fractal noise with Evolution
+animated gives a living heat haze. A solid with a [Gradient](/effects/generate/gradient/)
+gives a controllable lens. A blurred copy of the layer itself makes the picture
+distort along its own edges. Switch the map layer's own visibility off — the Matte
+row renders it whether or not it is showing.
+
+**How it differs from [Turbulent displace](/effects/distortion/turbulent-displace/).**
+Turbulent displace *invents* its warp from a noise field it generates itself and
+animates for free. Displacement map is *given* the warp and has none of its own.
+Use Turbulent displace when you want churn and do not care exactly where it goes;
+use this one when the warp has to match something.
+
+## Related
+
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Set matte](/effects/utility/set-matte/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

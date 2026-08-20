@@ -1,0 +1,55 @@
+---
+title: "Invert"
+description: "The colour inverse, with nothing to configure."
+---
+
+Invert is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Flips the picture's colour: light becomes dark, and each colour becomes its
+opposite. There is nothing to set — it either inverts or, through Mix, inverts
+part of the way.
+
+Most of its use is not as a look. Inverting a layer that is being used as a
+matte swaps what is kept for what is removed, which is often quicker than
+rebuilding the matte the other way round. Inverting for a few frames is a
+classic impact flash. And inverting a duplicate layer under a blend mode is the
+basis of several difference-based tricks.
+
+The inverse is taken in scene-linear light exactly as it is stored, which is the
+deliberately simple choice. Values above white invert to honest negatives rather
+than being clipped first, so an inverted highlight carries real information
+rather than a flat patch. Transparency is left alone, so a keyed subject inverts
+without its edges fringing.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mix** — how much of the inverted picture replaces the original. It is the
+  only control, and it is the interesting one: partway between the two is a
+  washed, flattened picture, and animating it is how the invert flash is timed
+  to a beat.
+
+## Related
+
+- [Tint](/effects/colour/tint/)
+- [Flash](/effects/stylise/flash/)
+- [Mattes](/use/mattes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

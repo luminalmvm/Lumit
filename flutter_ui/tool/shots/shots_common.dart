@@ -34,10 +34,31 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/workspace.dart';
+import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 /// Where the media fixtures live. Made once with ffmpeg (see the repo's shots
 /// report) and never committed.
 const fixtures = 'C:/tmp/lumit-shots';
+
+/// The shape every sweep stages in — `LUMIT_SHOTS_SHAPE=round` picks Round
+/// (K-394), which is what Settings ▸ Appearance ▸ Shape sets. The manual is
+/// shot in the look it documents, so this is set once for a whole pass rather
+/// than sweep by sweep.
+final shotShape = ThemeShape.values.asNameMap()[
+        Platform.environment['LUMIT_SHOTS_SHAPE'] ?? ''] ??
+    ThemeShape.sharp;
+
+/// How far above a docked panel's content its tab strip starts, in logical
+/// pixels: the 26px strip itself, plus the pane card's padding under Round
+/// (`dock_widget.dart`, `tokens.cardPadding` and its 1px boundary).
+final dockTabInset = shotShape == ThemeShape.round ? 37.0 : 26.0;
+
+/// How far outside a docked panel's content its pane card runs. Under Round the
+/// rounded edge and its shadow are part of what a panel looks like, so a crop
+/// taken at the content's own box cuts the design off; under Sharp the content
+/// *is* the pane and there is nothing outside it.
+final paneCardInset = shotShape == ThemeShape.round ? 13.0 : 0.0;
 
 /// `flutter run` starts the built exe from `build/windows/x64/runner/Debug`,
 /// not from `flutter_ui`, so every path here is worked out from the executable
@@ -89,6 +110,7 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
   // A fresh store reads as a first run, and the first-run dialogue would sit
   // over every shot in the sweep.
   ui.workspace.skipFirstRun();
+  ui.workspace.setShape(shotShape);
   return (state, ui);
 }
 
@@ -224,6 +246,13 @@ Rect? boxOfType(Type type) {
   }
   return render.localToGlobal(Offset.zero) & render.size;
 }
+
+/// The popup currently open — a dropdown's list, a menu's page, a dialogue —
+/// with a margin around it. Every one of them is a [FloatSurface], so the crop
+/// follows the thing rather than a band of numbers that only fits the shape and
+/// the row count it was measured against.
+Rect? openPopup({double margin = 12}) =>
+    boxOfType(FloatSurface)?.inflate(margin);
 
 /// Photograph the application's own render tree.
 ///

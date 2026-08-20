@@ -1,0 +1,94 @@
+---
+title: Levels
+description: "Set the black point, the white point and the bend between them, per channel."
+---
+
+Levels is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Says which input value counts as black, which counts as white, and how the
+range between them is stretched to fill the output. Five numbers per channel,
+each with a name you can aim at a histogram.
+
+Where [Curves](/effects/colour/curves/) is a shape, Levels is a set of decisions.
+A flat capture whose darkest pixel is nowhere near black is fixed by dragging
+Input black up to meet it; a picture that needs to sit inside a lighter frame is
+fixed by pulling Output white down. Gamma bends the middle without moving either
+end, which is the same move the one-knob [Gamma](/effects/colour/gamma/) effect
+makes — here it is per channel, and it arrives with the end points beside it.
+
+Highlights are not clipped. After Effects' Levels flattens everything above the
+input white, because it grades in a display range where there is nothing above
+white; Lumit works in scene-linear light, where there is, so a value past the
+input white carries on through the curve rather than stopping. That is the one
+place this effect deliberately parts company with the After Effects original.
+
+Dragging a white point below its black point does not break anything — the
+picture saturates, which is what the numbers are asking for.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Master › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Master › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Master › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher by typing | 1 | - |
+| **Master › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Master › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Red › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Red › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Red › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher by typing | 1 | - |
+| **Red › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Red › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Green › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Green › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Green › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher by typing | 1 | - |
+| **Green › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Green › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Blue › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Blue › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Blue › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher by typing | 1 | - |
+| **Blue › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Blue › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Master** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**.
+- **Red** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Green** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Blue** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Input black** — the input value that comes out as Output black. Raise it to
+  crush the darks toward the floor.
+- **Input white** — the input value that comes out as Output white. Lower it to
+  push the brights up.
+- **Gamma** — the bend between the two ends. Above 1 lifts the mid-tones, below
+  1 lowers them; both ends stay where they are.
+- **Output black** and **Output white** — where the two ends land. Lifting the
+  black is the film look, where nothing in the frame is fully black.
+- **Master** applies to all three channels; **Red**, **Green** and **Blue**
+  apply to one each. The colour channels run first and Master runs over the top,
+  matching Curves.
+- **Mix** — how much of the graded picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Curves](/effects/colour/curves/)
+- [Gamma](/effects/colour/gamma/)
+- [Exposure](/effects/colour/exposure/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

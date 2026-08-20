@@ -1,0 +1,113 @@
+---
+title: "Shake"
+description: "Seeded camera wobble, with per-axis control and its own motion blur."
+---
+
+Shake is a [Distortion](/effects/distortion/) effect.
+
+## What it is for
+
+Wobbles the layer as though the camera were handheld, or struck. The movement
+comes from seeded noise rather than from keyframes, so it never repeats
+mechanically and you never have to draw it.
+
+This is the beat-shake workhorse. A short burst on a drop, a constant low-level
+drift under a whole sequence to stop it feeling locked off, a violent hit on an
+impact frame — all of it comes from the two master controls and a keyframe or
+two on **Amplitude**.
+
+It is a transform effect, not a pixel effect: it moves a virtual camera and
+resamples the layer once, so the picture stays as sharp as it was rather than
+being smeared by repeated sampling. That also means it reveals whatever lies
+beyond the layer's edge as it moves, which is what **Edges** is for.
+
+Put it on an adjustment layer to shake a whole montage at once, including
+everything composited beneath it. See [Layers](/use/layers/).
+
+The movement is a pure function of time and the seed, so it is identical every
+time you play it and identical between a preview and an export.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amplitude** | Slider | 0 to 20; up to 100 by typing | 1.5 | Per cent of the composition diagonal |
+| **Frequency** | Slider | 0.1 to 30; down to 0 and higher by typing | 8 | - |
+| **Rotation amount** | Slider | 0 to 45; up to 360 by typing | 1 | - |
+| **X amount** | Slider | 0 to 2; higher by typing | 1 | - |
+| **X frequency** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Y amount** | Slider | 0 to 2; higher by typing | 1 | - |
+| **Y frequency** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Z amount** | Slider | 0 to 20; up to 100 by typing | 0 | - |
+| **Z frequency** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Motion blur** | Checkbox | On or off | Off | - |
+| **Shutter** | Slider | 0 to 1 | 0.5 | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Per-axis wobble** groups **X amount**, **X frequency**, **Y amount**, **Y frequency**, **Z amount**, **Z frequency**, and starts closed.
+- **Motion blur** groups **Motion blur**, **Shutter**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amplitude** — how far the layer travels, across the composition diagonal.
+  This is the control to keyframe: a spike on the beat easing back to a low
+  constant is most of what this effect is used for.
+- **Frequency** — how fast the wobble happens, in cycles per second. Low is a
+  slow drift, high is a rattle. It is independent of Amplitude, so a large slow
+  sway and a tiny fast buzz are both a few seconds' work.
+- **Rotation amount** — how much the frame rolls as it moves. A little of this is
+  what separates a camera shake from a picture sliding around; too much reads as
+  a spin.
+- **Edges** — what fills the border the movement reveals. Mirror reflects the
+  picture back in and hides the seam best on textured footage, which is why it is
+  the usual choice; Repeat holds the edge pixel; Transparent leaves it clear,
+  which is what you want when something will be composited behind.
+- **Seed** — which random wobble you get. Two layers with the same seed shake in
+  perfect unison; give them different seeds and they move independently. Change
+  it when a shake happens to land badly rather than trying to fight it with the
+  other controls.
+- **Mix** — how much of the shaken picture replaces the original.
+
+The **Per-axis wobble** group biases the movement rather than adding to it:
+
+- **X amount** / **Y amount** — multipliers on the master amplitude for each axis.
+  Leaving both at one reproduces the plain uniform shake; dropping Y to zero
+  gives a purely horizontal judder, which suits a wide frame.
+- **X frequency** / **Y frequency** — multipliers on the master frequency per
+  axis. Setting the two axes to different rates is what stops a shake looking
+  like it is travelling along a diagonal line.
+- **Z amount** and **Z frequency** — the depth shake: a pump in and out of the
+  frame rather than across it. A little of this on an impact reads as the camera
+  being knocked backwards.
+
+The **Motion blur** group adds the shake's own smear:
+
+- **Motion blur** — samples the wobble several times across the shutter and
+  averages the results, so a fast shake streaks rather than stepping. This is
+  only the shake's own movement; it is unrelated to the layer's motion blur
+  switch or to the [Motion blur](/effects/temporal/motion-blur/) effect.
+- **Shutter** — how far across the shutter window those samples spread, and so how
+  long the streak is. At zero the smear is off and the result is the plain single
+  resample. It is a fraction of the frame's own shutter window rather than a
+  length in seconds, so the streak keeps its character whatever rate the
+  composition runs at.
+
+## Related
+
+- [Transform](/effects/utility/transform/)
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Block glitch](/effects/distortion/block-glitch/)
+- [Layers](/use/layers/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

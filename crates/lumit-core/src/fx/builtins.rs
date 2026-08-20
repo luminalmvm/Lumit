@@ -102,6 +102,46 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             p.value = EffectValue::Float(Property::fixed(v));
         }
     }
+    // Wave 2's Distort I batch (docs/08 §3.48, §3.51, §3.52) has the same shape
+    // of default again: a Corner pin's four points and a Twirl's or a Spherize's
+    // centre are all px@comp (K-260), and a schema constant that says "960, 540"
+    // lands a fresh instance in the top-left quarter of a 4K comp — the "drop it
+    // on and it already looks right" failure §1.2 names. The keystone below is
+    // §3.48's declared default expressed as fractions of the actual raster.
+    for p in &mut inst.params {
+        let v = match (match_name, p.id.as_str()) {
+            ("corner_pin", "upper_left_x") => w * 0.05,
+            ("corner_pin", "upper_left_y" | "upper_right_y") => h * 0.05,
+            ("corner_pin", "upper_right_x") => w * 0.95,
+            ("corner_pin", "lower_left_x") => 0.0,
+            ("corner_pin", "lower_left_y" | "lower_right_y") => h * 0.95,
+            ("corner_pin", "lower_right_x") => w,
+            // Wave 2's Transitions batch (docs/08 §3.71) joins them: an Iris
+            // wipe's centre is px@comp for the same reason, and its two radii
+            // are not here because they are % of the comp diagonal and so need
+            // no raster (§3.71's fourth note).
+            ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_x") => w * 0.5,
+            ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_y") => h * 0.5,
+            // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
+            // points are the frame's own corners with the handles at the
+            // thirds — the patch that is exactly the identity — and every one
+            // of them is px@comp, so all twelve need the actual raster.
+            ("bezier_warp", "upper_left_x" | "lower_left_x") => 0.0,
+            ("bezier_warp", "upper_left_y" | "upper_right_y") => 0.0,
+            ("bezier_warp", "upper_right_x" | "lower_right_x") => w,
+            ("bezier_warp", "lower_left_y" | "lower_right_y") => h,
+            ("bezier_warp", "top_left_tangent_x" | "bottom_left_tangent_x") => w / 3.0,
+            ("bezier_warp", "top_right_tangent_x" | "bottom_right_tangent_x") => w * 2.0 / 3.0,
+            ("bezier_warp", "top_left_tangent_y" | "top_right_tangent_y") => 0.0,
+            ("bezier_warp", "bottom_left_tangent_y" | "bottom_right_tangent_y") => h,
+            ("bezier_warp", "left_top_tangent_x" | "left_bottom_tangent_x") => 0.0,
+            ("bezier_warp", "right_top_tangent_x" | "right_bottom_tangent_x") => w,
+            ("bezier_warp", "left_top_tangent_y" | "right_top_tangent_y") => h / 3.0,
+            ("bezier_warp", "left_bottom_tangent_y" | "right_bottom_tangent_y") => h * 2.0 / 3.0,
+            _ => continue,
+        };
+        p.value = EffectValue::Float(Property::fixed(v));
+    }
     Some(inst)
 }
 
@@ -128,6 +168,12 @@ pub fn default_param_value(kind: &ParamKind) -> EffectValue {
         // sanctioned exception the File parameter takes to the "no no-op
         // default" rule.
         ParamKind::Layer { .. } => EffectValue::Layer(None),
+        // A fresh mask-path row is unset, which is the "First mask" entry
+        // (K-408) — resolved at render time, not written here: an effect is
+        // usually added before the mask is drawn, so there is no id to write,
+        // and a row that followed the first mask only until the masks were
+        // reordered would be the worse of the two behaviours anyway.
+        ParamKind::MaskPath { .. } => EffectValue::MaskPath(None),
     }
 }
 
@@ -233,6 +279,43 @@ pub fn point_self_layer_params_at(inst: &mut EffectInstance, layer: uuid::Uuid) 
 /// implements the real branch independently and never calls this, so the two
 /// cannot drift into disagreeing about pixels: at worst a missing rule leaves a
 /// live control that does nothing, which is a panel bug, not a render bug.
+/// Whether a parameter's row is **on screen at all** for this instance — the
+/// visibility half of [`param_enabled`]'s question (K-145, K-257).
+///
+/// A [`ParamGroup`] may carry `visible_when`, and the rows in it then appear
+/// only while a sibling Choice holds one of the listed values: the Lens flare's
+/// Matte rows exist only while its Source type is Matte. A parameter in no
+/// group, or in a group with no condition, is always visible — nearly all of
+/// them.
+///
+/// **The render reads this, not only the panel.** A matte row nobody can see is
+/// a matte nobody can have meant, and rendering the layer it happens to name
+/// would cost a whole extra pass per frame for a picture that is thrown away
+/// (K-395: `build.rs`'s `mattes_for` skips such a row). That is what the Lens
+/// flare's own "only in Matte mode" gate used to say by name, before the matte
+/// carriage made it one rule for every effect.
+///
+/// The lens-element condition (`visible_when_lens_elements`) is deliberately not
+/// consulted: it depends on which prescription is loaded, which is a file the
+/// engine has not necessarily read here, and no matte row uses it.
+#[must_use]
+pub fn param_visible(inst: &EffectInstance, id: &str) -> bool {
+    let Some(s) = schema(&inst.effect.match_name) else {
+        return true;
+    };
+    s.groups.iter().filter(|g| g.params.contains(&id)).all(|g| {
+        let Some((on, values)) = g.visible_when else {
+            return true;
+        };
+        // A group whose deciding parameter the instance does not carry stays
+        // visible — the `param_enabled` rule, for the same reason.
+        match inst.param(on) {
+            Some(EffectValue::Choice(got)) => values.contains(got),
+            _ => true,
+        }
+    })
+}
+
 pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
     let Some(s) = schema(&inst.effect.match_name) else {
         // No built-in schema (an OFX or placeholder instance) means no rules,

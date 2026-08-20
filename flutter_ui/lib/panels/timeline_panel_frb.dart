@@ -7710,6 +7710,7 @@ class _BarState extends State<_Bar> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final round = t.shape == ThemeShape.round;
     // ZERO bridge calls (K-184): the span already mapped to comp frames, the
     // kind, and the clip split positions all ride in on the read model.
     final info = widget.entry.info;
@@ -7780,7 +7781,11 @@ class _BarState extends State<_Bar> {
                       color: t.labelColour(info.label).withValues(alpha: 0.45),
                       width: 1,
                     ),
-                    borderRadius: BorderRadius.circular(2),
+                    // Follows the bar's own ends: this *is* the bar, drawn as
+                    // far as its source goes, and a rectangle round a capsule
+                    // would read as a second object rather than the same one.
+                    borderRadius: BorderRadius.circular(
+                        round ? t.tokens.controlRadius : 2),
                   ),
                 ),
               ),
@@ -7882,7 +7887,16 @@ class _BarState extends State<_Bar> {
                         ? Color.lerp(
                             t.labelColour(info.label), t.textPrimary, 0.35)!
                         : t.labelColour(info.label),
-                    borderRadius: BorderRadius.circular(2),
+                    // Stadium ends under Round (K-394, §12.1) — the control
+                    // radius is the sentinel that clamps to half the bar's own
+                    // height. **The bar's HIT rect is unchanged and stays
+                    // rectangular**: a BoxDecoration's radius paints, it does
+                    // not hit-test, so [barGrabAt] still reads dx across the
+                    // full width and the trim zones keep exactly the grab area
+                    // they had. That is deliberate — a curved end would take
+                    // pixels off the corner of a target already only 8 px wide.
+                    borderRadius: BorderRadius.circular(
+                        round ? t.tokens.controlRadius : 2),
                   ),
                   child: Stack(
                     children: [

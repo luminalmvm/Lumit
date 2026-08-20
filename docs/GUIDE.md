@@ -214,9 +214,67 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   **Samples** (how many steps to take along each streak — more is smoother but slower), and a
   **View** picker — leave it on *Rendered* for the blurred picture, or switch to *Motion vectors*
   (the arrows, colour-coded) or *Confidence* (the trust map in grey) to see exactly what the
-  effect is doing. A still frame, a shutter of zero, or zero confidence leaves the picture
-  untouched. For now it follows the footage's own motion only (not, yet, motion you add with
-  keyframes) and works on footage layers, the same starting scope Echo has.
+  effect is doing. For now it follows the footage's own motion only (not, yet, motion you add
+  with keyframes) and works on footage layers, the same starting scope Echo has.
+
+  **What the rebuild changed, and the two problems it fixes (K-392).** The description above
+  is how the effect started, and it has two faults you can see once you know to look for them.
+
+  The first is that *smearing each pixel along its own arrow* can never let a moving thing
+  spill onto what it passes. A car crossing a still street gets a blurred car and a perfectly
+  sharp street right up to its edge, which is not what a camera does — a real shutter has the
+  car's light land on the street's pixels too. The reason the old way cannot do it is that it
+  asks the wrong question: it asks each pixel "where am *I* going", when the question that
+  produces a smear is "who might have flown *through here*". So the effect now also looks at
+  what its **neighbourhood** is doing. The frame is divided into 16-pixel tiles, each tile
+  notes the strongest motion inside it, and every pixel gathers along that direction as well
+  as its own — keeping a sample only in proportion to whether the thing it found there was
+  moving fast enough to have reached it. This is a standard technique with a slightly
+  backwards name, *scatter as gather*: the honest way to smear paint outwards is to have every
+  destination ask who could have thrown at it, because a graphics card can do that in
+  parallel and cannot do the throwing.
+
+  The second is the confidence taper from FX-19. Multiplying the streak by trust sounds right,
+  but it means the *least* trustworthy pixels end up with **no blur at all** — so a patch the
+  flow could not read comes out pin-sharp in the middle of a smeared frame, which is more
+  obvious and worse-looking than a blur pointing slightly the wrong way. Confidence now
+  *steers* instead of shortening: a pixel that trusts its own arrow uses it, and one that does
+  not **borrows its neighbourhood's motion** at about 60% length. It is the honest answer to
+  "I do not know how this moved, but I know everything around it is moving like *that*". The
+  only place left that gets no blur is a patch where the neighbourhood itself is still — which
+  is what you actually want. (A still frame and a shutter of zero still leave the picture
+  exactly untouched.)
+
+  One trap worth recording, because it was caught on real footage rather than by reading the
+  code. "The strongest motion in the tile" and "what my neighbourhood is doing" sound like the
+  same number, and they are not. The strongest is by definition the most *unusual* arrow out of
+  the couple of hundred in a tile — and it gets picked exactly where the measurement is least
+  reliable, so two tiles side by side can pick two unrelated wild arrows. Using it for the
+  borrowing produced blur in **rectangular patches at different angles** across a cartoon's
+  characters. The fix is to blend smoothly between tiles when borrowing: the borrowed direction
+  becomes continuous so no tile edge can show, and — the nice part — tiles that *disagree*
+  average each other out toward nothing, so where there is no consensus to borrow the blur
+  quietly backs off instead of inventing one.
+
+  Two more things came with the rebuild. **Samples** is now a *ceiling* rather than a count:
+  the effect works out how many steps a streak actually needs (about one every two pixels) and
+  spends no more, so a barely-moving pixel does not pay for 32 samples landing on top of each
+  other. And a **Quality** choice — *Normal* or *High* — is the only method choice there is,
+  deliberately: there is one blur that adapts internally, never a menu of algorithms to pick
+  between. High halves the spacing between samples and re-reads the motion partway along each
+  streak, so a streak can **bend** — which is what a spinning or swinging object's smear really
+  does. The View picker gains *Dominant motion*, which paints the borrowed direction; flipping
+  between it and *Confidence* shows you exactly where the effect stopped trusting a pixel and
+  started trusting its surroundings.
+
+  **One thing it gets wrong, which is worth knowing rather than hiding.** Deciding whether the
+  fast thing is in *front* of you or *behind* you needs to know how far away things are, and a
+  video has no such information. So the weighting is even-handed, and a **small** still object
+  completely ringed by fast motion — a logo burnt into the corner of a cartoon, say — picks up
+  some of its surroundings' smear. Large still areas are fine: a static desktop around a
+  fast-moving game window measured 0.014 out of 255 of change, against 3.99 inside the window.
+  Fixing it properly needs a depth input, not a cleverer constant, so it is recorded rather
+  than tuned around.
 - **Datamosh** — the corrupted-video "melting picture" look, rebuilt (T19) to follow motion
   properly. Real video codecs sometimes drop a frame's actual picture and just reuse the last
   one nudged by that frame's motion arrows; when this keeps happening, the old picture is
@@ -331,14 +389,16 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   effect, means a depth reference can never chase its own tail into an endless loop. Second,
   the picture you see while scrubbing and the picture you export go through the **one and the
   same** "render that layer on its own" helper, so the preview can never quietly disagree with
-  the file (the house rule every effect follows). For now the depth pass should share your
-  footage's framing (it is stretched to fit) and should be a *visible* layer; a depth built
-  from effects, or hidden away, is a later refinement. The blur disc itself is the foundation
-  kernel below, unchanged and still proven against its plain-Rust twin. One more piece the
-  owner will add: the little dropdown in the effect controls that actually *picks* the depth
-  layer — until that lands the effect is wired and correct but has no layer to point at yet.
+  the file (the house rule every effect follows). The depth pass should share your footage's
+  framing, since it is stretched to fit; it does *not* need to be a visible layer, and
+  usually should not be — a depth pass is something the effect reads, not something you want
+  composited over your shot, so switching its eye off is the normal way to use one. (The
+  part of the renderer that decodes footage walks matte and layer-input references whether
+  or not the layer they name is visible, which is what makes that work.) The blur disc itself
+  is the foundation kernel below, unchanged and still proven against its plain-Rust twin.
 - **Depth of field grows three lens controls.** Three tick-and-slide additions, all borrowed
-  from the reference plugins. **Depth invert** is a tickbox that flips the depth map's reading
+  from the reference plugins. **Invert** — the tickbox on Depth of field's Matte row — flips
+  the depth map's reading
   (`near` becomes `far` and back), so if your depth pass is the wrong way round you fix it with
   one click instead of re-rendering it. **Near blur** and **Far blur** let you set *how much*
   blur the close side and the far side get *separately* — a shallow foreground and a soft
@@ -925,6 +985,146 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   effect that reads another layer, not just this one — the depth-of-field
   depth pass can be pointed at its own layer too, though it doesn't start
   there, because a depth map is never the picture itself.
+
+  **Driving *any* effect with a matte (K-395).** Every effect in Lumit now has
+  a **Matte** row — a layer picker with an **Invert** tickbox beside it — and
+  what it does is the obvious thing: the matte's brightness says *how much of
+  the effect* each pixel gets. White, the effect applies in full; black, the
+  pixel is left exactly as it arrived; grey, part way. Point a blur's Matte at
+  a soft radial gradient and you have a blur that fades off towards the middle
+  of the frame, with no second layer, no pre-comp and no track matte.
+
+  It is worth being clear about how this differs from **masking** an effect,
+  because they sound the same and are not. A mask hides what the effect *did*
+  — the effect ran everywhere and you painted over the parts you did not want.
+  A matte feeds the effect *itself*. For a plain colour correction the two look
+  identical, and for anything with a radius or a direction they do not: a blur
+  masked to a circle still smears pixels from outside that circle inwards,
+  where a blur *driven* by a matte simply blurs less there.
+
+  A few effects already had the idea under their own names — depth of field's
+  depth pass, the lens flare's matte source — and they keep their own, deeper
+  meanings (a depth pass decides *focus*, not strength). They now wear the same
+  row and the same two words, so there is one thing to learn rather than three.
+  Everything you already have is untouched: the row starts empty, and an empty
+  row is not "a dissolve by one" — nothing extra runs at all, and the picture is
+  the same pixels it was before the row existed.
+
+  **Some effects do something cleverer with the matte than fading (K-395).**
+  Fading is a good default and a poor answer for anything with a *size*. Four
+  effects therefore take the matte into their own maths — depth of field and the
+  lens flare, which always did, and two more worth knowing about because the
+  result is a picture you could not get any other way.
+
+  The **gaussian blur** treats the matte as a per-pixel *radius*. Where the
+  matte is white you get the full Radius; where it is mid-grey you get half of
+  it; where it is black, nothing. That is not the same as fading a finished
+  blur, and the difference is easy to see once you know to look: fading leaves
+  every pixel smeared from the full radius away and then dials the result back,
+  so it looks like a soft veil laid over a picture that is still sharp
+  underneath. Scaling the radius makes the blur genuinely *narrower* — the way a
+  lens does when it comes into focus. Paint a gradient down one side of a frame
+  and you have a lens racking focus across the shot, with no keyframes.
+
+  **Glow** treats the matte as a gate on which pixels are allowed to *start* a
+  glow. The bright parts of your matte bloom; the dark parts do not. But — and
+  this is the whole point — the light that escapes from the bright parts still
+  spreads outward, across the dark parts of the matte and past its edge, exactly
+  as light does in a room. If glow merely faded to the matte, a glow "on the
+  neon sign only" would stop dead at the sign's outline and refuse to light the
+  wall beside it, which never looks right. Gating the seed lets the sign light
+  the wall.
+
+  **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
+  picture, and a picture is the wrong thing for some effects. Think of a brush
+  that travels along a line you have drawn, from 20 % of the way along to 80 %,
+  or of dashes marching round the outline of a shape. Neither can be told from a
+  cut-out: a cut-out says which pixels are in and which are out, and says
+  nothing at all about which way is *along*. What those effects need is the
+  curve itself — the actual points, in order.
+
+  So an effect can now carry a row that names one of **this layer's masks**. You
+  draw the mask on the layer exactly as you always do, and the effect walks it.
+  The row lists your masks by their own names, with **First mask** at the top,
+  which simply means "whichever mask is first" — that is the default, because
+  you usually drop the effect on before you draw the shape, and it keeps working
+  when you draw one later. A mask set to mode **None** is still offered: that
+  mode means "this shape is drawn but gates nothing", which is exactly what you
+  want when the shape is there for an effect rather than for cutting the layer
+  out.
+
+  Two mechanical points, because they explain what you will see. First, the
+  effect gets the curve as a long chain of very short straight pieces — a curve
+  a computer can walk has to be straightened first — and the fineness of that
+  chain is fixed at half a pixel, close enough that you cannot see the corners
+  and identical every time. It has to be fixed rather than adjustable, because
+  the frame cache names each finished frame by everything that went into it, and
+  a fineness that could change would let one name mean two different pictures.
+  Second, if the row names nothing, or names a mask you have since deleted, or
+  the layer has no masks at all, the effect simply passes the picture through.
+  Nothing errors; there is just nothing to walk.
+
+  The seam was built ahead of the effects that use it, because building it into
+  one of them would have buried a general mechanism inside a single effect.
+  **Three effects use it now**, and they are the three that stopped waiting for
+  it: **Scribble**, **Stroke** and **Vegas** on its new Mask/Path source.
+
+  **Scribble** shades the mask in the way a hand shades a shape with a pencil:
+  parallel strokes at whatever angle you pick, spaced how you like, running a
+  little past the edges the way a hand does, and wavering as they go. Two
+  behaviours of it are worth knowing about. The strokes are one *continuous*
+  line — the pen crosses the shape, hops down the edge, and comes back — which
+  is why Start and End trim it the way a pen drawing it would, so keyframing End
+  from 0 makes the shading draw itself on. And where the shape has a notch in
+  it, the pen lifts rather than flying across the gap. The waver is what makes it
+  look drawn rather than ruled, and Wiggle type says how it moves: **Static**
+  holds one arrangement, **Jagged** snaps to a new one several times a second
+  (the pencil-test look), **Wiggly** drifts.
+
+  **Stroke** runs a round brush along the mask's *line*. Start and End are per
+  cents of the way round it, so the same "keyframe End from 0" trick draws the
+  line on — that is what this effect is mostly for. Spacing is how far apart the
+  brush stamps are, as a per cent of the brush's own width: leave it low and you
+  get a solid line, push it past about half and the stamps come apart into
+  dots, which is a deliberate look. Paint style decides what the stroke lands
+  on: over the picture, on nothing but itself, or — the interesting one —
+  **Reveal original**, where the picture survives *only* where the brush went,
+  so a stroke drawing itself on wipes a title into view.
+
+  **Vegas** already ran its dashes along a contour it found in the picture; it
+  can now run them round a mask instead. That half is better than the contour
+  half in one specific way, and it is worth saying why. Along a contour, Vegas
+  has no idea how far round it has gone, so it spaces the dashes by position on
+  screen — which drifts out of step wherever the contour curves hard. A mask is
+  a real curve, and the distance round it is measured on the way over, so on
+  this half the dashes stay evenly spaced all the way round however tight the
+  bend. That measured distance is what After Effects' own "Segments" count
+  means, so an imported project converts exactly rather than approximately.
+
+  Under all three is **one piece of drawing code, not three**. It is worth
+  knowing because it explains why they feel consistent. A scribble, a brush
+  trail and a ring of dashes differ entirely in *where the line goes* and hardly
+  at all in *how it is drawn* — a soft-edged band of a given width along a list
+  of short straight pieces, optionally broken into dashes. So the "where"
+  happens first, on the processor, in three quite different pieces of code, and
+  what reaches the graphics card is the same short description in every case. It
+  is the same principle as the lightning bolt: work out anything that does not
+  change from pixel to pixel *before* the graphics card sees it, and the part
+  that runs three million times a frame stays small.
+
+  There is a ceiling on that description — 512 straight pieces — because it
+  travels in a fixed-size parcel. You will not meet it in normal use; if you do,
+  nothing breaks and nothing disappears. The hatch opens its spacing slightly,
+  the dots space out slightly, a very long path straightens slightly. The whole
+  shape is always drawn; it just gets a little coarser rather than stopping half
+  way, which is the failure you would actually notice.
+
+  You never have to remember which is which: every effect's page in the manual
+  spells out, under its parameter table, what that effect's matte does — the
+  plain fade for most of them, in the same words each time, and the deeper
+  meaning where there is one. Those sentences are written on the effect itself,
+  in the engine, so a page cannot describe a matte the effect stopped honouring
+  (see "The effect pages write themselves", below).
   **And the Background choice became a Blend menu** (K-289). The flare used
   to offer Transparent or Black, which was really a blend-mode question in
   disguise: everything the effect renders is a picture of light on a black
@@ -1427,6 +1627,79 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   fuller version, which shifts the picture along real colour-temperature lines and adds a
   green/magenta Tint axis, is a later Tier-2 job); it is the everyday "make it feel warmer"
   control, and it animates like every other grade.
+- **Curves (K-396).** The grade everyone recognises: a graph of "what came in" against "what
+  goes out", bent where you want it. Lumit's version gives you five handles per channel —
+  black, shadows, midtones, highlights, white — and draws a smooth line through them. Leave
+  them at their defaults and the line is straight, which is no change at all; pull shadows
+  down and highlights up and you have the classic S that adds punch without touching the
+  middle. There is a Master graph for all three colours at once, and a Red, Green and Blue
+  graph for one each.
+
+  Two things are worth explaining because they are choices rather than accidents.
+
+  The **smooth line** is a *monotone* spline. A plain smooth curve through five points has a
+  habit of bulging past them — pull one handle up and the curve dips below its neighbour on
+  the way there, which puts a dark ring in a bright roll-off. The monotone kind is the
+  standard cure: it flattens its own slope near a handle rather than overshooting, so the
+  curve only ever goes the way the handles say. The maths for the shape is worked out once,
+  on the processor, before the picture is touched, and both the preview and the export are
+  handed the same numbers — so neither one is fitting its own curve.
+
+  The **five handles do not slide sideways**, and that is the honest limit of this version.
+  After Effects lets you drop points anywhere along a curve, but it stores them in a private
+  blob that cannot be animated — AE itself can only *hold* a curve between keyframes, never
+  tween it. Lumit's five handles are ordinary numbers, so every one of them keyframes and
+  takes an expression, which is the trade: less freedom in where a point sits, and a curve
+  that can actually animate. The panel shows twenty rows today; the drawn graph is a later
+  change to the *panel*, and a curve you author now will still be there when it arrives.
+- **Levels (K-396's sibling, docs/08 §3.31).** The same job as Curves approached from the
+  other end: instead of a shape, five numbers with names you can aim at a histogram.
+  **Input black** and **Input white** say which values in the picture should count as black
+  and white — drag them inward to fill out a flat capture. **Gamma** bends the middle without
+  moving either end. **Output black** and **Output white** say where those two ends land —
+  lifting the output black is the film look where nothing in the frame is fully black. Each
+  of Master, Red, Green and Blue gets its own set.
+
+  One deliberate difference from After Effects: AE's Levels flattens everything above the
+  input white, because it works in a range where there is nothing brighter than white. Lumit
+  works in scene-linear light, where a highlight can be many times brighter than paper, so
+  those values carry on through rather than stopping. Pull them back down with another effect
+  and the detail is still there.
+- **Brightness (K-397).** After Effects' *Brightness & Contrast*, as one effect: a slider that
+  adds light to every pixel, and a slider that spreads the picture about middle grey. Both sit
+  at zero when neutral, which is AE's spelling, and that is why it is a separate effect from
+  Lumit's own **Contrast** (whose neutral is 100 %) rather than a mode of it — one control
+  cannot honestly be both numbers, and a project file should not have to guess which one it
+  holds.
+
+  Brightness *adds*, where Exposure *multiplies*, and the difference is the reason both exist.
+  Adding lifts the shadows exactly as much as the highlights, so it washes the picture out —
+  sometimes precisely the look you want. Multiplying leaves black where black was, which is
+  what a real camera's exposure does.
+- **Hue and saturation (docs/08 §3.33).** Turn the colour wheel, change how colourful the
+  picture is, and raise or lower how bright it is — either everywhere, or for one family of
+  colours only. There is a Master group and six range groups: reds, yellows, greens, cyans,
+  blues, magentas. Pulling the greens toward cyan and lifting them is the grade this effect
+  exists for, and it leaves skin alone while it does it.
+
+  How it decides what counts as "the greens" is the interesting part. Each range is widest at
+  its own colour and fades to nothing by the time it reaches its neighbours, and the six fades
+  are shaped so that they always add up to exactly one. A colour sitting between green and
+  cyan therefore takes a share of each and never more than one range's worth in total — so a
+  gradient sweeping from green to cyan changes smoothly instead of stepping as it crosses some
+  invisible boundary. There is no range width to tune, because there is no boundary to place.
+
+  There is one more guard, and it fixes a bug every naive version of this effect has. A grey
+  pixel has no colour, and the arithmetic that works out "which hue is this?" answers zero for
+  it — which is red. Left alone, that means lifting the reds quietly lightens every neutral in
+  the frame. So each range's pull is scaled by how colourful the pixel already is: greys take
+  the Master adjustment and nothing else.
+
+  Finally, **Lightness** is a gain rather than a fade toward white, because in scene-linear
+  light there is no white to fade toward. Full negative takes a colour to black, full positive
+  doubles it, and nothing clips on the way. The one-knob **Hue shift** above is still the
+  effect to reach for when all you want is a dial that holds brightness as the hue turns; this
+  one does not try to.
 - **Matte key — greenscreen removal (K-154).** Drop this on green-screen footage and it makes
   the green vanish, leaving whatever was shot in front of it on a clean transparent background.
   It is modelled on the professional keyer *Keylight*: you tell it the **Screen colour** (a
@@ -1807,6 +2080,33 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   updated at once by a million threads without any two of them tripping over each other. The
   slow reference implementation is written the same way on purpose, so that the fast one is
   allowed to agree with it.
+  **A fourth part that was built, measured, and switched off — and why that is a result, not
+  a waste.** Cartoons and anime are the one kind of footage flow has never been good at. The
+  reason is that a cel is a flat area of colour with a hard outline round it: over most of
+  the frame there is simply nothing to match, because every pixel looks like its neighbours.
+  The planned fix was to let the *outlines* decide the motion for the flat areas — solve the
+  finished field against the picture's own edges, so a vector spreads freely inside one flat
+  region and stops dead at the line round it, instead of a character's motion smearing onto
+  the background. (This is a known technique, the "bilateral solver"; the flat-region-filling
+  half of it demonstrably works, and there is a test that proves motion crosses a flat band
+  and refuses to cross the outline.)
+  It was built for both backends and measured on five clips, and it made four of them
+  **worse**. The interesting part is why, because the reason is not "it needed more tuning".
+  The pass runs *after* variational refinement, and refinement has already smoothed the field
+  using real evidence from the two pictures. The new pass smooths it again using no evidence
+  at all — only "these two pixels are a similar brightness, so they probably move together".
+  It therefore cannot discover anything; it can only swap one kind of smoothing for another.
+  Where refinement had nothing to go on it sometimes guesses a little better (the anime clip
+  gained a bit), and everywhere refinement was already right it does damage. Every knob
+  confirmed it: on four of the five clips, the best setting was the one that made the pass do
+  as little as possible. When the best version of a feature is the one closest to switched
+  off, the honest reading is that the feature is answering the wrong question.
+  So it ships disabled, and the note it leaves behind is the useful bit: **line art is short
+  of evidence, not short of smoothing.** Getting more evidence is a different part of the same
+  programme — the matching step now compares each pixel with its neighbours rather than
+  comparing brightness directly, which is exactly the kind of change that finds something new
+  on a line drawing, and that one did help.
+
   **The HUD guard.** Game footage has a health bar, a killfeed, a minimap — things painted on
   top of the picture that stay perfectly still while the whole world slides underneath them
   during a fast turn. Flow sees a frame where everything moves except a few sharp rectangles,
@@ -3251,7 +3551,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   app's single accent — selection, the playhead, active states all follow it, since they are
   one token; **Shape** switches between the existing sharp, edge-to-edge look and a new
   Round shape — panels float as rounded cards with real gaps between them and the window
-  edge, Figma-inspired, no blur or bevel, just a soft shadow standing in for the border; and
+  edge, Figma-inspired, no blur or bevel, just a soft shadow standing in for the border.
+  Round commits to that shape rather than merely softening the corners: every button, chip,
+  tab and dropdown is a full capsule (a "stadium" — the ends are half-circles, so the corner
+  is always half the control's own height, whatever height it turns out to be); the tab or
+  mode you are currently on is filled solid with the accent colour instead of just having its
+  text tinted, which is what makes state readable across the room; Timeline layer bars and
+  Sequence clips get the same rounded ends; and each panel's tab carries a small accent dot
+  beside its name — decoration, not a status light, so it never blinks or changes to tell you
+  anything. Sharp is untouched by all of it. Finally,
   **Animation** picks how much motion the UI's own chrome shows (All / Minimal / None) —
   this reaches things like a collapsing section's arrow or a dialog's fade-in, not (yet) the
   app's own dropdown menus, which don't animate at all today regardless of this setting. All
@@ -3667,6 +3975,616 @@ Five budgets are missing from that list and cannot be here: how smooth the inter
 is (B1, B2) needs the real window; export speed (B8) needs the encoder; recovering from a
 graphics driver reset (B9) and audio/picture sync (B10) need a running application. Those
 stay manual checks, tracked in [TODO.md](TODO.md).
+
+### Making pictures out of nothing — `crates/lumit-core/src/fx/noise.rs` (K-398)
+
+Every effect described so far takes a picture and changes it. Four new ones don't: **Fill**
+floods a layer's shape with a colour, **Gradient** paints a ramp across the frame, **Noise**
+sprinkles grain over what arrived, and **Fractal noise** generates clouds. They needed
+somewhere to live in the Add-effect menu, and none of the six categories described what they
+do, so there is now a seventh: **Generate**.
+
+Three of the four are small. The interesting one is Fractal noise, and the interesting part
+of *it* is the word "noise", which in this context does not mean random.
+
+**Random would be useless here.** A genuinely random pattern would be a different picture
+every time it was drawn — every scrub, every preview, every export. There would be nothing
+to grade against and nothing to cache. What is wanted is a pattern that *looks* random and
+is in fact completely fixed: ask for the value at a given point and you always get the same
+answer, on any machine, in any run, for ever. That is what "seeded" means everywhere in
+Lumit, and `noise.rs` is where it is built for pictures.
+
+It is three layers stacked, and each is simple on its own.
+
+**One: a hash.** Imagine a grid over the frame, a hundred pixels apart. Each crossing point
+gets a number, and that number is *stirred* out of its own coordinates — its x, its y, and
+the effect's seed — by a few multiplications and shifts. The stirring is chaotic enough that
+neighbouring crossings get unrelated numbers, which is what makes it look random; but it is
+also pure arithmetic on whole numbers, so it gives the same answer everywhere, always. Whole
+numbers matter here for the same reason they mattered for the lens flare's ray counts: two
+computers can disagree about the last bit of a fraction, but they cannot disagree about
+`3 × 7`. The graphics card runs the identical few lines and gets the identical result, which
+is what lets the test compare the two down to the last representable step.
+
+**Two: smoothing between the crossings.** A grid of unrelated numbers is a chequerboard, not
+a cloud. So the value anywhere in between is blended from the crossings around it, along a
+curve that flattens out as it reaches each one — that is what stops the grid showing as
+creases. There are two flavours: **Value** noise blends the corner *numbers*, which is cheap
+and leaves a faintly woven look, and **Perlin** noise blends corner *slopes*, which costs
+more and gives the rounded, organic shape everyone pictures when they say "clouds".
+
+**Three: layers of detail.** One layer of that is a lava lamp. Real surfaces have big shapes
+with finer shapes on them and finer shapes on *those*, so the effect adds several layers,
+each roughly half the size and a bit fainter than the last. **Complexity** is how many,
+**Sub influence** how much each counts for, **Sub scaling** how much smaller each one is.
+Six layers is a cloud. That stack of shrinking, fading copies is what "fractal" means here,
+and it is the whole trick.
+
+The grid is three-dimensional, not two, and the third dimension is what **Evolution** moves
+along. You are always looking at a flat slice of a solid block of noise; turning the dial
+slides the slice deeper. That is why animating Evolution makes the pattern churn and drift
+like smoke instead of flickering into an unrelated pattern each frame — the slices either
+side of where you are are *nearly the same picture*, because they are neighbouring cuts
+through one solid thing. **Cycle** takes that further: switch it on and the block is made to
+repeat every so many steps, so an animation from 0 to the cycle length ends exactly where it
+began and can be looped with no seam. That works because every detail layer shares the one
+depth coordinate — a decision taken so that the loop closes precisely rather than
+approximately, and one of the places Lumit deliberately parts company with After Effects.
+
+**Why it is a module of its own rather than part of the effect.** The displacement effects
+coming next — Turbulent displace above all — do not draw noise, they *steer* by it: each
+pixel is pulled sideways by an amount the noise decides. That is the same field, read for a
+different purpose. One copy of the maths, one copy of the graphics-card version beside it,
+and one test holding the two together; the alternative is two implementations that agree
+right up until the afternoon somebody fixes one of them.
+
+### Moving pixels instead of recolouring them — the distort family
+
+Most effects answer the question "what colour should this pixel be?" by doing arithmetic on
+the colour that was already there. The distort effects — **Turbulent displace**,
+**Tile**, **Offset**, **Mirror**, **Lens distort**, and the five in the section after this
+one — answer a different question:
+*where should this pixel fetch its colour from?* The colour itself is never touched. That
+one difference is worth understanding, because it explains everything the family has in
+common, including the things about it that look like quirks.
+
+**They all work backwards.** It is tempting to picture a warp as pushing pixels around, like
+smearing wet paint. That is not how it is done, and it could not be: pushing leaves gaps
+where nothing landed and pile-ups where several things did. Instead the effect walks the
+*output* — every pixel of the finished frame, one at a time — and for each one works out
+which spot in the *input* it should read. Every output pixel gets exactly one answer, so
+there are never gaps and never pile-ups. A Mirror does not fling the left half across the
+frame; it says "if I am on the right, read from the mirrored spot on the left".
+
+**The spot they land on is usually between pixels**, and that is where **bilinear sampling**
+comes in. If the answer is "read from 12.4 pixels across and 7.8 down", there is no such
+pixel — so the four surrounding pixels are mixed in proportion to how close each one is.
+This is why a distortion very slightly softens the picture, and why moving by a whole number
+of pixels does not: a whole-number move lands exactly on a pixel and the mix picks it alone.
+
+**Sometimes the answer is outside the frame**, and each effect has to say what that means.
+Offset wraps — what leaves one side arrives at the other, because it treats the frame as a
+loop. Mirror gives transparency, because a reflection with nothing to reflect genuinely has
+nothing there. Lens distort offers the choice (transparent, hold the border pixel outward,
+or fold the picture back), because which one is right depends on the shot. Turbulent
+displace avoids the question near any edge you have *pinned*: it fades its push to nothing
+over a band exactly as wide as the push could reach, so the border cannot be pulled in from
+outside in the first place.
+
+**Turbulent displace is the one that reads the noise.** Its "where should I read from?" is
+answered by the pattern described in the previous section: two fields of it, one deciding
+how far to move sideways and one how far up or down. That is why the noise had to be a
+module rather than part of the Fractal noise effect — the generator draws the field, the
+displacer steers by it, and if the two ever disagreed about what the field *is*, using them
+together would stop working.
+
+**One thing that trips people up.** Every effect ends with a **Mix**, which blends the
+finished result back towards the picture that arrived. On a colour effect that reads as
+"less of the effect". On a warp it does not: blending a warped picture with an unwarped one
+shows *both*, so every edge appears twice, like a double exposure. To warp less, turn the
+Amount down. To warp less **in some places and not others**, use the Matte row — on
+Turbulent displace, uniquely in this family, the matte scales the push itself rather than
+fading the result, so a grey area is genuinely warped a little rather than being a full warp
+shown faintly.
+
+### Perspective, borrowed maps and circles — five more ways to move a pixel
+
+Everything in the previous section applies unchanged to **Corner pin**, **Displacement
+map**, **Polar coordinates**, **Twirl** and **Spherize**: they all walk the output and ask
+where to read from, they all land between pixels and mix four of them, and they all have to
+say what "outside the frame" means. What is new is the *shape of the answer*, and three of
+those shapes are worth understanding.
+
+**Corner pin does perspective, which is not the same as stretching.** Drag the four corners
+of a layer onto the four corners of a phone screen in a shot and the picture has to narrow
+where the screen recedes. Stretching cannot do that. What can is a **homography** — the
+transform a real camera performs: straight lines stay straight, but parallel lines meet.
+It needs eight numbers, and four points *are* eight numbers, which is why the effect stores
+the points and works the matrix out at render time rather than the other way round.
+
+Two consequences fall straight out of the maths. Because parallel lines meet, there is a
+**horizon** — a line in the output beyond which the surface you described has folded away
+behind the camera. Lumit draws nothing there. Some tools draw a mirrored copy of the picture
+instead, which is the arithmetic quietly running past the point where it means anything.
+And because a flat surface needs four corners to be a surface at all, putting three of them
+in a line describes nothing: the effect renders the picture untouched rather than dividing
+by zero, which is the house rule for every impossible setting (degrade, never fault).
+
+**Displacement map borrows its warp from another layer.** Turbulent displace invents its
+push out of a noise field it draws itself. Displacement map has no field of its own: you
+point the **Matte** row at a layer, and *that layer is the map*. One channel of it says how
+far to push sideways, another how far up and down.
+
+The number that matters is the neutral: **mid-grey means "do not move"**. Full white pushes
+the whole Amount one way, full black the whole Amount the other, and 50 % grey nothing at
+all. That is what lets a single picture push in both directions, and it is why a map that
+is mostly dark shoves everything one way — grade it around the middle and the warp moves
+*about* its rest position instead of away from it. This is also the second effect in the
+catalogue whose Matte row is the subject of the effect rather than a knob on it: Set matte's
+matte is the alpha, this one's is the map.
+
+**Polar coordinates bends the frame round its own middle.** In one direction the picture's
+rows become rings: the top row shrinks to a point at the centre, the bottom row becomes the
+outer ring, and the left and right edges meet in a seam pointing straight up. That is the
+"tiny planet". The other direction is the exact opposite and unrolls a circle into a strip.
+Two things follow. The centre is where detail dies — a whole row of the picture is squeezed
+onto a handful of pixels there — so whatever you put along the top of the source is what the
+middle of the planet will be made of. And its **Interpolation** control is a morph, not a
+fade: at 50 the frame is genuinely half bent, every pixel drawn from half-way along its own
+journey, which is quite different from laying a finished bend over the flat picture at half
+opacity. (The ordinary Mix does the second thing, and it is occasionally what you want.)
+
+**Twirl and Spherize are both bounded circles**, and that is the useful property. A twirl
+turns the picture about a point, hardest in the middle, easing to exactly nothing at the
+rim — so it can only ever rearrange what is already inside its own circle, and the rest of
+the frame is untouched to the last bit. Spherize magnifies inside its circle the way a glass
+marble does, which means the middle swells and everything it pushed aside is crowded into
+the last few pixels before the edge. Its **Bulge** control turned negative pinches instead,
+and the two are genuine opposites: a bulge and a pinch of the same strength cancel, which is
+not true of most effects that offer a minus sign.
+
+**One implementation trap, recorded because it cost an afternoon.** Every one of these
+kernels contains the same small helper: "fetch the pixel at (x, y), or transparent if that
+is outside the frame". The obvious way to write it is to check the coordinate and return
+early. That reads correctly and is wrong: fetching a picture has no side effects, so the
+compiler is free to move the fetch *above* the check and use the result afterwards — and an
+out-of-range fetch on at least one Windows graphics driver comes back with a live value in
+its alpha. The visible symptom is bizarre: a pixel that should be empty arrives opaque, with
+its colour still correctly black. The fix is to clamp the coordinate into the frame first,
+fetch that, and *then* choose between it and transparent — no fetch is ever out of range, so
+there is nothing to be undefined.
+
+### Waves, presets, and a warp that has to be solved
+
+Five more effects move pixels — **Ripple**, **Wave warp**, **Bezier warp**, **Warp** and
+**Roughen edges** — and between them they raise three ideas the catalogue had not needed
+before.
+
+**There is no speed control, anywhere, and that is a rule rather than an omission.** After
+Effects' Ripple and Wave Warp both have a "Wave Speed", which means cycles per second and is
+read off the clock. Lumit cannot have one. An effect that reads the clock renders a
+different picture depending on *when* it was asked, so the preview and the export disagree,
+two machines exporting the same project disagree, and a frame pulled out of the cache is
+wrong. Both effects instead have an angle — Evolution, or Phase — that the timeline
+animates, and one full turn is one whole wave. It is the same motion with the stopwatch in
+the user's hand instead of the computer's, and an imported AE project converts the speed
+into two keyframes automatically.
+
+**Ripple's rings die at the middle as well as at the rim, and there is a reason.** Every
+pixel in a ripple is pushed *along its own radius*, away from or toward the centre. The
+pixel exactly at the centre has no radius and therefore no direction, so an effect that
+pushed it anyway would have to pick one arbitrarily — and the result is a permanent pinched
+blob at the epicentre. Shaping the strength so that it starts at nothing, peaks about a
+third of the way out and falls back to nothing at the rim removes the problem exactly, and
+is also what a real spreading wave looks like: the crests are strongest in a ring, not at
+the point the stone went in.
+
+**Warp is thirteen named bends behind one slider, and it hides a sign trap worth knowing.**
+Every one of these kernels is a *gather*: it walks the output and asks where to read from.
+So if a style wants the middle of the picture to swell outward, it has to read from
+*further in*, not further out. Written the natural-looking way round, a style called Bulge
+pinches at a positive Bend — which is the one thing a preset called Bulge may not do. The
+five swelling styles therefore subtract their coefficient where the bending ones add theirs,
+and the tests check that every style at Bend 0 returns the picture untouched to the last
+bit.
+
+**Bezier warp is the first effect in Lumit that has to solve an equation per pixel.** Its
+twelve points — four corners and eight handles — bend the frame's four edges into curves,
+and the inside is filled by a **Coons patch**: a surface defined by its own boundary, made
+by blending the two horizontal edges vertically, blending the two vertical edges
+horizontally, adding the results and subtracting the flat surface on the corners that the
+two blends between them counted twice. That gives a formula for "where does source point
+(u, v) end up?" — and rendering needs the opposite, "which source point ended up *here*?",
+which the formula cannot be rearranged to answer.
+
+So each pixel searches for it, by **Newton's method**: start from a guess, work out how far
+wrong the guess is and which way the surface is sloping there, step, repeat. On a warp of
+any ordinary size a couple of steps is enough, and the effect's **Quality** control is
+simply how many steps it takes. (After Effects' Quality on the same effect means something
+else — how finely it chops the patch into triangles — but "higher is more accurate" is true
+of both, so a project converts without anyone noticing.)
+
+Two things about a solver that a formula never needs. It can **fail to converge**, and it
+must be told to stop: a patch dragged so far that it folds over itself has no single answer,
+so the search gives up rather than dividing by zero. And its answer has to be **checked**.
+Outside the bent shape there is no answer at all, and an unchecked search wanders about
+until it happens to land in range — which draws a scatter of stray, wrong pixels across the
+empty part of the frame. It looked like a driver bug and it was not; the fix is one more
+evaluation at the end, asking "does this answer actually solve the problem?", and throwing
+it away when it does not.
+
+**Roughen edges reuses a blur as a distance field, which is the batch's best trick.** To
+chew forty pixels off the outline of a shape you need to know, for every pixel, how far it
+is from that outline. Computing that properly is a whole algorithm — a *distance transform*
+— with its own passes and its own edge cases. But blurring the shape by forty pixels gives
+the same information for nothing: the half-way contour of a blurred alpha sits exactly where
+the original edge was, and the ramp either side of it is forty pixels wide. So the effect
+blurs, then re-cuts the blurred coverage at a threshold that a noise field wobbles per
+pixel. Drop shadow already reuses the same shipped blur for its softening; this is the
+second time one kernel has paid for another.
+
+The one thing the noise has to be told is *where it is allowed to act*. Deep inside a solid
+layer the blurred coverage is 1, and a noise value low enough would otherwise punch a hole
+in the middle of the shape. Weighting the wobble by how close the pixel is to the outline —
+strongest on it, zero well inside or well outside — confines the chewing to a band, which is
+both correct and exactly what the Border control ought to mean.
+
+### Deciding how much of a pixel there is — coverage, and the wipes (K-400)
+
+Every effect so far has answered "what colour is this pixel?" or "where does this pixel read
+from?". Five more answer a third question: **how much of this pixel is there at all?** That
+number is the alpha — the coverage — and it is what decides whether you can see through
+something.
+
+**Drop shadow** is the familiar one, and it is made entirely of coverage. The layer's alpha
+already carries its shape: where it is solid, where its edge softens, every wisp of
+antialiasing. Blur that shape, slide the blurred copy in the direction the light comes from,
+paint it one colour, and draw it *behind* the layer. That "behind" is the whole reason it is
+an effect rather than a duplicated layer, and it is why the effect can never make a shadow
+on footage that fills the frame — an opaque rectangle has no shape to cast.
+
+One small thing in it is worth knowing because it saves half the work. Blurring a picture
+and then sliding it gives exactly the same result as sliding it and then blurring it: the
+two operations do not care which order they happen in. So the effect softens the shape where
+it stands and then simply *reads* the softened version at the offset position. One blur
+instead of a blur and a resample, and not an approximation — the same picture.
+
+**Set matte** is the one worth slowing down for, because it changes what the Matte row
+means. Every effect has that row: pick a layer, and its brightness drives the effect. For
+almost all of them "drives" means strength — the effect runs everywhere and is then faded
+back towards the untouched picture where the matte is dark. Set matte's matte is not a
+strength. It **is** the alpha: whichever channel you choose out of that layer becomes this
+layer's transparency, so a title takes the shape of a cloud, or a fill takes the shape of a
+ramp.
+
+The difference is easy to see and impossible to fake. Point Set matte at a white disc on
+black. The effect gives you a disc-shaped picture. A strength dissolve at the same matte
+gives you the *whole frame*, with a faint ring where the disc's soft edge is — because
+inside the disc it shows the effect (which is the picture) and outside it shows the input
+(which is also the picture), and only the halfway ring differs at all. Six effects in the
+catalogue claim their matte this way instead of taking the dissolve; this is the first for
+which the matte is the answer rather than a knob on the answer.
+
+**Channel blur** is the ordinary blur with one radius per channel. It earns its place
+because a real camera does not resolve the three colours equally — blue is always the worst
+— so softening blue alone reads as a lens rather than as a blur, which is why blue is the
+one channel switched on by default. It is also how you feather a cut-out's edge without
+touching the colour inside it: turn up Alpha and leave the rest at zero.
+
+**Linear wipe and Radial wipe** are transitions, and they got a menu family of their own
+because there was nowhere honest to put them. A wipe adds nothing to the picture, so it is
+not a stylisation; it is not a tool either. It is the thing an editor means by the word
+*transition*: keyframe **Completion** from 0 to 100 and the layer leaves the frame along a
+straight edge or around a clock face, and a cut has been made out of a movement.
+
+Two details in them are the kind of thing that only shows up on a real project. **The edge
+travels slightly past each end of the frame**, by half the width of the feather. Without
+that, a soft wipe at Completion 0 would already be nibbling at the far corner and at 100 it
+would leave a faint ghost — so the wipe would neither start clean nor finish. And on the
+radial one, **the feather is measured across the arc**, so the soft edge stays the same
+thickness as the hand sweeps outwards instead of fanning open. Right at the centre that
+becomes impossible (a fixed width covers the whole circle when the circle is a point), so
+it is capped there, and a few pixels in the middle of a heavily feathered radial wipe are
+mush. That is true of every radial wipe in every application; it is geometry, not a bug.
+
+### Where a tone control should sit, and what "local" means (K-404)
+
+Six more effects change colour rather than position — **Posterize**, **Threshold**,
+**Tritone**, **Photo filter**, **Black and white** and **Shadow highlight** — and between
+them they raise two ideas the catalogue had managed without until now.
+
+**The picture is measured in photons, and a person is not, so a control has to be told
+which of the two it lives in.** Lumit works in scene-linear light (see the colour section
+above): a value of 1.0 is white, and 0.5 is *not* the grey halfway between white and black —
+the grey a person points at is nearer 0.25. That is fine while an effect is doing
+arithmetic, because light is the honest space to multiply in. It stops being fine the moment
+a control asks a *question about where the middle is*.
+
+Four controls in this batch do exactly that. Posterize is told how many shades to keep, and
+has to decide where to put them; Threshold is told a brightness and has to cut there;
+Tritone is told what colour the midtones should be; Shadow highlight has to know what a
+midtone is before it can add contrast to one. Put those evenly in light, and eight
+posterize bands land with six of them crowded into the highlights and the shadows left
+almost smooth — the opposite of what the effect is for. So all four run their control
+through one small conversion that stretches the dark end out, and the rule that came out of
+it is worth remembering: **do the maths in light, but put the knob where the eye is.**
+
+**The conversion is a square root, and the reason is the tests rather than the picture.**
+Any reasonable curve would place the bands acceptably — the usual one in this trade is a
+power of 1/2.2. The problem is that Posterize's answer is a *step*: a value either lands on
+this band or the next one, with nothing in between. Every effect in Lumit is checked by
+running the same maths on the processor and on the graphics card and demanding they agree
+(see the testing section). Two implementations of a power function disagree in the last bit
+or two, which for most effects is invisible — but for a step, "the last bit" is the
+difference between one band and the next, and the test would fail at random on whichever
+pixels happened to sit on a boundary. A square root is a single instruction that both the
+processor and the card are required to get *exactly* right, so they cannot disagree at all.
+Between a curve of 2.0 and one of 2.2 there is no visible difference in where eight bands
+land; between an exact answer and an approximate one there is a flickering test. **Pick the
+formula your test can prove.**
+
+**Shadow highlight is the first effect here that asks about a pixel's neighbours, and the
+way it does it is worth knowing.** The job is the backlit interview: a face against a
+window, where the camera exposed for the window and the face went black. Brightening the
+whole picture blows the window out. What is needed is to brighten the *dark regions* only —
+and the word doing the work is *regions*.
+
+The trick is that it blurs the picture, and then throws almost all of the blurred picture
+away. It keeps one number per pixel: how bright the neighbourhood is. That number decides
+*whether this pixel counts as a shadow*, and nothing else — the colour that comes out is
+always the pixel's own, multiplied by a gain. The blur is a question, not an answer.
+
+Two things follow. Nothing is softened, because no colour was ever borrowed from the blurred
+copy; the picture comes out exactly as sharp as it went in. And a white shirt button inside
+a dark jacket is brightened *along with the jacket*, instead of being singled out and left
+behind, because the question asked about the button was really a question about the jacket.
+That is the whole of what "local adaptive" means, and it is why the result looks like a
+better exposure rather than a washed-out one. The one artefact to watch for is a bright halo
+around a dark object on a bright background, which is what happens when the neighbourhood is
+too small or the lift too strong; the shipped defaults are deliberately mild.
+
+**Two smaller things from the same batch.** Black and white's six sliders — how bright should
+reds be, and yellows, and so on — work by splitting every colour *exactly* into a grey plus a
+bit of one colour plus a bit of another, rather than by guessing which slider a pixel most
+belongs to. That sounds like a detail and is not: it means a grey pixel has nothing for the
+sliders to act on, so a shot full of neutral does not drift while you tune one colour, and
+two neighbouring colours on a gradient hand over without a seam. And After Effects'
+Shadow/Highlight has an "Auto Amounts" that reads the frame's own histogram and then smooths
+that reading over neighbouring frames; Lumit deliberately has no such thing, because it makes
+a grade whose answer at one frame depends on the shot around it — which cannot be judged on a
+still and cannot be scrubbed backwards. It is the same reason there is no Wave Speed
+anywhere: a control that cannot give the same answer twice is one Lumit would rather not
+have.
+
+### Choosing a number instead of working one out (K-405)
+
+Almost every effect Lumit has *computes* its answer: take the pixel, multiply,
+add, done. Six more arrived together — **Median**, **Mosaic**, **Find edges**,
+**Emboss**, **Texturize** and **Broadcast safe** — and the first of them does
+something none of the others do. It **chooses**.
+
+Median replaces each pixel with the *middle* value of the little square of
+pixels around it: line the neighbours up in order and take the one in the
+centre. That one idea does something no blur can. A stray white speck has no
+neighbours agreeing with it, so it never gets near the middle of the queue and
+vanishes completely — while a real edge has half its square on each side, so the
+middle value is still on the correct side of it and the edge stays exactly where
+it was. Blur softens everything, including the edges; median removes the specks
+and leaves the edges alone. Turned up, it stops looking like a repair and starts
+looking like paint.
+
+**Why choosing is harder than computing, on a graphics card.** The obvious way to
+find a middle value is a *sort*, or its clever cousin the quickselect: compare
+two numbers, decide what to do next based on which was bigger, repeat. That is
+fine on a processor and wrong here, for two reasons. A graphics card runs dozens
+of pixels in lockstep, and a program that takes a different turning for each of
+them makes every pixel wait for every other. Worse — and this is the reason that
+actually settled it — Lumit checks each effect by running the same maths on the
+processor and on the card and demanding the two agree (see the testing section).
+A method that *decides what to compare next based on what it just saw* does not
+have to make the same decisions on both, and two different orders of comparison
+can land on two different pixels of the window. One pixel apart is a visibly
+different answer.
+
+So both paths run the same fixed dance instead. Walk the square once, carrying a
+short sorted list of the smallest values seen so far; for each new neighbour,
+push it along that list swapping wherever it is smaller than what is there. No
+step of that depends on a value — it is the same sequence of comparisons for
+every pixel in every frame — and the two halves of it, "the smaller of these
+two" and "the larger of these two", are the two operations a computer is
+required to get *exactly* right. So the processor and the card cannot disagree,
+even though (as it happens) they do not even walk the same square: the card
+always walks the largest one and pads the corners it does not want with a number
+bigger than any pixel, because those can never reach the middle. The general
+lesson is worth carrying: **when an effect has to pick rather than calculate,
+write the picking as a fixed sequence of exact steps, never as a search.**
+
+**The cost, and a slider that genuinely stops.** That dance costs roughly the
+fourth power of the radius — forty-five comparisons a pixel at radius 1, three
+hundred at 2, twelve hundred at 3, seventeen thousand at 6. After Effects lets
+its Median radius go to 50, which here would be a quarter of a million
+comparisons for every pixel of every frame. Lumit's stops at 3, and it is the one
+control in the whole catalogue that *cannot be typed past*. Everywhere else a
+slider is a suggestion and a number you type is obeyed; here the honest thing is
+to refuse, because a control that quietly gives you radius 3 when you asked for
+30 has answered a different question from the one you asked.
+
+**Two smaller ideas from the same six.** Mosaic cuts the frame into blocks, and
+which block a pixel belongs to has to be decided by *whole-number* arithmetic
+rather than by dividing its position by the block width — because a division that
+comes out exactly on a boundary can round the other way on the card than on the
+processor, and a whole block of colour changes. And Find edges and Emboss both
+work by comparing a pixel with its neighbours, which they do on the *perceptual*
+brightness rather than the raw light, for the reason the section above gives: in
+light, the step from a bright sky to a brighter one is a bigger number than the
+step from a shadow to a slightly-lit shadow, though the eye sees the second and
+not the first. Compare in light and you draw the highlights; compare
+perceptually and you draw what a person would draw.
+
+**And one that is about television.** Broadcast safe exists because analogue
+television carried brightness and colour along a single wire, added together,
+and a transmitter would distort a signal whose total swung too far. A saturated
+yellow is the classic offender: its brightness is nearly white already, and its
+colour adds a large amount on top, so the two together reach about a third again
+past the legal peak — even though neither half is unusual on its own. The effect
+measures that total for every pixel and either pulls the pixel down until it
+fits, drains colour out of it until it fits, or simply shows you which pixels
+the problem is in. It is a delivery tool rather than a look, which is why it sits
+under Utility with Set matte rather than with the colour effects.
+
+### Reading a picture instead of drawing one (K-406)
+
+Three more transitions arrived together — **Venetian blinds**, **Iris wipe** and
+**Card wipe** — and the last of them raises the biggest single idea in how
+Lumit's effects are built. It is worth the detour, because once you have it, a
+lot of the catalogue stops looking clever and starts looking obvious.
+
+**Venetian blinds first, because it is the easy one.** It is Linear wipe — one
+straight edge swept across the frame — with a single line added: before the edge
+is applied, the distance across the frame is *folded* into one slat. Measure how
+far a pixel is along the sweep, then throw away everything but the remainder when
+you divide by the slat width. Now every slat sees the same little number, and one
+edge becomes a rank of them. Everything Linear wipe already got right (the clean
+start and finish, the direction convention, the feather) comes along untouched.
+That is the cheapest kind of new effect there is: an old one, folded.
+
+**Iris wipe is the same trick in a circle, and it saves an enormous amount of
+work.** The effect cuts a polygon-shaped hole — six sides by default, up to
+thirty-two, and with one switch every other corner pulls inwards and it becomes a
+star. The obvious way to build that is to *draw* the polygon: work out its
+corners, walk its edges, fill the inside. Nobody does that here. A polygon is the
+same wedge repeated round a circle, so the effect takes the pixel's angle, folds
+it into one wedge, and then mirrors it about that wedge's own centre line. What
+is left of the entire boundary — six sides or sixty-four, points or no points —
+is **one straight edge**, and how far a pixel is from a straight edge is a single
+multiply-and-add. A star is the identical calculation with the second corner put
+somewhere else, so the switch costs nothing at all while the effect is running.
+
+There is a bonus in that, and it is the sort of thing worth noticing. Because the
+answer is a real perpendicular distance measured in pixels, the Feather control
+can be a *width* — the same thickness all the way round, including inside the
+crooks of a star's points. Radial wipe, which measures in angles instead, has to
+fight that battle and only half wins it (see the note about mush in its own
+section). Choosing the right thing to measure made a control's problem disappear
+rather than be solved.
+
+**Card wipe: why Lumit reads pictures instead of drawing them.** The effect cuts
+the frame into a grid of cards and turns each one edge-on until it vanishes, in a
+wave crossing the frame. It genuinely turns: the near edge grows as it swings
+towards you, the far edge shrinks, and the picture printed on the card slides
+across it. That is perspective, and it is the first time anything in Lumit has
+put a camera in front of a pixel.
+
+Here is the part that matters. There are two ways to put a rotated rectangle on
+screen. The way every 3D program does it is to **scatter**: take the rectangle's
+four corners, work out where each one lands, and paint the pixels in between.
+Lumit's effects never do that. They **gather** — every output pixel asks one
+question, *where should I read from?*, and answers it by itself, knowing nothing
+about any other pixel. Gathering is why effects run at full speed on the graphics
+card (a thousand pixels can ask their question simultaneously without ever
+tripping over each other), and it is why the processor and the card can be held to
+producing bit-identical answers.
+
+So Card wipe cannot draw a card. It has to run the perspective **backwards**:
+given that I am standing here on screen, which point of the flat card is in front
+of me? For a rotation about one axis with a camera in front of it, the forward
+formula turns out to be a fraction — one thing divided by another — and fractions
+of that shape can be turned inside out with school algebra. The inverse is one
+division. That single fact is the whole reason a card wipe is a cheap one-pass
+effect and not a rendering pipeline, and the general lesson has been written down:
+**before you reach for drawing, check whether the formula can simply be turned
+around.** (Bezier warp, elsewhere in the catalogue, is the case where it cannot be
+— and that effect has to *solve* for its answer by repeated guessing, which is a
+great deal more work.)
+
+**What Card wipe deliberately does not have.** After Effects' version carries a
+whole camera system: camera position, corner pins, lights, materials, jitters —
+all of it there so you can look at the grid from an angle. Lumit keeps cameras on
+the composition rather than inside an effect, so every card here is drawn in its
+own little frame from one fixed viewing distance. The choice of what to keep was
+made with one test: **is it still visible?** Perspective stayed in because without
+it the Flip direction control would do nothing at all — a card that merely
+squashed would look identical whichever way it turned — and a control that does
+nothing is a defect with a name on it. The camera controls went because Lumit
+cannot honour them, and the honest conversion of a control you cannot honour is
+to not have it and say so. That is the same ruling as the missing Wave Speed and
+the missing Auto Amounts elsewhere in these notes, for the third time.
+
+**And one small thing that is easy to get wrong.** A card is gone when it has
+turned a quarter turn, and the cosine of a quarter turn is zero — except that in a
+computer's arithmetic it is 0.00000006, which is not zero. Trusting the
+trigonometry would leave a hairline of faint pixels down the spine of every card
+at the end of the transition. So both the processor and the card *test* for the
+two ends of the range instead: not started, pass the pixel through untouched;
+finished, clear it. The general form of that is worth carrying: **when an
+animation has to land exactly on nothing, check for the end rather than
+calculating your way to it.**
+
+### Doing the random part once (K-407)
+
+Five more effects landed together — **Beam**, **Lightning**, **Radio waves**,
+**Vegas** and **Add grain** — and the batch contains an idea you will meet
+again.
+
+**Where work should happen: once a frame, or once a pixel.** A lightning bolt is
+built by taking a straight line, pushing its middle sideways by a random amount,
+then pushing the middle of each new half sideways, and so on — a few rounds of
+that and you have the jagged shape everyone recognises. The question is *where*
+that gets worked out.
+
+The obvious answer is "in the graphics card's program", because that is where
+effects live. But that program runs once for every pixel on the screen — two
+million times for a 1080p frame — and every one of those two million runs would
+be rebuilding the *same bolt* just so it could measure its own distance to it.
+Two million identical calculations, thrown away 1,999,999 times.
+
+So Lightning does it the other way round. The bolt is worked out **once a frame**,
+in ordinary Rust, into a list of at most 192 straight segments; that list is
+handed to the graphics card, which then only has to answer a very cheap question
+per pixel: how far am I from the nearest of these segments? A few hundred
+multiplications replace a few hundred million.
+
+There is a second prize, and it is arguably the bigger one. Every effect in
+Lumit is written twice — once in Rust as the reference, once as a graphics-card
+program — and a test holds the two to agreement pixel by pixel. Normally that
+test has to check the whole effect. Here it only has to check the *drawing*,
+because both versions are handed the **identical list of segments**: there is no
+second copy of the bolt-building code that could quietly disagree with the first.
+The rule to carry, which is now written down as a decision: **if the random thing
+does not change from pixel to pixel, it does not belong in the pixel program.**
+
+**A clock is a bug; a control is not.** Radio waves throws out a ring several
+times a second, each one expanding and fading. After Effects does that by asking
+what time it is. Lumit is not allowed to: an effect that reads a clock gives a
+different answer on a preview than on an export, and a cached frame becomes a
+lie. So Lumit's version has a **Time** control — a plain number of seconds you
+keyframe — and everything else is measured against it. Keyframe it in a straight
+line and you get exactly After Effects' behaviour. But you can also slow the line
+down, hold it to freeze every ring in mid-flight, or run it backwards; a rate
+cannot do any of that. This is the third effect where a missing rate turned out
+to be the faithful conversion, and the first where the replacement can do more
+than the thing it replaced.
+
+**Finding a line in a picture, and then running lights along it.** Vegas outlines
+whatever is in the frame and marches dashes along the outline. The interesting
+part is what "the outline" means. The obvious approach — measure how fast the
+picture is changing and light up wherever it changes fast — gives a line whose
+*thickness* depends on how sharp the edge happened to be, so a Width control
+would do nothing on a soft edge and everything on a hard one. Instead Vegas asks
+a different question: how far, **in pixels**, is this pixel from the place where
+the brightness crosses the level you chose? That number comes out of one
+division, it is a real distance, and Width is therefore a real width. It also
+switches the effect off by itself where the picture is flat, because "how far to
+a level that never arrives" is infinity.
+
+Two small practicalities came out of building it, both the sort of thing that
+only shows up on real footage. The direction of the outline is measured over a
+5×5 neighbourhood rather than a 3×3 one, because on compressed video a small
+neighbourhood points a different way in almost every pixel and the dashes come
+out as speckle rather than as a line. And the dashes are counted from the middle
+of the frame rather than from its corner, because a small error in the outline's
+direction gets multiplied by how far away you are — so halving the distance
+halves the wobble, for free.
 
 ## 5. Making a change safely (the recipe)
 
@@ -6327,3 +7245,40 @@ Both rows point at pages, not sections. The docs site's sidebar headings are
 generated from folders and have no page of their own, so a link to `/use/`
 would be a 404 — "online guides" therefore goes to the first-composition
 walkthrough, which is where somebody asking for guides wanted to end up.
+
+### The effect pages write themselves
+
+The manual has a page per effect, and each one carries a table of every
+parameter with its range, its default and its unit. Nobody types those tables.
+They are already written down once, on the effect's own declaration in the
+engine — that is where a slider learns it runs 0 to 25 and starts at 1.5 — and
+copying them into a web page by hand would mean every future tweak to a slider
+silently made the manual wrong.
+
+So the numbers travel. `cargo test -p lumit-core regenerate_fx_reference --
+--ignored` asks the engine to write its whole catalogue out as one file,
+`crates/lumit-core/fx-reference.json`; then, from `web-docs/`, `npm run
+docs:effects` turns that file into the pages. (The odd `--ignored` is Rust's way
+of saying "this test only runs when asked for by name" — it writes a file, so it
+should not fire on every run.)
+
+The trick that keeps it liveable is that the script does **not** own the pages.
+Each page has a marked-off block, opened and closed by an invisible comment, and
+the script rewrites what is between those two marks and nothing else. The
+prose — what the effect is for, what each control actually does, the warnings —
+is hand-written above and below, and survives every regeneration untouched. An
+effect with no page yet gets a whole one scaffolded, headings and marks and all,
+waiting for somebody to write the prose into it.
+
+Two safety rails come with that. `npm run docs:effects -- --check` writes
+nothing and simply fails if any page has fallen behind the engine, which is how
+a build catches a slider that moved without the manual following. And a page
+nobody claims any more — the leftover of a renamed or deleted effect — is
+reported by name rather than quietly left to mislead readers.
+
+This is also why one sentence can appear on all thirty-five pages at once. The
+Matte row's plain-English meaning (above, under driving effects with mattes) is
+written in the script for the effects that treat it as a simple strength, and on
+the effect itself for the four that do something cleverer — so each page states
+the truth about *that* effect without anybody maintaining thirty-five paragraphs
+that say the same thing.

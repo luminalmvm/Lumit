@@ -1,0 +1,96 @@
+---
+title: Curves
+description: "Bend the tone curve where you want it, on the whole picture or one channel."
+---
+
+Curves is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Bends the relationship between what came in and what goes out. Five points
+on each curve — black, shadows, midtones, highlights, white — say what a pixel
+of that brightness comes out as; the curve runs smoothly through them.
+
+This is the grade you reach for when a slider is not shaped enough. The classic
+move is the S: shadows pulled down a little, highlights pushed up, midtones left
+where they are, which is contrast that spares the middle. The Red, Green and
+Blue curves do the same thing one channel at a time, which is how a picture gets
+warm shadows and cool highlights without a colour cast across the whole frame.
+
+The curve cannot overshoot between two of your points, so a lifted highlight
+never dips the curve below its neighbour and never rings a dark halo into a
+roll-off. Values above 1 — the parts of a scene-linear picture brighter than
+white — carry on along the slope at the top rather than being clipped, so
+pushing a curve hard and pulling exposure back down recovers the detail.
+
+Two things Curves cannot do yet, and both are deliberate. The five points sit at
+fixed places along the input: you shape the curve by moving outputs up and down,
+not by placing points wherever you like. And the panel draws twenty numbers
+rather than a curve you drag — the drawn editor is a later change to the panel,
+not to what a project stores, so a curve authored today survives it.
+
+Every one of those twenty numbers keyframes and takes an expression, which is
+more than After Effects' own Curves can say: its curve is stored as a blob that
+can only be held between keyframes, never animated.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Master › Black** | Slider | 0 to 1; higher by typing | 0 | - |
+| **Master › Shadows** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Master › Midtones** | Slider | 0 to 1; higher by typing | 0.5 | - |
+| **Master › Highlights** | Slider | 0 to 1; higher by typing | 0.75 | - |
+| **Master › White** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Red › Black** | Slider | 0 to 1; higher by typing | 0 | - |
+| **Red › Shadows** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Red › Midtones** | Slider | 0 to 1; higher by typing | 0.5 | - |
+| **Red › Highlights** | Slider | 0 to 1; higher by typing | 0.75 | - |
+| **Red › White** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Green › Black** | Slider | 0 to 1; higher by typing | 0 | - |
+| **Green › Shadows** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Green › Midtones** | Slider | 0 to 1; higher by typing | 0.5 | - |
+| **Green › Highlights** | Slider | 0 to 1; higher by typing | 0.75 | - |
+| **Green › White** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Blue › Black** | Slider | 0 to 1; higher by typing | 0 | - |
+| **Blue › Shadows** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Blue › Midtones** | Slider | 0 to 1; higher by typing | 0.5 | - |
+| **Blue › Highlights** | Slider | 0 to 1; higher by typing | 0.75 | - |
+| **Blue › White** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Master** groups **Black**, **Shadows**, **Midtones**, **Highlights**, **White**.
+- **Red** groups **Black**, **Shadows**, **Midtones**, **Highlights**, **White**, and starts closed.
+- **Green** groups **Black**, **Shadows**, **Midtones**, **Highlights**, **White**, and starts closed.
+- **Blue** groups **Black**, **Shadows**, **Midtones**, **Highlights**, **White**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Black**, **Shadows**, **Midtones**, **Highlights**, **White** — what that
+  channel's curve outputs at inputs 0, 0.25, 0.5, 0.75 and 1. At the defaults
+  every output is its own input, which is a straight line and no change at all.
+- **Master** applies to all three channels; **Red**, **Green** and **Blue**
+  apply to one each. The colour curves run first and Master runs over the top of
+  them, which is the order Photoshop and After Effects use.
+- **Mix** — how much of the graded picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Levels](/effects/colour/levels/)
+- [Contrast](/effects/colour/contrast/)
+- [Gamma](/effects/colour/gamma/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

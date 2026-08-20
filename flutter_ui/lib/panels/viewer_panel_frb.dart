@@ -1,7 +1,9 @@
 // The Viewer, on the flutter_rust_bridge API.
 //
-// A toolbar over the picture: magnification, channel view, the transparency
-// grid, the transport and the timecode. The picture itself is whatever the
+// A toolbar under the picture: magnification, channel view, the transparency
+// grid, the transport and the timecode. Sharp welds it to the panel's bottom
+// edge; Round parts it from the picture by a tile gap and draws it as a tile
+// of its own (K-394). The picture itself is whatever the
 // render worker last published — always a platform `Texture` on a zero-copy
 // path (K-183) — drawn at the chosen zoom over a checkerboard, pannable when
 // it is larger than the panel.
@@ -350,7 +352,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             onWireframes: () => setState(() => _wireframes = !_wireframes),
             onPlayPause: _togglePlay,
             onSeek: (f) => _seek(comp, ui, f),
-            floating: round,
+            detached: round,
           ),
         ),
       ),
@@ -359,118 +361,126 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     // The picture. The preview progress bar used to float over the bottom of
     // it; it now rides on the right of the transport instead (K-287), where it
     // covers nothing and has a place of its own that is always the same size.
-    final stage = Expanded(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final size = facts.size;
-          final fitted = _fittedRect(constraints, size);
-          _reportScale(ui, fitted, size, _fitScale(constraints, size));
+    final stage = LayoutBuilder(
+      key: const ValueKey('viewer-stage'),
+      builder: (context, constraints) {
+        final size = facts.size;
+        final fitted = _fittedRect(constraints, size);
+        _reportScale(ui, fitted, size, _fitScale(constraints, size));
 
-          // Which layers might be missing their file. Off the held facts, not
-          // re-asked here: this used to live in the stage, which rebuilds per
-          // frame during playback, so `getLayers` plus a `getSourceItem` per
-          // layer crossed the bridge sixty times a second to re-answer a
-          // question edits change and playback never does.
-          final footage = facts.footage;
+        // Which layers might be missing their file. Off the held facts, not
+        // re-asked here: this used to live in the stage, which rebuilds per
+        // frame during playback, so `getLayers` plus a `getSourceItem` per
+        // layer crossed the bridge sixty times a second to re-answer a
+        // question edits change and playback never does.
+        final footage = facts.footage;
 
-          void applyZoom(ViewerZoom next) => _goToZoom(
-                next.scale,
-                next.pan,
-                from: size.width == 0 ? 1 : fitted.width / size.width,
-              );
+        void applyZoom(ViewerZoom next) => _goToZoom(
+              next.scale,
+              next.pan,
+              from: size.width == 0 ? 1 : fitted.width / size.width,
+            );
 
-          return Listener(
-            // The wheel zooms about the cursor (docs/07 §2.2): the comp point
-            // under the pointer stays under the pointer, which is what makes
-            // zooming feel like leaning in rather than teleporting.
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                // Shift+scroll belongs to the armed dropper, which is sizing
-                // its sample region with it — zooming as well would move the
-                // picture out from under the pixel being aimed at.
-                if (ui.dropper.value != null &&
-                    HardwareKeyboard.instance.isShiftPressed) {
-                  return;
-                }
-                _scrollZoom(event.localPosition, event.scrollDelta.dy,
-                    constraints, size, fitted);
+        return Listener(
+          // The wheel zooms about the cursor (docs/07 §2.2): the comp point
+          // under the pointer stays under the pointer, which is what makes
+          // zooming feel like leaning in rather than teleporting.
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              // Shift+scroll belongs to the armed dropper, which is sizing
+              // its sample region with it — zooming as well would move the
+              // picture out from under the pixel being aimed at.
+              if (ui.dropper.value != null &&
+                  HardwareKeyboard.instance.isShiftPressed) {
+                return;
               }
-            },
-            child: ValueListenableBuilder<int>(
-              valueListenable: ui.playheadFrame,
-              builder: (context, frame, _) => _Stage(
-                comp: comp,
-                uiState: ui,
+              _scrollZoom(event.localPosition, event.scrollDelta.dy,
+                  constraints, size, fitted);
+            }
+          },
+          child: ValueListenableBuilder<int>(
+            valueListenable: ui.playheadFrame,
+            builder: (context, frame, _) => _Stage(
+              comp: comp,
+              uiState: ui,
+              fitted: fitted,
+              grid: ui.viewerGrid,
+              wireframes: _wireframes,
+              channel: _channel,
+              compSize: size,
+              footage: footage,
+              onPan: (delta) => setState(() {
+                // A pan during a zoom flight would be fighting it, so the
+                // flight ends where it is and the drag takes over.
+                _zoomFrom = null;
+                _zoomMotion.value = 1;
+                _pan += delta;
+              }),
+              // The model is *told* an edit landed, rather than the boxes
+              // checking for themselves as they draw (K-230): the Viewer
+              // commits its own edits, and the drawing path reads the held
+              // copy now, so this is what puts the new document on screen
+              // without waiting for the change stream's round trip. The same
+              // thing every other panel does after committing.
+              onChanged: () {
+                ui.model.refresh();
+                setState(() {});
+              },
+              onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
+                cursor: at,
+                factor: out ? 1 / zoomToolStep : zoomToolStep,
                 fitted: fitted,
-                grid: ui.viewerGrid,
-                wireframes: _wireframes,
-                channel: _channel,
-                compSize: size,
-                footage: footage,
-                onPan: (delta) => setState(() {
-                  // A pan during a zoom flight would be fighting it, so the
-                  // flight ends where it is and the drag takes over.
-                  _zoomFrom = null;
-                  _zoomMotion.value = 1;
-                  _pan += delta;
-                }),
-                // The model is *told* an edit landed, rather than the boxes
-                // checking for themselves as they draw (K-230): the Viewer
-                // commits its own edits, and the drawing path reads the held
-                // copy now, so this is what puts the new document on screen
-                // without waiting for the change stream's round trip. The same
-                // thing every other panel does after committing.
-                onChanged: () {
-                  ui.model.refresh();
-                  setState(() {});
-                },
-                onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
-                  cursor: at,
-                  factor: out ? 1 / zoomToolStep : zoomToolStep,
-                  fitted: fitted,
-                  compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                  panel: Size(constraints.maxWidth, constraints.maxHeight),
-                )),
-                onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
-                  box: box,
-                  out: out,
-                  fitted: fitted,
-                  compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                  panel: Size(constraints.maxWidth, constraints.maxHeight),
-                )),
-              ),
+                compSize: Size(size.width.toDouble(), size.height.toDouble()),
+                panel: Size(constraints.maxWidth, constraints.maxHeight),
+              )),
+              onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
+                box: box,
+                out: out,
+                fitted: fitted,
+                compSize: Size(size.width.toDouble(), size.height.toDouble()),
+                panel: Size(constraints.maxWidth, constraints.maxHeight),
+              )),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
 
-    // The transport belongs under the picture, where a transport goes. In round
-    // mode it is a detached bar floating over the bottom of the frame — the
-    // rounded language treats it as an object sitting on the picture rather
-    // than a strip welded to the panel edge; sharp mode keeps it attached, so
+    // The transport belongs under the picture, where a transport goes. Round
+    // makes that literal (K-394, docs/15 §12.1): the picture is one tile and
+    // the transport another, parted by the same tile gap that parts the panes
+    // themselves (K-092) with the canvas showing through, so the bar sits
+    // *below* the picture instead of over it. It is still a child of this
+    // panel's own column, so docking or dragging the Viewer carries the
+    // transport with it. Sharp keeps the strip welded to the panel edge, and
     // the two shapes read as two deliberate designs rather than one with a gap.
-    return round
-        ? Stack(
-            children: [
-              Positioned.fill(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [stage],
-                ),
-              ),
-              Positioned(
-                left: t.tokens.windowInset,
-                right: t.tokens.windowInset,
-                bottom: t.tokens.windowInset,
-                child: bar,
-              ),
-            ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [stage, bar],
-          );
+    //
+    // The picture's own box shrinks by the bar and the gap under Round, which
+    // is the point: the layout builder above measures what is left, so fit,
+    // zoom and every hit-test are against a picture that no longer has a bar
+    // sitting on it.
+    if (!round) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [Expanded(child: stage), bar],
+      );
+    }
+    return ColoredBox(
+      color: t.surface0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+              child: stage,
+            ),
+          ),
+          SizedBox(height: t.tokens.tileGap),
+          bar,
+        ],
+      ),
+    );
   }
 
   /// Where the picture sits in the panel, at the current magnification.
@@ -1485,7 +1495,6 @@ Rect snapToDevicePixels(Rect rect, double dpr) {
       snap(rect.left), snap(rect.top), snap(rect.right), snap(rect.bottom));
 }
 
-
 /// The transparency checkerboard behind the picture.
 ///
 /// [picture] is where the picture is drawn in the panel; the board fills that
@@ -1562,9 +1571,10 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
-  /// Drawn as a detached bar over the picture (round mode) rather than a strip
-  /// filling the panel's width (sharp mode).
-  final bool floating;
+  /// Drawn as a tile of its own — rounded, outlined and shadowed, sitting
+  /// below the picture with the canvas showing between (round mode) — rather
+  /// than a strip welded to the panel's bottom edge (sharp mode).
+  final bool detached;
 
   /// The preview tier the last frame was made at, off the frame itself
   /// ([LumitUiState.previewTier]). Given rather than asked for: this bar
@@ -1599,20 +1609,21 @@ class _Toolbar extends StatelessWidget {
     required this.onWireframes,
     required this.onPlayPause,
     required this.onSeek,
-    this.floating = false,
+    this.detached = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
+      key: const ValueKey('viewer-bar'),
       height: 26,
       decoration: BoxDecoration(
         color: t.surface1,
         borderRadius:
-            floating ? BorderRadius.circular(t.tokens.floatRadius) : null,
-        border: floating ? Border.all(color: t.hairline) : null,
-        boxShadow: floating ? t.tokens.cardShadow : null,
+            detached ? BorderRadius.circular(t.tokens.floatRadius) : null,
+        border: detached ? Border.all(color: t.hairline) : null,
+        boxShadow: detached ? t.tokens.cardShadow : null,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
@@ -1806,43 +1817,25 @@ class _Toolbar extends StatelessWidget {
           // A fixed gap, not a Spacer: the bar scrolls when the panel is
           // narrow, and a flex child cannot live inside a scroll view.
           const SizedBox(width: 24),
-          HouseButton(
-            key: const ValueKey('viewer-home'),
-            small: true,
-            frameless: true,
-            onPressed: () => onSeek(0),
-            child: Text('|◀', style: t.small),
-          ),
-          HouseButton(
-            key: const ValueKey('viewer-step-back'),
-            small: true,
-            frameless: true,
-            onPressed: () => onSeek(frame - 1),
-            child: Text('◀', style: t.small),
-          ),
-          HouseButton(
-            key: const ValueKey('viewer-play'),
-            small: true,
-            onPressed: onPlayPause,
-            // The transport is the one place the spec asks for 20 (§5): it
-            // is the control the eye goes to without looking for it.
-            child: lumitIcon(playing ? LumitIcon.pause : LumitIcon.play,
-                size: iconSizeTransport, color: t.textPrimary),
-          ),
-          HouseButton(
-            key: const ValueKey('viewer-step-forward'),
-            small: true,
-            frameless: true,
-            onPressed: () => onSeek(frame + 1),
-            child: Text('▶', style: t.small),
-          ),
-          HouseButton(
-            key: const ValueKey('viewer-end'),
-            small: true,
-            frameless: true,
-            onPressed: () => onSeek(comp.durationFrames() - 1),
-            child: Text('▶|', style: t.small),
-          ),
+          // Round gathers the transport into one pill (K-394, §12.1): the five
+          // buttons are one instrument, and a container round them says so.
+          // Sharp is handed the very same widgets with nothing wrapped round
+          // them, so its bar is unchanged down to the widget tree.
+          if (t.shape == ThemeShape.round)
+            Container(
+              key: const ValueKey('viewer-transport-pill'),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: t.surface2,
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: _transport(t),
+              ),
+            )
+          else
+            ..._transport(t),
           const SizedBox(width: 8),
           // The clock, in a slot wide enough for the longest time this comp
           // can show and clickable to type one (docs/07 §2.2 item 11). A
@@ -1898,6 +1891,48 @@ class _Toolbar extends StatelessWidget {
       ),
     );
   }
+
+  /// The five transport buttons, in order. Pulled out so both shapes get the
+  /// identical set — Round inside its pill, Sharp loose on the bar.
+  List<Widget> _transport(LumitTheme t) => [
+        HouseButton(
+          key: const ValueKey('viewer-home'),
+          small: true,
+          frameless: true,
+          onPressed: () => onSeek(0),
+          child: Text('|◀', style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('viewer-step-back'),
+          small: true,
+          frameless: true,
+          onPressed: () => onSeek(frame - 1),
+          child: Text('◀', style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('viewer-play'),
+          small: true,
+          onPressed: onPlayPause,
+          // The transport is the one place the spec asks for 20 (§5): it
+          // is the control the eye goes to without looking for it.
+          child: lumitIcon(playing ? LumitIcon.pause : LumitIcon.play,
+              size: iconSizeTransport, color: t.textPrimary),
+        ),
+        HouseButton(
+          key: const ValueKey('viewer-step-forward'),
+          small: true,
+          frameless: true,
+          onPressed: () => onSeek(frame + 1),
+          child: Text('▶', style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('viewer-end'),
+          small: true,
+          frameless: true,
+          onPressed: () => onSeek(comp.durationFrames() - 1),
+          child: Text('▶|', style: t.small),
+        ),
+      ];
 
   static String _channelLabel(ViewerChannel c) => switch (c) {
         ViewerChannel.rgb => 'RGB',
@@ -1984,8 +2019,8 @@ class _ColourManagementBadge extends StatelessWidget {
                   : l10n.viewerDisplayTransform,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: t.small
-                  .copyWith(color: engaged ? t.accent : t.textSecondary),
+              style:
+                  t.small.copyWith(color: engaged ? t.accent : t.textSecondary),
             ),
           ),
         ),
@@ -2041,7 +2076,8 @@ class _BackgroundSwatch extends StatelessWidget {
     // refreshes the model and rebuilds this from the new colour.
     final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
     int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
-    final shown = documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
+    final shown =
+        documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
 
     return LumitTooltip(
       message: l10n.tipCompBackground,

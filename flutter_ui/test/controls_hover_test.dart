@@ -22,10 +22,11 @@ void main() {
     return gesture;
   }
 
-  Widget host(Widget child, {bool tooltips = true}) => Directionality(
+  Widget host(Widget child, {bool tooltips = true, LumitTheme? theme}) =>
+      Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(
-          theme: LumitTheme.dark(),
+          theme: theme ?? LumitTheme.dark(),
           animationLevel: AnimationLevel.none,
           showTooltips: tooltips,
           child: Overlay(
@@ -80,6 +81,75 @@ void main() {
 
       expect(tester.getTopLeft(second), before,
           reason: 'its neighbour stayed put');
+    });
+  });
+
+  group('The active control (K-394)', () {
+    BoxDecoration decorationOf(WidgetTester tester) =>
+        tester.widget<AnimatedContainer>(
+          find.descendant(
+            of: find.byType(HouseButton),
+            matching: find.byType(AnimatedContainer),
+          ),
+        ).decoration! as BoxDecoration;
+
+    Color labelOf(WidgetTester tester) =>
+        tester.widget<DefaultTextStyle>(
+          find.descendant(
+            of: find.byType(HouseButton),
+            matching: find.byType(DefaultTextStyle),
+          ).first,
+        ).style.color!;
+
+    /// Round's loudest cue: which one is in force reads from the fill, and the
+    /// label flips to the far end of the ramp so it survives the accent.
+    testWidgets('under Round it is the filled accent pill', (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.round);
+      await tester.pumpWidget(host(
+        HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
+        theme: t,
+      ));
+      await tester.pump();
+
+      expect(decorationOf(tester).color, t.accent);
+      expect(labelOf(tester), t.surface0);
+    });
+
+    /// Sharp is untouched by K-394: the armed tint, not a filled pill.
+    testWidgets('under Sharp it stays the tint', (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      await tester.pumpWidget(host(
+        HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
+        theme: t,
+      ));
+      await tester.pump();
+
+      final d = decorationOf(tester);
+      expect(d.color, isNot(t.accent), reason: 'a tint, not the accent itself');
+      expect(d.color!.a, lessThan(0.5));
+      expect(labelOf(tester), t.textPrimary, reason: 'the label does not flip');
+    });
+
+    /// The state must not blink off under the pointer — hovering the active
+    /// one lifts it rather than replacing it with the hover fill.
+    testWidgets('hovering an active control keeps it accent', (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.round);
+      await tester.pumpWidget(host(
+        HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
+        theme: t,
+      ));
+      await tester.pump();
+
+      final gesture = await mouse(tester);
+      await gesture.moveTo(tester.getCenter(find.byType(HouseButton)));
+      await tester.pumpAndSettle();
+
+      // Either accent — the lift is the point, the fill staying the accent
+      // family is the invariant. (Whether the framework reports the hover at
+      // all depends on its highlight mode, which is not what this asserts.)
+      expect(decorationOf(tester).color, anyOf(t.accent, t.accentHover));
+      expect(decorationOf(tester).color, isNot(t.surface4),
+          reason: 'the hover fill must not take the active state away');
     });
   });
 

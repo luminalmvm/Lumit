@@ -106,13 +106,15 @@ Future<void> main() async {
   final cardId = card.internallayerId.toString();
   final gameplayId = gameplay.internallayerId.toString();
 
-  /// Where the picture sits on screen — the Viewer's panel less its 26px bar,
-  /// with the composition fitted into the middle of it. Worked out the way the
-  /// Viewer works it out, so a click lands where the picture really is.
+  /// Where the picture sits on screen — the Viewer's own picture area, with the
+  /// composition fitted into the middle of it. Worked out the way the Viewer
+  /// works it out, so a click lands where the picture really is.
+  ///
+  /// The area is measured off the stage rather than taken as the panel less a
+  /// 26px bar: under Round the bar is parted from the picture by the tile gap
+  /// and sits below it, so the arithmetic that fitted Sharp is short by the gap.
   Rect stage() {
-    final panel = boxOfType(ViewerPanelFrb)!;
-    final area = Rect.fromLTWH(
-        panel.left, panel.top, panel.width, panel.height - 26);
+    final area = boxOf('viewer-stage')!;
     final size = comp.getSize();
     final scale =
         math.min(area.width / size.width, area.height / size.height);
@@ -196,11 +198,14 @@ Future<void> main() async {
   await pause(1);
 
   // ---- Shot: the Viewer bar -----------------------------------------------
+  // The bar's own box, with a margin: under Round it is a strip of its own with
+  // a rounded edge and a shadow, and a crop taken from the zoom button's height
+  // would shave both off.
+  final barBox = boxOf('viewer-bar')!;
   await captureUi(
     'viewer-bar.png',
     scale: 3,
-    crop: Rect.fromLTRB(viewerBox().left + 1, boxOf('viewer-zoom')!.top - 4,
-        viewerBox().right - 1, boxOf('viewer-zoom')!.bottom + 4),
+    crop: barBox.inflate(6),
   );
 
   // ---- Shot: a text layer being edited in the Viewer -----------------------
@@ -307,8 +312,7 @@ Future<void> main() async {
   await captureUi(
     'mask.png',
     scale: 2,
-    crop: Rect.fromLTRB(viewerBox().left, viewerBox().top, viewerBox().right,
-        viewerBox().bottom - 26),
+    crop: boxOf('viewer-stage')!,
   );
   gameplay.deleteMask(id: maskId);
   card.setSwitch(switch_: BridgeLayerSwitch.visible, on_: true);

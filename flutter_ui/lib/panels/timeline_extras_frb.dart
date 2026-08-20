@@ -280,6 +280,7 @@ class _CompTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final round = t.shape == ThemeShape.round;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -287,15 +288,25 @@ class _CompTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.only(left: 10, right: 4),
         decoration: BoxDecoration(
+          // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
+          // keeps the darker seat and the accent rule under it.
           color: dropping
               ? t.accent.withValues(alpha: 0.18)
-              : (active ? t.surface0 : null),
-          border: Border(
-            bottom: BorderSide(
-              color: active ? t.accent : const Color(0x00000000),
-              width: 2,
-            ),
-          ),
+              : (active ? (round ? t.accent : t.surface0) : null),
+          // Uniform under Round, because a BoxDecoration refuses a corner
+          // radius on a border that is only one side. Transparent and the same
+          // 2 px either way, so the label sits where it always did and the
+          // capsule's curved ends never crowd it.
+          border: round
+              ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
+              : Border(
+                  bottom: BorderSide(
+                    color: active ? t.accent : const Color(0x00000000),
+                    width: 2,
+                  ),
+                ),
+          borderRadius:
+              round ? BorderRadius.circular(t.tokens.controlRadius) : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -303,7 +314,11 @@ class _CompTab extends StatelessWidget {
             Center(
               child: Text(
                 name,
-                style: active ? t.bodyPrimary : t.small,
+                style: !active
+                    ? t.small
+                    : round
+                        ? t.bodyPrimary.copyWith(color: t.surface0)
+                        : t.bodyPrimary,
               ),
             ),
             const SizedBox(width: 4),
@@ -315,7 +330,12 @@ class _CompTab extends StatelessWidget {
                 width: 14,
                 height: 22,
                 child: Center(
-                  child: Text('×', style: t.small.copyWith(color: t.textMuted)),
+                  // Muted, unless it is sitting on Round's filled accent —
+                  // where muted grey is barely there. Same flip as the label.
+                  child: Text('×',
+                      style: t.small.copyWith(
+                          color:
+                              round && active ? t.surface0 : t.textMuted)),
                 ),
               ),
             ),

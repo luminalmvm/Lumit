@@ -1,0 +1,95 @@
+---
+title: Warp
+description: "Thirteen named ways of bending a picture — arc, flag, fisheye, twist — each one slider deep."
+---
+
+Warp is a **Distortion** effect.
+
+## What it is for
+
+Thirteen named bends, each of them a single slider deep. Pick the shape by its
+name, turn **Bend** up, and use the two Distortion sliders to taper the result as
+if the bent picture were seen at an angle.
+
+This is the effect to reach for when the bend is a *look* rather than something to
+be placed: a title arced over a logo, a lower third inflated like a balloon, a
+still bulged for a stinger. When the bend has to line up with something in the
+shot, [Bezier warp](/effects/distortion/bezier-warp/) is the one to drag.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Style** | Dropdown | Arc · Arc upper · Arc lower · Arch · Bulge · Flag · Wave · Fish · Rise · Fisheye · Inflate · Squeeze · Twist | Arc | - |
+| **Bend** | Slider | -100 to 100 | 50 | - |
+| **Horizontal distortion** | Slider | -100 to 100 | 0 | - |
+| **Vertical distortion** | Slider | -100 to 100 | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Style** — which bend:
+  - **Arc** bows the whole picture one way.
+  - **Arc upper** and **Arc lower** bow only the top or only the bottom edge.
+  - **Arch** bows top and bottom apart, fattening the middle.
+  - **Bulge** swells the middle on both axes.
+  - **Flag** puts one full wave across the width with every row in step.
+  - **Wave** is the same wave with the top and bottom edges out of step.
+  - **Fish** bows the sides out and tapers the ends.
+  - **Rise** lifts the picture diagonally.
+  - **Fisheye** magnifies outward from the middle and rounds the corners.
+  - **Inflate** is the same swell with a softer, rounder falloff.
+  - **Squeeze** crowds the rows toward the middle.
+  - **Twist** turns the top one way and the bottom the other.
+- **Bend** — how much of the style there is. **0** is no effect at all, for every
+  style; the sign turns the bend the other way, which is often a completely
+  different-looking result and worth trying.
+- **Horizontal distortion** — tapers the picture between its left and right edges,
+  as if the bent shape were turned away from the camera about a vertical axis.
+- **Vertical distortion** — the same taper between top and bottom.
+- **Mix** — how much of the bent picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Bend 0 is the exact identity, whichever style is chosen.** The picture comes
+back pixel for pixel, so you can animate a warp on and off from nothing without a
+frame of softening at the ends.
+
+**Some of the styles are cousins, on purpose.** Bulge, Fish and Arch are one swell
+on both axes, on the horizontal only and on the vertical only; Fisheye and Inflate
+differ only in how quickly the swell falls off. They are separate entries because
+people reach for them by look and by name, not by formula.
+
+**The round styles follow the frame's shape, not a circle.** On a widescreen frame
+a Fisheye reaches the left and right edges at the same Bend that reaches the top
+and bottom, which is what makes it usable on a full frame. If you want a true
+circular lens sitting on part of the picture, that is
+[Spherize](/effects/distortion/spherize/). **Twist** is the exception and has to
+be — an angle is not a shape, so a Bend of 100 really is a quarter turn.
+
+**Outside the bent shape is transparent.** As with Bezier warp, the shape is the
+point; put whatever should be behind it on a layer below.
+
+**The tapers act on the bend, not the other way round.** A style followed by a
+taper is a bent picture seen at an angle. That is the useful order, and it is the
+one you get.
+
+## Related
+
+- [Bezier warp](/effects/distortion/bezier-warp/)
+- [Spherize](/effects/distortion/spherize/)
+- [Twirl](/effects/distortion/twirl/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

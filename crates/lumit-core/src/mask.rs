@@ -774,10 +774,397 @@ pub fn combined_coverage(
     total.into_iter().map(|t| t as u8).collect()
 }
 
+// ---------------------------------------------------------------------------
+// The mask-path carriage (K-408): a mask's geometry, on its way to an effect.
+// ---------------------------------------------------------------------------
+
+/// How closely a flattened mask path follows the curve it came from, in
+/// **pixels at composition scale** (K-408, docs/08 §2.3's unit).
+///
+/// A constant on purpose, and this is the whole reason it is one: the polyline
+/// is part of what an effect renders, so if the tolerance could vary — with the
+/// preview raster, with a setting, with the machine — the same document would
+/// name the same frame twice and draw it differently. Half a pixel is under the
+/// threshold of a visible kink at 100 % zoom and cheap: a full-frame 1080p
+/// ellipse comes to a few hundred points.
+pub const MASK_PATH_TOLERANCE_PX: f64 = 0.5;
+
+/// A safety ceiling on the subdivisions of ONE cubic segment, so a path with an
+/// absurd tangent (a handle dragged a hundred thousand pixels out) costs a
+/// bounded amount rather than an unbounded one. Well above anything the drawing
+/// tools produce.
+const MAX_SEGMENT_STEPS: usize = 1024;
+
+/// One mask path flattened for an effect: an **arc-length-parameterised
+/// polyline** in layer pixels at composition scale (K-408).
+///
+/// # In plain terms
+///
+/// A mask is stored as a handful of points with curve handles. An effect that
+/// walks the shape — a brush travelling from 20 % to 80 % along it, segments
+/// marching round it — cannot use that directly: it needs to know *how far
+/// along* it is, and a curve handle says nothing about distance. So the render
+/// straightens the curve into many short straight pieces and writes down how
+/// far along each corner sits. Then "60 % of the way round" is a lookup.
+///
+/// [`Self::points`] and [`Self::arc`] are the same length. `arc[0]` is 0 and
+/// `arc.last()` is the total length, so a distance `s` in `0..=length` locates a
+/// point by searching `arc` — no consumer has to re-measure the curve, and every
+/// consumer measures it the same way.
+///
+/// **Empty is the documented no-op**: a row naming nothing, a mask since
+/// deleted, a layer with no masks at all, or a path with fewer than two
+/// vertices all arrive here as an empty polyline, and an effect handed one
+/// renders its input unchanged (14-ENGINEERING-RULES §4 — degrade, never
+/// fault).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MaskPolyline {
+    /// The vertices, in **layer pixels at composition scale** — deliberately
+    /// not the raster the frame happens to be previewing at, so the same
+    /// document flattens to the same numbers whatever the preview divisor is.
+    /// A consumer scales them by its own raster factor, as it does any px@comp
+    /// quantity (docs/08 §2.3).
+    pub points: Vec<[f32; 2]>,
+    /// Cumulative distance along the polyline at each point. Same length as
+    /// [`Self::points`]; starts at 0; ends at the total length.
+    pub arc: Vec<f32>,
+    /// Whether the path closes back to its first point. A closed path's last
+    /// point is the first one repeated, so the final `arc` entry is the full
+    /// perimeter and a consumer never has to special-case the join.
+    pub closed: bool,
+}
+
+impl MaskPolyline {
+    /// Nothing to walk — the effect's no-op.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.points.len() < 2
+    }
+
+    /// The total length in px@comp, 0 for an empty polyline.
+    #[must_use]
+    pub fn length(&self) -> f32 {
+        self.arc.last().copied().unwrap_or(0.0)
+    }
+
+    /// The point `s` px along the path, `s` clamped into `0..=length()`
+    /// (K-408). The lookup [`Self::arc`] exists for: a consumer asking "where
+    /// is 60 % of the way round" gets an answer without re-measuring the curve,
+    /// and every consumer gets the *same* answer.
+    ///
+    /// A binary search rather than a walk, because Stroke asks it once per
+    /// brush stamp and a walk would make placing `n` stamps quadratic in the
+    /// polyline. `[0.0, 0.0]` for an empty polyline — the no-op's coordinate,
+    /// never a panic (docs/14 §4).
+    #[must_use]
+    pub fn point_at(&self, s: f32) -> [f32; 2] {
+        if self.is_empty() {
+            return [0.0, 0.0];
+        }
+        let s = s.clamp(0.0, self.length());
+        // The last index whose arc is <= s: `partition_point` counts the
+        // entries strictly below, so subtracting one lands on it, and the
+        // final point can never be the *start* of an edge.
+        let i = self
+            .arc
+            .partition_point(|&a| a <= s)
+            .saturating_sub(1)
+            .min(self.points.len() - 2);
+        let (a, b) = (self.points[i], self.points[i + 1]);
+        let span = self.arc[i + 1] - self.arc[i];
+        // A zero-length edge (two coincident vertices) hands back its start
+        // rather than dividing by nothing.
+        let t = if span > 0.0 {
+            ((s - self.arc[i]) / span).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+    }
+}
+
+/// Flatten one bezier path to an arc-length-parameterised polyline within
+/// `tolerance_px` (K-408). Deterministic: the subdivision count of each cubic
+/// comes from the control points and the tolerance alone, so the same path
+/// always flattens to the same bytes.
+#[must_use]
+pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
+    let n = path.vertices.len();
+    if n < 2 {
+        return MaskPolyline::default();
+    }
+    let tol = if tolerance_px.is_finite() && tolerance_px > 0.0 {
+        tolerance_px
+    } else {
+        MASK_PATH_TOLERANCE_PX
+    };
+    // An open path has n-1 segments; a closed one has n, the last joining back.
+    let segments = if path.closed { n } else { n - 1 };
+    let mut points: Vec<[f32; 2]> = Vec::with_capacity(segments * 8);
+    for i in 0..segments {
+        let a = &path.vertices[i];
+        let b = &path.vertices[(i + 1) % n];
+        let p0 = a.pos;
+        let p1 = (a.pos.0 + a.tan_out.0, a.pos.1 + a.tan_out.1);
+        let p2 = (b.pos.0 + b.tan_in.0, b.pos.1 + b.tan_in.1);
+        let p3 = b.pos;
+        // How many straight pieces this cubic needs. The standard bound: a
+        // cubic split into `k` equal pieces sits within |B''|max / (8 k²) of
+        // the chords, and |B''|max is 6 × the larger of the two second
+        // differences of the control points. Solve for k.
+        let d1 = (p0.0 - 2.0 * p1.0 + p2.0, p0.1 - 2.0 * p1.1 + p2.1);
+        let d2 = (p1.0 - 2.0 * p2.0 + p3.0, p1.1 - 2.0 * p2.1 + p3.1);
+        let m = 6.0 * (d1.0.hypot(d1.1)).max(d2.0.hypot(d2.1));
+        let steps = if m.is_finite() && m > 0.0 {
+            ((m / (8.0 * tol)).sqrt().ceil() as usize).clamp(1, MAX_SEGMENT_STEPS)
+        } else {
+            1
+        };
+        // Each segment emits its start and its interior; the next segment's
+        // start is this one's end, so the join is written once.
+        for s in 0..steps {
+            let t = s as f64 / steps as f64;
+            let u = 1.0 - t;
+            let x = u * u * u * p0.0
+                + 3.0 * u * u * t * p1.0
+                + 3.0 * u * t * t * p2.0
+                + t * t * t * p3.0;
+            let y = u * u * u * p0.1
+                + 3.0 * u * u * t * p1.1
+                + 3.0 * u * t * t * p2.1
+                + t * t * t * p3.1;
+            points.push([x as f32, y as f32]);
+        }
+    }
+    // The final point: the last vertex for an open path, the first one again
+    // for a closed one — so `arc` covers the closing edge too and a consumer
+    // walking to `length()` ends where it started.
+    let last = if path.closed {
+        path.vertices[0].pos
+    } else {
+        path.vertices[n - 1].pos
+    };
+    points.push([last.0 as f32, last.1 as f32]);
+
+    let mut arc = Vec::with_capacity(points.len());
+    let mut total = 0.0f32;
+    arc.push(0.0);
+    for w in points.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        total += (b[0] - a[0]).hypot(b[1] - a[1]);
+        arc.push(total);
+    }
+    MaskPolyline {
+        points,
+        arc,
+        closed: path.closed,
+    }
+}
+
+/// Which of `masks` a [`ParamKind::MaskPath`](crate::fx::ParamKind::MaskPath)
+/// row names: the one it names, else the first when the schema's `self_default`
+/// says an unset row means "First mask" (K-408).
+///
+/// **One place**, because two answers would be two different pictures: the
+/// frame key hashes what this returns and the render flattens what this
+/// returns, and a key that disagrees with the picture is a stale frame nobody
+/// can explain. A named mask that is no longer on the layer is `None` — the
+/// no-op — and deliberately does *not* fall back to the first, because
+/// quietly walking a different shape is worse than walking none.
+///
+/// A mask in [`MaskMode::None`] is offered like any other: that mode is
+/// "geometry only, gates nothing", which is precisely the mask somebody draws
+/// *for* an effect to walk.
+/// Answers with the mask's **position** rather than the mask, because that is
+/// what both callers need: the render takes `masks[i]`, and the frame key
+/// hashes `i` — never the id, since identity never feeds a key (a duplicated
+/// comp shares its original's cache).
+#[must_use]
+pub fn mask_index_for_path_param(
+    masks: &[Mask],
+    named: Option<Uuid>,
+    self_default: bool,
+) -> Option<usize> {
+    match named {
+        Some(id) => masks.iter().position(|m| m.id == id),
+        None if self_default => (!masks.is_empty()).then_some(0),
+        None => None,
+    }
+}
+
+/// The polyline a mask-path row comes to at time `t`, in layer pixels at
+/// composition scale — the whole carriage in one call (K-408). Empty for every
+/// way of naming nothing.
+#[must_use]
+pub fn mask_path_at(
+    masks: &[Mask],
+    named: Option<Uuid>,
+    self_default: bool,
+    t: f64,
+) -> MaskPolyline {
+    match mask_index_for_path_param(masks, named, self_default).and_then(|i| masks.get(i)) {
+        Some(mask) => flatten_path(&mask.path_at(t), MASK_PATH_TOLERANCE_PX),
+        None => MaskPolyline::default(),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// **The same document at the same frame flattens to the same bytes**
+    /// (K-408). The whole reason the tolerance is a constant: the polyline is
+    /// part of what an effect draws, so a flattening that could vary — with the
+    /// preview raster, with a run, with the order the masks happen to be walked
+    /// in — would let one frame key name two pictures.
+    #[test]
+    fn a_mask_path_flattens_deterministically() {
+        let mut layer_a = vec![Mask::ellipse(60.0, 40.0, 30.0, 18.0)];
+        layer_a[0].name = "Ellipse 1".into();
+        // A second layer with the same shape drawn independently: different
+        // ids, same geometry. Identity must not reach the vertices.
+        let mut layer_b = vec![Mask::ellipse(60.0, 40.0, 30.0, 18.0)];
+        layer_b[0].name = "somebody else's name".into();
+        assert_ne!(layer_a[0].id, layer_b[0].id, "two masks, two ids");
+
+        let one = mask_path_at(&layer_a, None, true, 0.0);
+        let again = mask_path_at(&layer_a, None, true, 0.0);
+        let other = mask_path_at(&layer_b, None, true, 0.0);
+        assert_eq!(one, again, "two calls, two answers");
+        assert_eq!(one, other, "the mask's id reached its vertices");
+        assert!(!one.is_empty(), "an ellipse flattens to something");
+
+        // Arc length is monotone, starts at zero, and its last entry is the
+        // perimeter — the contract every consumer walks by.
+        assert_eq!(one.arc.len(), one.points.len());
+        assert_eq!(one.arc.first().copied(), Some(0.0));
+        assert!(
+            one.arc.windows(2).all(|w| w[1] >= w[0]),
+            "arc goes backwards"
+        );
+        // 2πab-ish: Ramanujan's perimeter for a 30×18 ellipse is ~152.5.
+        let (a, b) = (30.0f32, 18.0f32);
+        let want = std::f32::consts::PI * (3.0 * (a + b) - ((3.0 * a + b) * (a + 3.0 * b)).sqrt());
+        assert!(
+            (one.length() - want).abs() < want * 0.01,
+            "perimeter {} vs ~{want}",
+            one.length()
+        );
+        // A closed path ends where it started, so a consumer walking to
+        // `length()` needs no special case for the join.
+        assert!(one.closed);
+        let (first, last) = (one.points[0], one.points[one.points.len() - 1]);
+        assert!((first[0] - last[0]).abs() < 1e-4 && (first[1] - last[1]).abs() < 1e-4);
+    }
+
+    /// The tolerance means what it says: the shipped flattening is already
+    /// close enough that flattening 64× finer barely moves the outline.
+    ///
+    /// Measured as perimeter rather than as a point-to-curve distance, because
+    /// every flattened point sits *exactly* on the curve by construction — what
+    /// the tolerance actually bounds is how far the straight bits cut the
+    /// corners, and that shows up as a shorter total. A chord never overshoots,
+    /// so the coarse perimeter must also be the shorter of the two.
+    #[test]
+    fn a_finer_tolerance_barely_moves_the_outline() {
+        let m = Mask::ellipse(0.0, 0.0, 100.0, 60.0);
+        let coarse = flatten_path(&m.path, MASK_PATH_TOLERANCE_PX);
+        let fine = flatten_path(&m.path, MASK_PATH_TOLERANCE_PX / 64.0);
+        assert!(
+            fine.points.len() > coarse.points.len(),
+            "finer means more points"
+        );
+        assert!(
+            coarse.length() <= fine.length(),
+            "a chord overshot its curve: {} vs {}",
+            coarse.length(),
+            fine.length()
+        );
+        assert!(
+            fine.length() - coarse.length() < fine.length() * 0.005,
+            "the coarse perimeter {} strays from the fine one {}",
+            coarse.length(),
+            fine.length()
+        );
+    }
+
+    /// Which mask a path row comes to (K-408) — and every way of coming to
+    /// none, all of which are the effect's documented no-op rather than a fault.
+    #[test]
+    fn a_mask_path_row_resolves_or_is_a_no_op() {
+        let masks = vec![
+            Mask::rectangle(0.0, 0.0, 10.0, 10.0),
+            Mask::ellipse(50.0, 50.0, 8.0, 8.0),
+        ];
+        let (first, second) = (masks[0].id, masks[1].id);
+
+        assert_eq!(
+            mask_index_for_path_param(&masks, Some(second), true),
+            Some(1)
+        );
+        assert_eq!(
+            mask_index_for_path_param(&masks, Some(first), false),
+            Some(0)
+        );
+        // "First mask": unset means the first one where the schema says so.
+        assert_eq!(mask_index_for_path_param(&masks, None, true), Some(0));
+        // …and means nothing where it does not.
+        assert_eq!(mask_index_for_path_param(&masks, None, false), None);
+        // A mask since deleted does NOT fall back to the first: walking a
+        // different shape than the one named is worse than walking none.
+        assert_eq!(
+            mask_index_for_path_param(&masks, Some(Uuid::now_v7()), true),
+            None
+        );
+        // A layer with no masks at all, on the self-default.
+        assert_eq!(mask_index_for_path_param(&[], None, true), None);
+
+        // Each of those comes out as an empty polyline, never a panic.
+        for named in [Some(Uuid::now_v7()), None] {
+            let p = mask_path_at(&masks, named, false, 0.0);
+            assert!(p.is_empty() && p.length() == 0.0, "not the no-op");
+        }
+        assert!(mask_path_at(&[], None, true, 0.0).is_empty());
+        // A path of one vertex is a shape being drawn, not a curve to walk.
+        let stub = BezierPath {
+            vertices: vec![masks[0].path.vertices[0]],
+            closed: false,
+        };
+        assert!(flatten_path(&stub, MASK_PATH_TOLERANCE_PX).is_empty());
+    }
+
+    /// An animated mask hands over the shape at the *frame's* time — the same
+    /// `path_at` the rasteriser reads, so an effect walking a mask and the mask
+    /// gating the layer can never disagree about where the shape is.
+    #[test]
+    fn a_keyed_mask_path_follows_its_keys() {
+        let mut m = Mask::rectangle(0.0, 0.0, 10.0, 10.0);
+        let wide = Mask::rectangle(0.0, 0.0, 100.0, 10.0);
+        m.path_keys = vec![
+            PathKeyframe {
+                time: crate::time::Rational::new(0, 1).expect("0"),
+                path: m.path.clone(),
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            },
+            PathKeyframe {
+                time: crate::time::Rational::new(1, 1).expect("1"),
+                path: wide.path.clone(),
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            },
+        ];
+        let masks = vec![m];
+        let at_zero = mask_path_at(&masks, None, true, 0.0);
+        let at_one = mask_path_at(&masks, None, true, 1.0);
+        assert!(
+            at_one.length() > at_zero.length() * 2.0,
+            "{} then {} — the key never moved the shape",
+            at_zero.length(),
+            at_one.length()
+        );
+    }
 
     #[test]
     fn rectangle_covers_exactly_its_area() {

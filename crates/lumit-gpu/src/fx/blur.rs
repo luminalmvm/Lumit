@@ -15,6 +15,9 @@ pub struct BlurOp {
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The Matte's Invert switch (K-395): with it on, the blur widens where the
+    /// matte is *dark*. Read only when a matte is actually bound.
+    pub matte_invert: bool,
 }
 
 /// One resolved directional blur (docs/08 §3.8): a line integral along a
@@ -106,7 +109,12 @@ pub(super) struct BlurParams {
     pub(super) sigma: f32,
     pub(super) edge: u32,
     pub(super) mix_amt: f32,
-    pub(super) _pad: [f32; 2],
+    /// 1 = scale the radius by the bound matte's luma (K-395). 0 on every
+    /// internal blur — the glow's halo, the sharpen's unsharp pass and Light
+    /// wrap's spill are not the user's Gaussian blur, and their matte (if any)
+    /// has already been spent elsewhere.
+    pub(super) matte_on: f32,
+    pub(super) invert: f32,
 }
 
 #[repr(C)]
@@ -233,6 +241,9 @@ pub struct GlowOp {
     pub tint: [f32; 4],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The Matte's Invert switch (K-395): with it on, the *dark* parts of the
+    /// matte are what seed the halo. Read only when a matte is bound.
+    pub matte_invert: bool,
 }
 
 #[repr(C)]
@@ -243,6 +254,11 @@ pub(super) struct GlowParams {
     pub(super) knee: f32,
     pub(super) intensity: f32,
     pub(super) mix_amt: f32,
+    /// 1 = gate the bright pass by the matte's luma (K-395). The combine pass
+    /// reads the same uniform and ignores both fields.
+    pub(super) matte_on: f32,
+    pub(super) invert: f32,
+    pub(super) _pad: [f32; 2],
 }
 
 impl FxEngine {
@@ -255,17 +271,23 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &BlurOp,
     ) -> wgpu::Texture {
         let tmp = work_texture(ctx, w, h, "fx-blur-tmp");
         let out = work_texture(ctx, w, h, "fx-blur-out");
         let sigma = (op.radius_px * 0.5).max(1e-3);
+        // The Matte scales the radius per pixel (K-395) — see fx_blur.wgsl.
+        // Both passes carry it, because each reads its DESTINATION pixel's
+        // matte and the two halves must agree on this pixel's kernel width.
+        let (matte_on, invert) = (f32::from(matte.is_some()), f32::from(op.matte_invert));
         // Horizontal into tmp (mix 1: the blend happens once, at the end).
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.blur,
             src,
             src,
+            matte,
             &tmp,
             w,
             h,
@@ -275,15 +297,17 @@ impl FxEngine {
                 sigma,
                 edge: op.edge,
                 mix_amt: 1.0,
-                _pad: [0.0; 2],
+                matte_on,
+                invert,
             }),
         );
         // Vertical into out, blending against the original input.
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.blur,
             &tmp,
             src,
+            matte,
             &out,
             w,
             h,
@@ -293,7 +317,8 @@ impl FxEngine {
                 sigma,
                 edge: op.edge,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                matte_on,
+                invert,
             }),
         );
         out
@@ -416,7 +441,8 @@ impl FxEngine {
                     sigma,
                     edge: 1, // Repeat, always (see the schema comment)
                     mix_amt: 1.0,
-                    _pad: [0.0; 2],
+                    matte_on: 0.0,
+                    invert: 0.0,
                 }),
             );
         }
@@ -511,9 +537,13 @@ impl FxEngine {
             // wraps with the plate rather than with black.
             edge: 1,
             mix: 1.0,
+            // Light wrap's spill blur is internal plumbing, not the user's
+            // Gaussian blur: this effect's own matte is the generic strength
+            // dissolve and has already been dealt with beside the dispatch.
+            matte_invert: false,
         };
-        let spill = self.blur(ctx, background, w, h, &blur);
-        let soft = self.blur(ctx, src, w, h, &blur);
+        let spill = self.blur(ctx, background, w, h, None, &blur);
+        let soft = self.blur(ctx, src, w, h, None, &blur);
         let params = LightWrapParams {
             w,
             h,
@@ -593,6 +623,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &GlowOp,
     ) -> wgpu::Texture {
         let bright = work_texture(ctx, w, h, "fx-glow-bright");
@@ -605,12 +636,23 @@ impl FxEngine {
             knee: op.knee,
             intensity: op.intensity,
             mix_amt: op.mix,
+            // The Matte gates the SEED (K-395) — see fx_glow.wgsl. It touches
+            // the bright pass only: the halo then spreads from the pixels that
+            // survived, which is the whole difference from dissolving the
+            // finished glow.
+            matte_on: f32::from(matte.is_some()),
+            invert: f32::from(op.matte_invert),
+            _pad: [0.0; 2],
         };
+        // The bright pass wants ONE picture, so its `orig` slot is free and the
+        // matte rides in it (the kernel's own comment says so). Passing it as
+        // the matte binding instead would work equally well; this keeps the
+        // shared blur kernel below the only user of binding 4.
         self.dispatch(
             ctx,
             &self.glow_bright,
             src,
-            src,
+            matte.unwrap_or(src),
             &bright,
             w,
             h,
@@ -633,7 +675,8 @@ impl FxEngine {
                     sigma,
                     edge: 1, // Repeat, always (see the CPU reference)
                     mix_amt: 1.0,
-                    _pad: [0.0; 2],
+                    matte_on: 0.0,
+                    invert: 0.0,
                 }),
             );
         }
@@ -646,6 +689,160 @@ impl FxEngine {
             w,
             h,
             bytemuck::bytes_of(&params),
+        );
+        out
+    }
+}
+
+/// One resolved Channel blur (docs/08 §3.45): the separable gaussian with a
+/// radius per channel, already in raster pixels. Mirrors the arguments of
+/// `lumit_core::fx::cpu::channel_blur`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelBlurOp {
+    /// Red, green, blue and alpha kernel half-widths, raster pixels. A zero
+    /// copies that channel through untouched.
+    pub radii: [f32; 4],
+    /// 0 = Transparent, 1 = Repeat (AE's "Repeat edge pixels" switch).
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ChannelBlurParams {
+    radius: [f32; 4],
+    sigma: [f32; 4],
+    dir: [f32; 2],
+    mix_amt: f32,
+    edge: u32,
+}
+
+/// One resolved Drop shadow (docs/08 §3.43). Mirrors
+/// `lumit_core::fx::cpu::DropShadowParams` field-for-field; the direction's
+/// sine and cosine are already spent into `offset` host-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DropShadowOp {
+    /// Scene-linear RGB; the shadow's coverage supplies the rest.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// Where the shadow sits relative to the shape, raster pixels.
+    pub offset: [f32; 2],
+    /// The gaussian half-width the shape is softened by, raster pixels.
+    pub softness_px: f32,
+    /// Draw the shadow alone, without the layer that cast it.
+    pub shadow_only: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct DropShadowParams {
+    colour: [f32; 4],
+    offset: [f32; 2],
+    opacity: f32,
+    mix_amt: f32,
+    shadow_only: u32,
+    _pad: [u32; 3],
+}
+
+impl FxEngine {
+    /// Apply one Channel blur (docs/08 §3.45) to a linear working texture,
+    /// returning a new texture of the same size. Two passes, exactly as
+    /// [`Self::blur`] runs them — the difference is entirely inside the kernel,
+    /// which carries four radii instead of one.
+    pub fn channel_blur(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ChannelBlurOp,
+    ) -> wgpu::Texture {
+        let tmp = work_texture(ctx, w, h, "fx-chanblur-tmp");
+        let out = work_texture(ctx, w, h, "fx-chanblur-out");
+        // The four σ are taken once here, not per pixel (K-137's host-side
+        // arithmetic rule), and floored exactly as the CPU reference floors
+        // them so a zero radius cannot divide by zero on either path.
+        let sigma: [f32; 4] = std::array::from_fn(|c| (op.radii[c] * 0.5).max(1e-3));
+        for (pass_src, pass_orig, pass_dst, dir, mix) in [
+            (src, src, &tmp, [1.0, 0.0], 1.0),
+            (&tmp, src, &out, [0.0, 1.0], op.mix),
+        ] {
+            self.dispatch(
+                ctx,
+                &self.channel_blur,
+                pass_src,
+                pass_orig,
+                pass_dst,
+                w,
+                h,
+                bytemuck::bytes_of(&ChannelBlurParams {
+                    radius: op.radii,
+                    sigma,
+                    dir,
+                    mix_amt: mix,
+                    edge: op.edge,
+                }),
+            );
+        }
+        out
+    }
+
+    /// Apply one Drop shadow (docs/08 §3.43) to a linear working texture,
+    /// returning a new texture of the same size.
+    ///
+    /// Three passes: the shared §3.8 gaussian twice over the source, then one
+    /// combine that reads the softened alpha at the offset and composites the
+    /// shadow *underneath*. The blur is taken where the shape stands because a
+    /// translation and a convolution commute — one gaussian instead of a
+    /// gaussian plus a resample.
+    pub fn drop_shadow(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &DropShadowOp,
+    ) -> wgpu::Texture {
+        let soft = self.blur(
+            ctx,
+            src,
+            w,
+            h,
+            None,
+            &BlurOp {
+                radius_px: op.softness_px,
+                // Transparent: a shape touching the frame border casts a shadow
+                // that leaves the frame, and repeating the border pixel outward
+                // would smear it into a fan.
+                edge: 0,
+                mix: 1.0,
+                // This effect's own matte is the generic strength dissolve and
+                // has already been dealt with beside the dispatch; the softening
+                // is internal plumbing, not the user's Gaussian blur.
+                matte_invert: false,
+            },
+        );
+        let out = work_texture(ctx, w, h, "fx-drop-shadow-out");
+        self.dispatch(
+            ctx,
+            &self.drop_shadow,
+            src,
+            &soft,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&DropShadowParams {
+                colour: [op.colour[0], op.colour[1], op.colour[2], 1.0],
+                offset: op.offset,
+                opacity: op.opacity,
+                mix_amt: op.mix,
+                shadow_only: u32::from(op.shadow_only),
+                _pad: [0; 3],
+            }),
         );
         out
     }

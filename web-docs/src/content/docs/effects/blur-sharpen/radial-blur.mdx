@@ -1,0 +1,70 @@
+---
+title: "Radial blur"
+description: "A spin or a zoom about a chosen centre."
+---
+
+Radial blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+A blur that runs around a centre, or away from it. Spin smears each pixel along
+the arc it would travel if the frame were rotating; Zoom smears it along the ray
+from the centre outward, which reads as the camera rushing in.
+
+Zoom on a punch-in is the montage move: put the centre on whatever the cut is
+about, animate the amount up for two or three frames and back down, and the
+frame appears to slam toward the subject. Spin does the same job for a rotation,
+and at a low amount it is a convincing way to suggest a lens that cannot quite
+keep up.
+
+The spread is not uniform across the frame. It is smallest at the centre — where
+it is nothing at all — and reaches its full size at whichever corner is furthest
+away. That is why moving the centre changes the character of the effect and not
+just its position: it decides which part of the picture stays readable.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100; higher by typing | 8 | Per cent of the composition diagonal |
+| **Centre X** | Slider | 0 to 100; any value by typing | 50 | - |
+| **Centre Y** | Slider | 0 to 100; any value by typing | 50 | - |
+| **Type** | Dropdown | Spin · Zoom | Spin | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — the peak spread, reached at the frame's furthest corner from the
+  centre. Pixels nearer the centre get proportionally less, and the pixel under
+  the centre gets none. It may be pushed past the diagonal for a full dissolve.
+- **Centre X** and **Centre Y** — where the spin or zoom originates, as a
+  percentage of the composition's width and height, so the middle of the frame
+  is fifty and fifty. Animate the pair to follow a moving subject and the punch
+  stays anchored to it.
+- **Type** — Spin sweeps along arcs about the centre, the rotating look; Zoom
+  runs along rays out of it, the rushing look.
+- **Edges** — what the sweep finds when it reaches past the frame. Transparent
+  leaves the border clear, which is right over a plate that will be composited;
+  Repeat holds the outermost pixel, which keeps a full-frame shot from darkening
+  at the sides; Mirror reflects the picture back in, which hides the seam best
+  on textured footage.
+- **Mix** — how much of the swept picture replaces the original.
+
+## Related
+
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Transform](/effects/utility/transform/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

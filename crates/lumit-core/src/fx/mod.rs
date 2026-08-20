@@ -31,9 +31,15 @@ pub mod lens_flare;
 pub mod lens_library;
 mod markers;
 mod maths;
+/// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and
+/// Perlin noise and the fractal sum over them, reused by the displacement
+/// family.
+pub mod noise;
 /// The resolved key/value parameter form a frame renders from
 /// (docs/impl/effect-registry.md §2.3).
 mod params;
+/// The catalogue as JSON, for the manual's per-effect parameter tables.
+pub mod reference;
 /// What an effect is, as a value rather than a variant (§2.4).
 mod registry;
 mod resolved;

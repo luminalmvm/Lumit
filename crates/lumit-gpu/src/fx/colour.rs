@@ -223,6 +223,89 @@ struct GammaParams {
     _pad1: f32,
 }
 
+/// One resolved Curves (docs/08 §3.30): five knots and their monotone-cubic
+/// tangents per channel, both computed host-side by `Curves::packed` so the
+/// kernel fits nothing per pixel. Indexed `[knot][channel]`, channel 0 Master
+/// and 1..3 R/G/B. The identity knot set is the bit-exact neutral point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurvesOp {
+    /// Knot outputs at the fixed inputs 0, 0.25, 0.5, 0.75, 1.
+    pub y: [[f32; 4]; 5],
+    /// Fritsch–Carlson limited tangents at those knots.
+    pub m: [[f32; 4]; 5],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CurvesParams {
+    y: [[f32; 4]; 5],
+    m: [[f32; 4]; 5],
+    mix_amt: f32,
+    _pad: [f32; 3],
+}
+
+/// One resolved Levels (docs/08 §3.31): five rows indexed `[row][channel]` —
+/// input black, the reciprocal input span, the reciprocal gamma, output black
+/// and the output span — both reciprocals taken host-side by `Levels::packed`
+/// so nothing divides per pixel. Channel 0 is Master, 1..3 R/G/B.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LevelsOp {
+    pub r: [[f32; 4]; 5],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LevelsParams {
+    r: [[f32; 4]; 5],
+    mix_amt: f32,
+    _pad: [f32; 3],
+}
+
+/// One resolved Brightness (docs/08 §3.32): AE's Brightness & Contrast pair as
+/// the affine grade `(u + b − 0.5)·k + 0.5` on unpremultiplied colour. `b` and
+/// `k` are computed host-side; `(0.0, 1.0)` is the bit-exact neutral point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BrightnessOp {
+    /// The scene-linear offset, `Brightness ÷ 100`. 0.0 is neutral.
+    pub b: f32,
+    /// The contrast factor, `1 + Contrast ÷ 100`. 1.0 is neutral.
+    pub k: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct BrightnessParams {
+    b: f32,
+    k: f32,
+    mix_amt: f32,
+    _pad0: f32,
+}
+
+/// One resolved Hue and saturation (docs/08 §3.33): seven bands of
+/// `(hue degrees, saturation %, lightness %, unused)` — Master first, then the
+/// six ranges centred on red, yellow, green, cyan, blue and magenta. All
+/// twenty-one adjustments at zero is the bit-exact neutral point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HueSaturationOp {
+    pub bands: [[f32; 4]; 7],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct HueSaturationParams {
+    bands: [[f32; 4]; 7],
+    mix_amt: f32,
+    _pad: [f32; 3],
+}
+
 /// One resolved hue shift (docs/08 §3.17): a row-major linear 3×3 colour
 /// matrix, computed host-side (`lumit_core::fx::hue_matrix`) so the CPU
 /// reference and the kernel multiply by identical coefficients. The identity
@@ -558,6 +641,129 @@ impl FxEngine {
         out
     }
 
+    /// Apply one Curves (docs/08 §3.30) to a linear working texture, returning
+    /// a new texture of the same size. One pointwise pass: the per-channel
+    /// curve then Master, the §2.2 unpremultiply wrap fused into the kernel;
+    /// the identity knot set short-circuits inside it.
+    pub fn curves(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &CurvesOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-curves-out");
+        self.dispatch(
+            ctx,
+            &self.curves,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&CurvesParams {
+                y: op.y,
+                m: op.m,
+                mix_amt: op.mix,
+                _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+
+    /// Apply one Levels (docs/08 §3.31) to a linear working texture, returning
+    /// a new texture of the same size. One pointwise pass: the per-channel map
+    /// then Master, the §2.2 unpremultiply wrap fused into the kernel; neutral
+    /// rows short-circuit inside it.
+    pub fn levels(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &LevelsOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-levels-out");
+        self.dispatch(
+            ctx,
+            &self.levels,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&LevelsParams {
+                r: op.r,
+                mix_amt: op.mix,
+                _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+
+    /// Apply one Brightness (docs/08 §3.32) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass: the
+    /// affine grade about mid-grey, the §2.2 unpremultiply wrap fused into the
+    /// kernel; the neutral pair short-circuits inside it.
+    pub fn brightness(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &BrightnessOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-brightness-out");
+        self.dispatch(
+            ctx,
+            &self.brightness,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&BrightnessParams {
+                b: op.b,
+                k: op.k,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Hue and saturation (docs/08 §3.33) to a linear working
+    /// texture, returning a new texture of the same size. One pointwise pass:
+    /// the HSV round trip with the master and six weighted ranges, the §2.2
+    /// unpremultiply wrap fused into the kernel; all-zero adjustments
+    /// short-circuit inside it.
+    pub fn hue_saturation(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &HueSaturationOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-hue-saturation-out");
+        self.dispatch(
+            ctx,
+            &self.hue_saturation,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&HueSaturationParams {
+                bands: op.bands,
+                mix_amt: op.mix,
+                _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+
     /// Apply one hue shift (docs/08 §3.17) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass: RGB × the
     /// host-computed colour matrix, alpha untouched.
@@ -583,6 +789,364 @@ impl FxEngine {
                 mix_amt: op.mix,
                 _pad0: 0.0,
                 _pad1: 0.0,
+            }),
+        );
+        out
+    }
+}
+
+/// One resolved Posterize (docs/08 §3.58): the tone ladder cut into `n + 1`
+/// rungs, spaced evenly in a square root of the light.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PosterizeOp {
+    /// Levels − 1, computed host-side.
+    pub n: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PosterizeParams {
+    n: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
+/// One resolved Threshold (docs/08 §3.59): the cut's perceptual position and
+/// half-width, both computed host-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThresholdOp {
+    /// Level ÷ 100.
+    pub level: f32,
+    /// Half the crossing's width, floored at a thousandth of the range.
+    pub half_width: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ThresholdParams {
+    level: f32,
+    hw: f32,
+    mix_amt: f32,
+    _pad0: f32,
+}
+
+/// One resolved Tritone (docs/08 §3.60): the three stops of the ramp.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TritoneOp {
+    pub shadows: [f32; 3],
+    pub midtones: [f32; 3],
+    pub highlights: [f32; 3],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct TritoneParams {
+    shadows: [f32; 4],
+    midtones: [f32; 4],
+    highlights: [f32; 4],
+    mix_amt: f32,
+    _pad: [f32; 3],
+}
+
+/// One resolved Photo filter (docs/08 §3.61): the glass's scene-linear colour,
+/// already decoded host-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PhotoFilterOp {
+    pub filter: [f32; 3],
+    /// Density ÷ 100. 0.0 is the bit-exact identity.
+    pub density: f32,
+    /// 1.0 to restore the pixel's own luma afterwards, 0.0 to let the filter
+    /// cost light as a real one does.
+    pub preserve: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PhotoFilterParams {
+    filter: [f32; 4],
+    density: f32,
+    preserve: f32,
+    mix_amt: f32,
+    _pad0: f32,
+}
+
+/// One resolved Black and white (docs/08 §3.62): the six weights as fractions
+/// in red, yellow, green, cyan, blue, magenta order, and the tint already
+/// divided through by its own luma.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlackAndWhiteOp {
+    pub weights: [f32; 6],
+    pub tint: [f32; 3],
+    /// 1.0 to tint, 0.0 to leave the grey grey.
+    pub tint_on: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct BlackAndWhiteParams {
+    w0: [f32; 4],
+    w1: [f32; 4],
+    tint: [f32; 4],
+    tint_on: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
+/// One resolved Shadow highlight (docs/08 §3.63). `radius_px` drives the
+/// shipped gaussian the kernel reads its neighbourhood from; `active` false
+/// never reaches the GPU at all.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowHighlightOp {
+    /// Shadow amount ÷ 100 × 2.
+    pub shadow: f32,
+    /// Highlight amount ÷ 100 × 2.
+    pub highlight: f32,
+    /// Shadow tonal width ÷ 100, floored host-side.
+    pub shadow_width: f32,
+    /// Highlight tonal width ÷ 100, floored host-side.
+    pub highlight_width: f32,
+    /// The neighbourhood's radius, in raster pixels.
+    pub radius_px: f32,
+    /// 1 + Midtone contrast ÷ 100.
+    pub contrast: f32,
+    /// Colour correction ÷ 100.
+    pub colour_correction: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ShadowHighlightParams {
+    shadow: f32,
+    highlight: f32,
+    shadow_width: f32,
+    highlight_width: f32,
+    contrast: f32,
+    colour_correction: f32,
+    mix_amt: f32,
+    _pad0: f32,
+}
+
+/// Wave 2's Stylise I batch (docs/08 §3.58–§3.63, K-404): six tone and colour
+/// effects, five of them one pointwise pass and the sixth one gaussian plus a
+/// pointwise pass.
+impl FxEngine {
+    /// Apply one Posterize (docs/08 §3.58) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass; the §2.2
+    /// unpremultiply wrap is fused into the kernel.
+    pub fn posterize(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &PosterizeOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-posterize-out");
+        self.dispatch(
+            ctx,
+            &self.posterize,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&PosterizeParams {
+                n: op.n,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Threshold (docs/08 §3.59) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass; alpha is
+    /// untouched, so a thresholded picture keeps its shape.
+    pub fn threshold(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ThresholdOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-threshold-out");
+        self.dispatch(
+            ctx,
+            &self.threshold,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ThresholdParams {
+                level: op.level,
+                hw: op.half_width,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Tritone (docs/08 §3.60) to a linear working texture, returning
+    /// a new texture of the same size. One pointwise pass.
+    pub fn tritone(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &TritoneOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-tritone-out");
+        let rgb = |c: [f32; 3]| [c[0], c[1], c[2], 1.0];
+        self.dispatch(
+            ctx,
+            &self.tritone,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&TritoneParams {
+                shadows: rgb(op.shadows),
+                midtones: rgb(op.midtones),
+                highlights: rgb(op.highlights),
+                mix_amt: op.mix,
+                _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+
+    /// Apply one Photo filter (docs/08 §3.61) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass; Density 0
+    /// short-circuits inside the kernel.
+    pub fn photo_filter(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &PhotoFilterOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-photo-filter-out");
+        self.dispatch(
+            ctx,
+            &self.photo_filter,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&PhotoFilterParams {
+                filter: [op.filter[0], op.filter[1], op.filter[2], 1.0],
+                density: op.density,
+                preserve: op.preserve,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Black and white (docs/08 §3.62) to a linear working texture,
+    /// returning a new texture of the same size. One pointwise pass.
+    pub fn black_and_white(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &BlackAndWhiteOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-black-and-white-out");
+        self.dispatch(
+            ctx,
+            &self.black_and_white,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&BlackAndWhiteParams {
+                w0: [op.weights[0], op.weights[1], op.weights[2], op.weights[3]],
+                w1: [op.weights[4], op.weights[5], 0.0, 0.0],
+                tint: [op.tint[0], op.tint[1], op.tint[2], 1.0],
+                tint_on: op.tint_on,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Shadow highlight (docs/08 §3.63) to a linear working texture,
+    /// returning a new texture of the same size. Two passes: the shipped §3.8
+    /// gaussian at Radius, whose luma answers "how bright is this pixel's
+    /// neighbourhood?", and then one pointwise pass that never reads the blur's
+    /// colour.
+    pub fn shadow_highlight(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &ShadowHighlightOp,
+    ) -> wgpu::Texture {
+        let soft = self.blur(
+            ctx,
+            src,
+            w,
+            h,
+            None,
+            &super::BlurOp {
+                radius_px: op.radius_px,
+                // Repeat: the frame's own border must not read as a dark
+                // neighbourhood and lift the picture's edges.
+                edge: 1,
+                mix: 1.0,
+                // This effect's matte is the generic strength dissolve and has
+                // already been dealt with beside the dispatch; the blur here is
+                // internal plumbing, not the user's Gaussian blur.
+                matte_invert: false,
+            },
+        );
+        let out = work_texture(ctx, w, h, "fx-shadow-highlight-out");
+        self.dispatch(
+            ctx,
+            &self.shadow_highlight,
+            src,
+            &soft,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&ShadowHighlightParams {
+                shadow: op.shadow,
+                highlight: op.highlight,
+                shadow_width: op.shadow_width,
+                highlight_width: op.highlight_width,
+                contrast: op.contrast,
+                colour_correction: op.colour_correction,
+                mix_amt: op.mix,
+                _pad0: 0.0,
             }),
         );
         out

@@ -190,7 +190,12 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
 
 - `list_parameters(effect)` — one `BridgeParamInfo` per declared parameter, in schema order:
     its id, its label, and its **kind**, which is what decides the control drawn. The kinds
-    are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File and Layer.
+    are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File, Layer and **MaskPath**.
+    A `MaskPath` names one of the *owning layer's* masks (K-408) and crosses as a
+    `BridgeEffectValue::MaskPath(Option<Uuid>)` — the mask id, or `None` for the panel's
+    "First mask" entry. The **geometry never crosses**: the render flattens the curve
+    engine-side, beside the op. The panel builds the dropdown from the mask names already in
+    the layer entries it holds, so the row costs no call of its own per rebuild.
 - `list_parameter_groups(effect)` — the twirls (K-145). A group names a *contiguous run* of
     the schema's parameters and renders where its first member sits; an empty label renders
     headerless, and `visible_when_param`/`visible_when_values` hide the whole run while a

@@ -1,0 +1,87 @@
+---
+title: "Motion blur"
+description: "Re-render the scene below at sub-frame moments and average them."
+---
+
+Motion blur is a [Temporal](/effects/temporal/) effect.
+
+## What it is for
+
+The correct motion blur, and the expensive one. Rather than smearing a finished
+frame, it renders the whole scene beneath it several times at moments *inside*
+one frame and averages the results.
+
+Because every sample is a real render, everything moves in it: footage motion,
+animated layer transforms, animated effect parameters, the camera. There are no
+artefacts from blurring something that should not have been blurred, and no
+guessing about where a pixel came from.
+
+Its natural home is an adjustment layer over a whole montage. There, the scene
+below is what re-renders, and every moving thing in it blurs together as one
+picture.
+
+The cost is roughly the sample count times a full render of everything
+underneath, which makes it the heaviest thing in the application. Work with a low
+sample count and raise it before you export.
+
+For the cheap kind that smears a finished frame instead, use
+[Fast motion blur](/effects/temporal/fast-motion-blur/). For one layer's own
+transform only, the layer's motion blur switch is free — see
+[Layers](/use/layers/).
+
+Temporal effects inside the scene being sampled — an
+[Echo](/effects/temporal/echo/), a
+[Datamosh](/effects/distortion/datamosh/), a Fast motion blur — hold still across
+the samples rather than being sampled through. That is a documented boundary, not
+a fault.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Samples** | Slider | 2 to 32; up to 64 by typing | 8 | - |
+| **Shutter angle** | Slider | 0 to 720 | 180 | - |
+| **Shutter phase** | Slider | -360 to 360; down to -720 and up to 720 by typing | -90 | - |
+| **Force on all layers** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Samples** — how many times the scene below is rendered inside one frame. This
+  is the quality-against-cost dial, and it is the whole expense of the effect. Too
+  few and fast movement shows as separate stepped copies rather than a smooth
+  smear; the faster the motion, the more you need.
+- **Shutter angle** — how much of the frame the imaginary shutter is open for, as
+  a fraction of a full turn. The film-standard half-turn covers half the frame's
+  movement, which is the natural-looking setting; larger values smear further and
+  smaller ones sharpen toward no blur at all.
+- **Shutter phase** — where that open window sits relative to the frame's own
+  moment. The default centres the blur on the frame, so a moving object is
+  smeared equally either side of where it nominally is rather than trailing
+  behind or running ahead of itself.
+- **Force on all layers** — turns on every layer's own transform motion blur for
+  the duration of each sample render, using this effect's shutter settings. It
+  saves toggling the switch on every layer individually, and because each sample
+  is itself smeared the result stays smooth at lower sample counts. The document
+  itself is not changed; the switches only apply inside the sampling.
+- **Mix** — blends the averaged, blurred result against the ordinary frame, which
+  is a way to ease the blur back without changing the shutter.
+
+## Related
+
+- [Fast motion blur](/effects/temporal/fast-motion-blur/)
+- [Posterize time](/effects/temporal/posterize-time/)
+- [Layers](/use/layers/)
+- [Export](/use/export/)
+- [Temporal](/effects/temporal/)
+- [Effects](/use/effects/)

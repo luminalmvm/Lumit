@@ -1,0 +1,122 @@
+---
+title: Lightning
+description: "Draws a jagged, forked bolt of lightning between two points."
+---
+
+Lightning is a **Generate** effect.
+
+## What it is for
+
+A bolt of lightning: jagged, branching, with a bright filament inside a coloured
+halo. Also arcs between electrodes, magic, a shorting cable, energy running along
+a shape.
+
+Two points set it up — **Origin**, where the bolt leaves, and **Direction**,
+where it is aimed — and **Type** decides what happens between them: a bolt whose
+far end wanders free, one that lands exactly on its target, five radiating out at
+once, or two meeting in the middle.
+
+The control that makes it *lightning* rather than a jagged line is
+**Conductivity state**. It is the bolt's shape, not its speed: hold it and the
+bolt holds still, animate it and the bolt writhes, and scrubbing back to a frame
+you have already seen gives exactly the same bolt. That is why an export and a
+preview never disagree about what the lightning did.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Origin x** | Slider | 0 to 3840; any value by typing | 300 | Pixels at composition size |
+| **Origin y** | Slider | 0 to 2160; any value by typing | 900 | Pixels at composition size |
+| **Direction x** | Slider | 0 to 3840; any value by typing | 1620 | Pixels at composition size |
+| **Direction y** | Slider | 0 to 2160; any value by typing | 200 | Pixels at composition size |
+| **Type** | Dropdown | Direction · Strike · Omni · Two-way strike | Direction | - |
+| **Conductivity state** | Slider | 0 to 100; any value by typing | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Amplitude** | Slider | 0 to 100 | 12 | - |
+| **Forking** | Slider | 0 to 100 | 45 | - |
+| **Decay** | Slider | 0 to 100 | 30 | - |
+| **Core radius** | Slider | 0 to 40; higher by typing | 3 | Pixels at composition size |
+| **Core colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Glow radius** | Slider | 0 to 200; higher by typing | 22 | Pixels at composition size |
+| **Glow colour** | Colour | Each channel 0 to 4, scene-linear | 0.25, 0.45, 1, 1 | - |
+| **Glow opacity** | Slider | 0 to 100 | 70 | - |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Origin x** and **Origin y** — where the bolt leaves from, in pixels at
+  composition size.
+- **Direction x** and **Direction y** — where it is aimed. Under **Omni** only
+  the *distance* between the two points is read, since those bolts go every way
+  at once.
+- **Type** — **Direction** lets the far end wander, which is what a bolt going
+  off into the sky does. **Strike** pins both ends, so the lightning lands on
+  whatever is at the Direction point. **Omni** sends five bolts out in all
+  directions from the origin. **Two-way strike** sends one from each point,
+  meeting in the middle.
+- **Conductivity state** — the bolt's shape. Keyframe it and the lightning
+  writhes; the rate you keyframe it at is how fast it moves.
+- **Seed** — which bolt. Two Lightning effects with the same seed and the same
+  points draw the same bolt; change one of them if they are meant to look
+  independent.
+- **Amplitude** — how far the bolt wanders off the straight line, as a percentage
+  of its own length. Small numbers give a taut arc, large ones a wild one.
+- **Forking** — how many branches leave the main bolt, as a percentage of the
+  twelve there is room for. The branches are thinner and dimmer than what they
+  left, and they re-roll as Conductivity state moves, so a writhing bolt sheds
+  and grows branches rather than waving a fixed set about.
+- **Decay** — how much dimmer the far end is than the root. It is what makes a
+  bolt read as coming *from* somewhere.
+- **Core radius** — how thick the bright filament is, in pixels at composition
+  size. Small is right: the filament is meant to be the hot centre of the halo,
+  not the bolt itself.
+- **Core colour** — the filament's colour. White or near-white is usual; values
+  above 1 make it bloom under a [Glow](/effects/stylise/glow/).
+- **Glow radius** — how far the halo reaches. This is where most of the bolt's
+  visible size comes from.
+- **Glow colour** — the halo's colour. The blue-white default is lightning; warm
+  it up for fire, green it for something else entirely.
+- **Glow opacity** — how strong the halo is.
+- **Composite on original** — on, the layer that arrived stays under the bolt.
+  Off, the bolt is all there is.
+- **Mix** — how much of the effect takes hold.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The bolt is worked out once a frame, not once a pixel.** That is worth knowing
+because it is why the effect is affordable at all: the branching shape is decided
+on the processor and handed to the graphics card as a list of straight segments,
+which the card then only has to measure distances to. It also means the CPU and
+the GPU cannot possibly draw different bolts.
+
+**Four of After Effects' eight lightning types are here.** Breaking, Bouncey,
+Anywhere and Vertical are not: two of them are Direction with a different
+wobble, one needs something to bounce off, and one is Direction with half its
+aiming point ignored. An imported instance gets the nearest of the four and says
+so.
+
+**Alpha Obstacle is not carried either.** Asking the bolt to route around the
+layer's own shape is a search rather than a formula, and it is the one thing in
+After Effects' version that would change the effect's cost by an order of
+magnitude.
+
+## Related
+
+- [Beam](/effects/generate/beam/)
+- [Glow](/effects/stylise/glow/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

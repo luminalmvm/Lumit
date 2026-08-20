@@ -1,0 +1,105 @@
+---
+title: Texturize
+description: "Presses another layer into this one as relief, so the picture looks printed on canvas, paper or foil."
+---
+
+Texturize is a **Stylise** effect.
+
+## What it is for
+
+Pick a layer — a canvas, a sheet of paper, a wall, crumpled foil, a fabric weave
+— and this layer comes back looking as though it were printed on it. The chosen
+layer is embossed exactly the way [Emboss](/effects/stylise/emboss/) embosses a
+picture, and the light and shade that come out are multiplied into this layer's
+colour.
+
+The everyday uses are a painted or printed title, an aged-poster look, a fabric
+or plaster surface under a graphic, and giving a flat vector logo something to
+sit on.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Texture** | Layer | Any layer in the composition | None | - |
+| **Light direction** | Dial | Any angle; snaps every 15° while a modifier is held | 45° | - |
+| **Relief** | Slider | 0 to 20; higher by typing | 1 | Pixels at composition size |
+| **Texture contrast** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Placement** | Dropdown | Stretch · Tile · Centre | Stretch | - |
+| **Scale** | Slider | 10 to 400; down to 1 and higher by typing | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Light direction** is editable while **Texture** names a layer.
+- **Relief** is editable while **Texture** names a layer.
+- **Texture contrast** is editable while **Texture** names a layer.
+- **Placement** is editable while **Texture** names a layer.
+- **Scale** is editable while **Texture** names a layer.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Texture** — the layer pressed into this one. Only its *brightness* matters;
+  its colour is ignored. Until you pick one the effect does nothing at all. The
+  texture layer can be switched off in the timeline — it is read directly, not
+  composited.
+- **Light direction** — where the light falls across the texture's relief,
+  measured from straight up and going clockwise. Turning it 180° turns every
+  raised thread into a groove.
+- **Relief** — how far apart the two points being compared are, in pixels at
+  composition size, which is how deep the texture presses. 1 is a fine weave; 4
+  or more is a heavy pressed surface.
+- **Texture contrast** — how strongly the relief shows. 0 leaves the picture
+  alone; above 150 the texture starts to overwhelm the image under it.
+- **Placement** — what happens *outside* one copy of the texture: **Stretch**
+  holds its edge outward, **Tile** repeats it, **Centre** leaves the rest of the
+  frame untextured. At Scale 100 all three are the same picture.
+- **Scale** — how big one copy of the texture is, as a percentage of the frame.
+  100 fits it exactly; 50 with Tile gives four copies; 200 shows a quarter of it.
+- **Mix** — how much of the textured picture replaces the original.
+- **Matte** and **Invert** — where the effect happens. Point the Matte at a shape
+  and only that region gets textured; see [Effects](/use/effects/).
+
+## Notes
+
+**Texture and Matte are two different rows, and they answer two different
+questions.** Texture says *what surface*; Matte says *where*. Pressing a canvas
+into a whole frame but only over the sky needs both, which is why this effect has
+its own layer row rather than reusing the Matte one.
+
+**A flat texture does nothing.** The effect reads the texture's *changes*, not
+its brightness, so a plain grey layer presses nothing at any contrast. If nothing
+is happening, the texture probably has no detail at this Scale — zoom it in.
+
+**Scale changes the texture's grain, and Relief changes its depth.** They are
+easy to confuse. Halving Scale makes the weave twice as fine; doubling Relief
+makes the same weave twice as deep. For a coarse canvas, raise Scale *and*
+Relief together.
+
+**The texture is read at the composition's size**, whatever the texture layer's
+own resolution. That is what makes Scale 100 fill the frame exactly, and it is
+why Tile and Centre are described in terms of Scale rather than of the texture's
+own pixel dimensions.
+
+**A precomp makes the best texture.** Build the surface once — a
+[Fractal noise](/effects/generate/fractal-noise/) with a
+[Levels](/effects/colour/levels/) on it makes an excellent paper or plaster —
+and point several layers at the same precomp so the whole title sequence sits on
+one surface.
+
+**Transparency is untouched**, so a textured logo keeps its shape.
+
+## Related
+
+- [Emboss](/effects/stylise/emboss/)
+- [Displacement map](/effects/distortion/displacement-map/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

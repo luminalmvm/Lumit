@@ -1,0 +1,64 @@
+---
+title: "Directional blur"
+description: "A streak along one angle, for impact frames and speed."
+---
+
+Directional blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+A blur along a single line. Instead of spreading light in every direction it
+smears it along one angle, which reads as motion rather than as softness.
+
+This is the impact-frame staple: a few frames of a long streak on a hit, easing
+back to nothing, sells a punch that the footage itself never had. It is also how
+speed lines and whip transitions are built, and it is a quick way to make a
+still graphic feel like it arrived at speed.
+
+The streak is centred on each pixel and runs equally in both directions along
+the angle, so it does not shift the picture — and so an angle and that angle
+plus half a turn produce the same result.
+
+For a smear that follows the motion already in the footage, rather than one
+angle you choose, use [Fast motion blur](/effects/temporal/fast-motion-blur/)
+instead.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Length** | Slider | 0 to 200; higher by typing | 10 | Per cent of the composition diagonal |
+| **Angle** | Slider | -180 to 180; down to -3600 and up to 3600 by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Length** — the full length of the streak, measured across the composition
+  diagonal so it survives a resize. There is no ceiling worth speaking of: this
+  is its own effect rather than one mode of a shared blur, so a streak may run
+  past the whole diagonal if that is the look. The sampling cost stops climbing
+  well before that, so a long streak stays affordable.
+- **Angle** — which way the streak runs. Zero is horizontal, and the angle winds
+  freely past a full turn so an animated value can keep spinning rather than
+  snapping back at the wrap.
+- **Mix** — how much of the streaked picture replaces the original. Animating
+  Mix rather than Length is the cheaper way to pulse the effect on a beat, since
+  the streak itself never has to be re-measured.
+
+## Related
+
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Radial blur](/effects/blur-sharpen/radial-blur/)
+- [Fast motion blur](/effects/temporal/fast-motion-blur/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

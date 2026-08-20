@@ -1,0 +1,58 @@
+---
+title: "Sharpen"
+description: "The plain sharpen, with one amount and one distance."
+---
+
+Sharpen is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+The blunt one. It exaggerates the difference between each pixel and its four
+neighbours, which crisps the picture without any of the judgement
+[Unsharp mask](/effects/blur-sharpen/unsharp-mask/) applies.
+
+Use it when you want a quick crispening and you are watching the result — a
+touch on a graphic, a lift on a layer that has been scaled down, a last nudge at
+the top of a stack. When the footage is noisy or heavily compressed, use Unsharp
+mask instead: this effect has no threshold, so it sharpens grain as
+enthusiastically as it sharpens detail.
+
+It leaves transparency alone and never invents dark detail at the frame's
+border.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 5; higher by typing | 1 | - |
+| **Radius** | Slider | 1 to 8; higher by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how far the difference from the neighbours is exaggerated. At zero
+  the picture passes through untouched, and the useful range is short: this
+  control climbs into crunch quickly, which is the honest character of a plain
+  sharpen.
+- **Radius** — how far out the four neighbours are taken, in whole pixels. One
+  pixel sharpens the finest detail there is. Larger distances skip past fine
+  texture and lift coarser structure instead, which is a way to crisp a picture
+  that has already been scaled up without emphasising its softness.
+- **Mix** — how much of the sharpened picture replaces the original.
+
+## Related
+
+- [Unsharp mask](/effects/blur-sharpen/unsharp-mask/)
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

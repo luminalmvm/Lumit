@@ -2,36 +2,74 @@
 # Generated - do not edit. To refresh after a schema change:
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
 Add
+Add grain
+All edges
 Alpha
 Alpha bias
+Alpha blur
 Amount
 Amplitude
 Anamorphic squeeze
 Anchor x
 Anchor y
 Angle
+Animate
+Anticlockwise
 Aperture
+Arc
+Arc lower
+Arc upper
+Arch
 As the lens file
 Aspect ratio
+Asymmetric
 Background
+Backwards
+Basic
+Beam
 Behind
+Bend
+Bezier warp
+Black
+Black and white
 Blades
 Blend
 Block glitch
 Block size
 Bloom
 Blue
+Blue blur
+Blues
 Blur & sharpen
+Border
+Both
+Bottom edge
+Bottom left tangent x
+Bottom left tangent y
+Bottom right tangent x
+Bottom right tangent y
+Bottom to top
+Brightness
 Broadband, amber
 Broadband, blue
 Broadband, green
+Broadcast safe
+Brush hardness
+Brush size
+Bulge
+Card wipe
+Centre
 Centre X
 Centre Y
+Channel
+Channel blur
 Channel offset
 Chromatic aberration
+Circle
 Clip black
 Clip rollback
 Clip white
+Clockwise
 Coating
 Colour
 Colour 1
@@ -39,33 +77,71 @@ Colour 2
 Colour 3
 Colour balance
 Colour burn
+Colour correction
 Colour dodge
+Colour edge
+Colour noise
+Columns
+Combine with existing alpha
+Completion
+Complexity
+Composite on original
+Conductivity state
 Confidence
 Contrast
+Conversion
+Cooling filter (80)
+Cooling filter (82)
+Cooling filter (LBB)
+Core colour
+Core radius
+Corner pin
+Curves
+Custom
+Cut
+Cyan
+Cyans
+Cycle
+Cycle evolution
 Darken
 Darker colour
 Datamosh
 Decay
+Deep blue
+Deep emerald
+Deep red
+Deep yellow
+Density
 Depth channel
-Depth invert
-Depth layer
 Depth map
 Depth of field
 Despill amount
 Despill bias
 Detail
 Detect edge threshold
+Diagonal
 Difference
+Direction
+Direction x
+Direction y
 Directional blur
 Dispersion
 Displacement
+Displacement map
 Display
+Distance
 Distortion
+Distribution
 Divide
+Dominant motion
 Draft
+Drop shadow
 Duration
 Echo
 Echoes
+Edge colour
+Edge sharpness
+Edge type
 Edges
 Element 1
 Element 10
@@ -87,17 +163,39 @@ Element 6
 Element 7
 Element 8
 Element 9
+Emboss
+End
+End colour
+End thickness
+End x
+End y
 Every Nth beat
+Evolution
+Evolution options
 Exclusion
+Expansion
 Exposure
 F-stop
 Fade
+Fade in
+Fade out
 Far blur
 Fast motion blur
+Feather
+Field of view
 File
+Fill
+Filter
 Final result
+Find edges
+Fish
+Fisheye
+Flag
 Flare options
 Flash
+Flip axis
+Flip direction
+Flip order
 Focus (m)
 Focus distance
 Focus map
@@ -105,88 +203,205 @@ Focus point x
 Focus point y
 Focus range
 Force on all layers
+Forking
+Forwards
+Fractal influence
+Fractal noise
+Fractal type
 Frame rate
 Frequency
 Gain
 Gamma
+Gaussian
 Gaussian blur
+Generate
 Ghost intensity
 Ghost size
 Ghost softness
 Ghost spacing
 Ghosts
 Glow
+Glow colour
 Glow intensity
+Glow opacity
+Glow radius
 Glow size
+Gradient
 Green
+Green blur
+Greens
 Hard
 Hard colour
 Hard light
 Hard mix
+Hardness
 High
+Highlight amount
 Highlight exposure
 Highlight threshold
+Highlight tonal width
 Highlights
+Horizontal
+Horizontal amount
+Horizontal axis
+Horizontal blocks
+Horizontal channel
+Horizontal distortion
+Horizontal phase shift
+How to treat
 Hue
+Hue and saturation
 Hue shift
 In front
+Inflate
+Inner radius
+Input black
+Input white
+Inside colour
 Intensity
 Interlace offset
+Interpolation
 Invert
+Invert edges
+Invert noise
 Iris
+Iris centre x
+Iris centre y
+Iris points
+Iris wipe
+Jagged
+Key out safe
+Key out unsafe
 LUT
+Left and right
+Left bottom tangent x
+Left bottom tangent y
+Left edge
+Left to right
+Left top tangent x
+Left top tangent y
 Length
 Lens
+Lens distort
 Lens file
 Lens flare
 Lens options
+Level
+Levels
+Lifespan
 Lift
+Light direction
 Light tint
 Light wrap
 Light x
 Light y
 Lighten
 Lighter colour
+Lightness
+Lightning
 Lights
 Line period
+Linear
 Linear burn
 Linear light
+Linear wipe
+Lower left x
+Lower left y
+Lower right x
+Lower right y
 Luminance
 Luminance only
 Luminosity
+Magenta
+Magentas
 Manual
 Manual light
 Map black to
 Map white to
+Mask
+Mask/Path
+Master
 Matte
 Matte key
-Matte layer
 Max ghosts
+Maximum signal
+Median
+Midtone contrast
+Midtones
 Mirror
+Mirror edges
 Mix
 Mode
+Monochrome
+More options
+Mosaic
 Motion blur
 Motion vectors
 Multiply
+NTSC
 Near blur
+Noise
+Noise type
 None
 Normal
+Offset
+Offset x
+Offset y
+Omni
+On original
+On transparent
+Opacity
 Opacity %
+Operate on alpha
+Orange
+Orientation
+Origin x
+Origin y
+Outer radius
+Output black
+Output height
+Output white
+Output width
+Outside colour
 Overlay
+PAL
+Paint style
+Path overlap
 Per-axis wobble
+Perlin
 Phase
 Phase offset
+Photo filter
 Pin light
+Pinning
+Placement
+Polar coordinates
+Polar to rectangular
 Position x
 Position y
+Posterize
 Posterize time
 Preserve luminance
+Preserve luminosity
+Producer x
+Producer y
 Quality
 RGB split
+Radial
 Radial blur
+Radial wipe
+Radio waves
 Radius
 Ramp
+Random
+Randomness
+Rectangular to polar
 Red
+Red blur
+Reds
+Reduce brightness
+Reduce saturation
+Relief
 Remove edge leak
 Rendered
 Repeat
@@ -194,31 +409,64 @@ Repeat edge pixels
 Replace colour
 Replace method
 Reset interval
+Reveal original
+Reverse
+Right bottom tangent x
+Right bottom tangent y
+Right edge
+Right to left
+Right top tangent x
+Right top tangent y
 Rim brightness
+Ripple
+Rise
 Roll speed
 Rotation
 Rotation amount
+Roughen
+Roughen edges
 Roundness
+Rows
 Rows/columns jitter
 Samples
 Saturation
+Sawtooth
 Scale
+Scale height
+Scale width
 Scale x %
 Scale y %
 Scanlines
+Scatter
 Screen
 Screen balance
 Screen colour
 Screen gain
 Screen matte
+Scribble
 Seed
+Segment length
+Sepia
+Set matte
+Shadow amount
+Shadow colour
+Shadow highlight
+Shadow only
+Shadow tonal width
+Shadows
 Shake
 Shape
+Sharp colours
 Sharpen
+Shift x
+Shift y
 Shutter
 Shutter angle
 Shutter phase
+Sides
+Sine
 Single layer, straw
+Size
 Slice repeat
 Soft colour
 Soft light
@@ -226,44 +474,131 @@ Softness
 Source
 Source height
 Source width
+Spacing
+Spherize
+Spiky
 Spin
 Sprite flare
+Square
+Squeeze
+Standard
+Star
+Star depth
 Starburst intensity
+Start
+Start angle
+Start colour
+Start thickness
+Start x
+Start y
+Static
 Status
 Stops
 Streak
 Streak angle
 Streak intensity
 Streak length
+Stretch
+Strike
 Strobe
+Stroke
+Stroke width
+Style
 Stylise
+Sub influence
+Sub scaling
+Sub settings
 Subtract
+Symmetric
 Temperature
 Temporal
+Texture
+Texture contrast
+Texturize
 Threshold
 Threshold softness
+Tile
+Tile centre x
+Tile centre y
+Tile height
+Tile width
+Time
 Tint
+Tint colour
+Top and bottom
+Top edge
+Top left tangent x
+Top left tangent y
+Top right tangent x
+Top right tangent y
+Top to bottom
 Transform
+Transition
+Transition width
 Transparent
+Triangle
 Trigger
+Tritone
+Turbulent
+Turbulent displace
+Twirl
+Twist
 Two layer, magenta
+Two-way strike
 Type
 Ultra
 Uncoated
+Underwater
+Uniform
+Uniform scaling
 Unsharp mask
+Upper left x
+Upper left y
+Upper right x
+Upper right y
 Use focus point
+Use inner radius
 Use source colour
 Utility
+Value
+Vegas
+Venetian blinds
+Vertical
+Vertical amount
+Vertical axis
+Vertical blocks
+Vertical channel
+Vertical distortion
 Vibrancy
 View
 Vignette
+Violet
 Vivid light
+Warming filter (81)
+Warming filter (85)
+Warming filter (LBA)
+Warp
+Wave
+Wave height
+Wave type
+Wave warp
+Wave width
 Wavelength
+White
 Width
+Wiggle type
+Wiggles per second
+Wiggly
+Wipe
+Wipe angle
+Wipe centre x
+Wipe centre y
 X amount
 X frequency
 Y amount
 Y frequency
+Yellow
+Yellows
 Z amount
 Z frequency
 Zoom

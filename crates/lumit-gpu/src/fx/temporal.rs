@@ -27,24 +27,37 @@ struct EchoParams {
     _pad: [f32; 2],
 }
 
+/// Side of the square tiles the dominant-motion reduction works in, in pixels
+/// (docs/impl/optical-flow.md §4.5 item 3).
+///
+/// Duplicated from `lumit_core::fx::cpu::MB_TILE` rather than imported, because
+/// this crate deliberately does not depend on lumit-core outside its tests
+/// (docs/05 §1.1). `wgsl_motion_blur_matches_the_cpu_oracle` asserts the two are
+/// equal, so the duplication cannot drift silently.
+pub const MB_TILE: u32 = 16;
+
 /// One resolved flow motion blur (docs/08 §3.2). The per-pixel motion is a
 /// dense flow field passed as its own texture (see [`upload_flow_field`] and
 /// [`FxEngine::motion_blur`]); this op carries only the scalars the kernel
-/// turns a vector into a streak with. `samples` must equal the tap count
+/// turns a vector into a streak with. `samples` must equal the tap *cap*
 /// `lumit_core::fx::effects::motion_blur::MotionBlur::packed` produces, so the
-/// GPU integrates the CPU oracle's exact tap count.
+/// GPU adapts its tap count inside the CPU oracle's exact bound.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MotionBlurOp {
     /// Shutter ÷ 360: streak length as a fraction of the inter-frame motion.
     pub shutter_frac: f32,
-    /// Evenly spaced bilinear taps along the streak.
+    /// The cap on bilinear taps along the streak; the count adapts below it
+    /// (K-390, docs/impl/optical-flow.md §4).
     pub samples: i32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// Output view (FX-19): 0 Rendered, 1 Motion vectors, 2 Confidence — the
-    /// `lumit_core::fx::MbView::code()` integer, so the kernel matches the CPU
-    /// oracle's `view` branch.
+    /// Output view (FX-19): 0 Rendered, 1 Motion vectors, 2 Confidence,
+    /// 3 Dominant motion — the `lumit_core::fx::MbView::code()` integer, so the
+    /// kernel matches the CPU oracle's `view` branch.
     pub view: i32,
+    /// Reconstruction tier: the `lumit_core::fx::MbQuality::code()` integer
+    /// (0 Normal, 1 High — curved trails and half the tap spacing).
+    pub quality: i32,
 }
 
 #[repr(C)]
@@ -54,6 +67,16 @@ struct MotionBlurParams {
     samples: i32,
     mix_amt: f32,
     view: i32,
+    tile: i32,
+    quality: i32,
+    _pad: [i32; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MbTileParams {
+    tile: i32,
+    _pad: [i32; 3],
 }
 
 /// One resolved Datamosh pass (docs/08 §3.12, K-104; its own effect since
@@ -156,14 +179,26 @@ impl FxEngine {
     }
 
     /// Apply one flow motion blur (docs/08 §3.2) to a linear working texture,
-    /// returning a new texture of the same size. One pass: per output pixel,
-    /// read its motion vector from `flow` (a two-channel field the same size
-    /// as `src`, in raster pixels) and integrate `op.samples` box-weighted
-    /// bilinear taps along the centred streak `± motion × shutter_frac`, then
-    /// blend against the input by the host Mix. `flow`'s vectors are consumed
-    /// exactly as `lumit_core::fx::cpu::motion_blur` reads its `u`/`v` slices,
-    /// so the two agree (§1.6). Its own bind group (the flow field is the one
-    /// extra input over the shared two-input shape).
+    /// returning a new texture of the same size. The Guertin-class
+    /// reconstruction of K-390 (docs/impl/optical-flow.md §4.5 item 3).
+    ///
+    /// **Two passes.** The first reduces `flow` to one dominant vector per
+    /// `MB_TILE`-square tile; the second does the blur, and each pixel reads the
+    /// 3×3 tile neighbourhood to learn what its surroundings are doing. That
+    /// second direction is what lets a fast object smear *over* the still
+    /// background it passes (v1, gathering only along each pixel's own vector,
+    /// could not), and it is what an unconfident pixel borrows its direction
+    /// from instead of freezing.
+    ///
+    /// The reduction lives here rather than at the upload seam deliberately:
+    /// computing it from the flow texture the kernel already has keeps the whole
+    /// change inside this crate — the decode worker, the render plan and the aux
+    /// slots all still carry exactly one field.
+    ///
+    /// `flow`'s vectors are consumed exactly as
+    /// `lumit_core::fx::cpu::motion_blur` reads its `u`/`v` slices, and the
+    /// reduction matches `lumit_core::fx::cpu::motion_blur_tiles`, so the two
+    /// agree (§1.6).
     pub fn motion_blur(
         &self,
         ctx: &GpuContext,
@@ -174,7 +209,35 @@ impl FxEngine {
         op: &MotionBlurOp,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
+        let tile = MB_TILE;
+        let (tw, th) = (w.div_ceil(tile).max(1), h.div_ceil(tile).max(1));
+        let tiles = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("fx-mb-tiles"),
+            size: wgpu::Extent3d {
+                width: tw,
+                height: th,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            // f32, not the working fp16: these vectors are compared bit-for-bit
+            // against an f32 oracle.
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+            view_formats: &[],
+        });
         let out = work_texture(ctx, w, h, "fx-mb-out");
+        let tbuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-mb-tile-params"),
+                contents: bytemuck::bytes_of(&MbTileParams {
+                    tile: tile as i32,
+                    _pad: [0; 3],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -184,10 +247,31 @@ impl FxEngine {
                     samples: op.samples.max(1),
                     mix_amt: op.mix,
                     view: op.view,
+                    tile: tile as i32,
+                    quality: op.quality,
+                    _pad: [0; 2],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        let tile_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-mb-tile-bind"),
+            layout: &self.mb_tile_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view(flow)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view(&tiles)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: tbuf.as_entire_binding(),
+                },
+            ],
+        });
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-mb-bind"),
             layout: &self.mb_layout,
@@ -196,11 +280,9 @@ impl FxEngine {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&view(src)),
                 },
-                // orig-for-mix: a single pass, so the unprocessed original is
-                // the source itself.
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view(src)),
+                    resource: wgpu::BindingResource::TextureView(&view(&tiles)),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -217,6 +299,15 @@ impl FxEngine {
             ],
         });
         let mut enc = ctx.encoder("fx-mb-enc");
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-mb-tile-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.mb_tilemax);
+            cpass.set_bind_group(0, &tile_bind, &[]);
+            cpass.dispatch_workgroups(tw.div_ceil(8), th.div_ceil(8), 1);
+        }
         {
             let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("fx-mb-pass"),

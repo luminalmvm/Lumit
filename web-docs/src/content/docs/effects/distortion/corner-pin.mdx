@@ -1,0 +1,90 @@
+---
+title: Corner pin
+description: "Pulls the four corners of the layer onto four points you place, with true perspective."
+---
+
+Corner pin is a **Distortion** effect.
+
+## What it is for
+
+Putting a picture onto a surface that is not facing the camera. Drag the four
+corners of the layer onto the four corners of a phone screen, a billboard, a
+laptop, a picture frame or a wall, and the layer sits there — narrowing where the
+surface recedes, widening where it comes toward you.
+
+That convergence is the whole point. Corner pin is a **projective** transform,
+which is the same maths a real camera does: straight lines stay straight, but
+parallel ones meet. Scaling and skewing a layer by hand cannot produce it, and the
+difference is the difference between a screen replacement that sits in the shot
+and one that floats on top of it.
+
+The other everyday use is faking a camera move on a still: pin all four corners
+slightly, keyframe them, and a flat plate leans and turns as if the camera had.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Upper left x** | Slider | -1920 to 3840; any value by typing | 96 | Pixels at composition size |
+| **Upper left y** | Slider | -1080 to 2160; any value by typing | 54 | Pixels at composition size |
+| **Upper right x** | Slider | -1920 to 3840; any value by typing | 1824 | Pixels at composition size |
+| **Upper right y** | Slider | -1080 to 2160; any value by typing | 54 | Pixels at composition size |
+| **Lower left x** | Slider | -1920 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Lower left y** | Slider | -1080 to 2160; any value by typing | 1026 | Pixels at composition size |
+| **Lower right x** | Slider | -1920 to 3840; any value by typing | 1920 | Pixels at composition size |
+| **Lower right y** | Slider | -1080 to 2160; any value by typing | 1026 | Pixels at composition size |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Transparent | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Upper left**, **Upper right**, **Lower left**, **Lower right** — where each of
+  the frame's four corners ends up, in pixels at composition size. Put all four
+  back on the frame's own corners and the effect does nothing; move one and the
+  whole picture follows. A fresh Corner pin starts as a gentle keystone so you can
+  see it working before you touch anything.
+- **Edges** — what fills the area a corner has been dragged *away* from.
+  **Transparent** leaves it empty, which is what a screen replacement wants and is
+  what After Effects always does. **Repeat** smears the border pixel outward and
+  **Mirror** reflects the picture back, both of which are useful when you are
+  faking a camera move on a plate and want the frame to stay full.
+- **Mix** — how much of the pinned picture replaces the original. Below 100 the
+  two are blended, which is mostly useful for checking your alignment against the
+  plate underneath.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Cross two corners and part of the picture vanishes.** Drag the upper left past
+the upper right and the surface you have described folds back behind the camera.
+Lumit draws nothing there. Some tools draw a mirrored ghost of the picture
+instead, which looks like a bug because it is one — there genuinely is no image
+behind the horizon of a perspective transform.
+
+**A quad with no area does nothing at all.** Put three corners in a line, or two
+on top of each other, and there is no perspective to compute; the effect renders
+the picture untouched rather than filling the frame with noise. Pull a corner back
+out and it resumes.
+
+**Pin, then track.** For a moving shot, keyframe the four points to the tracked
+corners of the surface. Corner pin is deliberately just the transform — it has no
+tracker of its own, and the points are ordinary animatable numbers you can drive
+from anywhere.
+
+## Related
+
+- [Transform](/effects/utility/transform/)
+- [Lens distort](/effects/distortion/lens-distort/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

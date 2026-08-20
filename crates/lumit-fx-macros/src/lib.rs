@@ -12,6 +12,16 @@
 //! expansion. See `docs/impl/effect-registry.md` §2.1 for the shape and the full
 //! attribute table.
 //!
+//! Two parameters are **injected** rather than declared: the Matte layer row
+//! and its Invert switch (K-395), which every effect gets so the row means
+//! something on all of them from day one. `matte = "<id>"` says the effect
+//! reads the matte out of the named parameter *itself*, inside its own maths,
+//! instead of the generic dissolve — `matte = "matte"` for an effect that takes
+//! the injected row and means something deeper by it (Gaussian blur, Glow), and
+//! the effect's own older id for one that owned the idea first (Depth of
+//! field's `depth`, the Lens flare's `matte`, which it declares itself and so
+//! is not injected twice).
+//!
 //! ```ignore
 //! #[derive(Effect)]
 //! #[effect(
@@ -43,7 +53,7 @@ use syn::{
 #[proc_macro_derive(
     Effect,
     attributes(
-        effect, slider, counter, dial, toggle, choice, colour, seed, file, layer
+        effect, slider, counter, dial, toggle, choice, colour, seed, file, layer, mask_path
     )
 )]
 pub fn derive_effect(input: TokenStream) -> TokenStream {
@@ -68,6 +78,55 @@ struct EffectAttr {
     beat_input: TokenStream2,
     groups: TokenStream2,
     enabled_when: TokenStream2,
+    /// What this effect's Matte row means (K-395). Default [`MatteAttr::Strength`].
+    matte: MatteAttr,
+}
+
+/// The generic Matte parameter's id, repeated here because a proc-macro crate
+/// cannot depend on `lumit-core`. `lumit_core::fx::MATTE_PARAM` is the
+/// definition — the emitted schema uses *that* const for the id, and this copy
+/// only decides whether to emit at all. If the two ever drift, the effect either
+/// gains no row or gains a second one under the same id, and
+/// `every_effect_carries_a_matte_row` in lumit-core fails on the first effect it
+/// walks.
+const MATTE_PARAM: &str = "matte";
+
+/// The `matte = ...` attribute's three spellings (K-395), which become
+/// `lumit_core::fx::MatteRole` in the emitted schema.
+enum MatteAttr {
+    /// `matte = false` — no row, no slot, no dissolve.
+    None,
+    /// Absent, or `matte = true` — the generic strength dissolve.
+    Strength,
+    /// `matte = ("<param id>", "<what it means>")` — the effect consumes the
+    /// matte inside its own maths, out of the named parameter. `"matte"` is the
+    /// injected row read by the kernel instead of the dissolve (Gaussian blur,
+    /// Glow); any other id is a row the effect already declares itself (Depth of
+    /// field's `depth`). The sentence rides in the same attribute because K-395
+    /// requires an override to document its meaning, and a separate optional
+    /// attribute is one an override can forget.
+    Own(String, String),
+}
+
+impl MatteAttr {
+    /// The parameter id the matte layer is stored under, if any.
+    fn role(&self) -> Option<&str> {
+        match self {
+            MatteAttr::None => None,
+            MatteAttr::Strength => Some(MATTE_PARAM),
+            MatteAttr::Own(id, _) => Some(id),
+        }
+    }
+
+    fn tokens(&self) -> TokenStream2 {
+        match self {
+            MatteAttr::None => quote! { ::lumit_core::fx::MatteRole::None },
+            MatteAttr::Strength => quote! { ::lumit_core::fx::MatteRole::Strength },
+            MatteAttr::Own(id, meaning) => quote! {
+                ::lumit_core::fx::MatteRole::Own { param: #id, meaning: #meaning }
+            },
+        }
+    }
 }
 
 fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
@@ -96,12 +155,16 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
     let mut schemas = Vec::new();
     let mut id_consts = Vec::new();
     let mut readers = Vec::new();
+    // Every id the struct declares, so the Matte injection below can tell "this
+    // effect wants the generic row" from "this effect already has one".
+    let mut declared: Vec<String> = Vec::new();
 
     for field in fields {
         let Some(name) = field.ident.clone() else {
             continue;
         };
         let param = parse_param(field, &name)?;
+        declared.push(param.id.clone());
         let id = &param.id;
         let label = &param.label;
         let kind = &param.kind;
@@ -137,7 +200,44 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         beat_input,
         groups,
         enabled_when,
+        matte,
     } = effect;
+
+    // The Matte pair (K-395), appended to every effect's parameters unless the
+    // declaration opted out. It is injected here rather than written down 33
+    // times for the reason the unit table is: a declaration that has to repeat
+    // something is a declaration that will one day forget it, and an effect
+    // whose Matte row is missing looks exactly like an effect whose matte does
+    // not work. There is no field to read back, so `read()` is untouched — the
+    // layer binding rides beside the op (K-387) and the switch is read out of
+    // the bag by whoever consumes the matte, not by `read()`.
+    //
+    // **Injected only where it is wanted and missing.** An effect that claims
+    // the matte inside its own maths still takes the generic row (Gaussian blur
+    // and Glow do), so the test is the role's parameter *id*, not whether the
+    // meaning is generic. An effect that owned the idea first already declares
+    // the row itself — the Lens flare's `matte`, Depth of field's `depth` —
+    // and injecting a second one would give it two rows with one id.
+    let matte_role = matte.tokens();
+    let inject = matte.role() == Some(MATTE_PARAM) && !declared.iter().any(|d| d == MATTE_PARAM);
+    if inject {
+        schemas.push(quote! {
+            ::lumit_core::fx::ParamSchema {
+                id: ::lumit_core::fx::MATTE_PARAM,
+                label: "Matte",
+                kind: ::lumit_core::fx::ParamKind::Layer { self_default: false },
+                unit: ::lumit_core::fx::Unit::Raw,
+            }
+        });
+        schemas.push(quote! {
+            ::lumit_core::fx::ParamSchema {
+                id: ::lumit_core::fx::MATTE_INVERT_PARAM,
+                label: "Invert",
+                kind: ::lumit_core::fx::ParamKind::Bool { default: false },
+                unit: ::lumit_core::fx::Unit::Raw,
+            }
+        });
+    }
 
     let doc =
         format!("The `{match_name}` effect's declaration, generated from its parameter struct.");
@@ -165,6 +265,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 params: &[#(#schemas),*],
                 groups: #groups,
                 enabled_when: #enabled_when,
+                matte: #matte_role,
             };
 
             fn read(p: ::lumit_core::fx::Params<'_>) -> Self {
@@ -203,6 +304,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
     let mut beat_input = quote! { false };
     let mut groups = quote! { &[] };
     let mut enabled_when = quote! { &[] };
+    let mut matte = MatteAttr::Strength;
 
     for meta in metas {
         let Meta::NameValue(nv) = meta else {
@@ -227,6 +329,41 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
             "beat_input" => beat_input = quote! { #value },
             "groups" => groups = quote! { #value },
             "enabled_when" => enabled_when = quote! { #value },
+            // What the Matte row means (K-395). `false` opts out entirely; a
+            // string names the parameter the effect reads the matte out of
+            // *itself*, which is how an effect declares a deeper meaning than
+            // strength — and how the two that owned the idea first keep their
+            // stored ids (K-065).
+            "matte" => {
+                matte = match value {
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Bool(b), ..
+                    }) => {
+                        if b.value() {
+                            MatteAttr::Strength
+                        } else {
+                            MatteAttr::None
+                        }
+                    }
+                    Expr::Tuple(t) if t.elems.len() == 2 => {
+                        let mut it = t.elems.iter();
+                        match (it.next(), it.next()) {
+                            (Some(id), Some(meaning)) => {
+                                MatteAttr::Own(lit_str(id)?, lit_str(meaning)?)
+                            }
+                            _ => unreachable!("len == 2 was just matched"),
+                        }
+                    }
+                    other => {
+                        return Err(syn::Error::new(
+                            other.span(),
+                            "expected `false` (no matte), `true` (the generic strength \
+                             dissolve), or `(\"<param id>\", \"<what this effect's matte \
+                             means>\")` — an override must say what it means (K-395)",
+                        ))
+                    }
+                }
+            }
             other => {
                 return Err(syn::Error::new(
                     nv.path.span(),
@@ -250,6 +387,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
         beat_input,
         groups,
         enabled_when,
+        matte,
     })
 }
 
@@ -264,7 +402,16 @@ struct Param {
 
 fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
     let known = [
-        "slider", "counter", "dial", "toggle", "choice", "colour", "seed", "file", "layer",
+        "slider",
+        "counter",
+        "dial",
+        "toggle",
+        "choice",
+        "colour",
+        "seed",
+        "file",
+        "layer",
+        "mask_path",
     ];
     let attr = field
         .attrs
@@ -274,7 +421,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             syn::Error::new(
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[counter] #[dial] \
-                 #[toggle] #[choice] #[colour] #[seed] #[file] #[layer]",
+                 #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[mask_path]",
             )
         })?;
 
@@ -436,6 +583,18 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             (
                 quote! { ::lumit_core::fx::ParamKind::Layer { self_default: #self_default } },
                 quote! { p.layer_bound(#idc) },
+            )
+        }
+        // One of this layer's masks, handed to the effect as geometry (K-408).
+        // `self_default` mirrors `#[layer]`'s and defaults the other way round:
+        // an unset row means the layer's **first mask**, because an effect that
+        // wants a path wants the one path most layers have, and an effect is
+        // usually dropped on before the mask is drawn.
+        "mask_path" => {
+            let self_default = get("self_default").unwrap_or_else(|| quote! { true });
+            (
+                quote! { ::lumit_core::fx::ParamKind::MaskPath { self_default: #self_default } },
+                quote! { p.mask_named(#idc) },
             )
         }
         other => {

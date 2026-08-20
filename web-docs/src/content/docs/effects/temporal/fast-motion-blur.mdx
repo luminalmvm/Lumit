@@ -1,0 +1,91 @@
+---
+title: "Fast motion blur"
+description: "Smear each pixel along the motion measured in the footage."
+---
+
+Fast motion blur is a [Temporal](/effects/temporal/) effect.
+
+## What it is for
+
+Game capture has no natural motion blur. Every frame is a perfectly sharp instant,
+which is the reason engine footage reads as a game and not as film, and it is
+what makes fast movement strobe rather than flow.
+
+This effect measures where every pixel moved between one frame and the next, and
+smears each one along its own path. Unlike the layer's motion blur switch, which
+only knows about the layer's own animated transform, this catches motion that is
+*inside* the picture: a player running across frame, a car passing, a camera whip
+that was recorded rather than keyframed.
+
+It is the cheap kind. For the correct, whole-scene kind that re-renders
+everything at sub-frame moments, use
+[Motion blur](/effects/temporal/motion-blur/) — at several times the cost.
+
+Measured motion is never perfect. Where the measurement is unsure — at the edges
+of moving objects, where things pass behind one another — the effect does not
+switch off and leave a sharp patch in the middle of a blurred frame. It borrows
+the motion of the surrounding area instead, so uncertain pixels follow their
+neighbourhood. Blur therefore survives everywhere except where the neighbourhood
+itself is genuinely still, which is where you want sharpness anyway.
+
+It works on footage layers, since it needs real frames to measure between.
+
+:::note[One flow measurement per layer]
+Measuring motion is expensive, so a layer computes it once per frame and shares
+it. If a layer carries both this and
+[Datamosh](/effects/distortion/datamosh/), whichever comes first in the stack
+gets the measurement and the other does nothing. Put them on separate layers if
+you need both.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shutter angle** | Slider | 0 to 720 | 180 | - |
+| **Samples** | Slider | 8 to 32; down to 2 and up to 64 by typing | 16 | - |
+| **Quality** | Dropdown | Normal · High | Normal | - |
+| **View** | Dropdown | Rendered · Motion vectors · Confidence · Dominant motion | Rendered | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shutter angle** — how long the imaginary shutter is open, and so how long the
+  streak is. The streak covers that fraction of a full turn of the movement
+  between frames, which means the film-standard half-turn gives you half the
+  inter-frame motion — the setting that looks like footage rather than like an
+  effect. Larger angles smear further; a full turn and beyond is a stylised
+  choice.
+- **Samples** — the *cap* on how many taps the smear may spend. The effect already
+  spends fewer on short streaks, so this is a ceiling for the expensive frames
+  rather than a fixed cost on every one. Raise it if long streaks show as
+  separate stacked copies; lower it to buy back time.
+- **Quality** — High halves the spacing between taps and bends each streak to
+  follow the curve of the motion rather than running straight. On rotating or
+  swirling movement the difference is obvious; on straight-line motion it is
+  slight.
+- **View** — a diagnostic display. Motion vectors shows the measured movement as
+  colour, Confidence shows in greyscale where the measurement is trusted, and
+  Dominant motion shows the neighbourhood motion an uncertain pixel borrows.
+  These are the fastest way to understand why a region smeared the way it did.
+  Leave it on Rendered for output.
+- **Mix** — how much of the smeared picture replaces the original.
+
+## Related
+
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Echo](/effects/temporal/echo/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Retime](/use/retime/)
+- [Temporal](/effects/temporal/)
+- [Effects](/use/effects/)

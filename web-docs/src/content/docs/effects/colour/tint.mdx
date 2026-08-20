@@ -1,0 +1,68 @@
+---
+title: "Tint"
+description: "Map the picture's brightness onto two colours of your choosing."
+---
+
+Tint is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Replaces the picture's colour with a gradient between two you pick. Every
+pixel's brightness decides where it lands on that gradient: the darkest pixels
+take the first colour, the brightest take the second, and everything between is
+mixed accordingly.
+
+This is the duotone look — the poster-style two-colour treatment — and it is
+also the most direct way to force a section of a montage into one palette
+regardless of what was shot. Because the picture's brightness structure is kept
+and only its colour is replaced, the result still reads as the original footage
+rather than as a flat wash.
+
+Left at black and white it maps every pixel to its own brightness, which is a
+clean greyscale. That is a useful thing in itself, and it is the reason the
+effect does something visible the moment you add it rather than sitting inert.
+
+For a treatment that shifts existing colours rather than replacing them, use
+[Hue shift](/effects/colour/hue-shift/) or
+[Colour balance](/effects/colour/colour-balance/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Map black to** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Map white to** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Map black to** — the colour the darkest pixels become. Lifting it off black
+  is what stops the result feeling harsh, and tinting it is where most of the
+  character of a duotone comes from.
+- **Map white to** — the colour the brightest pixels become. Pulling it below
+  white flattens the picture; pushing it past white keeps highlights hot enough
+  for a [Glow](/effects/stylise/glow/) downstream to still find them.
+- **Mix** — how much of the mapped picture replaces the original. Partial values
+  are genuinely useful here: a light blend of a duotone over the real footage
+  reads as a grade rather than as a filter.
+
+Both colours open the picker with its screen dropper, so a palette can be
+sampled from a reference image.
+
+## Related
+
+- [Hue shift](/effects/colour/hue-shift/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Invert](/effects/colour/invert/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

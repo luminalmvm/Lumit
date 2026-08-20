@@ -1,0 +1,123 @@
+---
+title: Vegas
+description: "Runs a dashed, marching stroke along a contour it finds in the picture, or round a mask you have drawn."
+---
+
+Vegas is a **Generate** effect.
+
+## What it is for
+
+Outlining what is in the picture, and then making that outline *move*. It finds a
+contour — the line where the picture's brightness, or its transparency, crosses a
+level you choose — and runs a stroke along it. Set **Length** below 100 and the
+stroke becomes dashes; keyframe **Rotation** and the dashes march along the
+contour like the lights around a theatre sign, which is what the effect is named
+for.
+
+It is the quickest way to make a shape announce itself: a logo traced by a
+running highlight, a diagram whose lines light up in turn, a technical readout
+drawing itself around the thing it is measuring.
+
+Point **Source** at Alpha and it outlines the layer's own shape rather than
+anything in its picture, which is usually what you want on a title or a logo.
+
+Point it at **Mask/Path** and it marches round a mask you have drawn instead of
+hunting for a contour at all — and that half is the more precise of the two, for
+the reason in the notes below.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source** | Dropdown | Luminance · Alpha · Mask/Path | Luminance | - |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Threshold** | Slider | 0 to 100 | 50 | - |
+| **Width** | Slider | 0 to 50; higher by typing | 3 | Pixels at composition size |
+| **Hardness** | Slider | 0 to 100 | 50 | - |
+| **Segment length** | Slider | 1 to 1000; higher by typing | 80 | Pixels at composition size |
+| **Length** | Slider | 0 to 100 | 55 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.8, 0.25, 1 | - |
+| **Opacity** | Slider | 0 to 100 | 100 | - |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Mask** is editable while **Source** is set to Mask/Path.
+- **Threshold** is editable while **Source** is anything but Mask/Path.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source** — **Luminance** finds the contour in the picture's brightness;
+  **Alpha** finds it at the edge of the layer's own shape; **Mask/Path** ignores
+  the picture and runs the stroke round one of the layer's masks.
+- **Mask** — which mask, while Source is Mask/Path. **First mask** means whichever
+  is first, so you can add the effect before you draw the shape. A mask set to
+  mode **None** is offered like any other.
+- **Threshold** — which contour. On Luminance it is a position on the tone range,
+  so 50 traces the mid-greys and lower values trace the darker parts; on Alpha,
+  50 sits exactly on the shape's edge. Greyed on Mask/Path, where there is no
+  picture to take a level of.
+- **Width** — how thick the stroke is, in pixels at composition size.
+- **Hardness** — how crisp its edges are. 100 is a hard-edged stroke, 0 one that
+  fades out over its own width.
+- **Segment length** — one dash and its gap together, in pixels at composition
+  size. This is where After Effects' *number* of segments becomes a length, for
+  the reason in the notes below — except on Mask/Path, where the two mean the
+  same thing.
+- **Length** — how much of one segment is lit, as a percentage. 100 is a
+  continuous outline with no gaps at all.
+- **Rotation** — marches the dashes along the contour. One full turn moves them
+  on by exactly one segment, so a straight keyframe from 0° to 360° over a second
+  advances them by one segment a second, and looping it is seamless.
+- **Colour** — the stroke's colour. Values above 1 make it bloom under a
+  [Glow](/effects/stylise/glow/).
+- **Opacity** — how strong the stroke is.
+- **Composite on original** — on, the layer that arrived stays under the stroke.
+  Off, the stroke is all there is, which turns the outline into its own element.
+- **Mix** — how much of the effect takes hold.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/). This is how you run the lights round only part of
+  a shape.
+
+## Notes
+
+**A soft picture gives a soft result.** The contour is found from the picture's
+own gradient, so a heavily compressed or very smooth image gives a stroke that
+wanders and breaks up. A small [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+before Vegas is the standard cure and is exactly what After Effects' Pre-Blur
+control is for.
+
+**On a contour, Segment length is a length rather than a count.** After Effects
+traces the contour into a path and can therefore count segments *around* it; Lumit
+finds the contour where each pixel stands, which is what makes the effect one
+cheap pass, and the price is that spacing has to be a distance instead of a
+number. On a straight contour the two are the same picture; on a tightly curved
+one Lumit's dashes drift in phase where After Effects' stay evenly spaced.
+
+**On a mask, they mean the same thing.** A mask is a real curve, and Lumit
+measures the distance round it on the way in — so the Mask/Path source spaces its
+dashes evenly all the way round, however tight the bend. This is the half to use
+when the dashes must stay regular on a curve, and it is why an imported After
+Effects project using Mask/Path converts its Segments count exactly rather than
+approximately.
+
+**The contour is found on what the eye sees**, not on raw light, so Threshold
+spends its range evenly instead of doing nothing for its first eighty per cent.
+
+## Related
+
+- [Stroke](/effects/generate/stroke/)
+- [Scribble](/effects/generate/scribble/)
+- [Radio waves](/effects/generate/radio-waves/)
+- [Find edges](/effects/stylise/find-edges/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

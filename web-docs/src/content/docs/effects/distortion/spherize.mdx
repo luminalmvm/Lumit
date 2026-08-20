@@ -1,0 +1,88 @@
+---
+title: Spherize
+description: "Magnifies a circle of the picture as if a glass ball were held over it — or pinches it inward."
+---
+
+Spherize is a **Distortion** effect.
+
+## What it is for
+
+Holding a marble over the picture. Inside a circle the image swells outward, and
+everything the middle pushed aside is squeezed into the last few pixels before the
+rim — which is exactly what a real glass ball does, and why the effect reads as
+glass rather than as a zoom.
+
+Turn **Bulge** negative and it does the opposite, pinching the picture inward
+toward the centre.
+
+The everyday uses are a fisheye peephole, a water droplet on a lens, a magnifying
+glass travelling across a map or a page, and — animated from 0 up and back — a
+soft pulse or impact ripple on a title.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Radius** | Slider | 0 to 100; higher by typing | 25 | Per cent of the composition diagonal |
+| **Bulge** | Slider | -100 to 100 | 100 | - |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Radius** — how big the ball is, as a percentage of the composition diagonal.
+  Being a percentage rather than a pixel count, it covers the same part of the
+  picture whatever size the composition is, and a half-resolution preview matches
+  the export.
+- **Bulge** — which way the glass bends and how much of it there is. **100** is a
+  full sphere; **0** is no effect at all; **−100** is the exact opposite, a pinch.
+  The values in between read as a shallower lens rather than a smaller one, which
+  is what makes Bulge the control to animate.
+- **Centre X** and **Centre Y** — where the ball sits, in pixels at composition
+  size. A fresh Spherize starts in the middle of the frame. Animate these to slide
+  a magnifying glass across the picture.
+- **Mix** — how much of the bulged picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**A bulge and a pinch cancel exactly.** Stack a Spherize at +100 and another at
+−100 with the same Radius and Centre and you get the picture back (give or take
+the softening of two resamples). They are genuinely opposite transforms rather
+than a sign flipped on a number, which is what makes the negative half of the
+slider trustworthy.
+
+**The rim is meant to be crowded.** Detail piles up in the last few pixels before
+the edge of the ball, because that is where a sphere puts everything it magnified
+away from the middle. If it reads as too harsh, lower Bulge rather than Radius —
+lowering Radius just makes a smaller ball with the same crowded rim.
+
+**Nothing outside the radius moves.** As with [Twirl](/effects/distortion/twirl/),
+the effect is exactly bounded by its own circle, so it is safe to drop on a full
+frame. If the circle hangs off the edge of the frame, the part with nothing to
+read comes back transparent.
+
+**For a real lens, reach for something else.** Spherize is a local bulge, not an
+optical model. To correct or add the barrel distortion of an actual lens across
+the whole frame, use [Lens distort](/effects/distortion/lens-distort/), which is
+described in field of view rather than in radius.
+
+## Related
+
+- [Twirl](/effects/distortion/twirl/)
+- [Lens distort](/effects/distortion/lens-distort/)
+- [Displacement map](/effects/distortion/displacement-map/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

@@ -15,6 +15,9 @@
 
 use std::path::Path;
 
+/// The shared noise core, exactly as `FxEngine::new` prepends it.
+const NOISE_CORE: &str = include_str!("../src/fx_noise_core.wgsl");
+
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -37,6 +40,23 @@ fn every_wgsl_kernel_parses_and_validates() {
         let Ok(source) = std::fs::read_to_string(&path) else {
             failures.push(format!("{name}: unreadable"));
             continue;
+        };
+        // `fx_noise_core.wgsl` is not a kernel: it is prepended to the kernels
+        // that read the noise field, which is WGSL's only way of having a shared
+        // module (docs/08 §3.37, §3.38). So it is validated exactly as the engine
+        // compiles it — as part of each consumer — rather than on its own, where
+        // it has no entry point and its consumers have no `nc_fractal`.
+        if name == "fx_noise_core.wgsl" {
+            continue;
+        }
+        // Any `nc_` name means this kernel is one of the core's consumers —
+        // Card wipe (docs/08 §3.72) takes only `nc_hash01` and no fractal at
+        // all, so the older "does it call nc_fractal" test would have compiled
+        // it alone and failed on an unknown identifier.
+        let source = if source.contains("nc_") {
+            format!("{NOISE_CORE}{source}")
+        } else {
+            source
         };
         let module = match naga::front::wgsl::parse_str(&source) {
             Ok(module) => module,

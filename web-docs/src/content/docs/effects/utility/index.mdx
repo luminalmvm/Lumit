@@ -1,0 +1,51 @@
+---
+title: "Utility"
+description: "The effects that do a job rather than create a look."
+sidebar:
+  order: 0
+---
+
+## What this family does
+
+The effects that exist to do a job rather than to create a look.
+
+[Transform](/effects/utility/transform/) is the layer transform properties —
+anchor, position, scale, rotation, opacity — available as a stack entry. Its
+point is that an effect can sit on an **adjustment layer**, so it can move the
+composite of everything beneath it. That is the montage punch-in and whip, done
+once rather than on every layer.
+
+[Matte key](/effects/utility/matte-key/) is the keyer: it pulls a green or blue
+screen, or any colour you choose, down to transparency, with the strength,
+balance, clip and despill controls a colourist expects.
+
+[Set matte](/effects/utility/set-matte/) takes another layer's brightness — or
+one of its channels — and makes it this layer's transparency, which is the
+track-matte relationship written as an effect so that it can sit anywhere in the
+stack.
+
+[Broadcast safe](/effects/utility/broadcast-safe/) is the delivery limiter: it
+measures each pixel's composite signal amplitude, pulls the illegal ones back,
+and — if you ask it to — shows you which pixels those were.
+
+They are grouped together because none of them is decorative. All four are the
+sort of thing you reach for knowing exactly what you need it to do.
+
+## The effects
+
+{/* GENERATED:list - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+- [Transform](/effects/utility/transform/)
+- [Matte key](/effects/utility/matte-key/)
+- [Set matte](/effects/utility/set-matte/)
+- [Broadcast safe](/effects/utility/broadcast-safe/)
+
+{/* END GENERATED */}
+
+## Related
+
+- [All effects](/effects/)
+- [Effects](/use/effects/)
+- [Transform](/use/transform/)
+- [Mattes](/use/mattes/)
+- [Layers](/use/layers/)

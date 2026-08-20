@@ -1,0 +1,100 @@
+---
+title: Stroke
+description: "Walks a round brush along a mask you have drawn, from one point on it to another."
+---
+
+Stroke is a **Generate** effect.
+
+## What it is for
+
+Drawing a line on. You draw a mask; Stroke runs a round brush along it, from one
+percentage of the way round to another. Keyframe **End** from 0 and the line draws
+itself, which is most of what the effect is used for: an underline that sweeps in,
+a route tracing across a map, a circle closing around something.
+
+Point **Paint style** at **Reveal original** and the same animation becomes a
+wipe: the picture survives only where the brush has been, so a stroke drawing
+itself on paints a title into view.
+
+Stroke reads the mask's **line**, not the hole it cuts. A cut-out cannot say which
+way is *along* it, and a brush that starts at 20% and stops at 80% has to know.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Brush size** | Slider | 0.5 to 100; down to 0.1 and higher by typing | 8 | Pixels at composition size |
+| **Brush hardness** | Slider | 0 to 100 | 75 | - |
+| **Spacing** | Slider | 1 to 500; higher by typing | 15 | - |
+| **Start** | Slider | 0 to 100 | 0 | - |
+| **End** | Slider | 0 to 100 | 100 | - |
+| **Paint style** | Dropdown | On original · On transparent · Reveal original | On original | - |
+| **Opacity** | Slider | 0 to 100 | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mask** — which of the layer's masks to walk. **First mask** means whichever
+  is first, so you can add the effect before you draw the path. A mask set to mode
+  **None** is offered like any other, and is usually what you want here: the shape
+  is there for the brush, not to cut the layer out.
+- **Colour** — the brush's colour. Values above 1 make it bloom under a
+  [Glow](/effects/stylise/glow/). Ignored by **Reveal original**, which paints
+  with the picture underneath.
+- **Brush size** — how wide the brush is, in pixels at composition size. A width,
+  not a radius.
+- **Brush hardness** — how crisp its edge is. 100 is a hard-edged marker, 0 an
+  airbrush that fades out over its own width.
+- **Spacing** — how far apart the brush stamps are, as a percentage of the
+  brush's width. Leave it low for a solid line; push it past about 50 and the
+  stamps come apart into separate dots, which is a deliberate look.
+- **Start** and **End** — where the brush begins and stops, as percentages of the
+  way round the path. Keyframe **End** from 0 to draw the line on.
+- **Paint style** — what the stroke lands on. **On original** paints over the
+  picture that arrived; **On transparent** keeps the stroke and drops the picture;
+  **Reveal original** keeps the picture *only* where the brush went and hides the
+  rest.
+- **Opacity** — how strong the brush is.
+- **Mix** — how much of the effect takes hold.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Spacing changes the shape of the stroke, not just its texture.** Under about
+half the brush width the stamps overlap and you get a continuous line — Lumit
+draws it as the shape the brush sweeps, which is the same picture for a fraction
+of the work. Above that they genuinely separate, and you get the dotted line the
+control exists for.
+
+**Brush size is a width.** After Effects' Brush Size is a radius; every length in
+Lumit is the thing itself, so a project imported from After Effects has this
+number doubled for you.
+
+**Reveal original takes the transparency with it.** What the brush covers keeps
+its colour *and* its coverage, so the result composites correctly over whatever
+is below. It is a proper wipe, not a brightness trick.
+
+**One mask at a time.** After Effects' All Masks and Stroke Sequentially are not
+carried: the mask row names one mask by design. Two Strokes on one layer, each
+pointed at its own mask, is the equivalent and gives you separate control of
+both.
+
+## Related
+
+- [Scribble](/effects/generate/scribble/)
+- [Vegas](/effects/generate/vegas/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

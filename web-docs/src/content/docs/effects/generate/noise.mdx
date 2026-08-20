@@ -1,0 +1,84 @@
+---
+title: Noise
+description: "Grain over the picture — flat or film-like, grey or coloured, crawling or frozen."
+---
+
+Noise is a **Generate** effect.
+
+## What it is for
+
+Sprinkling light and dark over the picture, one pixel at a time.
+
+Turned up it is video noise, a deliberate wall of static. Turned down — five or
+ten per cent — it is film grain, and that is what it is usually for: a small
+amount of grain over a computer-made image stops it looking computer-made. It is
+the standard cure for a flat sky or a gentle gradient breaking into visible
+bands, and it is what makes a clean graphic sit convincingly on top of shot
+footage, which has grain of its own.
+
+Unlike the rest of this family it does not replace the picture — it works on
+whatever arrived. It is also the only one of the four whose result changes over
+time on its own.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100; higher by typing | 25 | - |
+| **Distribution** | Dropdown | Uniform · Gaussian | Uniform | - |
+| **Colour noise** | Checkbox | On or off | Off | - |
+| **Animate** | Checkbox | On or off | On | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how far a pixel may be pushed, as a percentage of full scale. 100
+  means a pixel can move by the whole distance from black to white, which is
+  static; single figures are grain. The slider stops at 100 but larger numbers
+  can be typed.
+- **Distribution** — **Uniform** picks any value in the range with equal odds, so
+  the grain is even and slightly harsh. **Gaussian** clusters values near zero,
+  so most pixels move a little and few move a lot, which is what real film grain
+  does and what you want under about twenty per cent.
+- **Colour noise** — off, all three channels move together, so the grain is
+  purely light and dark and does not tint anything. On, each channel is drawn
+  separately, which gives the coloured speckle of a badly lit video camera.
+- **Animate** — on, a fresh pattern every frame, which is what grain does. Off,
+  one pattern frozen in place, which is what a texture does. A frozen pattern
+  over moving footage reads as dirt on the lens rather than grain in the stock.
+- **Seed** — which random pattern this instance follows. Two Noise effects with
+  the same seed produce the same grain; change one of them if they are meant to
+  look independent.
+- **Mix** — how much of the grained picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/). Pointing the Matte at a luminance ramp is the way
+  to put grain in the shadows and leave the highlights clean.
+
+## Notes
+
+**Nothing is clipped.** After Effects offers a switch to keep the result inside
+the 0–100 range because it works in a range that has a ceiling. Lumit works in
+scene-linear light, which has headroom, so grain rides on top of a highlight
+instead of flattening it — and can push a dark pixel slightly below zero, which
+the compositor handles and later effects can recover from.
+
+**Grain is applied before the layer's transparency**, so it lies evenly over the
+picture rather than fading out across a soft edge along with the coverage.
+
+## Related
+
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Block glitch](/effects/distortion/block-glitch/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

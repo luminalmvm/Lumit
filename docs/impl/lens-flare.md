@@ -786,7 +786,7 @@ fits a compositor.
 
 ### 6a. Which layer the matte reads (K-288)
 
-The Matte layer parameter defaults to **this layer** — the layer the effect is on — and
+The Matte parameter defaults to **this layer** — the layer the effect is on — and
 that reference does not render a second picture: it binds the effect's own input at its
 point in the stack (`fxops::LayerInput::ThisLayer`, chosen by the draw builder when the
 reference equals the owning layer's id). Two things fall out of that, and both were
@@ -966,7 +966,7 @@ the other cannot silently clamp to Divide.
    a saved Transparent becomes Add, a saved Black becomes Normal, the dead parameter
    goes, and loading twice changes nothing
    (`lens_flare_background_migrates_to_the_blend_menu`).
-8b. **This layer (K-288)**: a fresh flare's Matte layer points at the layer it was added
+8b. **This layer (K-288)**: a fresh flare's Matte points at the layer it was added
    to, a preset's stays unset, DoF's depth is untouched
    (`lens_flare_matte_defaults_to_the_layer_it_is_added_to`); the draw builder answers
    `ThisLayer` for a self-reference on an ordinary layer AND on an adjustment layer, and

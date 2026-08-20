@@ -110,9 +110,14 @@ Future<void> main() async {
   final written = <File>[];
   if (library != null) {
     for (final name in ['Neon grade', 'Soft bloom']) {
-      final file = File('$library/$name.lumfx');
-      if (file.existsSync()) continue;
-      file.writeAsStringSync(gameplay.savePreset(name: name));
+      // Written whether or not one of this name is already there, and taken
+      // away again on the way out either way. It used to skip an existing file
+      // and then delete nothing — so a sweep that died before its last shot
+      // left two presets in the library, and the *next* run skipped them,
+      // never deleted them, and photographed them in every panel that lists
+      // the library.
+      final file = File('$library/$name.lumfx')
+        ..writeAsStringSync(gameplay.savePreset(name: name));
       written.add(file);
     }
   } else {
@@ -131,8 +136,9 @@ Future<void> main() async {
   await sizeWindow(1720, 1000);
   await pause(7);
 
-  /// The whole of a docked panel, chrome and all.
-  Rect panel(Type type) => boxOfType(type)!;
+  /// The whole of a docked panel, chrome and all — grown out to the pane card
+  /// it sits in, which under Round is the rounded edge the design is made of.
+  Rect panel(Type type) => boxOfType(type)!.inflate(paneCardInset);
 
   // ---- Shot: Effect controls, with two effects on one layer ---------------
   // Nothing is clicked here on purpose: a card arrives twirled **open**, so a

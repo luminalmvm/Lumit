@@ -414,7 +414,14 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             decoration: BoxDecoration(
               color: t.labelColour(widget.entry.info.label),
               border: Border.all(color: t.surface0, width: 1),
-              borderRadius: BorderRadius.circular(2),
+              // Stadium ends under Round (K-394, §12.1), clamped to half the
+              // clip's own height by the control radius sentinel. **The hit
+              // rect stays rectangular** — the gesture detector is outside
+              // this box and reads localPosition.dx across the full width, so
+              // the edge-grab zones are the ones they always were, curve or
+              // no curve. Deliberate: the ends are the smallest targets here.
+              borderRadius: BorderRadius.circular(
+                  t.shape == ThemeShape.round ? t.tokens.controlRadius : 2),
             ),
             alignment: Alignment.center,
             clipBehavior: Clip.hardEdge,

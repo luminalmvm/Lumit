@@ -1,0 +1,98 @@
+---
+title: Ripple
+description: "Sends rings of distortion spreading outward from a point, like a stone dropped into the picture."
+---
+
+Ripple is a **Distortion** effect.
+
+## What it is for
+
+A stone goes into the picture. Rings of distortion spread out from where it
+landed, strongest about a third of the way to the rim and dying away to nothing
+by the time they reach it.
+
+Turn **Evolution** and the rings travel outward. That is where the motion comes
+from — there is no speed control, because a control that meant "cycles per
+second" would have to read the clock, and an effect that reads the clock renders
+one picture in the preview and a different one in the export. Keyframe Evolution
+instead: one full turn sends one whole wave out.
+
+The everyday uses are water — a puddle, a lake, a drop landing — plus shockwaves
+and impact hits on a title, a heat-haze pulse, and the moment a portal opens.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Radius** | Slider | 0 to 100; higher by typing | 30 | Per cent of the composition diagonal |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Type** | Dropdown | Symmetric · Asymmetric | Asymmetric | - |
+| **Wave height** | Slider | 0 to 10; higher by typing | 0.5 | Per cent of the composition diagonal |
+| **Wave width** | Slider | 0.1 to 20; higher by typing | 4 | Per cent of the composition diagonal |
+| **Evolution** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Radius** — how far the rings reach, as a percentage of the composition
+  diagonal. Outside it the picture is untouched, exactly, so the effect is safe
+  to drop on a full frame. Being a percentage rather than a pixel count, it
+  covers the same part of the picture whatever size the composition is.
+- **Centre X** and **Centre Y** — where the stone landed, in pixels at
+  composition size. A fresh Ripple starts in the middle of the frame.
+- **Type** — **Symmetric** slides each pixel in and out along the radius, which
+  reads as a lens breathing. **Asymmetric** adds a sideways component a quarter
+  wave out of step, so each pixel walks a small circle instead. That is what a
+  particle of water actually does under a passing wave, and it is why Asymmetric
+  is the default.
+- **Wave height** — the farthest a pixel moves, at the peak of the envelope. It
+  is a literal distance: the number you set is the distance you get.
+- **Wave width** — the distance from one crest to the next. Small values give
+  fine concentric ripples; large ones give a single slow swell.
+- **Evolution** — where the rings have travelled to. One turn is one wave. Put a
+  linear keyframe on it and the ripples run outward for as long as you like.
+- **Mix** — how much of the rippled picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Nothing happens at the epicentre, and that is deliberate.** The wave's strength
+rises from zero at the centre, peaks about a third of the way out, and falls back
+to zero at the rim. A ripple with a flat amplitude would have to push the very
+middle pixel in some direction, and there is no direction there — the result is a
+pinched blob where the stone went in. It is also simply what a spreading wave
+looks like: the crests are strongest in a ring, not at the point of impact.
+
+**Wave height is honest.** The envelope above scales the wave, so the number on
+the slider is scaled up to compensate. Set 20 pixels' worth and the farthest a
+pixel travels is 20 pixels.
+
+**Keep Wave height below about a quarter of Wave width.** Past that the wave
+starts to fold over itself and the picture goes from rippled to churned. That is
+sometimes what you want — for a hard impact — but it is not water any more.
+
+**The edges repeat.** A Radius wider than half the frame height puts crests over
+the top and bottom borders. Rather than punch transparent bites out of the
+picture there, the border pixel is held; the same choice
+[Turbulent displace](/effects/distortion/turbulent-displace/) and
+[Wave warp](/effects/distortion/wave-warp/) make.
+
+## Related
+
+- [Wave warp](/effects/distortion/wave-warp/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Twirl](/effects/distortion/twirl/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

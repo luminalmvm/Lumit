@@ -344,6 +344,24 @@ fix. Also unbuilt: an **export**'s progress still has its own path
 
 ## Next - engine/bridge follow-ups
 
+**The displacement class still takes the generic matte.** K-395 names
+"displacement-class effects scale their vectors before sampling" as an override
+worth having, beside the four that landed (Gaussian blur's radius, Glow's seed
+gate, Depth of field's depth, the Lens flare's source detection). Turbulent
+displace and its neighbours currently take the strength dissolve, which for a
+displacement is the *veil* failure the blur had: the pixels still moved the full
+distance and the result is faded back over them, rather than moving less far.
+The hook is in place and the change is per effect — declare
+`matte = ("matte", "<what it means>")`, read `aux.matte()` in the kernel, scale
+the vector, update the oracle op-for-op (docs/impl/effect-registry.md §2.5b).
+
+**The Lens flare's Matte row has no Invert.** Every other matte row carries one
+(K-395); the flare's predates the uniform row and it has no `matte_invert`, so
+the row draws the picker alone. Adding one is a parameter, a version bump and a
+line in the detect kernel — small, but it changes what a saved flare renders if
+done carelessly, so it wants its own K-258 test.
+
+
 **Fast motion blur only works on footage layers.** docs/08 §3.2 says the effect
 is "applied per layer or, **most commonly, on an adjustment layer over the whole
 montage**", and that case is a silent passthrough — as is a Precomp layer. Only
@@ -371,10 +389,32 @@ controls have landed. What is left:
     uploads** — about 70 ms of the 79 ms a 1080p interpolation costs, against
     8 ms for the flow itself. Both would go if the decoded frame reached the
     card once and stayed there, which is the `DrawSource` change K-331 sketched.
-3. **A measurement harness on real gameplay** (K-332 follow-up), so the learned
-    ceiling — RIFE-class synthesis, WAFT-class flow — is judged against numbers
-    rather than impressions. A learned synthesiser emits no flow field, so Fast
-    motion blur and Datamosh need DIS vectors regardless.
+3. **The learned ceiling** — RIFE-class synthesis, WAFT-class flow — now has a
+    judge to be measured against: `flow_quality.rs` and `clip_cadence.rs` landed
+    with K-332's follow-up and the K-390 programme ran through them
+    (docs/impl/optical-flow.md §4.5–§4.7, §5.5). A learned synthesiser emits no
+    flow field, so Fast motion blur and Datamosh need DIS vectors regardless.
+4. **A second matching cost is measured out, not open.** Census scoring (K-390
+    item 1) cost game capture 0.0073 against a 0.005 allowance; choosing census
+    or SSD per patch from the Hessian trace (K-393) recovered most of it
+    (gameplay −0.0043, anime +0.0012, cartoon +0.0045, synthetic +0.0026) and
+    missed on the **cinematic** instead, by 0.0002. No setting on the sweep
+    cleared all four conditions and the frontier's shape says a hard switch
+    cannot, so **both were reverted and the inverse search ships as SSD**
+    (docs/impl/optical-flow.md §5.5.1, §5.5.2 hold the tables). Only one avenue
+    is left open, and only if somebody funds it: blend the two costs across a
+    band, or give a patch hysteresis so its mode agrees with its neighbours'.
+    Either needs the two costs on a common scale — a real design question — and
+    a second measurement, and either would need §5.5.2's 16 px checkerboard
+    parity scene brought back, since it left with the revert.
+5. **Line art is still behind a crossfade on the worst blocks**, by −0.0095 of
+    worst-5% block SSIM on anime and more on cartoon. Both attempts at it are
+    now measured rather than argued: census matching (K-390 item 1) closed part
+    of the gap at a cost elsewhere that the bar refused, and edge-aware
+    densification (K-391) lost on four of five clips because a field-space
+    solve cannot add evidence. A third attempt must be **evidence-bearing** —
+    something that measures line art better, not something that smooths a
+    finished field again.
 
 **Not to be built: a `flow/` disk tier.** docs/06 §5.4 reserves the folder and it
 should stay empty. Measuring a 1080p pair on the GPU costs ~8 ms; reading 37 MB
@@ -600,7 +640,124 @@ collection, the recording mode, the panel) is in the entry above.
     and ship a `.flatpakref`, or submit to Flathub and let it host. Until then
     Lumit tells Flatpak users the install command rather than offering a button.
 
-## Later - roadmap features not yet built
+## Later
+
+**AE effect parity, wave 1 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
+Eighteen Tier-A effects in four family batches: ~~colour (Curves, Levels, Brightness, Hue
+and saturation)~~ **K-396/K-397**, ~~generate (Fill, Gradient, Noise, Fractal noise)~~
+**K-398**, ~~distort (Turbulent displace, Tile, Offset, Mirror, Lens distort)~~ **K-399**,
+~~utilities and transitions (Drop shadow, Set matte, Channel blur, Linear wipe, Radial
+wipe)~~ **K-400**. docs/11's seed table is trued for all eighteen.
+
+**AE effect parity, wave 2 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
+All of Tier B, by owner's ruling, with one standing exclusion (no particle-world port).
+Six batches: ~~Distort I (Corner pin, Displacement map, Polar coordinates, Twirl,
+Spherize)~~ **K-402**, ~~Distort II (Ripple, Wave warp, Bezier warp, Warp, Roughen
+edges)~~ **K-403**, ~~Stylise I (Posterize, Threshold, Tritone, Photo filter, Black and
+white, Shadow highlight)~~ **K-404**, ~~Stylise II (Median, Mosaic, Find edges, Emboss,
+Texturize, Broadcast safe)~~ **K-405, landed 2026-08-20, catalogue at 75**,
+~~Transitions (Venetian blinds, Iris wipe, Card wipe)~~ **K-406, landed 2026-08-20,
+catalogue at 78**, ~~Draw and grain (Beam, Lightning, Radio waves, Vegas, Add grain)~~
+**K-407, landed 2026-08-20, catalogue at 83**. Scribble, Stroke and Vegas' Mask/Path
+half stopped on the mask seam and landed with it the next day - **K-408, landed
+2026-08-21, catalogue at 85**. docs/11's seed table is trued for all thirty-two, with no
+substitutes left in it.
+ - **A mask-path row names one mask, and three AE controls want a set** (K-408, docs/08
+   §3.78-§3.79). Scribble, Stroke and Vegas' Mask/Path source are built and the import's
+   substitutes are retired; what is still reported against the seam is AE's **All Masks**
+   and **Stroke Sequentially**, and Scribble's two multi-mask Fill Types. All three want a
+   row naming a *set* of masks - a small extension of `ParamKind::MaskPath` and a list
+   rather than a slot in the carriage. Nobody has asked for it.
+ - **A path drawing is capped at 512 straight pieces** (K-409, docs/08 §3.78). The geometry
+   rides in a uniform, exactly as Lightning's bolt does, and past the cap every consumer
+   coarsens rather than drawing part of a shape: the hatch widens its spacing, the dots
+   space out, the chain straightens. A storage buffer is the answer the day something wants
+   tens of thousands of pieces; nothing does, so none was built.
+ - **Lightning ships four of AE's eight types, and no Alpha Obstacle** (K-407, docs/08
+   §3.74). Breaking, Bouncey, Anywhere and Vertical map to the nearest of the four and are
+   reported; Alpha Obstacle asks the bolt to route around the layer's own alpha, which is a
+   *search* rather than a formula and would change the effect's cost class. If it is ever
+   wanted it wants a distance field of the alpha and a bolt built against it, both of which
+   the host-side generator could do without touching the kernel.
+ - **Beam has no 3D perspective** (K-407, docs/08 §3.73), for K-406's reason: AE's
+   foreshortens the beam from a camera of its own, and Lumit keeps cameras on the
+   composition (docs/06). The same composition-camera input that would give Card wipe its
+   grid would give Beam this.
+ - **Radio waves ships one Stroke width where AE tapers from a start to an end**, and only
+   its Polygon wave type (K-407, docs/08 §3.75). A taper needs the *age* to reach the
+   stroke's width, which it already does for the fade — so it is a cheap addition whenever
+   somebody wants it. Image Contours is Vegas, and so is Mask now (K-408, its Mask/Path
+   source) - both are reported as suggestions rather than built into Radio waves itself.
+ - **Vegas' Segment length is a length, not a count** (K-407, docs/08 §3.76). AE traces the
+   contour into a path and can therefore count segments *around* it. **On the Mask/Path
+   source this is fixed** (K-408): there the dashes are spaced by measured distance round
+   the mask, so they stay even however hard it curves, and the import converts AE's Segments
+   exactly. It is only the contour half that still drifts in phase on a curve, because it
+   still never traces one - the machinery that would let it is now sitting next door.
+ - **Card wipe has no camera, no back layer, and no Card Scale** (K-406, docs/08 §3.72).
+   Each card is projected in its own local frame at a fixed viewing distance, because
+   Lumit keeps cameras on the composition (docs/06) and has none on an effect. If effects
+   ever get a composition-camera input, the grid could be projected through it and AE's
+   Camera Position / Corner Pins / Composite Camera would stop being reported. A back
+   layer would need a second layer row, which §3.68's test says a card wipe can justify.
+ - **Card wipe's Flip order has no Gradient entry** (K-406, docs/08 §3.72). AE reads that
+   order from a gradient *layer*; Lumit's one layer row is the universal Matte, and a card
+   wipe wants to say "only over the sky" as well as "in this order". A Gradient order can
+   arrive later on a row of its own without moving anything. Randomness plus Seed covers
+   the intent meanwhile, and the import approximates from the gradient's spread.
+ - **Median's Radius is capped at 3 and cannot be typed past** (K-405, docs/08 §3.64), the
+   only control in the catalogue for which that is true. The cost is the fourth power of
+   the radius, so a larger window needs a different algorithm - a per-tile histogram, or a
+   separable approximation that is no longer a median - and either is its own programme
+   with its own oracle. The import writes 3 and reports the instance as approximated.
+ - **Texturize's Placement cannot honour AE's *native-size* Tile and Centre** (K-405,
+   docs/08 §3.68). The layer carriage renders a referenced layer at this raster, so the
+   texture arrives frame-shaped and Scale is what says how big one copy is. If a layer
+   input ever carries its source's own dimensions alongside the texture, the three
+   Placements could use them and the import would stop approximating the size.
+ - **The Stylise II proof renders on the CPU, and the fixtures are gradients.** Median,
+   Find edges and Emboss are the first effects whose picture cannot be judged on the smooth
+   clips in `C:/tmp/lumit-shots` at all, and the batch was judged on a screenshot instead.
+   A fixture with real high-frequency detail in it - a resolution chart, a page of type -
+   would serve every future edge-detecting or despeckling effect.
+ - **Shadow highlight has no Auto amounts, and probably never should** (K-404, docs/08
+   §3.63). AE's is a whole-frame histogram reduction smoothed across neighbouring frames,
+   which makes a grade whose answer at a frame depends on the shot around it. If it is
+   ever wanted, it is a *scene analysis* feature with its own cache and its own doc, not a
+   checkbox on this effect — and the import already reports it.
+ - **Shadow highlight ships one Radius where AE ships two.** The second full-frame
+   gaussian is real work for the softness of a mask; if a shot ever needs the shadows'
+   mask measured at one scale and the highlights' at another, the kernel takes a second
+   bound texture and the uniform grows one float.
+ - **The old distort kernels still guard a texture fetch instead of clamping it**
+   (K-402): Mirror, Tile, Lens distort, Drop shadow, Transform, Shake and the blur
+   family all carry the early-return form of `tap`, which the compiler may hoist above
+   its own bounds check. A pixel whose four bilinear taps are *all* outside the frame can
+   come back opaque instead of empty. Wave 2's five kernels use the clamp-and-`select`
+   form; the rest want the same one-line change, and an oracle case that drives every tap
+   outside at once so the fix is held.
+ - **Bezier warp's twelve points want on-picture handles.** v1 ships them as
+   twenty-four ordinary rows, four corners open and the eight tangents behind their
+   edges' headings (docs/08 §3.55). Dragging a Bezier patch in the Viewer is the same
+   overlay job Corner pin's four points want and should land with them; the stored form
+   is AE's clockwise walk and survives the editor.
+ - **Warp has no Warp Axis, and Wave warp no noise wave types.** Both are recorded
+   skips (docs/08 §3.56, §3.54) that the import reports rather than approximates. The
+   axis swap is six lines whenever someone misses it; the noise wave types are §3.37's
+   field wearing a wave's clothes and probably never want building.
+ - **Curves wants a drawn curve editor.** v1 ships the stored form (five knots a
+   channel, K-396) as twenty ordinary rows. The editor is a panel change and not a
+   data one: `customEffectRows` in `effect_controls_panel_frb.dart` is the hook, and a
+   curve authored today survives it.
+ - ~~**The noise core is built but only half used.**~~ **Done 2026-08-20.** Turbulent
+   displace reads the same field. The WGSL half moved to `fx_noise_core.wgsl`, which is
+   prepended to both kernels at pipeline build (WGSL has no `include`), so there is one
+   twin of `lumit-core/src/fx/noise.rs` rather than one per effect.
+ - **Fractal noise is missing five AE controls**, all of them one more scalar through
+   the same loop: Sub rotation, Sub offset, Perspective offset, Centre subscale, and
+   the Overflow modes beyond Clip (docs/08 §3.37). None changes what the effect is;
+   they land when a real project asks.
+ - roadmap features not yet built
 
 Grouped by the phase they belong to in [16-ROADMAP.md](16-ROADMAP.md). A pointer
 list, not a re-statement of the roadmap.

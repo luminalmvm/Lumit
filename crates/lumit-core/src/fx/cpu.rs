@@ -1,4 +1,5 @@
-use super::{MatteKeyParams, MbView, MAX_BLADES};
+use super::noise::{fractal, hash01, value3, FractalField};
+use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
 
 /// Apply a whole resolved stack to an RGBA f32 image (premultiplied, linear
 /// light), in place — the CPU-degradation rung (K-019) and the parity oracle's
@@ -35,6 +36,23 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack)
 /// halo`, output alpha saturating at 1 (full coverage). Highlights are
 /// never clipped (§2.1). Intensity 0 is the effect's neutral point and
 /// short-circuits to the bit-exact identity (the WGSL twin matches).
+///
+/// # The Matte gates the seed (K-395, docs/08 §2.6)
+///
+/// Glow is one of the effects that claim the matte inside their own maths, and
+/// this is what it does with it: the source is multiplied by the matte's luma
+/// **before** the bright pass, so only what the matte lights is allowed to
+/// bloom. The halo then spreads from those pixels normally — out across dark
+/// matte, past the matte's edge, over the parts of the picture the matte
+/// excluded.
+///
+/// That last sentence is the whole difference from the generic dissolve. Fading
+/// a finished glow by a matte clips the halo to the matte's shape, so a glow
+/// "on the sign only" stops dead at the sign's outline, which is not how light
+/// behaves. Gating the seed lets the sign light the wall beside it.
+///
+/// An empty `matte` multiplies nothing and reads no pixels, leaving the
+/// arithmetic exactly as it was before K-395 (K-258).
 #[allow(clippy::too_many_arguments)]
 pub fn glow(
     rgba: &mut [f32],
@@ -46,14 +64,39 @@ pub fn glow(
     intensity: f32,
     tint: [f32; 4],
     mix: f32,
+    matte: &[f32],
+    matte_invert: bool,
 ) {
     if intensity == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
     let original = rgba.to_vec();
     let mut halo = vec![0.0f32; rgba.len()];
-    for (dst, src) in halo.iter_mut().zip(original.iter()) {
-        *dst = super::glow_bright(*src, threshold, knee);
+    if matte.is_empty() {
+        for (dst, src) in halo.iter_mut().zip(original.iter()) {
+            *dst = super::glow_bright(*src, threshold, knee);
+        }
+    } else {
+        for i in (0..original.len()).step_by(4) {
+            // One k for all four channels, from the matte pixel under this one.
+            // A matte shorter than the picture seeds those pixels in full —
+            // degrade, never fault (14-ENGINEERING-RULES §4).
+            let k = match matte.get(i..i + 3) {
+                Some(m) => {
+                    let luma = m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2];
+                    let k = luma.clamp(0.0, 1.0);
+                    if matte_invert {
+                        1.0 - k
+                    } else {
+                        k
+                    }
+                }
+                None => 1.0,
+            };
+            for c in 0..4 {
+                halo[i + c] = super::glow_bright(original[i + c] * k, threshold, knee);
+            }
+        }
     }
     blur_gaussian(&mut halo, w, h, radius_px, 1, 1.0);
     for i in (0..rgba.len()).step_by(4) {
@@ -562,6 +605,1539 @@ pub fn tint(rgba: &mut [f32], black: [f32; 3], white: [f32; 3], mix: f32) {
     }
 }
 
+/// The five fixed inputs Curves' knots sit at (docs/08 §3.30), and the
+/// identity outputs they default to — the neutral curve, and the spacing
+/// every evaluation assumes.
+pub const CURVE_X: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+
+/// The gap between two Curves knots. Uniform by construction, which is what
+/// keeps the interval lookup a multiply and a floor.
+pub const CURVE_H: f32 = 0.25;
+
+/// One channel's monotone-cubic tangents at the five knots (docs/08 §3.30),
+/// Fritsch–Carlson limited so the curve cannot overshoot between two knots —
+/// which is what stops a lifted highlight knot from dipping the curve below
+/// its neighbour and ringing a dark halo into a roll-off.
+///
+/// Host-side maths (docs/impl/effect-registry.md §2.4): both render paths take
+/// the tangents this produced, so neither fits a spline per pixel and the two
+/// cannot disagree about the shape.
+#[must_use]
+pub fn curve_tangents(y: [f32; 5]) -> [f32; 5] {
+    let mut d = [0.0f32; 4];
+    for i in 0..4 {
+        d[i] = (y[i + 1] - y[i]) / CURVE_H;
+    }
+    let mut m = [
+        d[0],
+        (d[0] + d[1]) / 2.0,
+        (d[1] + d[2]) / 2.0,
+        (d[2] + d[3]) / 2.0,
+        d[3],
+    ];
+    for i in 0..4 {
+        if d[i] == 0.0 {
+            // A flat interval pins both its ends flat, or the cubic would
+            // bulge through a segment the knots say is level.
+            m[i] = 0.0;
+            m[i + 1] = 0.0;
+        } else {
+            let a = m[i] / d[i];
+            let b = m[i + 1] / d[i];
+            let s = a * a + b * b;
+            if s > 9.0 {
+                let t = 3.0 / s.sqrt();
+                m[i] = t * a * d[i];
+                m[i + 1] = t * b * d[i];
+            }
+        }
+    }
+    m
+}
+
+/// One channel of the Curves spline at `x` (docs/08 §3.30): a cubic Hermite
+/// between the two knots either side, and a straight line along the end
+/// tangent outside 0..1 — so scene-linear values above 1 curve honestly and
+/// are never clipped (§2.1), and slightly negative light stays continuous.
+///
+/// `y`/`m` are indexed `[knot][channel]`, the shape the uniform carries, so
+/// the WGSL twin reads the identical layout.
+#[must_use]
+pub fn curve_at(x: f32, y: &[[f32; 4]; 5], m: &[[f32; 4]; 5], c: usize) -> f32 {
+    if x <= 0.0 {
+        return y[0][c] + m[0][c] * x;
+    }
+    if x >= 1.0 {
+        return y[4][c] + m[4][c] * (x - 1.0);
+    }
+    let fi = (x * 4.0).floor();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let i = (fi as usize).min(3);
+    let t = (x - fi * CURVE_H) / CURVE_H;
+    let t2 = t * t;
+    let t3 = t2 * t;
+    y[i][c] * (2.0 * t3 - 3.0 * t2 + 1.0)
+        + m[i][c] * CURVE_H * (t3 - 2.0 * t2 + t)
+        + y[i + 1][c] * (-2.0 * t3 + 3.0 * t2)
+        + m[i + 1][c] * CURVE_H * (t3 - t2)
+}
+
+/// Whether a Curves knot set is the identity curve on all four channels —
+/// the bit-exact neutral point (the WGSL twin runs the same comparison).
+fn curves_neutral(y: &[[f32; 4]; 5]) -> bool {
+    (0..5).all(|i| y[i] == [CURVE_X[i]; 4])
+}
+
+/// Curves (docs/08 §3.30): a monotone-cubic tone curve per channel, on
+/// unpremultiplied colour (§2.2), re-premultiplied on the way out — exactly
+/// Contrast's and Gamma's premultiply handling, a tone curve being non-linear.
+/// The **per-channel curves run first, then Master** (Photoshop's and AE's
+/// order, so an imported curve set lands the same way round); lane 0 of each
+/// knot is Master and lanes 1..3 are R/G/B. Identity knots on all four
+/// channels short-circuit the whole effect (bit-exact identity — a
+/// short-circuit, not a reliance on the spline reproducing `y = x`; the WGSL
+/// twin matches). Continuous everywhere, so it is safe under the §1.6 fp16
+/// ULP oracle; alpha is untouched.
+pub fn curves(rgba: &mut [f32], y: [[f32; 4]; 5], m: [[f32; 4]; 5], mix: f32) {
+    if curves_neutral(&y) {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        for c in 0..3 {
+            let v = curve_at(curve_at(u[c], &y, &m, c + 1), &y, &m, 0);
+            let graded = v * a;
+            px[c] = px[c] * (1.0 - mix) + graded * mix;
+        }
+    }
+}
+
+/// One channel of the Levels map (docs/08 §3.31). `r` is indexed
+/// `[row][channel]`: input black, the reciprocal input span, the reciprocal
+/// gamma, output black, the output span — every reciprocal computed host-side
+/// so neither path divides per pixel.
+#[must_use]
+pub fn level_at(x: f32, r: &[[f32; 4]; 5], c: usize) -> f32 {
+    // Clamped at zero before the power exactly as §3.19 clamps: a power of a
+    // negative base is undefined, and the clamp must be byte-identical on both
+    // paths. There is deliberately no clamp above: a value past the input
+    // white travels on rather than clipping (§2.1, the one divergence from
+    // AE's 0..1 Levels).
+    let mut n = ((x - r[0][c]) * r[1][c]).max(0.0);
+    if r[2][c] != 1.0 {
+        n = n.powf(r[2][c]);
+    }
+    r[3][c] + r[4][c] * n
+}
+
+/// Whether a Levels row set is the identity on all four channels.
+fn levels_neutral(r: &[[f32; 4]; 5]) -> bool {
+    r[0] == [0.0; 4] && r[1] == [1.0; 4] && r[2] == [1.0; 4] && r[3] == [0.0; 4] && r[4] == [1.0; 4]
+}
+
+/// Levels (docs/08 §3.31): input black/white, gamma and output black/white per
+/// channel, on unpremultiplied colour (§2.2), re-premultiplied on the way out.
+/// Per-channel first, then Master, matching Curves. Fully neutral rows
+/// short-circuit the whole effect (bit-exact identity; the WGSL twin matches).
+/// Alpha is untouched.
+pub fn levels(rgba: &mut [f32], r: [[f32; 4]; 5], mix: f32) {
+    if levels_neutral(&r) {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        for c in 0..3 {
+            let v = level_at(level_at(u[c], &r, c + 1), &r, 0);
+            let graded = v * a;
+            px[c] = px[c] * (1.0 - mix) + graded * mix;
+        }
+    }
+}
+
+/// Brightness (docs/08 §3.32, AE's Brightness & Contrast): one affine grade
+/// `(u + b − pivot)·k + pivot` per RGB channel about the same mid-grey pivot
+/// Contrast uses, on unpremultiplied colour (§2.2), re-premultiplied on the way
+/// out — affine, so it does not commute with premultiplied alpha. `b` and `k`
+/// are computed host-side (`Brightness ÷ 100`, `1 + Contrast ÷ 100`) so both
+/// paths multiply by identical numbers. The neutral pair `(0, 1)`
+/// short-circuits the whole effect (bit-exact identity; the WGSL twin matches).
+/// Purely continuous — no round/clamp/quantize — and highlights are never
+/// clipped (§2.1). Alpha is untouched.
+pub fn brightness(rgba: &mut [f32], b: f32, k: f32, mix: f32) {
+    if b == 0.0 && k == 1.0 {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        for c in 0..3 {
+            let v = (u[c] + b - CONTRAST_PIVOT) * k + CONTRAST_PIVOT;
+            let graded = v * a;
+            px[c] = px[c] * (1.0 - mix) + graded * mix;
+        }
+    }
+}
+
+/// The HSV hue of an unpremultiplied colour, in degrees 0..360, given its
+/// value (the channel maximum) and chroma (maximum − minimum). A neutral
+/// colour has no hue and answers 0; the range weighting scales by saturation,
+/// so that 0 costs a grey nothing (docs/08 §3.33).
+#[must_use]
+pub fn hsv_hue(u: [f32; 3], v: f32, c: f32) -> f32 {
+    if c <= 0.0 {
+        return 0.0;
+    }
+    let sixth = if v == u[0] {
+        (u[1] - u[2]) / c
+    } else if v == u[1] {
+        (u[2] - u[0]) / c + 2.0
+    } else {
+        (u[0] - u[1]) / c + 4.0
+    };
+    let h = sixth * 60.0;
+    if h < 0.0 {
+        h + 360.0
+    } else {
+        h
+    }
+}
+
+/// HSV back to RGB, with **V unbounded above** so scene-linear headroom
+/// survives the round trip (docs/08 §3.33). `h` is degrees 0..360, `s` is
+/// 0..1.
+#[must_use]
+pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
+    let hh = h / 60.0;
+    let sector = hh.floor();
+    let f = hh - sector;
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - s * f);
+    let t = v * (1.0 - s * (1.0 - f));
+    // Wrapped, not clamped. `h` arrives folded into 0..360, but the fold can
+    // land on exactly 360 when the turn rounds — and a clamp would answer that
+    // with sector 5 (magenta) where the colour is red, which is a hue jump at
+    // one exact value. `rem_euclid` sends 6 back to 0, where the Hermite-free
+    // arithmetic below reproduces red exactly. The WGSL twin spells the same
+    // wrap.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    match (sector as i32).rem_euclid(6) {
+        0 => [v, t, p],
+        1 => [q, v, p],
+        2 => [p, v, t],
+        3 => [p, q, v],
+        4 => [t, p, v],
+        _ => [v, p, q],
+    }
+}
+
+/// Hue and saturation (docs/08 §3.33): a master adjustment plus six colour
+/// ranges, each hue/saturation/lightness, through HSV on unpremultiplied
+/// colour (§2.2), re-premultiplied on the way out.
+///
+/// `bands` is indexed `[band][hue, saturation %, lightness %, unused]`, band 0
+/// being Master and 1..6 the ranges centred on red, yellow, green, cyan, blue
+/// and magenta. Each range's weight is a hat function 120° wide centred every
+/// 60°, so the six sum to exactly 1 for any hue and there is no boundary to
+/// cross; the weights are then scaled by the pixel's own saturation, so a grey
+/// (whose hue reads 0°, which is red) takes the Master adjustment alone. All
+/// twenty-one adjustments at zero short-circuits the whole effect (bit-exact
+/// identity; the WGSL twin matches). Alpha is untouched.
+pub fn hue_saturation(rgba: &mut [f32], bands: [[f32; 4]; 7], mix: f32) {
+    if bands
+        .iter()
+        .all(|b| b[0] == 0.0 && b[1] == 0.0 && b[2] == 0.0)
+    {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let v = u[0].max(u[1]).max(u[2]);
+        let mn = u[0].min(u[1]).min(u[2]);
+        let chroma = v - mn;
+        let s = if v > 0.0 {
+            (chroma / v).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let h = hsv_hue(u, v, chroma);
+        let (mut dh, mut ds, mut dl) = (bands[0][0], bands[0][1], bands[0][2]);
+        for (i, band) in bands.iter().enumerate().skip(1) {
+            #[allow(clippy::cast_precision_loss)]
+            let centre = (i - 1) as f32 * 60.0;
+            let d = (h - centre).abs();
+            let d = if d > 180.0 { 360.0 - d } else { d };
+            let w = (1.0 - d / 60.0).max(0.0) * s;
+            dh += w * band[0];
+            ds += w * band[1];
+            dl += w * band[2];
+        }
+        // Folded into 0..360 by the subtract-the-floor form rather than
+        // `rem_euclid`, because that is the form WGSL can spell op-for-op.
+        let turned = h + dh;
+        let h2 = turned - (turned / 360.0).floor() * 360.0;
+        let s2 = (s * (1.0 + ds / 100.0)).clamp(0.0, 1.0);
+        let v2 = (v * (1.0 + dl / 100.0)).max(0.0);
+        let out = hsv_to_rgb(h2, s2, v2);
+        for c in 0..3 {
+            let graded = out[c] * a;
+            px[c] = px[c] * (1.0 - mix) + graded * mix;
+        }
+    }
+}
+
+/// Fill (docs/08 §3.34): flood the layer's own coverage with one colour.
+///
+/// The source colour is never read — `colour · a` *is* the premultiplied form of
+/// "this colour at this coverage", so the effect works directly on premultiplied
+/// values (§2.2) with no round trip. Alpha is untouched, and the colour's own
+/// alpha lane is ignored as it is on every colour parameter. There is no neutral
+/// short-circuit: a Fill that changed nothing would be a Fill nobody applied.
+/// Mix 0 is the bit-exact identity (the WGSL twin matches).
+pub fn fill(rgba: &mut [f32], colour: [f32; 3], mix: f32) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        for c in 0..3 {
+            let filled = colour[c] * a;
+            px[c] = px[c] * (1.0 - mix) + filled * mix;
+        }
+    }
+}
+
+/// One resolved Gradient (docs/08 §3.35), reduced to what both paths read.
+/// Every reciprocal is computed host-side (`Gradient::packed`) and floored
+/// there, so a zero-length axis collapses the ramp to one flat colour instead of
+/// dividing by zero (docs/14 §4) and neither path divides per pixel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientParams {
+    /// Radial rather than linear.
+    pub radial: bool,
+    /// The start point in raster pixels (the §2.3 preview factor already applied).
+    pub start: [f32; 2],
+    /// `end − start`, raster pixels.
+    pub axis: [f32; 2],
+    /// `1 ÷ |axis|²` for the linear projection, floored.
+    pub inv_len2: f32,
+    /// `1 ÷ |axis|` for the radial distance, floored.
+    pub inv_len: f32,
+    /// Scene-linear start colour (alpha ignored: the ramp is opaque).
+    pub c0: [f32; 3],
+    /// Scene-linear end colour.
+    pub c1: [f32; 3],
+    /// Dither of `t`, 0..1 (Scatter ÷ 100).
+    pub scatter: f32,
+    pub seed: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Gradient (docs/08 §3.35): a linear or radial two-colour ramp with optional
+/// scatter — a **generator**, so it replaces the frame edge to edge and writes
+/// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
+/// the ramp is photometrically even and can drive another effect's matte. Mix 0
+/// is the bit-exact identity (the WGSL twin matches).
+pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let dx = x as f32 + 0.5 - p.start[0];
+            let dy = y as f32 + 0.5 - p.start[1];
+            let mut t = if p.radial {
+                (dx * dx + dy * dy).sqrt() * p.inv_len
+            } else {
+                (dx * p.axis[0] + dy * p.axis[1]) * p.inv_len2
+            };
+            if p.scatter > 0.0 {
+                t += (hash01(p.seed, 0, x as i32, y as i32, 0) - 0.5) * p.scatter;
+            }
+            let t = t.clamp(0.0, 1.0);
+            for c in 0..3 {
+                let g = p.c0[c] + (p.c1[c] - p.c0[c]) * t;
+                rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
+            }
+            rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + p.mix;
+        }
+    }
+}
+
+/// Noise (docs/08 §3.36): per-pixel uniform or gaussian grain, mono or per
+/// channel, on unpremultiplied colour (§2.2) and re-premultiplied on the way
+/// out — a **modifier**, not a generator, so alpha is untouched.
+///
+/// Gaussian is four uniform draws averaged rather than a Box–Muller pair: it is
+/// exact in the same integer hash both paths already share, and it has bounded
+/// support, so a gaussian grain cannot produce the single wild outlier a true
+/// normal eventually will. Nothing is clipped at either end (§2.1, the one
+/// deliberate divergence from AE). `tick` arrives already discretised from layer
+/// time, so the kernel never sees a clock (§2.4). Amount 0 short-circuits to the
+/// bit-exact identity, and Mix 0 likewise (the WGSL twin matches).
+#[allow(clippy::too_many_arguments)]
+pub fn noise(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount: f32,
+    gaussian: bool,
+    colour: bool,
+    seed: u32,
+    tick: i32,
+    mix: f32,
+) {
+    if amount == 0.0 {
+        return; // neutral: bit-exact identity (the WGSL twin matches)
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let a = rgba[i + 3];
+            let u = unpremult(&rgba[i..i + 4]);
+            for c in 0..3 {
+                // Mono grain draws channel 0 for all three, which is what makes
+                // it read as luminance noise rather than a tint.
+                let ch = if colour { c as u32 } else { 0 };
+                let n = noise_draw(seed, ch, x as i32, y as i32, tick, gaussian);
+                let grained = (u[c] + n * amount) * a;
+                rgba[i + c] = rgba[i + c] * (1.0 - mix) + grained * mix;
+            }
+        }
+    }
+}
+
+/// One grain draw in `−1..=1` (docs/08 §3.36): a single uniform lattice draw, or
+/// four averaged for the gaussian. The four channels are offset by 4 so a mono
+/// gaussian and a colour gaussian never share a draw.
+fn noise_draw(seed: u32, channel: u32, x: i32, y: i32, tick: i32, gaussian: bool) -> f32 {
+    let draw = |k: u32| hash01(seed, channel + k * 4, x, y, tick) * 2.0 - 1.0;
+    if gaussian {
+        (draw(0) + draw(1) + draw(2) + draw(3)) * 0.5
+    } else {
+        draw(0)
+    }
+}
+
+/// One resolved Fractal noise (docs/08 §3.37), reduced to what both paths read.
+/// The rotation arrives as a host-computed cosine/sine pair and every scale as a
+/// reciprocal, so the kernel runs no trigonometry and no division (§1.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FractalNoiseParams {
+    /// The field's own shape: seed, octaves, gain, lacunarity, type, cycle.
+    pub field: FractalField,
+    /// `(cos, sin)` of the Rotation control, host-computed.
+    pub cos_sin: [f32; 2],
+    /// The field origin in raster pixels (the §2.3 preview factor applied).
+    pub offset: [f32; 2],
+    /// `1 ÷ cell size` per axis, in raster pixels.
+    pub inv_scale: [f32; 2],
+    /// The depth coordinate: Evolution ÷ 360, folded into the cycle when one is set.
+    pub z: f32,
+    /// Contrast ÷ 100.
+    pub contrast: f32,
+    /// Brightness ÷ 100.
+    pub brightness: f32,
+    pub invert: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Fractal noise (docs/08 §3.37): the seeded multi-octave generator. Replaces
+/// the frame edge to edge with opaque grey noise, shaped by contrast and
+/// brightness and clamped to 0..1 (§3.37 decision 5 — a generator that cannot be
+/// read as a matte is not worth having). Mix 0 is the bit-exact identity (the
+/// WGSL twin matches).
+pub fn fractal_noise(rgba: &mut [f32], w: u32, h: u32, p: &FractalNoiseParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5 - p.offset[0];
+            let py = y as f32 + 0.5 - p.offset[1];
+            // R(−rotation) applied to the pixel offset: the field turns, not
+            // the frame.
+            let qx = px * p.cos_sin[0] + py * p.cos_sin[1];
+            let qy = py * p.cos_sin[0] - px * p.cos_sin[1];
+            let n = fractal(&p.field, qx * p.inv_scale[0], qy * p.inv_scale[1], p.z);
+            let n01 = n * 0.5 + 0.5;
+            let mut v = ((n01 - 0.5) * p.contrast + 0.5 + p.brightness).clamp(0.0, 1.0);
+            if p.invert {
+                v = 1.0 - v;
+            }
+            for c in 0..3 {
+                rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + v * p.mix;
+            }
+            rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + p.mix;
+        }
+    }
+}
+
+/// One pixel's matte strength: the clamped premultiplied Rec. 709 luma of the
+/// matte under it, inverted if the Matte row's Invert is on (docs/08 §2.6).
+///
+/// The one reading of "how much matte is here" — the same expression
+/// [`matte_mix`] and the WGSL twins use, so a matte means the same thing whether
+/// it dissolves an effect or steers one. A matte shorter than the picture leaves
+/// the remaining pixels at full strength: degrade, never fault
+/// (14-ENGINEERING-RULES §4).
+fn matte_strength(matte: &[f32], i: usize, invert: bool) -> f32 {
+    match matte.get(i..i + 3) {
+        Some(m) => {
+            let k = (m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2]).clamp(0.0, 1.0);
+            if invert {
+                1.0 - k
+            } else {
+                k
+            }
+        }
+        None => 1.0,
+    }
+}
+
+/// One resolved Turbulent displace (docs/08 §3.38), reduced to what both paths
+/// read. The size and the pin band arrive as reciprocals and the Displacement
+/// choice as a pair of axis multipliers, so the kernel runs no division and no
+/// branch on the mode (§1.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TurbulentDisplaceParams {
+    /// The x field's shape (§3.37's core), seed included.
+    pub field: FractalField,
+    /// The y field's seed — the same shape under a salted seed (§3.38 decision 3).
+    pub seed_y: u32,
+    /// `1 ÷ Size`, in raster pixels.
+    pub inv_size: f32,
+    /// The field origin in raster pixels.
+    pub offset: [f32; 2],
+    /// The depth coordinate: Evolution ÷ 360, folded into the cycle.
+    pub z: f32,
+    /// Amount, raster pixels; signed.
+    pub amount: f32,
+    /// Which components survive: `[1,1]` Turbulent, `[1,0]` Horizontal, `[0,1]`
+    /// Vertical.
+    pub axes: [f32; 2],
+    /// Per axis, 1 when that axis's pair of edges is pinned.
+    pub pin: [f32; 2],
+    /// `1 ÷ |Amount|`, the reciprocal of the pin ramp's width.
+    pub inv_pin_band: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Turbulent displace (docs/08 §3.38): the fractal-driven warp — each pixel is
+/// pulled along a vector read out of §3.37's noise core, then sampled with one
+/// bilinear tap under Repeat edges.
+///
+/// **The matte scales the vector** rather than dissolving the result (§2.6's
+/// K-395 override): `k` multiplies the displacement, so a grey matte warps the
+/// picture *less* instead of showing a warped copy over an unwarped one. An
+/// empty `matte` is full strength everywhere, which makes this function the
+/// byte-for-byte no-matte path as well.
+///
+/// Amount 0 and Mix 0 are both the bit-exact identity: a zero displacement
+/// samples the pixel's own centre, which bilinear reproduces exactly.
+pub fn turbulent_displace(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &TurbulentDisplaceParams,
+    matte: &[f32],
+    invert: bool,
+) {
+    let original = rgba.to_vec();
+    // The second field is the first under a salted seed — one shape, two
+    // decorrelated draws (§3.38 decision 3).
+    let mut field_y = p.field;
+    field_y.seed = p.seed_y;
+    let (fw, fh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let qx = (px - p.offset[0]) * p.inv_size;
+            let qy = (py - p.offset[1]) * p.inv_size;
+            let nx = fractal(&p.field, qx, qy, p.z);
+            let ny = fractal(&field_y, qx, qy, p.z);
+            // Pinning ramps the WHOLE vector to zero across the last |Amount|
+            // pixels before a pinned edge, so a pinned corner cannot be reached
+            // from outside the frame. Distance is measured to the OUTERMOST
+            // PIXEL CENTRE rather than to the border half a pixel beyond it, so
+            // the border row is exactly still rather than nearly so — "pinned"
+            // has to mean pinned. Written as a lerp toward 1 rather than a
+            // branch, so the WGSL `mix` matches op-for-op.
+            let ramp = |d: f32| (d * p.inv_pin_band).clamp(0.0, 1.0);
+            let pin_x = 1.0 + p.pin[0] * (ramp((px - 0.5).min(fw - 0.5 - px)) - 1.0);
+            let pin_y = 1.0 + p.pin[1] * (ramp((py - 0.5).min(fh - 0.5 - py)) - 1.0);
+            let s = p.amount * pin_x * pin_y * matte_strength(matte, i, invert);
+            let v = bilinear_edge(
+                &original,
+                w,
+                h,
+                px + nx * p.axes[0] * s,
+                py + ny * p.axes[1] * s,
+                1,
+            );
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Tile (docs/08 §3.39). The four per cents stay *fractions of the
+/// raster* rather than lengths: the kernel already knows the raster, and a
+/// length would stop the same resolved op being usable at another one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TileParams {
+    /// The stamped rectangle's centre, raster pixels.
+    pub centre: [f32; 2],
+    /// Tile width and height as fractions of the frame.
+    pub tile_frac: [f32; 2],
+    /// Output width and height as fractions of the frame.
+    pub output_frac: [f32; 2],
+    /// Phase ÷ 360 — how far each row slides, in tiles.
+    pub phase: f32,
+    pub mirror_edges: bool,
+    pub horizontal_phase_shift: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame.
+/// Outside the output window the result is transparent; inside, the pixel's
+/// position within its tile picks the sample, mirrored on odd tiles when Mirror
+/// edges is on. Mix 0 is the bit-exact identity, and so is a 100 % tile at the
+/// frame centre with no phase.
+pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    let tw = (fw * p.tile_frac[0]).max(1e-3);
+    let th = (fh * p.tile_frac[1]).max(1e-3);
+    let (half_w, half_h) = (fw * p.output_frac[0] * 0.5, fh * p.output_frac[1] * 0.5);
+    let (cx, cy) = (fw * 0.5, fh * 0.5);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let v = if (px - cx).abs() > half_w || (py - cy).abs() > half_h {
+                [0.0f32; 4]
+            } else {
+                let mut u = (px - p.centre[0]) / tw + 0.5;
+                let mut t = (py - p.centre[1]) / th + 0.5;
+                // The phase shift is applied along one axis using the OTHER
+                // axis's whole tile index, so the two floors have to be taken in
+                // the order the switch chooses.
+                let (iu, it) = if p.horizontal_phase_shift {
+                    let iu = u.floor();
+                    t += iu * p.phase;
+                    (iu, t.floor())
+                } else {
+                    let it = t.floor();
+                    u += it * p.phase;
+                    (u.floor(), it)
+                };
+                let mut fu = u - iu;
+                let mut ft = t - it;
+                if p.mirror_edges {
+                    // Two's complement `& 1` is odd-ness for negative indices too,
+                    // on both paths.
+                    if (iu as i64) & 1 != 0 {
+                        fu = 1.0 - fu;
+                    }
+                    if (it as i64) & 1 != 0 {
+                        ft = 1.0 - ft;
+                    }
+                }
+                bilinear_edge(
+                    &original,
+                    w,
+                    h,
+                    p.centre[0] + (fu - 0.5) * tw,
+                    p.centre[1] + (ft - 0.5) * th,
+                    1,
+                )
+            };
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// Wrap-addressed bilinear sample: the frame is a torus, so a tap that leaves
+/// one side arrives at the other. Offset's own sampler (docs/08 §3.40) — the
+/// three [`EdgesMode`](super::EdgesMode) policies do not include wrapping,
+/// because no other effect wants it and a fourth policy on every one of them
+/// would be a control nobody sets. Same arithmetic order as [`bilinear`].
+fn bilinear_wrap(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32) -> [f32; 4] {
+    let fx = sx - 0.5;
+    let fy = sy - 0.5;
+    let x0 = fx.floor();
+    let y0 = fy.floor();
+    let tx = fx - x0;
+    let ty = fy - y0;
+    let (wi, hi) = (w as i64, h as i64);
+    let at = |x: i64, y: i64| {
+        let xw = ((x % wi) + wi) % wi;
+        let yw = ((y % hi) + hi) % hi;
+        let s = ((yw * wi + xw) * 4) as usize;
+        [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]]
+    };
+    let (x0, y0) = (x0 as i64, y0 as i64);
+    let c00 = at(x0, y0);
+    let c10 = at(x0 + 1, y0);
+    let c01 = at(x0, y0 + 1);
+    let c11 = at(x0 + 1, y0 + 1);
+    let mut out = [0.0f32; 4];
+    for c in 0..4 {
+        let top = c00[c] * (1.0 - tx) + c10[c] * tx;
+        let bottom = c01[c] * (1.0 - tx) + c11[c] * tx;
+        out[c] = top * (1.0 - ty) + bottom * ty;
+    }
+    out
+}
+
+/// Offset (docs/08 §3.40): the frame slid by `shift` raster pixels, wrapping
+/// round both axes. A zero shift and Mix 0 are both the bit-exact identity — a
+/// sample at the pixel's own centre is reproduced exactly by bilinear.
+pub fn offset(rgba: &mut [f32], w: u32, h: u32, shift: [f32; 2], mix: f32) {
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let v = bilinear_wrap(
+                &original,
+                w,
+                h,
+                x as f32 + 0.5 - shift[0],
+                y as f32 + 0.5 - shift[1],
+            );
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - mix) + v[c] * mix;
+            }
+        }
+    }
+}
+
+/// Mirror (docs/08 §3.41): the half of the frame the axis normal points into is
+/// replaced by the reflection of the other half. `normal` is the host-computed
+/// `(cos, sin)` of Angle (§1.6). Samples that land outside the frame read as
+/// transparent — a repeat there would smear the border pixel into a fan.
+/// Mix 0 is the bit-exact identity.
+pub fn mirror(rgba: &mut [f32], w: u32, h: u32, centre: [f32; 2], normal: [f32; 2], mix: f32) {
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let d = (px - centre[0]) * normal[0] + (py - centre[1]) * normal[1];
+            let (sx, sy) = if d > 0.0 {
+                (px - 2.0 * d * normal[0], py - 2.0 * d * normal[1])
+            } else {
+                (px, py)
+            };
+            let v = bilinear_edge(&original, w, h, sx, sy, 0);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - mix) + v[c] * mix;
+            }
+        }
+    }
+}
+
+/// The largest ray angle Lens distort's forward `tan` is allowed — 89°, past
+/// which the tangent runs away to infinity and takes the sample position with
+/// it. The WGSL twin clamps at the identical literal.
+pub const LENS_MAX_THETA: f32 = 1.553_343;
+
+/// One resolved Lens distort (docs/08 §3.42). The one trig call that can be
+/// lifted out of the pixel loop is (`tan_half_fov`); the two that cannot are
+/// named in §3.42's fourth note.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LensDistortParams {
+    /// False below [`LensDistort::MIN_FOV_DEG`](super::effects::lens_distort::
+    /// LensDistort::MIN_FOV_DEG): the exact identity, rather than a division by
+    /// a zero tangent.
+    pub active: bool,
+    /// `tan(Field of view ÷ 2)`, host-computed.
+    pub tan_half_fov: f32,
+    /// Remove the fisheye rather than add it — the exact inverse mapping.
+    pub reverse: bool,
+    /// Which half-extent the field of view spans: 0 width, 1 height, 2 diagonal.
+    pub half_kind: u32,
+    /// The optical centre, raster pixels.
+    pub centre: [f32; 2],
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Lens distort (docs/08 §3.42): barrel and pincushion by field of view. The
+/// focal length `f = half ÷ tan(fov ÷ 2)` is the frame's own optics; the
+/// forward map `r' = f·tan(r ÷ f)` adds a fisheye and `r' = f·atan(r ÷ f)`
+/// removes exactly the same one. Field of view 0 and Mix 0 are both the
+/// bit-exact identity.
+pub fn lens_distort(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams) {
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    let half = match p.half_kind {
+        1 => fh * 0.5,
+        2 => (fw * fw + fh * fh).sqrt() * 0.5,
+        _ => fw * 0.5,
+    };
+    // Floored so an inactive effect cannot divide by zero on its way to the
+    // short-circuit below.
+    let f = half / p.tan_half_fov.max(1e-6);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let dx = px - p.centre[0];
+            let dy = py - p.centre[1];
+            let r = (dx * dx + dy * dy).sqrt();
+            let (sx, sy) = if !p.active || r <= 0.0 {
+                (px, py)
+            } else {
+                let theta = r / f;
+                let radius = if p.reverse {
+                    f * theta.atan()
+                } else {
+                    f * theta.min(LENS_MAX_THETA).tan()
+                };
+                let scale = radius / r;
+                (p.centre[0] + dx * scale, p.centre[1] + dy * scale)
+            };
+            let v = bilinear_edge(&original, w, h, sx, sy, p.edge);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Corner pin (docs/08 §3.48), reduced to what both paths read.
+/// The whole projective derivation — the unit-square-to-quad map, its adjugate,
+/// the sign normalisation — happens once in
+/// [`CornerPin::packed`](super::effects::corner_pin::CornerPin::packed); the
+/// kernel runs one matrix multiply, one divide and one tap.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CornerPinParams {
+    /// The inverse homography, row-major, taking a raster pixel to the unit
+    /// square. Defined only up to a scale (the perspective divide cancels it),
+    /// and sign-normalised so `w > 0` means "in front of the horizon".
+    pub inv: [[f32; 3]; 3],
+    /// False for a degenerate quad: the exact identity, rather than a division
+    /// by a zero determinant.
+    pub active: bool,
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Corner pin (docs/08 §3.48): the picture pulled onto four points. Each output
+/// pixel is carried back through the inverse homography into the frame's own
+/// coordinates and sampled there; a pixel whose homogeneous `w` comes out
+/// non-positive lies **behind** the projection's horizon and is transparent,
+/// which is what stops a hard pin drawing a mirrored ghost of the picture.
+///
+/// Mix 0 and a degenerate quad are both the bit-exact identity.
+pub fn corner_pin(rgba: &mut [f32], w: u32, h: u32, p: &CornerPinParams) {
+    if !p.active {
+        return;
+    }
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let u = p.inv[0][0] * px + p.inv[0][1] * py + p.inv[0][2];
+            let t = p.inv[1][0] * px + p.inv[1][1] * py + p.inv[1][2];
+            let d = p.inv[2][0] * px + p.inv[2][1] * py + p.inv[2][2];
+            let v = if d > 0.0 {
+                bilinear_edge(&original, w, h, u / d * fw, t / d * fh, p.edge)
+            } else {
+                [0.0f32; 4]
+            };
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Displacement map (docs/08 §3.49), reduced to what both paths
+/// read. The Matte row's Invert is not here: it rides beside the layer binding,
+/// exactly as Set matte's does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DisplacementMapParams {
+    /// `CHANNEL_OPTIONS` indices: which channel of the map steers x, and which y.
+    pub channels: [u32; 2],
+    /// The farthest a pixel can be pushed on each axis, raster pixels; signed.
+    pub amount: [f32; 2],
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Displacement map (docs/08 §3.49) — the CPU reference and §1.6 oracle.
+///
+/// **The matte IS the map** (§2.6's K-395 override, the seventh): its chosen
+/// channels say which way and how far each pixel is pushed, with **mid-grey the
+/// neutral** — 0.5 moves nothing, 1 pushes a full Amount one way and 0 a full
+/// Amount the other, which is AE's convention and the only one a single map can
+/// push both ways under.
+///
+/// `map` is the referenced layer's picture at this raster, RGBA rather than one
+/// channel because which channel steers which axis is the effect's own control.
+/// An empty slice is the unbound case — the labelled no-op every layer-input
+/// effect follows — and leaves the picture untouched.
+pub fn displacement_map(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &DisplacementMapParams,
+    map: &[f32],
+    invert: bool,
+) {
+    if map.is_empty() {
+        return;
+    }
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            // A map shorter than the picture leaves the rest alone — degrade,
+            // never fault (14-ENGINEERING-RULES §4).
+            let Some(m) = map.get(i..i + 4) else {
+                return;
+            };
+            let mut kx = channel_of(m, p.channels[0]);
+            let mut ky = channel_of(m, p.channels[1]);
+            if invert {
+                kx = 1.0 - kx;
+                ky = 1.0 - ky;
+            }
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let v = bilinear_edge(
+                &original,
+                w,
+                h,
+                px + (kx - 0.5) * 2.0 * p.amount[0],
+                py + (ky - 0.5) * 2.0 * p.amount[1],
+                p.edge,
+            );
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Polar coordinates (docs/08 §3.50). The centre and the radius
+/// scale are deliberately absent: both are functions of the raster, which the
+/// kernel knows and the host does not (§3.39's precedent).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PolarParams {
+    /// True for Rectangular to polar (rows become rings), false for its exact
+    /// inverse.
+    pub to_polar: bool,
+    /// Interpolation ÷ 100: how far along its own path into the other space each
+    /// pixel is drawn from. 0 is the bit-exact identity.
+    pub interp: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Polar coordinates (docs/08 §3.50): the frame bent into a circle, and back.
+/// The radius spans **half the frame diagonal**, so the frame's corners are
+/// inside the mapped disc and a wrapped picture has no bald corners. The angle
+/// starts straight up and turns clockwise, the catalogue's convention, which is
+/// also where the seam of a wrapped picture falls.
+///
+/// Mix 0 and Interpolation 0 are both the bit-exact identity: a zero step along
+/// the path samples the pixel's own centre, which bilinear reproduces exactly.
+pub fn polar_coordinates(rgba: &mut [f32], w: u32, h: u32, p: &PolarParams) {
+    use std::f32::consts::TAU;
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    let (cx, cy) = (fw * 0.5, fh * 0.5);
+    let radius = 0.5 * (fw * fw + fh * fh).sqrt();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let (qx, qy) = if p.to_polar {
+                let dx = px - cx;
+                let dy = py - cy;
+                // atan2(x, −y) is "from straight up, clockwise" on a raster
+                // whose y grows downward, the same reading §3.46 and §3.47 use.
+                let turns = dx.atan2(-dy) / TAU;
+                let wrapped = turns - turns.floor();
+                (wrapped * fw, (dx * dx + dy * dy).sqrt() / radius * fh)
+            } else {
+                let theta = px / fw * TAU;
+                let r = py / fh * radius;
+                (cx + r * theta.sin(), cy - r * theta.cos())
+            };
+            let v = bilinear_edge(
+                &original,
+                w,
+                h,
+                px + (qx - px) * p.interp,
+                py + (qy - py) * p.interp,
+                0,
+            );
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Twirl (docs/08 §3.51). The radius arrives as a reciprocal so the
+/// kernel runs no division; the angle stays an angle because it is multiplied by
+/// a per-pixel falloff before any trigonometry is taken.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwirlParams {
+    /// The twirl's middle, raster pixels.
+    pub centre: [f32; 2],
+    /// The twirled circle's radius, raster pixels.
+    pub radius: f32,
+    /// `1 ÷ radius`, floored so a zero radius does not divide.
+    pub inv_radius: f32,
+    /// Angle in radians; positive turns the picture clockwise on screen.
+    pub angle: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Twirl (docs/08 §3.51): the picture wrung round a point, hardest at the middle
+/// and not at all at the rim. The falloff is **squared**, so the twist eases out
+/// with zero slope at the rim rather than stopping at a crease.
+///
+/// A rotation about the centre preserves the radius, so a twirl never samples
+/// outside its own circle; the only samples that leave the frame are the ones
+/// whose circle already hung over the edge, and those read transparent.
+///
+/// Mix 0, Angle 0 and Radius 0 are all the bit-exact identity.
+pub fn twirl(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams) {
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let dx = px - p.centre[0];
+            let dy = py - p.centre[1];
+            let r = (dx * dx + dy * dy).sqrt();
+            let (sx, sy) = if r >= p.radius {
+                (px, py)
+            } else {
+                let t = 1.0 - r * p.inv_radius;
+                let (sin, cos) = (p.angle * t * t).sin_cos();
+                // R(−φ) applied to the offset: the picture turns by +φ.
+                (
+                    p.centre[0] + dx * cos + dy * sin,
+                    p.centre[1] - dx * sin + dy * cos,
+                )
+            };
+            let v = bilinear_edge(&original, w, h, sx, sy, 0);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Spherize (docs/08 §3.52).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpherizeParams {
+    /// The ball's middle, raster pixels.
+    pub centre: [f32; 2],
+    /// The ball's radius, raster pixels.
+    pub radius: f32,
+    /// `1 ÷ radius`, floored so a zero radius does not divide.
+    pub inv_radius: f32,
+    /// Bulge ÷ 100, −1..1. The sign chooses the map, the magnitude blends
+    /// toward it; 0 is the exact identity.
+    pub bulge: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Spherize (docs/08 §3.52): a glass ball held over the picture. The two
+/// directions are **mutually inverse radial maps** — `(2 ÷ π)·asin ρ` magnifies
+/// the middle and `sin(ρ·π ÷ 2)` is exactly its undo — so a bulge and a pinch of
+/// the same strength, radius and centre cancel to sampling error.
+///
+/// Mix 0, Bulge 0 and Radius 0 are all the bit-exact identity: a zero bulge
+/// leaves the sample radius exactly its own, and a sample at the pixel's own
+/// centre is reproduced exactly by bilinear.
+pub fn spherize(rgba: &mut [f32], w: u32, h: u32, p: &SpherizeParams) {
+    use std::f32::consts::PI;
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let dx = px - p.centre[0];
+            let dy = py - p.centre[1];
+            let r = (dx * dx + dy * dy).sqrt();
+            // Bulge 0 short-circuits, as Lens distort's Field of view 0 does
+            // (§3.42): the blend below would leave `scale` at rho ÷ rho, and a
+            // GPU that compiles that division as a reciprocal-multiply answers a
+            // hair under 1 — which is a whole picture of resampling for an
+            // effect the user has turned off.
+            let (sx, sy) = if r >= p.radius || r <= 0.0 || p.bulge == 0.0 {
+                (px, py)
+            } else {
+                // Clamped: a radius rounded a hair below `r` would hand `asin`
+                // an argument above 1 and it would answer NaN.
+                let rho = (r * p.inv_radius).min(1.0);
+                let target = if p.bulge >= 0.0 {
+                    (2.0 / PI) * rho.asin()
+                } else {
+                    (rho * PI * 0.5).sin()
+                };
+                let scale = (rho + (target - rho) * p.bulge.abs()) / rho;
+                (p.centre[0] + dx * scale, p.centre[1] + dy * scale)
+            };
+            let v = bilinear_edge(&original, w, h, sx, sy, 0);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Ripple (docs/08 §3.53). Both lengths arrive as reciprocals so
+/// the kernel runs no division, and Wave height arrives already multiplied by
+/// the envelope's peak reciprocal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RippleParams {
+    /// The rings' middle, raster pixels.
+    pub centre: [f32; 2],
+    /// How far the rings reach, raster pixels.
+    pub radius: f32,
+    /// `1 ÷ radius`, floored so a zero radius does not divide.
+    pub inv_radius: f32,
+    /// The farthest a pixel moves, raster pixels: Wave height times `27⁄4`
+    /// (docs/08 §3.53 decision 1).
+    pub amount: f32,
+    /// `1 ÷ Wave width`, raster pixels.
+    pub inv_width: f32,
+    /// Evolution ÷ 360: whole waves sent outward.
+    pub turns: f32,
+    /// Asymmetric adds the tangential half of the wave, a quarter-turn out of
+    /// phase, so a pixel walks a small circle instead of sliding.
+    pub asymmetric: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Ripple (docs/08 §3.53): rings spreading from a point.
+///
+/// The envelope `27⁄4·ρ(1 − ρ)²` is zero at the centre as well as at the rim,
+/// which removes the direction singularity at `r = 0` exactly and is also the
+/// true shape of a spreading disturbance; the constant makes Wave height
+/// literally the farthest a pixel moves.
+///
+/// Mix 0, Radius 0 and Wave height 0 are all the bit-exact identity.
+pub fn ripple(rgba: &mut [f32], w: u32, h: u32, p: &RippleParams) {
+    use std::f32::consts::TAU;
+    let original = rgba.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let dx = px - p.centre[0];
+            let dy = py - p.centre[1];
+            let r = (dx * dx + dy * dy).sqrt();
+            let (sx, sy) = if r >= p.radius || r <= 0.0 || p.amount == 0.0 {
+                (px, py)
+            } else {
+                let rho = (r * p.inv_radius).min(1.0);
+                let one = 1.0 - rho;
+                let env = rho * one * one * p.amount;
+                let phase = TAU * (r * p.inv_width - p.turns);
+                let (sin, cos) = phase.sin_cos();
+                // The unit radial, and the unit tangential a quarter-turn
+                // clockwise from it on a raster whose y grows downward.
+                let inv_r = 1.0 / r;
+                let nx = dx * inv_r;
+                let ny = dy * inv_r;
+                if p.asymmetric {
+                    (
+                        px + (nx * sin - ny * cos) * env,
+                        py + (ny * sin + nx * cos) * env,
+                    )
+                } else {
+                    (px + nx * sin * env, py + ny * sin * env)
+                }
+            };
+            // Repeat edges, as §3.54's and §3.38's warps use: a ring wider than
+            // the frame's own half-height reaches outside it, and a transparent
+            // edge would punch a bite out of the picture where the crest was.
+            let v = bilinear_edge(&original, w, h, sx, sy, 1);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Wave warp (docs/08 §3.54). The direction's sine and cosine are
+/// spent host-side into the two unit vectors, so neither path runs trigonometry
+/// beyond the wave shape itself.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WaveWarpParams {
+    /// The direction the wave travels, host-computed `(sin θ, −cos θ)`.
+    pub dir: [f32; 2],
+    /// That vector turned a quarter-turn clockwise on screen: the direction the
+    /// picture slides.
+    pub perp: [f32; 2],
+    /// How far the picture slides at a crest, raster pixels; signed.
+    pub height: f32,
+    /// `1 ÷ Wave width`, raster pixels.
+    pub inv_width: f32,
+    /// Phase ÷ 360, in whole waves.
+    pub turns: f32,
+    /// 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle.
+    pub shape: u32,
+    /// Per edge — left, right, top, bottom — 1 when that edge is pinned.
+    pub pin: [f32; 4],
+    /// `1 ÷ |Wave height|` — the pin ramp's width, reciprocated.
+    pub inv_pin_band: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The five wave shapes (docs/08 §3.54's table), each running `−1..=1` over one
+/// whole wave. Written as one function so the CPU reference and the WGSL kernel
+/// cannot drift on the awkward ones.
+#[must_use]
+pub fn wave_shape(shape: u32, t: f32) -> f32 {
+    use std::f32::consts::TAU;
+    let f = t - t.floor();
+    match shape {
+        1 => {
+            if f < 0.5 {
+                1.0
+            } else {
+                -1.0
+            }
+        }
+        2 => {
+            let q = t + 0.25;
+            1.0 - 4.0 * ((q - q.floor()) - 0.5).abs()
+        }
+        3 => 2.0 * f - 1.0,
+        4 => {
+            // Two half-circles a wave, the second one below the line.
+            let b = 2.0 * f;
+            let u = 2.0 * (b - b.floor()) - 1.0;
+            let arc = (1.0 - u * u).max(0.0).sqrt();
+            if f < 0.5 {
+                arc
+            } else {
+                -arc
+            }
+        }
+        _ => (TAU * t).sin(),
+    }
+}
+
+/// Wave warp (docs/08 §3.54): a travelling wave across the frame — the
+/// transverse one, so the picture slides *across* the direction the wave runs
+/// in, which is what a flag does.
+///
+/// The edges repeat rather than fading: an unpinned wave carries the picture off
+/// the frame and a transparent edge would leave a hole where the crest was.
+///
+/// Mix 0 and Wave height 0 are both the bit-exact identity.
+pub fn wave_warp(rgba: &mut [f32], w: u32, h: u32, p: &WaveWarpParams) {
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    let (cx, cy) = (fw * 0.5, fh * 0.5);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let along = (px - cx) * p.dir[0] + (py - cy) * p.dir[1];
+            let wave = wave_shape(p.shape, along * p.inv_width - p.turns);
+            // Each pinned edge ramps the WHOLE slide to zero across the last
+            // |Wave height| pixels before it, measured to the outermost pixel
+            // centre so the border row is exactly still. A lerp toward 1 rather
+            // than a branch, so the four factors simply multiply.
+            let ramp = |d: f32| (d * p.inv_pin_band).clamp(0.0, 1.0);
+            let pin = (1.0 + p.pin[0] * (ramp(px - 0.5) - 1.0))
+                * (1.0 + p.pin[1] * (ramp(fw - 0.5 - px) - 1.0))
+                * (1.0 + p.pin[2] * (ramp(py - 0.5) - 1.0))
+                * (1.0 + p.pin[3] * (ramp(fh - 0.5 - py) - 1.0));
+            let s = p.height * wave * pin;
+            let v = bilinear_edge(&original, w, h, px + p.perp[0] * s, py + p.perp[1] * s, 1);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Bezier warp (docs/08 §3.55).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BezierWarpParams {
+    /// The twelve points in AE's clockwise walk from the upper left — corner,
+    /// two handles, corner, two handles, … — raster pixels.
+    pub pts: [[f32; 2]; 12],
+    /// Newton steps a pixel, 1..=12 (the Quality control).
+    pub steps: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The narrowest Jacobian determinant the patch inversion will divide by. Below
+/// it the patch has folded on itself and there is no single answer; the solver
+/// stops where it stands rather than dividing by zero (14-ENGINEERING-RULES §4).
+const BEZ_MIN_DET: f32 = 1e-9;
+
+/// How far the solved point may still be from the pixel it was solving for,
+/// raster pixels (docs/08 §3.55 decision 3). **A Newton solve has to be checked,
+/// not trusted**: outside the patch there is no answer, and an unchecked
+/// iteration wanders until it happens to land in `0..1` — which draws a scatter
+/// of stray pixels across the empty part of the frame. One more patch evaluation
+/// says whether the answer is an answer.
+const BEZ_MAX_RESIDUAL_PX: f32 = 1.0;
+
+/// How near its own centre a sample has to land to be snapped to it, raster
+/// pixels (docs/08 §3.55 decision 4). Four orders of magnitude below anything a
+/// resampler could show, and it is what makes an unbent region of a bent frame
+/// bit-exact rather than softened.
+const BEZ_SNAP_PX: f32 = 1e-3;
+
+/// One cubic Bezier and its derivative at `t`.
+fn bez(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2], t: f32) -> ([f32; 2], [f32; 2]) {
+    let s = 1.0 - t;
+    let (w0, w1, w2, w3) = (s * s * s, 3.0 * s * s * t, 3.0 * s * t * t, t * t * t);
+    let (g0, g1, g2) = (3.0 * s * s, 6.0 * s * t, 3.0 * t * t);
+    let mut pos = [0.0f32; 2];
+    let mut tan = [0.0f32; 2];
+    for k in 0..2 {
+        pos[k] = a[k] * w0 + b[k] * w1 + c[k] * w2 + d[k] * w3;
+        tan[k] = (b[k] - a[k]) * g0 + (c[k] - b[k]) * g1 + (d[k] - c[k]) * g2;
+    }
+    (pos, tan)
+}
+
+/// The Coons patch on the twelve points, and its two partial derivatives, at
+/// `(u, v)` — the surface `S` of docs/08 §3.55 and the Jacobian Newton needs.
+///
+/// Written once and called from both the CPU reference and (op-for-op) the WGSL
+/// kernel: the two boundary curves in each direction blended across, minus the
+/// bilinear surface on the four corners, which the two blends between them count
+/// twice.
+fn coons(pts: &[[f32; 2]; 12], u: f32, v: f32) -> ([f32; 2], [f32; 2], [f32; 2]) {
+    let (ul, ur, lr, ll) = (pts[0], pts[3], pts[6], pts[9]);
+    // Top left → right, bottom left → right, left top → bottom, right top →
+    // bottom: the clockwise walk read in each curve's own increasing direction.
+    let (top, dtop) = bez(ul, pts[1], pts[2], ur, u);
+    let (bot, dbot) = bez(ll, pts[8], pts[7], lr, u);
+    let (lef, dlef) = bez(ul, pts[11], pts[10], ll, v);
+    let (rig, drig) = bez(ur, pts[4], pts[5], lr, v);
+    let mut s = [0.0f32; 2];
+    let mut su = [0.0f32; 2];
+    let mut sv = [0.0f32; 2];
+    for k in 0..2 {
+        let corners = (1.0 - u) * (1.0 - v) * ul[k]
+            + u * (1.0 - v) * ur[k]
+            + (1.0 - u) * v * ll[k]
+            + u * v * lr[k];
+        s[k] = (1.0 - v) * top[k] + v * bot[k] + (1.0 - u) * lef[k] + u * rig[k] - corners;
+        su[k] = (1.0 - v) * dtop[k] + v * dbot[k] - lef[k] + rig[k]
+            - (-(1.0 - v) * ul[k] + (1.0 - v) * ur[k] - v * ll[k] + v * lr[k]);
+        sv[k] = -top[k] + bot[k] + (1.0 - u) * dlef[k] + u * drig[k]
+            - (-(1.0 - u) * ul[k] - u * ur[k] + (1.0 - u) * ll[k] + u * lr[k]);
+    }
+    (s, su, sv)
+}
+
+/// Bezier warp (docs/08 §3.55) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The twelve points bend the frame's four edges into cubic
+/// curves and the inside follows smoothly. Rendering asks "where did this output
+/// pixel come from", so every pixel *solves* the patch backwards by Newton's
+/// method from its own position — which is the identity patch's own answer, so
+/// an untouched frame converges before it starts.
+///
+/// Outside the patch is transparent; a sample landing within
+/// [`BEZ_SNAP_PX`] of its own centre is snapped to it, so an unbent region of a
+/// bent frame is bit-exact rather than resampled.
+pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
+    let original = rgba.to_vec();
+    let (fw, fh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let mut u = px / fw;
+            let mut v = py / fh;
+            for _ in 0..p.steps {
+                let (s, du, dv) = coons(&p.pts, u, v);
+                let fx = s[0] - px;
+                let fy = s[1] - py;
+                let det = du[0] * dv[1] - du[1] * dv[0];
+                if det.abs() < BEZ_MIN_DET {
+                    break;
+                }
+                let inv = 1.0 / det;
+                u -= (fx * dv[1] - fy * dv[0]) * inv;
+                v -= (du[0] * fy - du[1] * fx) * inv;
+            }
+            // The solve, verified: in range *and* actually solving.
+            let (back, _, _) = coons(&p.pts, u, v);
+            let miss = (back[0] - px).abs().max((back[1] - py).abs());
+            let v4 = if !(0.0..=1.0).contains(&u)
+                || !(0.0..=1.0).contains(&v)
+                || miss > BEZ_MAX_RESIDUAL_PX
+            {
+                [0.0f32; 4]
+            } else {
+                let mut sx = u * fw;
+                let mut sy = v * fh;
+                if (sx - px).abs() < BEZ_SNAP_PX && (sy - py).abs() < BEZ_SNAP_PX {
+                    sx = px;
+                    sy = py;
+                }
+                bilinear_edge(&original, w, h, sx, sy, 0)
+            };
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v4[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Warp (docs/08 §3.56).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WarpParams {
+    /// Which of the thirteen bends, in §3.56's table order.
+    pub style: u32,
+    /// Bend ÷ 100, −1..1. 0 is the exact identity for every style.
+    pub bend: f32,
+    /// Horizontal distortion ÷ 100, clamped to ±0.9 so the taper's divisor
+    /// never reaches zero.
+    pub h_distort: f32,
+    /// Vertical distortion ÷ 100; see [`h_distort`](Self::h_distort).
+    pub v_distort: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The thirteen bends of docs/08 §3.56, on a frame normalised to `−1..=1` on
+/// each axis. Written once and mirrored op-for-op in WGSL.
+///
+/// Each map is written so that `a = 0` returns its argument untouched, which is
+/// what makes Bend 0 the identity for every style.
+///
+/// `ar` is the frame's aspect ratio (half-width over half-height) and is read by
+/// **Twist alone** (docs/08 §3.56's second note): a rotation has to happen in a
+/// space where both axes measure the same thing, or a "quarter turn" on a 16∶9
+/// frame is really a huge horizontal shear. Every other style is deliberately
+/// elliptical.
+#[must_use]
+pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
+    use std::f32::consts::PI;
+    let d = 1.0 - u * u;
+    let e = 1.0 - v * v;
+    match style {
+        // Arc upper / Arc lower: the same bow weighted to one edge.
+        1 => [u, v + a * d * (1.0 - v) * 0.5],
+        2 => [u, v + a * d * (1.0 + v) * 0.5],
+        // Arch: top and bottom bow apart. The coefficient is SUBTRACTED here and
+        // in the four styles below: this is a gather, so pulling the sample
+        // *inward* is what makes the picture swell outward, and a positive Bend
+        // has to do what the style's name promises.
+        3 => [u, v * (1.0 - a * d)],
+        // Bulge: the middle swells on both axes.
+        4 => [u * (1.0 - a * e * 0.5), v * (1.0 - a * d * 0.5)],
+        // Flag: one wave across the width, every row in step.
+        5 => [u, v + a * 0.35 * (PI * u).sin()],
+        // Wave: the same wave with the two edges out of phase.
+        6 => [u, v - a * 0.35 * v * (PI * u).sin()],
+        // Fish: the sides bow out and the ends taper.
+        7 => [u * (1.0 - a * e * 0.5), v],
+        // Rise: a diagonal lift.
+        8 => [u, v + a * (u + 1.0) * 0.5],
+        // Fisheye and Inflate: radial swells differing only in their falloff.
+        9 => {
+            let rho = (u * u + v * v).sqrt().min(1.0);
+            let k = 1.0 - a * (1.0 - rho * rho) * 0.6;
+            [u * k, v * k]
+        }
+        10 => {
+            let rho = (u * u + v * v).sqrt().min(1.0);
+            let k = 1.0 - a * (1.0 - rho) * 0.6;
+            [u * k, v * k]
+        }
+        // Squeeze: rows crowded toward the middle.
+        11 => [u, v * (1.0 + a * e)],
+        // Twist: the top turns one way and the bottom the other. R(−φ) applied
+        // to the point, as §3.51's rotation is, in the isotropic space `ar`
+        // buys. The horizontal component is carried back as a *difference* so
+        // that a zero angle returns `u` to the bit rather than `u·ar ÷ ar`.
+        12 => {
+            let x = u * ar;
+            let (sin, cos) = (a * PI * 0.5 * v).sin_cos();
+            let rx = x * cos + v * sin;
+            [u + (rx - x) / ar, -x * sin + v * cos]
+        }
+        // Arc: the whole picture bows one way.
+        _ => [u, v + a * d],
+    }
+}
+
+/// Warp (docs/08 §3.56): the thirteen bend presets, one kernel.
+///
+/// The sample is built from the **difference** between the style's output and
+/// the pixel's own normalised position, not rebuilt from the normalised
+/// coordinate — which is what makes Bend 0 with both distortions 0 the bit-exact
+/// identity rather than a rounding away from one.
+pub fn warp(rgba: &mut [f32], w: u32, h: u32, p: &WarpParams) {
+    let original = rgba.to_vec();
+    let half_w = w as f32 * 0.5;
+    let half_h = h as f32 * 0.5;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let u = px / half_w - 1.0;
+            let v = py / half_h - 1.0;
+            let m = warp_style(p.style, u, v, p.bend, half_w / half_h);
+            // The two perspective tapers, both taken from the style's output so
+            // neither feeds the other (§3.56's fourth note).
+            let du = m[0] / (1.0 + p.v_distort * m[1]);
+            let dv = m[1] / (1.0 + p.h_distort * m[0]);
+            let sx = px + (du - u) * half_w;
+            let sy = py + (dv - v) * half_h;
+            let val = bilinear_edge(&original, w, h, sx, sy, 0);
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + val[c] * p.mix;
+            }
+        }
+    }
+}
+
 /// Vignette (docs/08 §3.14): darkens toward black away from the frame
 /// centre, on premultiplied colour — a coverage-like darkening, not a
 /// colour grade, so no unpremultiply round trip (alpha is untouched).
@@ -824,25 +2400,219 @@ pub(crate) fn light_blend(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
     o
 }
 
+/// Side of the square tiles the dominant-motion reduction works in, in pixels
+/// (docs/impl/optical-flow.md §4.5 item 3). The WGSL uses the same constant;
+/// changing one without the other breaks the §1.6 parity.
+pub const MB_TILE: u32 = 16;
+
+/// How much of the neighbourhood's dominant streak an entirely unconfident
+/// pixel draws. **The centre of the v2 reconstruction**: v1 multiplied the
+/// streak by confidence, so an uncertain pixel collapsed to no blur at all and
+/// read as a frozen speck in the middle of a moving frame. Here an uncertain
+/// pixel instead *borrows* the motion its neighbourhood is certain about, at a
+/// tempered length — visibly blurred, plausibly directed, never sharp against a
+/// smeared surround. Tempered rather than full because a borrowed vector is a
+/// guess about this pixel: it should read as motion, not assert a length it
+/// cannot know.
+pub const MB_DOM_TEMPER: f32 = 0.6;
+
+/// The weight a wholly unconfident vector still carries when tiles are scored.
+/// **Not zero, and that is the point.** Scoring a tile by `conf · ‖v‖` alone
+/// means a region where nothing matched — smoke, a muzzle flash, fast water —
+/// scores zero everywhere and the tile reads as *still*, so the pixels that most
+/// need a borrowed direction are handed a zero one. Flooring the weight lets an
+/// untrusted vector represent its tile when there is nothing better, while a
+/// trusted vector four times shorter still outranks it.
+pub const MB_SCORE_FLOOR: f32 = 0.25;
+
+/// The dominant motion per tile: the `(u, v)` of the highest-scoring pixel in
+/// each `MB_TILE`-square tile, where score is
+/// `(MB_SCORE_FLOOR + (1 − MB_SCORE_FLOOR) · conf) · ‖(u, v)‖` — confidence
+/// weighted, so one wild vector in a badly matched patch cannot capture the tile
+/// away from a slower vector the measurement actually believes, but a tile with
+/// no confident vector at all still reports the motion it saw.
+///
+/// Returns `(tiles, tiles_x, tiles_y)`, each tile `[u, v, score]`, row-major.
+/// The GPU twin is `fx_mb_tilemax.wgsl`, one thread per tile, scanning the same
+/// pixels in the same raster order with the same strictly-greater comparison —
+/// so ties resolve to the same pixel on both and the choice is a copy, never an
+/// average, and therefore bit-identical rather than merely close.
+#[must_use]
+pub fn motion_blur_tiles(
+    u: &[f32],
+    v: &[f32],
+    conf: &[f32],
+    w: u32,
+    h: u32,
+) -> (Vec<[f32; 3]>, u32, u32) {
+    let tiles_x = w.div_ceil(MB_TILE);
+    let tiles_y = h.div_ceil(MB_TILE);
+    let mut tiles = vec![[0.0f32; 3]; (tiles_x * tiles_y) as usize];
+    for ty in 0..tiles_y {
+        for tx in 0..tiles_x {
+            let mut best = [0.0f32; 3];
+            let mut best_score = -1.0f32;
+            for py in (ty * MB_TILE)..((ty + 1) * MB_TILE).min(h) {
+                for px in (tx * MB_TILE)..((tx + 1) * MB_TILE).min(w) {
+                    let i = (py * w + px) as usize;
+                    let (uu, vv) = (u[i], v[i]);
+                    let trust = MB_SCORE_FLOOR + (1.0 - MB_SCORE_FLOOR) * conf[i].clamp(0.0, 1.0);
+                    let score = trust * (uu * uu + vv * vv).sqrt();
+                    if score > best_score {
+                        best_score = score;
+                        best = [uu, vv, score];
+                    }
+                }
+            }
+            tiles[(ty * tiles_x + tx) as usize] = best;
+        }
+    }
+    (tiles, tiles_x, tiles_y)
+}
+
+/// The dominant streak for the pixel in tile `(tx, ty)`: the highest-scoring
+/// tile of the 3×3 neighbourhood (clamped at the frame edge, so a border tile
+/// simply reads itself more than once). Guertin's neighbour-max — a tile only
+/// knows about motion inside itself, and an object one tile away is exactly the
+/// thing whose smear should reach in.
+///
+/// This answers "which way might something have flown into me", and an extremum
+/// is the right summary for it: the point is to catch the fast thing.
+fn neighbour_max(tiles: &[[f32; 3]], tiles_x: u32, tiles_y: u32, tx: u32, ty: u32) -> (f32, f32) {
+    let mut dom = (0.0f32, 0.0f32);
+    let mut best = -1.0f32;
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            let nx = (tx as i32 + dx).clamp(0, tiles_x as i32 - 1) as u32;
+            let ny = (ty as i32 + dy).clamp(0, tiles_y as i32 - 1) as u32;
+            let t = tiles[(ny * tiles_x + nx) as usize];
+            if t[2] > best {
+                best = t[2];
+                dom = (t[0], t[1]);
+            }
+        }
+    }
+    dom
+}
+
+/// The motion an uncertain pixel **borrows**: the tile field sampled bilinearly
+/// between tile centres, rather than one tile's winning vector.
+///
+/// # In plain terms, because this is the subtle one
+///
+/// Borrowing and scattering are different questions and they want different
+/// summaries. [`neighbour_max`] answers "what is the fastest thing near me",
+/// and an extremum is right for that. Borrowing asks "what is my neighbourhood
+/// *doing*", and an extremum is badly wrong for it: it is the single most
+/// unusual vector out of two hundred and fifty-six, chosen where — by
+/// construction — the measurement is least trustworthy. Two tiles side by side
+/// then win two unrelated wild vectors, the pixels between them borrow
+/// different directions, and the result is smear in rectangular patches. That
+/// artefact was measured on real footage, not imagined: a fast zoom on cel
+/// animation, 70% of the frame below half confidence, tile-shaped blocks of
+/// differently-angled blur across the characters' faces.
+///
+/// Interpolating between tile centres fixes both halves of it. The borrowed
+/// direction becomes continuous, so no tile edge can show. And **disagreement
+/// cancels**: four neighbouring tiles that agree reinforce into a full-strength
+/// vector, while four that point at random average toward zero — so where there
+/// is a consensus to borrow the blur commits to it, and where there is none it
+/// quietly backs off toward not blurring at all. That is the correct behaviour
+/// falling out of the arithmetic rather than being special-cased.
+fn tile_bilinear(tiles: &[[f32; 3]], tiles_x: u32, tiles_y: u32, x: u32, y: u32) -> (f32, f32) {
+    // Tile (tx, ty) speaks for the pixel at its centre, ((tx + 0.5) · TILE).
+    let fx = (x as f32 + 0.5) / MB_TILE as f32 - 0.5;
+    let fy = (y as f32 + 0.5) / MB_TILE as f32 - 0.5;
+    let x0 = fx.floor();
+    let y0 = fy.floor();
+    let tx = fx - x0;
+    let ty = fy - y0;
+    let at = |cx: i32, cy: i32| {
+        let cx = cx.clamp(0, tiles_x as i32 - 1) as u32;
+        let cy = cy.clamp(0, tiles_y as i32 - 1) as u32;
+        let t = tiles[(cy * tiles_x + cx) as usize];
+        (t[0], t[1])
+    };
+    let (xi, yi) = (x0 as i32, y0 as i32);
+    let (c00, c10, c01, c11) = (
+        at(xi, yi),
+        at(xi + 1, yi),
+        at(xi, yi + 1),
+        at(xi + 1, yi + 1),
+    );
+    let top = (
+        c00.0 * (1.0 - tx) + c10.0 * tx,
+        c00.1 * (1.0 - tx) + c10.1 * tx,
+    );
+    let bottom = (
+        c01.0 * (1.0 - tx) + c11.0 * tx,
+        c01.1 * (1.0 - tx) + c11.1 * tx,
+    );
+    (
+        top.0 * (1.0 - ty) + bottom.0 * ty,
+        top.1 * (1.0 - ty) + bottom.1 * ty,
+    )
+}
+
+/// `1` where `d` is well inside a streak of length `l`, falling to `0` at its
+/// end — "could a thing of this streak length have covered this distance".
+fn mb_cone(d: f32, l: f32) -> f32 {
+    (1.0 - d / l.max(1e-4)).clamp(0.0, 1.0)
+}
+
+/// `1` inside a streak of length `l`, `0` outside, with a soft edge — the term
+/// that keeps a *uniformly* moving region integrating like the box a shutter is
+/// (docs/impl/optical-flow.md §4), rather than the triangle the two cones alone
+/// would give.
+fn mb_cylinder(d: f32, l: f32) -> f32 {
+    let l = l.max(1e-4);
+    let (e0, e1) = (0.95 * l, 1.05 * l);
+    let t = ((d - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    1.0 - t * t * (3.0 - 2.0 * t)
+}
+
 /// The §1.6 oracle for Fast motion blur (docs/08 §3.2): the CPU twin of
 /// `fx_motionblur.wgsl`, op-for-op. `rgba` is linear premultiplied RGBA,
-/// mutated in place; `u`/`v` are the per-pixel forward flow (pixels of
-/// this raster, one entry per pixel) the decode worker measured between
-/// the current source frame and the next, and `conf` is the matching
-/// per-pixel confidence in 0..1 ([`lumit_flow::confidence`]). Each pixel's
-/// streak vector is its own motion scaled by `shutter_frac` (shutter ÷ 360)
-/// **and by its confidence** (FX-19): a suspect pixel shortens its streak
-/// smoothly toward no blur, so occlusions and motion boundaries fade out
-/// instead of leaving a hard cut. The streak is a centred box integral of
-/// `samples` evenly spaced bilinear taps — the same line-integral shape as
-/// [`blur_directional`], but per-pixel directed by the flow rather than one
-/// global angle. Fixed tap order and count for determinism (§2.4). Edges
-/// clamp (the shared [`bilinear`] rule), so a full-frame smear never darkens
-/// the border. A zero streak — `shutter_frac == 0.0`, a still pixel, or zero
-/// confidence — collapses every tap onto the pixel itself, so with
-/// `mix == 1.0` the result is the bit-exact input. `view` selects the output:
-/// the blurred picture, the colour-coded flow, or the confidence as greyscale
-/// (the diagnostic views ignore `mix` — they show the field itself).
+/// mutated in place; `u`/`v` are the per-pixel forward flow (pixels of this
+/// raster, one entry per pixel) the decode worker measured between the current
+/// source frame and the next, and `conf` is the matching per-pixel confidence
+/// in 0..1 ([`lumit_flow::confidence`]).
+///
+/// # In plain terms
+///
+/// v1 smeared every pixel along its *own* vector and shortened that streak by
+/// its confidence. Two things were wrong with it, and this is the Guertin-class
+/// reconstruction that fixes both (docs/impl/optical-flow.md §4.5 item 3,
+/// K-390).
+///
+/// *A fast object never smeared onto what it passed.* Gathering along your own
+/// vector means a still background pixel gathers from itself, so the aeroplane
+/// stays inside its own outline while the sky behind it stays razor sharp.
+/// Here each pixel also gathers along the **dominant** motion of its
+/// neighbourhood ([`motion_blur_tiles`] + [`neighbour_max`]), and each tap is
+/// weighted by whether the sample it found could plausibly have travelled here
+/// — its own streak reaching out ([`mb_cone`]), this pixel's streak reaching in,
+/// and a [`mb_cylinder`] term for the ordinary case where the two agree. That is
+/// "scatter as gather": the maths of throwing paint, computed by asking each
+/// destination who might have thrown at it.
+///
+/// *An uncertain pixel froze.* Scaling the streak by confidence sent uncertain
+/// pixels to zero blur, which in a moving frame reads as a hole of frozen detail
+/// — worse than a wrong direction. Now confidence *blends* between this pixel's
+/// own vector and the neighbourhood's dominant one at [`MB_DOM_TEMPER`] length,
+/// so low confidence borrows rather than freezes. Zero blur survives in exactly
+/// one place: where the tile itself is still, in which case both terms are zero
+/// and every tap lands on the pixel, so with `mix == 1.0` the result is the
+/// bit-exact input — as it also is for `shutter_frac == 0.0`.
+///
+/// `samples` is the *cap* on taps, not the count: the count adapts to the
+/// streak (§4's `S = ceil(‖v‖ / 2)`), so a barely-moving pixel does not pay for
+/// 32 taps landing on top of each other. `quality` halves that spacing and
+/// re-samples the field partway along each own-direction tap, which bends the
+/// trail around a rotating object. Fixed tap order for determinism (§2.4);
+/// edges clamp (the shared [`bilinear`] rule) so a full-frame smear never
+/// darkens the border. `view` selects the output; the diagnostic views ignore
+/// `mix` — they show the field itself.
 #[allow(clippy::too_many_arguments)]
 pub fn motion_blur(
     rgba: &mut [f32],
@@ -855,32 +2625,89 @@ pub fn motion_blur(
     samples: i32,
     mix: f32,
     view: MbView,
+    quality: MbQuality,
 ) {
     let original = rgba.to_vec();
-    let n = samples.max(1);
-    let nf = n as f32;
+    let cap = samples.max(1);
+    let spacing = quality.tap_spacing();
+    let curved = quality.curved();
+    let (tiles, tiles_x, tiles_y) = motion_blur_tiles(u, v, conf, w, h);
+    // The confidence blend, in one place because it is applied twice: once for
+    // this pixel, and once at every tap position to learn that sample's reach.
+    // `lend` is the *borrowed* motion (smooth, consensus-driven), never the
+    // neighbour-max — see [`tile_bilinear`] for why those must not be the same
+    // number.
+    let blended = |uu: f32, vv: f32, c: f32, lend: (f32, f32)| {
+        let c = c.clamp(0.0, 1.0);
+        let borrow = MB_DOM_TEMPER * (1.0 - c);
+        (
+            lend.0 * shutter_frac * borrow + uu * shutter_frac * c,
+            lend.1 * shutter_frac * borrow + vv * shutter_frac * c,
+        )
+    };
     for y in 0..h {
         for x in 0..w {
             let idx = (y * w + x) as usize;
             let i = idx * 4;
+            // Two summaries of the neighbourhood, for two different questions:
+            // the fastest thing near me (where a smear could arrive from), and
+            // what the neighbourhood agrees it is doing (what to borrow).
+            let dom = neighbour_max(&tiles, tiles_x, tiles_y, x / MB_TILE, y / MB_TILE);
+            let lend = tile_bilinear(&tiles, tiles_x, tiles_y, x, y);
             let out: [f32; 4] = match view {
                 MbView::Rendered => {
                     let pos = (x as f32 + 0.5, y as f32 + 0.5);
-                    // The full streak vector: this pixel's inter-frame motion,
-                    // shortened by the shutter fraction and its confidence.
-                    let c = conf[idx];
-                    let sv = (u[idx] * shutter_frac * c, v[idx] * shutter_frac * c);
+                    let sv = blended(u[idx], v[idx], conf[idx], lend);
+                    let dom_s = (dom.0 * shutter_frac, dom.1 * shutter_frac);
+                    let len_sv = (sv.0 * sv.0 + sv.1 * sv.1).sqrt();
+                    let len_dom = (dom_s.0 * dom_s.0 + dom_s.1 * dom_s.1).sqrt();
+                    // Adaptive taps (§4): enough to keep them `spacing` apart
+                    // over whichever of the two directions reaches furthest,
+                    // never more than the user's cap.
+                    let n = ((len_sv.max(len_dom) / spacing).ceil() as i32).clamp(1, cap);
+                    let nf = n as f32;
                     let mut acc = [0.0f32; 4];
+                    let mut wsum = 0.0f32;
                     for k in 0..n {
                         let t = (k as f32 + 0.5) / nf - 0.5;
-                        let s = bilinear(&original, w, h, pos.0 + t * sv.0, pos.1 + t * sv.1);
+                        // Guertin's two directions per tile, alternating: the
+                        // neighbourhood's dominant sweep, then this pixel's own.
+                        let dir = if k % 2 == 0 {
+                            dom_s
+                        } else if curved {
+                            // Curved trail: re-read the field halfway along and
+                            // steer by what is there (§4's destination-flow
+                            // fixed point, per tap). Only the own-direction taps
+                            // bend — the dominant sweep is one direction by
+                            // construction.
+                            let (mx, my) = (pos.0 + 0.5 * t * sv.0, pos.1 + 0.5 * t * sv.1);
+                            let (mu, mv) = bilinear_uv(u, v, w, h, mx, my);
+                            let mc = bilinear_scalar(conf, w, h, mx, my);
+                            blended(mu, mv, mc, lend)
+                        } else {
+                            sv
+                        };
+                        let (ox, oy) = (t * dir.0, t * dir.1);
+                        let d = (ox * ox + oy * oy).sqrt();
+                        let (sx, sy) = (pos.0 + ox, pos.1 + oy);
+                        // What the sample found there is moving by — the term
+                        // that lets a fast object reach out over a still one.
+                        let (tu, tv) = bilinear_uv(u, v, w, h, sx, sy);
+                        let tc = bilinear_scalar(conf, w, h, sx, sy);
+                        let tap = blended(tu, tv, tc, lend);
+                        let len_tap = (tap.0 * tap.0 + tap.1 * tap.1).sqrt();
+                        let wt = mb_cone(d, len_tap)
+                            + mb_cone(d, len_sv)
+                            + 2.0 * mb_cylinder(d, len_tap) * mb_cylinder(d, len_sv);
+                        let s = bilinear(&original, w, h, sx, sy);
                         for cc in 0..4 {
-                            acc[cc] += s[cc];
+                            acc[cc] += s[cc] * wt;
                         }
+                        wsum += wt;
                     }
                     let mut o = [0.0f32; 4];
                     for cc in 0..4 {
-                        let vv = acc[cc] / nf;
+                        let vv = acc[cc] / wsum;
                         o[cc] = original[i + cc] * (1.0 - mix) + vv * mix;
                     }
                     o
@@ -901,10 +2728,47 @@ pub fn motion_blur(
                     let c = conf[idx].clamp(0.0, 1.0);
                     [c, c, c, 1.0]
                 }
+                MbView::TileMax => {
+                    // The *borrowed* field, not the neighbour-max: this is what
+                    // an uncertain pixel is actually steered by, so a picture
+                    // that looks wrong and this view looking wrong are the same
+                    // fact. On Motion vectors' exact scale, so flipping between
+                    // the two shows where the engine stopped trusting the pixel
+                    // and started trusting its surroundings.
+                    let k = 1.0 / 32.0;
+                    [
+                        (0.5 + lend.0 * k).clamp(0.0, 1.0),
+                        (0.5 + lend.1 * k).clamp(0.0, 1.0),
+                        0.5,
+                        1.0,
+                    ]
+                }
             };
             rgba[i..i + 4].copy_from_slice(&out);
         }
     }
+}
+
+/// Clamp-addressed bilinear sample of a single-channel field, the exact
+/// arithmetic order [`bilinear`] uses so the WGSL matches op-for-op. Used for
+/// the confidence channel beside [`bilinear_uv`]'s vectors.
+fn bilinear_scalar(a: &[f32], w: u32, h: u32, sx: f32, sy: f32) -> f32 {
+    let fx = sx - 0.5;
+    let fy = sy - 0.5;
+    let x0 = fx.floor();
+    let y0 = fy.floor();
+    let tx = fx - x0;
+    let ty = fy - y0;
+    let xi = x0 as i32;
+    let yi = y0 as i32;
+    let at = |cx: i32, cy: i32| {
+        let cx = cx.clamp(0, w as i32 - 1) as u32;
+        let cy = cy.clamp(0, h as i32 - 1) as u32;
+        a[(cy * w + cx) as usize]
+    };
+    let top = at(xi, yi) * (1.0 - tx) + at(xi + 1, yi) * tx;
+    let bottom = at(xi, yi + 1) * (1.0 - tx) + at(xi + 1, yi + 1) * tx;
+    top * (1.0 - ty) + bottom * ty
 }
 
 /// Clamp-addressed bilinear sample of a two-channel flow field (`u`/`v` as
@@ -1005,6 +2869,40 @@ pub fn datamosh(
 
 /// Rec. 709 luma weights, applied in linear light.
 pub const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// The generic Matte strength semantic (K-395), the CPU twin of
+/// `fx_matte_mix.wgsl`.
+///
+/// **In plain terms.** Every effect can be handed a second picture — a matte —
+/// whose brightness says *how much of the effect* each pixel gets. White means
+/// the effect applies in full, black means the pixel is left as it came in, grey
+/// means part way. This is that dissolve, and it is one function because it is
+/// the same dissolve for all thirty-odd effects: the effect itself never learns
+/// about the matte.
+///
+/// `processed` is the effect's output (in place, and the result), `input` the
+/// picture the effect was given, `matte` the driving picture at the same raster.
+/// The strength is the **premultiplied** Rec. 709 luma of the matte, clamped to
+/// 0..1 and then inverted if asked — the flare reads a matte's luma the same
+/// way (K-257), and unpremultiplying would make a half-transparent white matte
+/// drive harder than it looks.
+///
+/// The lerp is spelled `a·(1 − k) + b·k`, which is WGSL's own definition of
+/// `mix`, so the two paths associate their arithmetic identically: `k = 1` is
+/// exactly the effect's output and `k = 0` exactly its input, on both.
+///
+/// A shorter `matte` than the picture leaves the remaining pixels at the
+/// effect's output — degrade, never fault (14-ENGINEERING-RULES §4).
+pub fn matte_mix(processed: &mut [f32], input: &[f32], matte: &[f32], invert: bool) {
+    for i in (0..processed.len().min(input.len()).min(matte.len())).step_by(4) {
+        let luma = matte[i] * LUMA[0] + matte[i + 1] * LUMA[1] + matte[i + 2] * LUMA[2];
+        let k = luma.clamp(0.0, 1.0);
+        let k = if invert { 1.0 - k } else { k };
+        for c in 0..4 {
+            processed[i + c] = input[i + c] * (1.0 - k) + processed[i + c] * k;
+        }
+    }
+}
 
 /// The unpremultiplied colour of one premultiplied RGBA pixel. A fully
 /// transparent pixel's colour is undefined, so it reads as black — the
@@ -2169,6 +4067,810 @@ pub fn blur_gaussian(rgba: &mut [f32], w: u32, h: u32, radius_px: f32, edge: u32
     }
 }
 
+/// **The Matte-driven Gaussian blur** (K-395, docs/08 §2.6) — the §1.6 oracle
+/// for `fx_blur.wgsl`'s matted path, op-for-op.
+///
+/// # In plain terms
+///
+/// Gaussian blur is one of the effects that claim the matte inside their own
+/// maths instead of taking the generic strength dissolve, and this is what it
+/// does with it: each pixel's own matte luma **scales the radius**, so white
+/// blurs at the full Radius, mid-grey at half of it, and black not at all.
+///
+/// That is a picture the generic dissolve cannot make, and the difference is
+/// worth being clear about. Dissolving a 40 px blur to 50 % gives a sharp image
+/// with a wide soft halo laid over it — every pixel still gathered from 40 px
+/// away. Halving the radius gives a 20 px blur: genuinely less soft, gathering
+/// from half as far. On a face-shaped matte the first reads as a veil, the
+/// second as a lens racking focus.
+///
+/// Both separable passes read the **destination** pixel's matte, which is what
+/// makes the two halves agree about how wide this pixel's kernel is.
+///
+/// An empty `matte` is delegated straight to [`blur_gaussian`] — not "the same
+/// arithmetic with k = 1", but the identical function, so an unset Matte row is
+/// byte-for-byte the blur that shipped before K-395 (K-258). The matted path
+/// cannot precompute one weight table (every pixel's is different), so it
+/// accumulates unnormalised and divides at the end, exactly as the WGSL does.
+#[allow(clippy::too_many_arguments)]
+pub fn blur_gaussian_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    radius_px: f32,
+    edge: u32,
+    mix: f32,
+    matte: &[f32],
+    invert: bool,
+) {
+    if matte.is_empty() {
+        return blur_gaussian(rgba, w, h, radius_px, edge, mix);
+    }
+    let (wi, hi) = (w as i64, h as i64);
+    let original = rgba.to_vec();
+    let mut pass = vec![0.0f32; rgba.len()];
+    // One pixel's kernel, built from its own matte: the radius scaled by the
+    // clamped premultiplied luma (the reading `matte_mix` uses), then the WGSL's
+    // `ceil` and `max(σ, 1e-3)` in that order. A matte shorter than the picture
+    // leaves the remaining pixels at the full radius — degrade, never fault
+    // (14-ENGINEERING-RULES §4).
+    let kernel = |d: usize| -> (i64, f32) {
+        let k = match matte.get(d..d + 3) {
+            Some(m) => {
+                let luma = m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2];
+                let k = luma.clamp(0.0, 1.0);
+                if invert {
+                    1.0 - k
+                } else {
+                    k
+                }
+            }
+            None => 1.0,
+        };
+        let rad = radius_px * k;
+        (rad.ceil() as i64, (rad * 0.5).max(1e-3))
+    };
+    // Horizontal.
+    for y in 0..hi {
+        for x in 0..wi {
+            let d = ((y * wi + x) * 4) as usize;
+            let (r, sigma) = kernel(d);
+            let mut acc = [0.0f32; 4];
+            if r == 0 {
+                acc.copy_from_slice(&original[d..d + 4]);
+            } else {
+                let mut wsum = 0.0f32;
+                for i in -r..=r {
+                    let dd = i as f32 / sigma.max(1e-3);
+                    let wt = (-0.5 * dd * dd).exp();
+                    wsum += wt;
+                    if let Some(sx) = edge_index(x + i, wi, edge) {
+                        let s = ((y * wi + sx) * 4) as usize;
+                        for c in 0..4 {
+                            acc[c] += original[s + c] * wt;
+                        }
+                    }
+                }
+                for v in &mut acc {
+                    *v /= wsum;
+                }
+            }
+            pass[d..d + 4].copy_from_slice(&acc);
+        }
+    }
+    // Vertical, blending the host Mix against the untouched input.
+    for y in 0..hi {
+        for x in 0..wi {
+            let d = ((y * wi + x) * 4) as usize;
+            let (r, sigma) = kernel(d);
+            let mut acc = [0.0f32; 4];
+            if r == 0 {
+                acc.copy_from_slice(&pass[d..d + 4]);
+            } else {
+                let mut wsum = 0.0f32;
+                for i in -r..=r {
+                    let dd = i as f32 / sigma.max(1e-3);
+                    let wt = (-0.5 * dd * dd).exp();
+                    wsum += wt;
+                    if let Some(sy) = edge_index(y + i, hi, edge) {
+                        let s = ((sy * wi + x) * 4) as usize;
+                        for c in 0..4 {
+                            acc[c] += pass[s + c] * wt;
+                        }
+                    }
+                }
+                for v in &mut acc {
+                    *v /= wsum;
+                }
+            }
+            for c in 0..4 {
+                rgba[d + c] = original[d + c] * (1.0 - mix) + acc[c] * mix;
+            }
+        }
+    }
+}
+
+/// One resolved Channel blur (docs/08 §3.45) is four radii, an edge code and a
+/// mix, so it takes no struct — see [`channel_blur`].
+///
+/// Channel blur: the separable gaussian of [`blur_gaussian`] with a radius per
+/// channel.
+///
+/// **In plain terms.** Each of red, green, blue and alpha is blurred by its own
+/// amount. A channel whose radius is zero is copied through untouched, which is
+/// what makes the common case (one channel softened, three left alone) cost one
+/// channel's gather rather than four.
+///
+/// The weights are built **in the loop and normalised at the end** rather than
+/// precomputed as one table, because the four channels no longer share a table —
+/// the same arrangement [`blur_gaussian_matted`] uses, and the arrangement the
+/// WGSL twin mirrors op-for-op (§1.6).
+pub fn channel_blur(rgba: &mut [f32], w: u32, h: u32, radii: [f32; 4], edge: u32, mix: f32) {
+    let (wi, hi) = (w as i64, h as i64);
+    let original = rgba.to_vec();
+    let mut pass = vec![0.0f32; rgba.len()];
+    // Per channel: how far the gather reaches, and the σ it falls off over.
+    let taps: [i64; 4] = std::array::from_fn(|c| radii[c].ceil() as i64);
+    let sigma: [f32; 4] = std::array::from_fn(|c| (radii[c] * 0.5).max(1e-3));
+    // Horizontal, then vertical: the same loop over a different axis.
+    for y in 0..hi {
+        for x in 0..wi {
+            let d = ((y * wi + x) * 4) as usize;
+            for c in 0..4 {
+                let r = taps[c];
+                if r == 0 {
+                    pass[d + c] = original[d + c];
+                    continue;
+                }
+                let (mut acc, mut wsum) = (0.0f32, 0.0f32);
+                for i in -r..=r {
+                    let dd = i as f32 / sigma[c];
+                    let wt = (-0.5 * dd * dd).exp();
+                    wsum += wt;
+                    if let Some(sx) = edge_index(x + i, wi, edge) {
+                        acc += original[(((y * wi + sx) * 4) as usize) + c] * wt;
+                    }
+                }
+                pass[d + c] = acc / wsum;
+            }
+        }
+    }
+    for y in 0..hi {
+        for x in 0..wi {
+            let d = ((y * wi + x) * 4) as usize;
+            for c in 0..4 {
+                let r = taps[c];
+                let v = if r == 0 {
+                    pass[d + c]
+                } else {
+                    let (mut acc, mut wsum) = (0.0f32, 0.0f32);
+                    for i in -r..=r {
+                        let dd = i as f32 / sigma[c];
+                        let wt = (-0.5 * dd * dd).exp();
+                        wsum += wt;
+                        if let Some(sy) = edge_index(y + i, hi, edge) {
+                            acc += pass[(((sy * wi + x) * 4) as usize) + c] * wt;
+                        }
+                    }
+                    acc / wsum
+                };
+                rgba[d + c] = original[d + c] * (1.0 - mix) + v * mix;
+            }
+        }
+    }
+}
+
+/// One resolved Drop shadow (docs/08 §3.43), reduced to what both paths read.
+/// The direction's sine and cosine are already spent into `offset` host-side
+/// (`DropShadow::packed`), so neither render path runs trigonometry (§1.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DropShadowParams {
+    /// Scene-linear RGB; the shadow's coverage supplies the rest.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// Where the shadow sits relative to the shape, raster pixels.
+    pub offset: [f32; 2],
+    /// The gaussian half-width the shape is softened by, raster pixels.
+    pub softness_px: f32,
+    /// Draw the shadow alone, without the layer that cast it.
+    pub shadow_only: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Drop shadow (docs/08 §3.43) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Blur the layer's shape, read that blurred shape at a
+/// shifted position, paint it in one colour, and put it *underneath* the layer.
+///
+/// **The blur is taken where the shape stands, not where the shadow goes.** A
+/// translation and a convolution commute, so softening first and reading at the
+/// offset is exactly the same picture as offsetting first and softening — for
+/// one gaussian instead of a gaussian plus a resample.
+///
+/// The shadow's edges fall away into transparency (edge policy 0), which is the
+/// only honest reading: a shape touching the frame border casts a shadow that
+/// leaves the frame, and repeating the border pixel outward would smear it.
+pub fn drop_shadow(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams) {
+    let original = rgba.to_vec();
+    // The shared §3.8 gaussian, on the whole picture: only the alpha is read
+    // back out of it, and blurring four channels costs exactly what the WGSL
+    // pass this mirrors costs, since it is the same kernel.
+    let mut soft = original.clone();
+    blur_gaussian(&mut soft, w, h, p.softness_px, 0, 1.0);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let k = bilinear_edge(
+                &soft,
+                w,
+                h,
+                x as f32 + 0.5 - p.offset[0],
+                y as f32 + 0.5 - p.offset[1],
+                0,
+            )[3] * p.opacity;
+            let shadow = [p.colour[0] * k, p.colour[1] * k, p.colour[2] * k, k];
+            let src_a = original[d + 3];
+            for c in 0..4 {
+                // Source OVER shadow, premultiplied — the shadow is BELOW,
+                // which is the whole reason this is an effect and not a
+                // duplicated layer.
+                let over = if p.shadow_only {
+                    shadow[c]
+                } else {
+                    original[d + c] + shadow[c] * (1.0 - src_a)
+                };
+                rgba[d + c] = original[d + c] * (1.0 - p.mix) + over * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Roughen edges (docs/08 §3.57), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoughenEdgesParams {
+    /// The noise field's shape, seed and loop — §3.37's core, shared.
+    pub field: FractalField,
+    /// `1 ÷ Scale`, raster pixels.
+    pub inv_scale: f32,
+    /// The field's origin, raster pixels.
+    pub offset: [f32; 2],
+    /// The field's depth coordinate (Evolution ÷ 360, folded into the cycle).
+    pub z: f32,
+    /// Border, raster pixels: the gaussian radius of the first pass, and so the
+    /// width of the band the second one works in.
+    pub border_px: f32,
+    /// False at Border 0: the exact identity, rather than a re-cut of the
+    /// picture's own antialiasing.
+    pub active: bool,
+    /// Fractal influence ÷ 100: how far the noise shifts the cut.
+    pub influence: f32,
+    /// Half the width of the cut, in alpha, floored so the smoothstep never
+    /// divides by zero.
+    pub half_width: f32,
+    /// Scene-linear RGB the chewed band is painted in, when
+    /// [`colour_on`](Self::colour_on) says so.
+    pub colour: [f32; 3],
+    /// 1 to paint the band, 0 to leave it. A float rather than a bool so the
+    /// kernel multiplies instead of branching.
+    pub colour_on: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The smoothstep both paths run, written out rather than borrowed, so the CPU
+/// reference and WGSL's builtin cannot differ on the clamp or the polynomial.
+fn smoothstep_between(lo: f32, hi: f32, x: f32) -> f32 {
+    let t = ((x - lo) / (hi - lo)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Roughen edges (docs/08 §3.57) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Blur the picture by Border, which turns its alpha into a
+/// soft ramp whose half-way line is exactly where the original edge was; then
+/// cut that ramp again at a threshold the fractal field wobbles per pixel. What
+/// comes back is the same shape with its outline chewed.
+///
+/// The colour is carried straight (§2.2): a pixel keeps its own colour and gets
+/// a new coverage, and a pixel the chewing *grew* into — one that had no colour
+/// of its own — borrows the blurred neighbourhood's, because premultiplied black
+/// is what "no colour" looks like and a grown edge painted with it would read as
+/// soot.
+pub fn roughen_edges(rgba: &mut [f32], w: u32, h: u32, p: &RoughenEdgesParams) {
+    if !p.active {
+        return;
+    }
+    let original = rgba.to_vec();
+    // The shared §3.8 gaussian, on the whole picture — the same reuse §3.43
+    // makes, and here the blurred alpha *is* the distance field.
+    let mut soft = original.clone();
+    blur_gaussian(&mut soft, w, h, p.border_px, 0, 1.0);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let bar = soft[i + 3];
+            let n = fractal(
+                &p.field,
+                (px - p.offset[0]) * p.inv_scale,
+                (py - p.offset[1]) * p.inv_scale,
+                p.z,
+            );
+            // 1 on the outline, 0 well inside or well outside it. It weights
+            // the noise as well as the edge colour, and that is what confines
+            // the chewing to the band: deep inside the shape the shift is
+            // exactly zero, so no amount of Fractal influence can punch a hole
+            // in the middle of a solid layer (docs/08 §3.57 decision 3).
+            let band = 1.0 - (2.0 * bar - 1.0).abs();
+            let t = bar + n * p.influence * 0.5 * band - 0.5;
+            let k = smoothstep_between(-p.half_width, p.half_width, t);
+            let a = original[i + 3];
+            let mut col = if a > 1e-4 {
+                [original[i] / a, original[i + 1] / a, original[i + 2] / a]
+            } else {
+                let sa = soft[i + 3].max(1e-4);
+                [soft[i] / sa, soft[i + 1] / sa, soft[i + 2] / sa]
+            };
+            // The same band paints the chewed border, and nothing else.
+            let paint = band * p.colour_on;
+            for (c, edge) in col.iter_mut().zip(p.colour) {
+                *c += (edge - *c) * paint;
+            }
+            for c in 0..3 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + col[c] * k * p.mix;
+            }
+            rgba[i + 3] = original[i + 3] * (1.0 - p.mix) + k * p.mix;
+        }
+    }
+}
+
+/// Set matte (docs/08 §3.44) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The chosen channel of `matte` becomes this picture's
+/// alpha. The colour is carried across *straight* (§2.2): the pixel is
+/// unpremultiplied, given its new coverage, and re-premultiplied, so changing
+/// how much of a pixel there is does not also change what colour it is.
+///
+/// `matte` is the referenced layer's picture at this raster, RGBA rather than a
+/// single channel, because which channel carries the shape is one of this
+/// effect's controls. An empty slice is the unbound case — the labelled no-op
+/// every layer-input effect follows — and leaves the picture untouched.
+pub fn set_matte(
+    rgba: &mut [f32],
+    matte: &[f32],
+    channel: u32,
+    invert: bool,
+    combine: bool,
+    mix: f32,
+) {
+    if matte.is_empty() {
+        return;
+    }
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let d = i * 4;
+        let Some(m) = matte.get(d..d + 4) else {
+            // A matte shorter than the picture leaves the rest alone — degrade,
+            // never fault (14-ENGINEERING-RULES §4).
+            break;
+        };
+        let mut k = channel_of(m, channel);
+        if invert {
+            k = 1.0 - k;
+        }
+        let a = if combine { px[3] * k } else { k };
+        let straight = unpremult(px);
+        for c in 0..3 {
+            px[c] = px[c] * (1.0 - mix) + straight[c] * a * mix;
+        }
+        px[3] = px[3] * (1.0 - mix) + a * mix;
+    }
+}
+
+/// One resolved Linear wipe (docs/08 §3.46), reduced to what both paths read.
+/// The frame's extent along the sweep is deliberately absent: it is a function
+/// of the raster, which the kernel knows and the host does not (§3.39).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LinearWipeParams {
+    /// Where the wipe line pivots, raster pixels.
+    pub centre: [f32; 2],
+    /// The sweep direction, host-computed `(sin θ, −cos θ)`.
+    pub normal: [f32; 2],
+    /// Completion ÷ 100.
+    pub completion: f32,
+    /// The feather's width in raster pixels, floored above zero so the hard
+    /// case is a step rather than a divide by zero.
+    pub band: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The kept fraction of one pixel under a Linear wipe — the expression both
+/// paths evaluate, written once so [`linear_wipe`] and the WGSL twin cannot
+/// disagree about it.
+///
+/// The edge travels half a feather *past* each end of the frame, which is what
+/// makes Completion 0 keep the whole frame exactly and 100 remove it exactly. A
+/// wipe that cannot fully finish is not a transition.
+#[must_use]
+pub fn linear_wipe_keep(px: f32, py: f32, w: f32, h: f32, p: &LinearWipeParams) -> f32 {
+    let d = (px - p.centre[0]) * p.normal[0] + (py - p.centre[1]) * p.normal[1];
+    let extent = 0.5 * ((w * p.normal[0]).abs() + (h * p.normal[1]).abs());
+    let edge = -(extent + p.band * 0.5) + p.completion * (2.0 * extent + p.band);
+    ((d - edge) / p.band + 0.5).clamp(0.0, 1.0)
+}
+
+/// Linear wipe (docs/08 §3.46) — the CPU reference and §1.6 oracle. The picture
+/// is scaled by its kept fraction, all four channels, which is the
+/// premultiplied form of "less of this pixel".
+pub fn linear_wipe(rgba: &mut [f32], w: u32, h: u32, p: &LinearWipeParams) {
+    let (fw, fh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let keep = linear_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, p);
+            // Written as `1 − mix·(1 − keep)` rather than `(1−mix) + keep·mix`
+            // so a fully kept pixel scales by *exactly* 1 at any Mix: the
+            // second form rounds twice and Completion 0 would stop being the
+            // bit-exact identity below full Mix.
+            let f = 1.0 - p.mix * (1.0 - keep);
+            for c in 0..4 {
+                rgba[d + c] *= f;
+            }
+        }
+    }
+}
+
+/// One resolved Radial wipe (docs/08 §3.47), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadialWipeParams {
+    /// Where the hand pivots, raster pixels.
+    pub centre: [f32; 2],
+    /// Start angle in radians, from straight up, clockwise.
+    pub start: f32,
+    /// Where the wedge's middle sits from `start`: +1 clockwise, −1
+    /// anticlockwise, 0 for Both (the wedge opens symmetrically).
+    pub dir: f32,
+    /// Completion ÷ 100.
+    pub completion: f32,
+    /// The feather's width in raster pixels, measured at the arc; floored above
+    /// zero.
+    pub feather: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The kept fraction of one pixel under a Radial wipe — one expression for all
+/// three sweep directions (docs/08 §3.47), written once so [`radial_wipe`] and
+/// the WGSL twin cannot disagree about it.
+///
+/// The wrap into −π..π uses `floor(x + ½)` and **not** `round`: Rust rounds
+/// halves away from zero, WGSL rounds them to even, and one pixel landing on the
+/// wrong side of the wedge is exactly what §1.6 exists to catch.
+#[must_use]
+pub fn radial_wipe_keep(px: f32, py: f32, p: &RadialWipeParams) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    let dx = px - p.centre[0];
+    let dy = py - p.centre[1];
+    // From straight up, clockwise, on a raster whose y grows downward.
+    let phi = dy.atan2(dx) + PI * 0.5;
+    let r = (dx * dx + dy * dy).sqrt();
+    // A constant-width soft edge: the angle a `feather`-wide band subtends at
+    // this radius. Clamped at π because near the centre it grows without bound.
+    let band = (p.feather / r.max(1.0)).clamp(1e-4, PI);
+    // The wedge's half-width, with a half-band lead-in at each end so
+    // Completion 0 and 100 are the exact identity and the exact empty frame.
+    let hw = p.completion * (PI + band) - band * 0.5;
+    let mid = p.start + hw * p.dir;
+    let mut delta = phi - mid;
+    delta -= TAU * (delta / TAU + 0.5).floor();
+    (0.5 - (hw - delta.abs()) / band).clamp(0.0, 1.0)
+}
+
+/// Radial wipe (docs/08 §3.47) — the CPU reference and §1.6 oracle.
+pub fn radial_wipe(rgba: &mut [f32], w: u32, h: u32, p: &RadialWipeParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let keep = radial_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, p);
+            // See [`linear_wipe`] for why this form and not the other.
+            let f = 1.0 - p.mix * (1.0 - keep);
+            for c in 0..4 {
+                rgba[d + c] *= f;
+            }
+        }
+    }
+}
+
+/// One resolved Venetian blinds (docs/08 §3.70), reduced to what both paths
+/// read. The slats' anchor is deliberately absent: they sit on the frame's own
+/// middle, which the kernel knows and the host does not (§3.46's precedent).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VenetianBlindsParams {
+    /// The direction the slats close along, host-computed `(sin θ, −cos θ)`.
+    pub normal: [f32; 2],
+    /// One slat's width in raster pixels, floored at one so the fold has a
+    /// period.
+    pub period: f32,
+    /// Completion ÷ 100.
+    pub completion: f32,
+    /// The feather's width in raster pixels, floored above zero.
+    pub band: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The kept fraction of one pixel under Venetian blinds — the expression both
+/// paths evaluate, written once so [`venetian_blinds`] and the WGSL twin cannot
+/// disagree about it.
+///
+/// It is [`linear_wipe_keep`] with the distance folded into one slat first, and
+/// the same half-band lead-in at each end: the gap opens at the slat's middle
+/// and reaches exactly half a feather past its edges, so Completion 0 keeps the
+/// whole frame exactly and 100 removes it exactly.
+///
+/// The fold is `floor(x + ½)` and **not** `round`, for [`radial_wipe_keep`]'s
+/// reason: Rust rounds halves away from zero and WGSL rounds them to even.
+#[must_use]
+pub fn venetian_blinds_keep(px: f32, py: f32, w: f32, h: f32, p: &VenetianBlindsParams) -> f32 {
+    let d = (px - w * 0.5) * p.normal[0] + (py - h * 0.5) * p.normal[1];
+    let u = d - p.period * (d / p.period + 0.5).floor();
+    let hw = p.completion * (p.period * 0.5 + p.band) - p.band * 0.5;
+    ((u.abs() - hw) / p.band + 0.5).clamp(0.0, 1.0)
+}
+
+/// Venetian blinds (docs/08 §3.70) — the CPU reference and §1.6 oracle. The
+/// picture is scaled by its kept fraction, all four channels, which is the
+/// premultiplied form of "less of this pixel".
+pub fn venetian_blinds(rgba: &mut [f32], w: u32, h: u32, p: &VenetianBlindsParams) {
+    let (fw, fh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let keep = venetian_blinds_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, p);
+            // See [`linear_wipe`] for why this form and not the other.
+            let f = 1.0 - p.mix * (1.0 - keep);
+            for c in 0..4 {
+                rgba[d + c] *= f;
+            }
+        }
+    }
+}
+
+/// One resolved Iris wipe (docs/08 §3.71), reduced to what both paths read.
+/// The polygon is already solved into one sector here: two vertices become a
+/// point on the edge and that edge's outward unit normal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IrisWipeParams {
+    /// Where the iris opens, raster pixels.
+    pub centre: [f32; 2],
+    /// The sector's first vertex, in the sector's own frame (radius along +x).
+    pub vertex: [f32; 2],
+    /// The outward unit normal of the edge leaving that vertex.
+    pub normal: [f32; 2],
+    /// One sector, radians: `2π ÷ Points`.
+    pub period: f32,
+    /// Rotation in radians, from straight up, clockwise.
+    pub rotation: f32,
+    /// The feather's width in raster pixels, floored above zero.
+    pub band: f32,
+    /// False when Outer radius is 0: there is no polygon, so the frame passes
+    /// through untouched (§3.71's fifth note).
+    pub active: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The kept fraction of one pixel under an Iris wipe — the expression both paths
+/// evaluate, written once so [`iris_wipe`] and the WGSL twin cannot disagree
+/// about it.
+///
+/// The pixel's angle is folded into one sector and mirrored about that sector's
+/// bisector, which reduces the whole boundary — polygon or star — to the single
+/// straight edge the host solved. What comes out is a **true perpendicular
+/// distance in pixels**, which is what lets Feather be a width rather than an
+/// angle.
+#[must_use]
+pub fn iris_wipe_keep(px: f32, py: f32, p: &IrisWipeParams) -> f32 {
+    use std::f32::consts::PI;
+    if !p.active {
+        return 1.0;
+    }
+    let dx = px - p.centre[0];
+    let dy = py - p.centre[1];
+    // From straight up, clockwise, on a raster whose y grows downward, then
+    // de-rotated so the sector's first vertex sits on the +x axis.
+    let phi = dy.atan2(dx) + PI * 0.5 - p.rotation;
+    let r = (dx * dx + dy * dy).sqrt();
+    // `floor(x + ½)`, never `round` — [`radial_wipe_keep`]'s reason.
+    let a = (phi - p.period * (phi / p.period + 0.5).floor()).abs();
+    let point = [r * a.cos(), r * a.sin()];
+    let dist = (point[0] - p.vertex[0]) * p.normal[0] + (point[1] - p.vertex[1]) * p.normal[1];
+    (dist / p.band + 0.5).clamp(0.0, 1.0)
+}
+
+/// Iris wipe (docs/08 §3.71) — the CPU reference and §1.6 oracle.
+pub fn iris_wipe(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let keep = iris_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, p);
+            // See [`linear_wipe`] for why this form and not the other.
+            let f = 1.0 - p.mix * (1.0 - keep);
+            for c in 0..4 {
+                rgba[d + c] *= f;
+            }
+        }
+    }
+}
+
+/// How far the Card wipe's camera stands from a card, in card half-widths
+/// (docs/08 §3.72). Fixed, and deliberately so: Lumit has no 3D camera on an
+/// effect, so every card is projected in its own local frame at the same viewing
+/// distance whatever the grid. Exactly representable, so both paths multiply by
+/// the identical number; `fx_cardwipe.wgsl` spells the same literal.
+pub const CARD_VIEW_DISTANCE: f32 = 3.0;
+
+/// One resolved Card wipe (docs/08 §3.72), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CardWipeParams {
+    /// Columns then rows.
+    pub grid: [i32; 2],
+    /// Completion ÷ 100.
+    pub completion: f32,
+    /// `100 ÷ Transition width`, so the kernel multiplies.
+    pub inv_width: f32,
+    /// `1 − Transition width ÷ 100`.
+    pub one_minus_width: f32,
+    /// Which grid axis the Flip order ramp runs along: 0 columns, 1 rows.
+    pub order_axis: u32,
+    /// The ramp's offset — 0 forwards along that axis, 1 backwards.
+    pub order_bias: f32,
+    /// The ramp's slope: +1 forwards, −1 backwards.
+    pub order_scale: f32,
+    /// `FLIP_AXIS_OPTIONS` index: 0 horizontal, 1 vertical, 2 per card.
+    pub axis: u32,
+    /// `FLIP_DIRECTION_OPTIONS` index: 0 forwards, 1 backwards, 2 per card.
+    pub direction: u32,
+    /// Randomness ÷ 100.
+    pub randomness: f32,
+    /// Which shuffle this instance gets (§2.4).
+    pub seed: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The pixel range of the card `x` falls in, out of `n` across a `len`-pixel
+/// axis (docs/08 §3.72). Whole-number arithmetic throughout, for §3.65's reason
+/// — a division that comes out exact puts a pixel in a different card on the two
+/// paths, and here that would be a seam rather than a block.
+///
+/// Note the ceilings. [`mosaic_span`] takes the floor at both ends, which is
+/// fine when the span is only being *sampled*; a card is drawn to its span, so
+/// the two ends have to be the exact inverse of `(x·n) ÷ len` or the last pixel
+/// of a card would fall outside the card it was assigned to.
+#[must_use]
+pub fn card_span(x: i32, len: i32, n: i32) -> (i32, i32) {
+    let i = (x * n) / len;
+    ((i * len + n - 1) / n, ((i + 1) * len + n - 1) / n)
+}
+
+/// How far the card at `(i, j)` has turned, 0 (not started) to 1 (gone) —
+/// written once so [`card_wipe`] and the WGSL twin cannot disagree.
+#[must_use]
+pub fn card_wipe_progress(i: i32, j: i32, p: &CardWipeParams) -> f32 {
+    let along = if p.order_axis == 0 {
+        (i as f32 + 0.5) / p.grid[0] as f32
+    } else {
+        (j as f32 + 0.5) / p.grid[1] as f32
+    };
+    let base = p.order_bias + p.order_scale * along;
+    let shuffled = base + (super::noise::hash01(p.seed, 0, i, j, 0) - base) * p.randomness;
+    ((p.completion - shuffled * p.one_minus_width) * p.inv_width).clamp(0.0, 1.0)
+}
+
+/// Card wipe (docs/08 §3.72) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Each pixel finds its card, asks how far that card has
+/// turned, and then solves the one-point projection backwards to find which
+/// point of the flat card is standing where it is. A card is never drawn; it is
+/// read.
+///
+/// Mix 0 and Completion 0 are both the bit-exact identity, and Completion 100 is
+/// the exactly empty frame — both ends are *tested for* rather than arrived at
+/// through a cosine, because `cos(½π)` in `f32` is 6·10⁻⁸ and not zero.
+pub fn card_wipe(rgba: &mut [f32], w: u32, h: u32, p: &CardWipeParams) {
+    use std::f32::consts::PI;
+    let (wi, hi) = (w as i32, h as i32);
+    if wi <= 0 || hi <= 0 {
+        return;
+    }
+    let cols = p.grid[0].clamp(1, 256);
+    let rows = p.grid[1].clamp(1, 256);
+    let d_view = CARD_VIEW_DISTANCE;
+    let src = rgba.to_vec();
+    for y in 0..hi {
+        let (y0, y1) = card_span(y, hi, rows);
+        let j = (y * rows) / hi;
+        for x in 0..wi {
+            let (x0, x1) = card_span(x, wi, cols);
+            let i = (x * cols) / wi;
+            let o = ((y as i64 * i64::from(wi) + i64::from(x)) * 4) as usize;
+            let t = card_wipe_progress(i, j, p);
+            let v = if t <= 0.0 {
+                [src[o], src[o + 1], src[o + 2], src[o + 3]]
+            } else if t >= 1.0 {
+                [0.0; 4]
+            } else {
+                let hx = 0.5 * (x1 - x0) as f32;
+                let hy = 0.5 * (y1 - y0) as f32;
+                let mx = x0 as f32 + hx;
+                let my = y0 as f32 + hy;
+                let lx = (x as f32 + 0.5 - mx) / hx;
+                let ly = (y as f32 + 0.5 - my) / hy;
+                let axis = if p.axis == 2 {
+                    u32::from(super::noise::hash01(p.seed, 1, i, j, 0) >= 0.5)
+                } else {
+                    p.axis
+                };
+                let sign = match p.direction {
+                    1 => -1.0,
+                    2 => {
+                        if super::noise::hash01(p.seed, 2, i, j, 0) < 0.5 {
+                            1.0
+                        } else {
+                            -1.0
+                        }
+                    }
+                    _ => 1.0,
+                };
+                // The flip coordinate and the one across it, with the card's
+                // half-extent on each.
+                let (f, g, hf, hg) = if axis == 0 {
+                    (ly, lx, hy, hx)
+                } else {
+                    (lx, ly, hx, hy)
+                };
+                let (sin, cos) = (sign * t * (PI * 0.5)).sin_cos();
+                // The one-point projection, inverted: f = s·cos θ·D ÷ (D − s·sin θ)
+                // is a Möbius map in s, so it comes back in one divide.
+                let s = f * d_view / (d_view * cos + f * sin);
+                let k = d_view / (d_view - s * sin);
+                let across = g / k;
+                // The card's own edges, in screen units, and the box overlap of
+                // this pixel with them — `clamp(a) + clamp(b) − 1` rather than a
+                // pair of smoothsteps, so a band narrower than a pixel comes out
+                // as its width and not as a half-strength line.
+                let near = cos * d_view / (d_view - sin);
+                let far = -cos * d_view / (d_view + sin);
+                let cov_f = ((near - f) * hf + 0.5).clamp(0.0, 1.0)
+                    + ((f - far) * hf + 0.5).clamp(0.0, 1.0)
+                    - 1.0;
+                let cov_g = ((k - g) * hg + 0.5).clamp(0.0, 1.0)
+                    + ((g + k) * hg + 0.5).clamp(0.0, 1.0)
+                    - 1.0;
+                let cover = cov_f.clamp(0.0, 1.0) * cov_g.clamp(0.0, 1.0);
+                // Clamped before sampling so a tap never leaves the card, which
+                // is what stops one card bleeding into its neighbour.
+                let sc = s.clamp(-1.0, 1.0);
+                let ac = across.clamp(-1.0, 1.0);
+                let (sx, sy) = if axis == 0 {
+                    (mx + ac * hx, my + sc * hy)
+                } else {
+                    (mx + sc * hx, my + ac * hy)
+                };
+                let c = bilinear_edge(&src, w, h, sx, sy, 1);
+                [c[0] * cover, c[1] * cover, c[2] * cover, c[3] * cover]
+            };
+            for c in 0..4 {
+                rgba[o + c] = src[o + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
 /// Block glitch (docs/08 §3.12, split out by K-107): standalone block
 /// displacement, the block section of the old combined Glitch effect.
 ///
@@ -2315,4 +5017,1638 @@ pub fn scanlines(
             }
         }
     }
+}
+
+/// The perceptual position of a scene-linear value: a square root, floored at
+/// zero (docs/08 §3.58 decision 2).
+///
+/// **Why a square root and not sRGB's 2.2.** Four of this batch's six effects
+/// place a control — a rung, a cut, a stop, a pivot — on the tone range, and a
+/// person expects the middle of that range to be mid-grey rather than 0.5 of the
+/// light. Any transfer curve does that; only this one is a *single
+/// correctly-rounded instruction* on both the CPU and the GPU, which is what
+/// keeps a quantiser's or a threshold's answer from disagreeing by a whole step
+/// between the two paths (§1.6, K-399's rule about a threshold).
+#[must_use]
+pub fn perceptual(v: f32) -> f32 {
+    v.max(0.0).sqrt()
+}
+
+/// Posterize (docs/08 §3.58) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Each channel is snapped to the nearest of `n + 1` rungs,
+/// with the rungs spaced evenly in [`perceptual`] rather than in light, so the
+/// bands land where a person sees them. The ladder is not clipped at 1: a
+/// highlight above white keeps climbing it (§2.1).
+///
+/// `n` is `Levels − 1`, computed host-side. Unpremultiplied (§2.2); alpha is
+/// untouched. Mix 0 is the bit-exact identity.
+pub fn posterize(rgba: &mut [f32], n: f32, mix: f32) {
+    if n <= 0.0 {
+        return;
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        for c in 0..3 {
+            let t = perceptual(u[c]) * n;
+            // `floor(x + ½)` rather than `round`, because WGSL's `round` breaks
+            // a tie to even and Rust's breaks it away from zero — on a value
+            // that lands exactly between two rungs that is a whole rung of
+            // difference between the two paths.
+            let step = (t + 0.5).floor() / n;
+            let v = step * step;
+            px[c] = px[c] * (1.0 - mix) + v * a * mix;
+        }
+    }
+}
+
+/// Threshold (docs/08 §3.59) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** One question per pixel — is it brighter than `level`? —
+/// answered white or black. The crossing is a smoothstep of half-width `hw`
+/// rather than a step, floored host-side, so the cut is antialiased and the two
+/// paths cannot disagree about a pixel that lands exactly on the line.
+///
+/// Unpremultiplied (§2.2); alpha is untouched, so a thresholded picture keeps
+/// its shape. Mix 0 is the bit-exact identity.
+pub fn threshold(rgba: &mut [f32], level: f32, hw: f32, mix: f32) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let t = perceptual(u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2]);
+        let k = smoothstep_between(level - hw, level + hw, t);
+        for ch in px.iter_mut().take(3) {
+            *ch = *ch * (1.0 - mix) + k * a * mix;
+        }
+    }
+}
+
+/// One resolved Tritone (docs/08 §3.60): the three stops of the ramp, in
+/// scene-linear RGB, and the mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TritoneParams {
+    /// The colour the darkest pixels take.
+    pub shadows: [f32; 3],
+    /// The colour mid-grey takes.
+    pub midtones: [f32; 3],
+    /// The colour the brightest pixels take.
+    pub highlights: [f32; 3],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Tritone (docs/08 §3.60) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The pixel's brightness picks a colour off a two-segment
+/// ramp: Shadows at the bottom, Midtones in the middle, Highlights at the top.
+/// The position is [`perceptual`], so Midtones lands on the grey a person points
+/// at, and anything past white keeps its headroom by *scaling* the chosen colour
+/// rather than clamping to it (§2.1).
+///
+/// Unpremultiplied (§2.2); alpha is untouched. Mix 0 is the bit-exact identity.
+pub fn tritone(rgba: &mut [f32], p: &TritoneParams) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let t = perceptual(u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2]);
+        let s = t.min(1.0);
+        // Both halves are written `lo + (hi − lo)·x` — the same form the WGSL
+        // twin spells, so neither path contracts the multiply-add differently
+        // (§3.24's note).
+        let (lo, hi, x) = if s < 0.5 {
+            (p.shadows, p.midtones, s * 2.0)
+        } else {
+            (p.midtones, p.highlights, s * 2.0 - 1.0)
+        };
+        let head = t.max(1.0);
+        for c in 0..3 {
+            let v = (lo[c] + (hi[c] - lo[c]) * x) * head;
+            px[c] = px[c] * (1.0 - p.mix) + v * a * p.mix;
+        }
+    }
+}
+
+/// One resolved Photo filter (docs/08 §3.61): the glass's scene-linear colour,
+/// how much of it is in front of the lens, and whether the exposure is put back.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PhotoFilterParams {
+    /// The filter's colour, already decoded to scene-linear host-side.
+    pub filter: [f32; 3],
+    /// Density ÷ 100. 0 is the exact identity.
+    pub density: f32,
+    /// 1 to restore the pixel's own luma afterwards, 0 to let the filter cost
+    /// light as a real one does.
+    pub preserve: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Photo filter (docs/08 §3.61) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Multiply by the filter's colour, fade that multiply in by
+/// Density, and — with Preserve luminosity on — scale the result back to the
+/// luma it started with, so the picture changes colour rather than exposure.
+///
+/// Unpremultiplied (§2.2); alpha is untouched. Density 0 and Mix 0 are both the
+/// bit-exact identity.
+pub fn photo_filter(rgba: &mut [f32], p: &PhotoFilterParams) {
+    if p.density == 0.0 {
+        return; // no glass: bit-exact identity (the WGSL twin matches)
+    }
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let mut v = [0.0f32; 3];
+        for c in 0..3 {
+            v[c] = u[c] + (u[c] * p.filter[c] - u[c]) * p.density;
+        }
+        let before = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
+        let after = v[0] * LUMA[0] + v[1] * LUMA[1] + v[2] * LUMA[2];
+        // A filter dark enough to take the luma to nothing has nothing to
+        // restore; the floor keeps the division finite (docs/14 §4).
+        let gain = before / after.max(1e-6);
+        let k = 1.0 + (gain - 1.0) * p.preserve;
+        for c in 0..3 {
+            px[c] = px[c] * (1.0 - p.mix) + v[c] * k * a * p.mix;
+        }
+    }
+}
+
+/// One resolved Black and white (docs/08 §3.62): the six weights as fractions,
+/// in red, yellow, green, cyan, blue, magenta order, and the tint already
+/// divided through by its own luma.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlackAndWhiteParams {
+    /// Reds, Yellows, Greens, Cyans, Blues, Magentas — each ÷ 100.
+    pub weights: [f32; 6],
+    /// The tint colour, normalised to luma 1 so it changes hue and not exposure.
+    pub tint: [f32; 3],
+    /// 1 to tint, 0 to leave the grey grey.
+    pub tint_on: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The grey one colour makes under six weights (docs/08 §3.62).
+///
+/// **In plain terms.** Every colour is exactly a grey, plus one secondary
+/// (yellow, cyan or magenta), plus one primary (red, green or blue): the
+/// smallest channel is the grey, the middle minus the smallest is the secondary
+/// between the two larger channels, and the largest minus the middle is the
+/// primary. Weighting those two parts is what lets a red jumper and green grass
+/// come out as different greys.
+///
+/// The six branches agree wherever two channels are equal — the term that
+/// distinguishes them is zero there — so the function is continuous and a
+/// gradient has no seam. The WGSL twin spells the same six branches.
+#[must_use]
+pub fn bw_grey(u: [f32; 3], w: &[f32; 6]) -> f32 {
+    let (r, g, b) = (u[0], u[1], u[2]);
+    // (grey, secondary amount, secondary weight, primary amount, primary weight)
+    let (base, sec, sw, pri, pw) = if r >= g && g >= b {
+        (b, g - b, w[1], r - g, w[0]) // yellow, red
+    } else if g >= r && r >= b {
+        (b, r - b, w[1], g - r, w[2]) // yellow, green
+    } else if g >= b && b >= r {
+        (r, b - r, w[3], g - b, w[2]) // cyan, green
+    } else if b >= g && g >= r {
+        (r, g - r, w[3], b - g, w[4]) // cyan, blue
+    } else if b >= r && r >= g {
+        (g, r - g, w[5], b - r, w[4]) // magenta, blue
+    } else {
+        (g, b - g, w[5], r - b, w[0]) // magenta, red
+    };
+    base + sec * sw + pri * pw
+}
+
+/// Black and white (docs/08 §3.62) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** [`bw_grey`] per pixel, floored at zero because a negative
+/// weight would otherwise ask for negative light, and then optionally multiplied
+/// by the tint. Nothing is clipped above, so a weight of 300 on a specular
+/// highlight keeps its headroom (§2.1).
+///
+/// Unpremultiplied (§2.2); alpha is untouched. Mix 0 is the bit-exact identity.
+pub fn black_and_white(rgba: &mut [f32], p: &BlackAndWhiteParams) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let grey = bw_grey(u, &p.weights).max(0.0);
+        for (ch, tint) in px.iter_mut().zip(p.tint) {
+            let tinted = grey * tint;
+            let v = grey + (tinted - grey) * p.tint_on;
+            *ch = *ch * (1.0 - p.mix) + v * a * p.mix;
+        }
+    }
+}
+
+/// One resolved Shadow highlight (docs/08 §3.63).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowHighlightParams {
+    /// Shadow amount ÷ 100 × 2: 100 trebles a fully-masked shadow.
+    pub shadow: f32,
+    /// Highlight amount ÷ 100 × 2: 100 takes a fully-masked highlight to a
+    /// third.
+    pub highlight: f32,
+    /// Shadow tonal width ÷ 100, floored so the smoothstep never divides by
+    /// zero.
+    pub shadow_width: f32,
+    /// Highlight tonal width ÷ 100, floored likewise.
+    pub highlight_width: f32,
+    /// Radius, raster pixels: the gaussian that answers "how bright is this
+    /// pixel's neighbourhood?".
+    pub radius_px: f32,
+    /// 1 + Midtone contrast ÷ 100, about the perceptual middle.
+    pub contrast: f32,
+    /// Colour correction ÷ 100: the saturation put back where the gain moved.
+    pub colour_correction: f32,
+    /// False when nothing is being lifted, pulled or steepened: the exact
+    /// identity, and the gaussian is not even run.
+    pub active: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Shadow highlight (docs/08 §3.63) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Blur the picture at Radius and read its luma: that is how
+/// bright each pixel's *neighbourhood* is, and it decides whether the pixel is
+/// being treated as a shadow or a highlight. The pixel's own luma is then
+/// multiplied by a gain those two masks set, its colour rides along with the
+/// gain, and Colour correction puts back the saturation an opened shadow loses.
+///
+/// The blurred picture is a *question*, not an answer: it never contributes a
+/// colour, so nothing here softens the picture.
+pub fn shadow_highlight(rgba: &mut [f32], w: u32, h: u32, p: &ShadowHighlightParams) {
+    if !p.active {
+        return;
+    }
+    // The shared §3.8 gaussian, on the whole picture — the third reuse, after
+    // §3.43's softening and §3.57's distance field. Repeat edges, so the frame's
+    // own border does not read as a dark neighbourhood.
+    let mut soft = rgba.to_vec();
+    blur_gaussian(&mut soft, w, h, p.radius_px, 1, 1.0);
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let a = px[3];
+        let u = unpremult(px);
+        let d = i * 4;
+        let ub = unpremult(&soft[d..d + 4]);
+        let l = (u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2]).max(0.0);
+        let lb = ub[0] * LUMA[0] + ub[1] * LUMA[1] + ub[2] * LUMA[2];
+        // Where the neighbourhood sits on the tone range, perceptually. Clamped
+        // at 1 because a highlight mask has to saturate somewhere, and past
+        // white "brighter" no longer means "more of a highlight".
+        let t = perceptual(lb).min(1.0);
+        let ms = 1.0 - smoothstep_between(0.0, p.shadow_width, t);
+        let mh = smoothstep_between(1.0 - p.highlight_width, 1.0, t);
+        // A multiply, not a gamma (§3.63): monotone, no clamp, no inverse.
+        let lifted = l * (1.0 + ms * p.shadow) / (1.0 + mh * p.highlight);
+        // Midtone contrast about the perceptual middle.
+        let q = ((perceptual(lifted) - 0.5) * p.contrast + 0.5).max(0.0);
+        let out_l = q * q;
+        // A black pixel has no colour to scale and no ratio to take.
+        let k = if l > 1e-6 { out_l / l } else { 1.0 };
+        let mut v = [0.0f32; 3];
+        for c in 0..3 {
+            v[c] = u[c] * k;
+        }
+        let g = v[0] * LUMA[0] + v[1] * LUMA[1] + v[2] * LUMA[2];
+        // The boost applies exactly where the gain differs from 1, so Colour
+        // correction 0 is the identity in colour and a pixel the effect did not
+        // move is not quietly saturated.
+        let sat = 1.0 + p.colour_correction * (k - 1.0).abs().min(1.0);
+        for c in 0..3 {
+            let out = (g + (v[c] - g) * sat).max(0.0);
+            px[c] = px[c] * (1.0 - p.mix) + out * a * p.mix;
+        }
+    }
+}
+
+/// One resolved Median (docs/08 §3.64): the window's half-width in whole raster
+/// pixels, whether the coverage is medianed with the colour, and the mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MedianParams {
+    /// Half the window's width, in whole raster pixels, `0..=`
+    /// [`MEDIAN_MAX_RADIUS`]. 0 is the exact identity.
+    pub radius: i32,
+    /// AE's "Operate on Alpha Channel".
+    pub alpha: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+impl MedianParams {
+    /// The radius held inside the cap §3.64 decision 2 sets. Applied by the
+    /// declaration's `packed`, and again here, so a value that reached this
+    /// struct any other way cannot overrun the fixed-size selection array.
+    #[must_use]
+    pub fn clamped(self) -> Self {
+        Self {
+            radius: self.radius.clamp(0, MEDIAN_MAX_RADIUS),
+            ..self
+        }
+    }
+}
+
+/// The hard cap on Median's raster radius (docs/08 §3.64 decision 2). Mirrored
+/// by `lumit_core::fx::effects::median::Median::MAX_RADIUS` and by the WGSL
+/// kernel's window bound; the §1.6 oracle asserts the three agree.
+pub const MEDIAN_MAX_RADIUS: i32 = 3;
+
+/// The length of the sorted run the selection network carries: `⌈N ÷ 2⌉` at the
+/// cap, where `N = (2·MEDIAN_MAX_RADIUS + 1)²`.
+pub const MEDIAN_KEEP: usize = 25;
+
+/// A value no real pixel reaches, used to pad the selection network's array
+/// (docs/08 §3.64 decision 1). It sorts above every sample, so it can never
+/// become the answer, and it is finite so nothing here does arithmetic on an
+/// infinity.
+const MEDIAN_PAD: f32 = 1e30;
+
+/// Median (docs/08 §3.64) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Every pixel is replaced by the middle value of the little
+/// square of pixels around it, per channel. The selection is a
+/// **compare-exchange network**: sweep the window once, carrying the `⌈N ÷ 2⌉`
+/// smallest values seen so far in a sorted array, and insert each new sample by
+/// bubbling it down with `min`/`max` pairs. Nothing branches on a value, which
+/// is what lets the WGSL twin run the identical comparisons — and because `min`
+/// and `max` are exact, the two paths agree bit-for-bit whatever order they
+/// sweep in.
+///
+/// Edges repeat: a transparent surround would win the vote on a corner pixel and
+/// eat the frame's own border. Unpremultiplied (§2.2); the coverage is medianed
+/// only when `alpha` says so. Radius 0 is the bit-exact identity.
+pub fn median(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams) {
+    let r = p.radius.clamp(0, MEDIAN_MAX_RADIUS);
+    if r == 0 {
+        return;
+    }
+    let n = (2 * r + 1) * (2 * r + 1);
+    // The 1-based rank of the median among `n` samples, and therefore how many
+    // of the smallest the network has to carry.
+    let keep = ((n + 1) / 2) as usize;
+    let src = rgba.to_vec();
+    let (wi, hi) = (w as i64, h as i64);
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut sorted = [[MEDIAN_PAD; 4]; MEDIAN_KEEP];
+            for dy in -r..=r {
+                let sy = (y + i64::from(dy)).clamp(0, hi - 1);
+                for dx in -r..=r {
+                    let sx = (x + i64::from(dx)).clamp(0, wi - 1);
+                    let s = ((sy * wi + sx) * 4) as usize;
+                    let u = unpremult(&src[s..s + 4]);
+                    let mut v = [u[0], u[1], u[2], src[s + 3]];
+                    // The bubble: each rung keeps the smaller of what it held
+                    // and what is passing through, and hands the larger on.
+                    for slot in sorted.iter_mut().take(keep) {
+                        for c in 0..4 {
+                            let lo = slot[c].min(v[c]);
+                            let hi_c = slot[c].max(v[c]);
+                            slot[c] = lo;
+                            v[c] = hi_c;
+                        }
+                    }
+                }
+            }
+            let med = sorted[keep - 1];
+            let d = ((y * wi + x) * 4) as usize;
+            let out_a = if p.alpha { med[3] } else { rgba[d + 3] };
+            for c in 0..3 {
+                rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + med[c] * out_a * p.mix;
+            }
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + out_a * p.mix;
+        }
+    }
+}
+
+/// One resolved Mosaic (docs/08 §3.65): the grid, the sharp-colour switch and
+/// the mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MosaicParams {
+    /// Blocks across and blocks down, each `1..=2000`.
+    pub blocks: [i32; 2],
+    /// On, the block takes its centre pixel's colour; off, the mean of a
+    /// stratified sample of it.
+    pub sharp: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The most samples Mosaic takes along one axis of a block (docs/08 §3.65 note
+/// 2). Mirrored by the WGSL kernel and by
+/// `lumit_core::fx::effects::mosaic::Mosaic::MAX_SAMPLES`.
+pub const MOSAIC_MAX_SAMPLES: i32 = 8;
+
+/// The block bounds one axis of a Mosaic pixel falls in (docs/08 §3.65 note 1).
+///
+/// **Integer division throughout**, deliberately: a block edge decided by
+/// `floor(x ÷ block_width)` in floating point puts a pixel in different blocks
+/// on the two paths wherever the division comes out exact, which is K-399's rule
+/// about a threshold arriving on a coordinate.
+#[must_use]
+pub fn mosaic_span(x: i32, len: i32, blocks: i32) -> (i32, i32) {
+    let i = (x * blocks) / len;
+    ((i * len) / blocks, ((i + 1) * len) / blocks)
+}
+
+/// The `k`-th of `n` stratified sample positions across a block `span` wide
+/// starting at `lo` (docs/08 §3.65). Integer arithmetic, for [`mosaic_span`]'s
+/// reason.
+#[must_use]
+pub fn mosaic_sample(lo: i32, span: i32, n: i32, k: i32) -> i32 {
+    lo + (2 * k * span + span) / (2 * n)
+}
+
+/// Mosaic (docs/08 §3.65) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The frame is cut into a grid and every pixel takes its
+/// block's colour: the centre pixel's with Sharp colours on, otherwise the mean
+/// of an at-most-8×8 stratified sample of the block. A block under eight pixels
+/// across is sampled completely, so a fine mosaic is an exact mean.
+///
+/// Premultiplied (§2.2) — the alpha is blocked with the colour, so a mosaicked
+/// cut-out gets blocky edges. Mix 0 is the bit-exact identity.
+pub fn mosaic(rgba: &mut [f32], w: u32, h: u32, p: &MosaicParams) {
+    let (wi, hi) = (w as i32, h as i32);
+    if wi <= 0 || hi <= 0 {
+        return;
+    }
+    let bx = p.blocks[0].clamp(1, 2000);
+    let by = p.blocks[1].clamp(1, 2000);
+    let src = rgba.to_vec();
+    let at = |x: i32, y: i32| {
+        let s = ((i64::from(y.clamp(0, hi - 1)) * i64::from(wi) + i64::from(x.clamp(0, wi - 1)))
+            * 4) as usize;
+        [src[s], src[s + 1], src[s + 2], src[s + 3]]
+    };
+    for y in 0..hi {
+        let (y0, y1) = mosaic_span(y, hi, by);
+        for x in 0..wi {
+            let (x0, x1) = mosaic_span(x, wi, bx);
+            let v = if p.sharp {
+                at(x0 + (x1 - x0) / 2, y0 + (y1 - y0) / 2)
+            } else {
+                let nx = (x1 - x0).clamp(1, MOSAIC_MAX_SAMPLES);
+                let ny = (y1 - y0).clamp(1, MOSAIC_MAX_SAMPLES);
+                let mut acc = [0.0f32; 4];
+                for j in 0..ny {
+                    let sy = mosaic_sample(y0, y1 - y0, ny, j);
+                    for i in 0..nx {
+                        let sx = mosaic_sample(x0, x1 - x0, nx, i);
+                        let c = at(sx, sy);
+                        for k in 0..4 {
+                            acc[k] += c[k];
+                        }
+                    }
+                }
+                let inv = 1.0 / (nx * ny) as f32;
+                [acc[0] * inv, acc[1] * inv, acc[2] * inv, acc[3] * inv]
+            };
+            let d = ((i64::from(y) * i64::from(wi) + i64::from(x)) * 4) as usize;
+            for c in 0..4 {
+                rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + v[c] * p.mix;
+            }
+        }
+    }
+}
+
+/// The 3×3 Sobel pair, in raster reading order (docs/08 §3.66). Written out
+/// rather than generated, because the WGSL twin spells the same nine numbers in
+/// the same order and the two must sum them identically.
+const SOBEL_X: [f32; 9] = [-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
+/// See [`SOBEL_X`].
+const SOBEL_Y: [f32; 9] = [-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
+
+/// Find edges (docs/08 §3.66) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** A Sobel gradient per channel, taken on the **perceptual**
+/// value rather than on the light (§3.58's curve again): in light the step from
+/// 3.0 to 4.0 in a sunlit sky would outrank the step from 0.01 to 0.05 in a
+/// shadow, though the eye sees the second and not the first.
+///
+/// `invert` is 1 for bright edges on black and 0 for AE's default, dark edges on
+/// white. Unpremultiplied (§2.2); alpha is untouched, so the drawing keeps the
+/// layer's shape. Edges repeat. Mix 0 is the bit-exact identity.
+pub fn find_edges(rgba: &mut [f32], w: u32, h: u32, invert: f32, mix: f32) {
+    let src = rgba.to_vec();
+    let (wi, hi) = (w as i64, h as i64);
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut gx = [0.0f32; 3];
+            let mut gy = [0.0f32; 3];
+            for j in 0..3i64 {
+                let sy = (y + j - 1).clamp(0, hi - 1);
+                for i in 0..3i64 {
+                    let sx = (x + i - 1).clamp(0, wi - 1);
+                    let s = ((sy * wi + sx) * 4) as usize;
+                    let u = unpremult(&src[s..s + 4]);
+                    let k = (j * 3 + i) as usize;
+                    for c in 0..3 {
+                        let t = perceptual(u[c]);
+                        gx[c] += t * SOBEL_X[k];
+                        gy[c] += t * SOBEL_Y[k];
+                    }
+                }
+            }
+            let d = ((y * wi + x) * 4) as usize;
+            let a = rgba[d + 3];
+            for c in 0..3 {
+                let e = (gx[c] * gx[c] + gy[c] * gy[c]).sqrt().min(1.0);
+                // `1 − e` for the pencil drawing, `e` for the glow. Written as
+                // one lerp so neither path takes a branch on the switch.
+                let q = (1.0 - e) + (e - (1.0 - e)) * invert;
+                rgba[d + c] = rgba[d + c] * (1.0 - mix) + q * q * a * mix;
+            }
+        }
+    }
+}
+
+/// One resolved Emboss (docs/08 §3.67): the light's offset in raster pixels, the
+/// gain on the difference, and the mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EmbossParams {
+    /// The vector from the pixel toward the light, in raster pixels — Direction
+    /// and Relief already folded together host-side.
+    pub offset: [f32; 2],
+    /// Contrast ÷ 100.
+    pub contrast: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Emboss (docs/08 §3.67) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Two taps either side of the pixel along the light's axis,
+/// differenced perceptually and written as grey to all three channels — the
+/// stamped-metal look. Relief 0 is flat mid-grey rather than the identity: with
+/// no separation between the taps there is no relief to see.
+///
+/// Unpremultiplied (§2.2); alpha is untouched. Edges repeat. Mix 0 is the
+/// bit-exact identity.
+pub fn emboss(rgba: &mut [f32], w: u32, h: u32, p: &EmbossParams) {
+    let src = rgba.to_vec();
+    let luma_at = |sx: f32, sy: f32| {
+        let t = bilinear_edge(&src, w, h, sx, sy, 1);
+        let u = unpremult(&t);
+        perceptual(u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2])
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            let a = luma_at(px - p.offset[0], py - p.offset[1]);
+            let b = luma_at(px + p.offset[0], py + p.offset[1]);
+            let g = (0.5 + (b - a) * p.contrast).max(0.0);
+            let v = g * g;
+            let d = (y as usize * w as usize + x as usize) * 4;
+            let alpha = rgba[d + 3];
+            for c in 0..3 {
+                rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + v * alpha * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Texturize (docs/08 §3.68).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TexturizeParams {
+    /// The vector from the pixel toward the light, in raster pixels — Light
+    /// direction and Relief already folded together host-side.
+    pub offset: [f32; 2],
+    /// Texture contrast ÷ 100.
+    pub contrast: f32,
+    /// `100 ÷ Scale`: how many copies of the texture span the frame.
+    pub inv_scale: f32,
+    /// 0 Stretch (hold the texture's edge outward), 1 Tile (wrap), 2 Centre
+    /// (no relief outside one copy).
+    pub placement: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Texturize (docs/08 §3.68) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The texture layer is embossed exactly as §3.67 embosses a
+/// picture, and the light and shade that come out multiply this layer's colour.
+/// `texture` is the referenced layer already rendered at this raster
+/// (docs/impl/layer-input.md), which is why Placement is a *fitting* rather than
+/// a resize: see §3.68 decision 2.
+///
+/// Premultiplied (§2.2) — the relief is a scalar multiply, which is the same
+/// operation on premultiplied and on straight colour — but the *texture's* taps
+/// are unpremultiplied, so a texture with a soft edge does not read as black
+/// there. Mix 0 is the bit-exact identity.
+pub fn texturize(rgba: &mut [f32], texture: &[f32], w: u32, h: u32, p: &TexturizeParams) {
+    let (fw, fh) = (w as f32, h as f32);
+    let du = p.offset[0] * p.inv_scale / fw;
+    let dv = p.offset[1] * p.inv_scale / fh;
+    let tap = |u: f32, v: f32| -> Option<f32> {
+        let (su, sv) = match p.placement {
+            // Tile: wrap into 0..1 by subtracting the floor, the form WGSL
+            // spells op-for-op (§3.38's note about `rem_euclid`).
+            1 => (u - u.floor(), v - v.floor()),
+            // Centre: nothing outside one copy is textured.
+            2 if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) => return None,
+            // Stretch (and Centre inside the copy): hold the edge outward, which
+            // `bilinear_edge`'s repeat policy already does.
+            _ => (u, v),
+        };
+        let t = bilinear_edge(texture, w, h, su * fw, sv * fh, 1);
+        let c = unpremult(&t);
+        Some(perceptual(c[0] * LUMA[0] + c[1] * LUMA[1] + c[2] * LUMA[2]))
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let u = ((x as f32 + 0.5) / fw - 0.5) * p.inv_scale + 0.5;
+            let v = ((y as f32 + 0.5) / fh - 0.5) * p.inv_scale + 0.5;
+            let r = match (tap(u + du, v + dv), tap(u - du, v - dv)) {
+                (Some(b), Some(a)) => (b - a) * p.contrast,
+                _ => 0.0,
+            };
+            let d = (y as usize * w as usize + x as usize) * 4;
+            for c in 0..3 {
+                let out = (rgba[d + c] * (1.0 + r)).max(0.0);
+                rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + out * p.mix;
+            }
+        }
+    }
+}
+
+/// One resolved Broadcast safe (docs/08 §3.69).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BroadcastSafeParams {
+    /// The largest `Y + C` the pixel may carry — Maximum signal and the
+    /// standard's setup pedestal already folded together host-side, which is why
+    /// neither kernel branches on NTSC versus PAL.
+    pub target: f32,
+    /// 0 Reduce brightness, 1 Reduce saturation, 2 Key out unsafe, 3 Key out
+    /// safe.
+    pub mode: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The composite chroma amplitude of an encoded colour (docs/08 §3.69): the
+/// classic `U`/`V` weights, whose magnitude is what rides on top of the luma in
+/// a composite signal.
+#[must_use]
+pub fn broadcast_chroma(v: [f32; 3], y: f32) -> f32 {
+    let cu = 0.493 * (v[2] - y);
+    let cv = 0.877 * (v[0] - y);
+    (cu * cu + cv * cv).sqrt()
+}
+
+/// Broadcast safe (docs/08 §3.69) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** The pixel is encoded (the batch's √, §3.69 decision 2),
+/// its composite amplitude `Y + C` is measured, and where that is over the
+/// target one of four things happens: the pixel is scaled down, drained of
+/// colour, keyed out, or kept as the only thing left. A pixel already under the
+/// target is untouched by the two repair modes, by construction rather than by
+/// short-circuit.
+///
+/// Unpremultiplied (§2.2). Mix 0 is the bit-exact identity.
+pub fn broadcast_safe(rgba: &mut [f32], p: &BroadcastSafeParams) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let u = unpremult(px);
+        let v = [perceptual(u[0]), perceptual(u[1]), perceptual(u[2])];
+        let y = v[0] * LUMA[0] + v[1] * LUMA[1] + v[2] * LUMA[2];
+        let c = broadcast_chroma(v, y);
+        let amp = y + c;
+        let mut out = v;
+        let mut out_a = a;
+        match p.mode {
+            // Scale the whole signal: Y and C are both linear in it, so the
+            // factor that lands the amplitude on the target is exact.
+            0 => {
+                let k = (p.target / amp.max(1e-6)).min(1.0);
+                for ch in &mut out {
+                    *ch *= k;
+                }
+            }
+            // Pull toward the grey of the same luma: Y is unchanged and C
+            // scales, so the factor is again exact. A pixel whose luma alone is
+            // over the target ends fully desaturated and still hot — §3.69
+            // decision 3 says so rather than hiding it.
+            1 => {
+                let m = (p.target - y).clamp(0.0, c) / c.max(1e-6);
+                for ch in &mut out {
+                    *ch = y + (*ch - y) * m;
+                }
+            }
+            // The two diagnostic views. The comparison is `>` in one and `<=`
+            // in the other, so the two are exact complements.
+            2 if amp > p.target => out_a = 0.0,
+            3 if amp <= p.target => out_a = 0.0,
+            _ => {}
+        }
+        for c in 0..3 {
+            let lit = out[c] * out[c];
+            px[c] = px[c] * (1.0 - p.mix) + lit * out_a * p.mix;
+        }
+        px[3] = a * (1.0 - p.mix) + out_a * p.mix;
+    }
+}
+
+/// One resolved Beam (docs/08 §3.73), reduced to what both paths read. The two
+/// ends of the drawn interval are already clamped, and `active` records the
+/// degenerate case so neither path divides by a zero-length beam.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeamParams {
+    /// Where the beam starts, raster pixels.
+    pub start: [f32; 2],
+    /// `End − Start`, raster pixels.
+    pub axis: [f32; 2],
+    /// `1 ÷ |axis|²`, floored.
+    pub inv_len2: f32,
+    /// The tail, as a fraction of the axis, already clamped.
+    pub u0: f32,
+    /// The head; never below [`u0`](Self::u0).
+    pub u1: f32,
+    /// `1 ÷ (u1 − u0)`, floored; only read when `active`.
+    pub inv_span: f32,
+    /// The half-thickness at the tail, raster pixels.
+    pub half0: f32,
+    /// The half-thickness at the head, raster pixels.
+    pub half1: f32,
+    /// Softness ÷ 100, floored above zero.
+    pub soft: f32,
+    /// The core's colour, scene-linear RGB.
+    pub inside: [f32; 3],
+    /// The rim's colour, scene-linear RGB.
+    pub outside: [f32; 3],
+    /// False when the drawn interval is empty — Time 0 (§3.73's fourth note).
+    pub active: bool,
+    /// Whether the layer that arrived is kept under the beam.
+    pub composite: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// One pixel's beam: its premultiplied colour and its coverage — the expression
+/// both paths evaluate, written once so [`beam`] and the WGSL twin cannot
+/// disagree about it.
+#[must_use]
+pub fn beam_sample(px: f32, py: f32, p: &BeamParams) -> ([f32; 3], f32) {
+    if !p.active {
+        return ([0.0; 3], 0.0);
+    }
+    let rx = px - p.start[0];
+    let ry = py - p.start[1];
+    let s = ((rx * p.axis[0] + ry * p.axis[1]) * p.inv_len2).clamp(p.u0, p.u1);
+    let qx = rx - s * p.axis[0];
+    let qy = ry - s * p.axis[1];
+    let r = (qx * qx + qy * qy).sqrt();
+    let f = (s - p.u0) * p.inv_span;
+    let half = p.half0 + (p.half1 - p.half0) * f;
+    // The colour crossover: the core is the inside colour, the rim the outside
+    // one, and Softness is the share of the half-width the rim occupies. The
+    // crossover takes the rim's INNER HALF, so the outside colour is reached
+    // before the edge and is a band rather than a hairline nobody can see.
+    let k = ((r / half.max(1e-3) - (1.0 - p.soft)) / (p.soft * 0.5)).clamp(0.0, 1.0);
+    let cov = (half + 0.5 - r).clamp(0.0, 1.0);
+    let mut c = [0.0f32; 3];
+    for (i, ch) in c.iter_mut().enumerate() {
+        *ch = (p.inside[i] + (p.outside[i] - p.inside[i]) * k) * cov;
+    }
+    (c, cov)
+}
+
+/// Beam (docs/08 §3.73) — the CPU reference and §1.6 oracle. The beam is written
+/// over the picture (or over nothing, with Composite on original off) in
+/// premultiplied form, all four channels.
+pub fn beam(rgba: &mut [f32], w: u32, h: u32, p: &BeamParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let (c, cov) = beam_sample(x as f32 + 0.5, y as f32 + 0.5, p);
+            let keep = if p.composite { 1.0 - cov } else { 0.0 };
+            for i in 0..3 {
+                let lit = rgba[d + i] * keep + c[i];
+                rgba[d + i] = rgba[d + i] * (1.0 - p.mix) + lit * p.mix;
+            }
+            let lit = rgba[d + 3] * keep + cov;
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + lit * p.mix;
+        }
+    }
+}
+
+/// The most segments a bolt and its forks may occupy (docs/08 §3.74's first
+/// decision). Three kilobytes of uniform, and more bolt than Forking 100 asks
+/// for.
+pub const LIGHTNING_SEGMENTS: usize = 192;
+
+/// One resolved Lightning (docs/08 §3.74), reduced to what both paths read.
+///
+/// **The geometry is already built** — §3.74's first decision. Every segment is
+/// `(ax, ay, bx, by)` in raster pixels and carries its own fade, so the kernel
+/// does no randomness at all and the two paths are handed the identical numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightningParams {
+    /// The bolt, as straight segments in raster pixels.
+    pub segments: [[f32; 4]; LIGHTNING_SEGMENTS],
+    /// Each segment's brightness, 0..1, already carrying Decay and the fork dim.
+    pub fades: [f32; LIGHTNING_SEGMENTS],
+    /// How many of the above are real.
+    pub count: u32,
+    /// The core's half-width in raster pixels.
+    pub core_radius: f32,
+    /// The glow's reach in raster pixels.
+    pub glow_radius: f32,
+    /// Glow opacity ÷ 100.
+    pub glow_opacity: f32,
+    /// The core's colour, scene-linear RGB.
+    pub core_colour: [f32; 3],
+    /// The glow's colour, scene-linear RGB.
+    pub glow_colour: [f32; 3],
+    /// Whether the layer that arrived is kept under the bolt.
+    pub composite: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The distance from a point to one segment — the capsule both paths measure,
+/// with the projection clamped so the ends are round rather than infinite.
+#[must_use]
+fn segment_distance(px: f32, py: f32, s: &[f32; 4]) -> f32 {
+    let dx = s[2] - s[0];
+    let dy = s[3] - s[1];
+    let rx = px - s[0];
+    let ry = py - s[1];
+    let t = ((rx * dx + ry * dy) / (dx * dx + dy * dy).max(1e-6)).clamp(0.0, 1.0);
+    let ox = rx - t * dx;
+    let oy = ry - t * dy;
+    (ox * ox + oy * oy).sqrt()
+}
+
+/// One pixel's bolt: the core and glow weights — the expression both paths
+/// evaluate. Taken as a **maximum** over the segments, never a sum (§3.74's
+/// fourth decision), so the joints and the forks do not bead.
+#[must_use]
+pub fn lightning_sample(px: f32, py: f32, p: &LightningParams) -> (f32, f32) {
+    let mut core = 0.0f32;
+    let mut glow = 0.0f32;
+    let core_r = p.core_radius;
+    let glow_r = p.glow_radius;
+    for i in 0..p.count as usize {
+        let d = segment_distance(px, py, &p.segments[i]);
+        let fade = p.fades[i];
+        let c = ((core_r + 0.5 - d) / core_r.max(0.5)).clamp(0.0, 1.0);
+        core = core.max(fade * c);
+        let g = ((glow_r - d) / glow_r.max(1e-3)).clamp(0.0, 1.0);
+        glow = glow.max(fade * g * g);
+    }
+    (core, glow)
+}
+
+/// Lightning (docs/08 §3.74) — the CPU reference and §1.6 oracle. Two weights a
+/// pixel become one premultiplied colour and one coverage.
+pub fn lightning(rgba: &mut [f32], w: u32, h: u32, p: &LightningParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let (core, glow) = lightning_sample(x as f32 + 0.5, y as f32 + 0.5, p);
+            // The glow lights what the core has not already taken, so the two
+            // add to a coverage that cannot exceed one.
+            let gw = glow * p.glow_opacity * (1.0 - core);
+            let cov = (core + gw).clamp(0.0, 1.0);
+            let keep = if p.composite { 1.0 - cov } else { 0.0 };
+            for i in 0..3 {
+                let c = p.core_colour[i] * core + p.glow_colour[i] * gw;
+                let lit = rgba[d + i] * keep + c;
+                rgba[d + i] = rgba[d + i] * (1.0 - p.mix) + lit * p.mix;
+            }
+            let lit = rgba[d + 3] * keep + cov;
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + lit * p.mix;
+        }
+    }
+}
+
+/// The most waves alive at once (docs/08 §3.75's fourth note): a budget, and one
+/// that cannot be typed past.
+pub const RADIO_WAVES_MAX: i32 = 32;
+
+/// One resolved Radio waves (docs/08 §3.75), reduced to what both paths read.
+/// The polygon is already solved into one sector, for a **unit** radius, because
+/// every wave is that shape scaled (§3.75's second note).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RadioWavesParams {
+    /// Where the waves are emitted, raster pixels.
+    pub centre: [f32; 2],
+    /// The unit shape's first vertex, in the sector's own frame.
+    pub vertex: [f32; 2],
+    /// The outward unit normal of the edge leaving it.
+    pub normal: [f32; 2],
+    /// One sector, radians: `2π ÷ Sides`.
+    pub period: f32,
+    /// Rotation in radians, from straight up, clockwise.
+    pub rotation: f32,
+    /// Spin in radians per second.
+    pub spin: f32,
+    /// The newest wave's index, `floor(Time × Frequency)` — taken host-side
+    /// (K-399).
+    pub newest: i32,
+    /// How many waves to walk back from it.
+    pub count: i32,
+    /// The Time control, seconds.
+    pub time: f32,
+    /// `1 ÷ Frequency`, seconds between waves.
+    pub period_s: f32,
+    /// Expansion in raster pixels per second.
+    pub expansion: f32,
+    /// Lifespan in seconds, floored above zero.
+    pub lifespan: f32,
+    /// The stroke's half-width in raster pixels.
+    pub half_width: f32,
+    /// Fade in as a share of the lifespan, floored above zero.
+    pub fade_in: f32,
+    /// Fade out as a share of the lifespan, floored above zero.
+    pub fade_out: f32,
+    /// The stroke's colour, scene-linear RGB.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// Whether the layer that arrived is kept under the waves.
+    pub composite: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// One pixel's coverage under the live waves — the expression both paths
+/// evaluate. §3.71's sector fold, once per wave, against a shape scaled to that
+/// wave's radius.
+#[must_use]
+pub fn radio_waves_sample(px: f32, py: f32, p: &RadioWavesParams) -> f32 {
+    let rx = px - p.centre[0];
+    let ry = py - p.centre[1];
+    let r = (rx * rx + ry * ry).sqrt();
+    let phi = ry.atan2(rx) + std::f32::consts::FRAC_PI_2;
+    let mut acc = 0.0f32;
+    for j in 0..p.count {
+        let k = p.newest - j;
+        if k < 0 {
+            continue;
+        }
+        let age = p.time - k as f32 * p.period_s;
+        if age < 0.0 || age > p.lifespan {
+            continue;
+        }
+        let rad = age * p.expansion;
+        // The sector fold: `floor(x + ½)` and never `round` (§3.47's reason).
+        let turned = phi - p.rotation - p.spin * age;
+        let a = (turned - p.period * (turned / p.period + 0.5).floor()).abs();
+        let (sin, cos) = a.sin_cos();
+        let dx = r * cos - rad * p.vertex[0];
+        let dy = r * sin - rad * p.vertex[1];
+        let dist = (dx * p.normal[0] + dy * p.normal[1]).abs();
+        let cov = ((p.half_width + 0.5 - dist) / p.half_width.max(0.5)).clamp(0.0, 1.0);
+        let u = age / p.lifespan;
+        let fade = (u / p.fade_in)
+            .clamp(0.0, 1.0)
+            .min(((1.0 - u) / p.fade_out).clamp(0.0, 1.0));
+        acc = acc.max(cov * fade);
+    }
+    acc
+}
+
+/// Radio waves (docs/08 §3.75) — the CPU reference and §1.6 oracle.
+pub fn radio_waves(rgba: &mut [f32], w: u32, h: u32, p: &RadioWavesParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let cov = radio_waves_sample(x as f32 + 0.5, y as f32 + 0.5, p) * p.opacity;
+            let keep = if p.composite { 1.0 - cov } else { 0.0 };
+            for i in 0..3 {
+                let lit = rgba[d + i] * keep + p.colour[i] * cov;
+                rgba[d + i] = rgba[d + i] * (1.0 - p.mix) + lit * p.mix;
+            }
+            let lit = rgba[d + 3] * keep + cov;
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + lit * p.mix;
+        }
+    }
+}
+
+/// One resolved Vegas (docs/08 §3.76), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VegasParams {
+    /// True to read the alpha rather than the perceptual luma.
+    pub from_alpha: bool,
+    /// The contour's level, 0..1 in the read value.
+    pub level: f32,
+    /// The stroke's half-width in raster pixels.
+    pub half_width: f32,
+    /// The soft band either side of it, raster pixels, floored above zero.
+    pub band: f32,
+    /// `1 ÷ Segment length`, raster pixels.
+    pub inv_segment: f32,
+    /// The lit share of one segment, 0..1.
+    pub duty: f32,
+    /// Rotation in turns — one full turn marches the dashes on by a segment.
+    pub phase: f32,
+    /// The stroke's colour, scene-linear RGB.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// Whether the layer that arrived is kept under the stroke.
+    pub composite: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The value Vegas takes its contour from at one pixel: the perceptual luma of
+/// the unpremultiplied colour, or the alpha (§3.76 decision 5).
+#[must_use]
+fn vegas_value(px: &[f32], from_alpha: bool) -> f32 {
+    if from_alpha {
+        return px[3];
+    }
+    let u = unpremult(px);
+    perceptual(u[0]) * LUMA[0] + perceptual(u[1]) * LUMA[1] + perceptual(u[2]) * LUMA[2]
+}
+
+/// One pixel's stroke coverage — the expression both paths evaluate. `l` is the
+/// smoothed value and `gx`/`gy` the Sobel pair, already normalised, so this
+/// function is identical either side of the fetch.
+///
+/// `px`/`py` are measured **from the middle of the frame**, not from its corner,
+/// and that is not cosmetic: the dash's phase is the pixel's position projected
+/// on the contour's direction, so an error of ε in that direction moves the
+/// phase by `|p|·ε`. Halving the arm halves the wobble for nothing.
+#[must_use]
+pub fn vegas_stroke(px: f32, py: f32, l: f32, gx: f32, gy: f32, p: &VegasParams) -> f32 {
+    let g = (gx * gx + gy * gy).sqrt();
+    // The signed distance to the level set, in pixels (§3.76 decision 1). A flat
+    // neighbourhood sends this to infinity, which switches the stroke off rather
+    // than lighting it.
+    let sd = (l - p.level) / g.max(1e-6);
+    let across = ((p.half_width - sd.abs()) / p.band + 0.5).clamp(0.0, 1.0);
+    // The contour's own direction, and the dash laid along it.
+    let inv = 1.0 / g.max(1e-6);
+    let tx = -gy * inv;
+    let ty = gx * inv;
+    let phase = (px * tx + py * ty) * p.inv_segment + p.phase;
+    let frac = phase - phase.floor();
+    let soft = (p.band * p.inv_segment).max(1e-4);
+    let along = ((p.duty - frac) / soft + 0.5).clamp(0.0, 1.0);
+    across * along
+}
+
+/// The smoothing and derivative halves of the 5×5 Sobel (docs/08 §3.76 decision
+/// 1). Five taps of smoothing either way is what makes the contour's *direction*
+/// steady enough to lay a dash along: a 3×3 gradient on a compressed gradient
+/// points a different way in every pixel, and the dashes come out as speckle.
+pub const VEGAS_SMOOTH: [f32; 5] = [1.0, 4.0, 6.0, 4.0, 1.0];
+/// The derivative half; see [`VEGAS_SMOOTH`].
+pub const VEGAS_DERIV: [f32; 5] = [-1.0, -2.0, 0.0, 2.0, 1.0];
+
+/// Vegas (docs/08 §3.76) — the CPU reference and §1.6 oracle. One separable 5×5
+/// Sobel over the neighbourhood, clamped at the frame's edge, then the stroke.
+pub fn vegas(rgba: &mut [f32], w: u32, h: u32, p: &VegasParams) {
+    let src = rgba.to_vec();
+    let at = |x: i32, y: i32| -> f32 {
+        let cx = x.clamp(0, w as i32 - 1) as usize;
+        let cy = y.clamp(0, h as i32 - 1) as usize;
+        let d = (cy * w as usize + cx) * 4;
+        vegas_value(&src[d..d + 4], p.from_alpha)
+    };
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let d = (y as usize * w as usize + x as usize) * 4;
+            let mut l = 0.0f32;
+            let mut gx = 0.0f32;
+            let mut gy = 0.0f32;
+            for j in 0..5 {
+                for i in 0..5 {
+                    let v = at(x + i as i32 - 2, y + j as i32 - 2);
+                    l += VEGAS_SMOOTH[i] * VEGAS_SMOOTH[j] * v;
+                    gx += VEGAS_DERIV[i] * VEGAS_SMOOTH[j] * v;
+                    gy += VEGAS_SMOOTH[i] * VEGAS_DERIV[j] * v;
+                }
+            }
+            // 16 for each smoothing pass, 8 for the derivative's own scale.
+            let l = l * (1.0 / 256.0);
+            let gx = gx * (1.0 / 128.0);
+            let gy = gy * (1.0 / 128.0);
+            let cov = vegas_stroke(
+                x as f32 + 0.5 - w as f32 * 0.5,
+                y as f32 + 0.5 - h as f32 * 0.5,
+                l,
+                gx,
+                gy,
+                p,
+            ) * p.opacity;
+            let keep = if p.composite { 1.0 - cov } else { 0.0 };
+            for ch in 0..3 {
+                let lit = rgba[d + ch] * keep + p.colour[ch] * cov;
+                rgba[d + ch] = rgba[d + ch] * (1.0 - p.mix) + lit * p.mix;
+            }
+            let lit = rgba[d + 3] * keep + cov;
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + lit * p.mix;
+        }
+    }
+}
+
+/// One resolved Add grain (docs/08 §3.77), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AddGrainParams {
+    /// The grain's amplitude in perceptual units, per channel — Intensity, the
+    /// channel gain and the fixed 0.1 scale already multiplied together.
+    pub amplitude: [f32; 3],
+    /// `1 ÷ Size`, raster pixels.
+    pub inv_size: f32,
+    /// Softness ÷ 100.
+    pub softness: f32,
+    /// The three tonal weights, each already divided by 100.
+    pub tonal: [f32; 3],
+    /// True to read one lane for all three channels.
+    pub monochrome: bool,
+    /// Which draw the grain follows (§2.4).
+    pub seed: u32,
+    /// The frame's draw, zero when Animate is off.
+    pub tick: i32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// One channel's grain at one cell coordinate — the expression both paths
+/// evaluate. The hard reading is one flat cell, the soft one the same lattice
+/// interpolated, and Softness crossfades them (§3.77's second note).
+#[must_use]
+pub fn grain_at(qx: f32, qy: f32, lane: u32, p: &AddGrainParams) -> f32 {
+    let hard = hash01(p.seed, lane, qx.floor() as i32, qy.floor() as i32, p.tick) * 2.0 - 1.0;
+    let soft = super::noise::value3(p.seed, lane, qx, qy, p.tick as f32, 0);
+    hard + (soft - hard) * p.softness
+}
+
+/// Add grain (docs/08 §3.77) — the CPU reference and §1.6 oracle. Unpremultiplied
+/// (§2.2); the wobble is added on the perceptual value and squared back.
+pub fn add_grain(rgba: &mut [f32], w: u32, h: u32, p: &AddGrainParams) {
+    // Intensity 0: the bit-exact identity, and it needs saying rather than
+    // arriving — `perceptual(v)²` is not `v` in the last bit (the WGSL twin
+    // short-circuits identically).
+    if p.amplitude[0] == 0.0 && p.amplitude[1] == 0.0 && p.amplitude[2] == 0.0 {
+        return;
+    }
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let a = rgba[d + 3];
+            let u = unpremult(&rgba[d..d + 4]);
+            let qx = (x as f32 + 0.5) * p.inv_size;
+            let qy = (y as f32 + 0.5) * p.inv_size;
+            for c in 0..3 {
+                let v = perceptual(u[c]);
+                // Three hats summing to one, so 100/100/100 is provably neutral.
+                let h0 = (1.0 - 2.0 * v).clamp(0.0, 1.0);
+                let h2 = (2.0 * v - 1.0).clamp(0.0, 1.0);
+                let weight = p.tonal[0] * h0 + p.tonal[1] * (1.0 - h0 - h2) + p.tonal[2] * h2;
+                let lane = if p.monochrome { 0 } else { c as u32 };
+                let g = grain_at(qx, qy, lane, p);
+                let out = (v + g * p.amplitude[c] * weight).max(0.0);
+                rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + out * out * a * p.mix;
+            }
+        }
+    }
+}
+
+/// The most straight pieces one path-drawn effect may occupy — the budget
+/// Scribble's hatch, Stroke's brush trail and Vegas' mask stroke all draw from
+/// (docs/08 §3.78, §3.79, §3.76).
+///
+/// A cap for §3.74's reason: the geometry rides in a uniform, and a uniform is a
+/// fixed size. 512 is generous — a full-frame 1080p ellipse flattens to a few
+/// hundred points at the K-408 tolerance — and what happens past it is a
+/// coarsening, never a fault: [`path_chain`] keeps every part of the shape and
+/// merges pieces to fit, Scribble widens its own spacing before it gets here,
+/// and Stroke spaces its dots out.
+pub const PATH_PRIMITIVES: usize = 512;
+
+/// [`PathDrawParams::style`]: the drawing sits on the picture that arrived.
+pub const PAINT_ON_ORIGINAL: u32 = 0;
+/// [`PathDrawParams::style`]: the drawing is all there is.
+pub const PAINT_ON_TRANSPARENT: u32 = 1;
+/// [`PathDrawParams::style`]: the drawing is a *hole* — it reveals the picture
+/// that arrived and hides the rest of it. AE's Reveal Original Image.
+pub const PAINT_REVEAL_ORIGINAL: u32 = 2;
+
+/// A point that lifts the pen: the edges into and out of it are not drawn, and
+/// neither adds to the distance along (docs/08 §3.78).
+///
+/// One continuous line is what Scribble wants — the pen travels from the end of
+/// each stroke to the start of the next, which is what makes it read as a
+/// scribble rather than as a comb — but a mask with a notch in it has *two*
+/// strokes on one line, and joining those would draw straight through the hole.
+/// So the chain carries a lift, spelled as a non-finite point because no real
+/// vertex can ever collide with one.
+pub const PEN_UP: [f32; 2] = [f32::NAN, f32::NAN];
+
+/// One resolved path drawing (docs/08 §3.78, §3.79 and §3.76's Mask/Path
+/// source), reduced to what both paths read.
+///
+/// # In plain terms
+///
+/// Three effects draw a *line* rather than a picture: Scribble fills a mask with
+/// pencil strokes, Stroke walks a brush round one, and Vegas can march its
+/// dashes along one. They differ entirely in **where the line goes** and hardly
+/// at all in **how it is drawn**, so the line is worked out first, on the CPU,
+/// and all three hand the same small description to the same kernel.
+///
+/// **The geometry is already built.** It arrives here as a list of straight
+/// pieces in **raster pixels**, each carrying how far along the drawing its
+/// start sits. That is §3.74's first decision applied to a whole family:
+/// neither render path generates geometry, so neither can generate it
+/// differently, and §1.6's comparison is handed identical numbers rather than
+/// two hashes that must agree.
+///
+/// A `count` of zero is the documented no-op — an unset mask row, a deleted
+/// mask, a mask with no area — and renders the input unchanged.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PathDrawParams {
+    /// The drawing, as `(ax, ay, bx, by)` in raster pixels.
+    pub segments: [[f32; 4]; PATH_PRIMITIVES],
+    /// How far along the whole drawing each piece's `a` end sits, raster pixels
+    /// — what lets a dash be evenly spaced *round* a path rather than projected
+    /// across it.
+    pub arcs: [f32; PATH_PRIMITIVES],
+    /// How many of the above are real.
+    pub count: u32,
+    /// Half the drawn width, raster pixels.
+    pub half_width: f32,
+    /// The soft band either side of it, raster pixels, floored above zero.
+    pub band: f32,
+    /// `1 ÷ dash length`, raster pixels — 0 for an undashed drawing.
+    pub inv_segment: f32,
+    /// The lit share of one dash; **2 for a continuous line**, which is how
+    /// Scribble and Stroke switch the dash off without a branch (§3.76's own
+    /// convention, and part of why there is one kernel and not three).
+    pub duty: f32,
+    /// The dash's phase in turns.
+    pub phase: f32,
+    /// How far the drawing is wobbled, raster pixels. 0 is no wobble at all and
+    /// skips the noise entirely.
+    pub wiggle_amp: f32,
+    /// The wobble's frequency, cells per raster pixel.
+    pub wiggle_freq: f32,
+    /// Where in the wobble's evolution this frame sits — taken from layer time
+    /// host-side, so the kernel never sees a clock (§2.4).
+    pub wiggle_tick: f32,
+    /// The wobble's seed.
+    pub seed: u32,
+    /// The drawing's colour, scene-linear RGB.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// One of [`PAINT_ON_ORIGINAL`], [`PAINT_ON_TRANSPARENT`],
+    /// [`PAINT_REVEAL_ORIGINAL`].
+    pub style: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+impl PathDrawParams {
+    /// An empty drawing — the no-op every path effect degrades to, and the base
+    /// each of them fills in with `..PathDrawParams::blank()`.
+    ///
+    /// Not [`Default`], because an array of 512 does not derive one.
+    #[must_use]
+    pub fn blank() -> Self {
+        Self {
+            segments: [[0.0; 4]; PATH_PRIMITIVES],
+            arcs: [0.0; PATH_PRIMITIVES],
+            count: 0,
+            half_width: 0.0,
+            band: 0.5,
+            inv_segment: 0.0,
+            duty: 2.0,
+            phase: 0.0,
+            wiggle_amp: 0.0,
+            wiggle_freq: 0.0,
+            wiggle_tick: 0.0,
+            seed: 0,
+            colour: [0.0; 3],
+            opacity: 0.0,
+            style: PAINT_ON_ORIGINAL,
+            mix: 0.0,
+        }
+    }
+}
+
+/// Fill `p`'s geometry from a chain of points in raster pixels, trimmed to the
+/// `start_pct`..`end_pct` share of its own drawn length (docs/08 §3.78).
+///
+/// The chain is one continuous line with [`PEN_UP`] lifts in it, and the trim is
+/// **by distance along the line**, which is what makes Start and End behave like
+/// a pen drawing the thing rather than like a pair of clipping planes.
+///
+/// Past [`PATH_PRIMITIVES`] the chain is **coarsened, not cut**: every n'th
+/// vertex is kept and the chords between them drawn, so the whole shape still
+/// appears, slightly straighter. A coarsened chain can also swallow a pen-up,
+/// joining two strokes that should be apart — only reachable past the cap, and
+/// the one producer of lifts widens its spacing to stay under it.
+pub fn path_chain(pts: &[[f32; 2]], start_pct: f32, end_pct: f32, p: &mut PathDrawParams) {
+    p.count = 0;
+    if pts.len() < 2 {
+        return;
+    }
+    let edges = pts.len() - 1;
+    let stride = edges.div_ceil(PATH_PRIMITIVES).max(1);
+    let kept = edges.div_ceil(stride);
+    let at = |k: usize| pts[(k * stride).min(pts.len() - 1)];
+    // A chord is drawn only when both its ends are real; a lift is skipped and
+    // does not advance the distance along, because the pen is off the paper.
+    let chord = |k: usize| -> Option<([f32; 4], f32)> {
+        let (a, b) = (at(k), at(k + 1));
+        if !(a[0].is_finite() && a[1].is_finite() && b[0].is_finite() && b[1].is_finite()) {
+            return None;
+        }
+        let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+        (len > 0.0).then_some(([a[0], a[1], b[0], b[1]], len))
+    };
+    let mut total = 0.0f32;
+    for k in 0..kept {
+        if let Some((_, len)) = chord(k) {
+            total += len;
+        }
+    }
+    let lo = (start_pct.min(end_pct) / 100.0).clamp(0.0, 1.0);
+    let hi = (start_pct.max(end_pct) / 100.0).clamp(0.0, 1.0);
+    let (s0, s1) = (total * lo, total * hi);
+    let mut arc = 0.0f32;
+    let mut n = 0usize;
+    for k in 0..kept {
+        let Some((c, len)) = chord(k) else {
+            continue;
+        };
+        let (e0, e1) = (arc, arc + len);
+        arc = e1;
+        if e1 <= s0 || e0 >= s1 {
+            continue;
+        }
+        let t0 = ((s0 - e0) / len).clamp(0.0, 1.0);
+        let t1 = ((s1 - e0) / len).clamp(0.0, 1.0);
+        if t1 <= t0 {
+            continue;
+        }
+        let (dx, dy) = (c[2] - c[0], c[3] - c[1]);
+        p.segments[n] = [
+            c[0] + dx * t0,
+            c[1] + dy * t0,
+            c[0] + dx * t1,
+            c[1] + dy * t1,
+        ];
+        p.arcs[n] = e0 + len * t0;
+        n += 1;
+        if n == PATH_PRIMITIVES {
+            break;
+        }
+    }
+    p.count = n as u32;
+}
+
+/// The wobble: where this pixel *really* samples the drawing from (docs/08
+/// §3.78's second decision).
+///
+/// The scribble is not wobbled — the paper is. Displacing the sample point by a
+/// smooth noise field costs one lookup a pixel and gives every stroke the same
+/// hand-drawn waver, where wobbling the geometry would have cost eight times the
+/// pieces to say the same thing. `wiggle_amp` 0 returns the point untouched, bit
+/// for bit, which is what the other two consumers pass.
+#[must_use]
+pub fn path_draw_warp(px: f32, py: f32, p: &PathDrawParams) -> (f32, f32) {
+    if p.wiggle_amp <= 0.0 {
+        return (px, py);
+    }
+    let (qx, qy) = (px * p.wiggle_freq, py * p.wiggle_freq);
+    let wx = value3(p.seed, 0, qx, qy, p.wiggle_tick, 0) * 2.0 - 1.0;
+    let wy = value3(p.seed, 1, qx, qy, p.wiggle_tick, 0) * 2.0 - 1.0;
+    (px + wx * p.wiggle_amp, py + wy * p.wiggle_amp)
+}
+
+/// One pixel's coverage — the expression both paths evaluate. A **maximum** over
+/// the pieces, never a sum, for §3.74's reason: every joint is shared by two of
+/// them and a sum would bead at each one.
+#[must_use]
+pub fn path_draw_sample(px: f32, py: f32, p: &PathDrawParams) -> f32 {
+    let (qx, qy) = path_draw_warp(px, py, p);
+    let mut cov = 0.0f32;
+    for i in 0..p.count as usize {
+        let s = &p.segments[i];
+        let (dx, dy) = (s[2] - s[0], s[3] - s[1]);
+        let (rx, ry) = (qx - s[0], qy - s[1]);
+        let len2 = (dx * dx + dy * dy).max(1e-6);
+        let t = ((rx * dx + ry * dy) / len2).clamp(0.0, 1.0);
+        let (ox, oy) = (rx - t * dx, ry - t * dy);
+        let d = (ox * ox + oy * oy).sqrt();
+        let across = ((p.half_width - d) / p.band + 0.5).clamp(0.0, 1.0);
+        if across <= 0.0 {
+            continue;
+        }
+        // How far along the whole drawing this pixel's nearest point sits —
+        // measured, not projected, which is the thing §3.76's third decision
+        // could not do without a path to trace.
+        let phase = (p.arcs[i] + t * len2.sqrt()) * p.inv_segment + p.phase;
+        let frac = phase - phase.floor();
+        let soft = (p.band * p.inv_segment).max(1e-4);
+        let along = ((p.duty - frac) / soft + 0.5).clamp(0.0, 1.0);
+        cov = cov.max(across * along);
+    }
+    cov * p.opacity
+}
+
+/// The shared path drawing (docs/08 §3.78, §3.79, §3.76) — the CPU reference and
+/// §1.6 oracle for all three of its consumers. One coverage a pixel, then the
+/// paint style.
+pub fn path_draw(rgba: &mut [f32], w: u32, h: u32, p: &PathDrawParams) {
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let cov = path_draw_sample(x as f32 + 0.5, y as f32 + 0.5, p);
+            if p.style == PAINT_REVEAL_ORIGINAL {
+                // The drawing is the matte: what it covers survives — colour and
+                // coverage alike, which is what premultiplied means — and the
+                // rest of the picture goes.
+                for i in 0..4 {
+                    let lit = rgba[d + i] * cov;
+                    rgba[d + i] = rgba[d + i] * (1.0 - p.mix) + lit * p.mix;
+                }
+                continue;
+            }
+            let keep = if p.style == PAINT_ON_ORIGINAL {
+                1.0 - cov
+            } else {
+                0.0
+            };
+            for i in 0..3 {
+                let lit = rgba[d + i] * keep + p.colour[i] * cov;
+                rgba[d + i] = rgba[d + i] * (1.0 - p.mix) + lit * p.mix;
+            }
+            let lit = rgba[d + 3] * keep + cov;
+            rgba[d + 3] = rgba[d + 3] * (1.0 - p.mix) + lit * p.mix;
+        }
+    }
+}
+
+/// A mask polyline in **raster** pixels — the px@comp vertices K-408 hands over,
+/// taken to the raster the frame is actually being drawn at (docs/08 §2.3).
+///
+/// Every consumer of the seam does this and none of them should do it
+/// differently, which is the whole reason it is a function.
+#[must_use]
+pub fn path_points(poly: &crate::mask::MaskPolyline, px_scale: f32) -> Vec<[f32; 2]> {
+    poly.points
+        .iter()
+        .map(|q| [q[0] * px_scale, q[1] * px_scale])
+        .collect()
+}
+
+/// The most hatch strokes a Scribble may lay down: two chain points each, so
+/// half the budget (docs/08 §3.78). Past it the **spacing widens** rather than
+/// the fill stopping half way down the shape, which is the degradation that
+/// keeps the picture whole (docs/14 §4).
+pub const SCRIBBLE_MAX_STROKES: usize = PATH_PRIMITIVES / 2;
+
+/// Build a scribble's chain: parallel strokes at `angle_deg` across the mask
+/// `poly` (raster pixels), `spacing` apart, each run on past the edge by
+/// `overlap`, joined end to end into one continuous line (docs/08 §3.78).
+///
+/// The line is where the pen goes, so its direction alternates — left to right,
+/// then right to left — so the join between one stroke and the next is a short
+/// hop along the edge rather than a flight back across the shape.
+///
+/// Points come back in raster pixels, with [`PEN_UP`] between strokes the pen
+/// must not join: the two halves of one line across a mask with a notch in it.
+#[must_use]
+pub fn scribble_chain(
+    poly: &[[f32; 2]],
+    angle_deg: f32,
+    spacing: f32,
+    overlap: f32,
+) -> Vec<[f32; 2]> {
+    let mut chain: Vec<[f32; 2]> = Vec::new();
+    if poly.len() < 3 {
+        return chain;
+    }
+    let th = angle_deg.to_radians();
+    // `u` runs along a stroke and `v` across them; orthonormal, so the point at
+    // (across, along) is just `across·v + along·u`.
+    let (ux, uy) = (th.cos(), th.sin());
+    let (vx, vy) = (-uy, ux);
+    let mut vmin = f32::INFINITY;
+    let mut vmax = f32::NEG_INFINITY;
+    for q in poly {
+        let d = q[0] * vx + q[1] * vy;
+        vmin = vmin.min(d);
+        vmax = vmax.max(d);
+    }
+    if !vmin.is_finite() || !vmax.is_finite() || vmax <= vmin {
+        return chain;
+    }
+    // Widen the spacing rather than run out of budget half way down the shape.
+    let span = vmax - vmin;
+    let step = spacing.max(0.5).max(span / SCRIBBLE_MAX_STROKES as f32);
+    let lines = (span / step).floor().max(0.0) as i32;
+    let mut hits: Vec<f32> = Vec::new();
+    for k in 0..=lines {
+        // Half a step in, so the outermost stroke is not laid exactly on the
+        // shape's tangent line, where it would flicker as the shape animates.
+        let off = vmin + step * 0.5 + step * k as f32;
+        hits.clear();
+        for i in 0..poly.len() {
+            let a = poly[i];
+            let b = poly[(i + 1) % poly.len()];
+            let (da, db) = (a[0] * vx + a[1] * vy - off, b[0] * vx + b[1] * vy - off);
+            // Half-open: an edge counts on one side only, so a vertex sitting
+            // exactly on the line is crossed once rather than twice or never.
+            if (da <= 0.0) == (db <= 0.0) {
+                continue;
+            }
+            let t = da / (da - db);
+            let (px, py) = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+            hits.push(px * ux + py * uy);
+        }
+        hits.sort_by(|x, y| x.partial_cmp(y).unwrap_or(core::cmp::Ordering::Equal));
+        // Even-odd: inside the shape between the first crossing and the second,
+        // the third and the fourth, and so on.
+        //
+        // On a reversed line the strokes are taken in reverse **order** as well
+        // as reversed in themselves. Reversing only the strokes would leave the
+        // pen at the far side of the shape and send it back across the whole
+        // width — through the notch it just lifted over — to start the next line.
+        let spans = hits.len() / 2;
+        for j in 0..spans {
+            let pair = if k % 2 == 0 { j } else { spans - 1 - j };
+            if chain.len() + 3 > PATH_PRIMITIVES {
+                return chain;
+            }
+            let (a, b) = (hits[pair * 2] - overlap, hits[pair * 2 + 1] + overlap);
+            let (a, b) = if a <= b { (a, b) } else { (b, a) };
+            let (a, b) = if k % 2 == 0 { (a, b) } else { (b, a) };
+            // The pen joins only strokes that follow each other down the shape;
+            // a second stroke on the same line is across a hole.
+            if j > 0 {
+                chain.push(PEN_UP);
+            }
+            chain.push([off * vx + a * ux, off * vy + a * uy]);
+            chain.push([off * vx + b * ux, off * vy + b * uy]);
+        }
+    }
+    chain
+}
+
+/// Fill `p`'s geometry with a brush stroke along `poly`, between the `start_pct`
+/// and `end_pct` marks (docs/08 §3.79). `diameter` and `spacing` are raster
+/// pixels; `px_scale` takes the seam's px@comp vertices to that raster.
+///
+/// **Why two shapes and not one.** A brush stroke is a row of round stamps, and
+/// while they overlap their union *is* the path swept by the brush — drawing the
+/// path directly is the same picture for a fraction of the pieces, and it is the
+/// only form that stays inside the budget on a long path with a fine brush. Once
+/// the stamps are further apart than the brush is wide they stop being a stroke
+/// and become a dotted line, which is what the control is for, and then they are
+/// drawn as what they are. The changeover is at **half the brush width**, where
+/// the deepest scallop between two stamps is an eighth of the radius — under a
+/// pixel for any brush you would notice it on.
+pub fn stroke_geometry(
+    poly: &crate::mask::MaskPolyline,
+    px_scale: f32,
+    diameter: f32,
+    spacing: f32,
+    start_pct: f32,
+    end_pct: f32,
+    p: &mut PathDrawParams,
+) {
+    p.count = 0;
+    if poly.is_empty() {
+        return;
+    }
+    let scale = px_scale.max(1e-6);
+    if spacing <= diameter * 0.5 {
+        path_chain(&path_points(poly, scale), start_pct, end_pct, p);
+        return;
+    }
+    let total = poly.length() * scale;
+    let lo = (start_pct.min(end_pct) / 100.0).clamp(0.0, 1.0) * total;
+    let hi = (start_pct.max(end_pct) / 100.0).clamp(0.0, 1.0) * total;
+    let span = hi - lo;
+    let mut step = spacing.max(1e-3);
+    // Past the budget the dots space out; the trail still reaches the End mark,
+    // which is the failure nobody notices over one that stops half way.
+    if span / step + 1.0 > PATH_PRIMITIVES as f32 {
+        step = span / (PATH_PRIMITIVES - 1) as f32;
+    }
+    let n = ((span / step.max(1e-3)).floor() as usize + 1).min(PATH_PRIMITIVES);
+    for i in 0..n {
+        let arc = lo + step * i as f32;
+        let q = poly.point_at(arc / scale);
+        let (x, y) = (q[0] * scale, q[1] * scale);
+        // A stamp is a piece with no length: the capsule's round cap is the
+        // brush, so one expression draws both shapes.
+        p.segments[i] = [x, y, x, y];
+        p.arcs[i] = arc;
+    }
+    p.count = n as u32;
 }

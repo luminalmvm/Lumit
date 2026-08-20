@@ -11,7 +11,7 @@
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
-use crate::gpufx::{AuxKind, AuxSlot};
+use crate::gpufx::{AuxData, AuxKind, AuxSlot};
 
 type Tex = wgpu::Texture;
 
@@ -205,19 +205,35 @@ pub fn render_layer_input(
 /// (degrade, never fault). `luts` is the parallel LUT list (docs/08 §3.11): the
 /// k-th `lut` op binds `luts[k]` — a `None` slot (unset, missing, 1D or
 /// unreadable file) is a passthrough, exactly like a missing flow field.
-/// `layer_inputs` is the parallel layer-input list (docs/08 §3.22, §3.28,
-/// docs/impl/layer-input.md): the k-th layer-input-consuming op — `dof` or
-/// `light_wrap` — binds `layer_inputs[k]`, the referenced layer rendered alone
-/// at comp size, [`LayerInput::ThisLayer`] for the effect's own input (K-288),
-/// or [`LayerInput::Absent`] (unset, missing or cyclic) for a passthrough,
-/// exactly like a missing LUT.
-/// `flare_mattes` is the parallel Lens flare Matte-source list (docs/08
-/// §3.27, K-257), and `flare_lens` the parallel custom-prescription list
-/// (K-264, `lens_file` as content hash + text; None = use the picked
-/// library lens): the k-th `lens_flare` op binds `flare_mattes[k]` — the
-/// referenced matte layer rendered alone at this raster, this effect's own
-/// input, or absent (unset, dangling, or not in Matte mode) which detects no
-/// sources, the LUT/DoF passthrough convention.
+/// `layer_inputs` is the parallel layer-input list (docs/08 §3.28,
+/// docs/impl/layer-input.md): the k-th layer-input-consuming op — `light_wrap`
+/// alone, since K-395 moved Depth of field's depth pass onto the matte list —
+/// binds `layer_inputs[k]`, the referenced layer rendered alone at comp size,
+/// [`LayerInput::ThisLayer`] for the effect's own input (K-288), or
+/// [`LayerInput::Absent`] (unset, missing or cyclic) for a passthrough, exactly
+/// like a missing LUT. `flare_lens` is the parallel custom-prescription list
+/// (K-264, `lens_file` as content hash + text; None = use the picked library
+/// lens): the k-th `lens_flare` op binds `flare_lens[k]`.
+///
+/// `mattes` is the parallel **Matte** list (K-395, docs/08 §2.6): one slot per
+/// op whose effect declares any [`MatteRole`](lumit_core::fx::MatteRole) with a
+/// parameter — which is every op — exactly as `build.rs`'s `mattes_for`
+/// enumerates them. What a bound slot *does* is the role's second question, and
+/// the only branch in this function that cares: an effect on the generic
+/// strength semantic gets the dissolve below, and an effect that claims the
+/// matte inside its own maths (Gaussian blur, Glow, Depth of field, the Lens
+/// flare) gets the texture handed to its kernel instead — never both, or the
+/// matte would be applied twice. An absent slot (the default, and every project
+/// saved before K-395) runs no extra pass at all, so the picture is
+/// byte-for-byte what it was (K-258).
+///
+/// `mask_paths` is the parallel **mask-path** list (K-408, docs/08 §1.2): one
+/// flattened polyline per op whose effect declares a
+/// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) row, exactly as
+/// `build.rs`'s `mask_paths_for` enumerates them. Its own counter, not the
+/// matte's: every op takes a matte and almost none takes a path, so one shared
+/// index would hand a path to whichever effect happened to sit above. An empty
+/// polyline is the effect's documented no-op.
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -230,8 +246,9 @@ pub fn run_ops(
     flow_field: Option<&Tex>,
     luts: &[Option<LoadedLut>],
     layer_inputs: &[LayerInput],
-    flare_mattes: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
+    mattes: &[LayerInput],
+    mask_paths: &[lumit_core::mask::MaskPolyline],
     mut timings: Option<&mut Vec<f32>>,
 ) -> Tex {
     let mut tex = tex;
@@ -251,7 +268,50 @@ pub fn run_ops(
     let mut lut_i = 0usize;
     let mut dof_i = 0usize;
     let mut flare_i = 0usize;
+    // The Matte's own counter (K-395). Deliberately *not* `dof_i`: the two lists
+    // are enumerated by two different predicates — one effect takes a background
+    // plate, every effect takes a matte — and sharing one index would bind a
+    // matte to whichever Light wrap happened to sit above it. Same contract,
+    // second predicate; it advances outside the GPU lookup below because
+    // `build.rs` fills a slot per *op*, not per kernel.
+    let mut matte_i = 0usize;
+    // The mask path's own counter (K-408), for the same reason: `build.rs`
+    // flattens one polyline per op whose schema declares a path row, and this
+    // advances on exactly that predicate — `EffectSchema::mask_path`, the one
+    // both sides call, so there is no second rule to keep in step.
+    let mut path_i = 0usize;
     for resolved in ops.iter() {
+        let role = resolved.def.schema().matte;
+        let mask_path = if resolved.def.schema().mask_path().is_some() {
+            let slot = mask_paths.get(path_i);
+            path_i += 1;
+            slot
+        } else {
+            None
+        };
+        let matte = if role.param().is_some() {
+            let slot = mattes.get(matte_i);
+            matte_i += 1;
+            slot
+        } else {
+            None
+        };
+        // Only a bound matte costs anything: the input texture is held (a
+        // cheap handle clone) so the dissolve below has something to lerp
+        // back towards, and nothing at all happens when the row is unset.
+        let matte = matte.and_then(|m| m.texture(&tex)).cloned();
+        // **Who gets it** — the one branch (K-395). A generic effect's matte is
+        // spent in the dissolve after the kernel, and must therefore not reach
+        // the kernel; an override's is spent inside the kernel, and must
+        // therefore not be dissolved again afterwards. Splitting the same
+        // `Option` two ways here is what keeps that a single decision rather
+        // than a rule each effect could disagree with.
+        let (own_matte, generic_matte) = if role.generic() {
+            (None, matte.as_ref())
+        } else {
+            (matte.as_ref(), None)
+        };
+        let unmatted_input = generic_matte.map(|_| tex.clone());
         // Only a *profiled* render reads a clock here, and it reads it either
         // side of a fence — see crate::profile on why an unfenced span would
         // time the paperwork rather than the work. One reading per op, whether
@@ -264,31 +324,54 @@ pub fn run_ops(
         // — the convention a missing LUT or flow field already uses, never a
         // fault (engine crates do not panic, 14-ENGINEERING-RULES §4).
         if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
-            let aux = match gpu.aux() {
-                AuxKind::None => AuxSlot::None,
+            let data = match gpu.aux() {
+                AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
                     let slot = luts.get(lut_i).and_then(|o| o.as_ref());
                     lut_i += 1;
-                    AuxSlot::Lut(slot)
+                    AuxData::Lut(slot)
                 }
                 AuxKind::LayerInput => {
                     let slot = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
                     dof_i += 1;
-                    AuxSlot::LayerInput(slot)
+                    AuxData::LayerInput(slot)
                 }
-                AuxKind::FlareInputs => {
-                    let matte = flare_mattes.get(flare_i).and_then(|o| o.texture(&tex));
+                AuxKind::LensFile => {
                     let lens = flare_lens.get(flare_i).and_then(|o| o.as_ref());
                     flare_i += 1;
-                    AuxSlot::FlareInputs { matte, lens }
+                    AuxData::LensFile(lens)
                 }
-                AuxKind::Neighbours => AuxSlot::Neighbours(neighbours),
-                AuxKind::FlowField => AuxSlot::FlowField {
+                AuxKind::Neighbours => AuxData::Neighbours(neighbours),
+                AuxKind::FlowField => AuxData::FlowField {
                     field: flow_field,
                     neighbours,
                 },
             };
-            tex = gpu.run(fx, ctx, &tex, w, h, resolved.params, aux);
+            tex = gpu.run(
+                fx,
+                ctx,
+                &tex,
+                w,
+                h,
+                resolved.params,
+                AuxSlot::new(data, own_matte, mask_path),
+            );
+        }
+
+        // The generic strength semantic (K-395), one implementation for every
+        // effect that has not claimed the matte for itself: after the effect's
+        // own Mix (which happens inside its kernel), dissolve back to the
+        // picture it was handed, by the matte's luma.
+        if let (Some(m), Some(input)) = (generic_matte, unmatted_input) {
+            tex = fx.matte_mix(
+                ctx,
+                &input,
+                &tex,
+                m,
+                w,
+                h,
+                resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+            );
         }
 
         if let (Some(started), Some(into)) = (started, timings.as_mut()) {

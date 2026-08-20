@@ -1,0 +1,72 @@
+---
+title: Effects
+description: Every built-in effect, what it is for, and what each parameter does.
+sidebar:
+  order: 0
+---
+
+Every effect Lumit ships with has a page here: what it is for, and a table of
+every parameter with its range, its default and its unit. The tables come
+straight from the engine's own catalogue, so they cannot drift from the
+application.
+
+For applying effects, ordering a stack and using adjustment layers, see
+[Effects](/use/effects/). For the panel the controls live in, see
+[Effect Controls](/panels/effect-controls/).
+
+## How to read a page
+
+Each page opens with what the effect is for and when to reach for it, then the
+parameter table, then what each control actually does. The table carries the
+numbers — range, default, unit — and the prose beneath it carries the reasoning,
+so the two are worth reading together rather than in place of one another.
+
+A few conventions run through the whole catalogue:
+
+- **Mix** appears on almost every effect. It blends the processed picture over
+  the untouched one, so it is the way to ease an effect back without disturbing
+  anything above it — and, being animatable, the usual way to pulse an effect on
+  a beat.
+- **Matte** and **Invert** appear on every effect too, and by default the matte
+  is a strength: point the row at a layer, and that layer's brightness says how
+  much of the effect each pixel gets — white in full, black not at all, grey
+  part way, with Invert swapping which end does which. It is not the same as
+  masking the effect's result, which hides what the effect already did
+  everywhere; a matte feeds the effect itself, so a blur driven by one genuinely
+  blurs less where the matte is dark rather than smearing and then fading back.
+  A handful of effects put the matte deeper into their own maths — the blur's
+  radius, the glow's seed, depth of field's focus, the flare's light sources —
+  and each of those pages says so under its own table.
+- **Distances** are given either as a percentage of the composition diagonal or
+  in pixels at composition size, and the Unit column on each page says which.
+  Both survive a resize and both match between a draft preview and the export,
+  so a Quarter-resolution scrub looks like the finished frame, only softer. A
+  parameter whose unit reads as a dash is a plain number and follows neither
+  rule — its own page says what it counts.
+- **Every parameter animates.** Turn on its stopwatch to start. See
+  [Keyframes](/use/keyframes/).
+- Effects that need a **file or another layer** — a LUT, a depth pass, a
+  background to wrap — do nothing until you supply one, and say so rather than
+  failing.
+
+## The categories
+
+{/* GENERATED:list - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+**[Blur & sharpen](/effects/blur-sharpen/)** - [Gaussian blur](/effects/blur-sharpen/gaussian-blur/), [Directional blur](/effects/blur-sharpen/directional-blur/), [Radial blur](/effects/blur-sharpen/radial-blur/), [Unsharp mask](/effects/blur-sharpen/unsharp-mask/), [Sharpen](/effects/blur-sharpen/sharpen/), [Depth of field](/effects/blur-sharpen/depth-of-field/), [Channel blur](/effects/blur-sharpen/channel-blur/).
+
+**[Colour](/effects/colour/)** - [Colour balance](/effects/colour/colour-balance/), [Saturation](/effects/colour/saturation/), [Vibrancy](/effects/colour/vibrancy/), [Vignette](/effects/colour/vignette/), [Exposure](/effects/colour/exposure/), [Hue shift](/effects/colour/hue-shift/), [Contrast](/effects/colour/contrast/), [Gamma](/effects/colour/gamma/), [Temperature](/effects/colour/temperature/), [LUT](/effects/colour/lut/), [Invert](/effects/colour/invert/), [Tint](/effects/colour/tint/), [Curves](/effects/colour/curves/), [Levels](/effects/colour/levels/), [Brightness](/effects/colour/brightness/), [Hue and saturation](/effects/colour/hue-and-saturation/), [Posterize](/effects/colour/posterize/), [Threshold](/effects/colour/threshold/), [Tritone](/effects/colour/tritone/), [Photo filter](/effects/colour/photo-filter/), [Black and white](/effects/colour/black-and-white/), [Shadow highlight](/effects/colour/shadow-highlight/).
+
+**[Distortion](/effects/distortion/)** - [RGB split](/effects/distortion/rgb-split/), [Chromatic aberration](/effects/distortion/chromatic-aberration/), [Shake](/effects/distortion/shake/), [Block glitch](/effects/distortion/block-glitch/), [Scanlines](/effects/distortion/scanlines/), [Datamosh](/effects/distortion/datamosh/), [Turbulent displace](/effects/distortion/turbulent-displace/), [Tile](/effects/distortion/tile/), [Offset](/effects/distortion/offset/), [Mirror](/effects/distortion/mirror/), [Lens distort](/effects/distortion/lens-distort/), [Corner pin](/effects/distortion/corner-pin/), [Displacement map](/effects/distortion/displacement-map/), [Polar coordinates](/effects/distortion/polar-coordinates/), [Twirl](/effects/distortion/twirl/), [Spherize](/effects/distortion/spherize/), [Ripple](/effects/distortion/ripple/), [Wave warp](/effects/distortion/wave-warp/), [Bezier warp](/effects/distortion/bezier-warp/), [Warp](/effects/distortion/warp/).
+
+**[Generate](/effects/generate/)** - [Fill](/effects/generate/fill/), [Gradient](/effects/generate/gradient/), [Noise](/effects/generate/noise/), [Fractal noise](/effects/generate/fractal-noise/), [Beam](/effects/generate/beam/), [Lightning](/effects/generate/lightning/), [Radio waves](/effects/generate/radio-waves/), [Vegas](/effects/generate/vegas/), [Add grain](/effects/generate/add-grain/), [Scribble](/effects/generate/scribble/), [Stroke](/effects/generate/stroke/).
+
+**[Stylise](/effects/stylise/)** - [Sprite flare](/effects/stylise/sprite-flare/), [Light wrap](/effects/stylise/light-wrap/), [Flash](/effects/stylise/flash/), [Glow](/effects/stylise/glow/), [Lens flare](/effects/stylise/lens-flare/), [Drop shadow](/effects/stylise/drop-shadow/), [Roughen edges](/effects/stylise/roughen-edges/), [Median](/effects/stylise/median/), [Mosaic](/effects/stylise/mosaic/), [Find edges](/effects/stylise/find-edges/), [Emboss](/effects/stylise/emboss/), [Texturize](/effects/stylise/texturize/).
+
+**[Temporal](/effects/temporal/)** - [Echo](/effects/temporal/echo/), [Posterize time](/effects/temporal/posterize-time/), [Motion blur](/effects/temporal/motion-blur/), [Fast motion blur](/effects/temporal/fast-motion-blur/).
+
+**[Transition](/effects/transition/)** - [Linear wipe](/effects/transition/linear-wipe/), [Radial wipe](/effects/transition/radial-wipe/), [Venetian blinds](/effects/transition/venetian-blinds/), [Iris wipe](/effects/transition/iris-wipe/), [Card wipe](/effects/transition/card-wipe/).
+
+**[Utility](/effects/utility/)** - [Transform](/effects/utility/transform/), [Matte key](/effects/utility/matte-key/), [Set matte](/effects/utility/set-matte/), [Broadcast safe](/effects/utility/broadcast-safe/).
+
+{/* END GENERATED */}

@@ -1,0 +1,73 @@
+---
+title: Threshold
+description: "Cuts every pixel to black or white at a brightness you choose, turning a photograph into a stencil."
+---
+
+Threshold is a **Colour** effect.
+
+## What it is for
+
+Every pixel is asked one question — is it brighter than the Level? — and comes
+back white if it is and black if it is not. That turns a photograph into a
+stencil: the two-tone poster, a stamped or screen-printed title, a quick matte
+cut out of a bright object, and the source shape for a
+[Roughen edges](/effects/stylise/roughen-edges/) or a
+[Drop shadow](/effects/stylise/drop-shadow/) treatment.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Level** | Slider | 0 to 100 | 50 | - |
+| **Softness** | Slider | 0 to 100; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Level** — where the cut sits. **50** is mid-grey; lower it and more of the
+  picture comes back white, raise it and more comes back black. Animating it
+  sweeps the stencil open or shut, which is a good title reveal.
+- **Softness** — how wide the crossing between black and white is. **0** is a
+  hard cut, and raising it gives a gradient between the two tones — useful for
+  a smoky or airbrushed stencil.
+- **Mix** — how much of the stencil replaces the original picture.
+- **Matte** and **Invert** — threshold only part of the frame; see
+  [Effects](/use/effects/).
+
+## Notes
+
+**Level is where you think it is.** 50 lands on the grey a person would point
+at, not on half of the light — Lumit works in scene-linear light, where half is
+very nearly white, so the control is placed perceptually instead.
+
+**Transparency survives the cut.** A thresholded layer keeps its shape: the
+effect decides what colour a pixel is, never whether it is there. Drop it on a
+keyed layer and you get a black-and-white version of the key, not a white
+rectangle.
+
+**Even at Softness 0 the cut is antialiased.** The crossing is a thousandth of
+the tone range wide, which is far under a pixel on any real edge, so the stencil
+has clean diagonals rather than staircases.
+
+**For a colour version of the same idea**, use
+[Posterize](/effects/colour/posterize/) at a low Levels count, or
+[Tritone](/effects/colour/tritone/) to map the two tones onto colours of your
+choosing.
+
+## Related
+
+- [Posterize](/effects/colour/posterize/)
+- [Tritone](/effects/colour/tritone/)
+- [Matte key](/effects/utility/matte-key/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

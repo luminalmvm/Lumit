@@ -46,18 +46,40 @@ pub enum AuxKind {
     None,
     /// The parallel LUT list (docs/08 §3.11): one parsed cube per `lut` op.
     Lut,
-    /// The parallel layer-input list (docs/08 §3.22, docs/impl/layer-input.md):
-    /// one rendered layer per consuming op, shared by Depth of field and Light
-    /// wrap because `build.rs` enumerates them with one predicate.
+    /// The parallel layer-input list (docs/impl/layer-input.md): one rendered
+    /// layer per consuming op — Light wrap's Background plate and Texturize's
+    /// Texture. Depth of field's depth pass used to be a third; it moved to the
+    /// generic matte carriage when K-395 made it one of the effects that claim
+    /// the matte inside their own maths.
     LayerInput,
-    /// The Lens flare's pair (K-257, K-264): its Matte source and its custom
-    /// prescription, counted together off one index.
-    FlareInputs,
+    /// The Lens flare's custom prescription (K-264): one `.lens` file per flare
+    /// op. Its Matte source used to be counted off this same index; since K-395
+    /// it is the generic matte, and rides on [`AuxSlot::matte`].
+    LensFile,
     /// The layer's decoded neighbour frames — the whole list, never per-op.
     Neighbours,
     /// The layer's decoded motion — the dense field and the neighbour frames
     /// beside it, both whole, never per-op.
     FlowField,
+}
+
+/// Everything the render prepared beside one op: the [`AuxData`] its
+/// [`AuxKind`] asked for, and — independently of that — the generic **Matte**
+/// this op is driven by, when the effect claims it inside its own maths (K-395).
+///
+/// **Why the matte is a field rather than a seventh [`AuxKind`].** Every effect
+/// can take a matte, including the ones that already consume a different aux
+/// list: the Lens flare wants its prescription *and* its matte, Depth of field's
+/// matte is a whole picture and Blur's is too. Making it a variant would mean a
+/// combinatorial variant per (kind, matte) pair, and the first effect that
+/// wanted both would add a seam. It rides beside instead, so the schema's
+/// [`MatteRole`](lumit_core::fx::MatteRole) is the *only* thing that decides who
+/// consumes the matte — one seam, whatever else the effect happens to need.
+#[derive(Clone, Copy)]
+pub struct AuxSlot<'a> {
+    data: AuxData<'a>,
+    matte: Option<&'a Tex>,
+    path: Option<&'a lumit_core::mask::MaskPolyline>,
 }
 
 /// The borrowed slot itself, as [`crate::fxops::run_ops`] resolved it.
@@ -67,7 +89,7 @@ pub enum AuxKind {
 /// dropped decode degrades the picture, it never faults
 /// (14-ENGINEERING-RULES §4).
 #[derive(Clone, Copy)]
-pub enum AuxSlot<'a> {
+pub enum AuxData<'a> {
     /// The effect declared [`AuxKind::None`].
     None,
     /// This op's parsed cube, or `None` when the file was unset, missing, 1D or
@@ -77,12 +99,11 @@ pub enum AuxSlot<'a> {
     /// carrying (so [`crate::fxops::LayerInput::ThisLayer`] is a real texture by
     /// the time it arrives here).
     LayerInput(Option<&'a Tex>),
-    /// The flare's Matte source and its custom prescription (content hash and
-    /// text), each absent on its own terms.
-    FlareInputs {
-        matte: Option<&'a Tex>,
-        lens: Option<&'a (u64, String)>,
-    },
+    /// The flare's custom prescription (content hash and text), absent when the
+    /// `.lens` row is unset or the file would not parse. Its Matte source is
+    /// **not** here: since K-395 that is the generic matte every effect can
+    /// take, and it arrives on [`AuxSlot::matte`] like everyone else's.
+    LensFile(Option<&'a (u64, String)>),
     /// Every decoded neighbour frame, keyed by offset; empty unless the stack
     /// asked for a temporal window.
     Neighbours(&'a [(i32, Tex)]),
@@ -98,22 +119,69 @@ pub enum AuxSlot<'a> {
 }
 
 impl<'a> AuxSlot<'a> {
+    /// Bundle one op's aux data with its generic matte and its mask path.
+    pub fn new(
+        data: AuxData<'a>,
+        matte: Option<&'a Tex>,
+        path: Option<&'a lumit_core::mask::MaskPolyline>,
+    ) -> Self {
+        Self { data, matte, path }
+    }
+
+    /// **This op's mask path** (K-408): the layer's chosen mask, flattened at
+    /// this frame's time to an arc-length-parameterised polyline in px@comp.
+    ///
+    /// A field beside the matte rather than an [`AuxKind`] variant, for the
+    /// reason the matte is one: an effect that walks a path may want a matte,
+    /// a layer input or neighbours as well, and a variant per pair would add a
+    /// seam to the first effect that wanted two things.
+    ///
+    /// `None` unless the effect declares a
+    /// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) row, and
+    /// [`MaskPolyline::is_empty`](lumit_core::mask::MaskPolyline::is_empty)
+    /// whenever the row comes to no mask. Both mean the same thing to a kernel
+    /// — render the input unchanged — which is why an effect need only check
+    /// the polyline it got, never why it is missing.
+    ///
+    /// It arrives as a **CPU slice**, the way [`AuxData::Lut`]'s parsed cube
+    /// does: whoever needs it on the GPU uploads it as a storage buffer at its
+    /// own layout, since a kernel that walks a curve and a kernel that builds a
+    /// distance field over one want different things in the buffer.
+    pub fn mask_path(self) -> Option<&'a lumit_core::mask::MaskPolyline> {
+        self.path
+    }
+
+    /// **This op's Matte** (K-395), already resolved against the picture the
+    /// chain is carrying — so a matte pointed at the effect's own layer (K-288)
+    /// is a real texture by the time it arrives here.
+    ///
+    /// `None` unless the effect's [`MatteRole`](lumit_core::fx::MatteRole) says
+    /// it consumes the matte itself *and* a layer is bound: an effect on the
+    /// generic strength semantic never sees one, because its matte is spent in
+    /// the dissolve beside the dispatch instead. An override with an unset row
+    /// gets `None` and must render exactly what it rendered before K-395
+    /// (K-258) — which for all four of them is the same branch an unset row
+    /// always took.
+    pub fn matte(self) -> Option<&'a Tex> {
+        self.matte
+    }
+
     /// This op's cube. `None` for a missing slot *and* for a slot of the wrong
     /// kind — which cannot happen, since [`GpuEffect::aux`] is what chose the
     /// kind, and which is a passthrough rather than a panic if it ever does.
     pub fn lut(self) -> Option<&'a LoadedLut> {
-        match self {
-            AuxSlot::Lut(l) => l,
+        match self.data {
+            AuxData::Lut(l) => l,
             _ => None,
         }
     }
 
-    /// This op's layer input — the depth pass, the background plate — already
-    /// resolved against the picture the chain is carrying. `None` for an unset,
-    /// missing or cyclic reference: the labelled no-op.
+    /// This op's layer input — Light wrap's background plate — already resolved
+    /// against the picture the chain is carrying. `None` for an unset, missing
+    /// or cyclic reference: the labelled no-op.
     pub fn layer_input(self) -> Option<&'a Tex> {
-        match self {
-            AuxSlot::LayerInput(t) => t,
+        match self.data {
+            AuxData::LayerInput(t) => t,
             _ => None,
         }
     }
@@ -121,9 +189,9 @@ impl<'a> AuxSlot<'a> {
     /// The decoded neighbour frames, empty when there are none — from either of
     /// the two kinds that carry them.
     pub fn neighbours(self) -> &'a [(i32, Tex)] {
-        match self {
-            AuxSlot::Neighbours(n) => n,
-            AuxSlot::FlowField { neighbours, .. } => neighbours,
+        match self.data {
+            AuxData::Neighbours(n) => n,
+            AuxData::FlowField { neighbours, .. } => neighbours,
             _ => &[],
         }
     }
@@ -131,20 +199,18 @@ impl<'a> AuxSlot<'a> {
     /// The dense motion field, `None` when the decode computed none — a plain
     /// layer, or a dropped neighbour. The passthrough, never a fault.
     pub fn flow_field(self) -> Option<&'a Tex> {
-        match self {
-            AuxSlot::FlowField { field, .. } => field,
+        match self.data {
+            AuxData::FlowField { field, .. } => field,
             _ => None,
         }
     }
 
-    /// The Lens flare's Matte source and its custom prescription, each absent on
-    /// its own terms: an unset or dangling matte detects no sources, and an
-    /// unset, missing or unparsable `.lens` file falls back to the picked library
-    /// lens. `(None, None)` for a slot of the wrong kind, which cannot happen.
-    pub fn flare_inputs(self) -> (Option<&'a Tex>, Option<&'a (u64, String)>) {
-        match self {
-            AuxSlot::FlareInputs { matte, lens } => (matte, lens),
-            _ => (None, None),
+    /// The Lens flare's custom prescription: `None` for an unset, missing or
+    /// unparsable `.lens` file, which falls back to the picked library lens.
+    pub fn lens_file(self) -> Option<&'a (u64, String)> {
+        match self.data {
+            AuxData::LensFile(l) => l,
+            _ => None,
         }
     }
 }
@@ -208,18 +274,68 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Temperature,
     &Lut,
     &Dof,
+    &ChannelBlur,
     &Transform,
     &Shake,
     &Glow,
     &BlockGlitch,
     &Scanlines,
     &Datamosh,
+    &TurbulentDisplace,
+    &Tile,
+    &Offset,
+    &Mirror,
+    &LensDistort,
+    &CornerPin,
+    &DisplacementMap,
+    &PolarCoordinates,
+    &Twirl,
+    &Spherize,
+    &Ripple,
+    &WaveWarp,
+    &BezierWarp,
+    &Warp,
+    &RoughenEdges,
+    &Median,
+    &Mosaic,
+    &FindEdges,
+    &Emboss,
+    &Texturize,
+    &Fill,
+    &Gradient,
+    &Noise,
+    &FractalNoise,
     &Echo,
     &MotionBlur,
     &MatteKey,
+    &SetMatte,
+    &BroadcastSafe,
     &Invert,
     &Tint,
+    &Curves,
+    &Levels,
+    &Brightness,
+    &HueSaturation,
+    &Posterize,
+    &Threshold,
+    &Tritone,
+    &PhotoFilter,
+    &BlackAndWhite,
+    &ShadowHighlight,
     &LensFlare,
+    &DropShadow,
+    &LinearWipe,
+    &RadialWipe,
+    &VenetianBlinds,
+    &IrisWipe,
+    &CardWipe,
+    &Beam,
+    &Lightning,
+    &RadioWaves,
+    &Vegas,
+    &AddGrain,
+    &Scribble,
+    &Stroke,
 ];
 
 /// The GPU pass for `match_name`, or `None` when the effect has no image
@@ -254,18 +370,24 @@ impl GpuEffect for Blur {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, edge, mix) = effects::blur::Blur::read(p).packed();
+        // **The blur claims its matte** (K-395): it scales the radius per pixel
+        // rather than dissolving a finished blur, so the texture goes into the
+        // kernel and no dissolve runs beside this op. With no matte bound the
+        // kernel takes the branch it always took, byte for byte.
         fx.blur(
             ctx,
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::BlurOp {
                 radius_px,
                 edge,
                 mix,
+                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -452,8 +574,10 @@ impl GpuEffect for LightWrap {
         "light_wrap"
     }
     /// The Background plate is another layer, rendered alone at this raster —
-    /// the layer-input list, off the same counter Depth of field uses because
-    /// `build.rs` enumerates both with one predicate (K-358, K-387).
+    /// the layer-input list (K-358, K-387). It is a *plate*, not a matte: the
+    /// light in it spills round the foreground's edge, so it is not the same
+    /// input as the Matte row this effect also carries, which dissolves the
+    /// wrap's strength generically.
     fn aux(&self) -> AuxKind {
         AuxKind::LayerInput
     }
@@ -847,6 +971,896 @@ impl GpuEffect for Gamma {
     }
 }
 
+struct Fill;
+impl GpuEffect for Fill {
+    fn match_name(&self) -> &'static str {
+        "fill"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (colour, mix) = effects::fill::Fill::read(p).packed();
+        fx.fill(ctx, tex, w, h, &lumit_gpu::fx::FillOp { colour, mix })
+    }
+}
+
+struct Gradient;
+impl GpuEffect for Gradient {
+    fn match_name(&self) -> &'static str {
+        "gradient"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let g = effects::gradient::Gradient::read(p).packed();
+        fx.gradient(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::GradientOp {
+                radial: g.radial,
+                start: g.start,
+                axis: g.axis,
+                inv_len2: g.inv_len2,
+                inv_len: g.inv_len,
+                c0: g.c0,
+                c1: g.c1,
+                scatter: g.scatter,
+                seed: g.seed,
+                mix: g.mix,
+            },
+        )
+    }
+}
+
+struct Noise;
+impl GpuEffect for Noise {
+    fn match_name(&self) -> &'static str {
+        "noise"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let n = effects::noise::Noise::read(p);
+        let (amount, gaussian, colour_noise, seed, tick, mix) =
+            n.packed(effects::noise::Noise::tick_of(p));
+        fx.noise(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::NoiseOp {
+                amount,
+                gaussian,
+                colour_noise,
+                seed,
+                tick,
+                mix,
+            },
+        )
+    }
+}
+
+struct FractalNoise;
+impl GpuEffect for FractalNoise {
+    fn match_name(&self) -> &'static str {
+        "fractal_noise"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let f = effects::fractal_noise::FractalNoise::read(p).packed();
+        fx.fractal_noise(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::FractalNoiseOp {
+                seed: f.field.seed,
+                octaves: f.field.octaves,
+                gain: f.field.gain,
+                lacunarity: f.field.lacunarity,
+                perlin: f.field.perlin,
+                turbulent: f.field.turbulent,
+                cycle: f.field.cycle,
+                cos_sin: f.cos_sin,
+                offset: f.offset,
+                inv_scale: f.inv_scale,
+                z: f.z,
+                contrast: f.contrast,
+                brightness: f.brightness,
+                invert: f.invert,
+                mix: f.mix,
+            },
+        )
+    }
+}
+
+struct TurbulentDisplace;
+impl GpuEffect for TurbulentDisplace {
+    fn match_name(&self) -> &'static str {
+        "turbulent_displace"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let t = effects::turbulent_displace::TurbulentDisplace::read(p).packed();
+        // **Turbulent displace claims its matte** (K-395): it scales the
+        // displacement vector rather than dissolving a finished warp, so the
+        // texture goes into the kernel and no dissolve runs beside this op.
+        fx.turbulent_displace(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::TurbulentDisplaceOp {
+                seed_x: t.field.seed,
+                seed_y: t.seed_y,
+                octaves: t.field.octaves,
+                gain: t.field.gain,
+                lacunarity: t.field.lacunarity,
+                cycle: t.field.cycle,
+                offset: t.offset,
+                inv_size: t.inv_size,
+                z: t.z,
+                amount: t.amount,
+                axes: t.axes,
+                pin: t.pin,
+                inv_pin_band: t.inv_pin_band,
+                mix: t.mix,
+                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+            },
+        )
+    }
+}
+
+struct Tile;
+impl GpuEffect for Tile {
+    fn match_name(&self) -> &'static str {
+        "tile"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let t = effects::tile::Tile::read(p).packed();
+        fx.tile(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::TileOp {
+                centre: t.centre,
+                tile_frac: t.tile_frac,
+                output_frac: t.output_frac,
+                phase: t.phase,
+                mirror_edges: t.mirror_edges,
+                horizontal_phase_shift: t.horizontal_phase_shift,
+                mix: t.mix,
+            },
+        )
+    }
+}
+
+struct Offset;
+impl GpuEffect for Offset {
+    fn match_name(&self) -> &'static str {
+        "offset"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (shift, mix) = effects::offset::Offset::read(p).packed();
+        fx.offset(ctx, tex, w, h, shift, mix)
+    }
+}
+
+struct Mirror;
+impl GpuEffect for Mirror {
+    fn match_name(&self) -> &'static str {
+        "mirror"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (centre, normal, mix) = effects::mirror::Mirror::read(p).packed();
+        fx.mirror(ctx, tex, w, h, centre, normal, mix)
+    }
+}
+
+struct LensDistort;
+impl GpuEffect for LensDistort {
+    fn match_name(&self) -> &'static str {
+        "lens_distort"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let l = effects::lens_distort::LensDistort::read(p).packed();
+        fx.lens_distort(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::LensDistortOp {
+                active: l.active,
+                tan_half_fov: l.tan_half_fov,
+                reverse: l.reverse,
+                half_kind: l.half_kind,
+                centre: l.centre,
+                edge: l.edge,
+                mix: l.mix,
+            },
+        )
+    }
+}
+
+struct CornerPin;
+impl GpuEffect for CornerPin {
+    fn match_name(&self) -> &'static str {
+        "corner_pin"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let c = effects::corner_pin::CornerPin::read(p).packed();
+        fx.corner_pin(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::CornerPinOp {
+                inv: c.inv,
+                active: c.active,
+                edge: c.edge,
+                mix: c.mix,
+            },
+        )
+    }
+}
+
+struct DisplacementMap;
+impl GpuEffect for DisplacementMap {
+    fn match_name(&self) -> &'static str {
+        "displacement_map"
+    }
+    /// **Displacement map's matte IS its map** (K-395, docs/08 §3.49): the
+    /// referenced layer rendered alone at this raster, arriving on the one matte
+    /// carriage every effect's matte uses. It declares no other aux, so this
+    /// stays [`AuxKind::None`].
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let d = effects::displacement_map::DisplacementMap::read(p).packed();
+        fx.displacement_map(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::DisplacementMapOp {
+                channels: d.channels,
+                amount: d.amount,
+                edge: d.edge,
+                mix: d.mix,
+                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+            },
+        )
+    }
+}
+
+struct PolarCoordinates;
+impl GpuEffect for PolarCoordinates {
+    fn match_name(&self) -> &'static str {
+        "polar_coordinates"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let pc = effects::polar_coordinates::PolarCoordinates::read(p).packed();
+        fx.polar_coordinates(ctx, tex, w, h, pc.to_polar, pc.interp, pc.mix)
+    }
+}
+
+struct Twirl;
+impl GpuEffect for Twirl {
+    fn match_name(&self) -> &'static str {
+        "twirl"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let t = effects::twirl::Twirl::read(p).packed();
+        fx.twirl(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::TwirlOp {
+                centre: t.centre,
+                radius: t.radius,
+                inv_radius: t.inv_radius,
+                angle: t.angle,
+                mix: t.mix,
+            },
+        )
+    }
+}
+
+struct Spherize;
+impl GpuEffect for Spherize {
+    fn match_name(&self) -> &'static str {
+        "spherize"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let s = effects::spherize::Spherize::read(p).packed();
+        fx.spherize(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::SpherizeOp {
+                centre: s.centre,
+                radius: s.radius,
+                inv_radius: s.inv_radius,
+                bulge: s.bulge,
+                mix: s.mix,
+            },
+        )
+    }
+}
+
+struct Ripple;
+impl GpuEffect for Ripple {
+    fn match_name(&self) -> &'static str {
+        "ripple"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let r = effects::ripple::Ripple::read(p).packed();
+        fx.ripple(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::RippleOp {
+                centre: r.centre,
+                radius: r.radius,
+                inv_radius: r.inv_radius,
+                amount: r.amount,
+                inv_width: r.inv_width,
+                turns: r.turns,
+                asymmetric: r.asymmetric,
+                mix: r.mix,
+            },
+        )
+    }
+}
+
+struct WaveWarp;
+impl GpuEffect for WaveWarp {
+    fn match_name(&self) -> &'static str {
+        "wave_warp"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let v = effects::wave_warp::WaveWarp::read(p).packed();
+        fx.wave_warp(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::WaveWarpOp {
+                dir: v.dir,
+                perp: v.perp,
+                height: v.height,
+                inv_width: v.inv_width,
+                turns: v.turns,
+                shape: v.shape,
+                pin: v.pin,
+                inv_pin_band: v.inv_pin_band,
+                mix: v.mix,
+            },
+        )
+    }
+}
+
+struct BezierWarp;
+impl GpuEffect for BezierWarp {
+    fn match_name(&self) -> &'static str {
+        "bezier_warp"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let b = effects::bezier_warp::BezierWarp::read(p).packed();
+        fx.bezier_warp(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BezierWarpOp {
+                pts: b.pts,
+                steps: b.steps,
+                mix: b.mix,
+            },
+        )
+    }
+}
+
+struct Warp;
+impl GpuEffect for Warp {
+    fn match_name(&self) -> &'static str {
+        "warp"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let a = effects::warp::Warp::read(p).packed();
+        fx.warp(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::WarpOp {
+                style: a.style,
+                bend: a.bend,
+                h_distort: a.h_distort,
+                v_distort: a.v_distort,
+                mix: a.mix,
+            },
+        )
+    }
+}
+
+struct RoughenEdges;
+impl GpuEffect for RoughenEdges {
+    fn match_name(&self) -> &'static str {
+        "roughen_edges"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let r = effects::roughen_edges::RoughenEdges::read(p).packed();
+        // Border 0 is the exact identity (docs/08 §3.57 decision 3): a
+        // zero-radius blur followed by a re-threshold would harden the
+        // picture's own antialiasing for an effect the user has turned off.
+        if !r.active {
+            return tex.clone();
+        }
+        fx.roughen_edges(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::RoughenEdgesOp {
+                seed: r.field.seed,
+                octaves: r.field.octaves,
+                gain: r.field.gain,
+                lacunarity: r.field.lacunarity,
+                cycle: r.field.cycle,
+                flags: u32::from(r.field.perlin) | (u32::from(r.field.turbulent) << 1),
+                offset: r.offset,
+                inv_scale: r.inv_scale,
+                z: r.z,
+                border_px: r.border_px,
+                influence: r.influence,
+                half_width: r.half_width,
+                colour: r.colour,
+                colour_on: r.colour_on,
+                mix: r.mix,
+            },
+        )
+    }
+}
+
+struct Curves;
+impl GpuEffect for Curves {
+    fn match_name(&self) -> &'static str {
+        "curves"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (y, m, mix) = effects::curves::Curves::read(p).packed();
+        fx.curves(ctx, tex, w, h, &lumit_gpu::fx::CurvesOp { y, m, mix })
+    }
+}
+
+struct Levels;
+impl GpuEffect for Levels {
+    fn match_name(&self) -> &'static str {
+        "levels"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (r, mix) = effects::levels::Levels::read(p).packed();
+        fx.levels(ctx, tex, w, h, &lumit_gpu::fx::LevelsOp { r, mix })
+    }
+}
+
+struct Brightness;
+impl GpuEffect for Brightness {
+    fn match_name(&self) -> &'static str {
+        "brightness"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (b, k, mix) = effects::brightness::Brightness::read(p).packed();
+        fx.brightness(ctx, tex, w, h, &lumit_gpu::fx::BrightnessOp { b, k, mix })
+    }
+}
+
+struct HueSaturation;
+impl GpuEffect for HueSaturation {
+    fn match_name(&self) -> &'static str {
+        "hue_saturation"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (bands, mix) = effects::hue_saturation::HueSaturation::read(p).packed();
+        fx.hue_saturation(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::HueSaturationOp { bands, mix },
+        )
+    }
+}
+
+struct Posterize;
+impl GpuEffect for Posterize {
+    fn match_name(&self) -> &'static str {
+        "posterize"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (n, mix) = effects::posterize::Posterize::read(p).packed();
+        fx.posterize(ctx, tex, w, h, &lumit_gpu::fx::PosterizeOp { n, mix })
+    }
+}
+
+struct Threshold;
+impl GpuEffect for Threshold {
+    fn match_name(&self) -> &'static str {
+        "threshold"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (level, half_width, mix) = effects::threshold::Threshold::read(p).packed();
+        fx.threshold(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::ThresholdOp {
+                level,
+                half_width,
+                mix,
+            },
+        )
+    }
+}
+
+struct Tritone;
+impl GpuEffect for Tritone {
+    fn match_name(&self) -> &'static str {
+        "tritone"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let t = effects::tritone::Tritone::read(p).packed();
+        fx.tritone(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::TritoneOp {
+                shadows: t.shadows,
+                midtones: t.midtones,
+                highlights: t.highlights,
+                mix: t.mix,
+            },
+        )
+    }
+}
+
+struct PhotoFilter;
+impl GpuEffect for PhotoFilter {
+    fn match_name(&self) -> &'static str {
+        "photo_filter"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let f = effects::photo_filter::PhotoFilter::read(p).packed();
+        fx.photo_filter(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::PhotoFilterOp {
+                filter: f.filter,
+                density: f.density,
+                preserve: f.preserve,
+                mix: f.mix,
+            },
+        )
+    }
+}
+
+struct BlackAndWhite;
+impl GpuEffect for BlackAndWhite {
+    fn match_name(&self) -> &'static str {
+        "black_and_white"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let b = effects::black_and_white::BlackAndWhite::read(p).packed();
+        fx.black_and_white(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BlackAndWhiteOp {
+                weights: b.weights,
+                tint: b.tint,
+                tint_on: b.tint_on,
+                mix: b.mix,
+            },
+        )
+    }
+}
+
+struct ShadowHighlight;
+impl GpuEffect for ShadowHighlight {
+    fn match_name(&self) -> &'static str {
+        "shadow_highlight"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let s = effects::shadow_highlight::ShadowHighlight::read(p).packed();
+        // Nothing to lift, pull or steepen: the identity, and the gaussian is
+        // not run (== the CPU reference early return).
+        if !s.active {
+            return tex.clone();
+        }
+        fx.shadow_highlight(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::ShadowHighlightOp {
+                shadow: s.shadow,
+                highlight: s.highlight,
+                shadow_width: s.shadow_width,
+                highlight_width: s.highlight_width,
+                radius_px: s.radius_px,
+                contrast: s.contrast,
+                colour_correction: s.colour_correction,
+                mix: s.mix,
+            },
+        )
+    }
+}
+
 struct Temperature;
 impl GpuEffect for Temperature {
     fn match_name(&self) -> &'static str {
@@ -923,12 +1937,11 @@ impl GpuEffect for Dof {
     fn match_name(&self) -> &'static str {
         "dof"
     }
-    /// The depth pass is the referenced layer rendered alone at this raster —
-    /// the k-th consuming op binds the k-th slot (docs/08 §3.22, K-387), the
-    /// counter Light wrap shares.
-    fn aux(&self) -> AuxKind {
-        AuxKind::LayerInput
-    }
+    /// **Depth of field's matte is its depth pass** (K-395): the referenced
+    /// layer rendered alone at this raster, arriving on the one matte carriage
+    /// every effect's matte uses. It declares no other aux, so this stays
+    /// [`AuxKind::None`] — the matte is not an aux kind, it rides beside
+    /// whatever kind an effect asks for.
     fn run(
         &self,
         fx: &FxEngine,
@@ -941,14 +1954,13 @@ impl GpuEffect for Dof {
     ) -> Tex {
         // An empty slot — unset, missing or cyclic — is the labelled no-op,
         // exactly as the old arm's `if let Some` was.
-        let Some(depth) = aux.layer_input() else {
+        let Some(depth) = aux.matte() else {
             return tex.clone();
         };
-        // A slot only ever arrives for an op whose Layer row names something
-        // (`build.rs`'s `layer_input_param` predicate), so a depth pass being
-        // *here* is precisely what "a depth layer is bound" meant in the old
-        // resolve arm — the fact the bag cannot carry, since a Layer row never
-        // reaches it.
+        // A slot only ever arrives for an op whose matte row names something
+        // (`build.rs`'s `mattes_for` predicate), so a depth pass being *here* is
+        // precisely what "a depth layer is bound" meant in the old resolve arm —
+        // the fact the bag cannot carry, since a Layer row never reaches it.
         let d = effects::dof::Dof::read(p).packed(true, effects::dof::Dof::blades_of(p));
         fx.dof(
             ctx,
@@ -980,6 +1992,272 @@ impl GpuEffect for Dof {
                 detect_edge_threshold: d.detect_edge_threshold,
                 display: d.display,
                 mix: d.mix,
+            },
+        )
+    }
+}
+
+struct ChannelBlur;
+impl GpuEffect for ChannelBlur {
+    fn match_name(&self) -> &'static str {
+        "channel_blur"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (radii, edge, mix) = effects::channel_blur::ChannelBlur::read(p).packed();
+        fx.channel_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::ChannelBlurOp { radii, edge, mix },
+        )
+    }
+}
+
+struct DropShadow;
+impl GpuEffect for DropShadow {
+    fn match_name(&self) -> &'static str {
+        "drop_shadow"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let d = effects::drop_shadow::DropShadow::read(p).packed();
+        fx.drop_shadow(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::DropShadowOp {
+                colour: d.colour,
+                opacity: d.opacity,
+                offset: d.offset,
+                softness_px: d.softness_px,
+                shadow_only: d.shadow_only,
+                mix: d.mix,
+            },
+        )
+    }
+}
+
+struct SetMatte;
+impl GpuEffect for SetMatte {
+    fn match_name(&self) -> &'static str {
+        "set_matte"
+    }
+    /// **Set matte's matte IS its output** (K-395/K-400): the referenced layer
+    /// rendered alone at this raster, arriving on the one matte carriage every
+    /// effect's matte uses. It declares no other aux, so this stays
+    /// [`AuxKind::None`].
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (channel, combine, mix) = effects::set_matte::SetMatte::read(p).packed();
+        fx.set_matte(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::SetMatteOp {
+                channel,
+                combine,
+                invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+                mix,
+            },
+        )
+    }
+}
+
+struct LinearWipe;
+impl GpuEffect for LinearWipe {
+    fn match_name(&self) -> &'static str {
+        "linear_wipe"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let l = effects::linear_wipe::LinearWipe::read(p).packed();
+        fx.linear_wipe(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::LinearWipeOp {
+                centre: l.centre,
+                normal: l.normal,
+                completion: l.completion,
+                band: l.band,
+                mix: l.mix,
+            },
+        )
+    }
+}
+
+struct RadialWipe;
+impl GpuEffect for RadialWipe {
+    fn match_name(&self) -> &'static str {
+        "radial_wipe"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let r = effects::radial_wipe::RadialWipe::read(p).packed();
+        fx.radial_wipe(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::RadialWipeOp {
+                centre: r.centre,
+                start: r.start,
+                dir: r.dir,
+                completion: r.completion,
+                feather: r.feather,
+                mix: r.mix,
+            },
+        )
+    }
+}
+
+struct VenetianBlinds;
+impl GpuEffect for VenetianBlinds {
+    fn match_name(&self) -> &'static str {
+        "venetian_blinds"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let v = effects::venetian_blinds::VenetianBlinds::read(p).packed();
+        fx.venetian_blinds(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::VenetianBlindsOp {
+                normal: v.normal,
+                period: v.period,
+                completion: v.completion,
+                band: v.band,
+                mix: v.mix,
+            },
+        )
+    }
+}
+
+struct IrisWipe;
+impl GpuEffect for IrisWipe {
+    fn match_name(&self) -> &'static str {
+        "iris_wipe"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let i = effects::iris_wipe::IrisWipe::read(p).packed();
+        fx.iris_wipe(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::IrisWipeOp {
+                centre: i.centre,
+                vertex: i.vertex,
+                normal: i.normal,
+                period: i.period,
+                rotation: i.rotation,
+                band: i.band,
+                active: i.active,
+                mix: i.mix,
+            },
+        )
+    }
+}
+
+struct CardWipe;
+impl GpuEffect for CardWipe {
+    fn match_name(&self) -> &'static str {
+        "card_wipe"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let c = effects::card_wipe::CardWipe::read(p).packed();
+        fx.card_wipe(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::CardWipeOp {
+                grid: c.grid,
+                completion: c.completion,
+                inv_width: c.inv_width,
+                one_minus_width: c.one_minus_width,
+                order_axis: c.order_axis,
+                order_bias: c.order_bias,
+                order_scale: c.order_scale,
+                axis: c.axis,
+                direction: c.direction,
+                randomness: c.randomness,
+                seed: c.seed,
+                mix: c.mix,
             },
         )
     }
@@ -1116,15 +2394,20 @@ impl GpuEffect for Glow {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, threshold, knee, intensity, tint, mix) =
             effects::glow::Glow::read(p).packed();
+        // **The glow claims its matte** (K-395): it gates the bright pass, so
+        // the matte decides which pixels are allowed to seed the halo — light
+        // still spills out of them across dark matte, which is the difference
+        // from dissolving the finished glow.
         fx.glow(
             ctx,
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::GlowOp {
                 radius_px,
                 threshold,
@@ -1132,6 +2415,7 @@ impl GpuEffect for Glow {
                 intensity,
                 tint,
                 mix,
+                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -1342,7 +2626,8 @@ impl GpuEffect for MotionBlur {
         let Some(flow) = aux.flow_field() else {
             return tex.clone();
         };
-        let (shutter_frac, samples, mix, view) = effects::motion_blur::MotionBlur::read(p).packed();
+        let (shutter_frac, samples, mix, view, quality) =
+            effects::motion_blur::MotionBlur::read(p).packed();
         fx.motion_blur(
             ctx,
             tex,
@@ -1354,6 +2639,7 @@ impl GpuEffect for MotionBlur {
                 samples,
                 mix,
                 view: view.code(),
+                quality: quality.code(),
             },
         )
     }
@@ -1444,12 +2730,17 @@ impl GpuEffect for LensFlare {
     fn match_name(&self) -> &'static str {
         "lens_flare"
     }
-    /// The Matte source and the custom `.lens` prescription, counted together off
-    /// one index (K-257, K-264, K-387): `build.rs` enumerates the layer's enabled
-    /// `lens_flare` effects once and fills both lists in that order, so the k-th
-    /// flare op binds the k-th entry of each.
+    /// The custom `.lens` prescription: the k-th flare op binds the k-th entry
+    /// (K-264, K-387).
+    ///
+    /// **The Matte source is no longer counted here** (K-395). It used to ride
+    /// beside the prescription off one index, because both were the flare's
+    /// private business; it is now the generic matte every effect can take, and
+    /// the flare is simply one of the four that claim it inside their own maths
+    /// — it reaches [`AuxSlot::matte`] off the one carriage, not a list of the
+    /// flare's own.
     fn aux(&self) -> AuxKind {
-        AuxKind::FlareInputs
+        AuxKind::LensFile
     }
     /// The one wrapper that is not thin, and could not be: the flare needs a
     /// **bake** — the prescription parsed, every ghost path ray-probed and ranked,
@@ -1473,7 +2764,7 @@ impl GpuEffect for LensFlare {
         aux: AuxSlot<'_>,
     ) -> Tex {
         use lumit_core::fx::lens_flare as lf;
-        let (matte, custom) = aux.flare_inputs();
+        let (matte, custom) = (aux.matte(), aux.lens_file());
         let (lights, light_count) = effects::lens_flare::LensFlare::lights_of(p);
         let params = effects::lens_flare::LensFlare::read(p).packed(lights, light_count);
         let p = &params;
@@ -1616,6 +2907,477 @@ impl GpuEffect for LensFlare {
     }
 }
 
+struct Median;
+impl GpuEffect for Median {
+    fn match_name(&self) -> &'static str {
+        "median"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let m = effects::median::Median::read(p).packed();
+        // The network's run length, worked out here rather than in the kernel so
+        // the CPU reference and the WGSL twin take the same rank of the same
+        // sorted run (docs/08 §3.64 decision 1).
+        let n = (2 * m.radius + 1) * (2 * m.radius + 1);
+        fx.median(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::MedianOp {
+                radius: m.radius,
+                keep: (n + 1) / 2,
+                alpha_on: f32::from(u8::from(m.alpha)),
+                mix: m.mix,
+            },
+        )
+    }
+}
+
+struct Mosaic;
+impl GpuEffect for Mosaic {
+    fn match_name(&self) -> &'static str {
+        "mosaic"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let m = effects::mosaic::Mosaic::read(p).packed();
+        fx.mosaic(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::MosaicOp {
+                blocks: m.blocks,
+                sharp: f32::from(u8::from(m.sharp)),
+                mix: m.mix,
+            },
+        )
+    }
+}
+
+struct FindEdges;
+impl GpuEffect for FindEdges {
+    fn match_name(&self) -> &'static str {
+        "find_edges"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (invert, mix) = effects::find_edges::FindEdges::read(p).packed();
+        fx.find_edges(ctx, tex, w, h, &lumit_gpu::fx::FindEdgesOp { invert, mix })
+    }
+}
+
+struct Emboss;
+impl GpuEffect for Emboss {
+    fn match_name(&self) -> &'static str {
+        "emboss"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let e = effects::emboss::Emboss::read(p).packed();
+        fx.emboss(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::EmbossOp {
+                offset: e.offset,
+                contrast: e.contrast,
+                mix: e.mix,
+            },
+        )
+    }
+}
+
+struct Texturize;
+impl GpuEffect for Texturize {
+    fn match_name(&self) -> &'static str {
+        "texturize"
+    }
+    /// The Texture is another layer, rendered alone at this raster — the
+    /// layer-input list (K-387), as Light wrap's Background is. It is **not**
+    /// the Matte row this effect also carries: §3.49's map is its matte because
+    /// a map has nothing else it could be, and a texture is not, because
+    /// "press this canvas in" and "only over the sky" are two statements
+    /// (docs/08 §3.68 decision 1).
+    fn aux(&self) -> AuxKind {
+        AuxKind::LayerInput
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let t = effects::texturize::Texturize::read(p).packed();
+        fx.texturize(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.layer_input(),
+            &lumit_gpu::fx::TexturizeOp {
+                offset: t.offset,
+                contrast: t.contrast,
+                inv_scale: t.inv_scale,
+                placement: t.placement,
+                mix: t.mix,
+            },
+        )
+    }
+}
+
+struct BroadcastSafe;
+impl GpuEffect for BroadcastSafe {
+    fn match_name(&self) -> &'static str {
+        "broadcast_safe"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let b = effects::broadcast_safe::BroadcastSafe::read(p).packed();
+        fx.broadcast_safe(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BroadcastSafeOp {
+                target: b.target,
+                mode: b.mode,
+                mix: b.mix,
+            },
+        )
+    }
+}
+
+struct Beam;
+impl GpuEffect for Beam {
+    fn match_name(&self) -> &'static str {
+        "beam"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let b = effects::beam::Beam::read(p).packed();
+        fx.beam(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::BeamOp {
+                start: b.start,
+                axis: b.axis,
+                inv_len2: b.inv_len2,
+                u0: b.u0,
+                u1: b.u1,
+                inv_span: b.inv_span,
+                half0: b.half0,
+                half1: b.half1,
+                soft: b.soft,
+                inside: b.inside,
+                outside: b.outside,
+                active: b.active,
+                composite: b.composite,
+                mix: b.mix,
+            },
+        )
+    }
+}
+
+struct Lightning;
+impl GpuEffect for Lightning {
+    fn match_name(&self) -> &'static str {
+        "lightning"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        // The bolt is built here, host-side, exactly once a frame (docs/08
+        // §3.74's first decision) — the kernel is handed the segments.
+        let l = effects::lightning::Lightning::read(p).packed();
+        fx.lightning(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::LightningOp {
+                segments: l.segments,
+                fades: l.fades,
+                count: l.count,
+                core_radius: l.core_radius,
+                glow_radius: l.glow_radius,
+                glow_opacity: l.glow_opacity,
+                core_colour: l.core_colour,
+                glow_colour: l.glow_colour,
+                composite: l.composite,
+                mix: l.mix,
+            },
+        )
+    }
+}
+
+struct RadioWaves;
+impl GpuEffect for RadioWaves {
+    fn match_name(&self) -> &'static str {
+        "radio_waves"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let r = effects::radio_waves::RadioWaves::read(p).packed();
+        fx.radio_waves(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::RadioWavesOp {
+                centre: r.centre,
+                vertex: r.vertex,
+                normal: r.normal,
+                period: r.period,
+                rotation: r.rotation,
+                spin: r.spin,
+                newest: r.newest,
+                count: r.count,
+                time: r.time,
+                period_s: r.period_s,
+                expansion: r.expansion,
+                lifespan: r.lifespan,
+                half_width: r.half_width,
+                fade_in: r.fade_in,
+                fade_out: r.fade_out,
+                colour: r.colour,
+                opacity: r.opacity,
+                composite: r.composite,
+                mix: r.mix,
+            },
+        )
+    }
+}
+
+struct Vegas;
+impl GpuEffect for Vegas {
+    fn match_name(&self) -> &'static str {
+        "vegas"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let vegas = effects::vegas::Vegas::read(p);
+        // The Mask/Path half is the shared path drawing, not the level set: the
+        // line is a mask's own, so there is no picture to take a gradient of
+        // (K-408, docs/08 §3.76).
+        if vegas.on_a_path() {
+            let built = vegas.path_packed(&path_of(aux), effects::vegas::Vegas::px_scale_of(p));
+            return fx.path_draw(ctx, tex, w, h, &path_draw_op(&built));
+        }
+        let v = vegas.packed();
+        fx.vegas(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::VegasOp {
+                from_alpha: v.from_alpha,
+                level: v.level,
+                half_width: v.half_width,
+                band: v.band,
+                inv_segment: v.inv_segment,
+                duty: v.duty,
+                phase: v.phase,
+                colour: v.colour,
+                opacity: v.opacity,
+                composite: v.composite,
+                mix: v.mix,
+            },
+        )
+    }
+}
+
+/// The three effects that draw a mask's own line share one pass, so they share
+/// one way of filling its op (K-408). `p` is the resolved bag and `aux` the slot
+/// the render prepared; an absent path is an empty polyline, which packs to a
+/// count of zero and draws nothing.
+fn path_draw_op(built: &lumit_core::fx::cpu::PathDrawParams) -> lumit_gpu::fx::PathDrawOp {
+    lumit_gpu::fx::PathDrawOp {
+        segments: built.segments,
+        arcs: built.arcs,
+        count: built.count,
+        half_width: built.half_width,
+        band: built.band,
+        inv_segment: built.inv_segment,
+        duty: built.duty,
+        phase: built.phase,
+        wiggle_amp: built.wiggle_amp,
+        wiggle_freq: built.wiggle_freq,
+        wiggle_tick: built.wiggle_tick,
+        seed: built.seed,
+        colour: built.colour,
+        opacity: built.opacity,
+        style: built.style,
+        mix: built.mix,
+    }
+}
+
+/// The polyline this op was handed, or an empty one — the same picture either
+/// way, which is why no effect has to ask *why* it is missing (docs/08 §1.2).
+fn path_of(aux: AuxSlot<'_>) -> lumit_core::mask::MaskPolyline {
+    aux.mask_path().cloned().unwrap_or_default()
+}
+
+struct Scribble;
+impl GpuEffect for Scribble {
+    fn match_name(&self) -> &'static str {
+        "scribble"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        // The hatch is laid out here, host-side, exactly once a frame — the
+        // kernel is handed the strokes (docs/08 §3.78, §3.74's decision).
+        use lumit_core::fx::effects::scribble::Scribble as S;
+        let (px_scale, tick) = S::derived_of(p);
+        let built = S::read(p).packed(&path_of(aux), px_scale, tick);
+        fx.path_draw(ctx, tex, w, h, &path_draw_op(&built))
+    }
+}
+
+struct Stroke;
+impl GpuEffect for Stroke {
+    fn match_name(&self) -> &'static str {
+        "stroke"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::stroke::Stroke as S;
+        let built = S::read(p).packed(&path_of(aux), S::px_scale_of(p));
+        fx.path_draw(ctx, tex, w, h, &path_draw_op(&built))
+    }
+}
+
+struct AddGrain;
+impl GpuEffect for AddGrain {
+    fn match_name(&self) -> &'static str {
+        "add_grain"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let g =
+            effects::add_grain::AddGrain::read(p).packed(effects::add_grain::AddGrain::tick_of(p));
+        fx.add_grain(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::AddGrainOp {
+                amplitude: g.amplitude,
+                inv_size: g.inv_size,
+                softness: g.softness,
+                tonal: g.tonal,
+                monochrome: g.monochrome,
+                seed: g.seed,
+                tick: g.tick,
+                mix: g.mix,
+            },
+        )
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -1665,11 +3427,20 @@ mod tests {
         use lumit_core::fx::ParamKind;
         for def in BUILTIN_DEFS.iter() {
             let name = def.schema().match_name;
-            let side_input = def
-                .schema()
-                .params
-                .iter()
-                .any(|p| matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. }));
+            // The Matte row (K-395) is deliberately not counted: it is carried
+            // by the one matte list beside `run_ops`'s dispatch, whoever
+            // consumes it, and never by the effect's own `aux()`. Every effect
+            // has one, so counting it would require all thirty-odd to declare a
+            // list none of them reads. Its Invert goes with it — including the
+            // older `depth_invert`, which is the same switch under K-065's
+            // stored id.
+            let matte_row = def.schema().matte.param();
+            let side_input = def.schema().params.iter().any(|p| {
+                let is_matte = matte_row.is_some_and(|m| p.id == m || p.id.starts_with(m));
+                !is_matte
+                    && p.id != lumit_core::fx::MATTE_INVERT_PARAM
+                    && matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. })
+            });
             if !side_input {
                 continue;
             }
@@ -1750,6 +3521,7 @@ mod tests {
             &ops,
             &[],
             None,
+            &[],
             &[],
             &[],
             &[],
@@ -1837,6 +3609,7 @@ mod tests {
                 ops,
                 &[],
                 None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1936,6 +3709,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -1951,24 +3725,25 @@ mod tests {
         );
     }
 
-    /// **Depth of field and Light wrap count along ONE layer-input list**
-    /// (docs/impl/layer-input.md §2, K-358, K-387).
+    /// **A plate and a matte are two lists, and neither eats the other's slot**
+    /// (docs/impl/layer-input.md §2, K-358, K-387, K-395).
     ///
-    /// `build.rs` fills a slot for every enabled effect that declares a Layer
-    /// row — one predicate, `layer_input_param`, covering both — and `run_ops`
-    /// walks a single counter down the ops in the same order. Two counters, or a
-    /// counter that only advanced when a slot was actually filled, would hand the
-    /// second effect the first effect's plate: a project where adding a Depth of
-    /// field above a Light wrap silently moves which layer the wrap reads.
+    /// Depth of field and Light wrap used to share the layer-input list, off one
+    /// predicate and one counter. K-395 split them — not arbitrarily: Light
+    /// wrap's Background is a *plate* whose light spills round an edge, while
+    /// Depth of field's depth pass is that effect's **matte**, and belongs on the
+    /// one carriage every effect's matte uses. So the two now count along
+    /// different lists, and the risk this test exists for is exactly that: an
+    /// implementation where the Depth of field still advances the layer-input
+    /// counter hands the wrap a slot that is not there, and the wrap silently
+    /// stops wrapping.
     ///
-    /// So the first slot here is deliberately **empty** and belongs to the Depth
-    /// of field — the passthrough case, which is where a "skip the counter when
-    /// there is nothing to bind" implementation goes wrong — and the second holds
-    /// a bright plate for the Light wrap. If the counter is shared and
-    /// unconditional, the wrap lights the foreground's edge; if it is not, the
-    /// wrap reads the empty slot and draws nothing at all.
+    /// The stack is Depth of field then Light wrap, and the plate is the layer
+    /// input list's **only** entry. If the two lists are properly separate, the
+    /// wrap reads it and lights the foreground's edge; if the Depth of field is
+    /// still counted, the wrap reads past the end and draws nothing at all.
     #[test]
-    fn depth_of_field_and_light_wrap_share_one_layer_input_counter() {
+    fn a_background_plate_and_a_matte_do_not_share_a_counter() {
         let Ok(ctx) = GpuContext::headless() else {
             lumit_gpu::no_adapter();
             return;
@@ -1992,8 +3767,9 @@ mod tests {
             .flat_map(|_| [2.0f32, 2.0, 2.0, 1.0])
             .collect();
 
-        // Stack order: Depth of field (its Depth row unset — an empty slot),
-        // then Light wrap with a real Width so it has something to draw.
+        // Stack order: Depth of field (its Matte row unset — a passthrough, and
+        // no layer-input slot of its own since K-395), then Light wrap with a
+        // real Width so it has something to draw.
         let dof = lumit_core::fx::instantiate("dof").expect("dof is a built-in");
         let mut wrap = lumit_core::fx::instantiate("light_wrap").expect("light_wrap is a built-in");
         for p in &mut wrap.params {
@@ -2010,7 +3786,7 @@ mod tests {
             &lumit_core::fx::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
-        assert_eq!(ops.len(), 2, "two consuming ops, two slots to bind");
+        assert_eq!(ops.len(), 2, "two ops: one plate to bind, two mattes");
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &fg, w, h);
         let plate_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &plate, w, h);
@@ -2024,12 +3800,16 @@ mod tests {
             &[],
             None,
             &[],
-            // Slot 0 empty (the Depth of field's), slot 1 the plate (the wrap's).
+            // The layer-input list carries Light wrap's Background plate and
+            // nothing else: one consuming op, one slot, at index 0.
+            &[crate::fxops::LayerInput::Texture(plate_tex)],
+            &[],
+            // Two matte slots, one per op — the Depth of field's unset (its
+            // passthrough) and the wrap's unset too.
             &[
                 crate::fxops::LayerInput::Absent,
-                crate::fxops::LayerInput::Texture(plate_tex),
+                crate::fxops::LayerInput::Absent,
             ],
-            &[],
             &[],
             None,
         );
@@ -2100,6 +3880,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -2107,6 +3888,297 @@ mod tests {
         assert!(
             got[0] > 0.2 + 1e-2,
             "red is {} — the neighbour list never reached the kernel",
+            got[0]
+        );
+    }
+
+    /// **An unbound Matte renders byte-for-byte what it rendered before K-395**
+    /// (K-258, the campaign's hardest invariant).
+    ///
+    /// Every effect gained two parameters. A project saved yesterday carries
+    /// neither, and must draw exactly the same pixels today — not "within a
+    /// tolerance", the same bits. Both halves are checked here because both can
+    /// break on their own: a *legacy* instance stripped of the pair renders what
+    /// a fresh instance renders, and a fresh instance with its Matte row unset
+    /// renders what it rendered before the row existed — which is what the empty
+    /// matte list stands for, since `build.rs` fills `Absent` for an unset row
+    /// and `run_ops` treats a missing slot and an absent one alike.
+    ///
+    /// The failure this catches is the tempting implementation: running the
+    /// dissolve unconditionally with `k = 1`. That is *nearly* free and *nearly*
+    /// identity — and it is neither, because it costs a full-frame pass per
+    /// effect and quantises the result through another fp16 store.
+    #[test]
+    fn an_unbound_matte_is_byte_identical() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        let source: Vec<f32> = (0..(w * h * 4))
+            .map(|i| match i % 4 {
+                3 => 1.0,
+                _ => (i % 13) as f32 / 13.0,
+            })
+            .collect();
+
+        // A real stack, not one effect: a blur (a gather), a saturation (a
+        // pointwise colour op) and a glow (a multi-pass) — three shapes of
+        // kernel, so a stray pass anywhere in the chain shows up.
+        let stack = |strip_matte: bool| {
+            let mut insts = Vec::new();
+            for (name, param, value) in [
+                ("blur", "radius", 2.0f64),
+                ("saturation", "saturation", 30.0),
+                ("glow", "intensity", 1.5),
+            ] {
+                let mut inst = lumit_core::fx::instantiate(name).expect("a built-in");
+                for p in &mut inst.params {
+                    if p.id == param {
+                        p.value = lumit_core::model::EffectValue::Float(
+                            lumit_core::anim::Property::fixed(value),
+                        );
+                    }
+                }
+                if strip_matte {
+                    inst.params.retain(|p| {
+                        p.id != lumit_core::fx::MATTE_PARAM
+                            && p.id != lumit_core::fx::MATTE_INVERT_PARAM
+                    });
+                }
+                insts.push(inst);
+            }
+            lumit_core::fx::resolve_stack(
+                &insts,
+                0.0,
+                ((w * w + h * h) as f32).sqrt(),
+                1.0,
+                &lumit_core::fx::MarkerContext::NONE,
+                std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+            )
+        };
+
+        let rendered = |ops: &lumit_core::fx::ResolvedStack,
+                        mattes: &[crate::fxops::LayerInput]| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                mattes,
+                &[],
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+
+        let fresh = rendered(&stack(false), &[]);
+        assert_ne!(
+            fresh, source,
+            "the stack must actually have drawn something"
+        );
+        assert_eq!(
+            rendered(&stack(true), &[]),
+            fresh,
+            "a project saved before the Matte row existed renders different pixels"
+        );
+        // And an explicitly Absent slot per op — what `build.rs` fills for an
+        // unset row — is the same nothing as no list at all.
+        let absent: Vec<crate::fxops::LayerInput> =
+            (0..3).map(|_| crate::fxops::LayerInput::Absent).collect();
+        assert_eq!(
+            rendered(&stack(false), &absent),
+            fresh,
+            "an unset Matte row must not be a dissolve by one"
+        );
+    }
+
+    /// **An override's matte is spent ONCE** (K-395).
+    ///
+    /// The hook's whole risk in one test. An effect that claims the matte inside
+    /// its maths must not *also* be dissolved by it beside the dispatch — the
+    /// matte would then be applied twice, and the give-away is that the picture
+    /// would be neither the kernel's answer nor the dissolve's but a blend of
+    /// the two. At a mid-grey matte the three are all different, which is why
+    /// the matte here is grey rather than the black or white that would let a
+    /// double application hide.
+    ///
+    /// So: run a Gaussian blur through `run_ops` with a grey matte bound, and
+    /// demand the result is **bit-identical** to calling the blur kernel with
+    /// that matte directly. Any extra pass — a lerp, an fp16 round-trip, a
+    /// dissolve by one — shows up immediately.
+    #[test]
+    fn an_override_is_not_also_dissolved() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        // A hard edge, so a blur has something to do and a dissolve of one would
+        // be visible in the numbers.
+        let source: Vec<f32> = (0..(w * h))
+            .flat_map(|i| {
+                let lit = f32::from(i % w < 8);
+                [lit, lit, lit, 1.0]
+            })
+            .collect();
+        let grey: Vec<f32> = (0..(w * h)).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
+        let matte_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &grey, w, h);
+
+        let mut inst = lumit_core::fx::instantiate("blur").expect("blur is a built-in");
+        for p in &mut inst.params {
+            if p.id == "radius" {
+                p.value =
+                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(20.0));
+            }
+        }
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            ((w * w + h * h) as f32).sqrt(),
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        let (radius_px, edge, mix) =
+            lumit_core::fx::effects::blur::Blur::read(ops.iter().next().expect("one op").params)
+                .packed();
+
+        let through_run_ops = {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                &ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
+                &[],
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+        let kernel_alone = {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = fx.blur(
+                &ctx,
+                &tex,
+                w,
+                h,
+                Some(&matte_tex),
+                &lumit_gpu::fx::BlurOp {
+                    radius_px,
+                    edge,
+                    mix,
+                    matte_invert: false,
+                },
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+        assert_ne!(
+            kernel_alone, source,
+            "the blur must actually have blurred, or this proves nothing"
+        );
+        assert_eq!(
+            through_run_ops, kernel_alone,
+            "an effect that claims the matte was ALSO dissolved by it — the \
+             matte applied twice"
+        );
+    }
+
+    /// **The k-th matte-carrying op binds the k-th matte slot** (K-395, the
+    /// K-387 contract with its second predicate).
+    ///
+    /// The mirror of `the_kth_lut_op_binds_the_kth_slot`, and it exists for the
+    /// same reason: nothing but the counting joins `build.rs`'s enumeration to
+    /// `run_ops`'s walk, so a slot skipped or double-counted drives the wrong
+    /// effect — a project where reordering the stack moves which effect a matte
+    /// controls.
+    ///
+    /// The first slot is deliberately **absent** (the unset row every list
+    /// allows), so an implementation that advances its counter only when a matte
+    /// is really there hands the second op the first op's slot and dissolves
+    /// nothing. The second slot is black, which switches its op off entirely —
+    /// so the picture must be "the first effect applied, the second not".
+    #[test]
+    fn the_kth_matte_op_binds_the_kth_slot() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (4u32, 4u32);
+        // Opaque mid grey, so both an exposure up and an exposure down are
+        // visible and neither clips.
+        let source: Vec<f32> = (0..(w * h))
+            .flat_map(|_| [0.25f32, 0.25, 0.25, 1.0])
+            .collect();
+
+        let exposure = |stops: f64| {
+            let mut inst = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+            for p in &mut inst.params {
+                if p.id == "stops" {
+                    p.value = lumit_core::model::EffectValue::Float(
+                        lumit_core::anim::Property::fixed(stops),
+                    );
+                }
+            }
+            inst
+        };
+        let ops = lumit_core::fx::resolve_stack(
+            &[exposure(2.0), exposure(-2.0)],
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        assert_eq!(ops.len(), 2, "two ops, two matte slots to bind");
+
+        let black: Vec<f32> = (0..(w * h)).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
+        let off =
+            crate::fxops::LayerInput::Texture(lumit_gpu::fx::upload_linear_f32(&ctx, &black, w, h));
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            // Slot 0 absent (the first exposure applies in full), slot 1 black
+            // (the second is switched off).
+            &[crate::fxops::LayerInput::Absent, off],
+            &[],
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        assert!(
+            (got[0] - 1.0).abs() < 1e-2,
+            "red is {} — expected 0.25 lifted two stops and NOT pulled back \
+             down, i.e. the second op bound the second slot",
             got[0]
         );
     }

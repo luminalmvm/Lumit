@@ -1,0 +1,99 @@
+---
+title: Iris wipe
+description: "Opens a polygon or a star out of the middle of the frame."
+---
+
+Iris wipe is a **Transition** effect.
+
+## What it is for
+
+Opening a hole in the layer. The hole is a regular polygon — six sides by
+default, up to thirty-two — and switching **Use inner radius** on pulls every
+other corner inwards, which turns it into a star.
+
+It is the one transition in the family with no Completion, because it does not
+need one: **the radius is the transition**. Keyframe **Outer radius** from 0 to
+something larger than the frame and the layer opens out of its middle; reverse
+the keyframes and it closes on it. That is how the shutter irises of old film
+titles were made, and it is still the quickest way to point at the centre of a
+shot.
+
+At a fixed radius it stops being a transition at all and becomes a shape: a
+hexagonal or star-shaped hole to put another layer through, or — with the whole
+thing on a solid and used as a matte — a star you can animate the points of.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Iris centre x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Iris centre y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Iris points** | Slider, whole numbers | 6 to 32 | 6 | - |
+| **Outer radius** | Slider | 0 to 100; higher by typing | 15 | Per cent of the composition diagonal |
+| **Use inner radius** | Checkbox | On or off | Off | - |
+| **Inner radius** | Slider | 0 to 100; higher by typing | 7.5 | Per cent of the composition diagonal |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Feather** | Slider | 0 to 500; higher by typing | 0 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Inner radius** is editable while **Use inner radius** is on.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Iris centre x** and **Iris centre y** — where the hole opens. A fresh
+  instance starts in the middle of the composition.
+- **Iris points** — how many corners the polygon has, 6 to 32. Six is a
+  recognisable hexagon; by about twenty it is indistinguishable from a circle
+  unless the radius is very large. With **Use inner radius** on, this is the
+  number of *points on the star*, so twelve points means a twelve-pointed star.
+- **Outer radius** — how far the corners reach, as a per cent of the composition
+  diagonal. This is the control that animates. At 0 the frame is untouched
+  exactly.
+- **Use inner radius** — turns the polygon into a star by pulling every other
+  corner in to **Inner radius**.
+- **Inner radius** — where those pulled-in corners sit. The closer it is to zero
+  the sharper and thinner the star's points become; set it *above* Outer radius
+  and the star turns inside out, which is a perfectly good shape and occasionally
+  a useful one.
+- **Rotation** — which way the shape is turned, from straight up and clockwise.
+  Worth animating slowly under a growing radius: a turning iris reads as
+  mechanical, a still one as graphic.
+- **Feather** — how soft the edge is, in pixels. It is a true width measured
+  across the edge, so it stays the same thickness all the way round, including
+  in the crooks of a star's points.
+- **Mix** — how much of the effect takes hold, as distinct from how far the iris
+  has opened. See [Linear wipe](/effects/transition/linear-wipe/).
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The iris removes what is inside it.** That is the way an iris wipe has always
+worked, and it is After Effects' behaviour too. To reveal *through* the shape
+instead, the Matte row's Invert is the wrong tool — it inverts the strength of
+the effect, not the shape it makes. Put this effect on a solid above the layer
+and use [Set matte](/effects/utility/set-matte/), or simply push Outer radius
+past the frame so only the star's points are left.
+
+**The radii are per cents of the diagonal and the centre is in pixels**, which
+looks inconsistent and is not. A radius is a *size*, and a size ought to survive
+someone reframing the composition from 1080p to 4K; a centre is a *place*, and a
+place is something you click on. [Twirl](/effects/distortion/twirl/) makes the
+same split for the same reason.
+
+## Related
+
+- [Venetian blinds](/effects/transition/venetian-blinds/)
+- [Radial wipe](/effects/transition/radial-wipe/)
+- [Set matte](/effects/utility/set-matte/)
+- [Transition](/effects/transition/)
+- [Effects](/use/effects/)

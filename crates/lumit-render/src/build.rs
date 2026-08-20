@@ -589,19 +589,24 @@ pub fn build_comp_draws_at(
     /// `fxops::run_ops` consumes one per matching op, in the same order.
     fn layer_input_param(match_name: &str) -> Option<&'static str> {
         match match_name {
-            "dof" => Some("depth"),
             // Light wrap's Background (K-358) — the plate whose light spills
-            // round the foreground's edge.
+            // round the foreground's edge. Depth of field's depth pass used to
+            // be here too, and K-395 moved it onto the one matte carriage, where
+            // it is simply this effect's matte with a deeper meaning.
             "light_wrap" => Some("background"),
+            // Texturize's Texture (K-405, docs/08 §3.68): the layer pressed into
+            // this one as relief. Not its matte — that row is still the generic
+            // strength dissolve, which is how "only over the sky" is said.
+            "texturize" => Some("texture"),
             _ => None,
         }
     }
 
     // One referenced layer resolved into an input slot — the body
-    // `dof_inputs_for` and `flare_mattes_for` share (docs/impl/layer-input.md
-    // §2): the span gate, the K-266 nested-precomp render, and the K-142
-    // masks-and-effects folding, so the depth pass and the flare matte can
-    // never disagree about what "a layer rendered alone" means.
+    // `dof_inputs_for` and `mattes_for` share (docs/impl/layer-input.md §2): the
+    // span gate, the K-266 nested-precomp render, and the K-142
+    // masks-and-effects folding, so a matte and a background plate can never
+    // disagree about what "a layer rendered alone" means.
     let layer_slot = |e: &lumit_core::model::EffectInstance, param: &str| -> Option<DofInputDraw> {
         let id = e.layer_ref(param)?;
         let src = comp.layers.iter().find(|l| l.id == id)?;
@@ -698,38 +703,90 @@ pub fn build_comp_draws_at(
                 .collect()
         };
 
-    // The Lens flare's Matte sources (docs/08 §3.27, K-257): one slot per
-    // enabled lens_flare effect, filled only when its Source type is Matte
-    // (Choice 1) and its matte layer resolves — the DoF depth-input shape,
-    // reusing the same DofInputDraw and the same render helper. The matte's
-    // own masks and effects apply per its layer_source mode (default:
-    // effects and masks — a user grading their matte expects the grade).
-    let flare_mattes_for =
+    // **The Matte inputs — the one carriage** (K-395, docs/08 §2.6). One slot
+    // per enabled built-in whose declaration names a matte parameter AND
+    // resolves to an op at all — the two conditions `resolve_stack` itself
+    // applies, so this list stays 1:1 with the ops `run_ops` walks. An
+    // orchestration-only effect (Posterize time, Accumulation motion blur) has a
+    // Matte row like everything else but no op to hang it on, and is skipped on
+    // both sides.
+    //
+    // The parameter comes from the schema's own role rather than a table here,
+    // which is what folds Depth of field's `depth` and the Lens flare's `matte`
+    // into this list instead of the two private lists they used to have. They
+    // are not special cases: they are effects whose matte means something deeper
+    // than strength, and the only thing that differs is which parameter holds
+    // the reference.
+    let mattes_for =
         |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance]| -> Vec<LayerInputDraw> {
-            use lumit_core::model::{EffectNamespace, EffectValue};
+            use lumit_core::model::EffectNamespace;
             effects
                 .iter()
-                .filter(|e| {
-                    e.enabled
-                        && e.effect.namespace == EffectNamespace::Builtin
-                        && e.effect.match_name == "lens_flare"
+                .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+                .filter_map(|e| {
+                    let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                    let param = def.schema().matte.param()?;
+                    def.is_image_op().then_some((e, param))
                 })
-                .map(|e| {
-                    if !matches!(e.param("source_type"), Some(EffectValue::Choice(1))) {
+                .map(|(e, param)| {
+                    // A row the panel does not show, or shows greyed, is a row
+                    // nobody meant: the Lens flare's Matte rows only exist while
+                    // its Source type is Matte, and rendering the layer one names
+                    // in Manual mode would cost a whole pass per frame for a
+                    // picture the kernel ignores. One rule, every effect — the
+                    // flare's own named gate, generalised.
+                    if !lumit_core::fx::param_visible(e, param)
+                        || !lumit_core::fx::param_enabled(e, param)
+                    {
                         return LayerInputDraw::Absent;
                     }
-                    // "This layer" (K-288), the default a fresh flare carries:
-                    // detect the lights in the effect's OWN input rather than
-                    // rendering a second layer. On an adjustment layer that
-                    // input is the composite of everything below — which is
-                    // why a flare works on an adjustment layer at all now.
-                    if e.layer_ref("matte") == Some(owner) {
+                    // "This layer" (K-288): a matte pointed at the layer the
+                    // effect is on is the effect's own input, not a re-render —
+                    // on an adjustment layer, the composite below.
+                    if e.layer_ref(param) == Some(owner) {
                         return LayerInputDraw::ThisLayer;
                     }
-                    layer_slot(e, "matte").map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                    layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
                 })
                 .collect()
         };
+
+    // **The mask paths — the geometry carriage** (K-408, docs/08 §1.2). One
+    // polyline per enabled built-in whose declaration names a MaskPath row AND
+    // resolves to an op at all — the same two conditions `mattes_for` applies,
+    // so this list stays 1:1 with the ops `run_ops` walks, with its own counter
+    // there because the predicate is a different one.
+    //
+    // The masks are the *layer's own*: a mask belongs to the layer it is drawn
+    // on, and an effect walking another layer's shape is a question nobody has
+    // asked. That is why nothing is rendered here — unlike a matte, this input
+    // is not a picture, and the whole point of the seam is that a coverage
+    // buffer cannot say which way is *along* a curve.
+    let mask_paths_for = |layer: &lumit_core::model::Layer,
+                          slt: f64|
+     -> Vec<lumit_core::mask::MaskPolyline> {
+        use lumit_core::model::EffectNamespace;
+        layer
+            .effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|e| {
+                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let (param, self_default) = def.schema().mask_path()?;
+                def.is_image_op().then_some((e, param, self_default))
+            })
+            .map(|(e, param, self_default)| {
+                // A row the panel does not show, or shows greyed, is a row
+                // nobody meant — the same rule the matte carriage applies.
+                if !lumit_core::fx::param_visible(e, param)
+                    || !lumit_core::fx::param_enabled(e, param)
+                {
+                    return lumit_core::mask::MaskPolyline::default();
+                }
+                lumit_core::mask::mask_path_at(&layer.masks, e.mask_ref(param), self_default, slt)
+            })
+            .collect()
+    };
 
     // Solo / isolate (K-105): while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
@@ -976,7 +1033,8 @@ pub fn build_comp_draws_at(
                     // `light_wrap` effects, 1:1 with the stack's
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
-                    flare_mattes: flare_mattes_for(layer.id, &layer.effects),
+                    mattes: mattes_for(layer.id, &layer.effects),
+                    mask_paths: mask_paths_for(layer, lt),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
                     // the render target (K-266) — realise rescales.
@@ -1215,7 +1273,8 @@ pub fn build_comp_draws_at(
             // §3.22, §3.28); built the same way export does, so the two blur
             // identically (K-031).
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
-            flare_mattes: flare_mattes_for(layer.id, &layer.effects),
+            mattes: mattes_for(layer.id, &layer.effects),
+            mask_paths: mask_paths_for(layer, lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
             // Per-layer motion blur (docs/06 §4, K-120): the layer's own

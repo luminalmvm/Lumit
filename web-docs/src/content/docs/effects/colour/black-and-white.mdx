@@ -1,0 +1,88 @@
+---
+title: Black and white
+description: "Converts to grey with six sliders that say how bright each colour comes out, the way a coloured filter on black-and-white film did."
+---
+
+Black and white is a **Colour** effect.
+
+## What it is for
+
+Turning a colour picture grey throws information away, and *which* information
+decides whether the result is a photograph or a mush. A flat conversion gives a
+red jumper and the green grass behind it the same grey, and the jumper vanishes.
+
+This effect asks six questions instead — how bright should reds be, and yellows,
+and greens, and cyans, and blues, and magentas — so you can darken a sky until
+the clouds stand out, lift skin so a face reads, or separate two colours that
+happen to have the same brightness. It is what a red filter on black-and-white
+film always did, with the filter chosen after the shoot.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Reds** | Slider | -200 to 300; higher by typing | 40 | - |
+| **Yellows** | Slider | -200 to 300; higher by typing | 60 | - |
+| **Greens** | Slider | -200 to 300; higher by typing | 40 | - |
+| **Cyans** | Slider | -200 to 300; higher by typing | 60 | - |
+| **Blues** | Slider | -200 to 300; higher by typing | 20 | - |
+| **Magentas** | Slider | -200 to 300; higher by typing | 80 | - |
+| **Tint** | Checkbox | On or off | Off | - |
+| **Tint colour** | Colour | Each channel 0 to 4, scene-linear | 0.62, 0.44, 0.26, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Tint colour** is editable while **Tint** is on.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Reds**, **Yellows**, **Greens**, **Cyans**, **Blues**, **Magentas** — how
+  bright each colour comes out in the grey. Raise one to lift everything of that
+  colour, lower it to darken. The classic move is **Blues** down to darken a sky
+  and **Reds** up to lift skin and brick.
+- **Tint** and **Tint colour** — colour the grey picture. A warm brown is a
+  sepia print, a mid blue is a cyanotype. Tint colour changes the *hue* of the
+  result and not its brightness, so you can try a dark tint without the picture
+  going dark with it.
+- **Mix** — how much of the conversion replaces the original. Below 100 you get
+  a partly desaturated picture, which is a different and often better look than
+  pulling [Saturation](/effects/colour/saturation/) down.
+- **Matte** and **Invert** — convert only part of the frame, which is how a
+  single object is kept in colour; see [Effects](/use/effects/).
+
+## Notes
+
+**The six sliders do nothing at all to a grey.** The maths decomposes each
+colour exactly into a grey plus a bit of one colour and a bit of another, so a
+neutral pixel has nothing for the sliders to act on. That is what makes them
+safe to push: a shot with a lot of neutral in it does not drift while you tune
+one colour.
+
+**There are no seams.** A gradient that runs from red through orange to yellow
+crosses from one slider's territory to another smoothly, because the two agree
+exactly where they meet.
+
+**Nothing clips.** Pushing a slider to 300 lifts a specular highlight well past
+white rather than flattening it, so a converted picture still has headroom for
+[Glow](/effects/stylise/glow/). The grey is only prevented from going *below*
+black.
+
+**For a plain desaturation**, [Saturation](/effects/colour/saturation/) at
+&minus;100 is the shorter route. Use this when the picture needs its colours
+told apart.
+
+## Related
+
+- [Saturation](/effects/colour/saturation/)
+- [Tritone](/effects/colour/tritone/)
+- [Photo filter](/effects/colour/photo-filter/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

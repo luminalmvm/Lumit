@@ -18,6 +18,16 @@ use lumit_fx_macros::Effect;
     // the safe static bound (mirroring Chromatic aberration's own px@comp
     // parameter).
     roi = FullFrame,
+    // K-395: the glow claims the injected Matte row inside its own maths — the
+    // matte gates the bright pass, so it decides which pixels are *allowed to
+    // glow*, not how much of a finished glow survives. The generic strength
+    // dissolve does not also run.
+    matte = (
+        "matte",
+        "gates which pixels may seed the halo, before the bright pass: light \
+         only escapes from where the matte is bright, but it still spills \
+         outward across dark matte — which fading the finished glow cannot do",
+    ),
 )]
 pub struct Glow {
     /// Linear-light value above which pixels bloom. The K-090 one-sided hard
@@ -104,6 +114,23 @@ impl EffectDef for GlowDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radius_px, threshold, knee, intensity, tint, mix) = Glow::read(p).packed();
-        cpu::glow(rgba, w, h, radius_px, threshold, knee, intensity, tint, mix);
+        // No matte through the single-buffer dispatcher: it carries one
+        // picture, and this effect's matte is a second one (the K-387 rule the
+        // depth pass and the LUT already follow). The §1.6 oracle for the matted
+        // path is `cpu::glow` called directly from the lumit-gpu test, which can
+        // upload it.
+        cpu::glow(
+            rgba,
+            w,
+            h,
+            radius_px,
+            threshold,
+            knee,
+            intensity,
+            tint,
+            mix,
+            &[],
+            false,
+        );
     }
 }

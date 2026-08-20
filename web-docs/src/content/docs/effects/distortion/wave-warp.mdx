@@ -1,0 +1,93 @@
+---
+title: Wave warp
+description: "Runs a wave across the frame and slides the picture sideways to it, the way a flag ripples."
+---
+
+Wave warp is a **Distortion** effect.
+
+## What it is for
+
+A wave travels across the picture in the direction you choose, and the picture
+slides *across* that direction as the wave passes — a flag rippling, a reflection
+in moving water, a bad video signal.
+
+Five wave shapes are on offer, and they are not decoration: a **Sine** is a soft
+ripple, a **Square** is a stack of hard slices offset left and right, a
+**Sawtooth** tears, a **Triangle** zigzags and a **Circle** scallops.
+
+As with [Ripple](/effects/distortion/ripple/), the motion comes from a keyframed
+**Phase** rather than a speed control, so what you see in the preview is what the
+export writes.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Wave type** | Dropdown | Sine · Square · Triangle · Sawtooth · Circle | Sine | - |
+| **Wave height** | Slider | -500 to 500; any value by typing | 15 | Pixels at composition size |
+| **Wave width** | Slider | 1 to 2000; higher by typing | 120 | Pixels at composition size |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 90° | - |
+| **Phase** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | - |
+| **Pinning** | Dropdown | None · All edges · Left and right · Top and bottom · Left edge · Right edge · Top edge · Bottom edge | None | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Wave type** — the shape of the wave. Sine and Circle are smooth; Triangle is
+  angular; Square and Sawtooth carry a step, which arrives as the hard slice it
+  is meant to be.
+- **Wave height** — how far the picture slides at a crest, in pixels at
+  composition size. Negative is the same wave half a turn of Phase along.
+- **Wave width** — the distance between crests. Together with Wave height this
+  sets how violent the wave is: a tall wave in a narrow width folds the picture
+  over itself.
+- **Direction** — the direction the wave **travels**, in degrees from straight up,
+  turning clockwise. The picture slides across it, a quarter turn round. At the
+  default 90° the wave runs left to right and the picture slides up and down.
+- **Phase** — where along the wave this frame is caught. Animate it linearly and
+  the wave travels; the speed is yours to set.
+- **Pinning** — which edges of the frame are nailed down. A pinned edge cannot
+  move, so the wave fades out over the last **Wave height** pixels before it. All
+  eight combinations are here, from a single edge to all four.
+- **Mix** — how much of the waved picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**Pinning is what makes it a flag rather than a ripple.** Pin one edge and the
+picture is fixed there and free at the other, which is exactly how cloth behaves
+when it is nailed to a pole. Pin all four and the wave lives in the middle of the
+frame and the borders stay put.
+
+**The edges repeat rather than fading.** An unpinned wave carries the picture off
+the side of the frame, and something has to stand behind it; a transparent edge
+would leave a hole where the crest was, which is not what a waving flag looks
+like. If you want a clean edge, pin it.
+
+**Direction names the wave's travel, not the picture's slide.** They are a quarter
+turn apart. If the picture is sliding the wrong way, turn Direction by 90°, not
+by 180°.
+
+**Two shapes AE has are not here.** Its Noise and Smooth Noise wave types are a
+noise field wearing a wave's clothes; if that is what you want, reach for
+[Turbulent displace](/effects/distortion/turbulent-displace/), which is built on
+the real thing and has a seed, an evolution and a complexity of its own.
+
+## Related
+
+- [Ripple](/effects/distortion/ripple/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Warp](/effects/distortion/warp/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

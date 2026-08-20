@@ -118,6 +118,21 @@ class EffectParamRowFrb extends StatelessWidget {
   /// Empty is a fair default — the row then simply offers no dropper.
   final Map<String, BridgeEffectValue> siblings;
 
+  /// The Invert switch that rides beside a Matte layer picker on the **same
+  /// row** (K-395), or null on every other row.
+  ///
+  /// The matte row is one row everywhere — picker, then the switch that flips
+  /// what the matte says — so it is one widget rather than two rows that
+  /// happen to be adjacent. The switch keeps its own parameter id, so the key
+  /// it draws under and the value it writes are the ones a separate row would
+  /// have used; only the layout is shared.
+  final BridgeParamInfo? invertParam;
+
+  /// [invertParam]'s current value, staged drag included. Null draws the switch
+  /// off, the same reading an absent parameter gets everywhere else (K-258:
+  /// a saved project from before the pair simply has none).
+  final BridgeEffectValue? invertValue;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -137,6 +152,8 @@ class EffectParamRowFrb extends StatelessWidget {
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
+    this.invertParam,
+    this.invertValue,
   });
 
   @override
@@ -429,7 +446,13 @@ class EffectParamRowFrb extends StatelessWidget {
 
       case BridgeParamKind_Layer():
         if (value case BridgeEffectValue_Layer(:final field0)) {
-          return _layerPicker(context, id, field0);
+          return _matteRow(context, t, id, _layerPicker(context, id, field0));
+        }
+        return Text('—', style: t.small);
+
+      case BridgeParamKind_MaskPath():
+        if (value case BridgeEffectValue_MaskPath(:final field0)) {
+          return _maskPicker(context, id, field0);
         }
         return Text('—', style: t.small);
 
@@ -851,6 +874,90 @@ class EffectParamRowFrb extends StatelessWidget {
       ),
     );
   }
+
+  /// The masks of the layer this effect sits on, by name (K-408).
+  ///
+  /// An effect that walks a shape reads one of *this layer's* masks — a mask
+  /// belongs to the layer it was drawn on — so the list comes from the owner's
+  /// own entry in the read model the panel already holds. No call crosses the
+  /// bridge to build it: this runs on every rebuild, and the budget test counts
+  /// zero.
+  ///
+  /// **"First mask"** is the unset entry rather than "None": what an unset row
+  /// comes to is the engine's answer (the schema's `self_default`), and for
+  /// every effect that takes a path it is the layer's first mask. A layer with
+  /// no masks yet still shows it — that is the honest reading of an effect
+  /// dropped on before the shape is drawn.
+  Widget _maskPicker(BuildContext context, UuidValue id, UuidValue? current) {
+    final masks = ownerLayers
+            .where((l) => l.layer.internallayerId == ownerLayerId)
+            .map((l) => l.info.masks)
+            .firstOrNull ??
+        const <BridgeMask>[];
+    return SizedBox(
+      width: effectCellWidth + 40,
+      child: BareLazyDropdown<UuidValue?>(
+        key: ValueKey<String>('fx-mask-$id-${param.id}'),
+        label: current == null
+            ? l10n.firstMask
+            : (masks
+                    .where((m) => m.id == current)
+                    .map((m) => m.name)
+                    .firstOrNull ??
+                l10n.missingMask),
+        options: () => [
+          (null, l10n.firstMask),
+          // Every mask, including one in None mode: that mode is "geometry
+          // only, gates nothing", which is exactly the mask somebody draws
+          // *for* an effect to walk.
+          for (final m in masks) (m.id, m.name),
+        ],
+        onChanged: (picked) => _set(BridgeEffectValue.maskPath(picked)),
+      ),
+    );
+  }
+
+  /// The picker with its Invert switch beside it — the uniform Matte row
+  /// (K-395), which every effect has and which the two that owned the idea
+  /// first (Depth of field's depth pass, the Lens flare's source matte) now
+  /// share. Without an [invertParam] this is the picker alone, which is what
+  /// the flare draws: it has no invert of its own to offer.
+  ///
+  /// The switch's word is drawn here rather than in the name column because the
+  /// name column already holds this row's word, "Matte". Two controls on one
+  /// row need two labels, and the second one goes where the second control is.
+  Widget _matteRow(
+      BuildContext context, LumitTheme t, UuidValue id, Widget picker) {
+    final inv = invertParam;
+    if (inv == null) return picker;
+    final on = switch (invertValue) {
+      BridgeEffectValue_Bool(:final field0) => field0,
+      _ => false,
+    };
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        picker,
+        const SizedBox(width: 10),
+        HouseCheckbox(
+          // The key a row of its own would have drawn under: the switch moved
+          // house, it did not become a different control.
+          key: ValueKey<String>('fx-bool-$id-${inv.id}'),
+          value: on,
+          onChanged: (next) =>
+              onWrite(effectId, inv.id, BridgeEffectValue.bool(next)),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            engineLabel(inv.label),
+            style: t.small,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Two `_x`/`_y` Float parameters as ONE point row (docs/07 §6.1): the pair
@@ -1197,6 +1304,9 @@ BridgeEffectValue defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       BridgeParamKind_File() => BridgeEffectValue.file(
           const BridgeFileParam(paths: [], index: BridgeScalar.static_(0))),
       BridgeParamKind_Layer() => const BridgeEffectValue.layer(),
+      // Unset is "First mask" (K-408), not "no mask" — what it comes to is
+      // the engine's answer, not a value written here.
+      BridgeParamKind_MaskPath() => const BridgeEffectValue.maskPath(),
     };
 
 /// One channel of a declared colour default, tolerating a short list — a schema

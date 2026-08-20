@@ -1,0 +1,96 @@
+---
+title: Drop shadow
+description: "Casts a soft, coloured copy of the layer's own shape behind it."
+---
+
+Drop shadow is a **Stylise** effect.
+
+## What it is for
+
+Lifting a layer off whatever is behind it. The layer already carries its shape in
+its transparency — the solid parts, the soft edge, every scrap of antialiasing —
+and this blurs that shape, tints it, slides it in the direction the light comes
+from, and draws it **underneath** the layer.
+
+That "underneath" is the whole reason it is an effect rather than a duplicated
+layer: one instance gives you the shadow and the thing casting it, correctly
+stacked, in the right place, animated together.
+
+It is the most-reached-for effect in motion graphics for a reason. Titles,
+lower thirds, logos, UI panels, cut-out photographs — anything with a shape
+reads better with one, and a shadow is usually the difference between a caption
+that sits *on* the picture and one that sits *in front of* it.
+
+**It needs a shape to work with.** A layer that fills the frame edge to edge has
+no silhouette, so there is nothing to cast and you will see nothing. Put it on a
+title, a shape layer, a keyed subject, or a footage layer that has been masked
+or scaled down.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shadow colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Opacity** | Slider | 0 to 100 | 50 | - |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 135° | - |
+| **Distance** | Slider | 0 to 500; higher by typing | 12 | Pixels at composition size |
+| **Softness** | Slider | 0 to 250; higher by typing | 8 | Pixels at composition size |
+| **Shadow only** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shadow colour** — what the shadow is made of. Black is the default and
+  usually right, but a shadow is really *the absence of a light*, so tinting it
+  towards the colour opposite your key light is what makes it look considered
+  rather than stuck on. The range runs past white so a bright "shadow" is
+  typable, which is how a glow-behind is faked in one instance.
+- **Opacity** — how much of that colour lands. 50 is the default because a
+  shadow at full strength reads as a hole rather than as a shadow.
+- **Direction** — where the light is, in degrees. **Measured from straight up,
+  turning clockwise**: 0° puts the shadow directly above the layer, 90° to the
+  right, 135° (the default) down and to the right, which is where almost every
+  interface in the world puts it.
+- **Distance** — how far the shadow slides. Small distances read as "resting
+  just above the background", large ones as "floating well in front of it".
+- **Softness** — how blurred the shadow is. It is independent of Distance on
+  purpose, so you can move a shadow without changing how sharp it is. In real
+  life the two travel together — a light further away casts a sharper shadow
+  further off — so animating both is what sells a lift.
+- **Shadow only** — keeps the shadow and throws the layer away. This is how you
+  put a shadow on a *different* layer from the thing casting it: duplicate the
+  layer, put Shadow only on the copy, and move the copy anywhere in the stack.
+- **Mix** — how much of the whole result replaces the original. Below 100 the
+  shadow fades; at 0 nothing happens at all, which is where a fade-in starts.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The shadow can leave the frame, and that is correct.** A shape touching the
+frame border casts a shadow that goes off the edge; those pixels are simply not
+there. Holding the border pixel outward instead would smear it into a fan, which
+reads as a fault.
+
+**Several shadows are several instances.** Two Drop shadows at different
+distances and opacities is the standard recipe for a soft ambient shadow plus a
+tight contact one, and it stacks in the order you would expect: the lower one in
+the list is drawn further back.
+
+## Related
+
+- [Glow](/effects/stylise/glow/)
+- [Fill](/effects/generate/fill/)
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

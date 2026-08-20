@@ -295,7 +295,7 @@ Future<void> _blendKeysAndWaveform() async {
   await captureUi(
     'blend-modes.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, 384, boxOf('tl-ruler')!.left + 40, 960),
+    crop: _blendCrop(cardId),
   );
   await tapAt(const Offset(240, 560), settle: 1.2);
 
@@ -417,9 +417,21 @@ Future<void> _speedRamp() async {
   await captureUi(
     'speed-ramp.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, ruler.top - 28, ruler.right + 4,
-        boxOf('tl-zoom-slider')!.bottom + 8),
+    crop: Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+        ruler.right + 4 + paneCardInset,
+        boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset),
   );
+}
+
+/// The open blend-mode list, with the outline it belongs to beside it.
+///
+/// Sideways it is the band the caption is about: the outline, from the window's
+/// edge to a little past the seam. Up and down it is measured off the list
+/// itself — the list is as tall as its rows, and Round's rows are taller than
+/// Sharp's, so a band of fixed numbers cut the last modes off.
+Rect _blendCrop(String cardId) {
+  final list = openPopup()!.expandToInclude(boxOf('tl-blend-$cardId')!.inflate(12));
+  return Rect.fromLTRB(2, list.top, boxOf('tl-ruler')!.left + 40, list.bottom);
 }
 
 /// Move the splitter between the upper band and the Timeline, and let the

@@ -253,7 +253,129 @@ struct ScanlinesParams {
     _pad2: f32,
 }
 
+/// One resolved Roughen edges (docs/08 §3.57). Mirrors
+/// `lumit_core::fx::cpu::RoughenEdgesParams` with its `FractalField` flattened,
+/// which is the shape the uniform wants anyway.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoughenEdgesOp {
+    pub seed: u32,
+    /// 1..=10.
+    pub octaves: u32,
+    pub gain: f32,
+    pub lacunarity: f32,
+    /// Depth loop length in cells; 0 for a field that never repeats.
+    pub cycle: i32,
+    /// Bit 0 Perlin, bit 1 Turbulent (the Spiky edge type).
+    pub flags: u32,
+    /// The field's origin, raster pixels.
+    pub offset: [f32; 2],
+    /// `1 ÷ Scale`, raster pixels.
+    pub inv_scale: f32,
+    /// The field's depth coordinate.
+    pub z: f32,
+    /// Border, raster pixels: the first pass's gaussian radius.
+    pub border_px: f32,
+    /// Fractal influence ÷ 100.
+    pub influence: f32,
+    /// Half the cut's width, in alpha.
+    pub half_width: f32,
+    /// Scene-linear RGB the chewed band is painted in.
+    pub colour: [f32; 3],
+    /// 1 to paint the band, 0 to leave it.
+    pub colour_on: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct RoughenEdgesParams {
+    colour: [f32; 4],
+    offset: [f32; 2],
+    inv_scale: f32,
+    z: f32,
+    gain: f32,
+    lacunarity: f32,
+    influence: f32,
+    half_width: f32,
+    colour_on: f32,
+    mix_amt: f32,
+    seed: u32,
+    octaves: u32,
+    cycle: i32,
+    flags: u32,
+    _pad0: u32,
+    _pad1: u32,
+}
+
 impl FxEngine {
+    /// Apply one Roughen edges (docs/08 §3.57) to a linear working texture,
+    /// returning a new texture of the same size.
+    ///
+    /// **Two passes, and the first is the shipped §3.8 gaussian.** Blurring the
+    /// picture by Border turns its alpha into a ramp whose half-way contour sits
+    /// exactly where the original edge was and whose slope is Border wide — the
+    /// distance field the roughening needs, without a distance transform. §3.43
+    /// reuses the same blur for its own reasons; this is the second time it has
+    /// paid.
+    pub fn roughen_edges(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &RoughenEdgesOp,
+    ) -> wgpu::Texture {
+        let soft = self.blur(
+            ctx,
+            src,
+            w,
+            h,
+            None,
+            &super::BlurOp {
+                radius_px: op.border_px,
+                // Transparent: the shape's own edge is what is being measured,
+                // and repeating the border pixel outward would put a phantom
+                // edge along the frame's own sides.
+                edge: 0,
+                mix: 1.0,
+                // This effect's own matte is the generic strength dissolve and
+                // has already been dealt with beside the dispatch; the softening
+                // is internal plumbing, not the user's Gaussian blur.
+                matte_invert: false,
+            },
+        );
+        let out = work_texture(ctx, w, h, "fx-roughen-edges-out");
+        self.dispatch(
+            ctx,
+            &self.roughen_edges,
+            src,
+            &soft,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&RoughenEdgesParams {
+                colour: [op.colour[0], op.colour[1], op.colour[2], 1.0],
+                offset: op.offset,
+                inv_scale: op.inv_scale,
+                z: op.z,
+                gain: op.gain,
+                lacunarity: op.lacunarity,
+                influence: op.influence,
+                half_width: op.half_width,
+                colour_on: op.colour_on,
+                mix_amt: op.mix,
+                seed: op.seed,
+                octaves: op.octaves,
+                cycle: op.cycle,
+                flags: op.flags,
+                _pad0: 0,
+                _pad1: 0,
+            }),
+        );
+        out
+    }
+
     /// Apply one matte key (docs/08 §3.21, K-121/K-154) to a linear working
     /// texture, returning a new texture of the same size. One pointwise pass; the
     /// §2.2 unpremultiply wrap is fused into the kernel, which derives the screen's
@@ -477,6 +599,285 @@ impl FxEngine {
                 _pad0: 0.0,
                 _pad1: 0.0,
                 _pad2: 0.0,
+            }),
+        );
+        out
+    }
+}
+
+/// One resolved Median (docs/08 §3.64). Mirrors
+/// `lumit_core::fx::cpu::MedianParams`, with the network's run length worked out
+/// beside it so the kernel never derives a count of its own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MedianOp {
+    /// Half the window's width, whole raster pixels, `0..=3`.
+    pub radius: i32,
+    /// `⌈(2r+1)² ÷ 2⌉`: how many of the smallest the selection network carries,
+    /// and therefore the 1-based rank of the median.
+    pub keep: i32,
+    /// 1 to median the coverage with the colour, 0 to leave it.
+    pub alpha_on: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MedianParams {
+    radius: i32,
+    keep: i32,
+    alpha_on: f32,
+    mix_amt: f32,
+}
+
+/// One resolved Mosaic (docs/08 §3.65). Mirrors
+/// `lumit_core::fx::cpu::MosaicParams`; the kernel derives the block bounds from
+/// its own `textureDimensions`, in integers, exactly as the CPU reference
+/// derives them from `w`/`h`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MosaicOp {
+    /// Blocks across and blocks down, each `1..=2000`.
+    pub blocks: [i32; 2],
+    /// 1 for the block's centre pixel, 0 for the sampled mean.
+    pub sharp: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MosaicParams {
+    blocks_x: i32,
+    blocks_y: i32,
+    sharp: f32,
+    mix_amt: f32,
+}
+
+/// One resolved Find edges (docs/08 §3.66).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FindEdgesOp {
+    /// 1 for bright edges on black, 0 for AE's dark edges on white.
+    pub invert: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct FindEdgesParams {
+    invert: f32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
+/// One resolved Emboss (docs/08 §3.67). Mirrors
+/// `lumit_core::fx::cpu::EmbossParams`: Direction and Relief arrive folded into
+/// one vector, so the kernel never runs its own trigonometry (§3.5's rule).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EmbossOp {
+    /// Toward the light, raster pixels.
+    pub offset: [f32; 2],
+    /// Contrast ÷ 100.
+    pub contrast: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct EmbossParams {
+    offset: [f32; 2],
+    contrast: f32,
+    mix_amt: f32,
+}
+
+/// One resolved Texturize (docs/08 §3.68). Mirrors
+/// `lumit_core::fx::cpu::TexturizeParams`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TexturizeOp {
+    /// Toward the light, raster pixels.
+    pub offset: [f32; 2],
+    /// Texture contrast ÷ 100.
+    pub contrast: f32,
+    /// `100 ÷ Scale`.
+    pub inv_scale: f32,
+    /// 0 Stretch, 1 Tile, 2 Centre.
+    pub placement: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct TexturizeParams {
+    offset: [f32; 2],
+    contrast: f32,
+    inv_scale: f32,
+    placement: u32,
+    mix_amt: f32,
+    _pad0: f32,
+    _pad1: f32,
+}
+
+impl FxEngine {
+    /// Apply one Median (docs/08 §3.64) to a linear working texture, returning a
+    /// new texture of the same size.
+    ///
+    /// One pass, and the catalogue's only `heavy` one: up to 1 225
+    /// compare-exchanges a pixel. Radius 0 short-circuits inside the kernel to
+    /// the bit-exact identity.
+    pub fn median(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &MedianOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-median-out");
+        self.dispatch(
+            ctx,
+            &self.median,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&MedianParams {
+                radius: op.radius,
+                keep: op.keep.max(1),
+                alpha_on: op.alpha_on,
+                mix_amt: op.mix,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Mosaic (docs/08 §3.65) to a linear working texture, returning a
+    /// new texture of the same size. One pass: one tap in the sharp mode, at
+    /// most 64 in the averaged one.
+    pub fn mosaic(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &MosaicOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-mosaic-out");
+        self.dispatch(
+            ctx,
+            &self.mosaic,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&MosaicParams {
+                blocks_x: op.blocks[0],
+                blocks_y: op.blocks[1],
+                sharp: op.sharp,
+                mix_amt: op.mix,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Find edges (docs/08 §3.66) to a linear working texture,
+    /// returning a new texture of the same size. One pass, eight taps a pixel.
+    pub fn find_edges(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &FindEdgesOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-find-edges-out");
+        self.dispatch(
+            ctx,
+            &self.find_edges,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&FindEdgesParams {
+                invert: op.invert,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Emboss (docs/08 §3.67) to a linear working texture, returning a
+    /// new texture of the same size. One pass, two bilinear taps a pixel.
+    pub fn emboss(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &EmbossOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-emboss-out");
+        self.dispatch(
+            ctx,
+            &self.emboss,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&EmbossParams {
+                offset: op.offset,
+                contrast: op.contrast,
+                mix_amt: op.mix,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Texturize (docs/08 §3.68) to a linear working texture,
+    /// returning a new texture of the same size.
+    ///
+    /// `texture` is the Texture row's layer, already rendered at this raster
+    /// (docs/impl/layer-input.md) and bound in the `orig` slot — this being a
+    /// single pass, `src` is already its own unprocessed original. **An unset
+    /// row is the identity**, returned here rather than in the kernel, because a
+    /// texture that does not exist is not a texture of zero relief.
+    pub fn texturize(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        texture: Option<&wgpu::Texture>,
+        op: &TexturizeOp,
+    ) -> wgpu::Texture {
+        let Some(texture) = texture else {
+            return src.clone();
+        };
+        let out = work_texture(ctx, w, h, "fx-texturize-out");
+        self.dispatch(
+            ctx,
+            &self.texturize,
+            src,
+            texture,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&TexturizeParams {
+                offset: op.offset,
+                contrast: op.contrast,
+                inv_scale: op.inv_scale,
+                placement: op.placement,
+                mix_amt: op.mix,
+                _pad0: 0.0,
+                _pad1: 0.0,
             }),
         );
         out

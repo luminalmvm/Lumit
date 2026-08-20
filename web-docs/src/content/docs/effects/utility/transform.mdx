@@ -1,0 +1,83 @@
+---
+title: "Transform"
+description: "The transform properties as a stack entry, for adjustment layers."
+---
+
+Transform is a [Utility](/effects/utility/) effect.
+
+## What it is for
+
+The layer transform group — anchor, position, scale, rotation and opacity — as an
+effect in the stack. The parameters mirror the real ones exactly, in the same
+units, animatable in the same way.
+
+Its point is **adjustment layers**. Every layer already has a transform, so an
+effect that repeats it would be pointless were it not for the one place a layer
+transform cannot reach: the composite of everything below. Put this on an
+adjustment layer and it moves, scales and rotates the whole picture beneath it as
+one, which is the montage punch-in and the whip transition, done in a single
+place rather than by keyframing every layer.
+
+It is also useful on an ordinary layer when you need a transform to happen at a
+particular *point in the stack* — before or after a given effect — rather than
+after the whole stack, which is where the layer's own transform always applies.
+Scaling a layer up before a blur and back down after it is not the same picture
+as doing either alone.
+
+For the layer's own transform properties, see
+[Transform](/use/transform/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Anchor x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Anchor y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Position x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Position y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Scale x %** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Scale y %** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Opacity %** | Slider | 0 to 100 | 100 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Anchor x** and **Anchor y** — the point everything else happens around, in
+  pixels. Scale grows away from it and rotation turns about it, so moving the
+  anchor is how you decide whether a punch-in comes toward the middle of frame or
+  toward a subject standing off to one side.
+- **Position x** and **Position y** — where that anchor point lands, in pixels.
+  Since the two default to the same place, a fresh instance changes nothing until
+  you move one.
+- **Scale x %** and **Scale y %** — size as a percentage, so full size is a
+  hundred. The two axes are separate, so a picture can be stretched as well as
+  scaled. Negative values flip, which is the quickest way to mirror the composite
+  beneath an adjustment layer.
+- **Rotation** — degrees, on a dial. It is unbounded and winds through whole
+  turns, because a whip transition spins several times and a control that stopped
+  at one turn could not express it.
+- **Opacity %** — how much of the transformed picture is there at all.
+- **Mix** — how much of the transformed result replaces the original. It is a
+  different question from opacity: this blends the moved picture against the
+  unmoved one, which at partial values gives you a double exposure rather than a
+  fade.
+
+## Related
+
+- [Transform](/use/transform/)
+- [Layers](/use/layers/)
+- [Radial blur](/effects/blur-sharpen/radial-blur/)
+- [Shake](/effects/distortion/shake/)
+- [Utility](/effects/utility/)
+- [Effects](/use/effects/)

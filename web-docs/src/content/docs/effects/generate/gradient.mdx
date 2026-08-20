@@ -1,0 +1,93 @@
+---
+title: Gradient
+description: "A two-colour ramp across the frame, straight or radiating, with a dither that kills banding."
+---
+
+Gradient is a **Generate** effect.
+
+## What it is for
+
+Painting a smooth run from one colour to another over the whole frame.
+
+Two points decide it. Everything at the first point is the first colour,
+everything at the second is the second, and in between the two are mixed by how
+far along you have got. **Linear** measures that along the straight line between
+the points, so the ramp runs in whatever direction you drag them. **Radial**
+measures distance out from the first point instead, so the ramp becomes rings —
+the first colour at the centre, the second at the radius the second point sits
+on.
+
+It replaces the frame rather than grading it, so it belongs on a solid, on an
+adjustment layer, or on a layer whose picture you no longer want. Backgrounds are
+the obvious use; the less obvious and more valuable one is as a **matte source**.
+Point another effect's Matte row at a layer carrying a Gradient and that effect
+now fades in across the frame — a blur that softens toward one corner, a grade
+that only reaches the top of the shot.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Linear · Radial | Linear | - |
+| **Start x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Start y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Start colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **End x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **End y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
+| **End colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Scatter** | Slider | 0 to 100 | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shape** — **Linear** runs the ramp along the line between the two points.
+  **Radial** runs it outward from Start, with End marking the outer edge.
+- **Start x** and **Start y** — where the first colour is. Both are in pixels at
+  composition size, so the ramp sits in the same place at every preview
+  resolution and after a resize.
+- **Start colour** — the colour at that point. Scene-linear and open past 1, so a
+  ramp can run out into highlight territory.
+- **End x** and **End y** — where the second colour is. In Radial this is a point
+  on the outer ring, so dragging it further out makes the ramp wider.
+- **End colour** — the colour at that point.
+- **Scatter** — jiggles each pixel's position along the ramp by a hair. A long,
+  gentle ramp shown on an ordinary display tends to break into visible bands;
+  a few per cent of scatter dissolves the bands into grain without moving the
+  ramp or softening its ends. Above about 20 it stops being a fix and starts
+  being a texture.
+- **Seed** — which random pattern the scatter follows. Change it if two
+  gradients in the same shot happen to scatter identically.
+- **Mix** — how much of the ramp replaces the original picture. This is where an
+  imported After Effects Ramp's "Blend with original" lands.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The ramp is even in light, not in appearance.** Colours are blended in
+scene-linear light, the space the whole engine works in, which means a
+white-to-black ramp spends more of its width looking dark than an eye expects.
+That is the correct behaviour and the reason the ramp can be trusted to drive
+another effect: half way along really is half the light.
+
+**Start and End in the same place** does not break anything — the ramp has no
+length, so the frame fills with one flat colour.
+
+## Related
+
+- [Fill](/effects/generate/fill/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Vignette](/effects/colour/vignette/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

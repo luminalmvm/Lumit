@@ -22,6 +22,35 @@ void main() {
     expect(t.cardShadow, isEmpty);
   });
 
+  /// Round v2, the bubble commit (K-394, docs/15-DESIGN.md §12.1).
+  test('shape tokens round carry the v2 geometry', () {
+    const t = ShapeTokens.round;
+    expect(t.controlRadius, ShapeTokens.stadium,
+        reason: 'controls are capsules, not 8px corners');
+    expect(t.floatRadius, 16);
+    expect(t.cardRadius, 18,
+        reason: 'a menu must not be squarer than the card that spawned it');
+    // The gap/inset system stands as K-092 built it.
+    expect(t.cardPadding, 10);
+    expect(t.tileGap, 12.0);
+    expect(t.windowInset, 12.0);
+  });
+
+  /// What the stadium sentinel rests on: a rounded rectangle scales its radii
+  /// down to fit its own box, so one radius bigger than any control is tall
+  /// draws a capsule at *whatever* height the control turns out to be — which
+  /// is why `controlRadius` needs no second field and no call site changes.
+  test('the stadium radius clamps to half a control of any height', () {
+    for (final height in [16.0, 20.0, 44.0]) {
+      final drawn = RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, 120, height),
+        const Radius.circular(ShapeTokens.stadium),
+      ).scaleRadii();
+      expect(drawn.tlRadiusY, height / 2, reason: 'at height $height');
+      expect(drawn.tlRadiusX, height / 2, reason: 'at height $height');
+    }
+  });
+
   test('every colour scheme builds under both shapes', () {
     for (final scheme in LumitColorScheme.values) {
       for (final shape in ThemeShape.values) {

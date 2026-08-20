@@ -1,0 +1,71 @@
+---
+title: "Colour balance"
+description: "Lift, gamma and gain — shadows, mid-tones and highlights, per channel."
+---
+
+Colour balance is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+The full grade in one effect: three colours, each steering a different part of
+the brightness range. **Lift** moves the shadows, **Gamma** the mid-tones and
+**Gain** the highlights, and because each is a colour rather than a number, each
+can push its part of the picture toward any hue.
+
+This is the effect to reach for when a single-knob control cannot express what
+is wrong. A cast that only affects the shadows, a highlight that has gone green,
+the teal-and-orange split where shadows go cool and skin stays warm — all of
+those need the ranges separated, and this is where they are.
+
+It is also the slowest to learn, which is why the one-knob effects exist beside
+it. If the problem is simply that everything is too warm, use
+[Temperature](/effects/colour/temperature/). Come here when the problem is that
+only part of the picture is.
+
+The three ranges overlap rather than being cut apart from one another, so a
+change to lift still influences the mid-tones a little. That is the point:
+grading by hard bands leaves visible boundaries where they meet.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Lift** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Gamma** | Colour | Each channel 0.1 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Gain** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Lift** — the shadows. Pushing it toward a colour tints the dark end of the
+  picture, and lifting it overall raises the black point, which is the flat,
+  filmic look where nothing is fully black.
+- **Gamma** — the mid-tones. This is where most of a picture lives, and where a
+  cast is most visible, so it is usually the first of the three to touch.
+- **Gain** — the highlights. It scales the bright end, so a tint here colours the
+  sky, the practicals and the specular hits while leaving shadows alone.
+- **Mix** — how much of the graded picture replaces the original.
+
+Each of the three opens the colour picker, which carries a screen dropper — so
+you can sample a cast directly off the picture rather than guessing at it. See
+[Effect Controls](/panels/effect-controls/).
+
+## Related
+
+- [Temperature](/effects/colour/temperature/)
+- [Exposure](/effects/colour/exposure/)
+- [Saturation](/effects/colour/saturation/)
+- [LUT](/effects/colour/lut/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

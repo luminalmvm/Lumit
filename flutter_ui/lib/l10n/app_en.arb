@@ -204,6 +204,422 @@
       }
     }
   },
+  "fxAddGrain": "Add grain",
+  "@fxAddGrain": {
+    "description": "Effect name in the Add effect menu — lays film grain on the picture."
+  },
+  "fxBackwards": "Backwards",
+  "@fxBackwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
+  "fxBeam": "Beam",
+  "@fxBeam": {
+    "description": "Effect name in the Add effect menu — draws a tapered shaft of light."
+  },
+  "fxBottomToTop": "Bottom to top",
+  "@fxBottomToTop": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxBrushHardness": "Brush hardness",
+  "@fxBrushHardness": {
+    "description": "Effect controls — a control on Stroke: how crisp the brush’s edge is."
+  },
+  "fxBrushSize": "Brush size",
+  "@fxBrushSize": {
+    "description": "Effect controls — a control on Stroke: how wide the brush is."
+  },
+  "fxBulge": "Bulge",
+  "@fxBulge": {
+    "description": "Effect controls — a control on Spherize."
+  },
+  "fxCardWipe": "Card wipe",
+  "@fxCardWipe": {
+    "description": "Effect name in the Add effect menu — turns the frame away as a grid of cards."
+  },
+  "fxColumns": "Columns",
+  "@fxColumns": {
+    "description": "Effect controls — a control on Card wipe: how many cards across the frame."
+  },
+  "fxCompositeOnOriginal": "Composite on original",
+  "@fxCompositeOnOriginal": {
+    "description": "Effect controls — a switch on Beam, Lightning, Radio waves and Vegas: keep the layer under what is drawn, or draw on nothing."
+  },
+  "fxConductivityState": "Conductivity state",
+  "@fxConductivityState": {
+    "description": "Effect controls — a control on Lightning: the bolt's shape, animated to make it writhe."
+  },
+  "fxConversion": "Conversion",
+  "@fxConversion": {
+    "description": "Effect controls — a control on Polar coordinates."
+  },
+  "fxCoreColour": "Core colour",
+  "@fxCoreColour": {
+    "description": "Effect controls — a control on Lightning: the filament's colour."
+  },
+  "fxCoreRadius": "Core radius",
+  "@fxCoreRadius": {
+    "description": "Effect controls — a control on Lightning: how thick the bright filament is."
+  },
+  "fxCornerPin": "Corner pin",
+  "@fxCornerPin": {
+    "description": "Effect name in the Add effect menu — the picture pulled onto four points."
+  },
+  "fxDirectionX": "Direction x",
+  "@fxDirectionX": {
+    "description": "Effect controls — a control on Lightning: where the bolt is aimed, horizontally."
+  },
+  "fxDirectionY": "Direction y",
+  "@fxDirectionY": {
+    "description": "Effect controls — a control on Lightning: where the bolt is aimed, vertically."
+  },
+  "fxDisplacementMap": "Displacement map",
+  "@fxDisplacementMap": {
+    "description": "Effect name in the Add effect menu — another layer's channels push this one."
+  },
+  "fxEnd": "End",
+  "@fxEnd": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing stops, as a per cent of its length."
+  },
+  "fxEndThickness": "End thickness",
+  "@fxEndThickness": {
+    "description": "Effect controls — a control on Beam: how wide the beam is at its head."
+  },
+  "fxExpansion": "Expansion",
+  "@fxExpansion": {
+    "description": "Effect controls — a control on Radio waves: how fast a wave grows."
+  },
+  "fxFadeIn": "Fade in",
+  "@fxFadeIn": {
+    "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading up."
+  },
+  "fxFadeOut": "Fade out",
+  "@fxFadeOut": {
+    "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading out."
+  },
+  "fxFlipAxis": "Flip axis",
+  "@fxFlipAxis": {
+    "description": "Effect controls — a control on Card wipe: which line each card turns about."
+  },
+  "fxFlipDirection": "Flip direction",
+  "@fxFlipDirection": {
+    "description": "Effect controls — a control on Card wipe: which way each card turns."
+  },
+  "fxFlipOrder": "Flip order",
+  "@fxFlipOrder": {
+    "description": "Effect controls — a control on Card wipe: which corner the wave of flips starts from."
+  },
+  "fxForking": "Forking",
+  "@fxForking": {
+    "description": "Effect controls — a control on Lightning: how many branches leave the bolt."
+  },
+  "fxForwards": "Forwards",
+  "@fxForwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
+  "fxGlowColour": "Glow colour",
+  "@fxGlowColour": {
+    "description": "Effect controls — a control on Lightning: the halo's colour."
+  },
+  "fxGlowOpacity": "Glow opacity",
+  "@fxGlowOpacity": {
+    "description": "Effect controls — a control on Lightning: how strong the halo is."
+  },
+  "fxGlowRadius": "Glow radius",
+  "@fxGlowRadius": {
+    "description": "Effect controls — a control on Lightning: how far the halo reaches."
+  },
+  "fxHardness": "Hardness",
+  "@fxHardness": {
+    "description": "Effect controls — a control on Vegas: how crisp the stroke's edges are."
+  },
+  "fxHorizontalAmount": "Horizontal amount",
+  "@fxHorizontalAmount": {
+    "description": "Effect controls — a control on Displacement map."
+  },
+  "fxHorizontalAxis": "Horizontal axis",
+  "@fxHorizontalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
+  },
+  "fxHorizontalChannel": "Horizontal channel",
+  "@fxHorizontalChannel": {
+    "description": "Effect controls — a control on Displacement map."
+  },
+  "fxInnerRadius": "Inner radius",
+  "@fxInnerRadius": {
+    "description": "Effect controls — a control on Iris wipe: where a star's pulled-in corners sit."
+  },
+  "fxInsideColour": "Inside colour",
+  "@fxInsideColour": {
+    "description": "Effect controls — a control on Beam: the colour of the beam's core."
+  },
+  "fxInterpolation": "Interpolation",
+  "@fxInterpolation": {
+    "description": "Effect controls — a control on Polar coordinates."
+  },
+  "fxIrisCentreX": "Iris centre x",
+  "@fxIrisCentreX": {
+    "description": "Effect controls — a control on Iris wipe: where the iris opens, horizontally."
+  },
+  "fxIrisCentreY": "Iris centre y",
+  "@fxIrisCentreY": {
+    "description": "Effect controls — a control on Iris wipe: where the iris opens, vertically."
+  },
+  "fxIrisPoints": "Iris points",
+  "@fxIrisPoints": {
+    "description": "Effect controls — a control on Iris wipe: how many corners the polygon has."
+  },
+  "fxIrisWipe": "Iris wipe",
+  "@fxIrisWipe": {
+    "description": "Effect name in the Add effect menu — opens a polygon or a star out of the middle."
+  },
+  "fxJagged": "Jagged",
+  "@fxJagged": {
+    "description": "Effect controls — an option of Scribble’s Wiggle type: the waver snaps to a new arrangement several times a second."
+  },
+  "fxLeftToRight": "Left to right",
+  "@fxLeftToRight": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxLifespan": "Lifespan",
+  "@fxLifespan": {
+    "description": "Effect controls — a control on Radio waves: how long a wave lives."
+  },
+  "fxLightning": "Lightning",
+  "@fxLightning": {
+    "description": "Effect name in the Add effect menu — draws a forked bolt of lightning."
+  },
+  "fxLowerLeftX": "Lower left x",
+  "@fxLowerLeftX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerLeftY": "Lower left y",
+  "@fxLowerLeftY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerRightX": "Lower right x",
+  "@fxLowerRightX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerRightY": "Lower right y",
+  "@fxLowerRightY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxMask": "Mask",
+  "@fxMask": {
+    "description": "Effect controls — a control on Scribble, Stroke and Vegas: which of the layer’s masks the effect draws along."
+  },
+  "fxMaskPath": "Mask/Path",
+  "@fxMaskPath": {
+    "description": "Effect controls — an option of Vegas’ Source: run the dashes round a mask rather than round a contour found in the picture."
+  },
+  "fxMonochrome": "Monochrome",
+  "@fxMonochrome": {
+    "description": "Effect controls — a switch on Add grain: draw one grain field for all three channels."
+  },
+  "fxOmni": "Omni",
+  "@fxOmni": {
+    "description": "Effect controls — a Type option on Lightning: several bolts radiating from the origin."
+  },
+  "fxOnOriginal": "On original",
+  "@fxOnOriginal": {
+    "description": "Effect controls — an option of Stroke’s Paint style: paint over the picture that arrived."
+  },
+  "fxOnTransparent": "On transparent",
+  "@fxOnTransparent": {
+    "description": "Effect controls — an option of Stroke’s Paint style: keep the stroke and drop the picture."
+  },
+  "fxOriginX": "Origin x",
+  "@fxOriginX": {
+    "description": "Effect controls — a control on Lightning: where the bolt leaves from, horizontally."
+  },
+  "fxOriginY": "Origin y",
+  "@fxOriginY": {
+    "description": "Effect controls — a control on Lightning: where the bolt leaves from, vertically."
+  },
+  "fxOuterRadius": "Outer radius",
+  "@fxOuterRadius": {
+    "description": "Effect controls — a control on Iris wipe: how far the corners reach."
+  },
+  "fxOutsideColour": "Outside colour",
+  "@fxOutsideColour": {
+    "description": "Effect controls — a control on Beam: the colour of the beam's rim."
+  },
+  "fxPaintStyle": "Paint style",
+  "@fxPaintStyle": {
+    "description": "Effect controls — a control on Stroke: what the brush is painted onto."
+  },
+  "fxPathOverlap": "Path overlap",
+  "@fxPathOverlap": {
+    "description": "Effect controls — a control on Scribble: how far each stroke runs past the mask’s edge."
+  },
+  "fxPolarCoordinates": "Polar coordinates",
+  "@fxPolarCoordinates": {
+    "description": "Effect name in the Add effect menu — the frame bent into a circle."
+  },
+  "fxPolarToRectangular": "Polar to rectangular",
+  "@fxPolarToRectangular": {
+    "description": "Effect controls — a Conversion option on Polar coordinates."
+  },
+  "fxProducerX": "Producer x",
+  "@fxProducerX": {
+    "description": "Effect controls — a control on Radio waves: where the waves are emitted, horizontally."
+  },
+  "fxProducerY": "Producer y",
+  "@fxProducerY": {
+    "description": "Effect controls — a control on Radio waves: where the waves are emitted, vertically."
+  },
+  "fxRadioWaves": "Radio waves",
+  "@fxRadioWaves": {
+    "description": "Effect name in the Add effect menu — emits expanding shapes from a point."
+  },
+  "fxRandom": "Random",
+  "@fxRandom": {
+    "description": "Effect controls — a Flip axis and Flip direction option on Card wipe."
+  },
+  "fxRandomness": "Randomness",
+  "@fxRandomness": {
+    "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
+  },
+  "fxRectangularToPolar": "Rectangular to polar",
+  "@fxRectangularToPolar": {
+    "description": "Effect controls — a Conversion option on Polar coordinates."
+  },
+  "fxRevealOriginal": "Reveal original",
+  "@fxRevealOriginal": {
+    "description": "Effect controls — an option of Stroke’s Paint style: keep the picture only where the brush went."
+  },
+  "fxRightToLeft": "Right to left",
+  "@fxRightToLeft": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxRows": "Rows",
+  "@fxRows": {
+    "description": "Effect controls — a control on Card wipe: how many cards down the frame."
+  },
+  "fxScribble": "Scribble",
+  "@fxScribble": {
+    "description": "Effect name — fills a mask with pencil strokes."
+  },
+  "fxSegmentLength": "Segment length",
+  "@fxSegmentLength": {
+    "description": "Effect controls — a control on Vegas: one dash and its gap along the contour."
+  },
+  "fxSides": "Sides",
+  "@fxSides": {
+    "description": "Effect controls — a control on Radio waves: how many corners the emitted shape has."
+  },
+  "fxSpacing": "Spacing",
+  "@fxSpacing": {
+    "description": "Effect controls — a control on Scribble and Stroke: how far apart the strokes or the brush stamps are laid."
+  },
+  "fxSpherize": "Spherize",
+  "@fxSpherize": {
+    "description": "Effect name in the Add effect menu — a glass ball held over the picture."
+  },
+  "fxStar": "Star",
+  "@fxStar": {
+    "description": "Effect controls — a switch on Radio waves: make a star of the polygon."
+  },
+  "fxStarDepth": "Star depth",
+  "@fxStarDepth": {
+    "description": "Effect controls — a control on Radio waves: how deep the star's notches go."
+  },
+  "fxStart": "Start",
+  "@fxStart": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing begins, as a per cent of its length."
+  },
+  "fxStartThickness": "Start thickness",
+  "@fxStartThickness": {
+    "description": "Effect controls — a control on Beam: how wide the beam is at its tail."
+  },
+  "fxStatic": "Static",
+  "@fxStatic": {
+    "description": "Effect controls — an option of Scribble’s Wiggle type: the waver holds still."
+  },
+  "fxStrike": "Strike",
+  "@fxStrike": {
+    "description": "Effect controls — a Type option on Lightning: both ends pinned, so the bolt lands on its target."
+  },
+  "fxStroke": "Stroke",
+  "@fxStroke": {
+    "description": "Effect name — walks a brush along a mask’s path."
+  },
+  "fxStrokeWidth": "Stroke width",
+  "@fxStrokeWidth": {
+    "description": "Effect controls — a control on Radio waves: how thick each wave's outline is."
+  },
+  "fxTime": "Time",
+  "@fxTime": {
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock."
+  },
+  "fxTopToBottom": "Top to bottom",
+  "@fxTopToBottom": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxTransitionWidth": "Transition width",
+  "@fxTransitionWidth": {
+    "description": "Effect controls — a control on Card wipe: how much of the wipe one card's own flip takes."
+  },
+  "fxTwirl": "Twirl",
+  "@fxTwirl": {
+    "description": "Effect name in the Add effect menu — the picture wrung round a point."
+  },
+  "fxTwoWayStrike": "Two-way strike",
+  "@fxTwoWayStrike": {
+    "description": "Effect controls — a Type option on Lightning: two bolts meeting in the middle."
+  },
+  "fxUpperLeftX": "Upper left x",
+  "@fxUpperLeftX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperLeftY": "Upper left y",
+  "@fxUpperLeftY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightX": "Upper right x",
+  "@fxUpperRightX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightY": "Upper right y",
+  "@fxUpperRightY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUseInnerRadius": "Use inner radius",
+  "@fxUseInnerRadius": {
+    "description": "Effect controls — a switch on Iris wipe that turns the polygon into a star."
+  },
+  "fxVegas": "Vegas",
+  "@fxVegas": {
+    "description": "Effect name in the Add effect menu — runs marching lights along the picture's contours."
+  },
+  "fxVenetianBlinds": "Venetian blinds",
+  "@fxVenetianBlinds": {
+    "description": "Effect name in the Add effect menu — closes the frame with a rank of slats."
+  },
+  "fxVerticalAmount": "Vertical amount",
+  "@fxVerticalAmount": {
+    "description": "Effect controls — a control on Displacement map."
+  },
+  "fxVerticalAxis": "Vertical axis",
+  "@fxVerticalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
+  },
+  "fxVerticalChannel": "Vertical channel",
+  "@fxVerticalChannel": {
+    "description": "Effect controls — a control on Displacement map."
+  },
+  "fxWiggleType": "Wiggle type",
+  "@fxWiggleType": {
+    "description": "Effect controls — a control on Scribble: how the pencil’s waver moves."
+  },
+  "fxWigglesPerSecond": "Wiggles per second",
+  "@fxWigglesPerSecond": {
+    "description": "Effect controls — a control on Scribble: how fast the waver moves."
+  },
+  "fxWiggly": "Wiggly",
+  "@fxWiggly": {
+    "description": "Effect controls — an option of Scribble’s Wiggle type: the waver drifts continuously."
+  },
   "openingProject": "Opening project…",
   "@openingProject": {
     "description": "Card shown over the interface while a project file is being read from disk."
@@ -512,6 +928,10 @@
   "@findMissingFootage": {
     "description": "Context-menu item: search a folder for files that have moved."
   },
+  "firstMask": "First mask",
+  "@firstMask": {
+    "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
+  },
   "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows which moment of the source is on screen.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
@@ -693,6 +1113,10 @@
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxAllEdges": "All edges",
+  "@fxAllEdges": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
   "fxAlpha": "Alpha",
   "@fxAlpha": {
     "description": "Effect controls — a depth-channel option on Depth of field."
@@ -700,6 +1124,10 @@
   "fxAlphaBias": "Alpha bias",
   "@fxAlphaBias": {
     "description": "Effect controls — a control on Matte key."
+  },
+  "fxAlphaBlur": "Alpha blur",
+  "@fxAlphaBlur": {
+    "description": "Effect controls — a control on Channel blur."
   },
   "fxAmount": "Amount",
   "@fxAmount": {
@@ -725,6 +1153,14 @@
   "@fxAngle": {
     "description": "Effect controls — a control on Directional blur."
   },
+  "fxAnimate": "Animate",
+  "@fxAnimate": {
+    "description": "Effect controls — a switch on Noise."
+  },
+  "fxAnticlockwise": "Anticlockwise",
+  "@fxAnticlockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
+  },
   "fxAperture": "Aperture",
   "@fxAperture": {
     "description": "Effect controls — a control on Depth of field."
@@ -737,9 +1173,17 @@
   "@fxBackground": {
     "description": "Effect controls — a control on Light wrap. Picks the layer whose light spills round the foreground's edge; normally the plate the subject was keyed onto."
   },
+  "fxBasic": "Basic",
+  "@fxBasic": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
   "fxBehind": "Behind",
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxBlack": "Black",
+  "@fxBlack": {
+    "description": "Effect controls — a Curves knot, the curve's output at input 0."
   },
   "fxBlades": "Blades",
   "@fxBlades": {
@@ -765,9 +1209,25 @@
   "@fxBlue": {
     "description": "Effect controls — a control on RGB split."
   },
+  "fxBlueBlur": "Blue blur",
+  "@fxBlueBlur": {
+    "description": "Effect controls — a control on Channel blur."
+  },
+  "fxBlues": "Blues",
+  "@fxBlues": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
   "fxBlurAndSharpen": "Blur & sharpen",
   "@fxBlurAndSharpen": {
     "description": "Add-effect menu category heading."
+  },
+  "fxBoth": "Both",
+  "@fxBoth": {
+    "description": "Effect controls — a Wipe option on Radial wipe: the wedge opens both ways at once."
+  },
+  "fxBrightness": "Brightness",
+  "@fxBrightness": {
+    "description": "Effect controls — the name of an effect, and its own first control."
   },
   "fxCentreX": "Centre X",
   "@fxCentreX": {
@@ -776,6 +1236,14 @@
   "fxCentreY": "Centre Y",
   "@fxCentreY": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxChannel": "Channel",
+  "@fxChannel": {
+    "description": "Effect controls — a control on Set matte: which channel of the matte layer becomes the alpha."
+  },
+  "fxChannelBlur": "Channel blur",
+  "@fxChannelBlur": {
+    "description": "Effect name in the Add effect menu — blurs each colour channel by its own amount."
   },
   "fxChannelOffset": "Channel offset",
   "@fxChannelOffset": {
@@ -797,9 +1265,53 @@
   "@fxClipWhite": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxClockwise": "Clockwise",
+  "@fxClockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
+  },
   "fxCoating": "Coating",
   "@fxCoating": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxColourNoise": "Colour noise",
+  "@fxColourNoise": {
+    "description": "Effect controls — a switch on Noise."
+  },
+  "fxCombineWithExistingAlpha": "Combine with existing alpha",
+  "@fxCombineWithExistingAlpha": {
+    "description": "Effect controls — a control on Set matte: intersect with the layer's own alpha instead of replacing it."
+  },
+  "fxCompletion": "Completion",
+  "@fxCompletion": {
+    "description": "Effect controls — a control on Linear wipe and Radial wipe: how far the wipe has travelled."
+  },
+  "fxComplexity": "Complexity",
+  "@fxComplexity": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxCycle": "Cycle",
+  "@fxCycle": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxCycleEvolution": "Cycle evolution",
+  "@fxCycleEvolution": {
+    "description": "Effect controls — a switch on Fractal noise."
+  },
+  "fxDirection": "Direction",
+  "@fxDirection": {
+    "description": "Effect controls — a control on Drop shadow: which way the light comes from."
+  },
+  "fxDistance": "Distance",
+  "@fxDistance": {
+    "description": "Effect controls — a control on Drop shadow: how far the shadow is offset."
+  },
+  "fxDistribution": "Distribution",
+  "@fxDistribution": {
+    "description": "Effect controls — a control on Noise."
+  },
+  "fxDropShadow": "Drop shadow",
+  "@fxDropShadow": {
+    "description": "Effect name in the Add effect menu — casts the layer's own shape behind it."
   },
   "fxElement1": "Element 1",
   "@fxElement1": {
@@ -969,6 +1481,14 @@
   "@fxContrast": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxCurves": "Curves",
+  "@fxCurves": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxCyans": "Cyans",
+  "@fxCyans": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
   "fxDarken": "Darken",
   "@fxDarken": {
     "description": "Effect controls — a control on Echo."
@@ -1017,6 +1537,10 @@
   "@fxDetectEdgeThreshold": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxDiagonal": "Diagonal",
+  "@fxDiagonal": {
+    "description": "Effect controls — an Orientation option on Lens distort."
+  },
   "fxDifference": "Difference",
   "@fxDifference": {
     "description": "Effect controls — a control on Echo."
@@ -1045,6 +1569,10 @@
   "@fxDivide": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxDominantMotion": "Dominant motion",
+  "@fxDominantMotion": {
+    "description": "Effect controls — an option in the View dropdown on Fast motion blur. Shows the neighbourhood's strongest motion, which uncertain pixels borrow their blur direction from."
+  },
   "fxDraft": "Draft",
   "@fxDraft": {
     "description": "Effect controls — a control on Lens flare."
@@ -1065,9 +1593,29 @@
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxEndColour": "End colour",
+  "@fxEndColour": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxEndX": "End x",
+  "@fxEndX": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxEndY": "End y",
+  "@fxEndY": {
+    "description": "Effect controls — a control on Gradient."
+  },
   "fxEveryNthBeat": "Every Nth beat",
   "@fxEveryNthBeat": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxEvolution": "Evolution",
+  "@fxEvolution": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxEvolutionOptions": "Evolution options",
+  "@fxEvolutionOptions": {
+    "description": "Effect controls — a group heading on Fractal noise."
   },
   "fxExclusion": "Exclusion",
   "@fxExclusion": {
@@ -1093,9 +1641,21 @@
   "@fxFastMotionBlur": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxFeather": "Feather",
+  "@fxFeather": {
+    "description": "Effect controls — a control on Linear wipe and Radial wipe: how soft the wiping edge is."
+  },
+  "fxFieldOfView": "Field of view",
+  "@fxFieldOfView": {
+    "description": "Effect controls — a control on Lens distort."
+  },
   "fxFile": "File",
   "@fxFile": {
     "description": "Effect controls — a control on LUT."
+  },
+  "fxFill": "Fill",
+  "@fxFill": {
+    "description": "Effect controls — the name of an effect."
   },
   "fxFinalResult": "Final result",
   "@fxFinalResult": {
@@ -1137,6 +1697,14 @@
   "@fxForceOnAllLayers": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxFractalNoise": "Fractal noise",
+  "@fxFractalNoise": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxFractalType": "Fractal type",
+  "@fxFractalType": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
   "fxFrameRate": "Frame rate",
   "@fxFrameRate": {
     "description": "Effect controls — a control on Posterize time."
@@ -1153,9 +1721,17 @@
   "@fxGamma": {
     "description": "Effect controls — a control on Colour balance."
   },
+  "fxGaussian": "Gaussian",
+  "@fxGaussian": {
+    "description": "Effect controls — a Distribution option on Noise."
+  },
   "fxGaussianBlur": "Gaussian blur",
   "@fxGaussianBlur": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxGenerate": "Generate",
+  "@fxGenerate": {
+    "description": "Add-effect menu category heading."
   },
   "fxGhostIntensity": "Ghost intensity",
   "@fxGhostIntensity": {
@@ -1181,9 +1757,17 @@
   "@fxGlow": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxGradient": "Gradient",
+  "@fxGradient": {
+    "description": "Effect controls — the name of an effect."
+  },
   "fxGreen": "Green",
   "@fxGreen": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxGreenBlur": "Green blur",
+  "@fxGreenBlur": {
+    "description": "Effect controls — a control on Channel blur."
   },
   "fxHard": "Hard",
   "@fxHard": {
@@ -1209,6 +1793,14 @@
   "@fxHighlightThreshold": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxHorizontal": "Horizontal",
+  "@fxHorizontal": {
+    "description": "Effect controls — a Displacement option on Turbulent displace, and an Orientation option on Lens distort."
+  },
+  "fxHorizontalPhaseShift": "Horizontal phase shift",
+  "@fxHorizontalPhaseShift": {
+    "description": "Effect controls — a control on Tile."
+  },
   "fxHighlights": "Highlights",
   "@fxHighlights": {
     "description": "Effect controls — a group of controls on Depth of field."
@@ -1233,9 +1825,21 @@
   "@fxInvert": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxInvertEdges": "Invert edges",
+  "@fxInvertEdges": {
+    "description": "Effect controls — a control on Find edges: bright lines on black instead of dark lines on white."
+  },
+  "fxInvertNoise": "Invert noise",
+  "@fxInvertNoise": {
+    "description": "Effect controls — a switch on Fractal noise."
+  },
   "fxIris": "Iris",
   "@fxIris": {
     "description": "Effect controls — a group of controls on Depth of field."
+  },
+  "fxLeftAndRight": "Left and right",
+  "@fxLeftAndRight": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
   },
   "fxLength": "Length",
   "@fxLength": {
@@ -1244,6 +1848,10 @@
   "fxLens": "Lens",
   "@fxLens": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLensDistort": "Lens distort",
+  "@fxLensDistort": {
+    "description": "Effect name in the Add effect menu — barrel and pincushion lens distortion."
   },
   "fxLensFile": "Lens file",
   "@fxLensFile": {
@@ -1288,6 +1896,14 @@
   "fxLinePeriod": "Line period",
   "@fxLinePeriod": {
     "description": "Effect controls — a control on Scanlines."
+  },
+  "fxLinear": "Linear",
+  "@fxLinear": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
+  "fxLinearWipe": "Linear wipe",
+  "@fxLinearWipe": {
+    "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
   },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
@@ -1337,6 +1953,10 @@
   "@fxMirror": {
     "description": "Effect controls — a control on an effect."
   },
+  "fxMirrorEdges": "Mirror edges",
+  "@fxMirrorEdges": {
+    "description": "Effect controls — a control on Tile."
+  },
   "fxMix": "Mix",
   "@fxMix": {
     "description": "Effect controls — a control on an effect."
@@ -1361,6 +1981,14 @@
   "@fxNearBlur": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxNoise": "Noise",
+  "@fxNoise": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxNoiseType": "Noise type",
+  "@fxNoiseType": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
   "fxNone": "None",
   "@fxNone": {
     "description": "Effect controls — a control on Matte key."
@@ -1369,9 +1997,29 @@
   "@fxNormal": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxOffset": "Offset",
+  "@fxOffset": {
+    "description": "Effect name in the Add effect menu — slides the frame, wrapping round."
+  },
+  "fxOffsetX": "Offset x",
+  "@fxOffsetX": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxOffsetY": "Offset y",
+  "@fxOffsetY": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxOpacity": "Opacity",
+  "@fxOpacity": {
+    "description": "Effect controls — a control on Drop shadow: how dark the shadow is."
+  },
   "fxOpacityPct": "Opacity %",
   "@fxOpacityPct": {
     "description": "Effect controls — a control on Transform."
+  },
+  "fxOrientation": "Orientation",
+  "@fxOrientation": {
+    "description": "Effect controls — a control on Lens distort."
   },
   "fxOverlay": "Overlay",
   "@fxOverlay": {
@@ -1381,6 +2029,10 @@
   "@fxPerAxisWobble": {
     "description": "Effect controls — a control on an effect."
   },
+  "fxPerlin": "Perlin",
+  "@fxPerlin": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
   "fxPhase": "Phase",
   "@fxPhase": {
     "description": "Effect controls — a control on Posterize time."
@@ -1388,6 +2040,10 @@
   "fxPhaseOffset": "Phase offset",
   "@fxPhaseOffset": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxPinning": "Pinning",
+  "@fxPinning": {
+    "description": "Effect controls — a control on Turbulent displace."
   },
   "fxPositionX": "Position x",
   "@fxPositionX": {
@@ -1409,9 +2065,17 @@
   "@fxQuality": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxRadial": "Radial",
+  "@fxRadial": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
   "fxRadialBlur": "Radial blur",
   "@fxRadialBlur": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxRadialWipe": "Radial wipe",
+  "@fxRadialWipe": {
+    "description": "Effect name in the Add effect menu — sweeps a wedge round a centre."
   },
   "fxRadius": "Radius",
   "@fxRadius": {
@@ -1424,6 +2088,10 @@
   "fxRed": "Red",
   "@fxRed": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxRedBlur": "Red blur",
+  "@fxRedBlur": {
+    "description": "Effect controls — a control on Channel blur."
   },
   "fxRemoveEdgeLeak": "Remove edge leak",
   "@fxRemoveEdgeLeak": {
@@ -1452,6 +2120,10 @@
   "fxResetInterval": "Reset interval",
   "@fxResetInterval": {
     "description": "Effect controls — a control on Datamosh."
+  },
+  "fxReverse": "Reverse",
+  "@fxReverse": {
+    "description": "Effect controls — a control on Lens distort."
   },
   "fxRgbSplit": "RGB split",
   "@fxRgbSplit": {
@@ -1497,6 +2169,14 @@
   "@fxScale": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxScaleHeight": "Scale height",
+  "@fxScaleHeight": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxScaleWidth": "Scale width",
+  "@fxScaleWidth": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
   "fxScaleXPct": "Scale x %",
   "@fxScaleXPct": {
     "description": "Effect controls — a control on Transform."
@@ -1508,6 +2188,10 @@
   "fxScanlines": "Scanlines",
   "@fxScanlines": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxScatter": "Scatter",
+  "@fxScatter": {
+    "description": "Effect controls — a control on Gradient."
   },
   "fxScreen": "Screen",
   "@fxScreen": {
@@ -1533,6 +2217,18 @@
   "@fxSeed": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxSetMatte": "Set matte",
+  "@fxSetMatte": {
+    "description": "Effect name in the Add effect menu — takes another layer's channel as this layer's transparency."
+  },
+  "fxShadowColour": "Shadow colour",
+  "@fxShadowColour": {
+    "description": "Effect controls — a control on Drop shadow."
+  },
+  "fxShadowOnly": "Shadow only",
+  "@fxShadowOnly": {
+    "description": "Effect controls — a control on Drop shadow: keep the shadow and hide the layer."
+  },
   "fxShake": "Shake",
   "@fxShake": {
     "description": "Effect controls — the name of an effect."
@@ -1545,6 +2241,14 @@
   "@fxSharpen": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxShiftX": "Shift x",
+  "@fxShiftX": {
+    "description": "Effect controls — a control on Offset."
+  },
+  "fxShiftY": "Shift y",
+  "@fxShiftY": {
+    "description": "Effect controls — a control on Offset."
+  },
   "fxShutter": "Shutter",
   "@fxShutter": {
     "description": "Effect controls — a control on Shake."
@@ -1556,6 +2260,10 @@
   "fxShutterPhase": "Shutter phase",
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxSize": "Size",
+  "@fxSize": {
+    "description": "Effect controls — a control on Turbulent displace."
   },
   "fxSliceRepeat": "Slice repeat",
   "@fxSliceRepeat": {
@@ -1571,7 +2279,7 @@
   },
   "fxSoftness": "Softness",
   "@fxSoftness": {
-    "description": "Effect controls — a control on Vignette."
+    "description": "Effect controls — a control on Vignette, Drop shadow and Threshold."
   },
   "fxSource": "Source",
   "@fxSource": {
@@ -1593,6 +2301,66 @@
   "@fxGlowSize": {
     "description": "Effect controls — a control on Sprite flare. How wide the soft glow on the light itself spreads, in pixels."
   },
+  "fxGreens": "Greens",
+  "@fxGreens": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxHueAndSaturation": "Hue and saturation",
+  "@fxHueAndSaturation": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxInputBlack": "Input black",
+  "@fxInputBlack": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxInputWhite": "Input white",
+  "@fxInputWhite": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxLevels": "Levels",
+  "@fxLevels": {
+    "description": "Effect controls — the name of an effect, and a control on Posterize: how many steps the tone range keeps."
+  },
+  "fxLightness": "Lightness",
+  "@fxLightness": {
+    "description": "Effect controls — a control on Hue and saturation."
+  },
+  "fxMagentas": "Magentas",
+  "@fxMagentas": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxMaster": "Master",
+  "@fxMaster": {
+    "description": "Effect controls — the all-channels group on Curves, Levels and Hue and saturation."
+  },
+  "fxMidtones": "Midtones",
+  "@fxMidtones": {
+    "description": "Effect controls — a Curves knot, the curve's output at input 0.5."
+  },
+  "fxOutputBlack": "Output black",
+  "@fxOutputBlack": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxOutputHeight": "Output height",
+  "@fxOutputHeight": {
+    "description": "Effect controls — a control on Tile."
+  },
+  "fxOutputWhite": "Output white",
+  "@fxOutputWhite": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxOutputWidth": "Output width",
+  "@fxOutputWidth": {
+    "description": "Effect controls — a control on Tile."
+  },
+  "fxReds": "Reds",
+  "@fxReds": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxShadows": "Shadows",
+  "@fxShadows": {
+    "description": "Effect controls — a Curves knot, the curve's output at input 0.25."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
@@ -1604,6 +2372,22 @@
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxStartAngle": "Start angle",
+  "@fxStartAngle": {
+    "description": "Effect controls — a control on Radial wipe: where the sweep begins."
+  },
+  "fxStartColour": "Start colour",
+  "@fxStartColour": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxStartX": "Start x",
+  "@fxStartX": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxStartY": "Start y",
+  "@fxStartY": {
+    "description": "Effect controls — a control on Gradient."
   },
   "fxStatus": "Status",
   "@fxStatus": {
@@ -1637,6 +2421,18 @@
   "@fxStylise": {
     "description": "Add-effect menu category heading."
   },
+  "fxSubInfluence": "Sub influence",
+  "@fxSubInfluence": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxSubScaling": "Sub scaling",
+  "@fxSubScaling": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxSubSettings": "Sub settings",
+  "@fxSubSettings": {
+    "description": "Effect controls — a group heading on Fractal noise."
+  },
   "fxSubtract": "Subtract",
   "@fxSubtract": {
     "description": "Effect controls — a control on Echo."
@@ -1651,19 +2447,47 @@
   },
   "fxThreshold": "Threshold",
   "@fxThreshold": {
-    "description": "Effect controls — a control on Unsharp mask."
+    "description": "Effect controls — a control on Unsharp mask, and the name of an effect that cuts every pixel to black or white."
   },
   "fxThresholdSoftness": "Threshold softness",
   "@fxThresholdSoftness": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxTile": "Tile",
+  "@fxTile": {
+    "description": "Effect name in the Add effect menu — repeats the frame across itself."
+  },
+  "fxTileCentreX": "Tile centre x",
+  "@fxTileCentreX": {
+    "description": "Effect controls — a control on Tile."
+  },
+  "fxTileCentreY": "Tile centre y",
+  "@fxTileCentreY": {
+    "description": "Effect controls — a control on Tile."
+  },
+  "fxTileHeight": "Tile height",
+  "@fxTileHeight": {
+    "description": "Effect controls — a control on Tile."
+  },
+  "fxTileWidth": "Tile width",
+  "@fxTileWidth": {
+    "description": "Effect controls — a control on Tile."
+  },
   "fxTint": "Tint",
   "@fxTint": {
     "description": "Effect controls — a control on Glow."
   },
+  "fxTopAndBottom": "Top and bottom",
+  "@fxTopAndBottom": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
   "fxTransform": "Transform",
   "@fxTransform": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxTransition": "Transition",
+  "@fxTransition": {
+    "description": "Add-effect menu category heading."
   },
   "fxTransparent": "Transparent",
   "@fxTransparent": {
@@ -1673,6 +2497,14 @@
   "@fxTrigger": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxTurbulent": "Turbulent",
+  "@fxTurbulent": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxTurbulentDisplace": "Turbulent displace",
+  "@fxTurbulentDisplace": {
+    "description": "Effect name in the Add effect menu — the fractal-driven warp."
+  },
   "fxType": "Type",
   "@fxType": {
     "description": "Effect controls — a control on Radial blur."
@@ -1680,6 +2512,14 @@
   "fxUltra": "Ultra",
   "@fxUltra": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxUniform": "Uniform",
+  "@fxUniform": {
+    "description": "Effect controls — a Distribution option on Noise."
+  },
+  "fxUniformScaling": "Uniform scaling",
+  "@fxUniformScaling": {
+    "description": "Effect controls — a switch on Fractal noise."
   },
   "fxUnsharpMask": "Unsharp mask",
   "@fxUnsharpMask": {
@@ -1697,6 +2537,14 @@
   "@fxUtility": {
     "description": "Add-effect menu category heading."
   },
+  "fxValue": "Value",
+  "@fxValue": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
+  "fxVertical": "Vertical",
+  "@fxVertical": {
+    "description": "Effect controls — a Displacement option on Turbulent displace, and an Orientation option on Lens distort."
+  },
   "fxVibrancy": "Vibrancy",
   "@fxVibrancy": {
     "description": "Effect controls — the name of an effect."
@@ -1713,9 +2561,29 @@
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
   },
+  "fxWhite": "White",
+  "@fxWhite": {
+    "description": "Effect controls — a Curves knot, the curve's output at input 1."
+  },
   "fxWidth": "Width",
   "@fxWidth": {
     "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
+  },
+  "fxWipe": "Wipe",
+  "@fxWipe": {
+    "description": "Effect controls — a control on Radial wipe: which way the wedge opens."
+  },
+  "fxWipeAngle": "Wipe angle",
+  "@fxWipeAngle": {
+    "description": "Effect controls — a control on Linear wipe: which way the edge runs."
+  },
+  "fxWipeCentreX": "Wipe centre x",
+  "@fxWipeCentreX": {
+    "description": "Effect controls — a control on Linear wipe and Radial wipe."
+  },
+  "fxWipeCentreY": "Wipe centre y",
+  "@fxWipeCentreY": {
+    "description": "Effect controls — a control on Linear wipe and Radial wipe."
   },
   "fxXAmount": "X amount",
   "@fxXAmount": {
@@ -1732,6 +2600,10 @@
   "fxYFrequency": "Y frequency",
   "@fxYFrequency": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxYellows": "Yellows",
+  "@fxYellows": {
+    "description": "Effect controls — a colour range on Hue and saturation."
   },
   "fxZAmount": "Z amount",
   "@fxZAmount": {
@@ -2754,6 +3626,10 @@
   "missingLayer": "Missing layer",
   "@missingLayer": {
     "description": "Shown where a picker names a layer that has since been deleted."
+  },
+  "missingMask": "Missing mask",
+  "@missingMask": {
+    "description": "Effect controls: shown where a mask picker names a mask that has since been deleted."
   },
   "motionFull": "Full",
   "@motionFull": {
@@ -5170,5 +6046,489 @@
   "blendVividLight": "Vivid light",
   "@blendVividLight": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
+  },
+  "fxArc": "Arc",
+  "@fxArc": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxArcLower": "Arc lower",
+  "@fxArcLower": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxArcUpper": "Arc upper",
+  "@fxArcUpper": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxArch": "Arch",
+  "@fxArch": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxAsymmetric": "Asymmetric",
+  "@fxAsymmetric": {
+    "description": "Effect controls — a Type option on Ripple."
+  },
+  "fxBend": "Bend",
+  "@fxBend": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxBezierWarp": "Bezier warp",
+  "@fxBezierWarp": {
+    "description": "Effect name in the Add effect menu — the frame's four edges bent."
+  },
+  "fxBorder": "Border",
+  "@fxBorder": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxBottomEdge": "Bottom edge",
+  "@fxBottomEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxBottomLeftTangentX": "Bottom left tangent x",
+  "@fxBottomLeftTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxBottomLeftTangentY": "Bottom left tangent y",
+  "@fxBottomLeftTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxBottomRightTangentX": "Bottom right tangent x",
+  "@fxBottomRightTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxBottomRightTangentY": "Bottom right tangent y",
+  "@fxBottomRightTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxCircle": "Circle",
+  "@fxCircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxColourEdge": "Colour edge",
+  "@fxColourEdge": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxCut": "Cut",
+  "@fxCut": {
+    "description": "Effect controls — an Edge type option on Roughen edges."
+  },
+  "fxEdgeColour": "Edge colour",
+  "@fxEdgeColour": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxEdgeSharpness": "Edge sharpness",
+  "@fxEdgeSharpness": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxEdgeType": "Edge type",
+  "@fxEdgeType": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxFish": "Fish",
+  "@fxFish": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxFisheye": "Fisheye",
+  "@fxFisheye": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxFlag": "Flag",
+  "@fxFlag": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxFractalInfluence": "Fractal influence",
+  "@fxFractalInfluence": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxHorizontalDistortion": "Horizontal distortion",
+  "@fxHorizontalDistortion": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxInflate": "Inflate",
+  "@fxInflate": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxLeftBottomTangentX": "Left bottom tangent x",
+  "@fxLeftBottomTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxLeftBottomTangentY": "Left bottom tangent y",
+  "@fxLeftBottomTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxLeftEdge": "Left edge",
+  "@fxLeftEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxLeftTopTangentX": "Left top tangent x",
+  "@fxLeftTopTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxLeftTopTangentY": "Left top tangent y",
+  "@fxLeftTopTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxRightBottomTangentX": "Right bottom tangent x",
+  "@fxRightBottomTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxRightBottomTangentY": "Right bottom tangent y",
+  "@fxRightBottomTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxRightEdge": "Right edge",
+  "@fxRightEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxRightTopTangentX": "Right top tangent x",
+  "@fxRightTopTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxRightTopTangentY": "Right top tangent y",
+  "@fxRightTopTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxRipple": "Ripple",
+  "@fxRipple": {
+    "description": "Effect name in the Add effect menu — rings spreading from a point."
+  },
+  "fxRise": "Rise",
+  "@fxRise": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxRoughen": "Roughen",
+  "@fxRoughen": {
+    "description": "Effect controls — an Edge type option on Roughen edges."
+  },
+  "fxRoughenEdges": "Roughen edges",
+  "@fxRoughenEdges": {
+    "description": "Effect name in the Add effect menu — the alpha edge chewed by a fractal."
+  },
+  "fxSawtooth": "Sawtooth",
+  "@fxSawtooth": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSine": "Sine",
+  "@fxSine": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSpiky": "Spiky",
+  "@fxSpiky": {
+    "description": "Effect controls — an Edge type option on Roughen edges."
+  },
+  "fxSquare": "Square",
+  "@fxSquare": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSqueeze": "Squeeze",
+  "@fxSqueeze": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxStyle": "Style",
+  "@fxStyle": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxSymmetric": "Symmetric",
+  "@fxSymmetric": {
+    "description": "Effect controls — a Type option on Ripple."
+  },
+  "fxTopEdge": "Top edge",
+  "@fxTopEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxTopLeftTangentX": "Top left tangent x",
+  "@fxTopLeftTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxTopLeftTangentY": "Top left tangent y",
+  "@fxTopLeftTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxTopRightTangentX": "Top right tangent x",
+  "@fxTopRightTangentX": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxTopRightTangentY": "Top right tangent y",
+  "@fxTopRightTangentY": {
+    "description": "Effect controls — a control on Bezier warp."
+  },
+  "fxTriangle": "Triangle",
+  "@fxTriangle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxTwist": "Twist",
+  "@fxTwist": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxVerticalDistortion": "Vertical distortion",
+  "@fxVerticalDistortion": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxWarp": "Warp",
+  "@fxWarp": {
+    "description": "Effect name in the Add effect menu — the thirteen bend presets."
+  },
+  "fxWave": "Wave",
+  "@fxWave": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxWaveHeight": "Wave height",
+  "@fxWaveHeight": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
+  "fxWaveType": "Wave type",
+  "@fxWaveType": {
+    "description": "Effect controls — a control on Wave warp."
+  },
+  "fxWaveWarp": "Wave warp",
+  "@fxWaveWarp": {
+    "description": "Effect name in the Add effect menu — a travelling wave across the frame."
+  },
+  "fxWaveWidth": "Wave width",
+  "@fxWaveWidth": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
+  "fxBlackAndWhite": "Black and white",
+  "@fxBlackAndWhite": {
+    "description": "Effect name in the Add effect menu — six weights, one grey."
+  },
+  "fxColourCorrection": "Colour correction",
+  "@fxColourCorrection": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxCoolingFilter80": "Cooling filter (80)",
+  "@fxCoolingFilter80": {
+    "description": "Effect controls — a Filter option on Photo filter. The number is a photographic filter designation and is not translated."
+  },
+  "fxCoolingFilter82": "Cooling filter (82)",
+  "@fxCoolingFilter82": {
+    "description": "Effect controls — a Filter option on Photo filter. The number is a photographic filter designation and is not translated."
+  },
+  "fxCoolingFilterLbb": "Cooling filter (LBB)",
+  "@fxCoolingFilterLbb": {
+    "description": "Effect controls — a Filter option on Photo filter. LBB is a photographic filter designation and is not translated."
+  },
+  "fxCustom": "Custom",
+  "@fxCustom": {
+    "description": "Effect controls — a Filter option on Photo filter, where the colour is the user's own."
+  },
+  "fxCyan": "Cyan",
+  "@fxCyan": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepBlue": "Deep blue",
+  "@fxDeepBlue": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepEmerald": "Deep emerald",
+  "@fxDeepEmerald": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepRed": "Deep red",
+  "@fxDeepRed": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepYellow": "Deep yellow",
+  "@fxDeepYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDensity": "Density",
+  "@fxDensity": {
+    "description": "Effect controls — a control on Photo filter: how strong the coloured glass is."
+  },
+  "fxFilter": "Filter",
+  "@fxFilter": {
+    "description": "Effect controls — a control on Photo filter: which coloured glass."
+  },
+  "fxHighlightAmount": "Highlight amount",
+  "@fxHighlightAmount": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxHighlightTonalWidth": "Highlight tonal width",
+  "@fxHighlightTonalWidth": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxLevel": "Level",
+  "@fxLevel": {
+    "description": "Effect controls — a control on Threshold: where the cut between black and white sits."
+  },
+  "fxMagenta": "Magenta",
+  "@fxMagenta": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxMidtoneContrast": "Midtone contrast",
+  "@fxMidtoneContrast": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxMoreOptions": "More options",
+  "@fxMoreOptions": {
+    "description": "Effect controls — a collapsible group heading on Shadow highlight."
+  },
+  "fxOrange": "Orange",
+  "@fxOrange": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxPhotoFilter": "Photo filter",
+  "@fxPhotoFilter": {
+    "description": "Effect name in the Add effect menu — a coloured glass held in front of the lens."
+  },
+  "fxPosterize": "Posterize",
+  "@fxPosterize": {
+    "description": "Effect name in the Add effect menu — the tone range cut into flat steps."
+  },
+  "fxPreserveLuminosity": "Preserve luminosity",
+  "@fxPreserveLuminosity": {
+    "description": "Effect controls — a control on Photo filter: keep the exposure and change only the colour."
+  },
+  "fxSepia": "Sepia",
+  "@fxSepia": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxShadowAmount": "Shadow amount",
+  "@fxShadowAmount": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxShadowHighlight": "Shadow highlight",
+  "@fxShadowHighlight": {
+    "description": "Effect name in the Add effect menu — lifts dark regions and pulls bright ones down."
+  },
+  "fxShadowTonalWidth": "Shadow tonal width",
+  "@fxShadowTonalWidth": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxTintColour": "Tint colour",
+  "@fxTintColour": {
+    "description": "Effect controls — a control on Black and white: the colour a grey picture is toned with."
+  },
+  "fxTritone": "Tritone",
+  "@fxTritone": {
+    "description": "Effect name in the Add effect menu — three colours mapped onto the tone range."
+  },
+  "fxUnderwater": "Underwater",
+  "@fxUnderwater": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxViolet": "Violet",
+  "@fxViolet": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxWarmingFilter81": "Warming filter (81)",
+  "@fxWarmingFilter81": {
+    "description": "Effect controls — a Filter option on Photo filter. The number is a photographic filter designation and is not translated."
+  },
+  "fxWarmingFilter85": "Warming filter (85)",
+  "@fxWarmingFilter85": {
+    "description": "Effect controls — a Filter option on Photo filter. The number is a photographic filter designation and is not translated."
+  },
+  "fxWarmingFilterLba": "Warming filter (LBA)",
+  "@fxWarmingFilterLba": {
+    "description": "Effect controls — a Filter option on Photo filter. LBA is a photographic filter designation and is not translated."
+  },
+  "fxYellow": "Yellow",
+  "@fxYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxBroadcastSafe": "Broadcast safe",
+  "@fxBroadcastSafe": {
+    "description": "Effect name in the Add effect menu — clamps the picture to a legal broadcast signal amplitude."
+  },
+  "fxCentre": "Centre",
+  "@fxCentre": {
+    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured."
+  },
+  "fxEmboss": "Emboss",
+  "@fxEmboss": {
+    "description": "Effect name in the Add effect menu — the picture as grey relief lit from one direction."
+  },
+  "fxFindEdges": "Find edges",
+  "@fxFindEdges": {
+    "description": "Effect name in the Add effect menu — the picture as a line drawing of its own edges."
+  },
+  "fxHorizontalBlocks": "Horizontal blocks",
+  "@fxHorizontalBlocks": {
+    "description": "Effect controls — a control on Mosaic: how many blocks span the frame's width."
+  },
+  "fxHowToTreat": "How to treat",
+  "@fxHowToTreat": {
+    "description": "Effect controls — a control on Broadcast safe: what to do with a pixel that is over the limit."
+  },
+  "fxKeyOutSafe": "Key out safe",
+  "@fxKeyOutSafe": {
+    "description": "Effect controls — a How to treat option on Broadcast safe: remove the legal pixels, leaving only the problem."
+  },
+  "fxKeyOutUnsafe": "Key out unsafe",
+  "@fxKeyOutUnsafe": {
+    "description": "Effect controls — a How to treat option on Broadcast safe: remove the illegal pixels."
+  },
+  "fxLightDirection": "Light direction",
+  "@fxLightDirection": {
+    "description": "Effect controls — a control on Texturize: which way the light falls across the texture's relief."
+  },
+  "fxMaximumSignal": "Maximum signal",
+  "@fxMaximumSignal": {
+    "description": "Effect controls — a control on Broadcast safe: the largest signal amplitude allowed, in IRE."
+  },
+  "fxMedian": "Median",
+  "@fxMedian": {
+    "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
+  },
+  "fxMosaic": "Mosaic",
+  "@fxMosaic": {
+    "description": "Effect name in the Add effect menu — the frame in flat rectangular blocks."
+  },
+  "fxNtsc": "NTSC",
+  "@fxNtsc": {
+    "description": "Effect controls — a Standard option on Broadcast safe. NTSC is a broadcast television standard and is not translated."
+  },
+  "fxOperateOnAlpha": "Operate on alpha",
+  "@fxOperateOnAlpha": {
+    "description": "Effect controls — a control on Median: whether the layer's transparency is filtered along with its colour."
+  },
+  "fxPal": "PAL",
+  "@fxPal": {
+    "description": "Effect controls — a Standard option on Broadcast safe. PAL is a broadcast television standard and is not translated."
+  },
+  "fxPlacement": "Placement",
+  "@fxPlacement": {
+    "description": "Effect controls — a control on Texturize: what happens outside one copy of the texture."
+  },
+  "fxReduceBrightness": "Reduce brightness",
+  "@fxReduceBrightness": {
+    "description": "Effect controls — a How to treat option on Broadcast safe: darken an over-bright pixel until it is legal."
+  },
+  "fxReduceSaturation": "Reduce saturation",
+  "@fxReduceSaturation": {
+    "description": "Effect controls — a How to treat option on Broadcast safe: drain colour from an over-saturated pixel until it is legal."
+  },
+  "fxRelief": "Relief",
+  "@fxRelief": {
+    "description": "Effect controls — a control on Emboss and on Texturize: how thick the raised surface reads."
+  },
+  "fxSharpColours": "Sharp colours",
+  "@fxSharpColours": {
+    "description": "Effect controls — a control on Mosaic: give each block its centre pixel's colour rather than the block's average."
+  },
+  "fxStandard": "Standard",
+  "@fxStandard": {
+    "description": "Effect controls — a control on Broadcast safe: which television system's signal is being measured."
+  },
+  "fxStretch": "Stretch",
+  "@fxStretch": {
+    "description": "Effect controls — a Placement option on Texturize: hold the texture's edge outward past one copy."
+  },
+  "fxTexture": "Texture",
+  "@fxTexture": {
+    "description": "Effect controls — a control on Texturize: the layer pressed into this one as relief."
+  },
+  "fxTextureContrast": "Texture contrast",
+  "@fxTextureContrast": {
+    "description": "Effect controls — a control on Texturize: how strongly the texture's relief shows."
+  },
+  "fxTexturize": "Texturize",
+  "@fxTexturize": {
+    "description": "Effect name in the Add effect menu — presses another layer into this one as relief."
+  },
+  "fxVerticalBlocks": "Vertical blocks",
+  "@fxVerticalBlocks": {
+    "description": "Effect controls — a control on Mosaic: how many blocks span the frame's height."
   }
 }

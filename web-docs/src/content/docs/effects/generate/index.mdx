@@ -1,0 +1,55 @@
+---
+title: Generate
+description: The Generate effects, and what the family is for.
+sidebar:
+  order: 0
+---
+
+## What this family does
+
+Every other family changes the picture that reaches it. These make one.
+
+Some of them ignore the incoming picture entirely — [Gradient](/effects/generate/gradient/)
+and [Fractal noise](/effects/generate/fractal-noise/) paint over the whole frame, and
+[Fill](/effects/generate/fill/) keeps only the layer's shape and throws away its
+colour — so what you put them on is usually a solid, a shape or an adjustment
+layer whose job is to be a surface for them.
+
+The rest add something *to* what arrived rather than replacing it.
+[Noise](/effects/generate/noise/) and [Add grain](/effects/generate/add-grain/)
+lay grain over the picture, plainly and as film does it. [Beam](/effects/generate/beam/),
+[Lightning](/effects/generate/lightning/) and [Radio waves](/effects/generate/radio-waves/)
+draw over it — a shaft of light, a forked bolt, a set of expanding rings — and
+each can be told to keep the layer underneath or to be the only thing there is.
+[Vegas](/effects/generate/vegas/) is the odd one: it *reads* the picture to find
+its contours, and then draws along them.
+
+Generated pictures earn their keep twice. Once as themselves: a background ramp,
+a wash of cloud, film grain over a flat sky, a bolt of lightning across a title.
+And once as *input to something else* — point another effect's **Matte** row at a
+layer carrying a Fractal noise and that effect now varies across the frame in a
+way no slider could describe. That second use is the reason this family lands
+before the distortion effects that will read it.
+
+## The effects
+
+{/* GENERATED:list - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+- [Fill](/effects/generate/fill/)
+- [Gradient](/effects/generate/gradient/)
+- [Noise](/effects/generate/noise/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Beam](/effects/generate/beam/)
+- [Lightning](/effects/generate/lightning/)
+- [Radio waves](/effects/generate/radio-waves/)
+- [Vegas](/effects/generate/vegas/)
+- [Add grain](/effects/generate/add-grain/)
+- [Scribble](/effects/generate/scribble/)
+- [Stroke](/effects/generate/stroke/)
+
+{/* END GENERATED */}
+
+## Related
+
+- [All effects](/effects/)
+- [Effects](/use/effects/)

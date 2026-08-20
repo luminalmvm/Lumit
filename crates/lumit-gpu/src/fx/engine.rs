@@ -15,6 +15,12 @@ impl FxEngine {
                 entries: &[
                     texture_entry(0),
                     texture_entry(1),
+                    // The generic Matte (K-395) at binding 4, below. It is on
+                    // the SHARED layout rather than a layout of its own because
+                    // a kernel need not use every binding its pipeline layout
+                    // declares — so the two kernels that read a matte get one,
+                    // the twenty that do not are unchanged, and there is no
+                    // second bind-group shape to keep in step.
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStages::COMPUTE,
@@ -35,6 +41,7 @@ impl FxEngine {
                         },
                         count: None,
                     },
+                    texture_entry(4),
                 ],
             });
         let pipeline_layout = ctx
@@ -81,9 +88,50 @@ impl FxEngine {
                 bind_group_layouts: &[&adjust_layout],
                 push_constant_ranges: &[],
             });
-        // Motion blur's layout: src (0), orig-for-mix (1), the flow field (2),
-        // the storage output (3) and the uniform (4) — the shared two-input
-        // shape plus the one extra sampled texture (modelled on adjust_layout).
+        // The dominant-motion reduction Fast motion blur runs first (K-390,
+        // docs/impl/optical-flow.md §4.5 item 3): the flow field in (0), one
+        // texel per tile out (1), the uniform (2). Its own layout because the
+        // output must be rgba32float — the tile vectors are compared against an
+        // f32 CPU oracle, and the working fp16 format would round them.
+        let mb_tile_layout =
+            ctx.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("fx-mb-tile-layout"),
+                    entries: &[
+                        texture_entry(0),
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::StorageTexture {
+                                access: wgpu::StorageTextureAccess::WriteOnly,
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+        let mb_tile_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-mb-tile-pl"),
+                bind_group_layouts: &[&mb_tile_layout],
+                push_constant_ranges: &[],
+            });
+        // Motion blur's layout: src (0) — also the orig-for-mix, since it is a
+        // single pass — the dominant-motion tiles (1), the flow field (2), the
+        // storage output (3) and the uniform (4) — the shared three-sampled-input
+        // shape (modelled on adjust_layout).
         let mb_layout = ctx
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -222,6 +270,93 @@ impl FxEngine {
         let hue_mod = module(include_str!("../fx_hue.wgsl"), "fx-hue");
         let contrast_mod = module(include_str!("../fx_contrast.wgsl"), "fx-contrast");
         let gamma_mod = module(include_str!("../fx_gamma.wgsl"), "fx-gamma");
+        let curves_mod = module(include_str!("../fx_curves.wgsl"), "fx-curves");
+        let levels_mod = module(include_str!("../fx_levels.wgsl"), "fx-levels");
+        let brightness_mod = module(include_str!("../fx_brightness.wgsl"), "fx-brightness");
+        let huesat_mod = module(include_str!("../fx_huesat.wgsl"), "fx-hue-saturation");
+        let posterize_mod = module(include_str!("../fx_posterize.wgsl"), "fx-posterize");
+        let threshold_mod = module(include_str!("../fx_threshold.wgsl"), "fx-threshold");
+        let tritone_mod = module(include_str!("../fx_tritone.wgsl"), "fx-tritone");
+        let photo_filter_mod = module(include_str!("../fx_photofilter.wgsl"), "fx-photo-filter");
+        let blackwhite_mod = module(include_str!("../fx_blackwhite.wgsl"), "fx-black-and-white");
+        let shadow_highlight_mod = module(
+            include_str!("../fx_shadowhighlight.wgsl"),
+            "fx-shadow-highlight",
+        );
+        let fill_mod = module(include_str!("../fx_fill.wgsl"), "fx-fill");
+        let gradient_mod = module(include_str!("../fx_gradient.wgsl"), "fx-gradient");
+        let noise_mod = module(include_str!("../fx_noise.wgsl"), "fx-noise");
+        // The noise core is not a kernel: it is prepended to every kernel that
+        // reads the noise field, which is WGSL's only way of having a shared
+        // module (docs/08 §3.37, §3.38). One twin of `lumit_core::fx::noise`,
+        // not one per effect.
+        let noise_core = include_str!("../fx_noise_core.wgsl");
+        let fractal_noise_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_fractal_noise.wgsl")),
+            "fx-fractal-noise",
+        );
+        let beam_mod = module(include_str!("../fx_beam.wgsl"), "fx-beam");
+        let lightning_mod = module(include_str!("../fx_lightning.wgsl"), "fx-lightning");
+        let radio_waves_mod = module(include_str!("../fx_radiowaves.wgsl"), "fx-radio-waves");
+        let vegas_mod = module(include_str!("../fx_vegas.wgsl"), "fx-vegas");
+        // Scribble's waver is the shared lattice read as a displacement, so
+        // the noise core is prepended exactly as Fractal noise's is.
+        let path_draw_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_pathdraw.wgsl")),
+            "fx-path-draw",
+        );
+        // The grain is the shared lattice, so the noise core is prepended
+        // exactly as Fractal noise's is.
+        let add_grain_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_addgrain.wgsl")),
+            "fx-add-grain",
+        );
+        let turbdisplace_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_turbdisplace.wgsl")),
+            "fx-turbulent-displace",
+        );
+        let tile_mod = module(include_str!("../fx_tile.wgsl"), "fx-tile");
+        let offset_mod = module(include_str!("../fx_offset.wgsl"), "fx-offset");
+        let mirror_mod = module(include_str!("../fx_mirror.wgsl"), "fx-mirror");
+        let lens_distort_mod = module(include_str!("../fx_lensdistort.wgsl"), "fx-lens-distort");
+        let corner_pin_mod = module(include_str!("../fx_cornerpin.wgsl"), "fx-corner-pin");
+        let dispmap_mod = module(include_str!("../fx_dispmap.wgsl"), "fx-displacement-map");
+        let polar_mod = module(include_str!("../fx_polar.wgsl"), "fx-polar-coordinates");
+        let twirl_mod = module(include_str!("../fx_twirl.wgsl"), "fx-twirl");
+        let spherize_mod = module(include_str!("../fx_spherize.wgsl"), "fx-spherize");
+        let ripple_mod = module(include_str!("../fx_ripple.wgsl"), "fx-ripple");
+        let wave_warp_mod = module(include_str!("../fx_wavewarp.wgsl"), "fx-wave-warp");
+        let bezier_warp_mod = module(include_str!("../fx_bezierwarp.wgsl"), "fx-bezier-warp");
+        let warp_mod = module(include_str!("../fx_warp.wgsl"), "fx-warp");
+        let roughen_edges_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_roughenedges.wgsl")),
+            "fx-roughen-edges",
+        );
+        let median_mod = module(include_str!("../fx_median.wgsl"), "fx-median");
+        let mosaic_mod = module(include_str!("../fx_mosaic.wgsl"), "fx-mosaic");
+        let find_edges_mod = module(include_str!("../fx_findedges.wgsl"), "fx-find-edges");
+        let emboss_mod = module(include_str!("../fx_emboss.wgsl"), "fx-emboss");
+        let texturize_mod = module(include_str!("../fx_texturize.wgsl"), "fx-texturize");
+        let broadcast_safe_mod = module(
+            include_str!("../fx_broadcastsafe.wgsl"),
+            "fx-broadcast-safe",
+        );
+        let chan_blur_mod = module(include_str!("../fx_chanblur.wgsl"), "fx-channel-blur");
+        let drop_shadow_mod = module(include_str!("../fx_dropshadow.wgsl"), "fx-drop-shadow");
+        let set_matte_mod = module(include_str!("../fx_setmatte.wgsl"), "fx-set-matte");
+        let linear_wipe_mod = module(include_str!("../fx_linearwipe.wgsl"), "fx-linear-wipe");
+        let radial_wipe_mod = module(include_str!("../fx_radialwipe.wgsl"), "fx-radial-wipe");
+        let venetian_blinds_mod = module(
+            include_str!("../fx_venetianblinds.wgsl"),
+            "fx-venetian-blinds",
+        );
+        let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
+        // The per-card shuffle is the shared hash, so the noise core is
+        // prepended exactly as Fractal noise's and Roughen edges' are.
+        let card_wipe_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_cardwipe.wgsl")),
+            "fx-card-wipe",
+        );
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
@@ -229,9 +364,11 @@ impl FxEngine {
         let scanlines_mod = module(include_str!("../fx_scanlines.wgsl"), "fx-scanlines");
         let echo_mod = module(include_str!("../fx_echo.wgsl"), "fx-echo");
         let motion_blur_mod = module(include_str!("../fx_motionblur.wgsl"), "fx-motion-blur");
+        let mb_tilemax_mod = module(include_str!("../fx_mb_tilemax.wgsl"), "fx-mb-tilemax");
         let datamosh_mod = module(include_str!("../fx_datamosh.wgsl"), "fx-datamosh");
         let dof_mod = module(include_str!("../fx_dof.wgsl"), "fx-dof");
         let adjust_mod = module(include_str!("../fx_adjust.wgsl"), "fx-adjust");
+        let matte_mix_mod = module(include_str!("../fx_matte_mix.wgsl"), "fx-matte-mix");
         let lut_mod = module(include_str!("../fx_lut.wgsl"), "fx-lut");
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
@@ -263,6 +400,67 @@ impl FxEngine {
         let hue_shift = pipeline(&hue_mod, "fx-hue", "hue_shift");
         let contrast = pipeline(&contrast_mod, "fx-contrast", "contrast");
         let gamma = pipeline(&gamma_mod, "fx-gamma", "gamma");
+        let curves = pipeline(&curves_mod, "fx-curves", "curves");
+        let levels = pipeline(&levels_mod, "fx-levels", "levels");
+        let brightness = pipeline(&brightness_mod, "fx-brightness", "brightness");
+        let hue_saturation = pipeline(&huesat_mod, "fx-hue-saturation", "hue_saturation");
+        let posterize = pipeline(&posterize_mod, "fx-posterize", "posterize");
+        let threshold = pipeline(&threshold_mod, "fx-threshold", "threshold");
+        let tritone = pipeline(&tritone_mod, "fx-tritone", "tritone");
+        let photo_filter = pipeline(&photo_filter_mod, "fx-photo-filter", "photo_filter");
+        let black_and_white = pipeline(&blackwhite_mod, "fx-black-and-white", "black_and_white");
+        let shadow_highlight = pipeline(
+            &shadow_highlight_mod,
+            "fx-shadow-highlight",
+            "shadow_highlight",
+        );
+        let fill = pipeline(&fill_mod, "fx-fill", "fill");
+        let gradient = pipeline(&gradient_mod, "fx-gradient", "gradient");
+        let noise = pipeline(&noise_mod, "fx-noise", "noise");
+        let fractal_noise = pipeline(&fractal_noise_mod, "fx-fractal-noise", "fractal_noise");
+        let beam = pipeline(&beam_mod, "fx-beam", "beam");
+        let lightning = pipeline(&lightning_mod, "fx-lightning", "lightning");
+        let radio_waves = pipeline(&radio_waves_mod, "fx-radio-waves", "radio_waves");
+        let vegas = pipeline(&vegas_mod, "fx-vegas", "vegas");
+        let path_draw = pipeline(&path_draw_mod, "fx-path-draw", "path_draw");
+        let add_grain = pipeline(&add_grain_mod, "fx-add-grain", "add_grain");
+        let turbulent_displace = pipeline(
+            &turbdisplace_mod,
+            "fx-turbulent-displace",
+            "turbulent_displace",
+        );
+        let tile = pipeline(&tile_mod, "fx-tile", "tile");
+        let offset = pipeline(&offset_mod, "fx-offset", "offset");
+        let mirror = pipeline(&mirror_mod, "fx-mirror", "mirror");
+        let lens_distort = pipeline(&lens_distort_mod, "fx-lens-distort", "lens_distort");
+        let corner_pin = pipeline(&corner_pin_mod, "fx-corner-pin", "corner_pin");
+        let displacement_map = pipeline(&dispmap_mod, "fx-displacement-map", "displacement_map");
+        let polar_coordinates = pipeline(&polar_mod, "fx-polar-coordinates", "polar_coordinates");
+        let twirl = pipeline(&twirl_mod, "fx-twirl", "twirl");
+        let spherize = pipeline(&spherize_mod, "fx-spherize", "spherize");
+        let ripple = pipeline(&ripple_mod, "fx-ripple", "ripple");
+        let wave_warp = pipeline(&wave_warp_mod, "fx-wave-warp", "wave_warp");
+        let bezier_warp = pipeline(&bezier_warp_mod, "fx-bezier-warp", "bezier_warp");
+        let warp = pipeline(&warp_mod, "fx-warp", "warp");
+        let roughen_edges = pipeline(&roughen_edges_mod, "fx-roughen-edges", "roughen_edges");
+        let median = pipeline(&median_mod, "fx-median", "median");
+        let mosaic = pipeline(&mosaic_mod, "fx-mosaic", "mosaic");
+        let find_edges = pipeline(&find_edges_mod, "fx-find-edges", "find_edges");
+        let emboss = pipeline(&emboss_mod, "fx-emboss", "emboss");
+        let texturize = pipeline(&texturize_mod, "fx-texturize", "texturize");
+        let broadcast_safe = pipeline(&broadcast_safe_mod, "fx-broadcast-safe", "broadcast_safe");
+        let channel_blur = pipeline(&chan_blur_mod, "fx-channel-blur", "channel_blur");
+        let drop_shadow = pipeline(&drop_shadow_mod, "fx-drop-shadow", "drop_shadow");
+        let set_matte = pipeline(&set_matte_mod, "fx-set-matte", "set_matte");
+        let linear_wipe = pipeline(&linear_wipe_mod, "fx-linear-wipe", "linear_wipe");
+        let radial_wipe = pipeline(&radial_wipe_mod, "fx-radial-wipe", "radial_wipe");
+        let venetian_blinds = pipeline(
+            &venetian_blinds_mod,
+            "fx-venetian-blinds",
+            "venetian_blinds",
+        );
+        let iris_wipe = pipeline(&iris_wipe_mod, "fx-iris-wipe", "iris_wipe");
+        let card_wipe = pipeline(&card_wipe_mod, "fx-card-wipe", "card_wipe");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
@@ -278,6 +476,16 @@ impl FxEngine {
                 layout: Some(&mb_pl),
                 module: &motion_blur_mod,
                 entry_point: Some("motion_blur"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+        let mb_tilemax = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-mb-tilemax"),
+                layout: Some(&mb_tile_pl),
+                module: &mb_tilemax_mod,
+                entry_point: Some("mb_tilemax"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -308,6 +516,19 @@ impl FxEngine {
                 layout: Some(&adjust_pl),
                 module: &adjust_mod,
                 entry_point: Some("adjust_blend"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+        // The generic Matte dissolve (K-395). Same three-sampled-inputs shape
+        // as the adjustment blend, so it borrows that layout rather than
+        // declaring an identical one.
+        let matte_mix = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-matte-mix"),
+                layout: Some(&adjust_pl),
+                module: &matte_mix_mod,
+                entry_point: Some("matte_mix"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -350,6 +571,55 @@ impl FxEngine {
             hue_shift,
             contrast,
             gamma,
+            curves,
+            levels,
+            brightness,
+            hue_saturation,
+            posterize,
+            threshold,
+            tritone,
+            photo_filter,
+            black_and_white,
+            shadow_highlight,
+            fill,
+            gradient,
+            noise,
+            fractal_noise,
+            beam,
+            lightning,
+            radio_waves,
+            vegas,
+            path_draw,
+            add_grain,
+            turbulent_displace,
+            tile,
+            offset,
+            mirror,
+            lens_distort,
+            corner_pin,
+            displacement_map,
+            polar_coordinates,
+            twirl,
+            spherize,
+            ripple,
+            wave_warp,
+            bezier_warp,
+            warp,
+            roughen_edges,
+            median,
+            mosaic,
+            find_edges,
+            emboss,
+            texturize,
+            broadcast_safe,
+            channel_blur,
+            drop_shadow,
+            set_matte,
+            linear_wipe,
+            radial_wipe,
+            venetian_blinds,
+            iris_wipe,
+            card_wipe,
             transform,
             shake_mb,
             glow_bright,
@@ -359,13 +629,16 @@ impl FxEngine {
             echo_accumulate,
             echo_mix,
             motion_blur,
+            mb_tilemax,
             datamosh,
             dof,
             adjust,
+            matte_mix,
             lut,
             layout,
             adjust_layout,
             mb_layout,
+            mb_tile_layout,
             lut_layout,
         }
     }

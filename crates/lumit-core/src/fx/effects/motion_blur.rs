@@ -16,7 +16,7 @@
 //! §1.6 oracle is [`crate::fx::cpu::motion_blur`], exercised directly from the
 //! lumit-gpu test, which can upload one.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, MbView};
+use crate::fx::{EffectDef, EffectMetadata, EffectSchema, MbQuality, MbView};
 use lumit_fx_macros::Effect;
 
 /// Fast motion blur's controls.
@@ -46,18 +46,29 @@ pub struct MotionBlur {
     )]
     pub shutter_angle: f32,
 
-    /// Taps along the streak (§3.2). The spec's integer, carried as a Float row
-    /// (Echo's Echoes does the same); [`MotionBlur::packed`] rounds and clamps.
-    /// More taps smooth a long streak; fewer are cheaper.
+    /// The *cap* on taps along the streak (§3.2). The spec's integer, carried as
+    /// a Float row (Echo's Echoes does the same); [`MotionBlur::packed`] rounds
+    /// and clamps. The kernel spends fewer than this on a short streak (K-390's
+    /// adaptive taps), so this is the ceiling on quality and cost, not the count.
     #[slider(min = 8.0, max = 32.0, default = 16.0, hard_min = 2.0, hard_max = 64.0)]
     pub samples: f32,
 
+    /// The reconstruction tier (K-390). Normal draws straight streaks; High
+    /// bends each streak along the motion field and halves the sample spacing.
+    /// **The only method choice there is** — one method adapts internally.
+    #[choice(
+        options = ["Normal", "High"],
+        default = 0
+    )]
+    pub quality: u32,
+
     /// Diagnostic outputs (FX-19): the blurred picture, the flow vectors
-    /// colour-coded (red +x, green +y), or the confidence as greyscale (white =
-    /// trusted, black = suspect — where the streak fades out). Rendered by
+    /// colour-coded (red +x, green +y), the confidence as greyscale (white =
+    /// trusted, black = suspect — where the streak is steered by its
+    /// neighbourhood), or that neighbourhood's own dominant motion. Rendered by
     /// default.
     #[choice(
-        options = ["Rendered", "Motion vectors", "Confidence"],
+        options = ["Rendered", "Motion vectors", "Confidence", "Dominant motion"],
         default = 0
     )]
     pub view: u32,
@@ -76,13 +87,14 @@ pub struct MotionBlur {
 impl MotionBlur {
     /// What the kernel wants, converted exactly as the old resolve arm converted
     /// it: the shutter as a fraction of the frame interval (floored at zero, so a
-    /// negative angle cannot reverse the streak), the tap count rounded and
-    /// clamped to the 2..=64 range both the kernel and the CPU oracle loop, the
-    /// view as its wire code (an unknown stored index falls back to Rendered
-    /// rather than a diagnostic), and Mix as a plain 0..1 fraction. Both render
-    /// paths read this one method, so the CPU reference and the WGSL kernel
-    /// cannot drift apart.
-    pub fn packed(self) -> (f32, i32, f32, MbView) {
+    /// negative angle cannot reverse the streak), the tap cap rounded and
+    /// clamped to the 2..=64 range both the kernel and the CPU oracle bound
+    /// themselves by, the view and the quality tier as their wire codes (an
+    /// unknown stored index falls back to Rendered and to Normal rather than to
+    /// a diagnostic or to the expensive tier), and Mix as a plain 0..1 fraction.
+    /// Both render paths read this one method, so the CPU reference and the WGSL
+    /// kernel cannot drift apart.
+    pub fn packed(self) -> (f32, i32, f32, MbView, MbQuality) {
         (
             (self.shutter_angle / 360.0).max(0.0),
             (self.samples.round() as i32).clamp(2, 64),
@@ -90,7 +102,12 @@ impl MotionBlur {
             match self.view {
                 1 => MbView::MotionVectors,
                 2 => MbView::Confidence,
+                3 => MbView::TileMax,
                 _ => MbView::Rendered,
+            },
+            match self.quality {
+                1 => MbQuality::High,
+                _ => MbQuality::Normal,
             },
         )
     }

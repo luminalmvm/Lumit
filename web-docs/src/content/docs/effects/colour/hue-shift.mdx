@@ -1,0 +1,60 @@
+---
+title: "Hue shift"
+description: "Turn the whole colour wheel, with or without holding brightness."
+---
+
+Hue shift is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Rotates every colour in the picture around the colour wheel. Red becomes orange,
+then yellow, then green, and so on round; a full turn brings everything back to
+where it started.
+
+It is a blunt instrument by design — it moves all colours, not a chosen range —
+which makes it a look tool rather than a correction one. Animated, it is the
+rainbow cycle that half the genre uses on a drop; held at a modest angle, it
+shifts a whole palette without the work of grading each part of it. It is also
+the quickest way to try a scene in a different colour scheme before committing
+to the version built out of [Colour balance](/effects/colour/colour-balance/).
+
+The rotation happens in scene-linear light, like every other grade here.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Preserve luminance** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Angle** — how far round the wheel every colour is turned. It wraps, so any
+  angle is legal and an animated value can keep spinning through whole turns
+  rather than snapping back.
+- **Preserve luminance** — whether brightness is held as the hue turns. On, the
+  rotation is weighted so a colour keeps its perceived brightness: a saturated
+  green stays as bright as it was, a blue stays as dark. Off, brightness is free
+  to ride along with the hue, the way a naive colour wheel behaves, so colours
+  visibly lighten and darken as they turn. On is the safer choice for grading;
+  off is the more energetic one for an animated cycle.
+- **Mix** — how much of the rotated picture replaces the original.
+
+## Related
+
+- [Saturation](/effects/colour/saturation/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Tint](/effects/colour/tint/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

@@ -1,0 +1,169 @@
+---
+title: "Depth of field"
+description: "A lens blur driven by a depth pass, with a real iris."
+---
+
+Depth of field is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+A blur whose strength changes per pixel, driven by a **depth pass** — a second
+layer whose brightness says how far away each pixel is. Pixels at the focus
+distance stay sharp and everything ahead of or behind that plane softens, the
+way a real lens throws a background out of focus.
+
+This is the effect that makes a game capture read as photographed rather than
+rendered. Engine footage is sharp everywhere, which is the single most reliable
+tell; a depth pass exported alongside it, driven through here, buys back the
+whole look. It is also how a subject is separated from a busy background without
+keying anything.
+
+Two things make it read as a lens rather than as a smudge, and both are
+adjustable. The blur is gathered through a **polygon**, not a circle, because a
+real iris has blades — which is why an out-of-focus highlight is a hexagon on
+some lenses and a disc on others. And bright points are averaged in a way that
+lets them survive their dark surroundings and bloom into balls, instead of
+dissolving into grey.
+
+You need a depth layer for any of this. Bring the depth pass in as an ordinary
+layer, hide it so it does not render into the composition, and point **Depth
+layer** at it. Until you do, the effect does nothing at all and says so. If you
+have no depth pass, [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) with a
+mask is the honest alternative.
+
+The defocused picture replaces the original rather than being added over it. To
+lay bokeh over a sharp plate, put the effect on an adjustment layer and give the
+layer a blend mode — see [Blend modes](/use/blend-modes/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Focus distance** | Slider | 0 to 1 | 0.5 | - |
+| **Use focus point** | Checkbox | On or off | Off | - |
+| **Focus point x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Focus point y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Focus range** | Slider | 0 to 1 | 0.1 | - |
+| **Aperture** | Slider | 0 to 40; higher by typing | 8 | - |
+| **Near blur** | Slider | 0 to 40; higher by typing | 8 | Pixels at composition size |
+| **Far blur** | Slider | 0 to 40; higher by typing | 8 | Pixels at composition size |
+| **Blades** | Slider, whole numbers | 3 to 8 | 6 | - |
+| **Roundness** | Slider | -1 to 1 | 1 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Aspect ratio** | Slider | -1 to 1 | 0 | - |
+| **Rim brightness** | Slider | -1 to 1 | 0 | - |
+| **Highlight threshold** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Highlight exposure** | Slider | 0 to 30; down to -30 by typing | 0 | - |
+| **Depth channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+| **Gamma** | Slider | -10 to 10 | 0 | - |
+| **Remove edge leak** | Slider | 0 to 1 | 0 | - |
+| **Detect edge threshold** | Slider | 0 to 1 | 0.1 | - |
+| **Repeat edge pixels** | Checkbox | On or off | On | - |
+| **Display** | Dropdown | Rendered · Depth map · Focus map | Rendered | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+
+In the Effect Controls panel:
+
+- **Iris** groups **Blades**, **Roundness**, **Rotation**, **Aspect ratio**, **Rim brightness**, and starts closed.
+- **Highlights** groups **Highlight threshold**, **Highlight exposure**, and starts closed.
+- **Depth map** groups **Depth channel**, **Gamma**, **Remove edge leak**, **Detect edge threshold**, and starts closed.
+- **Focus distance** is editable while **Use focus point** is off.
+- **Focus point x** is editable while **Use focus point** is on.
+- **Focus point y** is editable while **Use focus point** is on.
+- **Depth channel** is editable while **Matte** names a layer.
+- **Use focus point** is editable while **Matte** names a layer.
+- **Remove edge leak** is editable while **Matte** names a layer.
+- **Detect edge threshold** is editable while **Matte** names a layer.
+- **Matte** a depth pass, not a strength: its luma is how far away each pixel is, and the blur widens with the distance from the focus depth — so a mid-grey matte can be perfectly sharp. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+The picture, and where focus sits:
+
+- **Depth layer** — the layer read as the depth pass. It only has to exist in the
+  composition and cover the frame in time; hide it, since a depth map should not
+  appear in the picture. Unset or pointing at a layer that has gone, the whole
+  effect steps aside.
+- **Focus distance** — which depth stays sharp, read against the depth pass's own
+  zero-to-one range. This is the control you animate to rack focus from one
+  subject to another.
+- **Use focus point** and **Focus point x** / **Focus point y** — the alternative
+  to hunting for a number. Turn the switch on and click the thing you want
+  sharp; the effect reads the depth under that spot and focuses there. Focus
+  distance greys out while it is on, and the point pair greys out while it is
+  off, because only one of them can be in charge.
+- **Focus range** — the half-width of the band around focus that stays fully
+  sharp before softening begins. Widen it to keep a whole subject crisp rather
+  than one plane through it.
+- **Aperture** — the master scale on both blur sizes. This is the one to reach
+  for first: it moves near and far together, the way opening up a real lens does.
+- **Near blur** and **Far blur** — the maximum softening on each side of focus,
+  in pixels. Real lenses are not symmetric about focus, and neither is taste:
+  most shots want the background thrown much further than the foreground.
+
+The **Iris** group shapes each out-of-focus highlight:
+
+- **Blades** — how many straight edges the aperture has. It does nothing while
+  Roundness is fully round, since a circle has no blades.
+- **Roundness** — fully round is a disc, zero is the straight-edged polygon, and
+  negative pulls the edges inward so the shape becomes a star. Five blades at
+  full negative is the classic starred bokeh.
+- **Rotation** — turns the polygon. It winds through whole turns, so it can be
+  animated to spin.
+- **Aspect ratio** — squeezes the highlight oval. Positive stretches it wide and
+  negative tall; this is the anamorphic look, a squeeze either side of round.
+- **Rim brightness** — where the light sits inside each ball. A real lens rarely
+  throws a flat disc: negative pools the light in the middle for creamy bokeh,
+  zero is the flat disc, and positive rings the edge bright, the soap-bubble
+  look.
+
+The **Highlights** group decides what blooms:
+
+- **Highlight threshold** — the brightness a pixel must pass to be treated as a
+  highlight rather than as ordinary picture.
+- **Highlight exposure** — how hard those highlights bloom into balls. At zero
+  the whole split is skipped and the blur is a plain average, which is the
+  cheaper and flatter result.
+
+The **Depth map** group is about reading the pass, as distinct from where focus
+sits:
+
+- **Depth channel** — which channel carries the depth. Luminance suits the grey
+  map a depth pass usually is; alpha and the individual colour channels are
+  there for passes packed another way.
+- **Depth invert** — swaps near and far. Depth passes disagree on which end is
+  close, and this is the switch for when yours is the other way round.
+- **Gamma** — spreads the depth out before it is read. This matters more than it
+  sounds: a linear depth channel puts the sky at the far end and compresses an
+  entire room into the bottom of the range, so without it focus is
+  all-or-nothing. Each step doubles the spread, and game footage usually wants a
+  good deal of it — the middle of the slider rather than either end.
+- **Remove edge leak** and **Detect edge threshold** — suppress the halo where a
+  sharp near object meets a blurred far one and the blur reaches across the
+  boundary for colour it should not have. The threshold decides what counts as
+  such a boundary.
+
+And the tail:
+
+- **Repeat edge pixels** — holds the outermost pixel where the gather reaches
+  past the frame, rather than reading transparency and darkening the border.
+- **Display** — a diagnostic view. Depth map shows what the effect actually reads
+  after the channel pick and the invert, and Focus map shows white where the
+  picture is being kept sharp. Reach for these when focus lands somewhere you
+  did not expect; they are far quicker than reasoning about the numbers.
+- **Mix** — how much of the defocused picture replaces the original.
+
+## Related
+
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Blend modes](/use/blend-modes/)
+- [Layers](/use/layers/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

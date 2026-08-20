@@ -1,0 +1,226 @@
+---
+title: "Lens flare"
+description: "A flare traced through a real lens prescription, aperture and all."
+---
+
+Lens flare is a [Stylise](/effects/stylise/) effect.
+
+## What it is for
+
+A **simulated** lens flare rather than a stack of drawn sprites. The ghosts are
+traced through a real lens prescription — the actual element curvatures, glasses
+and spacings of a photographic lens — so they scale, stretch, colour and slide
+across the frame exactly as a camera's do. The starburst is the true diffraction
+pattern of the aperture.
+
+That is what you get for the cost. A sprite-based flare fakes the ghost train
+with drawn ellipses, so every light looks the same and nothing responds to the
+lens. Here, opening the aperture makes the ghosts grow and go round; stopping it
+down makes them small and bladed. Moving the light across frame flips the train
+through the optical centre. The blue, green and magenta casts come from each
+element's anti-reflective coating, the same way they do in life.
+
+It is the most expensive effect Lumit ships, and it owns a render pass of its
+own. Use **Quality** and **Detail** to buy it back while you work.
+
+Choose your **Lens** first. The twenty in the library were curated to have
+maximally different flare characters — modern multicoated cine glass, uncoated
+1930s exotics, superspeeds, process glass, long telephotos — so switching between
+them changes the look far more than any of the other controls will. You can also
+point **Lens file** at your own prescription.
+
+The whole thing is a pure function of its parameters, so it renders identically
+every time, and a preview matches an export.
+
+### When it is doing too much
+
+In order: pull **Intensity** down, then **Ghost intensity** and
+**Starburst intensity** to weigh the two halves against each other, then
+**Max ghosts** to thin the train, then **Quality** if it is the cost rather than
+the look, and **Mix** as the final blend.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
+| **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
+| **Source width** | Slider | 0 to 400; higher by typing | 0 | Pixels at composition size |
+| **Source height** | Slider | 0 to 400; higher by typing | 0 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 4; higher by typing | 1 | - |
+| **F-stop** | Slider | 1 to 22; down to 0.7 and up to 32 by typing | 2.8 | - |
+| **Lens** | Dropdown | 7Artisans · 50mm F0.95 · Angenieux · DEM 180mm F2.3 APO · Canon · 50mm f1.2 (1956) · Canon · 85mm f1.5 (1952) · Canon · EF 100mm f2.8 Macro · Canon · EF 400mm f2.8L IS II · Canon · EF 70-200mm f2.8L · Canon · FD 300mm f2.8 SSC Fluorite · Leica · Elmarit 90mm F2.8 · Leica · Summilux 35mm f1.4 · Leica · Summilux-C 100mm T1.4 · Meyer Görlitz · Kino Plasmat 100mm F2 · Meyer Görlitz · Orestor 135mm F2.8 · Ross · F10 APO Process Xpres · Voigtländer · Nokton 35mm F1.2 Asph · Voigtländer · Nokton 50mm F1.0 Asph · Zeiss · Arri Master Prime T1.3 50mm · Zeiss · Biotar 50mm F1.4 · Zeiss · Tessar 100mm F4.5 · Zeiss · Ultra Prime Sonnar 135mm T1.9 | Zeiss · Arri Master Prime T1.3 50mm | - |
+| **Lens file** | File | `.lens` | None | - |
+| **Focus (m)** | Slider | 0.5 to 100; down to 0.2 and higher by typing | 100 | - |
+| **Anamorphic squeeze** | Slider | 1 to 2; down to 0.5 and up to 3 by typing | 1 | - |
+| **Blades** | Slider, whole numbers | 3 to 16 | 8 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Coating** | Slider | 0 to 1 | 0.75 | - |
+| **Roundness** | Slider | 0 to 1 | 0.15 | - |
+| **Softness** | Slider | 0 to 1 | 0.05 | - |
+| **Element 1** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 2** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 3** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 4** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 5** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 6** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 7** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 8** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 9** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 10** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 11** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 12** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 13** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 14** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 15** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 16** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 17** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 18** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 19** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Element 20** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
+| **Ghost intensity** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Ghost softness** | Slider | 0 to 1; up to 2 by typing | 0.02 | - |
+| **Max ghosts** | Slider, whole numbers | 0 to 150; up to 200 by typing | 60 | - |
+| **Detail** | Slider | 0.25 to 2; up to 4 by typing | 1 | - |
+| **Dispersion** | Slider | 0 to 2; higher by typing | 1 | - |
+| **Starburst intensity** | Slider | 0 to 4; higher by typing | 1 | - |
+| **Scale** | Slider | 0.1 to 4; down to 0.05 and up to 20 by typing | 1 | - |
+| **Source** | Dropdown | Manual light · Matte · Lights | Manual light | - |
+| **Light tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Use source colour** | Checkbox | On or off | On | - |
+| **Matte** | Layer | Any layer in the composition | This layer | - |
+| **Threshold** | Slider | 0 to 1; higher by typing | 1 | - |
+| **Threshold softness** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Quality** | Dropdown | Draft · Normal · High · Ultra | Normal | - |
+| **Blend** | Dropdown | Normal · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Add | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+
+In the Effect Controls panel:
+
+- **Lens options** groups **Focus (m)**, **Anamorphic squeeze**, **Blades**, **Rotation**, **Coating**, **Roundness**, **Softness**, and starts closed.
+- **Flare options** groups **Ghost intensity**, **Ghost softness**, **Max ghosts**, **Detail**, **Dispersion**, **Starburst intensity**, **Scale**, and starts closed.
+- **Matte** where the flare looks for its light sources, in Matte source mode: the parts of the matte brighter than Detect threshold are the lights, and everything else contributes nothing.
+
+{/* END GENERATED */}
+
+## What each control does
+
+The light, and how strong the whole thing is:
+
+- **Light x** and **Light y** — where the light sits, in pixels. Open past the
+  frame's edges: a light off-screen still flares. There is a dropper for picking
+  it straight off the Viewer.
+- **Source width** and **Source height** — the half-size of the emitting area. At
+  zero the light is a point, which is what a distant lamp or the sun is. Give it a
+  size and it becomes an **area** light whose ghosts take the shape of the source
+  rather than of a point — which is what a window, a strip light or a practical
+  actually is, and it changes the ghost train considerably.
+- **Intensity** — the master gain on everything the effect adds. Zero adds
+  nothing.
+- **F-stop** — stops the iris down from the lens's own widest aperture. Wide open,
+  the ghosts are large and round; stopped down they shrink and take on the shape
+  of the blades. This is the single most photographic control here.
+- **Lens** — the prescription being traced. Changing it changes everything about
+  the flare's character, so try a few before adjusting anything else.
+- **Lens file** — your own prescription, in the same format the optical bench
+  tools use. Set, it overrides the Lens choice entirely; unset, missing or
+  unreadable, it falls back to the picked lens rather than failing.
+
+The **Lens options** group is the glass and the iris:
+
+- **Focus (m)** — the distance the lens is focused at. Refocusing shifts the
+  sensor plane and visibly rearranges the whole ghost train — the same lens at a
+  different focus is a different flare.
+- **Anamorphic squeeze** — the horizontal squeeze of an anamorphic lens, which
+  stretches the flare into the familiar wide oval.
+- **Blades** — how many blades the iris has, and so how many sides a stopped-down
+  ghost and how many spikes the starburst have.
+- **Rotation** — turns the iris. It winds through whole turns, so it can be
+  animated to spin.
+- **Coating** — how well the elements are anti-reflection coated overall.
+  Uncoated glass gives bright, neutral ghosts, which is the look of pre-war
+  lenses; fully coated gives dim, strongly colour-cast ones, which is modern
+  glass.
+- **Roundness** and **Softness** — the iris opening's shape and the softness of
+  its edge.
+- **Element 1** through **Element 20** — the coating on each individual piece of
+  glass. Only as many rows appear as the chosen lens actually has elements. Left
+  as the lens file says, each row changes nothing; set one and you override that
+  element's coating, which is how you push a particular ghost's colour without
+  disturbing the rest of the train.
+
+The **Flare options** group shapes the result:
+
+- **Ghost intensity** — the gain on the ghost train alone.
+- **Ghost softness** — a touch of out-of-focus blur on the ghosts, as a share of
+  the frame diagonal. Zero is a clean, sharp setting rather than a broken one;
+  this is taste, not a cover for artefacts.
+- **Max ghosts** — how many of the ghosts render. They are ranked by brightness
+  and the cap drops the dimmest first, so lowering it thins the train from the
+  faint end rather than cutting it arbitrarily.
+- **Detail** — buys more or less tracing work than the Quality tier alone would
+  spend, without changing tier. Raise it when a ghost's rim still shows structure;
+  lower it for a cheaper preview.
+- **Dispersion** — how far the traced wavelengths spread apart. At zero the trace
+  is monochrome and there is no colour fringing at all; at the neutral point it
+  is physically correct, and above that it is exaggerated.
+- **Starburst intensity** — the gain on the diffraction spikes alone.
+- **Scale** — scales the whole flare about the optical centre, ghosts and
+  starburst together.
+
+The **Source** group decides what the lights *are*:
+
+- **Source** — Manual light is the tracked-point workflow: one source at the Light
+  position. Matte finds the flare's sources in a layer's own picture, so
+  practicals and highlights in the footage each throw their own flare. Lights
+  takes the composition's own light layers as the sources: every light that is
+  visible and alive at that moment throws a flare from its own position, at its
+  own animated intensity, so lighting the scene and flaring it become one job. A
+  composition with no light layers flares with nothing in this mode — it does not
+  fall back to the Light position, which would put a flare somewhere nobody asked
+  for.
+- **Light tint** — multiplies every light in every mode. In Manual mode it is
+  simply the flare's colour. It costs nothing to animate.
+- **Use source colour** — in Matte and Lights modes, whether each source flares in
+  its own colour, so a warm practical flares warm and a cool one cool. Turned
+  off, every source flares white through the tint alone, which is what you want
+  when the sources are being used purely as a set of positions. The row appears
+  only in those two modes, since a Manual flare has just the one colour anyway.
+- **Matte layer** — which layer is searched for sources. It defaults to the layer
+  the effect is on, because "flare the lights in this picture" is nearly always
+  what asking for a matte source means. On an adjustment layer that is the
+  composite of everything below. Point it at another layer and that layer is
+  rendered on its own, and is expected to be hidden.
+- **Threshold** — how bright a pixel must be to count as a light, in scene-linear
+  brightness. At the top of the slider only genuinely over-range highlights
+  qualify; lower it and ordinary bright picture starts to flare too.
+- **Threshold softness** — how gradually sources fade in as they cross the
+  threshold. Widen it if lights pop in and out as the footage moves.
+
+And the tail:
+
+- **Quality** — the cost ladder, in four tiers. It sets how many wavelengths are
+  traced and how dense the ray grid is, which is what separates a smooth spectral
+  fringe from a stack of coloured copies. Draft also traces the flare at half
+  resolution, which makes it the one for scrubbing rather than for looking at.
+  Normal stands on its own for finished work; High and Ultra buy a cleaner fringe
+  and smoother ghost rims on the shots that need them, at a cost that climbs
+  steeply. Reach for Detail above before jumping a tier.
+- **Blend** — how the flare combines with the layer beneath it, the same question a
+  layer's own mode asks. Everything the effect draws is a black-backed light
+  element, so Add is the natural choice and the default. **Normal** is the odd one
+  out: the element *replaces* the layer, black background and all, which gives
+  you the flare on opaque black to export for a separate compositing pass.
+- **Mix** — how much of the flared result replaces the original.
+
+## Related
+
+- [Sprite flare](/effects/stylise/sprite-flare/)
+- [Glow](/effects/stylise/glow/)
+- [Chromatic aberration](/effects/distortion/chromatic-aberration/)
+- [Blend modes](/use/blend-modes/)
+- [Layers](/use/layers/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

@@ -1,0 +1,120 @@
+---
+title: Radio waves
+description: "Emits expanding rings, polygons or stars from a point, each fading as it ages."
+---
+
+Radio waves is a **Generate** effect.
+
+## What it is for
+
+A point that throws out a shape over and over, each one growing, turning and
+fading as it goes: a sonar ping, a shock wave, a drop in a pond, a radar sweep, a
+map marker announcing itself.
+
+Everything about the shape is one group of controls — **Sides**, **Star**, **Star
+depth** and **Rotation** — and everything about its life is another:
+**Frequency** is how often one leaves, **Expansion** how fast it grows,
+**Lifespan** how long it lasts, and **Fade in** and **Fade out** how it arrives
+and goes.
+
+The control that ties it together is **Time**. It is the second the emitter has
+reached, and it is an ordinary parameter rather than the clock: keyframe it
+linearly from 0 and the waves ping out exactly as After Effects' do, hold it and
+the picture holds still, scrub back and every wave is where it was.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Producer x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Producer y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Time** | Slider | 0 to 10; higher by typing | 3 | Seconds |
+| **Frequency** | Slider | 0.1 to 20; down to 0.01 and higher by typing | 2 | - |
+| **Expansion** | Slider | 0 to 1000; higher by typing | 260 | Pixels at composition size |
+| **Lifespan** | Slider | 0.1 to 10; down to 0.02 and higher by typing | 2 | Seconds |
+| **Sides** | Slider, whole numbers | 3 to 64 | 32 | - |
+| **Star** | Checkbox | On or off | Off | - |
+| **Star depth** | Slider | 0 to 100 | 50 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Spin** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Stroke width** | Slider | 0 to 100; higher by typing | 4 | Pixels at composition size |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 0.25, 0.7, 1, 1 | - |
+| **Opacity** | Slider | 0 to 100 | 100 | - |
+| **Fade in** | Slider | 0 to 100 | 15 | - |
+| **Fade out** | Slider | 0 to 100 | 45 | - |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Star depth** is editable while **Star** is on.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Producer x** and **Producer y** — where the waves are emitted, in pixels at
+  composition size.
+- **Time** — the second the emitter has reached. This is the one to keyframe: a
+  straight line from 0 to the length of the shot plays the effect at natural
+  speed, a shallower line plays it slower, and holding it freezes the whole set
+  of waves mid-flight.
+- **Frequency** — how many waves leave each second. High values give a dense set
+  of close rings, low ones a few well-separated ones.
+- **Expansion** — how fast a wave grows, in pixels at composition size per
+  second.
+- **Lifespan** — how long a wave lives before it disappears. Together with
+  Expansion this decides how far the outermost wave gets.
+- **Sides** — how many corners the shape has. 32 or more reads as a circle, which
+  is what most uses want; drop it to six for a hexagon or three for a triangle.
+- **Star** — put every second corner on an inner radius, making a star of the
+  polygon.
+- **Star depth** — how deep the star's notches go. Greyed out until Star is on.
+- **Rotation** — which way the shape faces, measured from straight up and turning
+  clockwise.
+- **Spin** — how far a wave turns for each second of its own age, so older waves
+  have turned further than younger ones. That difference is what makes a set of
+  polygons read as a fan rather than as one shape at several sizes.
+- **Stroke width** — how thick each wave's outline is.
+- **Colour** — the outline's colour. Values above 1 make it bloom under a
+  [Glow](/effects/stylise/glow/).
+- **Opacity** — how strong the outlines are.
+- **Fade in** — how much of a wave's life it spends fading up, as a percentage.
+- **Fade out** — how much it spends fading out. A long fade out is what makes the
+  set read as waves rather than as rings.
+- **Composite on original** — on, the layer that arrived stays under the waves.
+  Off, the waves are all there is.
+- **Mix** — how much of the effect takes hold.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**The first wave leaves at Time 0**, so the effect starts empty and fills up,
+which is what an emitter does. At Time 0 exactly the layer comes through
+untouched.
+
+**At most 32 waves are alive at once.** Lifespan multiplied by Frequency above
+that keeps the newest 32 and drops the rest — which is well past the point where
+more rings stop being visible as separate things.
+
+**Only the polygon wave type is here.** After Effects can also emit the outline
+of the picture or a mask path. The first of those is
+[Vegas](/effects/generate/vegas/), which does it better; the second needs a way
+for an effect to read its layer's masks, which does not exist yet.
+
+**One stroke width, not two.** After Effects tapers the outline from a start
+width to an end width over the wave's life. Lumit's is one thickness, and the
+Fade controls carry what that taper was mostly being used for.
+
+## Related
+
+- [Vegas](/effects/generate/vegas/)
+- [Beam](/effects/generate/beam/)
+- [Generate](/effects/generate/)
+- [Effects](/use/effects/)

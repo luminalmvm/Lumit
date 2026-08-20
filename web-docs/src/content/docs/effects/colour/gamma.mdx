@@ -1,0 +1,56 @@
+---
+title: "Gamma"
+description: "Lift or lower the mid-tones without moving black or white."
+---
+
+Gamma is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Bends the middle of the picture while leaving both ends where they are. Black
+stays black and white stays white; everything between them slides up or down.
+
+That is what makes it different from [Exposure](/effects/colour/exposure/),
+which moves the whole picture including the highlights, and from
+[Contrast](/effects/colour/contrast/), which moves the two ends apart. When a
+shot is roughly right but the mid-tones are muddy — a dark interior, a night
+capture, shadow detail that has fallen away — this is the control that fixes it
+without blowing the highlights out.
+
+The number reads the way a display gamma does: above the neutral point lifts the
+mid-tones and brightens, below it lowers them. Scene-linear highlights above
+white are curved honestly rather than clipped, and a picture that started
+between black and white stays between them.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Gamma** | Slider | 0.1 to 4; down to 0.01 and higher by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Gamma** — the mid-tone bend. Above neutral brightens the middle, below it
+  darkens. It cannot reach zero, since the curve has to stay finite, but it can
+  be typed well past the top of the slider for a heavily crushed or lifted look.
+- **Mix** — how much of the curved picture replaces the original.
+
+## Related
+
+- [Contrast](/effects/colour/contrast/)
+- [Exposure](/effects/colour/exposure/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

@@ -1,0 +1,80 @@
+---
+title: Offset
+description: "Slides the picture, wrapping round — what leaves one side arrives at the other."
+---
+
+Offset is a **Distortion** effect.
+
+## What it is for
+
+Sliding the picture sideways or up and down, with the frame treated as a loop:
+what leaves the left edge comes back in on the right. Nothing is ever revealed
+and nothing is ever lost.
+
+That wrap is the whole point. It gives you two things nothing else does:
+
+- **A scrolling background out of a single still.** Keyframe Shift x across the
+  shot and a seamless texture scrolls forever, with no second copy to line up and
+  no join to hide.
+- **A way to move a pattern without breaking it.** A tiled or procedural texture
+  can be repositioned to sit better under the subject, and it stays seamless
+  because the wrap is exact.
+
+It is also the standard first step when checking whether a texture really is
+seamless: offset it by half the frame, and any join you cannot see was not there.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shift x** | Slider | -3840 to 3840; any value by typing | 0 | Pixels at composition size |
+| **Shift y** | Slider | -2160 to 2160; any value by typing | 0 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shift x** — how far the picture moves to the right, in pixels at composition
+  size. Negative moves it left. A shift of exactly the frame's width puts the
+  picture back where it started, so a scroll that loops is a keyframe pair from 0
+  to the frame width.
+- **Shift y** — how far the picture moves down; negative moves it up.
+- **Mix** — how much of the shifted picture replaces the original. Because this
+  *blends* rather than shortens the shift, a mid Mix shows both pictures at once,
+  which is a double exposure rather than a smaller move. To move less, use a
+  smaller shift.
+- **Matte** and **Invert** — drive the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+
+## Notes
+
+**This is not the Transform effect.** [Transform](/effects/utility/transform/)
+moves a layer and leaves emptiness behind it; Offset moves the picture *within*
+its own frame and fills the gap with the other side of itself. Reach for
+Transform to reposition a layer, and for Offset to reposition a texture.
+
+**A whole-pixel shift is exact** — no resampling, no softening, however many times
+it is applied. A fractional shift is sampled and therefore very slightly softer,
+like any sub-pixel move.
+
+**After Effects users:** AE's Offset asks for "Shift Center To", the point that
+should end up in the middle. Lumit stores the shift itself, which is that point
+minus the frame centre, because a shift is what keyframes sensibly — two linear
+keys give a constant scrolling speed. An imported AE Offset is converted.
+
+## Related
+
+- [Tile](/effects/distortion/tile/)
+- [Transform](/effects/utility/transform/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

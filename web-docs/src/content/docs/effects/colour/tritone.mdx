@@ -1,0 +1,82 @@
+---
+title: Tritone
+description: "Replaces the picture's colours with three of your own — one for the shadows, one for the midtones, one for the highlights."
+---
+
+Tritone is a **Colour** effect.
+
+## What it is for
+
+The picture's own colours are thrown away and replaced by a ramp of three you
+choose. The darkest pixels take the Shadows colour, the brightest take the
+Highlights colour, and everything between is mixed through the Midtones colour.
+
+It is how a photograph becomes a cyanotype or a sepia print, how a trailer gets
+its two-colour title card, and a fast way to make mismatched footage from four
+sources look like one thing.
+
+[Tint](/effects/colour/tint/) does the same job with two colours. The middle
+stop is what makes this a duotone *print* rather than a straight fade between
+two ends: it is where the character of the look lives.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Highlights** | Colour | Each channel 0 to 4, scene-linear | 1, 0.98, 0.9, 1 | - |
+| **Midtones** | Colour | Each channel 0 to 4, scene-linear | 0.45, 0.3, 0.22, 1 | - |
+| **Shadows** | Colour | Each channel 0 to 4, scene-linear | 0.02, 0.03, 0.1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Highlights** — the colour the brightest part of the picture takes. Keep it
+  near white for a print, or push it warm for candlelight.
+- **Midtones** — the colour mid-grey takes, and the one that decides what the
+  look is. A warm brown gives sepia, a mid blue gives a cyanotype, a mid green
+  gives night-vision.
+- **Shadows** — the colour the darkest part takes. A deep blue rather than
+  black is the classic film-print choice, and reads as air rather than as a
+  hole.
+- **Mix** — how much of the toned picture replaces the original. This is where
+  an imported After Effects "Blend with original" lands.
+- **Matte** and **Invert** — tone only part of the frame; see
+  [Effects](/use/effects/).
+
+## Notes
+
+**The three stops are placed where the eye puts them**, so Midtones lands on the
+grey a person would point at rather than on half of the light. The default trio
+is a split-toned print — deep blue shadows, warm brown midtones, warm white
+highlights — so the effect does something worth looking at the moment you drop
+it on.
+
+**Highlights above white keep their headroom.** A specular four times brighter
+than white comes back as the Highlights colour four times over, rather than
+being flattened to it — so a toned picture still has something for
+[Glow](/effects/stylise/glow/) to catch.
+
+**Colours are scene-linear and can go above 1**, which is how you get a
+highlight stop that glows rather than one that just sits at white.
+
+**For an even simpler two-colour version**, use [Tint](/effects/colour/tint/).
+For a two-tone stencil with no ramp at all, use
+[Threshold](/effects/colour/threshold/).
+
+## Related
+
+- [Tint](/effects/colour/tint/)
+- [Threshold](/effects/colour/threshold/)
+- [Black and white](/effects/colour/black-and-white/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

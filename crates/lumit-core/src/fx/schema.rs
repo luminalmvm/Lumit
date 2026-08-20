@@ -157,6 +157,45 @@ pub enum ParamKind {
         /// no-op default — a depth pass is never the picture itself.
         self_default: bool,
     },
+    /// A reference to one of **this layer's masks**, handed to the effect as
+    /// *geometry* — where the curve goes — rather than as the coverage the
+    /// mask produces (K-408).
+    ///
+    /// # In plain terms
+    ///
+    /// Some effects work along a shape you have drawn rather than on the
+    /// picture: a brush that walks a mask path from one per cent to another,
+    /// pencil strokes that fill one, segments that march round one. Coverage
+    /// cannot tell them any of that — a coverage buffer is a picture, and a
+    /// picture says nothing about which way is *along*. So this kind names a
+    /// mask, and the render hands the effect the mask's curve.
+    ///
+    /// **The value is the choice, never the geometry.** What the document
+    /// stores is an [`EffectValue::MaskPath`](crate::model::EffectValue::
+    /// MaskPath) — an optional mask id, static exactly as a layer reference
+    /// is. The vertices ride beside the op, flattened at the frame's time
+    /// ([`crate::mask::mask_path_at`]), the way K-387's aux slots and K-395's
+    /// matte do; forcing a path through a parameter would be the wrong shape
+    /// permanently.
+    ///
+    /// **"First mask"** is the self-default, the way [`ParamKind::Layer`] has
+    /// `self_default`: an unset row means the layer's first mask rather than
+    /// nothing, so an effect dropped on a layer that is about to be masked
+    /// already points somewhere sensible. It is *not* written into the
+    /// instance at instantiation the way a self-default layer reference is —
+    /// an effect is usually added before the mask is drawn, so there is no id
+    /// to write. It resolves at render time instead, which is also what keeps
+    /// it pointing at the first mask when the masks are reordered.
+    ///
+    /// A row that names nothing, names a mask that has been deleted, or names
+    /// the first mask of a layer that has none resolves to an **empty
+    /// polyline**: the effect's documented no-op, degrade and never fault
+    /// (14-ENGINEERING-RULES §4).
+    MaskPath {
+        /// An unset row means the layer's first mask. `false` means it means
+        /// nothing — for an effect whose path input is genuinely optional.
+        self_default: bool,
+    },
 }
 
 /// How a transform- or displacement-domain effect treats the border pixels
@@ -300,14 +339,25 @@ pub enum EnabledCond {
     LayerSet,
 }
 
-/// The Add-effect menu's grouping (K-090): every schema declares one.
+/// The Add-effect menu's grouping (K-090, extended by K-398 and K-400): every
+/// schema declares one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxCategory {
     BlurSharpen,
     Colour,
     Distortion,
+    /// The effects that **make** pixels rather than change them (K-398): Fill,
+    /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
+    /// picture at all, which is why none of the other six describes them.
+    Generate,
     Stylise,
     Temporal,
+    /// The effects that **remove** the picture progressively, so a cut can be
+    /// made out of one (K-400): Linear wipe, Radial wipe. What they do to a
+    /// frame is take some of it away by a Completion the timeline animates —
+    /// which is neither a stylisation nor a utility, and is the family AE's Iris
+    /// wipe, Venetian blinds and Card wipe join when they land.
+    Transition,
     Utility,
 }
 
@@ -318,21 +368,125 @@ impl FxCategory {
             FxCategory::BlurSharpen => "Blur & sharpen",
             FxCategory::Colour => "Colour",
             FxCategory::Distortion => "Distortion",
+            FxCategory::Generate => "Generate",
             FxCategory::Stylise => "Stylise",
             FxCategory::Temporal => "Temporal",
+            FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
         }
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 6] = [
+    pub const ALL: [FxCategory; 8] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
+        FxCategory::Generate,
         FxCategory::Stylise,
         FxCategory::Temporal,
+        FxCategory::Transition,
         FxCategory::Utility,
     ];
+}
+
+/// The id of the generic Matte layer parameter every effect gains (K-395).
+///
+/// One definition: `#[derive(Effect)]` emits this very const into the injected
+/// [`ParamSchema`], the draw builder looks the layer reference up by it, and the
+/// panel finds the row by it. A second spelling of the string would be a matte
+/// bound to a layer nobody renders.
+pub const MATTE_PARAM: &str = "matte";
+
+/// The id of the Invert switch that rides beside [`MATTE_PARAM`] (K-395).
+pub const MATTE_INVERT_PARAM: &str = "matte_invert";
+
+/// [`MATTE_INVERT_PARAM`]'s resolved id — what the generic post-lerp reads the
+/// switch out of the bag by, once per op rather than once per effect.
+pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(MATTE_INVERT_PARAM);
+
+/// What an effect's Matte row *means*, and therefore who consumes it (K-395).
+///
+/// # In plain terms
+///
+/// Every effect can be handed a second picture that drives it. For most of them
+/// "drives" means strength — the effect runs everywhere and is then dissolved
+/// back towards the untouched picture where the matte is dark, which is one
+/// dissolve written once for all of them. But for some effects the matte belongs
+/// *inside* the maths: a blur that reads a matte should blur softly where the
+/// matte is grey, not blur fully and then fade; a glow should only let the lit
+/// parts of the matte seed the halo. Those effects claim the matte, and the
+/// generic dissolve must then not also run — otherwise the matte would be
+/// applied twice, once in the kernel and once beside it.
+///
+/// This is the whole of that decision, in one place. The draw builder reads it
+/// to know which parameter holds the layer reference; `run_ops` reads it to know
+/// whether to hand the texture to the kernel or to the dissolve; the derive
+/// reads it to know whether to inject the row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatteRole {
+    /// No matte row, no slot, no dissolve.
+    ///
+    /// Nothing declares this today. It exists because "every effect" is a claim
+    /// about the effects that exist, and an effect that genuinely cannot be
+    /// driven by a picture should be able to say so rather than carry a row
+    /// that does nothing.
+    None,
+    /// The generic **strength** semantic: the injected [`MATTE_PARAM`] pair, and
+    /// one dissolve beside the registry dispatch
+    /// ([`cpu::matte_mix`](super::cpu::matte_mix) and its WGSL twin). The
+    /// default, and what all but four effects use.
+    Strength,
+    /// The effect claims the matte **inside its own maths** — the K-395
+    /// override. The generic dissolve does not run.
+    Own {
+        /// The parameter the layer reference is stored under. [`MATTE_PARAM`]
+        /// for an effect that takes the injected row and simply means something
+        /// deeper by it (Gaussian blur, Glow), and the effect's own older id
+        /// where it owned the idea before K-395 existed (Depth of field's
+        /// `depth`, the Lens flare's `matte`) — a save is a save, K-065.
+        param: &'static str,
+        /// **What this effect's matte does**, in one sentence, sentence case, no
+        /// full stop — the schema prose K-395 requires of every override, and
+        /// what the manual prints beside the Matte row (`fx-reference.json`).
+        /// The declaration cannot claim the matte without writing it: the two
+        /// arrive as one attribute.
+        meaning: &'static str,
+    },
+}
+
+impl MatteRole {
+    /// The parameter the matte layer reference is stored under, or `None` when
+    /// this effect takes no matte. **The one lookup key**: the draw builder
+    /// enumerates slots by it, so a role and a declared parameter that disagree
+    /// is a matte bound to a layer nobody renders — which
+    /// `every_matte_role_names_a_declared_layer_row` refuses to let happen.
+    #[must_use]
+    pub const fn param(self) -> Option<&'static str> {
+        match self {
+            MatteRole::None => None,
+            MatteRole::Strength => Some(MATTE_PARAM),
+            MatteRole::Own { param, .. } => Some(param),
+        }
+    }
+
+    /// The one-sentence meaning an override declares, `None` for the generic
+    /// strength semantic (whose meaning is the same sentence for every effect
+    /// that uses it, and is written once in docs/08 §2.6).
+    #[must_use]
+    pub const fn meaning(self) -> Option<&'static str> {
+        match self {
+            MatteRole::Own { meaning, .. } => Some(meaning),
+            _ => None,
+        }
+    }
+
+    /// Whether the generic dissolve runs beside the dispatch. False for an
+    /// override, which is the whole point of overriding: the matte is already
+    /// spent inside the kernel.
+    #[must_use]
+    pub const fn generic(self) -> bool {
+        matches!(self, MatteRole::Strength)
+    }
 }
 
 /// One built-in effect's full declaration.
@@ -352,4 +506,41 @@ pub struct EffectSchema {
     /// Rows that grey out while another parameter says so. Empty for the
     /// effects whose controls are all independent, which is most of them.
     pub enabled_when: &'static [EnabledWhen],
+    /// What this effect's Matte row means, and therefore who consumes it
+    /// (K-395) — see [`MatteRole`].
+    ///
+    /// It is the one fact the generic carriage keys on, and both sides read it:
+    /// the draw builder fills one matte slot per op whose role names a
+    /// parameter, and `run_ops` consumes one per op whose role names a
+    /// parameter — one predicate, one order, exactly as K-387 requires of every
+    /// parallel list. Whether the *dissolve* then runs, or the texture goes to
+    /// the kernel instead, is the same field's second question
+    /// ([`MatteRole::generic`]).
+    ///
+    /// `#[derive(Effect)]` injects the [`MATTE_PARAM`] pair for any role that
+    /// names it and does not already declare it, so no declaration repeats the
+    /// row and none can forget it.
+    pub matte: MatteRole,
+}
+
+impl EffectSchema {
+    /// The [`ParamKind::MaskPath`] row this effect declares — its id and
+    /// whether an unset row means the layer's first mask (K-408).
+    ///
+    /// **The one predicate.** `build.rs` flattens a slot per op that answers
+    /// `Some`, and `fxops::run_ops` consumes one per op that answers `Some`,
+    /// in the same order — the K-387 rule, one predicate and one order, so the
+    /// two lists cannot drift apart silently. Anything that needs to know
+    /// whether an effect takes a path asks here rather than matching on the
+    /// parameter list itself.
+    ///
+    /// The first declaration wins: an effect takes at most one path, because a
+    /// second would need a second carriage and nothing has asked for one.
+    #[must_use]
+    pub fn mask_path(&self) -> Option<(&'static str, bool)> {
+        self.params.iter().find_map(|p| match p.kind {
+            ParamKind::MaskPath { self_default } => Some((p.id, self_default)),
+            _ => None,
+        })
+    }
 }

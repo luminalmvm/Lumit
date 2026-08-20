@@ -1,0 +1,69 @@
+---
+title: "Unsharp mask"
+description: "A radius-controlled detail lift, with a threshold to spare the grain."
+---
+
+Unsharp mask is a [Blur & sharpen](/effects/blur-sharpen/) effect.
+
+## What it is for
+
+The controlled way to sharpen. It compares the picture against a blurred copy of
+itself and adds back the difference, so what gets lifted is detail at the size
+you choose rather than every pixel-to-pixel step.
+
+Reach for it after anything that costs sharpness: a scale-down, a Retime, a
+blur elsewhere in the stack, or heavy compression on the source capture. It is
+also the honest fix for footage that was simply shot or streamed soft.
+
+The reason to prefer it over plain [Sharpen](/effects/blur-sharpen/sharpen/) is
+the pair of controls that keep it from ruining the picture: a radius, so you
+choose which scale of detail is lifted, and a threshold, so flat areas are left
+alone and compression noise is not amplified into a moving crust.
+
+Sharpening is a local exaggeration, so it is easy to overdo. Bright and dark
+halos along high-contrast edges are the tell.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 300 | 60 | - |
+| **Radius** | Slider | 0.05 to 2; down to 0 and up to 4 by typing | 0.4 | Per cent of the composition diagonal |
+| **Threshold** | Slider | 0 to 1 | 0.05 | - |
+| **Luminance only** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how strongly the recovered detail is added back. Past a point this
+  stops reading as sharpness and starts reading as edge haloes.
+- **Radius** — the size of detail that gets lifted, as a share of the composition
+  diagonal. Small values sharpen fine texture; larger ones lift broader shapes
+  and read more as local contrast than as sharpness.
+- **Threshold** — how much difference a pixel must show before it is lifted at
+  all. This is what protects flat sky, skin and compression blocks from having
+  their noise amplified: raise it until the grain stops crawling, and leave the
+  real edges to sail past it.
+- **Luminance only** — sharpens brightness while leaving colour alone. On
+  compressed capture, whose colour is stored at lower resolution than its
+  brightness, this avoids pulling coloured fringes out along every edge. It is
+  usually the right choice on game footage.
+- **Mix** — how much of the sharpened picture replaces the original.
+
+## Related
+
+- [Sharpen](/effects/blur-sharpen/sharpen/)
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Retime](/use/retime/)
+- [Blur & sharpen](/effects/blur-sharpen/)
+- [Effects](/use/effects/)

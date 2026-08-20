@@ -287,6 +287,13 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   const factory BridgeEffectValue.layer([
     UuidValue? field0,
   ]) = BridgeEffectValue_Layer;
+
+  /// Which of the owning layer's masks an effect walks (K-408): the mask id,
+  /// or `None` for "First mask". The *geometry* never crosses — the render
+  /// flattens it engine-side, beside the op.
+  const factory BridgeEffectValue.maskPath([
+    UuidValue? field0,
+  ]) = BridgeEffectValue_MaskPath;
 }
 
 @freezed
@@ -549,6 +556,12 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required String filterName,
   }) = BridgeParamKind_File;
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
+
+  /// One of the **owning layer's masks**, whose geometry the effect walks
+  /// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
+  /// "First mask" as the unset entry; the mask names come from the read model
+  /// the panel already holds, so the row costs no call of its own.
+  const factory BridgeParamKind.maskPath() = BridgeParamKind_MaskPath;
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]

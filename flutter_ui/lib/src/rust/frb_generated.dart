@@ -8183,6 +8183,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeEffectValue_Layer(
           dco_decode_opt_Uuid(raw[1]),
         );
+      case 8:
+        return BridgeEffectValue_MaskPath(
+          dco_decode_opt_Uuid(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -8691,6 +8695,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         );
       case 8:
         return BridgeParamKind_Layer();
+      case 9:
+        return BridgeParamKind_MaskPath();
       default:
         throw Exception("unreachable");
     }
@@ -10336,6 +10342,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case 7:
         var var_field0 = sse_decode_opt_Uuid(deserializer);
         return BridgeEffectValue_Layer(var_field0);
+      case 8:
+        var var_field0 = sse_decode_opt_Uuid(deserializer);
+        return BridgeEffectValue_MaskPath(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -10879,6 +10888,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             filter: var_filter, filterName: var_filterName);
       case 8:
         return BridgeParamKind_Layer();
+      case 9:
+        return BridgeParamKind_MaskPath();
       default:
         throw UnimplementedError('');
     }
@@ -12799,6 +12810,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeEffectValue_Layer(field0: final field0):
         sse_encode_i_32(7, serializer);
         sse_encode_opt_Uuid(field0, serializer);
+      case BridgeEffectValue_MaskPath(field0: final field0):
+        sse_encode_i_32(8, serializer);
+        sse_encode_opt_Uuid(field0, serializer);
     }
   }
 
@@ -13227,6 +13241,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_String(filterName, serializer);
       case BridgeParamKind_Layer():
         sse_encode_i_32(8, serializer);
+      case BridgeParamKind_MaskPath():
+        sse_encode_i_32(9, serializer);
     }
   }
 

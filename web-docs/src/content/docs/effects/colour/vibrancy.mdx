@@ -1,0 +1,59 @@
+---
+title: "Vibrancy"
+description: "A saturation lift weighted toward the colours that have least."
+---
+
+Vibrancy is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+A saturation boost that pays attention to what it is boosting. Pixels that are
+already vivid are lifted very little; pixels that are close to grey are lifted a
+lot.
+
+That single difference is what makes it the safer control of the two. A plain
+[Saturation](/effects/colour/saturation/) lift takes an already-saturated sky or
+a neon sign past what the picture can hold, and the result clips into flat
+patches of pure colour. Vibrancy leaves those alone and spends its effort on the
+muted parts, so skin tones, concrete, foliage and the general middle of the
+picture gain while the vivid areas stay intact.
+
+On game footage, where user-interface elements and effects are often already at
+full saturation while the environment is not, this is usually the one you want.
+
+Use plain Saturation when you specifically want an even scale — for going fully
+greyscale, or for pulling colour out — and this when you want the picture to
+look richer without picking a fight with its brightest colours.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 200; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how hard the lift is applied before the per-pixel weighting. At
+  zero the picture passes through untouched. The slider reaches a heavy boost
+  and can be typed past it; the weighting means even a large value stays kinder
+  to saturated areas than a much smaller Saturation value would be.
+- **Mix** — how much of the lifted picture replaces the original.
+
+## Related
+
+- [Saturation](/effects/colour/saturation/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

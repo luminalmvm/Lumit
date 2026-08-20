@@ -113,6 +113,11 @@ Widget hostPanel({
   /// test asserts a finished state rather than racing an animation; a test
   /// that is *about* the motion (the Viewer's zoom flight, K-218) asks for it.
   AnimationLevel animationLevel = AnimationLevel.none,
+
+  /// Which shape's chrome the panel is dressed in. Sharp by default, because
+  /// that is what every behaviour test wants to assert against; a test about
+  /// Round's own geometry (K-394) asks for it.
+  ThemeShape shape = ThemeShape.sharp,
 }) =>
     Directionality(
       textDirection: TextDirection.ltr,
@@ -123,10 +128,7 @@ Widget hostPanel({
           child: ChangeNotifierProvider<LumitUiState>.value(
             value: uiState,
             child: ThemeScope(
-              theme: LumitTheme.forScheme(
-                LumitColorScheme.dark,
-                ThemeShape.sharp,
-              ),
+              theme: LumitTheme.forScheme(LumitColorScheme.dark, shape),
               animationLevel: animationLevel,
               showTooltips: false,
               // The application's root is a MaterialApp, which puts one of

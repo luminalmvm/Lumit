@@ -1,0 +1,84 @@
+---
+title: "Block glitch"
+description: "Tear the picture into displaced, colour-split blocks."
+---
+
+Block glitch is a [Distortion](/effects/distortion/) effect.
+
+## What it is for
+
+Cuts the picture into a grid and pushes blocks around: some displaced sideways,
+some split into colour channels, some repeating a slice of themselves. It is the
+corrupted-video look, and it is built to be driven from a single dial.
+
+Everything the effect does is scaled by **Intensity**, so at zero it is a genuine
+passthrough and a keyframe pair on that one control gives you a clean burst on a
+beat without touching anything else. That is how it is meant to be used: hard for
+two or three frames, then gone.
+
+Held constantly at a low value it is a subtler thing — an intermittent
+instability under a whole sequence, as though the signal were not quite holding.
+
+The pattern varies from frame to frame on its own, so a held glitch keeps moving
+rather than freezing into one arrangement.
+
+Stack it before [Scanlines](/effects/distortion/scanlines/) for the standard
+broken-screen pair, and add an [RGB split](/effects/distortion/rgb-split/) over
+both if the colour fringing needs to go further than this effect's own.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Intensity** | Slider | 0 to 1 | 0.35 | - |
+| **Block size** | Slider | 4 to 128; down to 2 and higher by typing | 24 | Pixels at composition size |
+| **Rows/columns jitter** | Slider | 0 to 100 | 25 | - |
+| **Displacement** | Slider | 0 to 15; up to 100 by typing | 3 | Per cent of the composition diagonal |
+| **Channel offset** | Slider | 0 to 10; up to 50 by typing | 1 | Per cent of the composition diagonal |
+| **Slice repeat** | Slider | 0 to 100 | 20 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Intensity** — the master dial. Every other control below is scaled by it, so
+  it is a real off switch at zero and the only thing most projects need to
+  animate.
+- **Block size** — how large the torn blocks are, in pixels. Small values give a
+  fine digital hash; large ones give a few big slabs, which reads more like a
+  broken frame than like noise. It is measured in real pixels because the look is
+  deliberately pixel-scale, and it is scaled with the preview resolution so a
+  draft matches the export.
+- **Rows/columns jitter** — how far the grid's own lines wander, as a share of the
+  block size. Without it the tear lines sit on an obvious regular grid; with it
+  the blocks stop lining up and the damage looks less designed.
+- **Displacement** — how far a torn block is pushed from where it belongs, across
+  the composition diagonal. This is the control that decides whether the effect
+  reads as texture or as the picture coming apart.
+- **Channel offset** — how far a torn block's red and blue are split apart. It is
+  the per-block version of an [RGB split](/effects/distortion/rgb-split/), and a
+  little of it is what makes the damage look like video rather than like paper
+  being cut up.
+- **Slice repeat** — how often a block repeats a short strip of itself rather than
+  showing its own content, the stuttering horizontal banding of a stalled decode.
+- **Seed** — which random arrangement you get. Two layers sharing a seed break
+  identically; change it when a particular burst lands badly.
+- **Mix** — how much of the broken picture replaces the original.
+
+## Related
+
+- [Scanlines](/effects/distortion/scanlines/)
+- [RGB split](/effects/distortion/rgb-split/)
+- [Datamosh](/effects/distortion/datamosh/)
+- [Distortion](/effects/distortion/)
+- [Effects](/use/effects/)

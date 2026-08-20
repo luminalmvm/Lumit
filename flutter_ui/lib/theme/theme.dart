@@ -73,6 +73,20 @@ enum LumitColorScheme {
 /// Shape-dependent chrome geometry (K-092). `sharp` reproduces the egui
 /// frontend's pre-K-092 numbers exactly; `round` is the floating-card system.
 class ShapeTokens {
+  /// A control's corner radius — button, chip, tab, dropdown, value box.
+  ///
+  /// Under Round this is [stadium] rather than a number (K-394, §12.1): every
+  /// control is a full capsule, and a capsule's radius is half the control's
+  /// **own** height, which a token cannot know. It does not have to: a rounded
+  /// rectangle scales its radii down to fit the box it is drawn into, so a
+  /// radius larger than any control is tall *is* the capsule, at whatever
+  /// height the control turns out to be. That is why this stays one number
+  /// instead of growing a flag — every existing
+  /// `BorderRadius.circular(tokens.controlRadius)` is already correct under
+  /// both shapes, with nothing to change and nothing to forget.
+  ///
+  /// It is a **corner radius only**. Never use it as a length (a padding, a
+  /// height, an inset): under Round it is not one.
   final double controlRadius;
   final double floatRadius;
   final double cardRadius;
@@ -101,10 +115,14 @@ class ShapeTokens {
     cardShadow: [],
   );
 
+  /// The value [controlRadius] carries under Round: bigger than any control is
+  /// tall, so the corner clamps to half the height and draws a stadium.
+  static const double stadium = 1000;
+
   static const round = ShapeTokens(
-    controlRadius: 8,
-    floatRadius: 12,
-    cardRadius: 14,
+    controlRadius: stadium,
+    floatRadius: 16,
+    cardRadius: 18,
     cardPadding: 10,
     tileGap: 12.0,
     windowInset: 12.0,

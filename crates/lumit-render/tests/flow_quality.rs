@@ -30,6 +30,10 @@
 //!     --test flow_quality -- --ignored --nocapture
 //! ```
 //!
+//! `LUMIT_FLOW_ONLY` keeps only the variants whose label contains it — sweeping
+//! one engine constant wants `defaults` and nothing else, and the other five
+//! arms are five times the wait for numbers nobody reads.
+//!
 //! `LUMIT_FLOW_STRIDE` sets the gap between the frames used (default 1).
 //! **Animation drawn on 2s or 3s needs it**: consecutive frames there are
 //! duplicates, so a triplet is A, A, B and "rebuild the middle" is asking to
@@ -162,9 +166,15 @@ fn mean(v: &[Score]) -> (f64, f64, f64) {
 
 /// The variants measured. Each is a question worth an answer: does looking
 /// harder help, does measuring smaller help, does the guard cost anything.
+///
+/// `LUMIT_FLOW_ONLY` keeps just the arms whose label contains it — a sweep of
+/// one engine constant only ever wants the `flow (defaults)` row, and paying
+/// for the other five arms per triplet makes the sweep six times as long for
+/// numbers nobody reads.
 fn variants() -> Vec<(&'static str, FlowSettings)> {
     let base = FlowSettings::default();
-    vec![
+    let only = std::env::var("LUMIT_FLOW_ONLY").unwrap_or_default();
+    let all: Vec<(&'static str, FlowSettings)> = vec![
         ("flow (defaults)", base),
         (
             "flow, detail=Ultra",
@@ -197,7 +207,10 @@ fn variants() -> Vec<(&'static str, FlowSettings)> {
                 ..base
             },
         ),
-    ]
+    ];
+    all.into_iter()
+        .filter(|(label, _)| only.is_empty() || label.contains(&only))
+        .collect()
 }
 
 #[test]
@@ -247,7 +260,15 @@ fn score_flow_against_its_baselines_on_real_clips() {
         }
         let step = (span / samples.max(1)).max(1);
 
-        let mut engine = lumit_flow::FlowEngine::new_auto();
+        // The GPU is the shipping path and the default here. `LUMIT_FLOW_CPU=1`
+        // pins the oracle instead, which is how a change is measured in the
+        // window between the CPU reference landing and its WGSL twin: without
+        // it the harness would score the *old* shader and report no effect.
+        let mut engine = if std::env::var("LUMIT_FLOW_CPU").is_ok() {
+            lumit_flow::FlowEngine::cpu()
+        } else {
+            lumit_flow::FlowEngine::new_auto()
+        };
         let mut nearest = Vec::new();
         let mut blended = Vec::new();
         let mut flows: Vec<Vec<Score>> = (0..variants().len()).map(|_| Vec::new()).collect();

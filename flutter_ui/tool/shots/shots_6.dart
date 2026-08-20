@@ -169,12 +169,11 @@ Future<void> main() async {
 Rect _panelCrop(Rect panel, String lastRowKey) {
   final last = boxOf(lastRowKey);
   return Rect.fromLTRB(
-    panel.left,
-    panel.top - _dockTabHeight,
-    panel.right,
-    last == null ? panel.bottom : (last.bottom + 12).clamp(0, panel.bottom),
+    panel.left - paneCardInset,
+    panel.top - dockTabInset,
+    panel.right + paneCardInset,
+    last == null
+        ? panel.bottom
+        : (last.bottom + 12).clamp(0, panel.bottom + paneCardInset),
   );
 }
-
-/// The dock's tab strip, from `dock_widget.dart`.
-const double _dockTabHeight = 26;

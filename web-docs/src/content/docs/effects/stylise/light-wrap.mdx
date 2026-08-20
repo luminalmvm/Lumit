@@ -1,0 +1,78 @@
+---
+title: "Light wrap"
+description: "Spill the background's light around a keyed subject's edge."
+---
+
+Light wrap is a [Stylise](/effects/stylise/) effect.
+
+## What it is for
+
+The oldest trick in compositing, and the cheapest way to make a keyed subject
+stop looking pasted on.
+
+In a real camera the light behind a subject spills round its edges — off the
+hair, along the shoulders, anywhere the outline is thin. A matte cut in software
+has none of that, and its absence is most of what makes a composite read as fake,
+even when the key itself is clean.
+
+This effect takes the layer you name as the **Background**, softens it, and
+paints that softened light into a narrow band just inside the foreground's own
+edge. Put it after your key — after
+[Matte key](/effects/utility/matte-key/) — and point it at the plate the subject
+is being composited onto.
+
+It needs no mask of its own. The foreground's own transparency is the edge, so
+the band is found automatically and follows the subject as it moves. It also
+never paints outside the matte, which is the classic way to get this effect
+wrong: a halo drawn around a subject looks worse than no wrap at all.
+
+The light is screened on rather than added, so a bright background brightens the
+edge *toward* itself rather than past white and into a rim of blown highlight.
+
+Nothing happens until you choose a background, and with none chosen the picture
+passes through untouched.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Background** | Layer | Any layer in the composition | None | - |
+| **Width** | Slider | 0 to 200; higher by typing | 0 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 3; higher by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Background** — the layer whose light spills. Normally this is the plate the
+  subject was keyed onto. It should not be the layer the effect is on, which is
+  why it does not start pointed there: a layer is never its own background, and
+  wrapping a picture in its own light gives you nothing.
+- **Width** — how far the wrap reaches inside the edge, in pixels, and also the
+  distance the background is softened by. They are deliberately the same number:
+  light that spills a long way round an edge is also light that has been
+  scattered, so a wide wrap should be a soft one. At zero there is no wrap at
+  all. Keep it small — a wrap wide enough to notice as a band is a wrap that has
+  gone too far.
+- **Intensity** — how strong the spill is. There is no ceiling, so a deliberately
+  hot rim against a bright plate is available, but the convincing settings are
+  low.
+- **Mix** — how much of the wrapped picture replaces the original.
+
+## Related
+
+- [Matte key](/effects/utility/matte-key/)
+- [Glow](/effects/stylise/glow/)
+- [Mattes](/use/mattes/)
+- [Layers](/use/layers/)
+- [Stylise](/effects/stylise/)
+- [Effects](/use/effects/)

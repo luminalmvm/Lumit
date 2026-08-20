@@ -141,6 +141,14 @@ struct AdjustParams {
     _pad: [f32; 3],
 }
 
+/// The generic Matte dissolve's one number (K-395): 1 to invert the matte.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MatteMixParams {
+    invert: f32,
+    _pad: [f32; 3],
+}
+
 /// One resolved 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). The cube
 /// itself arrives as its own 3D texture (see [`upload_lut_3d`] and
 /// [`FxEngine::lut`]); this uniform carries the edge length the shader needs to
@@ -468,6 +476,87 @@ impl FxEngine {
                 timestamp_writes: None,
             });
             cpass.set_pipeline(&self.adjust);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
+        drop(enc);
+        out
+    }
+
+    /// The generic Matte dissolve (K-395, docs/08 §2.6): per-channel lerp from
+    /// the picture the effect was given (`input`) to what it produced
+    /// (`processed`), by the `matte`'s premultiplied Rec. 709 luma — inverted
+    /// when `invert`. The op-for-op twin of
+    /// [`lumit_core::fx::cpu::matte_mix`](../../../lumit_core/fx/cpu/fn.matte_mix.html);
+    /// all three textures are this raster's size, and a new one comes back.
+    ///
+    /// It is never called when no matte is bound, which is what makes an effect
+    /// with an unset Matte row byte-identical to the same effect before K-395
+    /// (K-258): the pass does not run, so there is nothing to be identical to.
+    #[allow(clippy::too_many_arguments)]
+    pub fn matte_mix(
+        &self,
+        ctx: &GpuContext,
+        input: &wgpu::Texture,
+        processed: &wgpu::Texture,
+        matte: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        invert: bool,
+    ) -> wgpu::Texture {
+        use wgpu::util::DeviceExt;
+        let out = work_texture(ctx, w, h, "fx-matte-mix-out");
+        let ubuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-matte-mix-params"),
+                contents: bytemuck::bytes_of(&MatteMixParams {
+                    invert: f32::from(invert),
+                    _pad: [0.0; 3],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-matte-mix-bind"),
+            layout: &self.adjust_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &input.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &processed.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &matte.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(
+                        &out.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: ubuf.as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = ctx.encoder("fx-matte-mix-enc");
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-matte-mix-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.matte_mix);
             cpass.set_bind_group(0, &bind, &[]);
             cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
         }

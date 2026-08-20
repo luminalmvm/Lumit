@@ -1,7 +1,7 @@
 # The effect registry: one declaration per effect
 
 **Covers:** how a built-in effect is declared, registered, resolved at a frame and
-dispatched to the GPU. All 35 built-ins are declared this way; the `fx::Resolved` enum
+dispatched to the GPU. Every built-in is declared this way; the `fx::Resolved` enum
 and the hand-written `BUILTINS` literal §1 inventories are gone.
 **Feeds:** [08-EFFECTS.md](../08-EFFECTS.md),
 [05-ARCHITECTURE.md](../05-ARCHITECTURE.md), [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md).
@@ -95,9 +95,21 @@ The macro generates, from that one declaration:
 
 Attributes map to `ParamKind` one-for-one: `#[slider]` → `Float`, `#[counter]` → `Int`,
 `#[dial]` → `Angle`, `#[toggle]` → `Bool`, `#[choice]` → `Choice`, `#[colour]` → `Colour`,
-`#[seed]` → `Seed`, `#[file]` → `File`, `#[layer]` → `Layer`. Group and greying metadata
+`#[seed]` → `Seed`, `#[file]` → `File`, `#[layer]` → `Layer`, `#[mask_path]` → `MaskPath`
+(K-408 — one of the owning layer's masks, whose geometry rides beside the op; its
+`self_default` defaults to **true**, the other way round from `#[layer]`'s, because an
+effect that wants a path wants the one path most layers have). Group and greying metadata
 (`ParamGroup`, `EnabledWhen`, K-145 and K-313) stay declared on the effect attribute,
 because they name *runs* of parameters rather than living inside one.
+
+**Two parameters are injected, not declared** (K-395): the `matte` Layer row and its
+`matte_invert` switch, which every effect gets so the row means something on all of them
+from the day it landed rather than on the handful someone remembered. The `matte`
+attribute is the only thing that varies, and it says what the row *means* rather than
+whether it exists — see §2.5b for the roles and the table of the four effects that claim
+their matte. The injection itself is conditional on the struct not already declaring a
+`matte` field, which is how the Lens flare keeps the row it wrote itself (K-065) without
+getting a second one under the same id.
 
 ### 2.2 Units are declared, not remembered
 
@@ -290,13 +302,14 @@ and every `GpuEffect` names a schema.
 
 Some effects consume an input the render prepared beside the stack: the k-th LUT op
 binds `luts[k]`, a depth/layer input binds `layer_inputs[k]`, Echo reads the decoded
-neighbour frames, the flow consumers read the dense field. `build.rs` enumerates these
+neighbour frames, the flow consumers read the dense field, and the k-th op declaring a
+`MaskPath` row binds `mask_paths[k]` (K-408). `build.rs` enumerates these
 with one predicate in one order, and `run_ops` walks shared counters so the two sides
 cannot drift. Registry dispatch keeps that contract by making the consumption a
 declaration:
 
 ```rust
-pub enum AuxKind { None, Lut, LayerInput, FlareInputs, Neighbours, FlowField }
+pub enum AuxKind { None, Lut, LayerInput, LensFile, Neighbours, FlowField }
 
 pub trait GpuEffect {
     ...
@@ -314,12 +327,95 @@ consumption matches def `match_name`s, and they are the same names — the one-p
 one-order rule survives unchanged. A missing slot stays a passthrough (degrade, never
 fault), exactly the convention every list already had.
 
-Two kinds carry a **pair**, because two inputs arrive together and are counted as one:
-`FlareInputs` is the flare's Matte source and its custom prescription off the one
-`flare_i`, and `FlowField` is the dense field *and* the decoded neighbours off the one
-decode — Datamosh walks the field out of the −1 frame, so it needs both, while Fast
-motion blur ignores the frames. Neither pair advances a second counter, which is the
-point: an effect declares one list, not a set of them.
+### 2.5b The one matte carriage (K-395)
+
+The Matte input every effect gained (docs/08 §2.6) is the same seam with a **second
+predicate**, deliberately not a sixth `AuxKind`. The difference is which effects it
+covers: `aux()` names a list a *handful* of effects count along, while **every** effect
+carries a matte. So:
+
+- **The declaration is a fact about the schema**, not about the GPU wrapper.
+  `EffectSchema::matte` is a `MatteRole`, and it answers two questions at once —
+  *which parameter holds the layer reference*, and *who consumes the texture*:
+
+  | Role | Declared as | Parameter | Consumed by |
+  |---|---|---|---|
+  | `Strength` | nothing (the default) | the injected `matte` | the dissolve beside the dispatch |
+  | `Own { param, meaning }` | `matte = ("<id>", "<meaning>")` | `<id>` | the effect's own kernel |
+  | `None` | `matte = false` | — | nobody; no row at all |
+
+  `build.rs`'s `mattes_for` fills one slot per enabled built-in whose role **names a
+  parameter** and whose def `is_image_op()` — the two conditions `resolve_stack` itself
+  applies — and `run_ops` advances `matte_i` for exactly the same ops. One fact, two
+  sides, no third list to keep in step.
+- **The counter is its own.** Sharing `dof_i` would bind a matte to whichever Light wrap
+  happened to sit above it, because the two predicates select different effects.
+- **The slot is a `LayerInput`**, rendered by the same `render_layer_input` a background
+  plate is: alone, at the effect's raster, with `ThisLayer` (K-288) resolved against the
+  picture the chain is carrying.
+- **Nothing runs when no slot is bound**, which is what makes an unset row byte-identical
+  to no row at all (K-258) rather than a lerp by one.
+- **A row the panel does not show fills no slot.** `mattes_for` consults
+  `param_visible`/`param_enabled`, so a matte named on a hidden or greyed row costs
+  nothing: the Lens flare's Matte rows exist only while its Source type is Matte, and it
+  used to enforce that inside a predicate of its own. Generalising it is what let that
+  predicate be deleted without a project paying for a layer render per frame it never
+  looks at.
+
+**The override hook.** An effect claims the matte by naming its parameter, and then two
+things follow mechanically, in one place (`run_ops`): the texture is handed to the kernel
+on `AuxSlot::matte()`, and the generic dissolve does **not** also run. Applying the matte
+twice — once inside and once beside — is the failure this hook exists to make
+unrepresentable, and `an_override_is_not_also_dissolved` pins it at a mid-grey matte,
+where the kernel's answer, the dissolve's, and a blend of the two are all different
+pictures.
+
+`AuxSlot` therefore carries the matte as a **field beside** the `AuxData` an effect's
+`aux()` asked for, rather than as a variant of it. The alternative is a variant per
+(kind, matte) pair, and the Lens flare already needs both: its prescription off the
+`LensFile` list, its matte off the matte carriage.
+
+**The mask path rides the same way** (K-408): `AuxSlot::mask_path()` is a second field
+beside the matte, filled for every op whose schema answers `EffectSchema::mask_path()`,
+on its own counter — every effect takes a matte and almost none takes a path, so one
+shared index would hand a path to whichever effect happened to sit above. It arrives as a
+**CPU slice** (`mask::MaskPolyline`: points, cumulative arc length, closed flag), the way
+`AuxData::Lut` arrives as a parsed cube: a kernel that *walks* a curve and a kernel that
+builds a *distance field* over one want different bytes in a storage buffer, so the first
+consumer uploads it at its own layout rather than the carriage guessing. An empty
+polyline is the effect's documented no-op.
+
+**And the three consumers share one pipeline** (K-409, docs/08 §3.78-§3.79). Scribble,
+Stroke and Vegas's Mask/Path source each have their own `EffectDef`, their own schema and
+their own `GpuEffect` — three `match_name`s, as the catalogue requires — but all three
+`run` methods build a `cpu::PathDrawParams` host-side and hand it to the same
+`FxEngine::path_draw`. That is legal and worth knowing about when reading `GPU_EFFECTS`:
+the list is one entry per effect, not one per kernel, and nothing in the registry requires
+the two counts to match. It works because the geometry is decided before the dispatch, so
+what differs between the three effects never reaches the GPU. The uploaded form is a
+**uniform**, not a storage buffer — 512 pieces of four floats, Lightning's array twice
+over — and every consumer coarsens rather than truncating past it (docs/14 §4).
+
+The four that claim it, and why each is a different picture from a strength dissolve:
+
+| Effect | Parameter | What the matte means |
+|---|---|---|
+| Gaussian blur | `matte` | scales the **radius** per pixel — a blur that varies in *width*, not a full blur faded back |
+| Glow | `matte` | gates which pixels may **seed** the halo, before the bright pass — the halo still spills outward past the matte |
+| Depth of field | `depth` | a **depth** pass: how far away each pixel is, so the blur widens with distance from focus |
+| Lens flare | `matte` | where the flare **detects its light sources**, in Matte source mode |
+
+Each one's sentence lives in its own declaration and reaches `fx-reference.json`, so the
+manual's parameter table prints what that effect's matte does rather than the generic
+sentence (K-395: an override documents its meaning in the schema prose). The macro will
+not let an override be declared without one — the id and the sentence are one attribute.
+
+One kind carries a **pair**, because two inputs arrive together off one decode:
+`FlowField` is the dense field *and* the decoded neighbours — Datamosh walks the field out
+of the −1 frame, so it needs both, while Fast motion blur ignores the frames. It advances
+no second counter, which is the point: an effect declares one list, not a set of them.
+(`FlareInputs` used to be the other, pairing the flare's Matte source with its
+prescription; K-395 took the matte off it, and what is left is `LensFile`.)
 
 Two facts about a slot cannot be a parameter and so are read off the slot itself. The
 first is presence — a Layer row never reaches the arena, so "is a depth pass bound?"
@@ -368,7 +464,7 @@ registry that starts as the built-in list — which is the seam this refactor is
 1. `resolve_stack` walks the instances, and for each enabled built-in looks the def up by
    `match_name` and evaluates **every declared parameter** — including derived and spare
    ones (§4) — through the expression context, converting by declared unit. There is no
-   per-effect resolve code: the loop is the same for all 35.
+   per-effect resolve code: the loop is the same for every one of them.
 2. Host maths that used to sit in the `resolve_one` arm now sits in `pack`, called once at
    dispatch, on whichever side needs it.
 3. `run_ops` looks up the `GpuEffect` and calls it with the bag.
@@ -460,7 +556,8 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    **`lens_flare` was its own campaign** and has landed: 50 parameters, the aux pair, a
    lazy bake closure the engine may run on another thread, and a frame-time grid probe that
    calls back into `lumit-core` mid-dispatch. `AuxKind::FlareInputs` already carried its two
-   slots, so the seam was never what blocked it; what it needed of its own was a home for
+   slots (K-395 later took the Matte off it, leaving `LensFile`), so the seam was never
+   what blocked it; what it needed of its own was a home for
    **Lights mode's sources** (K-360), which are the comp's own Light layers at this frame
    rather than anything anyone types. They are §2.4a derived values, two `Value::Colour`
    entries a light — geometry `(x, y, half_w, half_h)` and colour `(r, g, b, 0)` — under

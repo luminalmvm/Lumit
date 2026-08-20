@@ -733,25 +733,46 @@ class _EffectSection extends StatelessWidget {
     };
     final disabled = disabledParams(info.name, shown);
 
-    Widget rowFor(BridgeParamInfo param) => EffectParamRowFrb(
-          key: ValueKey<String>('fx-row-$id-${param.id}'),
-          effectId: id,
-          param: param,
-          value: stagedValue(id, param.id) ?? values[param.id],
-          comp: comp,
-          ownerLayerId: layer.internallayerId,
-          ownerLayers: allLayers,
-          playheadFrame: playheadFrame,
-          onSeek: onSeek,
-          onWrite: onWrite,
-          onLive: onLive,
-          twoColumn: true,
-          enabled: !disabled.contains(param.id),
-          // The effect's other values, for a control whose behaviour
-          // depends on a sibling (the depth-of-field dropper reads the
-          // effect's own `depth` layer).
-          siblings: values,
-        );
+    // **The uniform Matte row** (K-395). A Layer picker carries its Invert
+    // switch beside it on one row, and the switch never gets a row of its own.
+    // The pair is found by id convention — `matte` + `matte_invert`, and Depth
+    // of field's older `depth` + `depth_invert`, whose stored ids K-065 keeps —
+    // so the injected pair and the effects that predate it fold the same way
+    // without a table here naming them. It costs no bridge call: `params` is
+    // the cached schema this method already read.
+    final byId = {for (final p in params) p.id: p};
+    BridgeParamInfo? invertFor(BridgeParamInfo p) =>
+        p.kind is BridgeParamKind_Layer ? byId['${p.id}_invert'] : null;
+    final folded = <String>{
+      for (final p in params)
+        if (invertFor(p) case final inv?) inv.id,
+    };
+
+    Widget rowFor(BridgeParamInfo param) {
+      final inv = invertFor(param);
+      return EffectParamRowFrb(
+        key: ValueKey<String>('fx-row-$id-${param.id}'),
+        effectId: id,
+        param: param,
+        value: stagedValue(id, param.id) ?? values[param.id],
+        comp: comp,
+        ownerLayerId: layer.internallayerId,
+        ownerLayers: allLayers,
+        playheadFrame: playheadFrame,
+        onSeek: onSeek,
+        onWrite: onWrite,
+        onLive: onLive,
+        twoColumn: true,
+        enabled: !disabled.contains(param.id),
+        // The effect's other values, for a control whose behaviour
+        // depends on a sibling (the depth-of-field dropper reads the
+        // effect's own `depth` layer).
+        siblings: values,
+        invertParam: inv,
+        invertValue:
+            inv == null ? null : stagedValue(id, inv.id) ?? values[inv.id],
+      );
+    }
 
     // Fold a run of params into rows, pairing x/y neighbours.
     List<Widget> foldRows(List<BridgeParamInfo> run) {
@@ -759,6 +780,11 @@ class _EffectSection extends StatelessWidget {
       var i = 0;
       while (i < run.length) {
         final param = run[i];
+        // Already drawn, beside its picker on the Matte row.
+        if (folded.contains(param.id)) {
+          i += 1;
+          continue;
+        }
         final next = i + 1 < run.length ? run[i + 1] : null;
         final isPair = next != null &&
             param.id.endsWith('_x') &&
@@ -820,8 +846,9 @@ class _EffectSection extends StatelessWidget {
         }
       } else if (memberOf.containsKey(param.id)) {
         // A group member reached out of order (a schema whose group is not
-        // contiguous): render it plainly rather than losing it.
-        rows.add(rowFor(param));
+        // contiguous): render it plainly rather than losing it — unless it is
+        // an Invert already drawn on its picker's row.
+        if (!folded.contains(param.id)) rows.add(rowFor(param));
         i += 1;
       } else {
         // Flat params fold too, so an ungrouped x/y pair still joins.

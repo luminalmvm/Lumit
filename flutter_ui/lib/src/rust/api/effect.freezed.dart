@@ -64,6 +64,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(BridgeEffectValue_Seed value)? seed,
     TResult Function(BridgeEffectValue_File value)? file,
     TResult Function(BridgeEffectValue_Layer value)? layer,
+    TResult Function(BridgeEffectValue_MaskPath value)? maskPath,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -84,6 +85,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that);
+      case BridgeEffectValue_MaskPath() when maskPath != null:
+        return maskPath(_that);
       case _:
         return orElse();
     }
@@ -112,6 +115,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(BridgeEffectValue_Seed value) seed,
     required TResult Function(BridgeEffectValue_File value) file,
     required TResult Function(BridgeEffectValue_Layer value) layer,
+    required TResult Function(BridgeEffectValue_MaskPath value) maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -131,6 +135,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer():
         return layer(_that);
+      case BridgeEffectValue_MaskPath():
+        return maskPath(_that);
     }
   }
 
@@ -156,6 +162,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(BridgeEffectValue_Seed value)? seed,
     TResult? Function(BridgeEffectValue_File value)? file,
     TResult? Function(BridgeEffectValue_Layer value)? layer,
+    TResult? Function(BridgeEffectValue_MaskPath value)? maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -175,6 +182,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that);
+      case BridgeEffectValue_MaskPath() when maskPath != null:
+        return maskPath(_that);
       case _:
         return null;
     }
@@ -202,6 +211,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(int field0)? seed,
     TResult Function(BridgeFileParam field0)? file,
     TResult Function(UuidValue? field0)? layer,
+    TResult Function(UuidValue? field0)? maskPath,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -222,6 +232,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that.field0);
+      case BridgeEffectValue_MaskPath() when maskPath != null:
+        return maskPath(_that.field0);
       case _:
         return orElse();
     }
@@ -250,6 +262,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(int field0) seed,
     required TResult Function(BridgeFileParam field0) file,
     required TResult Function(UuidValue? field0) layer,
+    required TResult Function(UuidValue? field0) maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -269,6 +282,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer():
         return layer(_that.field0);
+      case BridgeEffectValue_MaskPath():
+        return maskPath(_that.field0);
     }
   }
 
@@ -294,6 +309,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(int field0)? seed,
     TResult? Function(BridgeFileParam field0)? file,
     TResult? Function(UuidValue? field0)? layer,
+    TResult? Function(UuidValue? field0)? maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -313,6 +329,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that.field0);
+      case BridgeEffectValue_MaskPath() when maskPath != null:
+        return maskPath(_that.field0);
       case _:
         return null;
     }
@@ -860,6 +878,73 @@ class _$BridgeEffectValue_LayerCopyWithImpl<$Res>
 }
 
 /// @nodoc
+
+class BridgeEffectValue_MaskPath extends BridgeEffectValue {
+  const BridgeEffectValue_MaskPath([this.field0]) : super._();
+
+  @override
+  final UuidValue? field0;
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeEffectValue_MaskPathCopyWith<BridgeEffectValue_MaskPath>
+      get copyWith =>
+          _$BridgeEffectValue_MaskPathCopyWithImpl<BridgeEffectValue_MaskPath>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeEffectValue_MaskPath &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  @override
+  String toString() {
+    return 'BridgeEffectValue.maskPath(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeEffectValue_MaskPathCopyWith<$Res>
+    implements $BridgeEffectValueCopyWith<$Res> {
+  factory $BridgeEffectValue_MaskPathCopyWith(BridgeEffectValue_MaskPath value,
+          $Res Function(BridgeEffectValue_MaskPath) _then) =
+      _$BridgeEffectValue_MaskPathCopyWithImpl;
+  @useResult
+  $Res call({UuidValue? field0});
+}
+
+/// @nodoc
+class _$BridgeEffectValue_MaskPathCopyWithImpl<$Res>
+    implements $BridgeEffectValue_MaskPathCopyWith<$Res> {
+  _$BridgeEffectValue_MaskPathCopyWithImpl(this._self, this._then);
+
+  final BridgeEffectValue_MaskPath _self;
+  final $Res Function(BridgeEffectValue_MaskPath) _then;
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = freezed,
+  }) {
+    return _then(BridgeEffectValue_MaskPath(
+      freezed == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as UuidValue?,
+    ));
+  }
+}
+
+/// @nodoc
 mixin _$BridgeEnabledCond {
   @override
   bool operator ==(Object other) {
@@ -1355,6 +1440,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_Seed value)? seed,
     TResult Function(BridgeParamKind_File value)? file,
     TResult Function(BridgeParamKind_Layer value)? layer,
+    TResult Function(BridgeParamKind_MaskPath value)? maskPath,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1377,6 +1463,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
+      case BridgeParamKind_MaskPath() when maskPath != null:
+        return maskPath(_that);
       case _:
         return orElse();
     }
@@ -1406,6 +1494,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_Seed value) seed,
     required TResult Function(BridgeParamKind_File value) file,
     required TResult Function(BridgeParamKind_Layer value) layer,
+    required TResult Function(BridgeParamKind_MaskPath value) maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -1427,6 +1516,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_Layer():
         return layer(_that);
+      case BridgeParamKind_MaskPath():
+        return maskPath(_that);
     }
   }
 
@@ -1453,6 +1544,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_Seed value)? seed,
     TResult? Function(BridgeParamKind_File value)? file,
     TResult? Function(BridgeParamKind_Layer value)? layer,
+    TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -1474,6 +1566,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
+      case BridgeParamKind_MaskPath() when maskPath != null:
+        return maskPath(_that);
       case _:
         return null;
     }
@@ -1512,6 +1606,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function()? seed,
     TResult Function(List<String> filter, String filterName)? file,
     TResult Function()? layer,
+    TResult Function()? maskPath,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1536,6 +1631,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
+      case BridgeParamKind_MaskPath() when maskPath != null:
+        return maskPath();
       case _:
         return orElse();
     }
@@ -1576,6 +1673,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function() seed,
     required TResult Function(List<String> filter, String filterName) file,
     required TResult Function() layer,
+    required TResult Function() maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -1599,6 +1697,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_Layer():
         return layer();
+      case BridgeParamKind_MaskPath():
+        return maskPath();
     }
   }
 
@@ -1635,6 +1735,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function()? seed,
     TResult? Function(List<String> filter, String filterName)? file,
     TResult? Function()? layer,
+    TResult? Function()? maskPath,
   }) {
     final _that = this;
     switch (_that) {
@@ -1658,6 +1759,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
+      case BridgeParamKind_MaskPath() when maskPath != null:
+        return maskPath();
       case _:
         return null;
     }
@@ -2337,6 +2440,26 @@ class BridgeParamKind_Layer extends BridgeParamKind {
   @override
   String toString() {
     return 'BridgeParamKind.layer()';
+  }
+}
+
+/// @nodoc
+
+class BridgeParamKind_MaskPath extends BridgeParamKind {
+  const BridgeParamKind_MaskPath() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeParamKind_MaskPath);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.maskPath()';
   }
 }
 

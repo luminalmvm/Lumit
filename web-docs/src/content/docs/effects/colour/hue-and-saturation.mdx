@@ -1,0 +1,104 @@
+---
+title: Hue and saturation
+description: "Turn, saturate or lighten the whole picture — or just its greens."
+---
+
+Hue and saturation is a [Colour](/effects/colour/) effect.
+
+## What it is for
+
+Turns the colour wheel, changes how colourful the picture is, and raises or
+lowers how bright it is — either everywhere, or only for one family of colours.
+
+The Master group does it to everything. The six range groups do it to the reds,
+yellows, greens, cyans, blues or magentas alone, which is the move this effect
+exists for: grass pulled toward teal without touching skin, a red jersey
+desaturated without flattening the rest of the frame, a sky lifted while the
+ground stays put.
+
+The ranges have no edges to tune, and no edge to catch you out. Each is widest at
+its own colour and fades to nothing at its neighbours, so a colour sitting
+between two ranges takes a share of each and never more than one range's worth
+in total — a gradient crossing from green to cyan changes smoothly rather than
+stepping as it passes a boundary.
+
+Greys take the Master adjustment only. A grey has no colour to belong to a range,
+so lifting the reds cannot quietly darken every neutral in the frame — which it
+would if the effect took a grey's technically-zero hue at face value.
+
+Lightness is a gain, not a fade toward white: there is no white to fade toward in
+a scene-linear picture, where a highlight can be many times brighter than paper.
+Full negative takes a colour to black, full positive doubles it, and nothing
+clips on the way.
+
+[Hue shift](/effects/colour/hue-shift/) is still the effect to reach for when all
+you want is one dial: it holds perceived brightness as the hue turns, which this
+one does not.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Master › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Master › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Master › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Reds › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Reds › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Reds › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Yellows › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Yellows › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Yellows › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Greens › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Greens › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Greens › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Cyans › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Cyans › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Cyans › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Blues › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Blues › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Blues › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Magentas › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
+| **Magentas › Saturation** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Magentas › Lightness** | Slider | -100 to 100; higher by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Master** groups **Hue**, **Saturation**, **Lightness**.
+- **Reds** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Yellows** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Greens** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Cyans** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Blues** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Magentas** groups **Hue**, **Saturation**, **Lightness**, and starts closed.
+- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Hue** — degrees round the colour wheel. Wraps, and winds through whole turns
+  when animated rather than stopping at 360.
+- **Saturation** — how colourful. Zero passes the picture through, −100 takes the
+  group to grey, +100 doubles it, and there is no ceiling above.
+- **Lightness** — a gain on brightness. −100 takes the group to black, +100
+  doubles it.
+- **Master** applies to every pixel. **Reds**, **Yellows**, **Greens**,
+  **Cyans**, **Blues** and **Magentas** apply by how close a pixel's colour is to
+  that range, and by how colourful the pixel already is.
+- **Mix** — how much of the graded picture replaces the original.
+- **Matte** and **Invert** — drive the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Hue shift](/effects/colour/hue-shift/)
+- [Saturation](/effects/colour/saturation/)
+- [Vibrancy](/effects/colour/vibrancy/)
+- [Tint](/effects/colour/tint/)
+- [Colour](/effects/colour/)
+- [Effects](/use/effects/)

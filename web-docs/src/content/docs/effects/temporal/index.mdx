@@ -1,0 +1,70 @@
+---
+title: "Temporal"
+description: "Effects that read other frames, or change which frame is drawn."
+sidebar:
+  order: 0
+---
+
+## What this family does
+
+Every other effect works on the frame in front of it. These four work on
+*time* — they read frames either side of the current one, or change which moment
+gets drawn at all.
+
+- [Echo](/effects/temporal/echo/) composites a run of earlier frames behind or
+  over the present one, for trails and speed lines.
+- [Fast motion blur](/effects/temporal/fast-motion-blur/) measures the motion
+  between frames and smears each pixel along it, in one pass.
+- [Motion blur](/effects/temporal/motion-blur/) re-renders the whole scene
+  beneath it at several moments inside one frame and averages the results. It is
+  the correct, expensive one.
+- [Posterize time](/effects/temporal/posterize-time/) holds time on a coarser
+  grid, so the picture steps rather than flows — the stop-motion look.
+
+## The three kinds of motion blur
+
+They are easy to confuse, and they are genuinely different things.
+
+| What | Where it lives | What it does |
+| --- | --- | --- |
+| The motion blur **switch** | A layer switch | Smears one layer along its own transform. |
+| **Motion blur** effect | The effect stack | Re-renders the scene below at sub-frame moments and averages them. |
+| **Fast motion blur** effect | The effect stack | Smears the motion already inside the footage, in one pass. |
+
+The switch is free and only knows about the layer's own animated position, scale
+and rotation. The effect below it is the correct one — it catches footage motion,
+animated effects, the camera, everything — and costs several full renders per
+frame. Fast motion blur is the cheap middle: it can smear motion that is inside
+the picture, which the switch cannot, without re-rendering anything.
+
+## What to expect of them
+
+Two of these read the layer's own **source** frames, which has consequences worth
+knowing. Echo and Fast motion blur work on footage layers; on a solid, a shape or
+an adjustment layer there is nothing beneath them to read and they step aside.
+And where one of the re-rendering effects — Motion blur or Posterize time — has a
+temporal effect inside the scene it is sampling, that inner effect holds still
+rather than being sampled through, which is a documented boundary rather than a
+fault.
+
+All four resolve time through [Retime](/use/retime/), so a slowed layer's echoes
+and blurs stretch with it correctly.
+
+## The effects
+
+{/* GENERATED:list - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+- [Echo](/effects/temporal/echo/)
+- [Posterize time](/effects/temporal/posterize-time/)
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Fast motion blur](/effects/temporal/fast-motion-blur/)
+
+{/* END GENERATED */}
+
+## Related
+
+- [All effects](/effects/)
+- [Effects](/use/effects/)
+- [Retime](/use/retime/)
+- [Layers](/use/layers/)
+- [Preview](/use/preview/)

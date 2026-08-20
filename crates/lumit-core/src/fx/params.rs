@@ -120,6 +120,19 @@ pub enum Value {
     Layer(bool),
     /// The op's slot in the stack's file table, or `u32::MAX` for unset.
     File(u32),
+    /// Whether the mask-path row names a mask, exactly as [`Value::Layer`]
+    /// carries whether the layer row names a layer (K-408).
+    ///
+    /// The *choice* is what the document stores (a mask id, or the "First
+    /// mask" entry); the *geometry* rides beside the op as a flattened
+    /// polyline. Neither belongs in the arena: this bag is `Copy`, borrows
+    /// nothing from the document, and is hashed field by field into the frame
+    /// key — a path of a thousand vertices in it would be all three of those
+    /// promises broken. What is left for the bag is the one bit a kernel can
+    /// use before it looks at its slot. Whether a path actually arrived is
+    /// `AuxSlot`'s answer, not this one: an unset row on a masked layer still
+    /// resolves to the first mask, and a named mask can have been deleted.
+    MaskPath(bool),
 }
 
 impl Value {
@@ -139,7 +152,7 @@ impl Value {
             }
             Value::Choice(v) => v as f32,
             Value::Colour([r, ..]) | Value::Vec4([r, ..]) => r,
-            Value::Layer(v) => {
+            Value::Layer(v) | Value::MaskPath(v) => {
                 if v {
                     1.0
                 } else {
@@ -162,6 +175,7 @@ impl Value {
             Value::Layer(_) => 5,
             Value::File(_) => 6,
             Value::Vec4(_) => 7,
+            Value::MaskPath(_) => 8,
         }
     }
 }
@@ -272,6 +286,12 @@ impl<'a> Params<'a> {
     /// Whether the layer reference `id` is bound to a picture this frame.
     pub fn layer_bound(&self, id: ParamId) -> bool {
         matches!(self.get(id), Some(Value::Layer(true)))
+    }
+
+    /// Whether the mask-path row `id` names a mask (K-408). Not whether a
+    /// path arrived — that is the op's slot's answer, and the honest one.
+    pub fn mask_named(&self, id: ParamId) -> bool {
+        matches!(self.get(id), Some(Value::MaskPath(true)))
     }
 
     /// The file-table slot for `id`, or `None` when unset — which resolves to
@@ -455,7 +475,7 @@ impl ResolvedStack {
                 match value {
                     Value::Float(v) => feed(&v.to_le_bytes()),
                     Value::Int(v) => feed(&v.to_le_bytes()),
-                    Value::Bool(v) | Value::Layer(v) => feed(&[u8::from(v)]),
+                    Value::Bool(v) | Value::Layer(v) | Value::MaskPath(v) => feed(&[u8::from(v)]),
                     Value::Choice(v) | Value::File(v) => feed(&v.to_le_bytes()),
                     // Four floats, one at a time — the tag above is what keeps a
                     // Colour and a Vec4 of the same numbers apart.
