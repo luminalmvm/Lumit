@@ -697,10 +697,34 @@ open and the capture types, with fourteen tests on a hand-written synthetic bund
      pass that enumerates option strings closes it, and would also confirm the orders
      this half took from Photoshop's published list (Warp's fifteen styles) and from AE's
      own defaults (Wave warp's eight pinnings, the ten-entry channel picker).
- - **The surface does not exist yet** (phase 3): `import_ae_bundle(path) → report`
-   across the bridge, the File menu entry, the report panel (docs/11 §9), and footage
-   relink through `resolve_all_media`. No user-facing string has been written, so
-   `app_en.arb` is untouched by phase 1 and will need its first keys at phase 3.
+ - **The surface landed 2026-08-20** (phase 3): `LumitBridgeState::import_ae_bundle`
+   in `crates/lumit-bridge/src/api/import.rs`, adopting the mapped document through
+   the `api::state::adopt` road `open_project` now shares, with footage relinked by
+   `resolve_all_media` against the bundle's folder; File ▸ Import After Effects
+   bundle…; and the report window `flutter_ui/lib/shell/ae_report_frb.dart`. Reasons
+   cross as a stable id plus their facts and are written in
+   `l10n/engine_labels.dart` (K-303), gated by `engine_labels_test.dart` reading the
+   `Reason` enum. Four things are owed:
+   - **Footage is found only where After Effects left it.** Of docs/11 §2.5's four
+     relink steps only the absolute path runs: there is no collected `footage/`
+     to check, the mapper stores the AE absolute path as the *relative* one too,
+     and an absolute path re-rooted against the bundle's folder is still itself.
+     A bundle imported on the machine that wrote it relinks; one carried to
+     another machine imports wholly offline. Both later steps want the collected
+     copy first — write that, store a genuinely relative path beside it, and the
+     re-rooting and fingerprint searches start paying.
+   - **The picker cannot reach a zipped bundle.** `open_bundle` reads a folder or a
+     zip of one; File ▸ Import opens a folder chooser, because a folder is what the
+     walker writes and `file_selector` will not offer both in one dialogue. Unzip
+     first, until there is a picker that offers either.
+   - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names
+     its comp ▸ layer ▸ property and double-clicking it does nothing. It needs the
+     row to carry an id, not just a path, which means the bridge row carrying one.
+   - **The report is not kept** (docs/11 §9's persistence): it lives as long as its
+     window, is not stored in the project's `ae` namespace, is not reopenable from
+     the File menu, and is not written beside the bundle as `import-report.json`.
+     The reason-level filter §9 asks for (disabled expressions as their own list)
+     belongs with that work; the built filter is by outcome.
 
 **AE effect parity, wave 1 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
 Eighteen Tier-A effects in four family batches: ~~colour (Curves, Levels, Brightness, Hue

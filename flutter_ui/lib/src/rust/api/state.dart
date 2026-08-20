@@ -8,6 +8,7 @@ import '../frb_generated.dart';
 import 'composition.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'import.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
@@ -17,13 +18,36 @@ import 'project_item.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
   static ProjectReference? getCurrentProject() =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateGetCurrentProject();
+
+  /// Import a Lumit Bridge bundle — a `.lum-bundle` folder, or a zip of one —
+  /// and make it the open project.
+  ///
+  /// `None` when the folder is not a bundle, or is one this build cannot
+  /// read: the previous project stays loaded and the frontend shows its own
+  /// notice, exactly as [`LumitBridgeState::open_project`] does for a `.lum`
+  /// that will not open. Anything short of that is not a failure — an import
+  /// **always completes** (docs/11 §9), and what could not be carried across
+  /// is in the report rather than in an error.
+  ///
+  /// The project it leaves open has **no path**: an import is not a file, and
+  /// the first save must ask where to put it.
+  ///
+  /// Deliberately **not** `#[frb(sync)]`, for the reason `open_project` is
+  /// not: this parses a whole capture, builds a document from it and stats
+  /// every media file it names, and on Dart's UI isolate that is the window
+  /// frozen for as long as it takes.
+  static Future<BridgeImportedProject?> importAeBundle(
+          {required String path,
+          RustStreamSink<ScopedChange>? onChangeStream}) =>
+      BridgeLib.instance.api.crateApiStateLumitBridgeStateImportAeBundle(
+          path: path, onChangeStream: onChangeStream);
 
   static ProjectReference newProject(
           {RustStreamSink<ScopedChange>? onChangeStream}) =>

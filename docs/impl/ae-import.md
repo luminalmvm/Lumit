@@ -197,10 +197,28 @@ test asset), builds inside an undo group, and does not touch an open project.
    renders), and a second audit pass enumerating dropdown option *strings*, without
    which Turbulent displace's Pinning maps at its default index only and several other
    orders rest on AE's documented defaults rather than on evidence.
-3. **The surface** — bridge API (`import_ae_bundle(path) → report`), File menu
-   entry, the report panel (docs/11 §9), footage relink through the existing
-   `resolve_all_media` flow. **Not built**: nothing user-facing exists, and no
-   `app_en.arb` key has been written, which is why the importer has no strings yet.
+3. **The surface** — **Built.** `LumitBridgeState::import_ae_bundle(path,
+   on_change_stream) → Option<BridgeImportedProject>` in
+   `crates/lumit-bridge/src/api/import.rs`, which maps the bundle and then adopts
+   the document through `api::state::adopt` — the road `open_project` now takes
+   too, so an import lets the previous project's worker and GPU device go exactly
+   as an open does. Footage relinks through that same `resolve_all_media` step,
+   rooted at the bundle's folder — which today finds a file **only at the
+   absolute path After Effects recorded**, because the mapper stores that path
+   on both sides of the `MediaRef` and an absolute path re-rooted against a
+   folder is still itself. So docs/11 §2.5's re-rooting step is inert, and stays
+   inert until the collected `footage/` copy it exists to find is written (v1
+   skips it) and the mapper has something genuinely relative to store. An item
+   whose file is nowhere imports offline with a `MediaNotFound` row and never
+   holds the import up. File ▸ Import After Effects
+   bundle… (`flutter_ui/lib/shell/menu_bar_frb.dart`) opens a **folder** chooser
+   and shows `shell/ae_report_frb.dart` — docs/11 §9's summary line, filter by
+   outcome, and a row per reason. A reason crosses as a stable id plus its facts
+   and the sentence is written in `l10n/engine_labels.dart` (K-303), gated by
+   `test/l10n/engine_labels_test.dart` reading the `Reason` enum. **Still owed**:
+   the picker cannot reach a *zipped* bundle the reader can open, §9's row
+   navigation, and §9's persistence of the report in the project — all three in
+   docs/TODO.md.
 4. **Later, separately**: golden-frame comparisons (needs AE renders of the fixture),
    the CEP panel packaging (`.zxp` — v1 ships the `.jsx` run via File → Scripts,
    exactly like the audit), Lottie, direct `.aep` parsing.

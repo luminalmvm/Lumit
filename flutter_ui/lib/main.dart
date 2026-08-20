@@ -35,6 +35,7 @@ import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -302,6 +303,30 @@ class LumitState extends ChangeNotifier {
     }
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
+  }
+
+  /// Import an After Effects bundle and make it the open project (docs/11).
+  ///
+  /// Answers the report to show, or null when the folder was not a bundle this
+  /// build can read — the previous project stays loaded in that case, exactly
+  /// as it does for a `.lum` that will not open. **A report is not a failure**:
+  /// an import always completes, and everything that could not be carried
+  /// across is a row in it (docs/11 §9).
+  Future<BridgeImportReport?> importAeBundle(String path) async {
+    // One at a time, for [openProject]'s reason: `_pendingSink` is a single
+    // field and two adoptions in flight would have the second take the first's.
+    if (opening.value) return null;
+    opening.value = true;
+    final imported = await LumitBridgeState.importAeBundle(
+        path: path, onChangeStream: _changeSink());
+    if (imported == null) {
+      postNotice(l10n.aeCouldNotImport(path), error: true);
+      opening.value = false;
+      return null;
+    }
+    // Deliberately still `opening`: the document is in, the picture is not.
+    _adopt(imported.project);
+    return imported.report;
   }
 
   /// The sink Rust pushes scoped document changes down. Held for the call so

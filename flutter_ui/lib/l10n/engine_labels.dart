@@ -757,3 +757,136 @@ Map<String, String> get _table => {
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
     };
+
+// --- The import report's reasons (K-303, docs/11 §9) ----------------------
+//
+// The other way engine text is translated, and the one docs/17 prescribes for
+// a sentence with a fact in it: "blend mode Dissolve has no equivalent —
+// imported as Normal" is a different whole text for every blend mode, so the
+// table above — which looks a label up by its English — could never hold it.
+//
+// So the *pieces* cross instead. `lumit_import::Reason::key` sends a stable id
+// (`blend_mode_unavailable`) and `::args` sends the blanks by name
+// (`ae_mode: "Dissolve"`), and the sentence is written here, in the reader's
+// language. `test/l10n/engine_labels_test.dart` reads the Rust enum and fails
+// if a variant has no case below, so a reason added to the engine cannot
+// quietly ship as English.
+
+/// The one-line reason for an import report row, or null when this build has
+/// no sentence for [key] — the caller shows the engine's own English instead,
+/// the same courtesy [engineLabel] extends to a label it has never seen.
+///
+/// Fact values go through [engineLabel] on the way in: most are After Effects'
+/// own words or plain numbers and pass through unchanged, while the few that
+/// are Lumit's own — the effect or feature an approximation landed on — are
+/// translated if anyone has translated them.
+String? importReason(String key, Map<String, String> args) {
+  String a(String name) => engineLabel(args[name] ?? '');
+  switch (key) {
+    // Items and compositions.
+    case 'item_unreadable':
+      return l10n.aeItemUnreadable;
+    case 'comp_missing':
+      return l10n.aeCompMissing;
+    case 'comp_frame_rate_guessed':
+      return l10n.aeCompFrameRateGuessed(a('used'));
+    case 'comp_duration_guessed':
+      return l10n.aeCompDurationGuessed(a('used'));
+    case 'pixel_aspect_ignored':
+      return l10n.aePixelAspectIgnored(a('par'));
+    case 'comp_start_ignored':
+      return l10n.aeCompStartIgnored(a('start'));
+    case 'nested_preserve_ignored':
+      final fps = args['fps'] == 'true';
+      final resolution = args['resolution'] == 'true';
+      if (fps && resolution) return l10n.aeNestedPreserveBoth;
+      return fps ? l10n.aeNestedPreserveRate : l10n.aeNestedPreserveResolution;
+    case 'project_blending_differs':
+      return l10n.aeProjectBlendingDiffers(a('bits'));
+    case 'renderer_unrecognised':
+      return l10n.aeRendererUnrecognised(a('renderer'));
+    case 'media_missing':
+      return l10n.aeMediaMissing(a('path'));
+    case 'media_not_found':
+      return l10n.aeMediaNotFound;
+    case 'media_placeholder':
+      return l10n.aeMediaPlaceholder;
+
+    // Layers.
+    case 'layer_unreadable':
+      return l10n.aeLayerUnreadable;
+    case 'layer_kind_unsupported':
+      return l10n.aeLayerKindUnsupported(a('ae_kind'));
+    case 'layer_source_missing':
+      return l10n.aeLayerSourceMissing(a('id'));
+    case 'layer_span_repaired':
+      return l10n.aeLayerSpanRepaired;
+    case 'audio_layer_as_footage':
+      return l10n.aeAudioLayerAsFootage;
+    case 'guide_layer_not_supported':
+      return l10n.aeGuideLayerNotSupported;
+    case 'preserve_transparency_not_supported':
+      return l10n.aePreserveTransparencyNotSupported;
+    case 'layer_quality_ignored':
+      return l10n.aeLayerQualityIgnored(a('quality'));
+    case 'stretch_as_retime':
+      return l10n.aeStretchAsRetime(a('percent'));
+    case 'flow_engine_differs':
+      return l10n.aeFlowEngineDiffers;
+    case 'parent_missing':
+      return l10n.aeParentMissing(a('index'));
+    case 'matte_target_missing':
+      return l10n.aeMatteTargetMissing(a('index'));
+    case 'blend_mode_unavailable':
+      return l10n.aeBlendModeUnavailable(a('ae_mode'));
+    case 'blend_mode_classic':
+      return l10n.aeBlendModeClassic(a('ae_mode'));
+    case 'shape_contents_not_mapped':
+      return l10n.aeShapeContentsNotMapped;
+    case 'text_styling_not_mapped':
+      return l10n.aeTextStylingNotMapped;
+    case 'light_kind_approximated':
+      return l10n.aeLightKindApproximated(a('ae_kind'));
+
+    // Properties and keyframes.
+    case 'spatial_tangents_flattened':
+      return l10n.aeSpatialTangentsFlattened;
+    case 'expression_carried':
+      return l10n.aeExpressionCarried;
+    case 'expression_disabled_carried':
+      return l10n.aeExpressionDisabledCarried;
+    case 'property_unreadable':
+      return l10n.aePropertyUnreadable(a('match_name'));
+
+    // Masks.
+    case 'mask_mode_unavailable':
+      return l10n.aeMaskModeUnavailable(a('ae_mode'));
+    case 'mask_feather_axes_differ':
+      return l10n.aeMaskFeatherAxesDiffer(a('x'), a('y'));
+    case 'mask_roto_bezier_flattened':
+      return l10n.aeMaskRotoBezierFlattened;
+
+    // Effects.
+    case 'effect_placeholder':
+      return l10n.aeEffectPlaceholder(a('match_name'));
+    case 'effect_param_not_carried':
+      return l10n.aeEffectParamNotCarried(a('effect'), a('param'));
+    case 'effect_param_approximated':
+      return l10n.aeEffectParamApproximated(
+          a('effect'), a('param'), a('imported_as'));
+    case 'effect_differs':
+      return l10n.aeEffectDiffers(a('effect'), a('detail'));
+    case 'effect_speed_as_keyframes':
+      return l10n.aeEffectSpeedAsKeyframes(a('effect'), a('param'));
+    case 'effect_suggestion':
+      return l10n.aeEffectSuggestion(a('match_name'), a('instead'));
+    case 'effect_param_rebased':
+      return l10n.aeEffectParamRebased(a('effect'), a('param'));
+
+    default:
+      return null;
+  }
+}
+
+/// Whether this build has a sentence for [key] — what the sync test asserts.
+bool hasImportReason(String key) => importReason(key, const {}) != null;

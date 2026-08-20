@@ -2207,6 +2207,14 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   refused outright, with a plain "please update Lumit", because reading an unfamiliar
   schema by guesswork is how an import goes silently wrong. And a bundle whose report is
   damaged still opens: the report is commentary, the capture is the work.
+  From the outside all of that is one menu row: File ▸ Import After Effects bundle…, a
+  folder chosen, and then a window listing what did not come across untouched. An import
+  **replaces** whatever project was open, exactly as opening a `.lum` does — the same code
+  performs the changeover, so the outgoing project's renderer is let go on either route
+  rather than sitting in memory holding a graphics card. Footage is looked for on this
+  machine at the same moment; a file that is not here imports as an **offline** item with a
+  row saying so, because an import that waited for missing media would be an import nobody
+  could finish.
 - `crates/lumit-import/src/map/fx_*.rs` — **the effect mapping table**, the part of the
   import that turns an After Effects effect into the Lumit effect that does the same job.
   It is a list, one entry per effect, and each entry answers the same four questions.

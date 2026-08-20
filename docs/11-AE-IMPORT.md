@@ -1,15 +1,19 @@
 # After Effects import
 
-**Status: the conversion is built; the surface is not.** The Bridge walker
-(`tools/ae-bridge/`), the bundle reader and the whole capture → `Document` mapping —
-items, comps, layers, keyframes, masks, mattes, retime, the §5 effect table and the
-§9 report — live in `crates/lumit-import/` (docs/impl/ae-import.md §6 phases 1 and 2).
-What does not exist yet is **phase 3**, the user-facing half: no bridge call, no File
-menu entry, no report panel, no footage relink, and therefore no way for a person to
-run an import. Two things §5 asks for are also still owed: the golden-frame tests of
-every mapped conversion (they need After Effects renders of the fixture), and the
-golden bundle itself, `make-fixture.jsx` never having been run on a live AE. This document
-implements K-060 (import strategy), and leans on
+**Status: the conversion and the surface are built; the golden bundle is still
+awaited.** The Bridge walker (`tools/ae-bridge/`), the bundle reader and the whole
+capture → `Document` mapping — items, comps, layers, keyframes, masks, mattes, retime,
+the §5 effect table and the §9 report — live in `crates/lumit-import/`
+(docs/impl/ae-import.md §6 phases 1 and 2). **Phase 3 is built too**: File ▸ Import
+After Effects bundle… opens a folder chooser, `LumitBridgeState::import_ae_bundle`
+reads it and adopts the document the way opening a `.lum` does, footage is looked for
+through the same `resolve_all_media` flow (§2.5's absolute-path step only, for the
+reason §2.5 now gives), and the report window (§9) lists what changed. Two things §5 asks
+for are still owed: the golden-frame tests of every mapped conversion (they need After Effects
+renders of the fixture), and the golden bundle itself, `make-fixture.jsx` never having
+been run on a live AE — so every test to date runs against hand-written synthetic
+bundles. §9's row navigation and its persistence in the project are not built either
+(docs/TODO.md). This document implements K-060 (import strategy), and leans on
 K-025 (AE-compatible keyframe maths) and K-021 (Retime) in [02-DECISIONS.md](02-DECISIONS.md). Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) exactly; After Effects' own feature names appear in quotes
 when describing AE itself. RFC-2119 keywords (MUST, SHOULD, MAY) are binding.
@@ -175,6 +179,13 @@ verified by hash/size where available). Unresolved items import as offline foota
 with full interpretation settings intact, listed in the import report; relinking later is
 the standard relink flow from [10-FILE-FORMAT.md](10-FILE-FORMAT.md). Import never blocks
 on missing media.
+
+**Today only the second step runs** (docs/TODO.md). There is no collected `footage/` to
+check, so a file is found where After Effects recorded it and nowhere else: the bundle
+carries an absolute path, and an absolute path re-rooted against the bundle's folder is
+still itself. An import on the machine that ran the Bridge therefore relinks everything;
+one carried to another machine imports every item offline, with a row apiece — which is
+the promised outcome, reached by fewer routes than this list.
 
 ---
 
@@ -448,9 +459,18 @@ Every import ends with the report — a panel listing per-item outcomes, in the 
   one-line reason ("blend mode Dissolve has no equivalent — imported as Normal";
   "Twixtor Pro imported as placeholder — the OFX version can be applied manually").
 - **Navigation**: double-clicking a row selects the item in the Project panel or Timeline.
+  **Not built** (docs/TODO.md): rows name their item and do not yet lead to it.
 - **Persistence**: the report is stored in the project (`ae` namespace) and reopenable from
   the File menu; it is also written next to the bundle as `import-report.json` for tooling.
+  **Not built** (docs/TODO.md): the report lives as long as its window does.
 - Expressions disabled at import are their own filter, so a user can work through them.
+  The filter is by outcome today; a reason-level filter comes with the persistence work.
+
+**The reasons are engine data, not engine prose** (K-303, docs/17). A row crosses as the
+stable id of its reason plus that reason's facts by name, and the sentence is written in the
+frontend, in the reader's language — a sentence built with `format!` on the engine's side
+could not be translated at all. The built surface is `flutter_ui/lib/shell/ae_report_frb.dart`
+over `LumitBridgeState::import_ae_bundle`, which hands the whole report across once.
 
 The report is informative, never blocking: import always completes, the project always
 opens.

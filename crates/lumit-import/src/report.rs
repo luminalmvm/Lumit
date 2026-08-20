@@ -135,6 +135,11 @@ pub enum Reason {
     RendererUnrecognised { renderer: String },
     /// The footage file was flagged missing by After Effects.
     MediaMissing { path: String },
+    /// The footage file was fine in After Effects and is not on *this*
+    /// machine — the ordinary case for a bundle carried across from another
+    /// one. The item imports offline with its interpretation intact, ready for
+    /// the standard relink (docs/11 §2.5); import never waits for media.
+    MediaNotFound,
     /// The item was an After Effects placeholder, not a real file.
     MediaPlaceholder,
 
@@ -285,6 +290,10 @@ impl std::fmt::Display for Reason {
             Self::MediaMissing { path } => {
                 write!(f, "the file at {path} was missing in After Effects too")
             }
+            Self::MediaNotFound => write!(
+                f,
+                "the file is not on this machine — imported offline, ready to relink"
+            ),
             Self::MediaPlaceholder => write!(f, "an After Effects placeholder, not a real file"),
             Self::LayerUnreadable => {
                 write!(f, "the layer had no place in the stack and was skipped")
@@ -433,6 +442,74 @@ impl std::fmt::Display for Reason {
     }
 }
 
+impl Reason {
+    /// The stable id this reason crosses the bridge under.
+    ///
+    /// [`Display`] writes the sentence with `format!`, and a sentence built
+    /// that way cannot be translated — the lookup a frontend does is by whole
+    /// text (docs/17 §"Display text crosses the bridge in English"). So the
+    /// *pieces* cross instead: this id says which sentence, [`Self::args`] says
+    /// what goes in its blanks, and the frontend writes it in the reader's
+    /// language.
+    ///
+    /// It is serde's own tag rather than a hand-written table, so a variant
+    /// added here gets an id whether or not anybody remembers to give it one.
+    ///
+    /// [`Display`]: std::fmt::Display
+    #[must_use]
+    pub fn key(&self) -> String {
+        self.as_object()
+            .get("reason")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    /// The facts this reason carries, by field name — "ae_mode" → "Dissolve",
+    /// "percent" → "50". Named rather than positional so the frontend's
+    /// sentence may put them in whatever order its language wants.
+    #[must_use]
+    pub fn args(&self) -> std::collections::BTreeMap<String, String> {
+        self.as_object()
+            .into_iter()
+            .filter(|(name, _)| name.as_str() != "reason")
+            .map(|(name, value)| (name, plain(&value)))
+            .collect()
+    }
+
+    fn as_object(&self) -> serde_json::Map<String, serde_json::Value> {
+        match serde_json::to_value(self) {
+            Ok(serde_json::Value::Object(map)) => map,
+            // Unreachable for this enum, and not worth a panic if it ever
+            // stopped being: a reason with no id reads as one the frontend has
+            // no sentence for, which falls back to the English above.
+            _ => serde_json::Map::new(),
+        }
+    }
+}
+
+/// One JSON scalar as the frontend would print it. Whole floats lose their
+/// ".0" so a stretch reads "50%" and not "50.0%", matching what [`Display`]
+/// writes on the engine's side of the same fact.
+///
+/// [`Display`]: std::fmt::Display
+fn plain(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Number(number) => number.as_f64().map_or_else(
+            || number.to_string(),
+            |f| {
+                if f.fract() == 0.0 {
+                    format!("{f:.0}")
+                } else {
+                    format!("{f}")
+                }
+            },
+        ),
+        other => other.to_string(),
+    }
+}
+
 /// One line of the report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReportRow {
@@ -518,5 +595,57 @@ impl ImportReport {
     #[must_use]
     pub fn has(&self, reason: &Reason) -> bool {
         self.rows.iter().any(|r| &r.reason == reason)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// **A reason crosses as an id plus its facts, not as a sentence.**
+    ///
+    /// The whole of K-303 for the import report in one assertion: what goes
+    /// over the bridge is `blend_mode_unavailable` + `{ae_mode: "Dissolve"}`,
+    /// and the English sentence stays behind as the fallback. A frontend that
+    /// got only the sentence could not translate it, because its lookup is by
+    /// whole text and the text is different for every blend mode.
+    #[test]
+    fn a_reason_crosses_as_a_stable_id_and_its_named_facts() {
+        let reason = Reason::BlendModeUnavailable {
+            ae_mode: "Dissolve".into(),
+        };
+        assert_eq!(reason.key(), "blend_mode_unavailable");
+        assert_eq!(reason.args()["ae_mode"], "Dissolve");
+
+        // A reason with nothing to say carries no facts, and still has an id.
+        assert_eq!(Reason::MediaPlaceholder.key(), "media_placeholder");
+        assert!(Reason::MediaPlaceholder.args().is_empty());
+    }
+
+    /// **A whole number arrives whole.**
+    ///
+    /// The stretch percentage and the guessed frame rate are `f64`, and JSON
+    /// spells them "50.0" and "24.0" where the report's own English says "50%"
+    /// and "24 fps". The panel must read the same way the engine does, so the
+    /// trailing zero is dropped on the way across — and a genuinely fractional
+    /// figure is left alone.
+    #[test]
+    fn a_whole_number_loses_its_trailing_zero_and_a_fraction_keeps_its_digits() {
+        let stretch = Reason::StretchAsRetime { percent: 50.0 };
+        assert_eq!(stretch.args()["percent"], "50");
+        assert!(stretch.to_string().contains("50%"));
+
+        let par = Reason::PixelAspectIgnored { par: 1.4587 };
+        assert_eq!(par.args()["par"], "1.4587");
+
+        // Bools cross as words, which is what the frontend branches on for the
+        // three "preserve when nested" sentences.
+        let nested = Reason::NestedPreserveIgnored {
+            fps: true,
+            resolution: false,
+        };
+        assert_eq!(nested.args()["fps"], "true");
+        assert_eq!(nested.args()["resolution"], "false");
     }
 }

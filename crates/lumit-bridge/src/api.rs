@@ -17,6 +17,7 @@ pub mod export;
 pub mod expressions;
 pub mod folder;
 pub mod footage;
+pub mod import;
 pub mod keymap;
 pub mod layer;
 pub mod project;

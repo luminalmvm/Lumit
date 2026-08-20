@@ -52,6 +52,10 @@ shared-texture-macos = ["lumit-render/shared-texture-macos"]
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
+# Reading an After Effects bundle and mapping it to a Document (docs/11 §2,
+# docs/impl/ae-import.md phase 3). An engine crate depending on lumit-core
+# alone, so the docs/05 layering is unbroken.
+lumit-import = { path = "../lumit-import" }
 lumit-keymap = { path = "../lumit-keymap" }
 lumit-project = { path = "../lumit-project" }
 # The realtime preview-tier controller (K-030/K-171) lives here as a pure,

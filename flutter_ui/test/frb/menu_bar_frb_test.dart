@@ -51,16 +51,26 @@ void main() {
     }) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
-        child: Builder(builder: (context) {
-          final state = context.watch<LumitState>();
-          context.watch<LumitUiState>();
-          return LumitMenuBarFrb(
-            app: state,
-            openPicker: openPicker,
-            savePicker: savePicker,
-            footagePicker: footagePicker,
-          );
-        }),
+        // Along the top, where the shell puts it. Centred — which is what an
+        // overlay entry does with a bar that has no height of its own — the
+        // File menu had only half the window beneath it to open into, and
+        // `showLumitPopup` pulled it back on screen by sliding it *up over the
+        // bar*: correct behaviour for a menu with nowhere to go, and an
+        // arrangement that does not ship, in which no heading can be hovered
+        // while a menu is open.
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Builder(builder: (context) {
+            final state = context.watch<LumitState>();
+            context.watch<LumitUiState>();
+            return LumitMenuBarFrb(
+              app: state,
+              openPicker: openPicker,
+              savePicker: savePicker,
+              footagePicker: footagePicker,
+            );
+          }),
+        ),
         state: p.state,
         uiState: p.uiState,
       ));

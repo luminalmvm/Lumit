@@ -16,6 +16,7 @@ import 'api/export.dart';
 import 'api/expressions.dart';
 import 'api/folder.dart';
 import 'api/footage.dart';
+import 'api/import.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/project.dart';
@@ -151,6 +152,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFrameProfile dco_decode_box_autoadd_bridge_frame_profile(dynamic raw);
+
+  @protected
+  BridgeImportedProject dco_decode_box_autoadd_bridge_imported_project(
+      dynamic raw);
 
   @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
@@ -321,6 +326,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeHistory dco_decode_bridge_history(dynamic raw);
+
+  @protected
+  BridgeImportArg dco_decode_bridge_import_arg(dynamic raw);
+
+  @protected
+  BridgeImportOutcome dco_decode_bridge_import_outcome(dynamic raw);
+
+  @protected
+  BridgeImportReport dco_decode_bridge_import_report(dynamic raw);
+
+  @protected
+  BridgeImportRow dco_decode_bridge_import_row(dynamic raw);
+
+  @protected
+  BridgeImportedProject dco_decode_bridge_imported_project(dynamic raw);
 
   @protected
   BridgeKeyBinding dco_decode_bridge_key_binding(dynamic raw);
@@ -551,6 +571,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeEnabledWhen> dco_decode_list_bridge_enabled_when(dynamic raw);
 
   @protected
+  List<BridgeImportArg> dco_decode_list_bridge_import_arg(dynamic raw);
+
+  @protected
+  List<BridgeImportRow> dco_decode_list_bridge_import_row(dynamic raw);
+
+  @protected
   List<BridgeKeyBinding> dco_decode_list_bridge_key_binding(dynamic raw);
 
   @protected
@@ -652,6 +678,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCompSettings? dco_decode_opt_box_autoadd_bridge_comp_settings(
+      dynamic raw);
+
+  @protected
+  BridgeImportedProject? dco_decode_opt_box_autoadd_bridge_imported_project(
       dynamic raw);
 
   @protected
@@ -833,6 +863,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFrameProfile sse_decode_box_autoadd_bridge_frame_profile(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeImportedProject sse_decode_box_autoadd_bridge_imported_project(
       SseDeserializer deserializer);
 
   @protected
@@ -1035,6 +1069,24 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeHistory sse_decode_bridge_history(SseDeserializer deserializer);
+
+  @protected
+  BridgeImportArg sse_decode_bridge_import_arg(SseDeserializer deserializer);
+
+  @protected
+  BridgeImportOutcome sse_decode_bridge_import_outcome(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeImportReport sse_decode_bridge_import_report(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeImportRow sse_decode_bridge_import_row(SseDeserializer deserializer);
+
+  @protected
+  BridgeImportedProject sse_decode_bridge_imported_project(
+      SseDeserializer deserializer);
 
   @protected
   BridgeKeyBinding sse_decode_bridge_key_binding(SseDeserializer deserializer);
@@ -1291,6 +1343,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeImportArg> sse_decode_list_bridge_import_arg(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeImportRow> sse_decode_list_bridge_import_row(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeKeyBinding> sse_decode_list_bridge_key_binding(
       SseDeserializer deserializer);
 
@@ -1415,6 +1475,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCompSettings? sse_decode_opt_box_autoadd_bridge_comp_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeImportedProject? sse_decode_opt_box_autoadd_bridge_imported_project(
       SseDeserializer deserializer);
 
   @protected
@@ -1609,6 +1673,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_frame_profile(
       BridgeFrameProfile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_imported_project(
+      BridgeImportedProject self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_mask(
@@ -1825,6 +1893,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_history(BridgeHistory self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_import_arg(
+      BridgeImportArg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_import_outcome(
+      BridgeImportOutcome self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_import_report(
+      BridgeImportReport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_import_row(
+      BridgeImportRow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_imported_project(
+      BridgeImportedProject self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_key_binding(
@@ -2108,6 +2196,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeEnabledWhen> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_import_arg(
+      List<BridgeImportArg> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_import_row(
+      List<BridgeImportRow> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_key_binding(
       List<BridgeKeyBinding> self, SseSerializer serializer);
 
@@ -2240,6 +2336,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_comp_settings(
       BridgeCompSettings? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_imported_project(
+      BridgeImportedProject? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_matte(

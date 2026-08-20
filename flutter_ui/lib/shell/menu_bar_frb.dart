@@ -43,6 +43,7 @@ import '../state/viewer_view.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
+import 'ae_report_frb.dart';
 import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
@@ -160,12 +161,16 @@ class LumitMenuBarFrb extends StatelessWidget {
   final Future<String?> Function()? savePicker;
   final Future<List<String>> Function()? footagePicker;
 
+  /// The After Effects bundle chooser — a folder picker (docs/11 §2.1).
+  final Future<String?> Function()? bundlePicker;
+
   const LumitMenuBarFrb({
     super.key,
     required this.app,
     this.openPicker,
     this.savePicker,
     this.footagePicker,
+    this.bundlePicker,
   });
 
   @override
@@ -199,6 +204,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       openPicker: openPicker,
       savePicker: savePicker,
       footagePicker: footagePicker,
+      bundlePicker: bundlePicker,
       palette: () => _palette(context),
     );
 
@@ -428,6 +434,7 @@ List<MenuSection> lumitMenus(
   Future<String?> Function()? openPicker,
   Future<String?> Function()? savePicker,
   Future<List<String>> Function()? footagePicker,
+  Future<String?> Function()? bundlePicker,
   VoidCallback? palette,
 }) {
   final ui = context.read<LumitUiState>();
@@ -496,6 +503,10 @@ List<MenuSection> lumitMenus(
                 ? null
                 : () => importFootageFrb(app, picker: footagePicker),
             action: 'file.import'),
+        // Not gated on a project: an import *replaces* whatever is loaded, the
+        // way opening a `.lum` does, so it is offered with none.
+        MenuEntry(l10n.menuImportAe,
+            () => importAeBundleFrb(context, app, picker: bundlePicker)),
         MenuEntry(
             l10n.menuExport, comp == null ? null : () => exportFrb(context),
             action: 'file.export'),
@@ -931,6 +942,21 @@ Future<void> openProjectFrb(LumitState app,
 Future<void> importFootageFrb(LumitState app,
         {Future<List<String>> Function()? picker}) async =>
     app.importFootagePaths(await (picker ?? pickFootage)());
+
+/// Import an After Effects bundle, then show its report (docs/11 §9).
+///
+/// The report is shown whatever it says — an import that adjusted nothing still
+/// opens the window, because "everything came across untouched" is the answer
+/// the user came for. A folder that is not a bundle posts a notice instead and
+/// leaves the open project alone.
+Future<void> importAeBundleFrb(BuildContext context, LumitState app,
+    {Future<String?> Function()? picker}) async {
+  final path = await (picker ?? pickAeBundle)();
+  if (path == null) return;
+  final report = await app.importAeBundle(path);
+  if (report == null || !context.mounted) return;
+  await showAeImportReport(context: context, report: report);
+}
 
 /// Make a composition and front it — a comp you just made is the one you want
 /// to work on.

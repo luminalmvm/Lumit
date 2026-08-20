@@ -1648,6 +1648,7 @@ dependencies = [
  "lumit-audio",
  "lumit-core",
  "lumit-eval",
+ "lumit-import",
  "lumit-keymap",
  "lumit-media",
  "lumit-project",

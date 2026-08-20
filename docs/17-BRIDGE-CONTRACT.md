@@ -218,6 +218,28 @@ Lens flare's Light, Radial blur's Centre and Depth of field's Focus point all ri
 still crosses as a `BridgeEffectValue::Float`, since an angle is a number of degrees and the
 kind only says which control to draw.
 
+### The After Effects import crosses once, as a report
+
+`LumitBridgeState::import_ae_bundle(path, on_change_stream)` is the whole surface of
+[11-AE-IMPORT.md](11-AE-IMPORT.md)'s user half. It reads a Lumit Bridge bundle, maps it to a
+`Document`, and **adopts that document exactly as opening a `.lum` does** — `api::state::adopt`
+is the one road both take, so the displaced project's media caches, change sink and render
+worker (a whole GPU device) are let go on either route. It answers `None` for a folder that is
+not a bundle, the way `open_project` answers `None` for a `.lum` that will not open; short of
+that an import **always completes**, and what could not be carried across is in the report
+rather than in an error. The project it leaves open has no path: an import is not a file.
+
+The `BridgeImportReport` crosses **once**, whole, on that call, and is held in Dart — the
+report window filters and lists from the object it was handed, so no bridge call rides a
+rebuild (K-183, and the budget test that forbids it).
+
+Its rows are the worked example of the K-303 rule below. A reason is *not* sent as a
+sentence: it crosses as a stable id plus its facts by name — `blend_mode_unavailable` with
+`ae_mode: "Dissolve"` — because "blend mode Dissolve has no equivalent" is a different whole
+text for every blend mode and a whole-text lookup could never hold it. The frontend writes the
+sentence (`importReason` in `flutter_ui/lib/l10n/engine_labels.dart`), and the engine's own
+English rides along as `english`, the fallback for an id this build has no sentence for.
+
 ### Versioning
 
 There is no ABI number to gate on. flutter_rust_bridge embeds a content hash of
@@ -300,7 +322,10 @@ The frontend translates them on arrival, by looking the English text up in
   otherwise, so it cannot be forgotten quietly.
 - **Build a display string with `format!` and it cannot be translated**, because the
   lookup is by whole text. Send the pieces and let the frontend assemble them, or give the
-  string a stable id of its own.
+  string a stable id of its own. The import report's reasons are the worked example (above):
+  an id and its named facts cross, and `flutter_ui/lib/l10n/engine_labels.dart` writes the
+  sentence. `test/l10n/engine_labels_test.dart` reads the Rust enum, so a reason added to the
+  engine with no sentence on this side fails the same gate a new effect label does.
 
 Nothing else the bridge sends is display text: a layer name, a comp name, a file path and
 a preset name are the *user's* words, and are passed through untouched.

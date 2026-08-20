@@ -131,6 +131,14 @@ Future<String?> pickThemeSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
+/// Pick a Lumit bundle to import from After Effects (docs/11 §2.1) — a
+/// **folder**, because a folder is what the Bridge's script writes: ExtendScript
+/// has no zip. The reader also opens a zipped bundle, which this dialogue cannot
+/// reach; unzipping it first is the route until there is a picker that offers
+/// both (docs/TODO.md). Null when cancelled.
+Future<String?> pickAeBundle() =>
+    getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
+
 /// Pick a folder — Settings → Performance's cache location, where the disk tier
 /// parks its frames (docs/07 §15). Null when the dialogue was cancelled.
 Future<String?> pickFolder() =>

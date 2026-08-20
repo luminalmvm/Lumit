@@ -291,7 +291,7 @@ pub enum WorkerResponse {
     FrameProfile(BridgeFrameProfile),
 }
 
-type CallbackStream = StreamSink<ScopedChange>;
+pub(crate) type CallbackStream = StreamSink<ScopedChange>;
 
 pub type WorkerResponseStream = StreamSink<WorkerResponse>;
 
@@ -532,98 +532,129 @@ impl LumitBridgeState {
         on_change_stream: Option<CallbackStream>,
     ) -> Result<Option<ProjectReference>, BridgeError> {
         let path = PathBuf::from(path);
-        let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
+        let Ok((doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
             // picker's problem, and Dart shows its own notice for None.
             return Ok(None);
         };
 
-        let id = Uuid::now_v7();
-
         // Relative media paths resolve against the project's own directory. A
         // path with no parent (a bare filename) resolves against the working
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
-        let project_dir = path.parent().unwrap_or_else(|| Path::new(""));
-        let (_relinked, _missing) = lumit_project::resolve_all_media(&mut doc, project_dir, &[]);
-
-        // Every footage file this project holds, handed to the probe worker
-        // before a panel has had a chance to ask about any of them. Opening a
-        // project is exactly when a Project panel full of rows is about to ask
-        // each of its items what it is, and reading them in the background is
-        // the difference between a list that fills and one that appears.
-        // Queued after `resolve_all_media`, so the paths are the resolved ones,
-        // and before the registry lock is taken (docs/14 §3).
-        let warm: Vec<PathBuf> = doc
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                lumit_core::model::ProjectItem::Footage(f) if !f.media.absolute_path.is_empty() => {
-                    Some(PathBuf::from(&f.media.absolute_path))
-                }
-                _ => None,
-            })
-            .collect();
-
-        let journal = journal_for(&doc);
-        let store = DocumentStore::new(doc);
-        let state = LumitBridgeState {
-            saved_revision: store.revision(),
-            store,
-            path: Some(path),
-            media: MediaCache::default(),
-            journal: Arc::clone(&journal),
-            sender: None,
-        };
-        state.store.set_callback(Arc::new(move |c| {
-            Self::handle_change_callback(c, id, &journal)
-        }));
-
-        if let Some(stream) = on_change_stream {
-            let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
-            s.insert(id, Arc::new(stream));
-        }
-
-        {
-            let mut p = PROJECTS.write().map_err(|_| BridgeError::WriteFailed)?;
-
-            for entry in p.values() {
-                // A project whose lock is poisoned is being discarded anyway,
-                // so a failed cache clear is not worth refusing the open over.
-                if let Ok(mut e) = entry.write() {
-                    e.media.clear();
-                }
-            }
-            // The waveform summaries are keyed by file path and shared between
-            // projects, so they are not any one project's to clear — but the
-            // project being closed is the reason they were built (K-280). The
-            // probe answers are shared the same way and go for the same reason,
-            // and clearing them also cancels whatever the probe worker still
-            // had queued for the project that is closing.
-            crate::peaks::clear();
-            crate::probe::clear();
-            // And any beat detection queued for the project that is going: its
-            // audio is about to stop being anybody's audio.
-            crate::beats::clear();
-
-            // Clear any other project that is currently open
-            // Will also prevent any existing references from working
-            p.clear();
-
-            p.insert(id, Arc::new(RwLock::new(state)));
-        }
-
-        // The displaced projects' change sinks go too — a forgotten project
-        // with a live sink is a leak, and one registry at a time means after
-        // the `PROJECTS` guard above has been dropped, not inside it.
-        forget_streams_except(id)?;
-
-        // After the clear, so this project's requests are not the ones
-        // cancelled, and outside the registry lock.
-        for file in &warm {
-            crate::probe::request(file);
-        }
-
-        Ok(Some(ProjectReference::new(id)))
+        let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
+        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream)?;
+        Ok(Some(project))
     }
+}
+
+/// Make `doc` the open project: relink its media, hand every project already
+/// open its farewell, and register this one in its place.
+///
+/// **The one road into the registry for a document that came from outside**,
+/// shared by [`LumitBridgeState::open_project`] and by the After Effects import
+/// (`api::import`). Import is an open — a whole new document replacing whatever
+/// was loaded — and the half of an open that is easy to leave out is not the
+/// insert but the *departure*: every displaced project's media cache, its
+/// change sink, and above all its render worker, which holds a whole GPU device
+/// and never stops on its own.
+///
+/// `saved_at` is where the document lives on disk, or `None` for one that has
+/// no file yet — an import, whose project is unsaved until somebody chooses a
+/// name for it. `media_root` is what relative media paths resolve against.
+///
+/// Answers the adopted project and **the names of the footage items whose file
+/// was not found**, which is not an error and never stops an adoption: those
+/// items are offline, which is a thing a project is allowed to be (docs/11
+/// §2.5). Opening a `.lum` ignores the list — the Project panel already draws a
+/// relink slate on each of them — while the importer turns it into report rows,
+/// because an import is exactly the moment somebody wants to be told.
+pub(crate) fn adopt(
+    mut doc: Document,
+    saved_at: Option<PathBuf>,
+    media_root: &Path,
+    on_change_stream: Option<CallbackStream>,
+) -> Result<(ProjectReference, Vec<String>), BridgeError> {
+    let id = Uuid::now_v7();
+
+    let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
+
+    // Every footage file this project holds, handed to the probe worker
+    // before a panel has had a chance to ask about any of them. Opening a
+    // project is exactly when a Project panel full of rows is about to ask
+    // each of its items what it is, and reading them in the background is
+    // the difference between a list that fills and one that appears.
+    // Queued after `resolve_all_media`, so the paths are the resolved ones,
+    // and before the registry lock is taken (docs/14 §3).
+    let warm: Vec<PathBuf> = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            lumit_core::model::ProjectItem::Footage(f) if !f.media.absolute_path.is_empty() => {
+                Some(PathBuf::from(&f.media.absolute_path))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let journal = journal_for(&doc);
+    let store = DocumentStore::new(doc);
+    let state = LumitBridgeState {
+        saved_revision: store.revision(),
+        store,
+        path: saved_at,
+        media: MediaCache::default(),
+        journal: Arc::clone(&journal),
+        sender: None,
+    };
+    state.store.set_callback(Arc::new(move |c| {
+        LumitBridgeState::handle_change_callback(c, id, &journal)
+    }));
+
+    if let Some(stream) = on_change_stream {
+        let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
+        s.insert(id, Arc::new(stream));
+    }
+
+    {
+        let mut p = PROJECTS.write().map_err(|_| BridgeError::WriteFailed)?;
+
+        for entry in p.values() {
+            // A project whose lock is poisoned is being discarded anyway,
+            // so a failed cache clear is not worth refusing the open over.
+            if let Ok(mut e) = entry.write() {
+                e.media.clear();
+            }
+        }
+        // The waveform summaries are keyed by file path and shared between
+        // projects, so they are not any one project's to clear — but the
+        // project being closed is the reason they were built (K-280). The
+        // probe answers are shared the same way and go for the same reason,
+        // and clearing them also cancels whatever the probe worker still
+        // had queued for the project that is closing.
+        crate::peaks::clear();
+        crate::probe::clear();
+        // And any beat detection queued for the project that is going: its
+        // audio is about to stop being anybody's audio.
+        crate::beats::clear();
+
+        // Clear any other project that is currently open
+        // Will also prevent any existing references from working
+        p.clear();
+
+        p.insert(id, Arc::new(RwLock::new(state)));
+    }
+
+    // The displaced projects' change sinks go too — a forgotten project
+    // with a live sink is a leak, and one registry at a time means after
+    // the `PROJECTS` guard above has been dropped, not inside it.
+    forget_streams_except(id)?;
+
+    // After the clear, so this project's requests are not the ones
+    // cancelled, and outside the registry lock.
+    for file in &warm {
+        crate::probe::request(file);
+    }
+
+    Ok((ProjectReference::new(id), missing))
 }

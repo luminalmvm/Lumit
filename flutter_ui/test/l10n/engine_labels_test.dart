@@ -61,7 +61,55 @@ Set<String> _engineLabels() {
   return labels;
 }
 
+/// Every reason the import report can raise, by the id it crosses the bridge
+/// under (`lumit_import::Reason::key`, which is serde's own tag).
+///
+/// Read out of the Rust source the same way the keymap's descriptions are
+/// above: nothing in either type system connects a variant here to a sentence
+/// in `engine_labels.dart`, and the failure this catches is silent — a reason
+/// added to the engine would simply show its English inside a translated
+/// window, because the fallback is deliberately forgiving.
+Set<String> _importReasonKeys() {
+  final source = File('../crates/lumit-import/src/report.rs');
+  expect(source.existsSync(), isTrue,
+      reason: 'run this from flutter_ui/, beside the crates/ tree');
+  final body = RegExp(r'pub enum Reason \{(.*?)\n\}', dotAll: true)
+      .firstMatch(source.readAsStringSync())
+      ?.group(1);
+  expect(body, isNotNull, reason: 'the Reason enum has moved or been renamed');
+
+  final keys = <String>{};
+  for (final m
+      in RegExp(r'^    ([A-Z]\w*)\s*[,{]', multiLine: true).allMatches(body!)) {
+    // serde's `rename_all = "snake_case"`, which is what the engine sends.
+    keys.add(m.group(1)!.replaceAllMapped(
+        RegExp(r'(?<=.)([A-Z])'), (c) => '_${c.group(1)}').toLowerCase());
+  }
+  expect(keys.length, greaterThan(30),
+      reason: 'the enum declares far more reasons than this — the scrape has '
+          'stopped matching the source');
+  return keys;
+}
+
 void main() {
+  test('every import report reason has a sentence to be translated', () {
+    final missing = _importReasonKeys().where((k) => !hasImportReason(k)).toList()
+      ..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason: 'these are variants of lumit_import::Reason with no case in '
+          "importReason() in lib/l10n/engine_labels.dart. Add each one's "
+          'sentence there and the matching key to lib/l10n/app_en.arb, or the '
+          'row ships in English inside a translated window.',
+    );
+  });
+
+  test('a reason with no sentence says so, so the caller can fall back', () {
+    expect(importReason('not_a_real_reason', const {}), isNull);
+    expect(hasImportReason('blend_mode_unavailable'), isTrue);
+  });
+
   test('every label the engine can send has a translation entry', () {
     final missing = _engineLabels().where((l) => !hasEngineLabel(l)).toList()
       ..sort();
