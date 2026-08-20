@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:iconoir_flutter/regular/align_left.dart' as ic;
 import 'package:iconoir_flutter/regular/arc_3d.dart' as ic;
 import 'package:iconoir_flutter/regular/circle.dart' as ic;
+import 'package:iconoir_flutter/regular/color_filter.dart' as ic;
 import 'package:iconoir_flutter/regular/color_picker.dart' as ic;
 import 'package:iconoir_flutter/regular/copy.dart' as ic;
 import 'package:iconoir_flutter/regular/cube.dart' as ic;
@@ -207,6 +208,23 @@ enum LumitIcon {
   /// toggle is about is the values above 1 that an ordinary display cannot
   /// show.
   toneMap,
+
+  /// The Viewer bar's transparency-grid switch (K-411): the checkerboard
+  /// itself, at icon size. Painter-drawn — Iconoir's grids are all wire
+  /// lattices, and what this toggle draws is filled squares in alternation,
+  /// which is the only thing that reads as "nothing is here".
+  checkerboard,
+
+  /// The Viewer bar's channel picker (K-411): three overlapping circles, the
+  /// mark for a picture separated into its channels. Tinted by whichever one
+  /// is being shown.
+  channels,
+
+  /// A matte: a shape cut out of a square. The channel picker's alpha face —
+  /// alpha is not a colour, so it gets a mark rather than a tint. The same
+  /// Iconoir glyph as [rotoBrush], named here for what it means on the bar
+  /// (as [twirlClosed] and [nextKeyframe] already share an arrow).
+  matte,
 }
 
 /// The size an icon draws at (15-DESIGN §5: 16px for panels, 20px for the
@@ -246,6 +264,7 @@ Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
     LumitIcon.wireframe => _GridIconPainter(color, _drawWireframe),
     LumitIcon.zoomExtent => ZoomExtentPainter(color),
     LumitIcon.aperture => _GridIconPainter(color, _drawAperture),
+    LumitIcon.checkerboard => _GridIconPainter(color, _drawCheckerboard),
     _ => null,
   };
   if (painter != null) {
@@ -366,7 +385,10 @@ Widget _glyph(LumitIcon icon, Color color) => switch (icon) {
       LumitIcon.cameraPan => ic.Drag(color: color),
       LumitIcon.cameraDolly => ic.Expand(color: color),
       LumitIcon.toneMap => ic.Hdr(color: color),
+      LumitIcon.channels => ic.ColorFilter(color: color),
+      LumitIcon.matte => ic.MaskSquare(color: color),
       // Painter-drawn, handled above.
+      LumitIcon.checkerboard ||
       LumitIcon.aperture ||
       LumitIcon.shy ||
       LumitIcon.shyHidden ||
@@ -428,6 +450,38 @@ void _drawAperture(Canvas canvas, Size size, double s, Color color) {
   for (var blade = 0; blade < 6; blade++) {
     canvas.drawLine(on(blade / 6), on((blade + 2) / 6), paint);
   }
+}
+
+/// The transparency-grid switch's mark (K-411): the checkerboard the toggle
+/// puts behind transparent pixels, on the same 24-unit grid.
+///
+/// A 4×4 board of 4-unit squares inside a 1.5-unit outline, filled in
+/// alternation. Painter-drawn rather than looked up: Iconoir's grid marks are
+/// lattices of lines, and a lattice does not read as "nothing is here" — the
+/// alternation is the whole meaning, and it needs filled cells to carry it.
+void _drawCheckerboard(Canvas canvas, Size size, double s, Color color) {
+  Offset at(double x, double y) => Offset(x * s, y * s);
+  final fill = Paint()..color = color;
+  for (var row = 0; row < 4; row++) {
+    for (var col = 0; col < 4; col++) {
+      if ((row + col).isEven) continue;
+      canvas.drawRect(
+        Rect.fromPoints(
+          at(4 + col * 4, 4 + row * 4),
+          at(8 + col * 4, 8 + row * 4),
+        ),
+        fill,
+      );
+    }
+  }
+  canvas.drawRect(
+    Rect.fromPoints(at(4, 4), at(20, 20)),
+    Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _iconStrokeUnits * s
+      ..strokeJoin = StrokeJoin.miter,
+  );
 }
 
 /// The motion-blur mark: a ring with speed streaks running into it, from the

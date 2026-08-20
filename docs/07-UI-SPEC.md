@@ -282,7 +282,12 @@ anywhere, including other monitors.
 
 ### 2.2 Viewer bar
 
-A single compact bar at the bottom of the Viewer holds, left to right:
+A single compact bar at the bottom of the Viewer. **Arrangement is K-411's**: the bar
+reads as instruments — scale (items 1–2), the view toggles as one icon cluster (7, 4,
+the layer-controls switch, 10), how the pixels read (3, 12, 13), the clock (11), the
+transport with its playback-mode dropdown, then the right-edge readouts (8, 9,
+progress) — with small gaps inside a group and wide gaps between them. Each list is in
+the order it is built in. The items below define what each control does:
 
 1. **Magnification** dropdown: Fit, Fit up to 100%, then 25 / 33.3 / 50 / 100 / 200 / 400 /
    800 %. Magnification is display scaling only; it MUST NOT change render resolution.
@@ -315,9 +320,11 @@ A single compact bar at the bottom of the Viewer holds, left to right:
    True raster downsampling — Half renders a quarter of the pixels. **Auto** renders only
    the pixels the current magnification can display. The setting is **stored per comp** in
    the project. Preview resolution MUST never affect export.
-3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte).
+3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). A compact
+   icon dropdown (K-411): the closed face is one mark tinted by the channel on show — alpha,
+   not being a colour, takes a matte mark instead — and the menu lists the names in full.
 4. **Transparency grid** toggle (checkerboard behind transparent pixels instead of the comp
-   background colour).
+   background colour). An icon — the checkerboard itself — rather than the word (K-411).
 5. **Wireframe/overlay menu**: layer wireframes, motion paths, mask paths, gizmo visibility,
    and a full wireframe display mode (outlines only, no raster) for heavy comps.
 6. **Guides menu**: rulers (`Ctrl+R`), guides (drag out of rulers; lock/clear), grid,

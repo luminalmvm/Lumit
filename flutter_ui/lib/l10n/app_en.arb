@@ -5172,6 +5172,10 @@
   "@tipValueGraph": {
     "description": "Tooltip: show value against time. Under five words."
   },
+  "tipViewerChannel": "Channel view",
+  "@tipViewerChannel": {
+    "description": "Tooltip on the Viewer bar's channel dropdown, which shows a tinted mark and no words, so this is the only name it has. It chooses whether the picture is shown in full colour or as one channel on its own."
+  },
   "tipViewerExposure": "Exposure — preview only",
   "@tipViewerExposure": {
     "description": "Tooltip on the Viewer's exposure box. It brightens or darkens the picture on screen and never the export. \"Stop\" is the photographic unit — one stop is a doubling of light."
@@ -5958,10 +5962,6 @@
         "type": "String"
       }
     }
-  },
-  "viewerGrid": "Grid",
-  "@viewerGrid": {
-    "description": "Button in the Viewer that shows the chequerboard behind transparent areas."
   },
   "volume": "Volume",
   "@volume": {

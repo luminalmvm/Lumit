@@ -192,31 +192,39 @@ void main() {
       await mount(tester, p);
       final last = p.comp.durationFrames() - 1;
 
-      await tester.tap(find.byKey(const ValueKey('viewer-step-forward')));
-      await tester.pump();
+      // The bar scrolls rather than overflowing (docs/07 §2.2), and this
+      // Viewer is 800 px wide — narrower than the bar wants since K-411 put
+      // the clock in front of the transport. So each button is scrolled into
+      // view before it is pressed, exactly as a user on a narrow dock would
+      // have to. Without this a tap lands on nothing and reads as a transport
+      // that does not work.
+      Future<void> press(String key) async {
+        final button = find.byKey(ValueKey<String>(key));
+        await tester.ensureVisible(button);
+        await tester.pump();
+        await tester.tap(button);
+        await tester.pump();
+      }
+
+      await press('viewer-step-forward');
       expect(p.uiState.playheadFrame.value, 1);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-step-back')));
-      await tester.pump();
+      await press('viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
       // Stepping back from the start stays at the start rather than going
       // negative — a frame before the comp is not a frame.
-      await tester.tap(find.byKey(const ValueKey('viewer-step-back')));
-      await tester.pump();
+      await press('viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-end')));
-      await tester.pump();
+      await press('viewer-end');
       expect(p.uiState.playheadFrame.value, last);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-step-forward')));
-      await tester.pump();
+      await press('viewer-step-forward');
       expect(p.uiState.playheadFrame.value, last,
           reason: 'and the end is the end');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-home')));
-      await tester.pump();
+      await press('viewer-home');
       expect(p.uiState.playheadFrame.value, 0);
     });
 
@@ -380,6 +388,38 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-grid')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('viewer-grid')));
       await tester.pump();
+    });
+
+    /// **The bar reads as instruments, not as a queue** (K-411, docs/07 §2.2).
+    /// The arrangement is the decision, so this is what asserts it: the order
+    /// the keys come in, left to right, and nothing about pixels. Grouping is
+    /// visible here as the runs — scale, the view toggles, how the pixels
+    /// read, the clock, the transport, then the right-edge readouts.
+    ///
+    /// The tone map is on for this one, so the whole set is named: it is the
+    /// only control that comes and goes with a setting rather than with state.
+    testWidgets('the Viewer bar is in K-411 order', (tester) async {
+      final p = withLayer();
+      p.uiState.workspace.interface.showToneMap = true;
+      await mount(tester, p);
+
+      expect(barKeys(tester), [
+        // The picture's scale.
+        'viewer-zoom', 'viewer-resolution',
+        // The view toggles.
+        'viewer-region', 'viewer-grid', 'viewer-wireframes',
+        'viewer-background',
+        // How the pixels read.
+        'viewer-channel', 'viewer-exposure', 'viewer-tone-map',
+        // The clock, then the transport and its mode.
+        'viewer-timecode', 'viewer-playback-mode',
+        'viewer-home', 'viewer-step-back', 'viewer-play',
+        'viewer-step-forward', 'viewer-end',
+        // The right edge: readouts.
+        'viewer-colour-badge',
+      ]);
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
     /// **The resolution dropdown is on the bar, and adaptive playback owns it

@@ -10995,3 +10995,31 @@ Saturation's channel ranges). The plain sibling properties carry Levels and Hue/
 Saturation fine; **Curves imports as a placeholder via the Bridge** until a blob
 decoder exists (the direct-parse route's problem, §7), and docs/11's Curves row now
 says so.
+
+## K-411 — The Viewer bar is arranged in instruments, not a queue
+
+**DECIDED 2026-08-22** (owner-directed, from an After Effects 2026 reference frame).
+docs/07 §2.2 lists what the bar holds; this decides how it reads. The bar is a row of
+**instruments** — small groups with one job each, separated by breathing room — rather
+than an evenly-spaced queue of controls:
+
+1. **The picture's scale**: magnification and preview resolution, two content-hugging
+   dropdowns (value + chevron), never fixed-width boxes.
+2. **The view toggles**, one tight icon cluster at icon spacing: region of interest,
+   transparency grid (an icon now, not the word), layer controls, the background
+   swatch. Toggles read in the accent while engaged, as they already do.
+3. **How the pixels read**: the channel picker as a compact icon dropdown (its glyph
+   tinted by the chosen channel) beside the exposure aperture + stops box and the
+   tone-map icon — the three things that change what the numbers on screen mean.
+4. **The clock**, its own field, click-to-type, beside the toggles rather than lost
+   between transport and badge — the After Effects cue worth taking whole.
+5. **The transport** with its playback-mode dropdown (Round keeps its K-394 pill).
+6. **The right edge**: colour-management badge, degradation badge, preview progress —
+   readouts, not controls, which is why they live apart.
+
+Within a group the gap is small (4 px); between groups it is wide (12 px). No control
+gains or loses a feature by this decision — item 8's badge, K-287's clock, K-314's
+preview-only pair, K-362's region all keep their exact behaviour — and the Sharp and
+Round shapes both follow it, Round on its detached tile. This is presentation, so the
+regression tests assert grouping and order by key, not pixels.
+

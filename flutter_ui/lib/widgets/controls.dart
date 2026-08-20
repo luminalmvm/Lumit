@@ -581,10 +581,15 @@ class _MenuHoverScope extends InheritedWidget {
 /// width its caller has, and a label longer than that is a layout error the
 /// user sees as striped tape. `Flexible` keeps the button intrinsic-width when
 /// there is room, so nothing that fits changes shape.
-Widget _dropdownFace(LumitTheme t, String label) => Row(
+///
+/// [face] replaces the label with a mark of the caller's own — the Viewer
+/// bar's channel picker, whose answer is a tinted glyph rather than a word
+/// (K-411). The caret is the same one either way, so an icon dropdown still
+/// reads as a dropdown.
+Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+        face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
         const SizedBox(width: 4),
         CustomPaint(
           size: const Size(9, 9),
@@ -612,6 +617,11 @@ class BareDropdown<T> extends StatelessWidget {
   /// headings rather than a scrambled list.
   final String? Function(T)? group;
 
+  /// A mark to show instead of the value's name on the closed face. The menu
+  /// still lists [label]'s words, so nothing is lost by showing a glyph — see
+  /// [_dropdownFace].
+  final Widget? face;
+
   const BareDropdown({
     super.key,
     required this.value,
@@ -619,6 +629,7 @@ class BareDropdown<T> extends StatelessWidget {
     required this.label,
     required this.onChanged,
     this.group,
+    this.face,
   });
 
   @override
@@ -636,7 +647,7 @@ class BareDropdown<T> extends StatelessWidget {
       // so nothing moves sideways.
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       onPressed: onChanged == null ? null : () => _open(context, t),
-      child: _dropdownFace(t, label(value)),
+      child: _dropdownFace(t, label(value), face: face),
     );
   }
 

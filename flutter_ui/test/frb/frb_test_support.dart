@@ -294,3 +294,21 @@ double stillValue(BridgeScalar scalar) => switch (scalar) {
       BridgeScalar_Static(:final field0) => field0,
       _ => throw StateError('expected a still scalar, got $scalar'),
     };
+
+/// The Viewer bar's controls, left to right, by key (K-411).
+///
+/// The bar's arrangement is a decision rather than a look, so what asserts it
+/// is the order of the keys and not a picture. Only the keys that name a
+/// control are collected — a badge slot standing empty has nothing to name,
+/// and the wrappers between them are not the point. Element traversal is
+/// depth-first from the bar's own `ValueKey`, which for a `Row` is left to
+/// right.
+List<String> barKeys(WidgetTester tester) => [
+      for (final element in find
+          .descendant(
+            of: find.byKey(const ValueKey('viewer-bar')),
+            matching: find.byWidgetPredicate((w) => w.key is ValueKey<String>),
+          )
+          .evaluate())
+        (element.widget.key! as ValueKey<String>).value,
+    ];

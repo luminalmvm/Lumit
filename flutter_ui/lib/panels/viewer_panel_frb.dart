@@ -1641,8 +1641,10 @@ class _Toolbar extends StatelessWidget {
     );
   }
 
-  /// Everything on the left of the bar: magnification, channel, the overlays,
-  /// the playback mode, the transport and the clock.
+  /// Everything on the left of the bar, in K-411's instruments: the picture's
+  /// scale, the view toggles, how the pixels read, the clock, the transport,
+  /// then the right-edge readouts. Small gaps inside a group, wide ones
+  /// between — the arrangement is the whole of what tells them apart.
   Widget _controls(BuildContext context, LumitTheme t) {
     // Scrolls rather than overflowing: a Viewer docked narrow has less width
     // than this bar wants, and an overflow stripe is not a design.
@@ -1650,32 +1652,34 @@ class _Toolbar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          SizedBox(
-            width: 76,
-            child: BareDropdown<int>(
-              key: const ValueKey('viewer-zoom'),
-              // -1: a wheel zoom between the listed steps; the button shows
-              // the true percentage and the menu still offers the steps.
-              value: _zoomSteps.indexOf(zoom),
-              options: [for (var i = 0; i < _zoomSteps.length; i++) i],
-              label: (i) => i == -1
-                  ? '${((zoom ?? 1) * 100).round()}%'
-                  : _zoomSteps[i] == null
-                      ? l10n.menuFit
-                      : '${(_zoomSteps[i]! * 100).round()}%',
-              onChanged: (i) => onZoom(_zoomSteps[i]),
-            ),
+          // --- The picture's scale (K-411 item 1). Both dropdowns hug their
+          // own label: a magnification reading "Fit" and one reading "400%"
+          // are different widths, and boxing them to a common one left a
+          // gap that read as a missing control.
+          BareDropdown<int>(
+            key: const ValueKey('viewer-zoom'),
+            // -1: a wheel zoom between the listed steps; the button shows
+            // the true percentage and the menu still offers the steps.
+            value: _zoomSteps.indexOf(zoom),
+            options: [for (var i = 0; i < _zoomSteps.length; i++) i],
+            label: (i) => i == -1
+                ? '${((zoom ?? 1) * 100).round()}%'
+                : _zoomSteps[i] == null
+                    ? l10n.menuFit
+                    : '${(_zoomSteps[i]! * 100).round()}%',
+            onChanged: (i) => onZoom(_zoomSteps[i]),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: _itemGap),
           // The preview resolution (docs/07 §2.2 item 2): how many pixels the
           // engine is asked to make, beside the magnification it is so easily
           // mistaken for. Muted while adaptive playback is choosing the tier
           // itself — a choice something else is making is not yours to make.
-          const SizedBox(
-            width: 76,
-            child: _ResolutionDropdown(),
-          ),
-          const SizedBox(width: 6),
+          const _ResolutionDropdown(),
+
+          // --- The view toggles (K-411 item 2): one tight cluster of icons,
+          // each of which changes what is drawn over or behind the picture
+          // and nothing about the picture itself.
+          const SizedBox(width: _groupGap),
           // Region of interest (K-362). Lit while a region is in force or a
           // drag is armed for one, so working on a corner of a shot is never
           // a state you can be in without being told; the same click clears a
@@ -1707,20 +1711,11 @@ class _Toolbar extends StatelessWidget {
               ),
             );
           }),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 76,
-            child: BareDropdown<ViewerChannel>(
-              key: const ValueKey('viewer-channel'),
-              value: channel,
-              options: ViewerChannel.values,
-              label: _channelLabel,
-              onChanged: onChannel,
-            ),
-          ),
-          const SizedBox(width: 6),
-          _BackgroundSwatch(comp: comp, background: background),
-          const SizedBox(width: 6),
+          const SizedBox(width: _itemGap),
+          // The transparency grid: the checkerboard itself rather than the
+          // word "Grid" (K-411 item 2). The word was the odd one out in a row
+          // of marks, and it named the thing least well — "grid" is also the
+          // guide overlay, which this is not.
           LumitTooltip(
             message: l10n.tipTransparencyGrid,
             child: HouseButton(
@@ -1728,11 +1723,55 @@ class _Toolbar extends StatelessWidget {
               small: true,
               frameless: true,
               onPressed: onGrid,
-              child: Text(l10n.viewerGrid,
-                  style: t.small.copyWith(color: grid ? t.accent : null)),
+              child: lumitIcon(
+                LumitIcon.checkerboard,
+                size: iconSize,
+                color: grid ? t.accent : t.textSecondary,
+              ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: _itemGap),
+          // The layer controls switch (K-217): the boxes, handles and hover
+          // highlight over the picture. An icon rather than a word, because
+          // what it governs is a *mark* — and the mark is what it draws.
+          LumitTooltip(
+            message: wireframes
+                ? l10n.tipHideLayerControls
+                : l10n.tipShowLayerControls,
+            child: HouseButton(
+              key: const ValueKey('viewer-wireframes'),
+              small: true,
+              frameless: true,
+              onPressed: onWireframes,
+              child: lumitIcon(
+                LumitIcon.wireframe,
+                size: iconSize,
+                color: wireframes ? t.accent : t.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: _itemGap),
+          _BackgroundSwatch(comp: comp, background: background),
+
+          // --- How the pixels read (K-411 item 3): the three controls that
+          // change what the numbers on screen mean.
+          const SizedBox(width: _groupGap),
+          // The channel picker as a mark tinted by its own answer: the face
+          // is read at a glance during a key, and "Green" spelled out is a
+          // word to read where a green mark is a thing to see. The menu still
+          // lists the names.
+          LumitTooltip(
+            message: l10n.tipViewerChannel,
+            child: BareDropdown<ViewerChannel>(
+              key: const ValueKey('viewer-channel'),
+              value: channel,
+              options: ViewerChannel.values,
+              label: _channelLabel,
+              onChanged: onChannel,
+              face: _channelFace(t, channel),
+            ),
+          ),
+          const SizedBox(width: _itemGap),
           // Exposure and the tone map (K-314, docs/07 §2.2 items 12-13): the
           // two preview-only controls. Each reads in the accent while it is
           // engaged, which says "this control is on" and nothing more — that
@@ -1743,7 +1782,7 @@ class _Toolbar extends StatelessWidget {
             size: iconSize,
             color: look.stops == 0 ? t.textSecondary : t.accent,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: _itemGap),
           LumitTooltip(
             message: l10n.tipViewerExposure,
             child: DragValueField(
@@ -1770,7 +1809,7 @@ class _Toolbar extends StatelessWidget {
           // work never reads a picture that way, so the bar stays shorter
           // until somebody turns it on in Settings → Interface.
           if (showToneMap) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: _itemGap),
             LumitTooltip(
               message: l10n.tipViewerToneMap,
               child: HouseButton(
@@ -1786,27 +1825,33 @@ class _Toolbar extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(width: 6),
-          // The layer controls switch (K-217): the boxes, handles and hover
-          // highlight over the picture. An icon rather than a word, because
-          // what it governs is a *mark* — and the mark is what it draws.
-          LumitTooltip(
-            message: wireframes
-                ? l10n.tipHideLayerControls
-                : l10n.tipShowLayerControls,
-            child: HouseButton(
-              key: const ValueKey('viewer-wireframes'),
-              small: true,
-              frameless: true,
-              onPressed: onWireframes,
-              child: lumitIcon(
-                LumitIcon.wireframe,
-                size: iconSize,
-                color: wireframes ? t.accent : t.textSecondary,
-              ),
-            ),
+
+          // --- The clock (K-411 item 4), a field of its own rather than
+          // something to find between the transport and a badge. In a slot
+          // wide enough for the longest time this comp can show, and
+          // clickable to type one (docs/07 §2.2 item 11). A time past either
+          // end of the composition lands on that end: the playhead cannot
+          // leave the comp, so asking for somewhere outside it means the
+          // nearest place inside.
+          const SizedBox(width: _groupGap),
+          TimeReadout(
+            key: const ValueKey('viewer-timecode'),
+            frame: frame,
+            format: (f) => timecodeOf(f, settings),
+            widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+            style: t.mono,
+            parse: (text) =>
+                framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+            onCommit: onSeek,
+            minFrame: 0,
+            maxFrame: _lastFrameOf(settings),
+            tooltip: l10n.tipFrameOnScreen,
           ),
-          const SizedBox(width: 6),
+
+          // --- The transport and the mode it runs in (K-411 item 5). A fixed
+          // gap, not a Spacer: the bar scrolls when the panel is narrow, and
+          // a flex child cannot live inside a scroll view.
+          const SizedBox(width: _groupGap),
           // A slot rather than a button sized to its own label: the two modes
           // are two different words, and letting them size themselves moved
           // the whole transport across whenever the mode changed.
@@ -1814,9 +1859,7 @@ class _Toolbar extends StatelessWidget {
             width: _playbackModeWidth,
             child: _PlaybackModeButton(),
           ),
-          // A fixed gap, not a Spacer: the bar scrolls when the panel is
-          // narrow, and a flex child cannot live inside a scroll view.
-          const SizedBox(width: 24),
+          const SizedBox(width: _itemGap),
           // Round gathers the transport into one pill (K-394, §12.1): the five
           // buttons are one instrument, and a container round them says so.
           // Sharp is handed the very same widgets with nothing wrapped round
@@ -1836,26 +1879,10 @@ class _Toolbar extends StatelessWidget {
             )
           else
             ..._transport(t),
-          const SizedBox(width: 8),
-          // The clock, in a slot wide enough for the longest time this comp
-          // can show and clickable to type one (docs/07 §2.2 item 11). A
-          // time past either end of the composition lands on that end: the
-          // playhead cannot leave the comp, so asking for somewhere outside
-          // it means the nearest place inside.
-          TimeReadout(
-            key: const ValueKey('viewer-timecode'),
-            frame: frame,
-            format: (f) => timecodeOf(f, settings),
-            widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-            style: t.mono,
-            parse: (text) =>
-                framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-            onCommit: onSeek,
-            minFrame: 0,
-            maxFrame: _lastFrameOf(settings),
-            tooltip: l10n.tipFrameOnScreen,
-          ),
-          const SizedBox(width: 8),
+
+          // --- The right edge (K-411 item 6): readouts, not controls, which
+          // is why they live apart from everything above.
+          const SizedBox(width: _groupGap),
           _ColourManagementBadge(look: look),
           // The degradation badge (docs/13 §B5, docs/07 §2.2): when adaptive
           // playback has dropped below Full, say so on the bar — a softer
@@ -1865,7 +1892,7 @@ class _Toolbar extends StatelessWidget {
           // Its slot is there whether or not the badge is: a box that comes
           // and goes mid-playback would drag the bar about at the very
           // moment the picture is being watched.
-          const SizedBox(width: 8),
+          const SizedBox(width: _itemGap),
           SizedBox(
             width: _tierBadgeWidth,
             child: playing && tier > 1
@@ -1934,6 +1961,28 @@ class _Toolbar extends StatelessWidget {
         ),
       ];
 
+  /// The channel picker's closed face (K-411 item 3): one mark, tinted by
+  /// whichever channel is being shown.
+  ///
+  /// The tints are the Scopes panel's own red, green and blue
+  /// ([ScopeColours.standard]) — the only place in the theme module that names
+  /// the three, and the right ones by meaning: a scope's red trace and a red
+  /// channel view are the same red channel. They do not vary by theme, which
+  /// is also correct here, because what they stand for does not either.
+  ///
+  /// Alpha is not a colour, so it gets a different mark rather than a tint: a
+  /// matte, which is what an alpha view is drawn as.
+  static Widget _channelFace(LumitTheme t, ViewerChannel c) => lumitIcon(
+        c == ViewerChannel.alpha ? LumitIcon.matte : LumitIcon.channels,
+        size: iconSize,
+        color: switch (c) {
+          ViewerChannel.rgb || ViewerChannel.alpha => t.textSecondary,
+          ViewerChannel.red => ScopeColours.standard.red,
+          ViewerChannel.green => ScopeColours.standard.green,
+          ViewerChannel.blue => ScopeColours.standard.blue,
+        },
+      );
+
   static String _channelLabel(ViewerChannel c) => switch (c) {
         ViewerChannel.rgb => 'RGB',
         ViewerChannel.red => engineLabel('Red'),
@@ -1960,6 +2009,13 @@ int _lastFrameOf(BridgeCompSettings settings) {
   final frames = settings.duration.num.toInt() * settings.fpsNum ~/ den;
   return frames > 0 ? frames - 1 : 0;
 }
+
+/// The two gaps the bar is built out of (K-411): controls doing one job sit at
+/// icon spacing, and the groups themselves are parted by three times as much.
+/// The bar used to be an even queue at 6, which is neither — near enough to
+/// touching that nothing grouped, far enough apart that nothing was tight.
+const double _itemGap = 4;
+const double _groupGap = 12;
 
 /// The slot the playback-mode button sits in — wide enough for either of the
 /// two labels, so changing mode does not shuffle the transport sideways.
