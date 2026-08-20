@@ -124,6 +124,9 @@ docs/10 §1.1's rule) and refuses only a newer *major* version.
   text, per-character-3D fields when off): one try/catch per attribute.
 - **Separated dimensions**: `prop.isSeparationLeader` → walk
   `prop.getSeparationFollower(i)`; the leader's own keyframes are not the animation.
+  The followers are *also* ordinary children of the Transform group
+  (`ADBE Position_0`, `_1`, `_2`), separated or not, so a capture lists them
+  twice; the ones under `separated` are the ones with the animation on them.
 - **Temporal ease** (`keyInTemporalEase`) returns an array of ease objects *per
   dimension* — but spatial properties return exactly one. Capture the array as-is.
 - **Mattes have two generations**: 23.0+ `layer.trackMatteType` +
@@ -178,13 +181,47 @@ match name Lumit does not ship, for the placeholder path.
 The builder saves `fixture.aep` beside the bundle (the direct-parse route's future
 test asset), builds inside an undo group, and does not touch an open project.
 
+**What the first real sitting corrected.** Three of the assumptions the
+hand-written fixtures were built on turned out not to be After Effects':
+
+- **A Null and an Adjustment layer are backed by a solid *item*.** Letting the
+  source item decide the layer kind imported a rig's null as the white card it
+  is made of, and an adjustment layer as an opaque solid over the whole comp.
+  The layer's own `kind` now wins for those two.
+- **Setting `stretch = -100` reflects the layer about its own zero**, so the bar
+  arrives sitting entirely *before* comp time zero with `in_point` and
+  `out_point` the other way round. The two ends are read in order (a swap, not
+  a repair — nothing about the layer changed), and the Retime is then AE's own
+  arithmetic with no special case: source time is layer time times the rate.
+  The reflection the mapper used to apply on top of that doubled the turn.
+- **AE 26 records the modern matte form for both generations**, so a
+  `trackMatteType`-only assignment comes back naming its layer outright. The
+  legacy above-layer form still exists in older projects and keeps its test in
+  `edges.lum-bundle`.
+
+**Two checklist rows did not come through**, and both are owed in
+docs/TODO.md rather than papered over: the **roving** key (After Effects did
+not apply `setRovingAtKey`, so the capture records `roving: false` — the walker
+reads `keyRoving` correctly and there is nothing to import), and a 3D layer's
+**Orientation** and Material Options, which the capture carries and the mapper
+has nowhere to put — the one place in the mapping that loses something without
+a report row.
+
 ## 6. Phases
 
 1. **The walker and the reader** — `tools/ae-bridge/` + `lumit-import`'s capture
-   types and bundle open. **Built.** Rust tests run on a small hand-written synthetic
-   capture; **still owed**, the owner running `make-fixture.jsx` once on a live After
-   Effects, after which the real bundle lands in the repo as the golden fixture and is
-   also the first proof that this note's match names are the ones AE ships.
+   types and bundle open. **Built, and the golden bundle is in.**
+   `make-fixture.jsx` was run on a live After Effects 26.0 on 2026-08-20;
+   `tools/ae-bridge/fixtures/fixture.lum-bundle/` (two comps, 24 layers, 109
+   unreadables) is the repo's golden fixture, and
+   `crates/lumit-import/tests/golden.rs` is the regression suite that gates it —
+   every §5 checklist row asserted through the *mapped* document, with every
+   expected number computed in the test from the fixture's own inputs. The
+   hand-written `synthetic.lum-bundle` and `edges.lum-bundle` stay: they are the
+   schema's readable documentation and the awkward half (both generations of
+   matte, the damaged captures) that one well-formed AE project does not
+   contain. The sitting also confirmed this note's match names are the ones AE
+   ships, and turned up three things no synthetic bundle had (see §5).
 2. **The mapping** — capture → `Document`, the effect table, placeholders, the
    report. **Built**, in `src/map/`: `mod.rs`/`layers.rs`/`props.rs`/`time.rs` for the
    structure and the keyframe value copy, `fx_colour.rs` and `fx_distort.rs` for the

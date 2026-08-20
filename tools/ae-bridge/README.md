@@ -34,9 +34,11 @@ rather than guessing.
 checklist in `docs/impl/ae-import.md` §5 — nested comps, the keyframe variety, both
 generations of matte, masks, markers, retiming, text, shapes, a camera and a light,
 expressions, and the effect spread including the unreadable one and one match name Lumit
-does not ship. Its bundle becomes the Rust importer's golden fixture — until it has been
-run once, `crates/lumit-import/tests/fixtures/synthetic.lum-bundle/` stands in, written
-by hand against this walker's output.
+does not ship. Its bundle **is** the Rust importer's golden fixture:
+`fixtures/fixture.lum-bundle/` was built on After Effects 26.0 on 2026-08-20 and is what
+`crates/lumit-import/tests/golden.rs` reads. Running the builder again rewrites it, so
+do that only when the checklist itself changes — and expect the golden test's exact
+counts to need updating alongside.
 
 1. Save and close whatever you are working on — this builds a **new** project.
 2. Same file-write preference as above.

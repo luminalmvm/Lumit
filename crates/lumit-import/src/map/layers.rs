@@ -19,9 +19,12 @@
 //! **Time stretch.** A layer stretched to 50% plays at double speed. Lumit has
 //! no stretch switch — it has Retime, which says the same thing in a more
 //! general way — so the stretch becomes the straight-line Retime that plays
-//! the source at that rate. A *negative* stretch means "backwards", and comes
-//! across as the same line reflected: the layer starts at the far end of its
-//! source and walks back to the beginning.
+//! the source at that rate: source time is layer time times the rate, which is
+//! After Effects' own arithmetic. A *negative* stretch means "backwards", and
+//! needs no special case, because After Effects has already turned the layer
+//! round for us — it puts the layer's own zero at the far end of the bar, so
+//! layer time runs negative there and the same multiplication comes out
+//! walking back towards the beginning of the source.
 //!
 //! **Time remap.** This one is already a Retime — AE's time-remap value graph
 //! and Lumit's Retime value graph are the same mathematical object — so it is
@@ -77,8 +80,15 @@ pub(crate) fn map_layer(
     conv.offset = conv.tb.seconds(ae.start_time.unwrap_or(0.0));
     let props = &ae.properties;
 
-    let in_point = CompTime(conv.tb.seconds(ae.in_point.unwrap_or(0.0)));
+    let mut in_point = CompTime(conv.tb.seconds(ae.in_point.unwrap_or(0.0)));
     let mut out_point = CompTime(conv.tb.seconds(ae.out_point.unwrap_or(0.0)));
+    if out_point < in_point {
+        // After Effects hands a *reversed* layer's two ends over the other way
+        // round — a solid stretched to −100% arrives with `inPoint` at the
+        // later moment. Reading them in order is the honest span, not a
+        // repair, so no row: nothing about the layer changed.
+        std::mem::swap(&mut in_point, &mut out_point);
+    }
     if out_point <= in_point {
         // The model's one span invariant. A zero-length or reversed bar is a
         // damaged capture, not a layer worth dropping.
@@ -158,6 +168,16 @@ fn layer_kind(
     let source = ae.source_id.and_then(|id| items.get(id));
     let kind = ae.kind.as_deref().unwrap_or("");
 
+    // After Effects backs a Null and an Adjustment layer with a solid item of
+    // its own, so for these two the layer's own kind has to win over its
+    // source: letting the item decide imports a rig's null as the white card
+    // it is made of, and an adjustment layer as an opaque solid over the comp.
+    match kind {
+        "null" => return LayerKind::Null,
+        "adjustment" => return LayerKind::Adjustment,
+        _ => {}
+    }
+
     // The source item decides between Footage and Precomp whatever the walker
     // called the layer: a precomp layer is a layer whose source is a comp.
     if let Some((uuid, item_kind)) = source {
@@ -176,8 +196,6 @@ fn layer_kind(
     }
 
     match kind {
-        "null" => LayerKind::Null,
-        "adjustment" => LayerKind::Adjustment,
         "camera" => LayerKind::Camera {
             zoom: scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0),
         },
@@ -551,15 +569,14 @@ fn retime(
     if !stretch.is_finite() || stretch == 0.0 || (stretch - 100.0).abs() < 1e-9 {
         return (None, interpolation);
     }
+    // After Effects' own definition, whichever way the stretch runs: source
+    // time is layer time times the rate. A reversed layer needs no reflection
+    // here because After Effects has already done it — it moves the layer's
+    // own zero (`start_time`) to the far end of the bar, which is what puts
+    // layer time negative and the source time back the right way up.
     let rate = 100.0 / stretch;
     let (from, to) = (local_in.to_f64(), local_out.to_f64());
-    let (v_from, v_to) = if rate >= 0.0 {
-        (from * rate, to * rate)
-    } else {
-        // Reversed: the same line reflected inside the layer's own span, so
-        // the layer opens on the last frame of the stretch and walks back.
-        (to * -rate, from * -rate)
-    };
+    let (v_from, v_to) = (from * rate, to * rate);
     conv.report.row(
         path.clone(),
         Outcome::Adjusted,

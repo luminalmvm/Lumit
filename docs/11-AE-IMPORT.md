@@ -1,18 +1,21 @@
 # After Effects import
 
-**Status: the conversion and the surface are built; the golden bundle is still
-awaited.** The Bridge walker (`tools/ae-bridge/`), the bundle reader and the whole
+**Status: the conversion and the surface are built, and the golden bundle is in.**
+The Bridge walker (`tools/ae-bridge/`), the bundle reader and the whole
 capture → `Document` mapping — items, comps, layers, keyframes, masks, mattes, retime,
 the §5 effect table and the §9 report — live in `crates/lumit-import/`
 (docs/impl/ae-import.md §6 phases 1 and 2). **Phase 3 is built too**: File ▸ Import
 After Effects bundle… opens a folder chooser, `LumitBridgeState::import_ae_bundle`
 reads it and adopts the document the way opening a `.lum` does, footage is looked for
 through the same `resolve_all_media` flow (§2.5's absolute-path step only, for the
-reason §2.5 now gives), and the report window (§9) lists what changed. Two things §5 asks
-for are still owed: the golden-frame tests of every mapped conversion (they need After Effects
-renders of the fixture), and the golden bundle itself, `make-fixture.jsx` never having
-been run on a live AE — so every test to date runs against hand-written synthetic
-bundles. §9's row navigation and its persistence in the project are not built either
+reason §2.5 now gives), and the report window (§9) lists what changed. `make-fixture.jsx` **has** now been run
+on a live After Effects 26.0: `tools/ae-bridge/fixtures/fixture.lum-bundle/` is the
+golden bundle, and `crates/lumit-import/tests/golden.rs` asserts every §5 checklist
+row through the mapped document, alongside the hand-written bundles that document the
+schema and the awkward half. One thing §5 asks for is still owed — the golden-frame
+tests of every mapped conversion, which need After Effects *renders* of the fixture —
+along with two checklist rows the sitting showed do not come across (a roving key and a
+3D layer's Orientation), and §9's row navigation and its persistence in the project
 (docs/TODO.md). This document implements K-060 (import strategy), and leans on
 K-025 (AE-compatible keyframe maths) and K-021 (Retime) in [02-DECISIONS.md](02-DECISIONS.md). Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) exactly; After Effects' own feature names appear in quotes

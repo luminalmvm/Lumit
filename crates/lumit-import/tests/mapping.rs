@@ -608,17 +608,21 @@ fn a_legacy_matte_resolves_to_the_layer_above() {
 
 /// **A negative stretch plays the layer backwards.**
 ///
-/// The same straight line reflected inside the layer's own span: it opens on
-/// the last moment of the stretch and walks back to the first.
+/// One multiplication, the same as a positive stretch: source time is layer
+/// time times the rate. After Effects has already done the turning round —
+/// reversing a layer moves its own zero (`start_time`) to the *far end* of the
+/// bar, so the layer's local time runs from −2 up to 0 and multiplying by −1
+/// walks the source from its last moment back to its first.
 #[test]
 fn a_negative_stretch_plays_the_layer_backwards() {
     let (doc, report) = mapped("edges.lum-bundle");
     let reversed = layer(comp(&doc, "Edges"), "Reversed");
     let retime = reversed.retime.as_ref().expect("a Retime");
 
-    assert_eq!(retime.value_at(0.0), 2.0, "opens on the far end");
-    assert_eq!(retime.value_at(1.0), 1.0);
-    assert_eq!(retime.value_at(2.0), 0.0, "and walks back to the start");
+    assert_eq!(reversed.start_offset.0, Rational::new(2, 1).unwrap());
+    assert_eq!(retime.value_at(-2.0), 2.0, "opens on the far end");
+    assert_eq!(retime.value_at(-1.0), 1.0);
+    assert_eq!(retime.value_at(0.0), 0.0, "and walks back to the start");
     assert!(reported(&report, |r| matches!(
         r,
         Reason::StretchAsRetime { percent } if (percent + 100.0).abs() < 1e-9

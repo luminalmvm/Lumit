@@ -645,15 +645,32 @@ collection, the recording mode, the panel) is in the entry above.
 **AE import, phase 1 (K-410, docs/impl/ae-import.md §6) - the walker and the reader
 landed 2026-08-21; three things are still open.** `tools/ae-bridge/` holds the
 ExtendScript walker and the fixture builder, `crates/lumit-import/` holds the bundle
-open and the capture types, with fourteen tests on a hand-written synthetic bundle.
- - **The golden bundle is one AE sitting away.** `make-fixture.jsx` has never been run:
-   it needs a real After Effects, which CI does not have and this machine's tests cannot
-   substitute for. Until the owner runs it once, `crates/lumit-import/tests/fixtures/
-   synthetic.lum-bundle/` stands in - written by hand against the walker's output, which
-   makes it an honest description of the schema and *not* evidence the walker produces
-   it. The first run is also the first proof that the match names in
-   `make-fixture.jsx` are the ones AE ships; the builder's step harness is there so a
-   drifted name costs one checklist row rather than the whole sitting.
+open and the capture types, tested against the golden bundle and two hand-written
+ones (the schema's readable documentation, and the awkward half one well-formed AE
+project does not contain).
+ - **The golden bundle landed 2026-08-20**, from one sitting on a live After Effects
+   26.0: `tools/ae-bridge/fixtures/fixture.lum-bundle/` (two comps, 24 layers, 109
+   unreadables) with `crates/lumit-import/tests/golden.rs` asserting every §5
+   checklist row through the mapped document, the exact report counts, and the
+   unreadables' four known classes. It confirmed the match names and corrected three
+   assumptions (null and adjustment layers are backed by solid *items*; a −100%
+   stretch arrives with its two ends reversed and before comp zero; AE 26 records the
+   modern matte form for both generations). **Two checklist rows are owed against the
+   walker, and each needs one more AE sitting:**
+   - **Roving.** `make-fixture.jsx`'s `setRovingAtKey(2, true)` did not take — the
+     capture records `roving: false` on every Position key, and the walker reads
+     `keyRoving` correctly, so the fixture never contained a roving key to import. The
+     next sitting should set roving on a key whose neighbours are bezier, and report
+     what the builder's step harness caught if it still refuses.
+   - **A 3D layer's Orientation and Material Options.** The capture carries
+     `ADBE Orientation` (`[0, 30, 0]` on the fixture's 3D card) and Casts Shadows;
+     the mapper reads only `ADBE Rotate X/Y/Z`, so both are dropped **without a report
+     row** — the one place the mapping loses something silently, against its own
+     standing rule. Either map orientation onto the three rotation lanes (they are not
+     the same thing: orientation composes before rotation) or raise a row. The camera's
+     Point of Interest, which AE stores under `ADBE Anchor Point`, lands on the
+     anchor-point lanes for the same reason, and its Depth of Field, Aperture and Focus
+     Distance are dropped rowless too.
  - **The structural mapping landed 2026-08-21** (phase 2, first half):
    `crates/lumit-import/src/map/` turns a capture into a whole new
    `lumit_core::Document` — the item tree, comps, layers with their kinds, switches,
@@ -670,8 +687,10 @@ open and the capture types, with fourteen tests on a hand-written synthetic bund
    (px@comp and % diag), option lists pinned against `tools/ae-audit/
    ae-audit-report.json`'s defaults, mask references on the K-408 row, and thirty-three
    conversion tests. Two things are owed:
-   - **The golden-frame tests §5 requires of every mapped conversion** — they need AE
-     renders of the fixture, so they land with the golden bundle.
+   - **The golden-frame tests §5 requires of every mapped conversion** — the golden
+     *bundle* has landed and `tests/golden.rs` checks every converted number against
+     one worked out from the fixture's own inputs, which is not the same thing: these
+     need After Effects *renders* of `fixture.aep` to compare pictures against.
    - **A keyframed dropdown in this half goes by unremarked.** `fx_colour`'s reader for
      the controls Lumit does not animate - option lists, switches, seeds - reads the
      still value only, so an instance whose Fractal type (say) is keyframed imports at
