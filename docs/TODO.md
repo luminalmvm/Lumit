@@ -918,6 +918,34 @@ list, not a re-statement of the roadmap.
     import, Lottie export, OpenTimelineIO interchange, render-farm/CLI export
     (K-023, K-036).
 
+**Tracking (K-415, docs/impl/tracking.md) - phase 1 landed 2026-08-20; three
+phases open.** `crates/lumit-track` holds the track substrate: Shi-Tomasi
+detection on a 16x16 bucket grid, pyramidal affine KLT with forward-backward and
+NCC verification, K-408 exclusion masks, re-detection into starved buckets, and a
+`TrackSet` whose `median_log_scale` is already the zoom detector's input.
+Nineteen tests, all synthetic, no assets.
+ - **Phase 2 - two-view geometry** (note §3): Hartley-normalised 8-point/7-point
+   inside LO-RANSAC, parallax-and-GRIC keyframe selection, epipolar dynamic-track
+   segmentation (this is what finally sets `TrackState::Moving`), and the
+   zoom-burst detector on top of the median log scale.
+ - **Phase 3 - the solve** (note §4): rotation averaging, global positions,
+   triangulation, one sparse-Schur LM bundle adjustment with per-segment focal.
+ - **Phase 4 - the surface** (note §5): bridge and Tracking workspace, point
+   cloud over the picture, solved camera to a Camera layer, 2D track to
+   keyframed transform and corner-pin export.
+ - **The coverage gate owes `lumit-track` its `-p` flag** (K-007). CI's
+   `cargo llvm-cov` line in `.github/workflows/ci.yml` names the engine crates
+   one by one and does not yet name this one; measured locally at 95 % lines,
+   well clear of the 80 % floor, so adding it cannot turn CI red. Held back only
+   because the crate landed while other work held that file.
+ - **GUIDE.md owes `lumit-track` its plain-English section** (K-007). The crate
+   landed while another workflow held the file; the crate and impl-note prose is
+   written for it and just needs a home there.
+ - **The Shi-Tomasi response map is a whole-frame pass and dominates when
+   re-detection runs** - 24.4 ms/frame against 11.0 with re-detection off, on
+   100 features over 640x360 (the note's measured number). Its box sums are
+   separable; that is the cheap win, and it comes before any WGSL port.
+
 ## Deliberately deferred (not backlog)
 
 Recorded so they are not re-proposed as gaps:

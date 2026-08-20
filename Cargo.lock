@@ -1641,6 +1641,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-track"
+version = "0.2.0"
+dependencies = [
+ "lumit-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit_bridge"
 version = "0.2.0"
 dependencies = [

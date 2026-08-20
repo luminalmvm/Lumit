@@ -1,0 +1,15 @@
+[package]
+name = "lumit-track"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+lumit-core = { path = "../lumit-core" }
+thiserror = "2"
+
+[lints]
+workspace = true

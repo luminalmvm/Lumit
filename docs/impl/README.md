@@ -43,3 +43,4 @@ Rules of engagement:
 | [effect-registry.md](effect-registry.md) | How an effect is declared, registered, resolved and dispatched: the derive macro, the parameter bag, dynamic and spare parameters (K-381) | 08, 05, 06 |
 | [lens-flare.md](lens-flare.md) | The Lens flare effect: lens prescriptions, ghost ray tracing with coating interference, FRFT/FFT bakes, hardware-raster ghosts, the staged oracle | 08 |
 | [ae-import.md](ae-import.md) | The AE importer: the Bridge walker, the capture schema, ExtendScript traps, the fixture, and the mapping rules (K-410) | 11, 10, 05 |
+| [tracking.md](tracking.md) | Camera and object tracking: affine KLT tracks, global SfM solve, dynamic-track rejection, zoom-cut handling (K-415) | 08, 16, 05 |

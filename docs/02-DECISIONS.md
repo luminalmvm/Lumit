@@ -11022,4 +11022,43 @@ gains or loses a feature by this decision — item 8's badge, K-287's clock, K-3
 preview-only pair, K-362's region all keep their exact behaviour — and the Sharp and
 Round shapes both follow it, Round on its detached tile. This is presentation, so the
 regression tests assert grouping and order by key, not pixels.
+## K-415 — Tracking is classical, global, and zoom-aware; learned trackers are a plugin road
 
+**DECIDED 2026-08-22** (owner-directed: object tracking and, more importantly, camera
+tracking; robust to moving objects, maskable, and able to survive a zoom that jumps
+between two frames). Four rulings:
+
+**No bundled models**, the K-390 reasoning again: the current learned trackers
+(MegaSaM, DATAP-SfM, MonST3R and kin) are hundreds of megabytes each and version
+fast; they are the plugin road, and the seam stays open for them. What ships is the
+strongest classical pipeline — the SynthEyes/libmv class, built on the 2024 global-SfM
+results rather than the 2010 incremental ones.
+
+**The pipeline is global, not incremental** (GLOMAP's revision of the field): 2D
+tracks → pairwise geometry on selected keyframes → rotation averaging → global
+positions → triangulation → one sparse bundle adjustment. Incremental chains drift
+and die on the middle of a shot; global solves stand or fall honestly. Tracks are
+pyramidal affine KLT (affine, because a zoom changes a patch's scale) seeded by the
+flow engine we already ship, forward-backward verified. Moving objects are handled
+the way the epipolar geometry says: RANSAC's dominant model wins, tracks that
+disagree with it over their lifetime are segmented out and downweighted, and the user
+can mask regions out entirely — the K-408 mask seam already carries mask geometry to
+the engine, and the tracker reads the same carriage.
+
+**Zoom is a first-class unknown.** Focal length is solved per segment, and a zoom
+*cut* — the owner's scope-in, where focal leaps between two adjacent frames — is
+detected from the tracks themselves (a burst in the median log scale change) and
+treated as a segment boundary: pose continuity is kept across the cut while focal is
+freed, which is what a scope-in physically is. A smooth zoom solves as a
+spline-regularised focal within its segment. Principal point stays at centre; radial
+distortion k1/k2 is per segment and optional.
+
+**One substrate, two products.** Camera solve and object track share the track store:
+an object track is a track group solved against the solved camera (rigid pose,
+later), or exported directly as 2D keyframed transforms and corner-pin data (docs/08
+§7's Tracker row, first). K-248's ruling stands: the tracker runs once on the full,
+unaltered footage, and results map through retimes.
+
+Lives in a new engine crate `lumit-track`; the how is docs/impl/tracking.md, which
+pins the algorithms and the test plan. UI follows the engine (a Tracking workspace is
+its own later piece).
