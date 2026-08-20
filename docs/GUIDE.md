@@ -2207,6 +2207,30 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   refused outright, with a plain "please update Lumit", because reading an unfamiliar
   schema by guesswork is how an import goes silently wrong. And a bundle whose report is
   damaged still opens: the report is commentary, the capture is the work.
+- `crates/lumit-import/src/map/fx_*.rs` — **the effect mapping table**, the part of the
+  import that turns an After Effects effect into the Lumit effect that does the same job.
+  It is a list, one entry per effect, and each entry answers the same four questions.
+  *Which dial becomes which dial* — AE's "Blurriness" is Lumit's Radius. *What arithmetic
+  turns one number into the other* — AE measured that blur in the pixels of the layer it
+  was handed, and Lumit measures it as a per cent of the composition's diagonal, so the
+  number changes even though the picture does not. That conversion is applied to the
+  keyframes too, and to the *handles* on them: a keyframe handle is a speed, in "so many
+  units a second", so if the units change the handle has to change with them or the curve
+  between two keys is no longer the curve somebody drew. *Which of AE's dropdown entries
+  is which of Lumit's* — After Effects stores a dropdown as a plain number, so getting the
+  order wrong is a silently wrong picture rather than an error, and every list is anchored
+  on the one entry a live After Effects has confirmed. And *what could not come across at
+  all* — which is the question that gets the most careful answer, because the rule is that
+  a control Lumit does not have is written down in the import report and never quietly
+  approximated into something that looks similar. There are four kinds of note the report
+  can carry about an effect: a control that was not carried, a control that arrived as the
+  nearest thing Lumit has, a number that means the same thing in different units, and an
+  effect that maps whole but evaluates differently by construction — Lumit works in real
+  light where After Effects worked in eight-bit display values, and some differences are
+  the point rather than a defect. A handful of effects are deliberately *not* in the
+  table: Timewarp, because retiming is a whole feature of Lumit's rather than an effect,
+  and Remove Grain, because removing grain is its own programme. Those import as
+  placeholders, and the report says what to use instead.
 - `crates/lumit-media/` — **reading media files** (via FFmpeg, the industry-standard
   media library). Two jobs so far: the *probe* (a file's vital statistics — resolution,
   frame rate, duration — shown under each item in the Project panel) and the *frame
@@ -4613,6 +4637,78 @@ out as speckle rather than as a line. And the dashes are counted from the middle
 of the frame rather than from its corner, because a small error in the outline's
 direction gets multiplied by how far away you are — so halving the distance
 halves the wobble, for free.
+
+### Turning an After Effects project into a Lumit one (K-410)
+
+Elsewhere in this chapter there is the `crates/lumit-import/` entry, which explains
+the two halves of an After Effects import: a script inside AE that writes down what
+it sees, and a Rust crate that does the translating. `crates/lumit-import/src/map/`
+is the second half — the one that reads the walk and builds an actual Lumit project
+out of it.
+
+Two rules shape everything in there.
+
+**An import never fails.** Not for an item the script could not identify, not for a
+composition whose settings never arrived, not for a layer pointing at footage that
+has been deleted. Every one of those becomes a line in a **report** and the import
+carries on, because a person who has just waited for a two-hundred-composition
+project to convert is not helped by an error message. The only way to lose something
+without anybody noticing is to not write it down, so everything that changed on the
+way across is written down. The report has four grades, which are the ones docs/11
+names: *imported* (came across whole), *adjusted* (came across with a documented
+difference), *placeholder* (kept whole but rendering nothing), and *skipped* (could
+not be represented, and named here rather than lost). The summary line at the top of
+the panel is counted from the list beneath it, so the two can never disagree.
+
+**Import makes a new project.** Merging an After Effects project into one that is
+already open is a later piece of work; today the answer is always a fresh document.
+That is why every After Effects id becomes a brand-new Lumit id rather than trying
+to match anything that already exists.
+
+Four translations in there are worth knowing about, because each is a place where a
+mistake would be invisible rather than loud.
+
+**Time.** After Effects hands times over as ordinary decimal seconds — `2.04` for
+the moment a person calls "frame 51". Lumit stores exact fractions, so a walk of ten
+thousand frames lands on the same moment however you got there. So every time is
+read back as the fraction it was meant to be: within a millionth of a frame it *is*
+that frame, and otherwise it is kept to the nearest thousandth of a frame. A key that
+sits deliberately between two frames is never nudged onto one, because that would
+quietly re-time somebody's animation. The same care recovers frame rates: `23.976`
+is written back as 24000/1001, since a project storing the decimal drifts a whole
+frame every twenty minutes.
+
+**Which clock a keyframe is on.** After Effects reports a layer's keyframe times on
+the *composition's* clock. Lumit stores them on the layer's own, which starts wherever
+the layer was dragged to. Subtracting one from the other happens in exactly one place
+(`Conv::layer_time`), because a layer moved two seconds down the timeline would
+otherwise import with its animation two seconds into the future — and it would look
+fine until you scrubbed.
+
+**The two things AE calls time.** A layer "stretched" to 50% plays at double speed,
+and a layer with "time remapping" has a graph saying which moment of its source to
+show. Lumit has one system for both — **Retime** — so both become one. The stretch
+becomes the straight line that plays the source at that rate, and a *negative*
+stretch becomes the same line reflected: the layer opens on the last frame and walks
+back to the first. Time remapping needs no translating at all, because AE's graph and
+Lumit's Retime graph are literally the same mathematical object; a hold key on it *is*
+a freeze, with nothing having to convert it.
+
+**Effects that Lumit does not have.** Rather than guessing at the closest Lumit
+effect — which is how an import quietly produces a picture nobody asked for — an
+unrecognised effect becomes a **placeholder**: it keeps its name, its on/off state
+and every one of its parameters as real Lumit properties that animate and appear in
+the graph editor, and it renders nothing. It never disappears, and it survives being
+saved and reopened, so the day Lumit learns that effect the data is still there. The
+mapping table that will recognise the effects Lumit *does* have plugs into a single
+function (`map_effect`); until it exists, everything takes the placeholder road, which
+is the honest answer rather than a hopeful one.
+
+Anything After Effects knew that Lumit has no field for — its own item numbers, its
+renderer's name, a footage item's interpretation settings, a layer's stretch
+percentage — is parked in an **`ae` namespace** on whichever object it belonged to.
+Lumit's own file format carries fields it does not understand through a save
+untouched, so that data survives indefinitely and a later version can pick it up.
 
 ## 5. Making a change safely (the recipe)
 
@@ -7304,9 +7400,54 @@ a build catches a slider that moved without the manual following. And a page
 nobody claims any more — the leftover of a renamed or deleted effect — is
 reported by name rather than quietly left to mislead readers.
 
-This is also why one sentence can appear on all thirty-five pages at once. The
+This is also why one sentence can appear on all eighty-five pages at once. The
 Matte row's plain-English meaning (above, under driving effects with mattes) is
 written in the script for the effects that treat it as a simple strength, and on
 the effect itself for the four that do something cleverer — so each page states
-the truth about *that* effect without anybody maintaining thirty-five paragraphs
+the truth about *that* effect without anybody maintaining eighty-five paragraphs
 that say the same thing.
+
+### The example pictures, and why nobody draws them
+
+Every effect page carries a picture of that effect on one frame of footage. There
+are eighty-five of those, and a folder of eighty-five screenshots taken by hand
+would be wrong within a month: somebody changes a default, and the manual quietly
+keeps showing what the effect used to do.
+
+So the engine draws them. `npm run docs:effect-shots`, run from `web-docs/`, does
+three things in a row. First it asks **ffmpeg** to turn the one committed
+photograph into a three-second clip with a slow sideways pan across it, because
+the handful of effects that read motion — motion blur, echo, datamosh — have
+nothing to show on a still. Then it runs a test in the Rust engine
+(`crates/lumit-render/tests/effect_examples.rs`) which builds a tiny project in
+memory, one composition with that clip on a single layer, puts one effect on the
+layer, renders a frame, and does it again for the next effect. The walk it uses
+is the Viewer's own walk, so a figure on the website is a frame the application
+would genuinely produce. Last, **sharp** encodes the results as WebP into
+`web-docs/public/effects/`, where the pages look for them.
+
+Two details are worth knowing, because both are deliberate.
+
+The engine hands the pictures over as *raw* pixels, one uncompressed file each.
+Nothing in the Rust workspace can write a PNG or a WebP, and writing an image
+encoder so that a documentation script has something to read would be a real
+piece of code carried for ever to save a script five lines. The node side already
+has an encoder, so the node side encodes.
+
+And the settings are not the defaults. A fresh Curves is a straight line and a
+fresh Exposure is zero stops, which is exactly right in the application and
+useless in a manual: the picture would be the untouched frame with a caption
+claiming otherwise. So a table in the test names showcase settings for the
+effects whose defaults change nothing, and the run compares every render against
+the untouched frame and **fails** if any of them came back identical. A silently
+neutral example is worse than a missing one, and this is the check that makes it
+impossible.
+
+A few effects get special handling for honest reasons. Drop shadow and light wrap
+need an outline to work from, so their frame is masked to an oval first. Depth of
+field, displacement map, set matte and texturize each read a second picture, so
+the project gains a hidden gradient layer for them to point at. Posterize time is
+skipped outright and says so: it holds one frame for several, which only exists in
+motion, and a still of it would be a still of the plate wearing a misleading
+caption.
+

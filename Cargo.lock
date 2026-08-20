@@ -1565,10 +1565,13 @@ dependencies = [
 name = "lumit-import"
 version = "0.2.0"
 dependencies = [
+ "lumit-core",
+ "lumit-project",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "uuid",
  "zip",
 ]
 

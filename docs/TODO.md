@@ -654,10 +654,49 @@ open and the capture types, with fourteen tests on a hand-written synthetic bund
    it. The first run is also the first proof that the match names in
    `make-fixture.jsx` are the ones AE ships; the builder's step harness is there so a
    drifted name costs one checklist row rather than the whole sitting.
- - **The mapping does not exist yet** (phase 2): capture → `lumit_core::Document`, the
-   effect table built from `tools/ae-audit/ae-audit-report.json`, placeholders, and the
-   report struct. `lumit-import` deliberately does not depend on `lumit-core` yet,
-   because nothing in the reader needs it.
+ - **The structural mapping landed 2026-08-21** (phase 2, first half):
+   `crates/lumit-import/src/map/` turns a capture into a whole new
+   `lumit_core::Document` — the item tree, comps, layers with their kinds, switches,
+   parenting, mattes and masks, the keyframe value copy, blend modes with docs/11 §4's
+   documented fallbacks, both of AE's times as one Retime, markers, and the typed
+   `ImportReport` — with twenty-three tests across two fixtures (`synthetic.lum-bundle`
+   is the ordinary half, `edges.lum-bundle` the awkward one) plus a save-and-reload
+   round trip through `lumit-project`.
+ - **The effect table's colour / blur / generate / temporal half landed 2026-08-21**
+   (phase 2, second half): `crates/lumit-import/src/map/fx_colour.rs` claims
+   twenty-seven match names — the Blur & sharpen, Colour, Generate and Temporal rows of
+   docs/11 §5, plus the two rows §5 places at a placeholder on purpose (Remove Grain and
+   Timewarp, each reporting what does the job instead). Per-parameter unit conversion
+   (px@comp and % diag), option lists pinned against `tools/ae-audit/
+   ae-audit-report.json`'s defaults, mask references on the K-408 row, and thirty-three
+   conversion tests. Two things are owed:
+   - **The golden-frame tests §5 requires of every mapped conversion** — they need AE
+     renders of the fixture, so they land with the golden bundle.
+   - **A keyframed dropdown in this half goes by unremarked.** `fx_colour`'s reader for
+     the controls Lumit does not animate - option lists, switches, seeds - reads the
+     still value only, so an instance whose Fractal type (say) is keyframed imports at
+     Lumit's default with no report row. The distort half reports "the value it starts
+     on" for the same case; both halves should. Rare in real projects and behind no
+     docs/11 clause, but it is the one place either half changes something silently.
+   - **Three undocumented bases are stated choices, not measurements**: Fractal noise's
+     Scale, Advanced Lightning's Turbulence and Add grain's Softness convert on the
+     "AE's default lands on Lumit's default" anchor docs/11 §5 now records. The
+     golden-frame tests replace each with a measurement.
+ - **The effect table's distort / stylise / transition / utility half landed 2026-08-21**
+   (phase 2, second half): `crates/lumit-import/src/map/fx_distort.rs` claims twenty-nine
+   match names — the Distortion, Stylise, Transition and Utility rows of docs/11 §5, plus
+   Channel blur and Median, which no other half claims. Per-parameter unit conversion
+   (px@comp, % of the comp diagonal, AE's per cent of the layer, and the two bare factors
+   AE reads as decimals), the option collapses and splits §5 names, layer references onto
+   the K-395 matte row, AE's two clock-reading controls as keyframes, and thirty-eight
+   conversion tests. Two things are owed:
+   - **The golden-frame tests §5 requires of every mapped conversion**, as above.
+   - **Turbulent displace's Pinning maps at one index**: the audit records a dropdown's
+     default but not its option strings, so only AE's own default (every edge) is pinned
+     from evidence and every other index is reported rather than guessed. A second audit
+     pass that enumerates option strings closes it, and would also confirm the orders
+     this half took from Photoshop's published list (Warp's fifteen styles) and from AE's
+     own defaults (Wave warp's eight pinnings, the ten-entry channel picker).
  - **The surface does not exist yet** (phase 3): `import_ae_bundle(path) → report`
    across the bridge, the File menu entry, the report panel (docs/11 §9), and footage
    relink through `resolve_all_media`. No user-facing string has been written, so
@@ -725,7 +764,9 @@ substitutes left in it.
    order from a gradient *layer*; Lumit's one layer row is the universal Matte, and a card
    wipe wants to say "only over the sky" as well as "in this order". A Gradient order can
    arrive later on a row of its own without moving anything. Randomness plus Seed covers
-   the intent meanwhile, and the import approximates from the gradient's spread.
+   the intent meanwhile. The import cannot read the spread - the capture carries the
+   gradient layer's *index*, not its pixels - so an instance using Gradient imports as
+   Left to right on AE's own Timing Randomness, and both are reported.
  - **Median's Radius is capped at 3 and cannot be typed past** (K-405, docs/08 §3.64), the
    only control in the catalogue for which that is true. The cost is the fourth power of
    the radius, so a larger window needs a different algorithm - a per-tile histogram, or a

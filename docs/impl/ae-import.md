@@ -27,7 +27,7 @@ be tested by CI (it needs a real After Effects), so it is kept too simple to get
 | The fixture builder | `tools/ae-bridge/make-fixture.jsx` | Builds a deterministic test project covering the feature matrix (§5 below), saves it as `fixture.aep`, then runs the walker on it — one sitting in AE produces the repo's golden bundle. |
 | The reader | `crates/lumit-import/src/capture.rs` | Serde types mirroring the capture schema; bundle open (folder or zip), manifest versioning (refuse newer major, accept older). |
 | The mapping | `crates/lumit-import/src/map/` | Capture → `lumit_core::Document`: items, comps, layers, keyframes, mattes, masks, markers, retime, blend modes, effects. |
-| The effect table | `crates/lumit-import/src/effect_map.rs` | The docs/11 §5 table as data: match name → Lumit effect + per-parameter conversion (unit, base, option collapse). Built from `tools/ae-audit/ae-audit-report.json`'s property trees, never from memory. |
+| The effect table | `crates/lumit-import/src/map/fx_colour.rs`, `fx_distort.rs` | The docs/11 §5 table as data: match name → Lumit effect + per-parameter conversion (unit, base, option collapse). Built from `tools/ae-audit/ae-audit-report.json`'s property trees, never from memory. |
 | The report | `crates/lumit-import/src/report.rs` | Per-item outcomes (imported / adjusted / placeholder / skipped) with reasons; serialises as `import-report.json` and crosses the bridge for the panel. |
 
 `lumit-import` is an engine crate: depends on `lumit-core` only, no IO assumptions
@@ -181,16 +181,26 @@ test asset), builds inside an undo group, and does not touch an open project.
 ## 6. Phases
 
 1. **The walker and the reader** — `tools/ae-bridge/` + `lumit-import`'s capture
-   types and bundle open. Rust tests run on a small hand-written synthetic capture
-   until the owner runs `make-fixture.jsx` once; the real bundle then lands in the
-   repo as the golden fixture.
+   types and bundle open. **Built.** Rust tests run on a small hand-written synthetic
+   capture; **still owed**, the owner running `make-fixture.jsx` once on a live After
+   Effects, after which the real bundle lands in the repo as the golden fixture and is
+   also the first proof that this note's match names are the ones AE ships.
 2. **The mapping** — capture → `Document`, the effect table, placeholders, the
-   report. Test plan: every §5 checklist row has an assertion against the fixture;
-   synthetic captures cover the error paths (unreadables, unknown match names,
-   missing footage, newer minor version).
+   report. **Built**, in `src/map/`: `mod.rs`/`layers.rs`/`props.rs`/`time.rs` for the
+   structure and the keyframe value copy, `fx_colour.rs` and `fx_distort.rs` for the
+   docs/11 §5 table (all sixty rows — fifty-seven mapped, three at a placeholder on
+   purpose), `effects.rs` for the placeholder road, `report.rs` for the typed report.
+   Tested against two fixtures (`synthetic.lum-bundle` for the ordinary half,
+   `edges.lum-bundle` for the awkward one) plus per-effect conversion tests and a
+   save-and-reload round trip through `lumit-project`. **Still owed**: the golden-frame
+   comparisons docs/11 §5 requires of every mapped conversion (phase 4 — they need AE
+   renders), and a second audit pass enumerating dropdown option *strings*, without
+   which Turbulent displace's Pinning maps at its default index only and several other
+   orders rest on AE's documented defaults rather than on evidence.
 3. **The surface** — bridge API (`import_ae_bundle(path) → report`), File menu
    entry, the report panel (docs/11 §9), footage relink through the existing
-   `resolve_all_media` flow.
+   `resolve_all_media` flow. **Not built**: nothing user-facing exists, and no
+   `app_en.arb` key has been written, which is why the importer has no strings yet.
 4. **Later, separately**: golden-frame comparisons (needs AE renders of the fixture),
    the CEP panel packaging (`.zxp` — v1 ships the `.jsx` run via File → Scripts,
    exactly like the audit), Lottie, direct `.aep` parsing.

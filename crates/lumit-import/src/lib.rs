@@ -25,12 +25,18 @@
 //! while a bundle whose `report.json` is damaged still opens, because the report
 //! is commentary and the capture is the work.
 //!
-//! Mapping a capture onto a Lumit document is the next phase and does not live
-//! here yet.
+//! [`map::map_capture`] is the other half: it turns the parsed capture into a
+//! whole new [`lumit_core::Document`] plus an [`report::ImportReport`] saying
+//! what changed on the way across. Import always makes a *new* project —
+//! merging a capture into one that is already open is later work.
 
 pub mod capture;
+pub mod map;
+pub mod report;
 
 pub use capture::{Capture, Manifest, Report};
+pub use map::map_capture;
+pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
 
 use std::fs::{self, File};
 use std::io::Read;

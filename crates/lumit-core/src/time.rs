@@ -230,6 +230,15 @@ pub struct FrameRate {
 }
 
 impl FrameRate {
+    /// 25 fps, as a value that cannot fail to build.
+    ///
+    /// [`FrameRate::new`] is fallible because zero is not a rate, which leaves
+    /// a caller that simply needs *a* rate — a fallback for a document whose
+    /// own rate did not arrive — with nothing to fall back to and no way to
+    /// prove `25/1` is valid without an `unwrap` the engine forbids (docs/14
+    /// §4). This is that value.
+    pub const FPS_25: Self = Self { num: 25, den: 1 };
+
     pub fn new(num: u32, den: u32) -> Result<Self, TimeError> {
         if num == 0 || den == 0 {
             return Err(TimeError::ZeroDenominator);
