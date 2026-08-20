@@ -42,3 +42,4 @@ Rules of engagement:
 | [ae-effect-parity.md](ae-effect-parity.md) | The AE default-effect gap audit and the order the missing ones get built (tiers, wave 1 batches) | 08, 11 |
 | [effect-registry.md](effect-registry.md) | How an effect is declared, registered, resolved and dispatched: the derive macro, the parameter bag, dynamic and spare parameters (K-381) | 08, 05, 06 |
 | [lens-flare.md](lens-flare.md) | The Lens flare effect: lens prescriptions, ghost ray tracing with coating interference, FRFT/FFT bakes, hardware-raster ghosts, the staged oracle | 08 |
+| [ae-import.md](ae-import.md) | The AE importer: the Bridge walker, the capture schema, ExtendScript traps, the fixture, and the mapping rules (K-410) | 11, 10, 05 |

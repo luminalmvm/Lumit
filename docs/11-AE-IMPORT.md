@@ -131,17 +131,22 @@ A bundle is a folder or zip:
 ```
 MyProject.lum-bundle/
   manifest.json        # bundle schema version, AE version, Bridge version, export date
-  project.json         # the exported project fragment
+  capture.json         # the faithful AE-shaped capture of the walk (§2.2)
   footage/             # optional collected media
   report.json          # per-item outcomes the Bridge itself already knows (unreadables)
 ```
 
-`project.json` is expressed **in the Lumit project schema** defined in
-[10-FILE-FORMAT.md](10-FILE-FORMAT.md), extended with an `ae` namespace for
-AE-only carry-through data (match names, unmapped parameters, raw blobs, renderer names).
-There is deliberately no separate interchange dialect to maintain: the Bridge emits what a
-`.lum` file contains, plus annotations. The `ae` namespace is preserved on load, save,
-and round-trip — Lumit never strips what it does not understand (§6).
+`capture.json` is a **faithful, AE-shaped record of the walk** (K-410, superseding the
+Lumit-schema `project.json` this section first specified): item ids are AE's, times are
+the DOM's float seconds, property trees keep their match names, and nothing is converted.
+Every conversion — rational time, ids, keyframe carriage, effect mapping — happens in
+Rust, in `lumit-import`, where the regression suite covers it; the Bridge is a walker
+with one try/catch per property and no opinions, which is also what survives Adobe's
+version drift. The capture schema is versioned in `manifest.json` and owned by
+[impl/ae-import.md](impl/ae-import.md). The importer's output is an ordinary Lumit
+document; AE-only carry-through data (match names, unmapped parameters, renderer names)
+lands in that document's `ae` namespace and is preserved on load, save, and round-trip —
+Lumit never strips what it does not understand (§6).
 
 `manifest.json` carries a semver bundle version. Lumit MUST refuse bundles with a newer
 major version (with a "please update Lumit" message) and MUST accept older ones via
@@ -262,7 +267,7 @@ conversion. Seeded with the montage staples:
 | "Directional Blur" (`ADBE Motion Blur`) | Directional blur |
 | "Radial Blur" (`ADBE Radial Blur`) | Radial blur |
 | "Glow" (`ADBE Glo2`) | Glow (exposure-aware; output brighter-cleaner — mapped, not lossless) |
-| "Curves" (`ADBE CurvesCustom`) | **Curves** (built, docs/08 §3.30) — mapped, not lossless: AE's arbitrary point list is **sampled** at Lumit's five fixed inputs (K-396), so a curve with points between them converts to the nearest smooth equivalent |
+| "Curves" (`ADBE CurvesCustom`) | **Curves** (built, docs/08 §3.30) — the mapping is defined (AE's arbitrary point list **sampled** at Lumit's five fixed inputs, K-396) but **via the Bridge the instance imports as a placeholder**: the point list is a `CUSTOM_VALUE` blob AE's own scripting DOM cannot read (K-410; the 2026-08-20 audit confirms `ADBE CurvesCustom-0001` is the one property with no readable value). The sampling mapping arms the day a blob decoder lands (§7 shares the problem) |
 | "Levels" (`ADBE Easy Levels2`) | **Levels** (built, docs/08 §3.31) — mapped: AE clamps at the input white, Lumit carries highlights on (scene-linear, §2.1) |
 | "Hue/Saturation" (`ADBE HUE SATURATION`) | **Hue and saturation** (built, docs/08 §3.33) — mapped: master and the six ranges convert directly; range weights are saturation-scaled, and **Colorize** has no equivalent yet and reports as a placeholder |
 | "Brightness & Contrast" (`ADBE Brightness & Contrast 2`) | **Brightness** (built, docs/08 §3.32) — one effect carrying both sliders under AE's names and AE's neutral point (K-397) |
@@ -460,7 +465,7 @@ opens.
   engine will support decides several matrix rows; blocked on the text spec in
   [03-DATA-MODEL.md](03-DATA-MODEL.md).
 - **Bundle size**: property-heavy projects (thousands of keyframed masks) may produce very
-  large `project.json` files; decide a compression policy (zip member compression is
+  large `capture.json` files; decide a compression policy (zip member compression is
   probably enough) with real-world CC-pack samples.
 - **Kaitai grammar licence**: confirm `forticheprod/aep_parser`'s licence is compatible with
   GPLv3 vendoring, or reimplement from the published chunk documentation.

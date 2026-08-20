@@ -1562,6 +1562,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-import"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
 name = "lumit-keymap"
 version = "0.2.0"
 dependencies = [

@@ -642,6 +642,27 @@ collection, the recording mode, the panel) is in the entry above.
 
 ## Later
 
+**AE import, phase 1 (K-410, docs/impl/ae-import.md §6) - the walker and the reader
+landed 2026-08-21; three things are still open.** `tools/ae-bridge/` holds the
+ExtendScript walker and the fixture builder, `crates/lumit-import/` holds the bundle
+open and the capture types, with fourteen tests on a hand-written synthetic bundle.
+ - **The golden bundle is one AE sitting away.** `make-fixture.jsx` has never been run:
+   it needs a real After Effects, which CI does not have and this machine's tests cannot
+   substitute for. Until the owner runs it once, `crates/lumit-import/tests/fixtures/
+   synthetic.lum-bundle/` stands in - written by hand against the walker's output, which
+   makes it an honest description of the schema and *not* evidence the walker produces
+   it. The first run is also the first proof that the match names in
+   `make-fixture.jsx` are the ones AE ships; the builder's step harness is there so a
+   drifted name costs one checklist row rather than the whole sitting.
+ - **The mapping does not exist yet** (phase 2): capture → `lumit_core::Document`, the
+   effect table built from `tools/ae-audit/ae-audit-report.json`, placeholders, and the
+   report struct. `lumit-import` deliberately does not depend on `lumit-core` yet,
+   because nothing in the reader needs it.
+ - **The surface does not exist yet** (phase 3): `import_ae_bundle(path) → report`
+   across the bridge, the File menu entry, the report panel (docs/11 §9), and footage
+   relink through `resolve_all_media`. No user-facing string has been written, so
+   `app_en.arb` is untouched by phase 1 and will need its first keys at phase 3.
+
 **AE effect parity, wave 1 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
 Eighteen Tier-A effects in four family batches: ~~colour (Curves, Levels, Brightness, Hue
 and saturation)~~ **K-396/K-397**, ~~generate (Fill, Gradient, Noise, Fractal noise)~~

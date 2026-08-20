@@ -10967,3 +10967,31 @@ AE's All Masks and Stroke Sequentially, and Scribble's two multi-mask Fill Types
 want a row naming a *set*, and the import reports them rather than guessing. Everything
 else the two effects and the Vegas half needed is carried, and docs/11's Scribble and
 Stroke substitutions are retired.
+
+## K-410 — The Bridge captures; Rust converts
+
+**DECIDED 2026-08-21.** The Lumit Bridge's bundle carries a **faithful, AE-shaped
+capture** (`capture.json`) rather than a document in the Lumit project schema, and
+every conversion — rational time, ids, keyframe carriage, effect mapping, retime,
+mattes — lives in Rust, in a new engine crate **`lumit-import`**. This supersedes
+the shape docs/11 §2.3 originally specified (a Lumit-schema `project.json` with an
+`ae` namespace), which K-060 decided before any of the importer existed.
+
+The reasons are the project's own rules. The Bridge is ExtendScript: CI cannot run
+it, so every line of conversion logic written there is logic the regression suite
+(K-007) can never cover — and the conversions are exactly the part that must not
+drift. A dumb walker that records what the DOM says, one try/catch per property, is
+also the piece most likely to survive Adobe's version drift untouched. docs/11 §2.2
+item 9 already ruled this way for effects ("the Bridge does not know which effects
+Lumit can map — it captures everything and lets the importer decide"); K-410 extends
+that principle to the whole walk. The importer's output is an ordinary
+`lumit_core::Document` handed to `lumit-project` to save, so there is still no
+second dialect of the *Lumit* format to maintain — the capture schema is versioned
+in the bundle's `manifest.json` and owned by `docs/impl/ae-import.md`.
+
+One honesty note recorded at the same time: AE's own scripting DOM cannot read
+`CUSTOM_VALUE` property data (Curves' point list, Levels' histogram, Hue/
+Saturation's channel ranges). The plain sibling properties carry Levels and Hue/
+Saturation fine; **Curves imports as a placeholder via the Bridge** until a blob
+decoder exists (the direct-parse route's problem, §7), and docs/11's Curves row now
+says so.

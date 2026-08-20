@@ -20,6 +20,7 @@ app's departments). They live in `crates/`:
 |---|---|---|
 | `lumit-core` | Time, the document, undo | The project file's brain: what a comp/layer *is*, and every edit that can happen to it |
 | `lumit-project` | `.lum` files, autosave, recovery | Saving and loading, and the "never lose work" machinery |
+| `lumit-import` | After Effects import | Turning an AE project into a Lumit one, and saying honestly what changed |
 | `lumit-render` | Making the picture | The whole path from "here is the project" to "here are the pixels" — decoding, compositing, caching, export |
 | `lumit-media` | Decoding video | Turning an .mp4 into frames |
 | `lumit-gpu` | The GPU pipeline | Drawing and processing frames on the graphics card |
@@ -2179,6 +2180,33 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   written to a temp file, flushed to disk, then renamed over the old file, so a crash
   mid-save can never destroy the previous save. The **journal** logs every edit to a side
   file the instant it happens; after a crash, replaying it restores your work.
+- `crates/lumit-import/` — **bringing an After Effects project across.** This happens in
+  two halves, and the split is the whole design. The first half is a script that runs
+  *inside* the user's own copy of After Effects (the **Lumit Bridge**): it walks the
+  project — every comp, layer, keyframe, mask, effect and expression — and writes down
+  what it finds, in AE's own words, changing nothing. It is a **courier, not a
+  translator**: AE's clock times stay AE's floating-point seconds, AE's ids stay AE's
+  integers, and every property keeps its AE "match name" (`ADBE Gaussian Blur 2` and
+  friends — the stable internal name AE uses, which survives the user renaming things).
+  What it writes is a **bundle**: a folder, or a zip of one, holding a `manifest.json`
+  saying what version the format is, a `capture.json` holding the walk, and a
+  `report.json` listing the handful of properties After Effects itself refused to hand
+  over. The second half is this crate, and it does all the actual translating: AE's clock
+  times become Lumit's exact times, AE's effects become Lumit's effects through a mapping
+  table, and anything that cannot translate becomes a clearly-labelled placeholder rather
+  than quietly vanishing.
+  Why split it that way, rather than have the script produce a Lumit project directly?
+  Because the script needs a real installation of After Effects to run, so no automated
+  test of ours can ever check a line of it — and the conversions are exactly the part that
+  must not drift. So the untestable half is kept too simple to be wrong, and every
+  judgement lives on the half the test suite watches. It also ages better: Adobe changes
+  the details between versions, and a script with no opinions has far less to break.
+  The reader is deliberately forgiving in one direction and strict in the other. A bundle
+  carrying fields this build has never heard of opens fine, with the unfamiliar parts
+  ignored — that is how the format is allowed to grow. A bundle from a *newer* Lumit is
+  refused outright, with a plain "please update Lumit", because reading an unfamiliar
+  schema by guesswork is how an import goes silently wrong. And a bundle whose report is
+  damaged still opens: the report is commentary, the capture is the work.
 - `crates/lumit-media/` — **reading media files** (via FFmpeg, the industry-standard
   media library). Two jobs so far: the *probe* (a file's vital statistics — resolution,
   frame rate, duration — shown under each item in the Project panel) and the *frame
