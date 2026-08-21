@@ -142,10 +142,16 @@ pub enum SolveError {
     /// 3D point that survived cheirality and parallax.
     #[error("no track triangulated to a point in front of its cameras")]
     NoPoints,
+    /// The caller asked for the solve to stop. Nothing partial is handed back:
+    /// a half-adjusted bundle is not a camera path, and the whole point of the
+    /// flag is that the answer never depends on when it was raised
+    /// (14-ENGINEERING-RULES §1.4).
+    #[error("the solve was cancelled")]
+    Cancelled,
 }
 
 /// Something the solve wants the caller to know without failing over it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SolveNote {
     /// The baseline directions all point the same way, so the *ratios* between
     /// the baselines are not determined by the directions at all — a dead
@@ -178,7 +184,7 @@ pub enum SolveNote {
 }
 
 /// One stretch of the shot over which the lens does not cut.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SolveSegment {
     pub first_frame: i64,
     pub last_frame: i64,
@@ -191,7 +197,7 @@ pub struct SolveSegment {
 
 /// Where one frame's pose came from — an honest label, because an interpolated
 /// pose is not a measured one and phase 4 should be able to say so.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PoseSource {
     /// A keyframe: solved globally and refined by the bundle.
     Keyframe,
@@ -203,7 +209,7 @@ pub enum PoseSource {
 }
 
 /// One frame's camera.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SolvedPose {
     pub frame: i64,
     /// World → camera rotation, row-major.
@@ -224,14 +230,14 @@ pub struct SolvedPose {
 /// One triangulated point: the track it came from and where it is. Colourless —
 /// the tracker works on luma and has no colour to give (docs/impl/tracking.md
 /// §4's output shape).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ScenePoint {
     pub track: u32,
     pub position: [f64; 3],
 }
 
 /// The whole answer: what phase 4's export reads.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraSolve {
     /// One per frame of the track set's range, in frame order.
     pub poses: Vec<SolvedPose>,
@@ -265,6 +271,28 @@ pub fn solve_camera(
     pairs: &[PairGeometry],
     zooms: &[ZoomBoundary],
     settings: &SolveSettings,
+) -> Result<CameraSolve, SolveError> {
+    solve_camera_cancellable(set, pairs, zooms, settings, &|| false)
+}
+
+/// [`solve_camera`] with a stop button: `cancel` is asked between passes and at
+/// every Levenberg–Marquardt iteration, and a `true` abandons the solve with
+/// [`SolveError::Cancelled`].
+///
+/// The seam docs/impl/tracking.md §4 recorded as owed. It cannot change an
+/// answer, only refuse to finish one: nothing partial is returned, and a run
+/// that is never cancelled takes exactly the path [`solve_camera`] takes, which
+/// is why determinism is unaffected.
+///
+/// # Errors
+///
+/// As [`solve_camera`], plus [`SolveError::Cancelled`].
+pub fn solve_camera_cancellable(
+    set: &TrackSet,
+    pairs: &[PairGeometry],
+    zooms: &[ZoomBoundary],
+    settings: &SolveSettings,
+    cancel: &dyn Fn() -> bool,
 ) -> Result<CameraSolve, SolveError> {
     let (first, last) = set.frame_range().ok_or(SolveError::NoTracks)?;
     let (w, h) = set.source_size();
@@ -342,7 +370,10 @@ pub fn solve_camera(
     // hope.
     let mut outcome: Option<Pass> = None;
     for _ in 0..settings.passes.max(1) {
-        let pass = one_pass(set, &usable, &segments, centre, settings)?;
+        if cancel() {
+            return Err(SolveError::Cancelled);
+        }
+        let pass = one_pass(set, &usable, &segments, centre, settings, cancel)?;
         for (seg, f) in segments.iter_mut().zip(pass.focals.iter()) {
             seg.focal_px = *f;
         }
@@ -415,6 +446,7 @@ fn one_pass(
     segments: &[SolveSegment],
     centre: [f64; 2],
     settings: &SolveSettings,
+    cancel: &dyn Fn() -> bool,
 ) -> Result<Pass, SolveError> {
     let mut notes: Vec<SolveNote> = Vec::new();
 
@@ -551,6 +583,7 @@ fn one_pass(
         centre,
         settings.huber_px,
         settings.bundle_iterations,
+        cancel,
     );
     // Now — and only now — reprojection is the right judge. Anything the
     // adjusted model still cannot explain was never a still-world point, and
@@ -577,7 +610,14 @@ fn one_pass(
             centre,
             settings.huber_px,
             settings.bundle_iterations,
+            cancel,
         );
+    }
+    // A cancelled bundle stopped early, so `cams`, `focals` and `points` are a
+    // half-adjusted model rather than a solve. It is thrown away here rather
+    // than filled out into frames and handed back looking finished.
+    if cancel() {
+        return Err(SolveError::Cancelled);
     }
     Ok(Pass {
         keyframes,

@@ -5738,3 +5738,233 @@ fn turning_flow_off_parks_its_tuning_and_one_undo_restores_both() {
     layer.set_flow_enabled(true).expect("already on is a no-op");
     assert_eq!(layer.get_flow_params().expect("read"), tuned);
 }
+
+// --- Camera track: the effect's surface across the seam (K-417) -------------
+
+/// A project, a comp, a footage layer carrying an enabled Camera track, and a
+/// written-down solve published for that footage's media.
+///
+/// The solve is **written down, not computed**: `lumit-render`'s own tests drive
+/// the analysis over a rendered shot, and repeating that here would be measuring
+/// the tracker again rather than the seam. The camera sits at the world origin
+/// looking down +z with a focal of 100, so every projection below is arithmetic
+/// anyone reading the test can do in their head.
+fn a_tracked_layer() -> (
+    crate::api::project::ProjectReference,
+    CompositionReference,
+    LayerReference,
+    Uuid,
+) {
+    use lumit_track::{CameraSolve, PoseSource, ScenePoint, SolveSegment, SolvedPose};
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project
+        .new_composition(
+            "Scene".into(),
+            Some(BridgeCompSettings {
+                name: "Scene".into(),
+                width: 1920,
+                height: 1080,
+                fps_num: 25,
+                fps_den: 1,
+                // Two seconds: the bake writes one key per frame, and a
+                // half-minute comp would be fifty keyframes' worth of test for
+                // no extra claim.
+                duration: BridgeRational { num: 2, den: 1 },
+            }),
+        )
+        .expect("comp");
+    let footage = project
+        .import_footage("C:/clips/tracked.mov".into())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    layer
+        .add_effect(lumit_core::track::CAMERA_TRACK.to_owned())
+        .expect("the Camera track is a builtin");
+
+    // Frame n moves the camera n units along x, so a walk that lands on the
+    // wrong frame cannot pass by accident.
+    let poses: Vec<SolvedPose> = (0..50)
+        .map(|frame| SolvedPose {
+            frame,
+            rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            position: [frame as f64, 0.0, 0.0],
+            segment: 0,
+            focal_px: 100.0,
+            mean_reprojection_px: 0.1,
+            source: PoseSource::Keyframe,
+        })
+        .collect();
+    let solve = CameraSolve {
+        poses,
+        segments: vec![SolveSegment {
+            first_frame: 0,
+            last_frame: 49,
+            focal_px: 100.0,
+            ramp: false,
+        }],
+        // One near, one far, so the depth cue has a spread to normalise over.
+        points: vec![
+            ScenePoint {
+                track: 7,
+                position: [10.0, 20.0, 100.0],
+            },
+            ScenePoint {
+                track: 9,
+                position: [30.0, 40.0, 200.0],
+            },
+        ],
+        keyframes: vec![0, 49],
+        mean_reprojection_px: 0.25,
+        notes: Vec::new(),
+    };
+    let media = footage.id();
+    lumit_render::track::publish(media, 25.0, solve);
+    (project, comp, layer, media)
+}
+
+/// The cloud lands where the tracker put it, on the frame the playhead is on,
+/// with the depth cue already worked out.
+///
+/// The comp's centre is added engine-side because the tracker's only origin is
+/// the frame's middle (docs/impl/tracking.md §5b): a point at `(10, 20, 100)`
+/// seen by a camera at the origin with a focal of 100 lands ten pixels right
+/// and twenty down of centre, which is `(970, 560)` on a 1920x1080 comp.
+#[test]
+fn the_point_cloud_crosses_in_composition_pixels_with_its_depth_cue() {
+    use crate::api::track::tracked_points;
+
+    let (_project, _comp, layer, _media) = a_tracked_layer();
+
+    let points = tracked_points(layer, 0);
+    assert_eq!(points.len(), 2, "both solved points are in front");
+    let near = points.iter().find(|p| p.track == 7).expect("track 7");
+    let far = points.iter().find(|p| p.track == 9).expect("track 9");
+    assert!((near.x - 970.0).abs() < 1e-9, "{}", near.x);
+    assert!((near.y - 560.0).abs() < 1e-9, "{}", near.y);
+    assert!((far.x - 975.0).abs() < 1e-9, "{}", far.x);
+    assert!((far.y - 560.0).abs() < 1e-9, "{}", far.y);
+    // Normalised over the cloud on this frame: the nearer one reads 1.
+    assert!((near.depth - 1.0).abs() < 1e-9, "{}", near.depth);
+    assert!((far.depth - 0.0).abs() < 1e-9, "{}", far.depth);
+
+    // A later frame is a later *solved* frame: the camera has moved five units
+    // along x, so both points slide left by that much times the focal over
+    // their depth. Five units at z = 100 with f = 100 is five pixels.
+    let later = tracked_points(layer, 5);
+    let near = later.iter().find(|p| p.track == 7).expect("track 7");
+    assert!((near.x - 965.0).abs() < 1e-9, "{}", near.x);
+}
+
+/// A Null made from picked points lands at their mean solved position, in 3D —
+/// and one undo step puts it back.
+#[test]
+fn a_null_lands_at_the_mean_of_the_points_it_was_made_from() {
+    use crate::api::layer::BridgeLayerKind;
+    use crate::api::track::{add_layer_at_points, add_solved_camera};
+
+    let (project, comp, layer, _media) = a_tracked_layer();
+    // A camera to face: without one the layer is made square to the comp,
+    // which is the honest fallback but not the claim being made here.
+    add_solved_camera(layer).expect("a linked camera");
+
+    let made = add_layer_at_points(layer, vec![7, 9], 0, false).expect("a null");
+    let transform = made.get_transform().expect("transform");
+    let still = |s: &BridgeScalar| match s {
+        BridgeScalar::Static(v) => *v,
+        _ => panic!("a fresh layer's transform is static"),
+    };
+    assert_eq!(made.get_kind().expect("kind"), BridgeLayerKind::NullLayer);
+    assert!((still(&transform.position_x) - 20.0).abs() < 1e-9);
+    assert!((still(&transform.position_y) - 30.0).abs() < 1e-9);
+    assert!((still(&transform.position_z) - 150.0).abs() < 1e-9);
+    assert!(
+        made.get_switches().expect("switches").three_d,
+        "a position in z means nothing on a layer that is not 3D"
+    );
+
+    // Naming nothing that was solved is a refusal, not a layer at the origin.
+    assert!(matches!(
+        add_layer_at_points(layer, vec![404], 0, false),
+        Err(BridgeError::NoSolve)
+    ));
+
+    let before = comp.get_layers().expect("layers").len();
+    project.undo().expect("undo");
+    assert_eq!(
+        comp.get_layers().expect("layers").len(),
+        before - 1,
+        "the layer went in as one step and comes out as one"
+    );
+}
+
+/// The badge reads the link, and Convert to keyframes bakes the motion and
+/// ends it — after which the camera is an ordinary one the user edits.
+#[test]
+fn a_linked_camera_reads_derived_and_converts_to_keyframes() {
+    use crate::api::track::{
+        add_solved_camera, camera_link, convert_camera_to_keyframes, BridgeLinkState,
+    };
+
+    let (_project, _comp, layer, _media) = a_tracked_layer();
+    let camera = add_solved_camera(layer).expect("a linked camera");
+
+    let link = camera_link(camera, 0);
+    assert_eq!(link.state, BridgeLinkState::Derived);
+    assert_eq!(link.tracked, Some(layer.layer_id));
+
+    // Inside the solved range the pose is derived; the comp is fifty frames
+    // long and the solve is fifty frames, so nothing is held here.
+    assert_eq!(camera_link(camera, 49).state, BridgeLinkState::Derived);
+
+    convert_camera_to_keyframes(camera).expect("baked");
+    let after = camera_link(camera, 0);
+    assert_eq!(after.state, BridgeLinkState::Unlinked);
+    assert_eq!(after.tracked, None);
+    let transform = camera.get_transform().expect("transform");
+    let BridgeScalar::Keyframed(keys) = &transform.position_x else {
+        panic!("the bake writes a key per frame");
+    };
+    assert_eq!(keys.len(), 50, "two seconds at twenty-five frames");
+    // The baked motion is the derived motion: frame five was five units along.
+    assert!((keys[5].value - 5.0).abs() < 1e-9, "{}", keys[5].value);
+}
+
+/// The status row's reading, and what a press of each button does.
+#[test]
+fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
+    use crate::api::track::{fire_effect_action, track_status, BridgeTrackStage};
+
+    let (_project, comp, layer, _media) = a_tracked_layer();
+
+    let status = track_status(layer);
+    assert_eq!(status.stage, BridgeTrackStage::Done);
+    assert_eq!(status.points, 2);
+    assert_eq!(status.frames, 50);
+    assert!((status.mean_error - 0.25).abs() < 1e-9);
+
+    let effect = layer.get_effects().expect("stack")[0].id();
+
+    // Cancel is always safe: nothing is running, and saying so is a no-op
+    // rather than an error the panel would have to explain.
+    fire_effect_action(layer, effect, "cancel".to_owned()).expect("cancel is accepted");
+
+    // A parameter that is not an Action is refused rather than ignored — a
+    // button that silently does nothing is the hardest fault to see.
+    assert!(matches!(
+        fire_effect_action(layer, effect, "density".to_owned()),
+        Err(BridgeError::InvalidParam)
+    ));
+
+    // The fixture's media is a path that does not exist, so Analyse cannot
+    // start: a refusal about the file, not a fault.
+    assert!(matches!(
+        fire_effect_action(layer, effect, "analyse".to_owned()),
+        Err(BridgeError::MediaPathUnresolved)
+    ));
+
+    // A layer with no Camera track has no analysis to read.
+    let solid = comp.add_solid_layer().expect("a solid");
+    assert_eq!(track_status(solid).stage, BridgeTrackStage::Idle);
+}

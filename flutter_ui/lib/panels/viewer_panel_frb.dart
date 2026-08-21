@@ -79,6 +79,7 @@ import 'viewer_rotate.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
+import 'viewer_track.dart';
 import 'viewer_camera.dart';
 import 'viewer_paint.dart';
 import 'viewer_progress_bar.dart';
@@ -771,6 +772,32 @@ class _Stage extends StatelessWidget {
     required this.onZoomBox,
   });
 
+  /// The tracked layer whose solved point cloud is drawn, and whether it is
+  /// also the one taking clicks (K-417, docs/07 §2.3.6).
+  ///
+  /// Found in the read model the panel already holds (K-184): the first layer
+  /// carrying an **enabled** Camera track whose Show points is on. No bridge
+  /// call, and no per-paint walk of anything the engine owns.
+  ({LayerReference layer, bool selecting})? _cloud() {
+    final picked = uiState.selectedLayerIds;
+    for (final entry in uiState.model.heldLayers) {
+      for (final fx in entry.info.effects) {
+        if (fx.name != 'camera_track' || !fx.enabled) continue;
+        var show = false;
+        for (final v in fx.values) {
+          if (v.id != 'show_points') continue;
+          if (v.value case BridgeEffectValue_Bool(:final field0)) show = field0;
+        }
+        if (!show) continue;
+        return (
+          layer: entry.layer,
+          selecting: picked.contains(entry.layer.internallayerId),
+        );
+      }
+    }
+    return null;
+  }
+
   /// Every layer of the comp with its box, top of the stack first — what the
   /// gizmo hit-tests, outlines and drags (K-217).
   ///
@@ -1080,6 +1107,36 @@ class _Stage extends StatelessWidget {
               accent: t.accent,
               onChanged: onChanged,
             ),
+            // The solved point cloud on the tracked layer (K-417): drawn
+            // whenever Show points is on and a solve exists, and taking the
+            // pointer only while that layer is the selected one — a cloud that
+            // always took clicks would make the whole shot unselectable.
+            if (_cloud() case final cloud?)
+              // Listened to rather than read: the playhead moving does not
+              // rebuild this panel by itself (it asks the engine for a frame,
+              // and the picture arriving is what redraws), and the cloud has to
+              // follow the frame it is drawn over.
+              Positioned.fill(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: uiState.playheadFrame,
+                  builder: (context, frame, _) => ViewerTrackLayer(
+                    key: ValueKey<String>(
+                        'viewer-track-${cloud.layer.internallayerId}'),
+                    tracked: cloud.layer,
+                    selecting: cloud.selecting,
+                    fitted: fitted,
+                    compSize: Size(
+                      compSize.width.toDouble(),
+                      compSize.height.toDouble(),
+                    ),
+                    playheadFrame: frame,
+                    revision: uiState.model.heldRevision,
+                    accent: t.accent,
+                    mark: t.textPrimary,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ),
             // The region of interest (K-362): the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a

@@ -733,7 +733,7 @@ fn the_layer_kinds_lumit_has_map_and_the_rest_keep_their_slot() {
     assert_eq!(layer(edges, "Adjust").kind, LayerKind::Adjustment);
     assert_eq!(layer(edges, "Off frame").kind, LayerKind::Null);
 
-    let LayerKind::Camera { zoom } = &layer(edges, "Cam").kind else {
+    let LayerKind::Camera { zoom, .. } = &layer(edges, "Cam").kind else {
         panic!("a camera");
     };
     assert_eq!(zoom.value_at(0.0), 1800.0, "read out of Camera Options");

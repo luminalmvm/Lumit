@@ -26,6 +26,12 @@ pub enum OpError {
     InvalidParent,
     #[error("the layer is locked")]
     LayerLocked,
+    /// The camera's placement is derived from a solve link, so it is not the
+    /// document's to edit (K-417). Convert to keyframes
+    /// ([`crate::track::bake_solve_link`]) makes it ordinary again, and clearing
+    /// the link with [`Op::SetCameraSolveLink`] is always allowed.
+    #[error("the camera's transform is derived from its solve link")]
+    CameraLinked,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -266,6 +272,18 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Point a Camera layer's **solve link** at a tracked layer, or clear it
+    /// with `None` (K-417, docs/03 §5.6).
+    ///
+    /// The one edit a linked camera always accepts — everything else about its
+    /// placement is derived and refuses with [`OpError::CameraLinked`], and a
+    /// link that could not be undone would be a trap rather than a link.
+    /// Trivially invertible: the inverse names the previous link.
+    SetCameraSolveLink {
+        comp: Uuid,
+        layer: Uuid,
+        solve_link: Option<Uuid>,
+    },
     /// Replace a layer's audio Volume animation (docs/09 §6; same
     /// coarse-grained shape as SetTransformProperty, for the same
     /// invertibility reason). Valid on any layer; only heard where the
@@ -413,6 +431,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerParent { comp, layer, .. }
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
+        | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
@@ -434,6 +453,41 @@ fn is_locked(doc: &Document, comp: Uuid, layer: Uuid) -> bool {
         .is_some_and(|l| l.switches.locked)
 }
 
+/// The `(comp, layer)` a **solve link** would protect this op from, or `None`
+/// when the link has nothing to say about it (K-417).
+///
+/// A linked camera's placement is derived per frame from the tracked layer, so
+/// the two ops that would write it — the transform and the zoom — refuse. Every
+/// other edit to the layer is untouched: its name, its span, its switches, its
+/// label and its markers are still the user's, and so is the link itself.
+#[must_use]
+fn solve_link_guards(op: &Op) -> Option<(Uuid, Uuid)> {
+    match op {
+        Op::SetTransformProperty { comp, layer, .. } | Op::SetCameraZoom { comp, layer, .. } => {
+            Some((*comp, *layer))
+        }
+        _ => None,
+    }
+}
+
+/// Whether `layer` in `comp` is a Camera carrying a solve link. An unknown comp
+/// or layer is not linked — the op's own arm reports what is actually missing,
+/// which is the better error (the lock's rule, for the same reason).
+#[must_use]
+fn is_solve_linked(doc: &Document, comp: Uuid, layer: Uuid) -> bool {
+    doc.comp(comp)
+        .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+        .is_some_and(|l| {
+            matches!(
+                l.kind,
+                crate::model::LayerKind::Camera {
+                    solve_link: Some(_),
+                    ..
+                }
+            )
+        })
+}
+
 pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     // **The lock is enforced here, not in the interface** (K-291). The Timeline
     // already refused the *gestures* — the bar, the razor, rename, reorder,
@@ -449,6 +503,18 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     if let Some((comp, layer)) = lock_guards(op) {
         if is_locked(doc, comp, layer) {
             return Err(OpError::LayerLocked);
+        }
+    }
+    // **A linked camera's placement is not the document's to edit** (K-417).
+    // The same shape of guard as the lock above, and here for the same reason:
+    // the panel already draws the rows read-only and wearing a badge, but a
+    // rule enforced only in the interface is a rule an expression, a preset or
+    // the next caller does not know about. Convert to keyframes
+    // (`track::bake_solve_link`) clears the link inside its own batch before
+    // it writes, which is what lets a bake through this.
+    if let Some((comp, layer)) = solve_link_guards(op) {
+        if is_solve_linked(doc, comp, layer) {
+            return Err(OpError::CameraLinked);
         }
     }
     match op {
@@ -1030,7 +1096,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let crate::model::LayerKind::Camera { zoom } = &mut l.kind else {
+            let crate::model::LayerKind::Camera { zoom, .. } = &mut l.kind else {
                 return Err(OpError::UnknownLayer);
             };
             let previous = std::mem::replace(&mut zoom.animation, animation.clone());
@@ -1038,6 +1104,30 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetCameraSolveLink {
+            comp,
+            layer,
+            solve_link,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let crate::model::LayerKind::Camera {
+                solve_link: slot, ..
+            } = &mut l.kind
+            else {
+                return Err(OpError::UnknownLayer);
+            };
+            let previous = std::mem::replace(slot, *solve_link);
+            Ok(Op::SetCameraSolveLink {
+                comp: *comp,
+                layer: *layer,
+                solve_link: previous,
             })
         }
         Op::SetLayerVolume {

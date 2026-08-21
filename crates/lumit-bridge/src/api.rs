@@ -27,6 +27,7 @@ pub mod shell;
 pub mod solid;
 pub mod state;
 pub mod system;
+pub mod track;
 
 mod worker_thread;
 
@@ -91,6 +92,16 @@ pub enum BridgeError {
     NotText,
     /// The edit named a camera layer and the layer is not one.
     NotCamera,
+    /// Analyse was pressed while another analysis is already running. One at a
+    /// time is deliberate (K-417): two disk-bound jobs share one drive and
+    /// halve each other.
+    AnalysisBusy,
+    /// Convert to keyframes was asked of a camera with no solve link to bake,
+    /// or one whose link resolves nowhere.
+    NotLinked,
+    /// The selection names no solved point, so there is nowhere to put a
+    /// layer.
+    NoSolve,
     /// The razor was pointed at a layer that is not a Sequence layer.
     NotSequence,
     /// Only a Footage layer converts to a Sequence layer.
@@ -190,6 +201,9 @@ impl fmt::Display for BridgeError {
             }
             BridgeError::NotText => write!(f, "That is not a text layer"),
             BridgeError::NotCamera => write!(f, "That is not a camera layer"),
+            BridgeError::AnalysisBusy => write!(f, "Another analysis is already running"),
+            BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
+            BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),
             BridgeError::NotSequence => write!(f, "That is not a sequence layer"),
             BridgeError::NotFootage => {
                 write!(f, "Only footage layers convert to sequenced")

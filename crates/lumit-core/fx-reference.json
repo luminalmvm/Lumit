@@ -6476,6 +6476,56 @@
       "groups": []
     },
     {
+      "slug": "camera-track",
+      "match_name": "camera_track",
+      "label": "Camera track",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "density",
+          "label": "Feature density",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Low",
+            "Normal",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "use_masks",
+          "label": "Use masks",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "show_points",
+          "label": "Show points",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        }
+      ],
+      "groups": []
+    },
+    {
       "slug": "invert",
       "match_name": "invert",
       "label": "Invert",

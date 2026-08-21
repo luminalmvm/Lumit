@@ -165,3 +165,9 @@ The **clip** restriction is about the noun: a clip is an entry inside a Sequence
 layer, never a general word for a layer or a piece of footage. **To clip** as the
 keying and colour verb — the Matte key's Clip black / Clip white / Clip rollback,
 clipped highlights — is ordinary trade language and stays (K-345).
+
+The **track** restriction is about the same noun. **To track** — following
+something through a shot — is the trade's own verb and stays: *camera tracking*,
+*object tracking*, the **Camera track** effect and the *2D track* it exports
+(K-415, K-417), and a **track** in that sense is one followed feature, never a
+row of the timeline.

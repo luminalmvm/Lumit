@@ -364,6 +364,7 @@ mod tests {
         let cam = layer(
             LayerKind::Camera {
                 zoom: Property::fixed(1000.0),
+                solve_link: None,
             },
             Vec::new(),
         );

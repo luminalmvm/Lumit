@@ -81,7 +81,7 @@ pub struct Param {
     pub id: &'static str,
     pub label: &'static str,
     /// `float`, `slider`, `int`, `angle`, `choice`, `bool`, `colour`, `seed`,
-    /// `file`, `layer`, `mask_path`, `curve`.
+    /// `file`, `layer`, `mask_path`, `curve`, `action`.
     pub kind: &'static str,
     /// The declared unit: `raw`, `pct_diag`, `px`, `degrees`, `seconds`.
     pub unit: &'static str,
@@ -305,6 +305,9 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
                     .collect(),
             ));
         }
+        // A button (K-417): no default, no range, no options — the label and
+        // the kind are the whole of what the manual's table can say about it.
+        ParamKind::Action => p.kind = "action",
     }
     p
 }
@@ -419,7 +422,7 @@ mod tests {
         let r = reference();
         assert_eq!(r.categories.len(), FxCategory::ALL.len());
         assert_eq!(r.effects.len(), super::super::BUILTINS.len());
-        assert!(r.effects.len() >= 90, "the catalogue has lost effects");
+        assert!(r.effects.len() >= 91, "the catalogue has lost effects");
         for e in &r.effects {
             assert!(!e.slug.is_empty(), "{} has no slug", e.match_name);
             assert!(!e.params.is_empty(), "{} declares no parameters", e.label);

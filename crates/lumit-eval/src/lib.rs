@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use lumit_core::{
     expression::ExpressionContext,
-    model::{Composition, Document, LayerKind, MatteChannel},
+    model::{CameraPose, Composition, Document, LayerKind, MatteChannel},
 };
 use uuid::Uuid;
 
@@ -99,6 +99,21 @@ pub trait SourceStamper {
     fn source_fps(&self, _item: Uuid) -> Option<f64> {
         None
     }
+
+    /// The camera `comp` actually renders with at comp time `t`.
+    ///
+    /// A frame drawn through a solve-linked Camera layer (K-417) is drawn with a
+    /// pose the *document does not contain* — it is derived from a camera solve
+    /// held outside this crate — so a key made from the stored properties would
+    /// name two different pictures the same, and the first one banked would be
+    /// served for the second. Asking the stamper is how the derived pose reaches
+    /// the key without `lumit-eval` learning what a camera solve is.
+    ///
+    /// The default answers what the document holds, which is what every camera
+    /// with no link resolves to anyway.
+    fn camera(&self, _doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
+        comp.camera_pose(t)
+    }
 }
 
 /// The content-hash key for `comp` rendered at time `t` — or None when some
@@ -146,7 +161,7 @@ fn feed_comp(
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
     }
-    match comp.camera_pose(t) {
+    match stamper.camera(doc, comp, t) {
         Some(pose) => {
             h.update(b"cam");
             for v in [
@@ -1597,6 +1612,7 @@ mod tests {
             Layer {
                 kind: LayerKind::Camera {
                     zoom: Property::fixed(1000.0),
+                    solve_link: None,
                 },
                 ..text_layer("", 0.0, 5.0, 0.0)
             },

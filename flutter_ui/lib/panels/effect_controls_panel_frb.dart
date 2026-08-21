@@ -46,6 +46,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -56,6 +57,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
+import 'camera_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
@@ -96,6 +98,13 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   /// The effect whose heading is an inline rename editor, or null (K-321).
   UuidValue? _renamingEffect;
+
+  /// How many Action buttons have been pressed in this panel's life (K-417).
+  ///
+  /// A press changes nothing in the document — it is an event, not an edit —
+  /// so there is no revision for a status line to compare against. This number
+  /// is what an effect's own display watches to know a button was pushed.
+  int _actionPressed = 0;
 
   @override
   void initState() {
@@ -300,6 +309,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // holds, not by asking the engine per rebuild (K-184).
                       threeD: info.switches.threeD ||
                           info.kind == BridgeLayerKind.camera,
+                      isCamera: info.kind == BridgeLayerKind.camera,
                       playheadFrame: playhead,
                       onSeek: (frame) => ui.playheadFrame.value = frame,
                       onChanged: ui.model.refresh,
@@ -391,6 +401,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         onSeek: (frame) => ui.playheadFrame.value = frame,
                         isGroupOpen: _isGroupOpen,
                         onToggleGroup: _toggleGroup,
+                        pressed: _actionPressed,
+                        onAction: (effect, param) {
+                          try {
+                            fireEffectAction(
+                                layer: layer, effect: effect, param: param);
+                          } catch (_) {
+                            // Refused — another analysis is already running,
+                            // or the media cannot be read. The effect's own
+                            // status line says which; a thrown error here
+                            // would be a dialogue over a button press.
+                          }
+                          setState(() => _actionPressed += 1);
+                        },
                       ),
                 ],
               ),
@@ -554,6 +577,11 @@ class _EffectSection extends StatelessWidget {
   final bool Function(String path, bool collapsedByDefault) isGroupOpen;
   final void Function(String path, bool collapsedByDefault) onToggleGroup;
 
+  /// An Action row's press (K-417), and the panel's running count of them —
+  /// what an effect's own display watches to know one happened.
+  final void Function(UuidValue effect, String param) onAction;
+  final int pressed;
+
   const _EffectSection({
     super.key,
     required this.info,
@@ -577,6 +605,8 @@ class _EffectSection extends StatelessWidget {
     this.onRenameCancelled,
     required this.isGroupOpen,
     required this.onToggleGroup,
+    required this.onAction,
+    required this.pressed,
   });
 
   /// Run [op] on a freshly read handle for this card's effect.
@@ -600,7 +630,10 @@ class _EffectSection extends StatelessWidget {
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
       for (final param in cachedListParameters(info.name)) {
-        instance.setValue(id: param.id, value: defaultEffectValue(param.kind));
+        // A button has no value to put back (K-417).
+        if (defaultEffectValue(param.kind) case final value?) {
+          instance.setValue(id: param.id, value: value);
+        }
       }
       try {
         layer.setEffects(effects: stack);
@@ -699,9 +732,12 @@ class _EffectSection extends StatelessWidget {
             for (final p in info.values) p.id: stagedValue(id, p.id) ?? p.value,
           },
           comp: comp,
+          layer: layer,
           playheadFrame: playheadFrame,
           onWrite: onWrite,
           onLive: onLive,
+          onChanged: onStackChanged,
+          pressed: pressed,
         )
             case final display?)
           display,
@@ -792,6 +828,7 @@ class _EffectSection extends StatelessWidget {
         invertParam: inv,
         invertValue:
             inv == null ? null : stagedValue(id, inv.id) ?? values[inv.id],
+        onAction: onAction,
       );
     }
 
@@ -1128,6 +1165,11 @@ class _TransformSection extends StatelessWidget {
   final CompositionReference comp;
   final BridgeTransform transform;
   final bool threeD;
+
+  /// Whether this layer is a Camera — the one kind whose transform can be
+  /// **derived** rather than held (K-417), and so the one kind whose heading
+  /// carries a link badge.
+  final bool isCamera;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
@@ -1140,6 +1182,7 @@ class _TransformSection extends StatelessWidget {
     required this.comp,
     required this.transform,
     required this.threeD,
+    required this.isCamera,
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
@@ -1152,6 +1195,20 @@ class _TransformSection extends StatelessWidget {
         title: engineLabel('Transform'),
         open: open,
         onToggle: onToggle,
+        // A solve-linked camera says so where its numbers are, because that is
+        // where the surprise would otherwise be: the rows are read-only and
+        // the engine refuses a write to them (K-417). Convert to keyframes
+        // sits beside the badge — it is the one command that ends the link,
+        // and it belongs next to the thing it ends.
+        actions: [
+          if (isCamera)
+            CameraLinkBadge(
+              key: ValueKey<String>('tf-link-${layer.internallayerId}'),
+              camera: layer,
+              playheadFrame: playheadFrame,
+              onChanged: onChanged,
+            ),
+        ],
         rows: TransformRowsFrb(
           comp: comp,
           layer: layer,
@@ -1183,18 +1240,31 @@ Widget? customEffectDisplay(
   required UuidValue effectId,
   required Map<String, BridgeEffectValue> values,
   required CompositionReference comp,
+  required LayerReference layer,
   required int playheadFrame,
   required void Function(UuidValue, String, BridgeEffectValue) onWrite,
   required void Function(UuidValue, String, BridgeEffectValue) onLive,
+  required VoidCallback onChanged,
+  required int pressed,
 }) =>
-    matchName == 'levels'
-        ? LevelsDisplayFrb(
-            key: ValueKey<String>('fx-levels-display-$effectId'),
-            effectId: effectId,
-            values: values,
-            comp: comp,
-            playheadFrame: playheadFrame,
-            onWrite: onWrite,
-            onLive: onLive,
-          )
-        : null;
+    switch (matchName) {
+      'levels' => LevelsDisplayFrb(
+          key: ValueKey<String>('fx-levels-display-$effectId'),
+          effectId: effectId,
+          values: values,
+          comp: comp,
+          playheadFrame: playheadFrame,
+          onWrite: onWrite,
+          onLive: onLive,
+        ),
+      // Camera track's display is a *status*, not a control (K-417): how far
+      // an analysis running elsewhere has got, and what its solve came to. It
+      // writes no parameter, which is why it takes neither callback.
+      'camera_track' => CameraTrackDisplayFrb(
+          key: ValueKey<String>('fx-camera-track-display-$effectId'),
+          layer: layer,
+          onChanged: onChanged,
+          pressed: pressed,
+        ),
+      _ => null,
+    };

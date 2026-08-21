@@ -76,6 +76,21 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         self.probes.probe(item).video().map(|(fps, ..)| fps)
     }
 
+    /// The camera the picture is actually drawn with — the solve link followed
+    /// (K-417), through the same store [`crate::build`] and [`crate::headless`]
+    /// read. Without this a linked camera's frames would be named by the
+    /// transform the document happens to hold, which is not the transform they
+    /// were drawn with, and a solve landing would hand back every frame made
+    /// before it.
+    fn camera(
+        &self,
+        doc: &Document,
+        comp: &lumit_core::model::Composition,
+        t: f64,
+    ) -> Option<lumit_core::model::CameraPose> {
+        crate::track::camera_pose(doc, comp, t)
+    }
+
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         let Some(ProjectItem::Footage(f)) = self.doc.item(item) else {
             return None;

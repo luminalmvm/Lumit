@@ -6883,5 +6883,91 @@
   "@aeEffectParamRebased": {
     "description": "Import report row reason, lower case. Nothing was approximated: the same length is spelled with a different number.",
     "placeholders": { "effect": { "type": "String" }, "param": { "type": "String" } }
+  },
+  "trackNotAnalysed": "Not analysed yet",
+  "@trackNotAnalysed": {
+    "description": "Camera track status line in Effect controls, before Analyse has ever been pressed."
+  },
+  "trackWaiting": "Waiting to start",
+  "@trackWaiting": {
+    "description": "Camera track status line: the analysis has been accepted but has not begun."
+  },
+  "trackFollowing": "Following frame {done} of {total}",
+  "@trackFollowing": {
+    "description": "Camera track status line while the shot is being analysed. Both numbers are frame counts.",
+    "placeholders": { "done": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "trackSolvingCamera": "Solving the camera",
+  "@trackSolvingCamera": {
+    "description": "Camera track status line: the frames are in and the camera path is being computed."
+  },
+  "trackStopped": "Analysis stopped",
+  "@trackStopped": {
+    "description": "Camera track status line after Cancel was pressed. Nothing was written."
+  },
+  "trackSolvedSummary": "{points} points, {error} px average error",
+  "@trackSolvedSummary": {
+    "description": "Camera track status line when a solve is in hand. {error} is a number already formatted to two decimals; px is pixels.",
+    "placeholders": { "points": { "type": "int" }, "error": { "type": "String" } }
+  },
+  "trackFailedUnreadable": "The media could not be read",
+  "@trackFailedUnreadable": {
+    "description": "Camera track status line when the analysis was refused: the file would not open, or carries no video."
+  },
+  "trackFailedNoFrames": "There are no frames to analyse",
+  "@trackFailedNoFrames": {
+    "description": "Camera track status line when the analysis was refused: the media opened but has no pictures in it."
+  },
+  "trackFailedFollowing": "The frames could not be followed",
+  "@trackFailedFollowing": {
+    "description": "Camera track status line when the analysis was refused: the pictures changed size part-way through."
+  },
+  "trackFailedNoFeatures": "Too little in the shot stayed still enough to follow",
+  "@trackFailedNoFeatures": {
+    "description": "Camera track status line when the analysis was refused: not enough fixed detail in the picture."
+  },
+  "trackFailedRotationOnly": "The camera only turned, so there is no depth to recover",
+  "@trackFailedRotationOnly": {
+    "description": "Camera track status line when the analysis was refused: the camera pivoted without moving, which carries no 3D information."
+  },
+  "trackFailedNoSolve": "The shot does not carry a camera move that could be solved",
+  "@trackFailedNoSolve": {
+    "description": "Camera track status line when the analysis was refused for any other reason."
+  },
+  "trackCreateCamera": "Create camera",
+  "@trackCreateCamera": {
+    "description": "Button beside the Camera track's status: adds a Camera layer that follows the solved shot."
+  },
+  "tipTrackCreateCamera": "Camera from the solve",
+  "@tipTrackCreateCamera": {
+    "description": "Tooltip on the Create camera button in the Camera track's status row."
+  },
+  "trackConvertToKeyframes": "Convert to keyframes",
+  "@trackConvertToKeyframes": {
+    "description": "Button in the Transform heading of a solve-linked Camera layer: bakes the derived motion into one keyframe per frame and ends the link."
+  },
+  "tipTrackConvert": "Bake the derived motion",
+  "@tipTrackConvert": {
+    "description": "Tooltip on the Convert to keyframes button in a linked Camera layer's Transform heading."
+  },
+  "trackLinkFollowing": "Following the solve",
+  "@trackLinkFollowing": {
+    "description": "Badge in the Transform heading of a Camera layer whose motion is derived from a solved shot; its rows are read-only."
+  },
+  "trackLinkHolding": "Holding the last solved frame",
+  "@trackLinkHolding": {
+    "description": "Badge in the Transform heading of a linked Camera layer where the playhead has run past what was solved."
+  },
+  "trackLinkLost": "The solve could not be found",
+  "@trackLinkLost": {
+    "description": "Badge in the Transform heading of a linked Camera layer whose link no longer resolves — the layer was deleted, or the media is offline."
+  },
+  "trackCreateNull": "Create null",
+  "@trackCreateNull": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a Null layer at their average position."
+  },
+  "trackCreateSolid": "Create solid",
+  "@trackCreateSolid": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a Solid layer at their average position."
   }
 }

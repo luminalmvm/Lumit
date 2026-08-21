@@ -266,3 +266,159 @@ a report row.
   no zip); revisit when the CEP panel packages one.
 - Shape-layer and text-animator mapping depth is decided by their engine features,
   not by the importer — capture is complete either way (docs/11 §2.2 items 10–11).
+
+## 7. The direct `.aep` parser (K-418)
+
+**In plain terms.** An `.aep` is a RIFX container: RIFF with big-endian sizes, form
+type `Egg!`, a tree of `LIST` chunks. The parser walks that tree and fills the same
+`Capture` the Bridge writes, so everything downstream — mapping, effect table,
+report — is shared. Its correctness is *measured*: `tools/ae-bridge/fixtures/` holds
+`fixture.aep` beside the bundle After Effects itself exported from it, and the
+differential tests compare the parsed capture against AE's account field by field,
+per category, with the recovery numbers asserted in CI.
+
+**Reference implementation** (read as documentation, nothing vendored):
+`forticheprod/aep_parser` on GitHub, MIT (licence checked 2026-08-21, closing
+docs/11's old open question) — since its Kaitai days it has matured into hand-written
+chunk parsers; the modules that matter are `src/py_aep/binary/` (`chunk.py` the RIFX
+walk, `item_chunks.py`/`composition_chunks.py`/`layer_chunks.py` the `idta`/`cdta`/
+`ldta` records, `property_chunks.py` the `tdgp`/`tdbs`/`tdb4`/`cdat` property system,
+`ldat_chunks.py` the keyframe records per property class) and `src/py_aep/parsers/`
+(`effect.py`, `text.py`, `marker.py`, `gradient.py`). `boltframe/aftereffects-aep-parser`
+(Go, MIT) is the second opinion. Attribution comment at the top of the Rust module.
+
+Chunk knowledge pinned (verify each against the reference and the fixture, not
+memory): names arrive in `Utf8` chunks; match names in `tdmn`; a property group is
+`LIST tdgp`, a property's metadata `tdbs`/`tdb4` (dimension count, animated flag,
+kind bits), its static value `cdat` (f64s), its keyframes `LIST list` → `lhd3`+`ldat`
+(fixed-size records per property class, carrying time, value, and the temporal ease
+floats); items `idta`, comp settings `cdta`, layers `ldta` (bitfields for the
+switches, matte type, blend mode as an index), expressions as `Utf8` beside their
+property. String encoding is UTF-8 with occasional MacRoman legacy; sizes pad to
+even. Where a record's layout is version-dependent, the parser keys on the file's
+`nhed`/app version and refuses fields it does not know rather than misreading them.
+
+**The funnel rule (binding):** the parser NEVER invents vocabulary. Where the DOM
+route writes an ExtendScript constant name (`SCREEN`, `BEZIER`, `ALPHA_INVERTED`),
+the parser writes the same name, translated from the aep's numeric code through one
+table per enum whose entries are proven by the differential tests. A code with no
+table entry falls through as the stringified number — the reader's unknown-handling
+already copes, and the report says so.
+
+Phases: **A** container + items/comps/layers structure → differential green on every
+non-property field of the golden capture; **B** property trees, keyframes, effects,
+masks, expressions → differential per-category recovery numbers; **C** the surface —
+the picker takes the `.aep` file (docs/11 §1's seamless front door), parse → the one
+mapping, plus the stretch goals (the Curves `CUSTOM_VALUE` blob is IN the file, so
+the K-412 sixteen-point target may finally be reachable — measured, not promised).
+
+### 7.1 Phase A: the layouts that are proved
+
+**Built.** `crates/lumit-import/src/aep/` — `rifx.rs` (the container walk),
+`enums.rs` (the funnel tables), `mod.rs` (the structure decode and `open_aep`) —
+with `tests/aep_differential.rs` as the gate. Everything below was read out of
+`fixture.aep` and checked against `fixture.lum-bundle/capture.json`, the same
+project as After Effects itself described it; offsets are **byte offsets into
+the chunk body**, sizes big-endian, and this table is the authoritative
+Rust-side map. Anything *not* listed here is not read, on purpose.
+
+**The tree.** `RIFX` (form `Egg!`) → loose project chunks + `LIST Fold`. `Fold`
+holds `fdta` then one `LIST Item` per top-level item; a folder item carries
+`LIST Sfdr` holding its own `LIST Item` children, and the Bridge's item order is
+a **depth-first pre-order** walk of exactly that tree. An item is
+`iide`,`idpc`,`idta`,`Utf8`,… ; a comp adds `cdta`, `LIST PRin` and its layers; a
+footage item adds `LIST Pin ` (holding `sspc` and `opti`).
+
+**Only `LIST Layr` is a layer.** A comp also holds `DLay`, six `SLay`, three
+`CLay` (the viewer's default/side/custom view cameras) and `SecL` (a hidden
+layer that exists to carry the comp's markers) — eleven layer-shaped records per
+comp, none of them a layer.
+
+| Record | Offset | Field |
+|---|---|---|
+| `head` (20) | 4 (u32 bitfield) | version word: `major = ((w>>26)&0x1F)*8 + ((w>>19)&7)`, `minor = (w>>15)&0xF`, `build = w&0xFF`. Fixture `0x0f100643` → `26.0x67`, the manifest's own string. |
+| `nnhd` (40) / `nhed` (32) | 24 (u8) | colour-depth **exponent**: 0→8, 1→16, 2→32 bpc |
+| root, no payload | — | `lnrb` present = linear blending; `lnrp` present = linearise working space |
+| root | `PwCs` then `Utf8` | working-space profile JSON; a literal `{}` is the DOM's `None`. Identified by the marker, never by "first profile envelope" — `pdvc` writes an identical one for the display space. |
+| root | `LIST ExEn` ▸ `Utf8` | expression engine (`javascript-1.0`) |
+| `idta` (84) | 0 (u16) | item type: 1 folder, 4 comp, 7 footage |
+| | 16 (u32) | item id — the id `Comp.id` and `Layer.source_id` point at |
+| | 0x3B (u8) | label colour |
+| `sspc` (222+) | 32 (u16), 36 (u16) | width, height |
+| `opti` | 0..4 | asset type; `Soli` marks a solid |
+| | 14/18/22 (f32) | solid colour R/G/B |
+| | 26 (strz, 256) | **the solid's name** — a solid's own `Utf8` chunk is empty |
+| `cdta` (204) | 44/48 | duration (rational: s32 dividend / u32 divisor) |
+| | 52,53,54 (u8) | background colour |
+| | 139 (u8) | comp flags: bit 7 preserve nested resolution, bit 5 preserve nested frame rate, bit 3 motion blur, bit 0 hide shy |
+| | 140/142 (u16) | width, height |
+| | 144/148 (u32) | pixel aspect (dividend/divisor) |
+| | 156 (u16) + 158 (u16) | frame rate = whole + fraction/65536 |
+| | 164/168 | display start time (rational, signed) |
+| | 174 (u16) | shutter angle |
+| | 180 (s32) | shutter phase |
+| | 196 (s32) | motion-blur adaptive sample limit |
+| | 200 (s32) | motion-blur samples per frame |
+| `LIST PRin` ▸ `prin` (104) | 4 (ascii 48) | renderer match name. The file's own name differs from scripting's: `ADBE Escher` **is** what the DOM calls `ADBE Advanced 3d`. |
+| `ldta` (164) | 0 (u32) | layer id — what `parent_id` and the matte reference point at |
+| | 4 (u16) | quality: 0 wireframe, 1 draft, 2 best |
+| | 8 (s32) with 108 (u32) | stretch as dividend/divisor; the capture's percentage is ×100 |
+| | 12/16, 20/24, 28/32 | start time, in point, out point (rationals, **unstretched**) |
+| | 37 (u8) | bit 4 chars-toward-camera, 3 per-character 3D, 2 frame-blend *kind* (1 = pixel motion), 1 guide layer, 0 name-was-set |
+| | 38 (u8) | bit 7 null, 6 point-of-interest auto-orient (camera/light), 5 camera auto-orient, 3 solo, 2 3D, 1 adjustment, 0 auto-orient along path |
+| | 39 (u8) | bit 7 collapse, 6 shy, 5 locked, 4 frame blending on, 3 motion blur, 2 effects active, 1 audio, 0 enabled |
+| | 40 (u32) | source item id; `0` and `0xFFFFFFFF` both mean none |
+| | 61 (u8) | label colour |
+| | 64 (strz, 32) | layer name, when the file put it there |
+| | 99 (u8) | blend mode, the SDK's `PF_Xfer` index |
+| | 103 (u8) | bit 0 preserve underlying transparency, bit 1 dancing dissolve |
+| | 107 (u8) | matte type: 0 none, 1 alpha, 2 alpha inverted, 3 luma, 4 luma inverted |
+| | 131 (u8) | layer type: 0 AV, 1 light, 2 camera, 3 text, 4 shape |
+| | 132 (u32) | parent's **layer id** |
+| | 139 (u8) | light type: 0 parallel, 1 spot, 2 point, 3 ambient, 4 environment |
+| | 160 (u32, AE ≥ 23) | matte layer's **layer id** |
+| `tdb4` (124) | 68 (u8) | `animated` — which is what scripting reports as the layer's `timeRemapEnabled` for `ADBE Time Remapping` |
+
+**Five things the layout alone does not tell you**, each of which produces a
+project that opens and is wrong:
+
+- **A layer's name is not one field.** It is the `Utf8` chunk beside `ldta` when
+  that is non-empty, then `ldta`+64, and otherwise **the source item's name** —
+  which is what AE displays for a layer nobody renamed, and is why eighteen of
+  the fixture's layers have an empty name chunk.
+- **A null and an adjustment layer are backed by a solid item** (§5 again): the
+  layer's own bits at `ldta`+38 decide, never the source.
+- **In and out points are stored unstretched.** Scripting reports
+  `start + (raw − start) × stretch`. At a negative stretch the two ends come
+  back the other way round — a swap, not a repair.
+- **Camera and light layers have no blend mode, transparency flag, matte block
+  or `timeRemapEnabled`**, and only five of the thirteen switches, because the
+  scripting DOM does not offer the rest on a rig. The capture must be absent
+  there, not `NORMAL`.
+- **"Is somebody's matte" is a fact about the other layer.** `is_track_matte` is
+  filled in after the whole stack is read, from who points at whom.
+
+**Owed, and honest about it.** (1) The **footage interpretation** fields — path,
+frame rate, alpha, fields, pulldown, loop, missing — are not read at all: the
+golden project is solids and comps with no file footage in it, so not one offset
+could be checked against AE, and an unchecked offset is the silently-wrong
+import this route exists to avoid. A fixture with real footage is owed.
+(2) A **reflected layer's** ends land 1/3000 s further out in AE's arithmetic
+than in the file's (`−0.000333` / `−10.000333` rather than `−0` / `−10`), as if
+AE reflects inclusive indices on an internal grid — one sample is not enough to
+prove the grid, so the differential test compares those two within a frame and
+records the delta rather than curve-fitting it. (3) Every funnel-table row the
+fixture does not exercise is marked `reference` in `enums.rs`.
+
+**What phase B needs from here.** A layer's properties hang off its
+`LIST tdgp`, whose children are `tdsb`, `tdsn`, then **alternating `tdmn`
+(the match name, a NUL-terminated 40-byte field) and the node it names** —
+`LIST tdbs` for a leaf, `LIST tdgp` for a group, `LIST OvG2` for Essential
+Properties overrides — closed by `tdmn "ADBE Group End"`. A `tdbs` holds
+`tdsb`, `tdsn`, `tdb4` (124 bytes; dimension count at 2, `animated` at 68) and
+then either `cdat` (static f64s) or `LIST list` = `lhd3` + `ldat`. In the
+fixture's animated Time Remap, `lhd3` is 52 bytes with the **key count at
+offset 8** (3) and the **per-key record size at offset 16** (0x30 = 48), and
+`ldat` is exactly 3 × 48 bytes. Comp markers are not in `cdta` at all: they are
+the `ADBE Marker` property of the hidden `SecL` layer, and that one property's
+node is a `LIST mrst` rather than a `tdbs`.

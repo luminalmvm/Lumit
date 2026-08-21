@@ -542,6 +542,15 @@ work-area nudge, a solo toggle, sound added to a layer, an opacity keyframe on a
 each one emptied the cache and the bar went blank with it. None of them does now, and an undo
 finds its frames still filed under the names the restored document asks for.
 
+**A derived camera is in the name too** (K-417). A Camera layer carrying a *solve link* is
+placed each frame from a camera solve that the document does not contain, so a key made from
+its stored transform would name two different pictures the same and hand back the frames
+banked before the solve landed. The frame key therefore asks for the camera the picture is
+actually drawn with — `SourceStamper::camera`, defaulting to the document's own answer and
+overridden by the renderer to follow the link — which is the same reading `build.rs` and
+`headless.rs` composite through. No algorithm-version bump was needed: an unlinked camera
+hashes exactly what it always did.
+
 The one place the key was not honest has been fixed with it: a layer's inherited **parent-chain**
 placement now feeds its contribution (`ALGO_VERSION` 2). A hidden layer contributes nothing —
 correctly, since it draws nothing — but its children still follow it, so moving a hidden parent

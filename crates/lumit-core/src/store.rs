@@ -1019,6 +1019,7 @@ mod tests {
                     name: "Camera".into(),
                     kind: LayerKind::Camera {
                         zoom: crate::anim::Property::fixed(1000.0),
+                        solve_link: None,
                     },
                     in_point: CompTime(Rational::ZERO),
                     out_point: CompTime(duration),

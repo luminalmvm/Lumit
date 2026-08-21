@@ -136,6 +136,11 @@ class EffectParamRowFrb extends StatelessWidget {
   /// a saved project from before the pair simply has none).
   final BridgeEffectValue? invertValue;
 
+  /// An **Action** row's press (K-417): a button, so an event rather than a
+  /// value. Null leaves the button drawn but dead, which is what a row shown
+  /// somewhere that cannot fire one (the Timeline's twirl-down) should do.
+  final void Function(UuidValue effect, String param)? onAction;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -157,6 +162,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.enabled = true,
     this.invertParam,
     this.invertValue,
+    this.onAction,
   });
 
   @override
@@ -207,6 +213,19 @@ class EffectParamRowFrb extends StatelessWidget {
     );
 
     final control = _greyed(_control(context, t, id, value, frame));
+
+    // **An Action is a button, and a button says its own name** (K-417). Drawn
+    // in the value column with the name column left empty, rather than as a
+    // label beside a button repeating it: the row is one statement, and the
+    // house style is that a control carrying words does not need them twice.
+    if (param.kind is BridgeParamKind_Action) {
+      return fxTwoColumnRow(
+        context: context,
+        name: const SizedBox.shrink(),
+        keyframeControls: null,
+        control: control,
+      );
+    }
 
     if (twoColumn && valueColumn == null) {
       // No padding of its own: the Effect controls panel gives every row the
@@ -286,6 +305,17 @@ class EffectParamRowFrb extends StatelessWidget {
 
   Widget _control(BuildContext context, LumitTheme t, UuidValue id,
       BridgeEffectValue? value, int frame) {
+    // Checked before the missing-value guard, because an Action row genuinely
+    // has none: it carries no `EffectValue` anywhere in the model, which is
+    // what makes it a press rather than a write.
+    if (param.kind is BridgeParamKind_Action) {
+      return HouseButton(
+        key: ValueKey<String>('fx-action-$id-${param.id}'),
+        small: true,
+        onPressed: onAction == null ? null : () => onAction!(id, param.id),
+        child: Text(engineLabel(param.label), style: t.body),
+      );
+    }
     if (value == null) return Text('—', style: t.small);
 
     switch (param.kind) {
@@ -378,6 +408,12 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
+      // Answered above, before the missing-value guard — a button has no
+      // value and so never reaches here. Spelled out because the switch is
+      // exhaustive over the kinds, which is what makes a kind added to the
+      // engine a compile error rather than a blank row.
+      case BridgeParamKind_Action():
+        return const SizedBox.shrink();
       case BridgeParamKind_Curve():
         if (value case BridgeEffectValue_Curve(:final field0)) {
           // The lone-curve case. Curves' five channels fold into one tabbed
@@ -1407,7 +1443,11 @@ String effectLabelOf(String name) {
 /// to write. Seed, file and layer declare none: a seed's default is zero, an
 /// unset file is no paths, and an unset layer reference is None — each of which
 /// is the identity the effect treats as "not configured".
-BridgeEffectValue defaultEffectValue(BridgeParamKind kind) => switch (kind) {
+/// **An Action has no value**, so it has no default either (K-417): Reset
+/// walks every parameter and this answers `null` for the one kind that is a
+/// button, which the caller skips.
+BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
+      BridgeParamKind_Action() => null,
       BridgeParamKind_Float(:final default_) =>
         BridgeEffectValue.float(BridgeScalar.static_(default_)),
       BridgeParamKind_Int(:final default_) =>

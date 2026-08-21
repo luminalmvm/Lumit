@@ -154,8 +154,14 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
 /// The value a parameter kind starts at (docs/08 §1.2): what `instantiate`
 /// fills a fresh instance with, and what [`backfill_builtin_params`] appends
 /// for a parameter the saved instance predates.
-pub fn default_param_value(kind: &ParamKind) -> EffectValue {
-    match *kind {
+///
+/// `None` for a row that **has** no value — today only [`ParamKind::Action`],
+/// the button kind (K-417). A stored value for a button would be a button that
+/// saves, animates and fires again on load, which is exactly what the kind
+/// exists to avoid; so no `EffectParam` is written for one, and every walk that
+/// fills defaults skips it.
+pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
+    Some(match *kind {
         // A Slider stores as a Float like Int and Angle do (K-414) — the kind
         // is the control drawn, not the value kept.
         ParamKind::Float { default, .. } | ParamKind::Slider { default, .. } => {
@@ -188,7 +194,9 @@ pub fn default_param_value(kind: &ParamKind) -> EffectValue {
         // sanctioned exception to the "no no-op default" rule, exactly as the
         // five fixed knots it replaces were.
         ParamKind::Curve => EffectValue::Curve(super::params::CURVE_IDENTITY.to_vec()),
-    }
+        // A button holds nothing (K-417) — see the doc comment above.
+        ParamKind::Action => return None,
+    })
 }
 
 /// Forward-migrate a stack loaded from disk (K-258): a built-in instance
@@ -207,10 +215,13 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         };
         migrate_lens_flare_background(e);
         for p in s.params {
+            let Some(value) = default_param_value(&p.kind) else {
+                continue; // a button has nothing to backfill (K-417)
+            };
             if !e.params.iter().any(|have| have.id == p.id) {
                 e.params.push(EffectParam {
                     id: p.id.to_owned(),
-                    value: default_param_value(&p.kind),
+                    value,
                     extra: serde_json::Map::new(),
                 });
             }
@@ -376,10 +387,14 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
         params: s
             .params
             .iter()
-            .map(|p| EffectParam {
-                id: p.id.to_owned(),
-                value: default_param_value(&p.kind),
-                extra: serde_json::Map::new(),
+            // A button declares no value, so a fresh instance carries no row
+            // for it (K-417).
+            .filter_map(|p| {
+                Some(EffectParam {
+                    id: p.id.to_owned(),
+                    value: default_param_value(&p.kind)?,
+                    extra: serde_json::Map::new(),
+                })
             })
             .collect(),
         sample_temporally: true,

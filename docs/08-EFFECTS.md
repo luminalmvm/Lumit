@@ -22,7 +22,8 @@ effect consists of exactly four parts, and an effect is not mergeable until all 
    space), **curve** (K-412 — an ordered list of 2..16 control points in the unit square,
    with a clamped cubic through them), seed (integer), file reference, layer reference, **mask-path
    reference** (K-408 — one of the owning layer's masks, whose *geometry* the effect walks),
-   and marker-trigger (§1.4).
+   marker-trigger (§1.4), and **action** (K-417 — a button, the one row that is not
+   animatable, because it carries no value to animate; see §1.2).
 2. **A WGSL compute implementation** — the production path, running on wgpu (K-011).
    Implementations MUST be pure functions of (inputs, parameters, time): no global state,
    no reading outside declared inputs.
@@ -131,6 +132,19 @@ parameters).
   order, outside the square, with a repeated x, or with fewer than two points is
   **straightened on read** — sorted, clamped, deduplicated, and replaced by the diagonal when
   nothing usable survives — quietly, because it comes off a document rather than a caller.
+
+- **Action** parameters (K-417) are **buttons, not values**: a row the panel draws as a push
+  button, which asks the engine to *do* something rather than describing what a picture
+  should look like. The Camera track's Analyse and Cancel (§3.85) are the first two, and the
+  kind is generic because they will not be the last — beat detection is already waiting.
+  An Action is the one exception to the "every parameter is animatable" rule of §1.1, and it
+  is an exception because there is nothing to animate: it carries **no value**, so no
+  `EffectParam` is written for it, nothing is stored, nothing keyframes, no expression can
+  read it, and the resolve step puts nothing in the arena — so pressing one renames no cached
+  frame. It crosses the bridge as an **event** naming the effect instance and the row, never
+  as a parameter value. Written as a Bool the effect watched for a rising edge, a button
+  would keyframe, save, and fire again the next time the project was opened; that is what
+  this kind exists to prevent.
 
 ### 1.3 Traits
 
@@ -4730,6 +4744,60 @@ Control` and kin) but are **not yet in the audited set**, so they enter the tabl
 claimed-matchnames.txt` carries them so that sitting is already prepared. A match name
 that turns out to be wrong costs nothing worse than the placeholder road docs/11 §6
 already specifies for every unclaimed name.
+
+---
+
+### 3.85 Camera track — the handle for a camera solve
+
+**Parameters:** **Analyse** (action), **Cancel** (action), **Feature density** (Low /
+Normal / High, default Normal), **Use masks** (default on), **Show points** (default on).
+
+Applied to a footage or precomp layer, this effect **renders identity**: it is not a look,
+it is a button and a readout. Pressing Analyse starts a camera solve (K-415's pipeline,
+[impl/tracking.md](impl/tracking.md)) on its own thread, and you keep editing while it runs
+— the working shape After Effects has, and the reason the controls are an effect on the
+tracked layer rather than a modal window that owns the application (K-417's first ruling).
+
+**The analysis is keyed to the source, not the clip** (K-248, K-417's second ruling). The
+job tracks and solves the **entire unaltered source clip**, keyed by (media, analysis
+settings), cached in the `track/` sidecar ([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3) and
+rebuildable like every sidecar tier — deleting it at any moment costs one re-analysis and
+nothing else. Every clip of that footage — trimmed, reordered, speed-ramped, retimed, in a
+Sequence layer or not — reads the same solve through its own time mapping, so reordering
+cuts or changing a speed never re-tracks anything. Because the key describes the *file*
+rather than the project, a second project cutting the same rushes reads the same solve
+without tracking it again. **Not built yet:** the effect on a *Precomp* layer analyses
+nothing — the solve link already resolves through a precomp to the footage inside, but
+analysing a nested comp means rendering it rather than decoding it (docs/TODO.md).
+
+**Feature density** is the one quality knob worth a row: it sets the detection grid and the
+best-N per bucket the tracker uses (Normal is the tracker's own default, so the middle
+option changes nothing). **Use masks** is K-408's mask carriage put to work — a track is
+neither born in nor allowed to wander into a masked region, which is how a moving subject is
+excluded by hand rather than argued with. **Show points** draws the solved cloud over the
+picture on this layer, depth-cued, on after a solve (K-417's fourth ruling); selected points
+make a Null or a Solid at their mean solved position.
+
+**The status is not a parameter.** A parameter is something the document stores and the
+timeline animates, and "solving, frame 214 of 900" is neither: it is live job state, and it
+crosses to the panel as job state. A string row pretending to be one would put a progress
+bar in the save file. It draws as **one calm line under the two buttons**
+([07-UI-SPEC.md](07-UI-SPEC.md) §6): how many frames have been followed, that the camera is
+being solved, or — when it is done — the point count and the mean reprojection error, which
+together are the one number that says whether the solve is any good. A refusal is a plain
+sentence in the same line, and nothing about the shot has changed. **Create camera** sits
+beside it once there is a solve to follow.
+
+What the solve is *for* is the **solve link** on a Camera layer
+([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6): the camera points at this layer and derives its
+placement per frame, rather than being handed a copy. Create camera makes one; while it is
+linked its transform rows are read-only and its Transform heading wears a calm badge saying
+which of the three link states it is in, with **Convert to keyframes** beside it
+([07-UI-SPEC.md](07-UI-SPEC.md) §2.3.6).
+
+Like the Controls family above, it declares no image operation, takes no matte and has no
+Mix — for the same reason and by the same mechanism, though it is a Utility rather than a
+Control: it holds a *job*, not a value.
 
 ---
 

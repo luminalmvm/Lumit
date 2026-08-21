@@ -23,6 +23,8 @@ pub mod sequence;
 pub mod shape;
 pub mod store;
 pub mod time;
+/// The solve link: a Camera layer driven by a tracked layer (K-417).
+pub mod track;
 
 pub use model::Document;
 pub use ops::{Op, OpError};

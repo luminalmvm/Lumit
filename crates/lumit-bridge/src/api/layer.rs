@@ -1077,7 +1077,7 @@ impl LayerReference {
     }
 
     #[frb(ignore)]
-    fn project(&self) -> Result<Arc<std::sync::RwLock<LumitBridgeState>>, BridgeError> {
+    pub(crate) fn project(&self) -> Result<Arc<std::sync::RwLock<LumitBridgeState>>, BridgeError> {
         let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
         let project = projects.get(&self.project_id);
 
@@ -1089,7 +1089,7 @@ impl LayerReference {
     /// The read lock is released by the time it returns, so a caller is free to
     /// take the write lock next.
     #[frb(ignore)]
-    fn composition(&self) -> Result<lumit_core::model::Composition, BridgeError> {
+    pub(crate) fn composition(&self) -> Result<lumit_core::model::Composition, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         let snapshot = proj.store.snapshot();

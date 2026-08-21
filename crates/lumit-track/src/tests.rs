@@ -2149,6 +2149,46 @@ fn the_solve_boundary_refuses_what_it_cannot_use() {
     );
 }
 
+/// The cancellation seam (docs/impl/tracking.md §4, owed by phase 3): a raised
+/// flag abandons the solve with [`SolveError::Cancelled`] and hands back nothing
+/// partial — and a flag that is never raised leaves the answer bit-for-bit what
+/// [`solve_camera`] gives, which is the whole claim about determinism.
+#[test]
+fn a_cancelled_solve_refuses_and_a_lowered_flag_changes_nothing() {
+    let cams = orbit_cameras(21, 2.0, 6.0, 300.0);
+    let mut set = solve_shot(&cams, &orbit_cloud(140), 120, [0.0, 0.05, 0.0], 0.3);
+    let pairs = select_keyframes(&set, &GeometrySettings::default());
+    segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
+    let zooms = detect_zoom(&set, &ZoomSettings::default());
+    let s = SolveSettings::default();
+
+    // Raised before the first pass: refused outright.
+    assert_eq!(
+        solve_camera_cancellable(&set, &pairs, &zooms, &s, &|| true),
+        Err(SolveError::Cancelled)
+    );
+
+    // Raised part-way through the bundle's iterations — the case the flag
+    // exists for, because that is where the seconds are. Still a refusal, not a
+    // half-adjusted model wearing a finished shape.
+    let seen = std::cell::Cell::new(0u32);
+    let after_three = || {
+        seen.set(seen.get() + 1);
+        seen.get() > 3
+    };
+    assert_eq!(
+        solve_camera_cancellable(&set, &pairs, &zooms, &s, &after_three),
+        Err(SolveError::Cancelled)
+    );
+    assert!(seen.get() > 3, "the flag was actually consulted");
+
+    // Never raised: the same bits the plain entry point produces.
+    assert_eq!(
+        solve_camera_cancellable(&set, &pairs, &zooms, &s, &|| false),
+        solve_camera(&set, &pairs, &zooms, &s)
+    );
+}
+
 // --- Determinism ----------------------------------------------------------------
 
 #[test]
@@ -2225,7 +2265,16 @@ fn the_bundle_converges_from_a_perturbed_start() {
         }
     }
 
-    let report = bundle_adjust(&mut solved, &mut focals, &mut points, &obs, centre, 2.0, 60);
+    let report = bundle_adjust(
+        &mut solved,
+        &mut focals,
+        &mut points,
+        &obs,
+        centre,
+        2.0,
+        60,
+        &|| false,
+    );
     assert!(
         report.initial_mean_px > 3.0,
         "the perturbation has to be visible: {} px",

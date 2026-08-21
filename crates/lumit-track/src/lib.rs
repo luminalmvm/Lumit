@@ -85,8 +85,8 @@ pub use segment::{
     ZoomKind, ZoomSettings,
 };
 pub use solve::{
-    solve_camera, CameraSolve, PoseSource, ScenePoint, SolveError, SolveNote, SolveSegment,
-    SolveSettings, SolvedPose,
+    solve_camera, solve_camera_cancellable, CameraSolve, PoseSource, ScenePoint, SolveError,
+    SolveNote, SolveSegment, SolveSettings, SolvedPose,
 };
 
 use detect::{BucketGrid, Scratch};

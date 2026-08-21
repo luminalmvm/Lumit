@@ -590,6 +590,13 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required double min,
     required double max,
   }) = BridgeParamKind_Slider;
+
+  /// A **button** (K-417), drawn as one and pressed through
+  /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
+  /// value at all — no default, no range, nothing in
+  /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
+  /// not a number that could be keyframed, undone or interpolated.
+  const factory BridgeParamKind.action() = BridgeParamKind_Action;
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]

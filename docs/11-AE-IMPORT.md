@@ -30,13 +30,20 @@ never silently dropped.
 
 ## 1. Strategy overview
 
-Three routes, in fidelity order (K-060):
+Three routes (K-060, priority revised by K-418):
 
 | Route | Requires | Fidelity | Status in UI |
 |---|---|---|---|
-| **Lumit Bridge** (primary) | After Effects installed, any recent version | High — the scripting DOM is documented public API | "Imported from After Effects" |
-| **Direct `.aep` parsing** (secondary) | Nothing | Structure only, best-effort | "Recovered from .aep — structure only" |
+| **Direct `.aep` parsing** (primary, K-418) | Nothing — pick the `.aep` | Measured per category against AE's own account of the golden fixture; anything unrecovered is a report row, never a guess | "Imported from After Effects" (+ per-item report rows for anything unrecovered) |
+| **Lumit Bridge** (fidelity backstop + verification harness) | After Effects installed, any recent version | High — the scripting DOM is documented public API | "Imported from After Effects" |
 | **Lottie / bodymovin JSON** (tertiary) | A `.json` export | High within Lottie's own scope | "Imported from Lottie" |
+
+K-418's ruling: the user-facing front door is the `.aep` itself — seamless, no script
+sitting — and the parser is a second *front end* to the same capture the Bridge
+writes, so both routes share one mapping, one effect table, one report. The Bridge
+remains first-class forever: it is the route that cannot drift with AE versions, the
+export path for machines without Lumit, and the source of the golden fixtures the
+parser is measured against.
 
 The Bridge is the proven pattern (bodymovin/Lottie walks the same DOM in the other
 direction): let After Effects itself be the parser. Every keyframe, easing handle, mask
@@ -417,7 +424,11 @@ The same mechanism serves missing OFX/LFX plugins at project-open time
 
 ## 7. Direct `.aep` parsing
 
-For users without After Effects. Honest scope: **recover what we can**.
+**The primary route since K-418.** Honest scope: **recover what we can, measure what
+we recovered** — the golden fixture's `.aep` sits beside AE's own account of its
+contents, and the parser's recovery is a per-category number asserted in CI, not a
+hope. The parser emits the same capture shape the Bridge writes (§2.3), so both
+routes share one mapping, one effect table, one report.
 
 `.aep` is a RIFX container (RIFF, big-endian sizes, form type `Egg!`) of nested LIST chunks.
 Chunk shapes are publicly known; many field semantics are not, and Adobe changes details
@@ -436,8 +447,9 @@ parameter blobs (typed per match name, third-party blobs opaque).
 
 Policy:
 
-- Direct parse results MUST be labelled "structure only" in the UI and the import report,
-  and the report MUST open automatically after a direct parse.
+- The report MUST open automatically after a direct parse, and anything the parser
+  could not recover MUST be a row in it (K-418 retires the blanket "structure only"
+  label in favour of per-item honesty — the measured recovery earned the front door).
 - Anything ambiguous imports as a placeholder or as a static value with a report entry —
   the parser MUST NOT guess silently.
 - A parse failure on one chunk skips that chunk and continues; the report lists skipped

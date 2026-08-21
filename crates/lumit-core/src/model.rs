@@ -893,7 +893,28 @@ pub enum LayerKind {
     /// layers with the 3D switch; the topmost visible camera is active.
     /// `zoom` is the AE model: focal distance in comp pixels — the z=0
     /// plane maps 1:1.
-    Camera { zoom: Property },
+    Camera {
+        zoom: Property,
+        /// The **solve link** (K-417, docs/03 §5.6): the id of a layer whose
+        /// camera solve drives this camera, in the same composition.
+        ///
+        /// **In plain terms.** A tracked shot knows where the real camera was
+        /// on every frame. Rather than copying that into keyframes the moment
+        /// it is solved, the Camera layer *points at* the tracked layer and
+        /// derives its placement per frame — so re-solving, re-trimming or
+        /// re-timing that layer moves the camera with it, and nothing has to
+        /// be re-baked. While the link is set the camera's transform and zoom
+        /// are read-only ([`crate::ops::OpError::CameraLinked`]);
+        /// **Convert to keyframes** ([`crate::track::bake_solve_link`]) turns
+        /// the derived motion into ordinary keys and severs it.
+        ///
+        /// The named layer is the one the analysis was run on — or a Precomp
+        /// layer that contains it, which is how the owner's precomp workflow
+        /// resolves (K-417's parent-comp ruling). `None` is an ordinary camera
+        /// the user drives by hand, which is every camera today.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        solve_link: Option<Uuid>,
+    },
     /// A Sequence layer (docs/01-GLOSSARY.md, §5.3): clips cut back-to-back on
     /// one row — Lumit's Vegas-style editing surface. Resolution lives in
     /// [`crate::sequence`].
@@ -1056,33 +1077,57 @@ pub struct CameraPose {
     pub rotation_deg: (f64, f64, f64),
 }
 
+/// One Camera layer's placement at comp time `t`, from its own properties.
+/// `None` when `layer` is not a Camera.
+#[must_use]
+pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
+    let LayerKind::Camera { zoom, .. } = &layer.kind else {
+        return None;
+    };
+    let lt = t - layer.start_offset.0.to_f64();
+    let tr = &layer.transform;
+    Some(CameraPose {
+        zoom: zoom.value_at(lt),
+        position: (
+            tr.position_x.value_at(lt),
+            tr.position_y.value_at(lt),
+            tr.position_z.value_at(lt),
+        ),
+        rotation_deg: (
+            tr.rotation_x.value_at(lt),
+            tr.rotation_y.value_at(lt),
+            tr.rotation.value_at(lt),
+        ),
+    })
+}
+
 impl Composition {
-    /// The topmost visible Camera layer whose span contains `t`, evaluated at
-    /// its layer time. None → the comp renders flat (3D switches ignored).
-    pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
-        self.layers.iter().find_map(|l| {
-            let LayerKind::Camera { zoom } = &l.kind else {
-                return None;
-            };
-            if !l.switches.visible || t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
-                return None;
-            }
-            let lt = t - l.start_offset.0.to_f64();
-            let tr = &l.transform;
-            Some(CameraPose {
-                zoom: zoom.value_at(lt),
-                position: (
-                    tr.position_x.value_at(lt),
-                    tr.position_y.value_at(lt),
-                    tr.position_z.value_at(lt),
-                ),
-                rotation_deg: (
-                    tr.rotation_x.value_at(lt),
-                    tr.rotation_y.value_at(lt),
-                    tr.rotation.value_at(lt),
-                ),
-            })
+    /// The topmost visible Camera layer whose span contains `t` — the one that
+    /// is *active*. None → the comp renders flat (3D switches ignored).
+    ///
+    /// Split out of [`Self::camera_pose`] because the solve link (K-417) needs
+    /// the layer as well as the numbers: a linked camera's placement is derived
+    /// from another layer rather than read off its own properties, and one rule
+    /// for which camera is active has to serve both readings.
+    #[must_use]
+    pub fn active_camera(&self, t: f64) -> Option<&Layer> {
+        self.layers.iter().find(|l| {
+            matches!(l.kind, LayerKind::Camera { .. })
+                && l.switches.visible
+                && t >= l.in_point.0.to_f64()
+                && t < l.out_point.0.to_f64()
         })
+    }
+
+    /// The active camera's placement at comp time `t`, read off its **own**
+    /// stored properties at its layer time. None → the comp renders flat.
+    ///
+    /// A camera carrying a solve link derives its placement from the tracked
+    /// layer instead ([`crate::track::camera_pose_at`], K-417); this answers
+    /// what the document itself holds, which is what the link's fallback reads
+    /// and what **Convert to keyframes** writes back.
+    pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
+        self.active_camera(t).and_then(|l| stored_camera_pose(l, t))
     }
 
     /// Every visible Light layer whose span contains `t`, evaluated at its own
@@ -2244,6 +2289,7 @@ mod tests {
             name: name.into(),
             kind: LayerKind::Camera {
                 zoom: Property::fixed(zoom),
+                solve_link: None,
             },
             in_point: secs(in_s),
             out_point: secs(out_s),

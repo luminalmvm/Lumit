@@ -71,6 +71,10 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+# Only to name `SolveError` when an analysis is refused, so the panel's reason
+# is a typed variant rather than a scraped English sentence (K-303). Already in
+# the build graph through lumit-render.
+lumit-track = { path = "../lumit-track" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v7", "serde"] }

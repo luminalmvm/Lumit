@@ -35,7 +35,7 @@ between frames.
 | **1 — tracks** | Feature detection + pyramidal affine KLT + track store + masks + forward-backward verification. The substrate everything else reads. | **Built** (see §2's "As built") |
 | **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
 | **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | **Built** (see §4's "As built") |
-| **4 — surface** | Bridge + Tracking UI: run, point cloud over the picture, solved camera → a Camera layer, 2D track → keyframed transform / corner-pin export, mask pick. | Open |
+| **4 — surface** | K-417's shape: the Camera track *effect* (identity render, Analyse/Cancel actions, status), the background analysis job keyed to (media, settings) with the sidecar `track/` cache, the solve-linked dynamic Camera layer reading through the comp→clip→source time chain, Convert to keyframes, the point-cloud overlay with select → Null/Solid, and `ParamKind::Action`. 2D track → keyframed transform / corner-pin export rides the same store. | **Built** (§5a, §5b, §5c) |
 
 Phase 1 first and alone: every later phase's quality is decided by track quality.
 
@@ -354,6 +354,338 @@ unchanged at 0.042 %. Phase 2 marks fifteen of the thirty movers as `Moving`;
 the other fifteen are refused later, by cheirality and by the post-bundle
 reprojection gate — both halves of that are asserted, so neither can quietly
 stop working.
+
+## 5a. Phase 4, stage 1 — the model half, as built
+
+`crates/lumit-core` (2026-08-21). Stage 1 is everything K-417 decides that can be
+built and tested **without decoding a single frame**: the schema kind, the effect,
+the link, and the bake. A written-down solve stands in for a real one, injected
+through a trait, and every claim below is asserted against it.
+
+- **`ParamKind::Action`** (`fx/schema.rs`), declared `#[action(label = "…")]`. A
+  button, not a value: no `EffectValue` variant, no `EffectParam` written by
+  `instantiate`, nothing appended by `backfill_builtin_params`, nothing pushed
+  into the resolved arena — and therefore nothing in the frame key, so pressing
+  Analyse renames no cached frame. `default_param_value` became
+  `-> Option<EffectValue>` to say that in the type; three call sites skip `None`.
+  `reference.rs` prints it as kind `action` with no default and no range, which is
+  all the manual's table can honestly say about a button.
+- **The Camera track effect** (`fx/effects/camera_track.rs`), Utility, catalogue
+  entry 91, identity render (`is_image_op → false`, the Controls family's
+  convention from K-414 for a different reason: this one holds a *job*). Analyse
+  and Cancel are the two Actions; Feature density, Use masks and Show points are
+  the value rows. `DENSITY` is the `(grid.0, grid.1, per_bucket)` table the
+  analysis job reads into `TrackSettings` — it lives on the effect because the
+  crate that owns the control cannot depend on the crate that owns the tracker,
+  and the job reads it the other way round, which is the only direction there is.
+- **`LayerKind::Camera` gained `solve_link: Option<Uuid>`** (`model.rs`,
+  docs/03 §5.6), serde-defaulted and skipped when absent, so no saved project
+  changes a byte. `Composition::active_camera` was split out of `camera_pose` and
+  `stored_camera_pose` out of its body, because the link needs the *layer* as well
+  as the numbers and one rule for which camera is active has to serve both.
+- **`crates/lumit-core/src/track.rs`** is the whole of the derivation:
+  `CameraSolveStore` (two methods — the solved range for one media, and one pose
+  at one solved frame), `camera_pose_at` / `camera_pose_of` returning a
+  `LinkedPose` of pose plus `LinkState`, and `bake_solve_link` building the
+  Convert-to-keyframes batch.
+- **`Op::SetCameraSolveLink`** and **`OpError::CameraLinked`** (`ops.rs`). The
+  refusal is a `solve_link_guards` function shaped exactly like the existing
+  `lock_guards`, checked in `apply` before the match — one guard for every caller
+  and every op yet to be written.
+
+Six things are deviations from, or decisions under, K-417's wording:
+
+1. **The store hands back poses already in Lumit's camera terms**, not
+   `lumit_track::CameraSolve`. `lumit-core` cannot depend on `lumit-track` (the
+   crate graph runs the other way), and more to the point the conversion —
+   world-to-camera rotation to AE rotation, solve units to comp pixels, focal in
+   source pixels to `zoom` — is a real piece of work that belongs in the store,
+   next to the solve it is converting. Stage 2 writes it; stage 1 would only have
+   guessed at it.
+2. **"Last-derived-hold" is a clamp into the solved frame range**, not a cached
+   value. A cache would make the same frame answer differently depending on what
+   was asked for before it, which is the opposite of what a render needs. Clamping
+   *is* the hold — the nearest solved frame is the last derived motion — and it is
+   stateless, deterministic and free. Where the link resolves nowhere at all there
+   is nothing derived to hold, so the fallback is the camera's own stored
+   properties, which (being read-only while linked) are the ones it had when the
+   link was made. The two cases are different `LinkState`s, so the interface can
+   say which.
+3. **The tracked layer inside a precomp is found by the effect on it.** K-417 says
+   the chain resolves through a Precomp layer to the tracked layer inside but does
+   not say how the inside one is identified; the effect *is* the handle, so the
+   layer carrying an enabled Camera track is the answer, first in stack order so
+   it never depends on the playhead. A precomp with no tracked layer resolves to
+   nothing and says `Unresolved` rather than guessing at the first footage it finds.
+4. **The bake is a `Batch`, built by a function, not an `Op` that computes.** An
+   `Op` is serialisable and replayed by `apply(doc, op)`, which has no store to
+   read — so a computing op would either need the store in `apply` or would replay
+   differently. `bake_solve_link` reads the store once, at the gesture, and emits
+   the numbers; the journal then holds exactly what happened. The link is cleared
+   as the batch's **first** member and therefore restored as the inverse's **last**,
+   which is what lets the read-only guard stay unconditional in both directions.
+5. **`camera_pose` keeps its signature and gains a sibling.** Fifteen call sites
+   read `Composition::camera_pose(t)`; threading a store through all of them before
+   there is a store to thread is churn for nothing. `camera_pose` now answers what
+   the document holds, `track::camera_pose_at` answers with the link followed, and
+   a linked camera under the old call reads `Unresolved` — the correct degrade.
+   Stage 2 moves the render path over.
+6. **The Action row does not cross the bridge yet.** `list_parameters` filters it
+   out rather than inventing a `BridgeParamKind` the panel cannot draw and an event
+   nothing sends; both are stage 3, and the frb generated code is regenerated, never
+   hand-edited. Until then the panel draws the effect's value rows and no button,
+   which is honest. *Stage 3 removed the filter and added both — see §5c.*
+
+**Stage 1's tests** are eight in `crates/lumit-core/src/track.rs` and two in
+`fx/tests.rs`, and not one of them decodes anything. The solve is a function of
+the frame number, distinct in every field, so a walk that lands on the wrong frame
+cannot accidentally pass: a plain clip frame for frame; a half-speed ramp into a
+freeze (the freeze reads `Derived`, not `Held` — the solve *has* that frame, the
+retime simply keeps asking for it); a Sequence layer whose two clips are played in
+both orders, with the same source moment giving the same pose either way; a
+precomp chain with a retime on the precomp layer; the hold past the end, the
+deleted layer, the empty store and the unlinked camera, each with its own
+`LinkState`; the two refusals and the one edit a linked camera still accepts; and
+the bake, checked frame by frame over a span that is half derived and half held,
+against the derived path it replaces, with undo restoring the layer exactly.
+
+**Owed to stage 2** (and listed in docs/TODO.md): the real `CameraSolveStore` over
+the `track/` sidecar, the analysis job and its thread, the status as live job
+state, and threading `camera_pose_at` into the render path and the frame key so a
+linked camera's frames are named by the pose they were drawn with. *All of that
+landed — see §5b.*
+
+## 5b. Phase 4, stage 2 — the job, the sidecar and the real store, as built
+
+`crates/lumit-render/src/track.rs` (2026-08-21), with the cancellation seam in
+`crates/lumit-track/src/{solve,bundle}.rs` and the luma tap in
+`crates/lumit-media/src/decode.rs`. Stage 2 is everything stage 1 stood on a
+written-down solve for: the analysis that decodes a real clip, the `track/`
+sidecar that keeps the answer, and the `CameraSolveStore` the render path
+actually reads.
+
+**Where it lives, and why.** `lumit-render` is the only engine crate that can
+both decode a clip and hold a solve where `build.rs`, `headless.rs` and the frame
+key can read it; `lumit-track` cannot decode, `lumit-core` may not know the
+tracker exists, and the bridge is above all of them. So the job, the cache and
+the store are one module there, and `lumit-render` gains a `lumit-track`
+dependency. The bridge (stage 3) presses the button; nothing about the work
+itself is in the bridge.
+
+**The thread.** One analysis at a time, on a thread spawned for it and named
+`lumit-track` — never a pool worker (K-417, and docs/05 §2's decode rule for the
+same reason: it holds a decoder open and stalls on seeks). `request` claims the
+one running slot and returns immediately; the *cache probe happens on that thread
+too*, so no caller — least of all the interface — ever waits on the disk. A
+second request while one is in flight answers `Busy` rather than queueing: this is
+a minutes-long, disk-bound job, and two of them share one drive and halve each
+other. `cancel(media)` raises an `AtomicBool` the frame loop reads between frames
+and the solve reads per pass and per LM iteration; a cancelled run writes nothing
+and publishes nothing, so there is no partial state to clean up. Progress is a
+value in a map (`Queued` → `Tracking { done, total }` → `Solving` → `Done` /
+`Cancelled` / `Failed`), sampled by whoever repaints, not a subscription anybody
+has to hold.
+
+**The store.** A process-wide `RwLock<HashMap<media, Arc<Solved>>>`, read once per
+frame by the render path with the guard dropped inside the accessor — nothing is
+held across a decode, a submit or an FFI call (docs/14 §1.3). The poses are
+converted **once**, when a solve lands, into a `Vec<CameraPose>` indexed by frame,
+so the per-frame read is a slice index and no trigonometry runs in the render path
+at all.
+
+Eight things are deviations from, or decisions under, K-417's wording:
+
+1. **The conversion is derived, not chosen, and tested against the real matrix.**
+   The tracker puts a world point at `centre + f · p.xy / p.z` with
+   `p = R(P − C)`; `lumit_gpu::composite::camera_matrix` puts it at
+   `centre + zoom · a.xy / (a.z + zoom)` with `a = Rot⁻¹(P − position)` and
+   `Rot = Ry·Rx·Rz`. Setting those equal for every `P` leaves no freedom:
+   `zoom = f`, `Rot = Rᵀ`, and `position = C + Rᵀ·(0, 0, f)` — the camera centre
+   pushed forward along its own optical axis by the focal length, because Lumit's
+   perspective matrix has already put the eye `zoom` behind `position`. The Euler
+   angles come out of `Rᵀ` in the compositor's own `Ry·Rx·Rz` order. The test does
+   not re-derive any of this: it calls `camera_matrix` and asserts that every
+   solved point lands within a twentieth of a pixel of where the tracker put it,
+   over every frame — an algebraic identity, so it cannot flake on solve quality
+   and cannot pass on a solve that failed.
+2. **The solve's world is read as comp pixels at the footage's own raster size.**
+   `CameraSolveStore` is asked about a *media item*, not about a comp — one clip is
+   in many comps — so there is nowhere else for a reference frame to come from.
+   Exact for the ordinary case (a comp made from the shot), off by the size ratio
+   otherwise. Recorded rather than hidden; a comp-aware scale is a change to the
+   trait, not to this arithmetic.
+3. **The sidecar is global, like `media-index/`, not per project.** K-417 says
+   "the project's sidecar (`track/`)", and docs/10 §3 calls the whole cache root
+   the sidecar — of whose two existing tiers one is already global for precisely
+   this reason. The key is (media fingerprint, settings, mask geometry): the solve
+   describes the *file*, so two projects on the same rushes share one and a copy of
+   a project finds its solves already there. Format in docs/10 §3.
+4. **The stored record is the `CameraSolve` and the media's frame rate, not the
+   `TrackSet`.** The store needs the poses and the range; the overlay and the
+   Null/Solid gesture need the point cloud; all three are in the solve. The 2D
+   track export will want the tracks themselves, and when it does the honest move
+   is a format-version bump and a re-analysis, not carrying megabytes of trajectory
+   that nothing reads today.
+5. **The luma tap is one swscale call to gray8, for every pixel format.**
+   `VideoDecoder::frame_luma` shares the whole seek-and-decode path with
+   `frame_rgba` — the split is `frame_exact` — and then converts to `GRAY8` at the
+   source's own size rather than to RGBA. For the planar YUV video actually arrives
+   in, swscale's gray8 output *is* the Y plane, so a fast path for it would buy
+   nothing but a second thing to keep correct; and asking for RGBA to discard two
+   thirds of it would cost a full colour conversion and four times the bytes on
+   every frame. Deliberately unscaled: the tracker measures sub-pixel motion in
+   source pixels, and a preview-tier downsample would silently change what a solved
+   focal means. The test compares the tap with the RGBA decode **by correlation**,
+   because the two conversions weight R, G and B differently and legitimately
+   disagree by tens of per cent on a colour bar — correlation is blind to the gain
+   and lift the tracker is blind to, and not blind to a wrong plane, a wrong frame,
+   a wrong raster or upside-down rows.
+6. **The frame source is a trait (`LumaFrames`) with two implementations.** The
+   real one wraps `VideoDecoder` and is opened on the analysis thread; the test one
+   renders a synthetic shot. That is the seam that lets the whole job — progress,
+   cancellation, the cache, the store, the link — be tested with no asset, no
+   encoder and no ffmpeg, in the shape `SourceProbes` already uses in this crate.
+7. **The mask factor is one, and that is a statement.** A mask's vertices are in
+   the layer's own pixel coordinates, and for a footage layer those *are* the source
+   raster — `build.rs` rasterises them at the layer's natural size, which is the
+   file's own size whatever the preview tier decodes at. The tracker works in the
+   same pixels (K-248), so nothing converts. The mask is flattened at layer time
+   zero: a tracker takes one fixed set of regions for a whole run, so a mask
+   keyframed to follow a mover cannot be honoured yet (owed, in TODO).
+8. **The frame key asks the stamper for the camera.** `lumit_eval::SourceStamper`
+   gained a defaulted `camera(doc, comp, t)` answering `comp.camera_pose(t)`, and
+   `lumit-render`'s `Stamper` overrides it to follow the link. Without it a frame
+   drawn through a derived pose would be *named* by the transform the document
+   holds — which is not the transform it was drawn with — and the frames banked
+   before a solve landed would be served back after it. One defaulted method rather
+   than a store threaded through `comp_frame_key`'s callers, and `lumit-eval` still
+   does not know what a camera solve is.
+
+**The cancellation seam phase 3 owed.** `solve_camera_cancellable` takes a
+`&dyn Fn() -> bool` asked between passes, once per Levenberg–Marquardt iteration,
+and after each bundle; `solve_camera` is it with a flag that is never raised, so
+every existing caller and every existing test is untouched. A raised flag returns
+`SolveError::Cancelled` and **nothing partial**: the half-adjusted model is thrown
+away rather than filled out into frames and handed back looking finished. Its test
+pins all three claims — refused before the first pass, refused part-way through
+the bundle with the flag provably consulted, and bit-identical to `solve_camera`
+when never raised.
+
+**Stage 2's tests** are six in `lumit-render/src/track.rs`, one in
+`lumit-track/src/tests.rs` and one in `lumit-media/src/decode.rs`. The six drive a
+synthetic shot: two textured planes at different depths, the near one present in a
+coarse checker of patches so both are visible at once and the occlusion is exact,
+ray-cast per pixel under a camera path written down in the test. A single plane
+would not do — however it is moved it is explained by a homography, and the solve
+refuses it as rotation-only, correctly. In order: the whole job end to end
+(progress readings, the recovered focal against the true 320 px, the conversion
+against `camera_matrix`, the solve into the store, and a linked Camera layer
+reading it frame for frame and then holding past the end); a solve landing renaming
+the frames it changes; a cancel five frames in leaving no sidecar entry, no
+published solve, and a clean re-run; the sidecar's whole contract (round trip,
+rebuild-equals-hit byte for byte, a different key refused, a newer version refused,
+a deleted file rebuilt to the identical bytes); a masked region with no track
+living in it while the rest of the frame still tracks; and the worker thread
+accepting one analysis, refusing a second, filing the answer, and a warm pass
+finding it without opening the media at all.
+
+**Mutation-checked.** Reading the focal offset off the wrong row of `R`, or
+swapping the y and z Euler extractions, moves the compositor-versus-tracker
+disagreement from 0.02 px to 930 px and 27 px respectively — the conversion test is
+the one that has to bite, and it does.
+
+**Owed to stage 3** (and listed in docs/TODO.md): the Action press event and the
+`BridgeParamKind`; `Progress` and `LinkState` surfaced as the effect's status row
+and the camera's badge; the point-cloud overlay; the warm pass wired to project
+open and `clear()` to project close; a Camera track on a **Precomp** layer (K-417
+allows it, and the analysis decodes media, so tracking a nested comp means
+rendering it first); keyframed masks as time-varying exclusion regions; and more
+than one analysis at a time if anyone ever wants it.
+
+## 5c. Phase 4, stage 3 — the surface, as built
+
+`crates/lumit-bridge/src/api/track.rs`, `flutter_ui/lib/panels/{viewer_track,
+camera_track_display_frb}.dart` (2026-08-21). Stage 3 is everything the user
+touches: the buttons, the line that says how the analysis is getting on, the dots
+over the picture, and the badge a derived camera wears.
+
+**The bridge is a doorway, not a worker.** Nine functions in one module, all
+`#[frb(sync)]` and none of them doing anything a caller waits on. Down:
+`fire_effect_action`, `add_solved_camera`, `set_camera_solve_link`,
+`convert_camera_to_keyframes`, `add_layer_at_points`. Up:
+`track_status`, `tracked_points`, `camera_link`. The whole surface, with its
+reasoning, is docs/17's "The camera track: an event down, readings up".
+
+Seven things are deviations from, or decisions under, K-417's wording:
+
+1. **An Action press is not an edit, and so has nothing to poll against.** Every
+   other reading in the interface is refreshed by a document revision moving; a
+   press moves nothing, deliberately. So the panel counts its own presses and the
+   status line watches that number — one `int` down the tree, rather than an event
+   stream for a thing that happens twice a session.
+2. **The status is polled, and only while it is moving.** Twice a second, from the
+   moment a press starts something to the moment the reading stops changing, and
+   never otherwise. The engine already keeps progress as a value in a map
+   precisely so nobody has to hold a subscription (§5b), and a stream would have
+   been a second mechanism for the same fact.
+3. **The failure reason crosses as an enum with no text in it.** `AnalysisError`
+   carries English (`thiserror`'s messages) and English crossing the seam ships
+   untranslated inside a translated window. `BridgeTrackFailure` is six variants;
+   Dart's switch over the generated enum picks the arb key, so a reason added to
+   the engine is a Dart compile error rather than a blank line. That is K-303's
+   chain one step stricter than the import report's, which sends an id *and* its
+   English as a fallback — this one has no free text to fall back to.
+4. **The cloud is drawn always and clickable only when its layer is selected.**
+   Show points says whether the dots are there; a cloud that also took every click
+   would make the shot unselectable, and clicking the picture is how a layer is
+   selected (K-217). Recorded in docs/07 §2.3.6 as the rule, because it is the one
+   thing about the overlay that is not obvious from looking at it.
+5. **The creation affordance is a floating row, not a context menu.** The gesture
+   that makes the selection is a drag on the picture; asking for a second, hidden
+   gesture to act on it would look calmer and be slower. Two buttons, under the
+   picked points, clamped onto the panel.
+6. **"Create camera" had to be invented.** K-417 describes what a solve-linked
+   camera *does* but not how one comes to exist, and without a gesture the link,
+   the badge and Convert to keyframes are all unreachable. It sits beside the
+   status line, where the solve it links to is being reported, and is one op:
+   a Camera layer whose `solve_link` is the tracked layer. `set_camera_solve_link`
+   is the primitive under it, so a picker on an existing camera is a panel away
+   rather than an engine change.
+7. **The overlay's placement inherits §5b's reference frame.** Points come back in
+   composition pixels as the footage's raster centred on the comp — the layer's own
+   transform is not applied. Exact for the ordinary case and wrong by that
+   transform otherwise; recorded in docs/TODO.md rather than hidden, and the fix is
+   a change to `CameraSolveStore`, not arithmetic in the overlay.
+
+**Where the claims are asserted, and why the split.** Four tests in
+`crates/lumit-bridge/src/api/tests.rs` drive a **written-down** solve published
+straight into the store (`lumit_render::track::publish`, public for exactly this):
+the cloud landing in composition pixels with its depth cue, on the frame the
+playhead is on and on a *later* frame; a Null landing at the mean solved position
+in 3D, with the refusal when nothing named was solved and undo taking it back; the
+badge reading `Derived` and Convert to keyframes writing fifty keys, ending the
+link, and leaving a camera that takes an edit again; and the status reading a
+solve's numbers, with each button's refusal. Six in
+`flutter_ui/test/frb/camera_track_frb_test.dart` drive the interface: the Action
+row drawing a button and a press of Cancel reaching the engine and changing the
+line (which is the wiring proved end to end, since the engine files a `Cancelled`
+reading a press with no wiring could not produce); every failure reason having
+words; a dot per point with its depth drawn rather than recomputed; click,
+shift-click, marquee and `Escape`; the cloud asked for **once per frame and not
+once per rebuild**, counted directly; and a linked camera's badge with Convert
+asserted through the read model rather than through the widget.
+
+The split is the honest one. A solve cannot be put into the engine's store from
+Dart — it is the answer to a minutes-long analysis of a real media file — so the
+*arithmetic* claims live in Rust where a solve can be written down, and the
+*interface* claims live in Dart with the cloud handed in through one optional
+callback (`ViewerTrackLayer.fetch`, defaulting to the engine's own answer). That
+is the same seam, one level up, that `LumaFrames` is in §5b.
+
+**Owed** (docs/TODO.md): the 2D track export, a Tracking workspace, a picker that
+links an existing Camera layer, the layer-transform-aware cloud placement, and the
+cloud's own affordances — a count, a filter, deleting a point, hiding points behind
+the shot, and setting the ground plane and origin from a selection.
 
 ## 5. Test plan
 

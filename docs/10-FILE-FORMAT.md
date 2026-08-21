@@ -99,9 +99,9 @@ the file's is what answers on a machine that has never seen the project.
 
 ## 3. The sidecar cache folder
 
-All derived data lives outside the project. **v1 status:** only the rendered-frame cache and
-the media index are built; `proxies/`, `peaks/`, and `flow/` are planned
-([TODO.md](TODO.md)). What exists today:
+All derived data lives outside the project. **v1 status:** the rendered-frame cache, the
+media index and the camera-solve sidecar are built; `proxies/`, `peaks/`, and `flow/` are
+planned ([TODO.md](TODO.md)). What exists today:
 
 ```
 <global cache root>/
@@ -110,6 +110,7 @@ the media index are built; `proxies/`, `peaks/`, and `flow/` are planned
 │   ├── index.bin                  #   the index snapshot: hash, size, cost, last use, quality
 │   └── index.log                  #   changes since that snapshot, replayed at open
 ├── media-index/       # frame indexes for exact long-GOP seeking, shared across projects
+├── track/             # camera solves (K-417), shared across projects — see below
 └── <project-uuid>/journal/ops.jsonl # the crash-recovery journal (§4)
 
 <project>.lum-cache/   # the same frame cache, when the user asks for it beside the project
@@ -143,6 +144,23 @@ machine's settings file cannot. Absent when the project follows the application,
 that has never been given a place of its own gains no line for it and an older build reads the
 file unchanged (§1.1's forward-compatibility rule). Nothing is moved when the choice changes —
 the frames in the old folder simply stop being addressed.
+
+**`track/` — the camera-solve sidecar (K-417).** One file per analysis, named
+`<32-byte blake3>.ltrk`, where the hash is over the media's fingerprint (size + head/tail
+hash), the analysis settings the Camera track effect was carrying, the mask geometry it was
+given, and this tier's own format version. The file is a seven-byte magic (`LUMTRK\0`), a
+little-endian `u16` version, then a bincode record of that key, the media's frame rate, and
+the solve: a pose per source frame, the focal per segment, the point cloud, the keyframes
+and the solve's notes. A file whose magic does not match, whose version is **newer than this
+build** (the same refuse-newer rule `manifest.json` follows in §1), whose body will not
+parse, or whose stored key is not the one being asked for, is ignored and re-analysed —
+every refusal costs one analysis and nothing else.
+
+Global rather than per-project, for the reason `media-index/` is: a solve describes the
+*file* and the settings it was analysed under, so two projects cutting the same rushes share
+one, and a copy of a project finds its solves already there. The solve is deterministic
+(K-415), so a rebuild is byte-identical to what was deleted — asserted by a test, not
+assumed.
 
 Rules, binding:
 - The global cache root defaults under the user's local app-data and is configurable with a

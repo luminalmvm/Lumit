@@ -11138,3 +11138,79 @@ slot in v1; AE's four-slot Shift-F5 family can follow on the same mechanism if a
 for. Preview-only in the K-314 sense, and item 8's badge does not engage for it — a
 held comparison is not a lying picture, it is a second picture, and releasing the
 button is its whole lifecycle.
+
+## K-417 — The tracker is an effect, and the camera it makes is a link
+
+**DECIDED 2026-08-21** (owner-directed; where in doubt, After Effects is the
+reference). Phase 4's surface, in five rulings:
+
+**Camera track is an effect** — applied to a footage or precomp layer, rendering
+identity, owning the analysis controls, the status readout and the Viewer overlay on
+its layer, exactly the working shape the owner likes in AE: you keep editing while it
+tracks. The effect is the *handle*; the work runs elsewhere.
+
+**The analysis is keyed to the source, not the clip** (K-248 made this decision years
+before the feature): the background job tracks and solves the **entire unaltered
+source clip**, keyed by (media, analysis settings), cached in the project's sidecar
+(`track/`, rebuildable like every sidecar tier, deterministic so a rebuild is
+byte-identical). Every clip of that footage — trimmed, reordered, speed-ramped,
+retimed, in a Sequence layer or not — reads the same solve through its own time
+mapping. Reordering clips or changing a speed never re-tracks anything.
+
+**The dynamic camera is a link, not a copy.** A Camera layer gains a *solve link*
+naming a tracked layer; its transform and focal are derived per frame by walking the
+full comp → clip → source time chain and reading the solve. While linked, the
+camera's transform is read-only and wears a calm badge. The owner's precomp workflow
+holds: a linked camera in the *parent* comp points at the precomp layer, and the
+chain resolves through it to the tracked layer inside. A link that stops resolving
+(the layer deleted, the media offline) holds its last derived motion and says so —
+never a silent freeze, never a crash. **Convert to keyframes** bakes one key per
+frame at the comp rate and severs the link; from then on it is an ordinary camera the
+user edits (the bake is honest about being many keyframes — they are real, editable,
+and the graph editor shows them like any others).
+
+**The point cloud is on by default after a solve**: solved points draw over the
+picture on the tracked layer (depth-cued, theme colours), selectable singly or
+marquee'd; the creation gesture is AE's — selected points make a **Null** or a
+**Solid** at their mean solved position, oriented to face the camera.
+
+**`ParamKind::Action` enters the schema** for the Analyse button (and Cancel while
+running): a parameter row that is a button, generic because the tracker will not be
+the last effect that needs one (beat detection is already waiting). An Action carries
+no value, never keyframes, and crosses the bridge as an event.
+
+Analysis runs on its own thread — never a pool worker (docs/05's decode rule for the
+same reason), cancellable between frames (the seam phase 3 recorded as owed), with
+progress reported to the effect's status row and the overlay.
+
+## K-418 — The importer reads the .aep itself, and the Bridge becomes the backstop
+
+**DECIDED 2026-08-21** (owner-directed: "we need this to be seamless — users shouldn't
+have to think about running scripts and enabling writing in After Effects"). This
+supersedes the *priority* half of K-060: **direct `.aep` parsing is the primary
+route** — the user picks an After Effects project file and it imports — and the Lumit
+Bridge becomes the fidelity backstop and the verification harness rather than the
+front door. K-060's reasoning (RIFX is undocumented and version-drifting) was true
+and remains true; what changed is the evidence available: the community
+reverse-engineering has matured into maintained, MIT-licensed chunk parsers
+(forticheprod's, licence-checked — closing docs/11's open question), and Lumit now
+owns something better than any of it: `tools/ae-bridge/fixtures/` holds a real
+`.aep` beside AE's own byte-exact account of its contents. Every claim the parser
+makes is checked against what After Effects itself said about the same file.
+
+**The architecture is one funnel.** The parser emits the same `Capture` the bundle
+reader produces — a second front end to `lumit-import`, not a second importer. The
+whole mapping layer, the sixty-row effect table, the placeholders, the report and
+the golden tests are reused unchanged, and the differential test (parse
+`fixture.aep`, compare field by field against `capture.json`) measures recovery per
+category instead of asserting it. Where the parser cannot recover something the
+Bridge captures (a field, a property class, a whole feature), that is a report row
+and a measured number, never a guess — and the report's suggestion for a
+low-recovery project is the Bridge route, whose teaching string already exists.
+
+Honesty that stands from K-060: a new AE version MAY break the parser at any time;
+the UI copy says so calmly, the Bridge remains the answer that cannot drift, and the
+bundle import stays a first-class citizen forever (studios export where Lumit is not
+installed). The Kaitai/licence open question in docs/11 closes: nothing is vendored;
+the MIT parsers are read as documentation and reimplemented under Lumit's own rules,
+with attribution in the impl note.

@@ -384,6 +384,12 @@ pub enum BridgeParamKind {
         min: f64,
         max: f64,
     },
+    /// A **button** (K-417), drawn as one and pressed through
+    /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
+    /// value at all — no default, no range, nothing in
+    /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
+    /// not a number that could be keyframed, undone or interpolated.
+    Action,
 }
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
@@ -407,10 +413,8 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
     schema
         .params
         .iter()
-        .map(|param| BridgeParamInfo {
-            id: param.id.to_owned(),
-            label: param.label.to_owned(),
-            kind: match param.kind {
+        .map(|param| {
+            let kind = match param.kind {
                 ParamKind::Float {
                     default,
                     slider,
@@ -479,7 +483,17 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                 // not a control the panel draws differently.
                 ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
                 ParamKind::Curve => BridgeParamKind::Curve,
-            },
+                // A button (K-417). The row crosses so the panel can draw one;
+                // the *value* never does, because there is none — the press
+                // goes back as an event on the owning layer
+                // (`fire_effect_action`), not as a write.
+                ParamKind::Action => BridgeParamKind::Action,
+            };
+            BridgeParamInfo {
+                id: param.id.to_owned(),
+                label: param.label.to_owned(),
+                kind,
+            }
         })
         .collect()
 }

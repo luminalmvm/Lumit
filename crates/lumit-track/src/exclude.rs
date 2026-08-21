@@ -53,6 +53,17 @@ impl ExclusionMask {
         Self::from_polyline(&poly, mask.inverted, comp_to_source)
     }
 
+    /// The outline, in source raster pixels, and whether it is inverted.
+    ///
+    /// Exposed because the analysis cache is keyed by what an analysis was
+    /// *given* (K-417): the mask geometry decides which tracks exist, so it
+    /// belongs in the key — and two masks that flatten to the same outline
+    /// deserve the same cached answer, which hashing ids would not give.
+    #[must_use]
+    pub fn outline(&self) -> (&[[f64; 2]], bool) {
+        (&self.points, self.inverted)
+    }
+
     /// Whether `(x, y)` — in source raster pixels — is forbidden.
     ///
     /// Even-odd crossing count against the polyline. A degenerate outline

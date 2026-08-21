@@ -47,15 +47,16 @@ const _banned = {
 /// Strings where a banned word is not the banned *sense*.
 ///
 /// The glossary bans "track" where Lumit means a **layer**. It says nothing
-/// about tracking as a verb, and these three are After Effects features whose
-/// names contain it: following a camera, following motion, and the matte that
-/// After Effects calls a track matte. All three are menu rows for work that is
-/// not built yet; if the wording is revisited when they are, revisit this too.
+/// about tracking as a verb (§9), and these are features whose names contain
+/// it: following a camera, following motion, and the matte that After Effects
+/// calls a track matte. The menu rows are for work not built yet;
+/// `fxCameraTrack` is the effect itself (K-417), which is built.
 const _bannedWordIsAnotherSense = {
   'menuTrackCamera',
   'menuTrackMotion',
   'menuTrackMatte',
   'toolCameraPan',
+  'fxCameraTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

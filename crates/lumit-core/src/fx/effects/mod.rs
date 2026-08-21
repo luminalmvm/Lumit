@@ -24,6 +24,7 @@ pub mod block_glitch;
 pub mod blur;
 pub mod brightness;
 pub mod broadcast_safe;
+pub mod camera_track;
 pub mod card_wipe;
 pub mod channel_blur;
 pub mod checkbox_control;

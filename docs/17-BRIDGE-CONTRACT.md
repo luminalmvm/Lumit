@@ -214,6 +214,13 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
     `BridgeEffectValue::Float`, the arrangement `Int` and `Angle` already use: the kind says
     which control to draw, not how the number is stored, so a Slider row keeps every float
     path the panel has — keyframes, the graph editor, the expression seed.
+    An **`Action`** (K-417) is a **button**, and the one kind that carries no value at all:
+    no default, no range, and nothing in `BridgeEffectInstanceInfo::values`, because a press
+    is an event and not a number that could be keyframed, undone or interpolated. It crosses
+    only so the panel can draw one; the press goes back through
+    `api::track::fire_effect_action(layer, effect, param)`, which is *not* an edit — nothing
+    is staged, nothing is committed, and no undo entry appears. `defaultEffectValue` answers
+    `null` for it, so Reset walks past the button rather than trying to put it back.
 - `list_parameter_groups(effect)` — the twirls (K-145). A group names a *contiguous run* of
     the schema's parameters and renders where its first member sits; an empty label renders
     headerless, and `visible_when_param`/`visible_when_values` hide the whole run while a
@@ -235,6 +242,42 @@ Lens flare's Light, Radial blur's Centre and Depth of field's Focus point all ri
 `Angle` **is** its own kind, because no arrangement of existing rows draws a dial; its value
 still crosses as a `BridgeEffectValue::Float`, since an angle is a number of degrees and the
 kind only says which control to draw.
+
+### The camera track: an event down, readings up (K-417)
+
+`api::track` is the Camera track effect's whole surface, and it is shaped by one fact: the
+analysis is a minutes-long job on its own thread, over the *media file*, in `lumit-render`.
+Nothing here does the work; this is the doorway.
+
+- **Down** — `fire_effect_action(layer, effect, param)` presses Analyse or Cancel (see
+  `Action`, above). `add_solved_camera(tracked)` adds a Camera layer holding a *link* to the
+  tracked layer; `set_camera_solve_link(camera, tracked)` makes or clears one on an existing
+  camera; `convert_camera_to_keyframes(camera)` bakes the derived motion into one key per
+  composition frame and severs the link, as **one** undoable batch;
+  `add_layer_at_points(tracked, tracks, frame, solid)` drops a 3D Null or Solid at the mean
+  solved position of the named tracks, turned to face the camera at that frame.
+- **Up, and polled** — `track_status(layer)` is one `BridgeTrackStatus`: a stage
+  (idle/queued/tracking/solving/done/cancelled/failed), the frames done and total, the
+  solve's mean reprojection error, its point and frame counts, and — on a refusal — a
+  `BridgeTrackFailure`. It is **read, never subscribed to**: the engine keeps the reading as
+  a value and whoever repaints samples it, exactly as the cache bar is sampled. The panel
+  polls twice a second *only while a job is moving*, and stops the moment it is not.
+- **The failure is a reason, not a sentence** — the same K-303 chain the import report uses,
+  one step stricter: the reason crosses as an enum with no text at all, and Dart's switch
+  over the generated enum picks the arb key. A reason added to the engine is a compile error
+  in Dart rather than an English island in a translated window.
+- **The point cloud** — `tracked_points(layer, frame)` answers where each solved point lands
+  on **composition pixels** at that composition frame, plus a `depth` already normalised
+  0..1 over the cloud on that frame. The engine projects; the interface draws. Which solved
+  frame that is comes from `lumit_core::track::tracked_solved_frame`, the same walk the
+  camera link takes, so the dots and the camera they were solved with cannot disagree. Asked
+  for **once per frame change, never per rebuild** — the Levels histogram's rule (K-413), and
+  the budget test is the gate.
+- **The badge** — `camera_link(camera, frame)` answers the `BridgeLinkState`
+  (unlinked/derived/held/unresolved) and the tracked layer's id, once per frame change.
+- **What is not a call**: which layer of a composition is the tracked one. The read model
+  (K-184) already carries every layer's every effect, so the interface finds the layer whose
+  stack holds an enabled Camera track with Show points on, from data it is already holding.
 
 ### The After Effects import crosses once, as a report
 

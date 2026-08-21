@@ -247,6 +247,35 @@ pub enum ParamKind {
     /// shrinks has no interpolation between two keyframes, which is exactly
     /// why After Effects' own curve blob only ever *steps*.
     Curve,
+    /// A **button**, not a value (K-417): a row the panel draws as a push
+    /// button, which asks the engine to *do* something rather than describing
+    /// what a picture should look like.
+    ///
+    /// # In plain terms
+    ///
+    /// The Camera track effect's Analyse and Cancel. Pressing one starts or
+    /// stops a background job; there is nothing to store, nothing to animate,
+    /// and nothing for a kernel to read. Every other kind answers "what should
+    /// this frame look like"; this one answers "go".
+    ///
+    /// It is generic because the tracker will not be the last effect that wants
+    /// one — beat detection is already waiting — and because a button written
+    /// as a Bool that an effect watches for a rising edge is a control that
+    /// keyframes, saves, and fires again on load.
+    ///
+    /// Three consequences, and they are the whole of the kind:
+    ///
+    /// - **No value.** [`default_param_value`](crate::fx::default_param_value)
+    ///   answers `None`, so `instantiate` writes no `EffectParam` for it and
+    ///   the backfill appends none. There is no
+    ///   [`EffectValue`](crate::model::EffectValue) variant to add.
+    /// - **Never keyframes.** There is no value to interpolate, so the graph
+    ///   editor and the expression system never see the row at all.
+    /// - **Not in the arena.** The resolve step skips it exactly as it skips a
+    ///   File or a Layer row, for a stronger reason: those carry their payload
+    ///   beside the op, and this one carries nothing anywhere. It crosses the
+    ///   bridge as an *event* (stage 3), never as a parameter value.
+    Action,
 }
 
 /// How a transform- or displacement-domain effect treats the border pixels

@@ -9,6 +9,7 @@ Alpha bias
 Alpha blur
 Amount
 Amplitude
+Analyse
 Anamorphic squeeze
 Anchor x
 Anchor y
@@ -57,6 +58,8 @@ Broadcast safe
 Brush hardness
 Brush size
 Bulge
+Camera track
+Cancel
 Card wipe
 Centre
 Centre X
@@ -186,6 +189,7 @@ Fade out
 Far blur
 Fast motion blur
 Feather
+Feature density
 Field of view
 File
 Fill
@@ -309,6 +313,7 @@ Linear
 Linear burn
 Linear light
 Linear wipe
+Low
 Lower left x
 Lower left y
 Lower right x
@@ -467,6 +472,7 @@ Sharp colours
 Sharpen
 Shift x
 Shift y
+Show points
 Shutter
 Shutter angle
 Shutter phase
@@ -567,6 +573,7 @@ Upper right x
 Upper right y
 Use focus point
 Use inner radius
+Use masks
 Use source colour
 Utility
 Value

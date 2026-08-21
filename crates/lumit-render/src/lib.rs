@@ -63,6 +63,7 @@ pub mod plan;
 pub mod profile;
 pub mod realise;
 pub mod source;
+pub mod track;
 
 pub use build::{
     below_draws_at, build_comp_draws, build_comp_draws_at, patch_layer_effect_param,

@@ -566,7 +566,7 @@ pub fn build_comp_draws_at(
                 height: nested.height,
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
-                camera: nested.camera_pose(slt),
+                camera: crate::track::camera_pose(doc, nested, slt),
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -915,7 +915,7 @@ pub fn build_comp_draws_at(
                         // black and hide the parent's stack behind it.
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws: nested_draws,
-                        camera: nested.camera_pose(lt),
+                        camera: crate::track::camera_pose(doc, nested, lt),
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -1415,7 +1415,7 @@ pub fn below_draws_at(
     }
     let mut draws = build_comp_draws_at(doc, &below_comp, tau, frame_t, pixels_by_layer, visited);
     strip_temporal_inputs(&mut draws);
-    (draws, comp.camera_pose(tau))
+    (draws, crate::track::camera_pose(doc, comp, tau))
 }
 
 /// The held below-stack for a temporal adjustment (Posterize Time everything-

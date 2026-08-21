@@ -30,6 +30,7 @@ use super::effects::{
     blur::{Blur, BlurDef},
     brightness::{Brightness, BrightnessDef},
     broadcast_safe::{BroadcastSafe, BroadcastSafeDef},
+    camera_track::{CameraTrack, CameraTrackDef},
     card_wipe::{CardWipe, CardWipeDef},
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
@@ -190,6 +191,10 @@ crate::catalogue![
     // Broadcast safe (docs/08 §3.69, K-405), after it — a delivery tool rather
     // than a look, which is what Utility is for.
     BroadcastSafeDef => BroadcastSafe,
+    // Camera track (docs/08 §3.85, K-417), at the Utility family's end. It is a
+    // handle for a background analysis rather than an image operation, which is
+    // exactly the kind of thing Utility is for.
+    CameraTrackDef => CameraTrack,
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,

@@ -907,7 +907,7 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert_eq!(card.transform.rotation_y.value_at(0.0), 0.0);
 
     let camera = layer(c, "camera");
-    let LayerKind::Camera { zoom } = &camera.kind else {
+    let LayerKind::Camera { zoom, .. } = &camera.kind else {
         panic!("a camera");
     };
     assert_eq!(zoom.value_at(0.0), 800.0, "read out of Camera Options");

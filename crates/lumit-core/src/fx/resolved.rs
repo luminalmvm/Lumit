@@ -405,9 +405,16 @@ fn resolve_into_arena(
             // `a_side_table_effect_declares_the_list_it_consumes` in
             // lumit-render fails the moment one does not, and a silent default
             // here would be a picture quietly rendering without its LUT.
-            ParamKind::File { .. } | ParamKind::Layer { .. } | ParamKind::MaskPath { .. } => {
-                continue
-            }
+            //
+            // An **Action** skips for a stronger reason still (K-417): those
+            // three carry their payload beside the op, and a button carries
+            // nothing anywhere. It is not a value, so it is not in the bag,
+            // and so it is not in the frame key either — pressing Analyse
+            // renames no frame.
+            ParamKind::File { .. }
+            | ParamKind::Layer { .. }
+            | ParamKind::MaskPath { .. }
+            | ParamKind::Action => continue,
             // A curve is small enough to ride in the bag itself (K-412), so
             // unlike the three above it needs no slot beside the op. It does
             // not animate, so there is nothing to evaluate at `lt` — only the

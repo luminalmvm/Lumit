@@ -33,6 +33,20 @@ pub struct DecodedFrame {
     pub rgba: Vec<u8>,
 }
 
+/// A decoded frame as single-channel luma, at the file's own raster size.
+///
+/// The tracker (K-415) reads nothing but brightness, and asking for RGBA to
+/// throw two thirds of it away costs a full colour conversion and four times the
+/// bytes on every frame of a clip. Every pixel format ffmpeg decodes has a
+/// gray8 conversion, and for the planar YUV that video actually arrives in it is
+/// a plane copy.
+pub struct LumaFrame {
+    pub width: u32,
+    pub height: u32,
+    /// Row-major, `width · height` long, 0..1.
+    pub luma: Vec<f32>,
+}
+
 pub struct VideoDecoder {
     input: AVFormatContextInput,
     decoder: AVCodecContext,
@@ -166,6 +180,26 @@ impl VideoDecoder {
         n: usize,
         target_width: Option<u32>,
     ) -> Result<DecodedFrame, MediaError> {
+        let frame = self.frame_exact(n)?;
+        convert_rgba(&frame, target_width)
+    }
+
+    /// Decode exactly frame `n` as luma at the file's own raster size — the
+    /// tracker's tap (K-415, docs/impl/tracking.md §1: source raster pixels, no
+    /// comp scaling).
+    ///
+    /// Deliberately unscaled: the tracker measures sub-pixel motion in *source*
+    /// pixels, and a preview-tier downsample would silently change what a
+    /// solved focal length means.
+    pub fn frame_luma(&mut self, n: usize) -> Result<LumaFrame, MediaError> {
+        let frame = self.frame_exact(n)?;
+        convert_luma(&frame)
+    }
+
+    /// Decode exactly frame `n` and hand back the picture in the shared planar
+    /// form both taps convert from — hardware frames transferred to system
+    /// memory and repacked, exactly as they were before either tap existed.
+    fn frame_exact(&mut self, n: usize) -> Result<AVFrame, MediaError> {
         let want_pts = self
             .index
             .pts_of_frame(n)
@@ -244,7 +278,7 @@ impl VideoDecoder {
                         sw
                     }
                 };
-                return convert_rgba(&frame, target_width);
+                return Ok(frame);
             }
             if pts > want_pts {
                 // Should not happen with an exact index; be honest about it.
@@ -308,6 +342,52 @@ fn deinterleave_to_yuv420p(src: &AVFrame) -> Result<AVFrame, MediaError> {
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     sws.scale_frame(src, 0, src.height, &mut out)?;
     Ok(out)
+}
+
+/// The luma tap: the same swscale call the RGBA path makes, asking for gray8 at
+/// the source's own size, then a byte-to-0..1 map.
+///
+/// One conversion for every pixel format rather than a fast path for planar YUV
+/// and a fallback for the rest: for yuv420p — which is what the software and the
+/// repacked hardware path both produce — swscale's gray8 output *is* the Y
+/// plane, so the branch would buy nothing but a second thing to keep correct.
+fn convert_luma(frame: &AVFrame) -> Result<LumaFrame, MediaError> {
+    let (w, h) = (frame.width, frame.height);
+    let mut sws = SwsContext::get_context(
+        w,
+        h,
+        frame.format,
+        w,
+        h,
+        ffi::AV_PIX_FMT_GRAY8,
+        ffi::SWS_POINT,
+        None,
+        None,
+        None,
+    )
+    .ok_or_else(|| MediaError::Ffmpeg("gray8 context creation failed".into()))?;
+    let mut out = AVFrame::new();
+    out.set_width(w);
+    out.set_height(h);
+    out.set_format(ffi::AV_PIX_FMT_GRAY8);
+    out.alloc_buffer()
+        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
+    sws.scale_frame(frame, 0, h, &mut out)?;
+
+    let stride = usize::try_from(out.linesize[0]).unwrap_or(0);
+    let width = u32::try_from(w).unwrap_or(0);
+    let height = u32::try_from(h).unwrap_or(0);
+    let row_bytes = width as usize;
+    let buf_len = stride
+        .checked_mul(height as usize)
+        .ok_or_else(|| MediaError::Ffmpeg("luma frame buffer size overflow".into()))?;
+    let data = unsafe_data_slice(&out, buf_len)?;
+    let tight = copy_tight_rows(data, stride, row_bytes, height as usize)?;
+    Ok(LumaFrame {
+        width,
+        height,
+        luma: tight.iter().map(|v| f32::from(*v) / 255.0).collect(),
+    })
 }
 
 fn convert_rgba(frame: &AVFrame, target_width: Option<u32>) -> Result<DecodedFrame, MediaError> {
@@ -418,6 +498,80 @@ mod tests {
 
     fn frame_hash(f: &DecodedFrame) -> String {
         blake3::hash(&f.rgba).to_hex().to_string()
+    }
+
+    /// The luma tap is the same picture, at the same size, seeking the same
+    /// way — it just skips the colour.
+    ///
+    /// **Compared by correlation, not by value.** The two paths are not the
+    /// same arithmetic — one is swscale's YUV→gray, the other YUV→RGB followed
+    /// by a weighted sum here — and on a saturated colour bar the two
+    /// conventions disagree by tens of per cent *legitimately*, because a
+    /// different weighting of R, G and B is a different number. So the test
+    /// asks the question the tracker asks: is this the same picture? It is
+    /// gradient-based and NCC-verified, both blind to a gain and a lift, so
+    /// correlation is exactly the right measure — and it is not blind to a wrong
+    /// plane, a wrong frame, a wrong raster or upside-down rows, which is the
+    /// whole list of ways this can break.
+    #[test]
+    fn the_luma_tap_is_the_same_frame_as_the_rgba_decode() {
+        /// Pearson correlation; `None` where either side is flat and there is
+        /// nothing to correlate.
+        fn correlation(a: &[f64], b: &[f64]) -> Option<f64> {
+            let n = a.len() as f64;
+            let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+            let mut cov = 0.0;
+            let (mut va, mut vb) = (0.0, 0.0);
+            for (x, y) in a.iter().zip(b) {
+                cov += (x - ma) * (y - mb);
+                va += (x - ma) * (x - ma);
+                vb += (y - mb) * (y - mb);
+            }
+            (va > 0.0 && vb > 0.0).then(|| cov / (va * vb).sqrt())
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let index = build_frame_index(&file).unwrap();
+        let mut decoder = VideoDecoder::open(&file, index).unwrap();
+
+        for n in [0usize, 45, 119, 30] {
+            let rgba = decoder.frame_rgba(n, None).unwrap();
+            let luma = decoder.frame_luma(n).unwrap();
+            assert_eq!((luma.width, luma.height), (rgba.width, rgba.height));
+            assert_eq!(luma.luma.len(), (rgba.width * rgba.height) as usize);
+
+            let (w, h) = (rgba.width as usize, rgba.height as usize);
+            let want: Vec<f64> = rgba
+                .rgba
+                .chunks_exact(4)
+                .map(|px| {
+                    (0.299 * f64::from(px[0]) + 0.587 * f64::from(px[1]) + 0.114 * f64::from(px[2]))
+                        / 255.0
+                })
+                .collect();
+            let got: Vec<f64> = luma.luma.iter().map(|v| f64::from(*v)).collect();
+            let upright = correlation(&got, &want).expect("neither frame is flat");
+            assert!(
+                upright > 0.9,
+                "frame {n}: the luma tap is not the frame the RGBA decode gives ({upright})"
+            );
+
+            // The same picture with its rows reversed correlates worse, which is
+            // what says the stride walk is the right way up.
+            let flipped: Vec<f64> = (0..h)
+                .rev()
+                .flat_map(|y| want[y * w..(y + 1) * w].iter().copied())
+                .collect();
+            let mirror = correlation(&got, &flipped).expect("neither frame is flat");
+            assert!(
+                mirror < upright,
+                "frame {n}: upside-down rows would read the same ({mirror} vs {upright})"
+            );
+        }
     }
 
     #[test]

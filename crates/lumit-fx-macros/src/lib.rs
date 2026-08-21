@@ -54,7 +54,7 @@ use syn::{
     Effect,
     attributes(
         effect, slider, bounded, counter, dial, toggle, choice, colour, seed, file, layer,
-        mask_path, curve
+        mask_path, curve, action
     )
 )]
 pub fn derive_effect(input: TokenStream) -> TokenStream {
@@ -415,6 +415,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "layer",
         "mask_path",
         "curve",
+        "action",
     ];
     let attr = field
         .attrs
@@ -425,7 +426,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
                  #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[mask_path] \
-                 #[curve]",
+                 #[curve] #[action]",
             )
         })?;
 
@@ -626,6 +627,17 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "curve" => (
             quote! { ::lumit_core::fx::ParamKind::Curve },
             quote! { p.curve(#idc) },
+        ),
+        // A button (K-417). It carries no value, so the field it declares is
+        // the unit type and `read` fills it with `()`: there is nothing in the
+        // bag to read back, and there never will be — an Action crosses the
+        // bridge as an event. The generated `ParamId` const is still emitted,
+        // which is what the event names the row by. `#[action(label = "…")]`
+        // is the only argument it takes, and it comes from the shared label
+        // handling above like every other kind's.
+        "action" => (
+            quote! { ::lumit_core::fx::ParamKind::Action },
+            quote! { () },
         ),
         other => {
             return Err(syn::Error::new(

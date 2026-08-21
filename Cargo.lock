@@ -1615,6 +1615,7 @@ dependencies = [
 name = "lumit-render"
 version = "0.2.0"
 dependencies = [
+ "bincode",
  "blake3",
  "lumit-audio",
  "lumit-cache",
@@ -1625,9 +1626,11 @@ dependencies = [
  "lumit-media",
  "lumit-project",
  "lumit-text",
+ "lumit-track",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "uuid",
  "wgpu",
 ]
@@ -1645,6 +1648,7 @@ name = "lumit-track"
 version = "0.2.0"
 dependencies = [
  "lumit-core",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -1661,6 +1665,7 @@ dependencies = [
  "lumit-media",
  "lumit-project",
  "lumit-render",
+ "lumit-track",
  "serde",
  "serde_json",
  "tempfile",

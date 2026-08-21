@@ -391,6 +391,7 @@ impl PointBlock {
 /// low-hundreds this pipeline selects (docs/impl/tracking.md §4 says as much);
 /// a shot that somehow lands thousands of keyframes wants a sparse
 /// factorisation here, not a bigger machine.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn bundle_adjust(
     cams: &mut [BundleCamera],
     focals: &mut [f64],
@@ -399,6 +400,9 @@ pub(crate) fn bundle_adjust(
     centre: [f64; 2],
     huber_px: f64,
     max_iterations: usize,
+    // Asked once per iteration; `true` stops the loop where it stands. The
+    // caller discards the half-adjusted model — see `solve_camera_cancellable`.
+    cancel: &dyn Fn() -> bool,
 ) -> BundleReport {
     let width = layout_width(cams.len(), focals.len());
     let (mut cost, initial_mean_px) = evaluate(cams, focals, points, obs, centre, huber_px);
@@ -425,6 +429,9 @@ pub(crate) fn bundle_adjust(
     let mut blocks: Vec<PointBlock> = Vec::new();
 
     for _ in 0..max_iterations {
+        if cancel() {
+            break;
+        }
         // --- linearise ------------------------------------------------------
         let mut u = Dense::zero(width);
         let mut bc = vec![0.0f64; width];

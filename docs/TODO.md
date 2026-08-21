@@ -369,6 +369,48 @@ fix. Also unbuilt: an **export**'s progress still has its own path
 
 ## Next - engine/bridge follow-ups
 
+**Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
+Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
+solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
+the engine half: `lumit_render::track` — the analysis job on its own thread with
+cancellation between frames and inside the solve, the `track/` sidecar keyed by
+(media fingerprint, settings, mask geometry), the real `CameraSolveStore`, the
+conversion into `CameraPose`, and the derived camera threaded into the render path
+and the frame key.
+
+**Stage 3** owes the bridge and the interface: a `BridgeParamKind` for an Action
+and the press event behind it (`list_parameters` filters the row out until then),
+`lumit_render::track::Progress` surfaced as the effect's status readout,
+`LinkState` as the read-only badge on a linked camera's rows, the point-cloud
+overlay with select → Null/Solid, and the 2D track → keyframed transform /
+corner-pin export.
+
+Four smaller things stage 2 left, each recorded in docs/impl/tracking.md §5b:
+
+- **Warm and clear are not wired to a project's life yet.**
+  `lumit_render::track::request` with `analyse: false` reads a cached solve without
+  decoding anything, and `clear()` empties the store; opening a project should do
+  the first for every tracked layer and closing it the second. Until then a link
+  resolves only after Analyse is pressed in the session.
+- **A Camera track on a Precomp layer does not analyse.** K-417 allows the effect
+  there and the solve link already resolves *through* a precomp to the footage
+  inside; what is missing is analysing a nested comp, which means rendering it
+  frame by frame rather than decoding a file.
+- **Masks are flattened at layer time zero.** The tracker takes one fixed set of
+  exclusion regions for a whole run, so a mask keyframed to follow a moving object
+  — the obvious thing to want — is honoured only in the shape it starts on.
+- **One analysis at a time.** A second `request` while one runs answers `Busy`
+  rather than queueing. Deliberate (two disk-bound jobs halve each other), and a
+  queue is a small change if anyone asks for one.
+
+**GUIDE.md owes a plain-English section on camera tracking's surface** (K-417,
+docs/03 §5.6, docs/impl/tracking.md §5b) — what "the camera points at the tracked
+layer" means, why that is better than several thousand keyframes, what Convert to
+keyframes does, and what the `track/` sidecar is for (why analysing once serves
+every clip of that footage, and why deleting the folder is always safe). Owed
+rather than written because GUIDE.md was another session's file when stages 1 and
+2 landed.
+
 **The displacement class still takes the generic matte.** K-395 names
 "displacement-class effects scale their vectors before sampling" as an override
 worth having, beside the four that landed (Gaussian blur's radius, Glow's seed
@@ -777,6 +819,42 @@ project does not contain).
      The reason-level filter §9 asks for (disabled expressions as their own list)
      belongs with that work; the built filter is by outcome.
 
+**The direct `.aep` parser (K-418, docs/impl/ae-import.md §7) - phase A landed
+2026-08-21; phases B and C are the work.** `crates/lumit-import/src/aep/` reads an
+After Effects project file itself and fills the same `Capture` the Bridge writes, so
+the mapping, the effect table and the report are shared unchanged: `rifx.rs` is the
+bounds-checked container walk, `enums.rs` the funnel tables, `mod.rs` the structure
+decode and `open_aep`. `tests/aep_differential.rs` parses `fixture.aep` and compares
+the project block, all 22 items, both comps' settings and all 24 layers against
+`fixture.lum-bundle/capture.json` - AE's own account of the same file - field for
+field; §7.1 is the proved layout map.
+ - **Phase B: the property system.** `tdgp`/`tdbs`/`tdb4`/`cdat` and the `lhd3`+`ldat`
+   keyframe records, then effects, masks, text, shapes and expressions - and markers,
+   which are keyframes of `ADBE Marker` (a comp's on its hidden `SecL` layer). Until
+   it lands every layer's `properties` and `markers` arrive empty, and
+   `time_remap_enabled` is the one property fact phase A reads.
+ - **Phase C: the front door.** File ▸ Import takes the `.aep` itself (docs/11 §1),
+   the report opens automatically and says which route ran, and skipped chunks - today
+   recorded as `Unreadable` rows on the bundle's report - become report rows the panel
+   shows. Then the stretch goal: the Curves `CUSTOM_VALUE` blob is in the file, so
+   K-412's sixteen-point target may be reachable, measured rather than promised.
+ - **Footage interpretation is not read at all, and needs a fixture that has some.**
+   `fixture.aep` is solids and comps with no file footage in it, so path, frame rate,
+   alpha, fields, pulldown, loop and missing-ness could not be checked against AE -
+   and an unchecked offset is exactly the silently-wrong import this route exists to
+   avoid. One more sitting with real footage in the project unblocks the whole group,
+   and the differential test asserts the fixture still has none so the exemption
+   cannot rot.
+ - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
+   two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
+   inclusive indices on an internal grid; with one sample the grid cannot be proved,
+   so the differential test compares those two within a frame. A fixture with a second
+   negative-stretch layer at a different frame rate settles it.
+ - **Every funnel-table row the fixture does not exercise is `reference`, not proved**
+   (marked as such in `enums.rs`): most blend modes, two matte types, `WIREFRAME`
+   quality, three light types, two auto-orient modes, and the three non-Classic
+   renderers. A fixture that uses them turns each into a measurement.
+
 **AE effect parity, wave 1 (docs/impl/ae-effect-parity.md) - landed in full 2026-08-20.**
 Eighteen Tier-A effects in four family batches: ~~colour (Curves, Levels, Brightness, Hue
 and saturation)~~ **K-396/K-397**, ~~generate (Fill, Gradient, Noise, Fractal noise)~~
@@ -946,8 +1024,8 @@ list, not a re-statement of the roadmap.
     import, Lottie export, OpenTimelineIO interchange, render-farm/CLI export
     (K-023, K-036).
 
-**Tracking (K-415, docs/impl/tracking.md) - phases 1, 2 and 3 landed (2026-08-20,
-2026-08-21); one phase open.** `crates/lumit-track` holds the track substrate -
+**Tracking (K-415/K-417, docs/impl/tracking.md) - all four phases landed
+(2026-08-20, 2026-08-21).** `crates/lumit-track` holds the track substrate -
 Shi-Tomasi detection on a 16x16 bucket grid, pyramidal affine KLT with
 forward-backward and NCC verification, K-408 exclusion masks, re-detection into
 starved buckets - the two-view geometry over it (Hartley-normalised 8-point and
@@ -956,18 +1034,11 @@ parallax-driven keyframe selection, epipolar dynamic-track segmentation, the
 zoom cut/ramp detector), and now the global solve: `solve_camera` returns a
 `CameraSolve` with a pose per frame, a focal per segment, the point cloud and
 the per-frame error. Forty-three tests, all synthetic, no assets.
- - **Phase 4 - the surface** (note §5): bridge and Tracking workspace, point
-   cloud over the picture, solved camera to a Camera layer, 2D track to
-   keyframed transform and corner-pin export. What phase 3 hands it is in the
-   note's §4 "as built": `CameraSolve.poses` is one `SolvedPose` per frame in
-   frame order, carrying its own `focal_px` so a per-frame export never walks
-   the segment table, and a `PoseSource` saying whether that pose was solved,
-   resectioned, or interpolated - the UI should be able to show the difference.
-   Four things phase 4 has to add rather than read:
-   - **A cancellation token on `solve_camera`.** Phase 1's seam is one frame per
-     `push`; the solve is a single bounded call with no seam inside it, which is
-     fine for a worker and not fine for the bridge (14-ENGINEERING-RULES §1.4).
-     The natural seam is the per-pass loop plus the LM iteration.
+ - **Phase 4 landed** (K-417, note §5a-§5c): the Camera track effect, the
+   analysis job on its own thread with the `track/` sidecar, the solve-linked
+   Camera layer, Convert to keyframes, the point cloud with select → Null/Solid,
+   and the cancellation seam inside `solve_camera`. Still open from phase 3's
+   hand-off list:
    - **A focal hint.** Every tracker worth using lets the operator type the lens
      in, and self-calibration is the weakest number in the pipeline (note §4's
      deviation 1). `SolveSettings` wants an optional `focal_px` that skips the
@@ -978,9 +1049,8 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
      rotations are recoverable and a Camera layer that only turns is a real
      deliverable for a locked-off pan. It needs its own output shape and its own
      decision entry.
-   - **Progress reporting**: the solve has five nameable stages and phase 2 has
-     one more; a bar that says which is running is most of what an operator
-     wants from a solve that takes seconds.
+   - **2D track exports** (docs/08 §7's Tracker row): keyframed transform and
+     corner-pin data from a track group, riding the same store.
  - **The zoom ramp is one focal, not a curve** (note §4's deviation 7). A
    segment containing a detected zoom ramp is flagged and reported as
    `SolveNote::ZoomRamp`, and its focal is a single number over the whole run

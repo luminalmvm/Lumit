@@ -942,6 +942,7 @@ impl CompositionReference {
             "Camera".into(),
             lumit_core::model::LayerKind::Camera {
                 zoom: Property::fixed(f64::from(comp.width) * 50.0 / 36.0),
+                solve_link: None,
             },
             comp.duration.0,
             TransformGroup {

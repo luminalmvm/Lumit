@@ -983,8 +983,14 @@ impl HeadlessRenderer {
             // makes the returned texture the region's size regardless, so
             // everything downstream sees one shape.
             let roi = self.region_px(cw, ch);
-            let linear =
-                realiser.realise_region(comp.camera_pose(t), cw, ch, background, &draws, roi);
+            let linear = realiser.realise_region(
+                crate::track::camera_pose(doc, comp, t),
+                cw,
+                ch,
+                background,
+                &draws,
+                roi,
+            );
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
                     crop_texture(&self.gpu, &linear, r, realiser.render_scale, (cw, ch))
@@ -3923,6 +3929,7 @@ mod tests {
                     "Camera",
                     LayerKind::Camera {
                         zoom: Property::fixed(f64::from(h) * 2.0),
+                        solve_link: None,
                     },
                     w,
                     h,

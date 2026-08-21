@@ -395,6 +395,20 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
+/// Camera-solve sidecar directory (docs/10-FILE-FORMAT.md §3, K-417) — where a
+/// tracked clip's solve is parked so the next session does not re-track it.
+///
+/// Global and keyed by (media fingerprint, analysis settings), for the reason
+/// [`media_index_dir`] is: the solve describes the *file* and the settings it
+/// was analysed under, not the project that happened to ask. Two projects
+/// cutting the same rushes share one analysis, and a copy of a project finds
+/// its solves already there. Rebuildable and deletable at any time, like every
+/// tier under this root.
+pub fn track_cache_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.cache_dir().join("track"))
+}
+
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {

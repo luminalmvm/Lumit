@@ -234,7 +234,7 @@ Invariants:
 | `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. **Precomp-level retime is future** — the `retime` field is not on the kind yet; nest through a Sequence clip to retime a comp for now. |
 | `Solid { def: Uuid }` | yes | A SolidDef | |
 | `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
-| `Camera { zoom: Property }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. |
+| `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
 | `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list; nested groups and modifiers are future (§9.2). |
@@ -308,6 +308,65 @@ want different things from a light and both get them from the same resolve: the 
 in the projected picture and ignores depth entirely, while shading needs `z` and the
 out-of-plane rotations, because a rectangle in the same plane as the surface it lights is
 edge-on and throws nothing.
+
+
+### 5.6 The solve link on a Camera layer (K-417)
+
+**In plain terms.** When a shot has been camera-tracked (§3.85 of
+[08-EFFECTS.md](08-EFFECTS.md), [impl/tracking.md](impl/tracking.md)), the engine knows
+where the real camera was on every frame of that *file*. The obvious thing to do with that
+is to stamp it onto a Camera layer as several thousand keyframes. Lumit does not, at least
+not at first: the Camera layer **points at** the tracked layer and derives its placement
+afresh each frame. Re-solve the shot, trim it, reorder its cuts, ramp its speed — the camera
+follows, because nothing was ever copied.
+
+`solve_link` names a **layer in the same composition**: the one the analysis was run on, or
+a Precomp layer that contains it. It is a layer id and nothing else — no cached poses, no
+frame numbers, no copy of the solve.
+
+**The derivation is the renderer's own time walk.** At composition time *t*, the linked
+layer's time is walked to a moment of its source exactly as the render plan walks it to
+choose a frame to decode: comp time, less the layer's `start_offset`, through the layer's
+Retime (or, on a Sequence layer, through the clip under the playhead and *its* trim and
+Retime), to a source time. That source time becomes a solved frame, and the solved frame
+becomes the camera's position, rotation and zoom. Because it is the same walk, a reordered
+Sequence layer, a speed ramp and a freeze all come out right without a special case — the
+tracker ran on the file, once (K-248).
+
+**Through a precomp.** A Precomp layer (or a comp-sourced clip) is walked *into*: the nested
+composition's own tracked layer — the one carrying the Camera track effect, which is what
+makes an effect the handle — continues the chain. This is the owner's workflow: a linked
+camera in the parent comp points at the precomp layer, and the chain resolves through it to
+the footage inside.
+
+**Read-only while linked.** A linked camera's transform and zoom are derived, so they are
+not the document's to edit: `SetTransformProperty` and `SetCameraZoom` on one refuse with
+`OpError::CameraLinked`, and the panel draws the rows greyed and wearing a calm badge. The
+rule is enforced in `ops::apply`, not in the interface, for the reason the lock is (K-291):
+a rule enforced only in a panel is a rule the next caller does not know about.
+`SetCameraSolveLink` is always accepted — a link that could not be undone would be a trap.
+
+**Two honest failures, and neither is silent.** A link that asks for a moment outside what
+was solved **holds** the nearest solved frame — the last derived motion — and reports that
+it is holding. A link that cannot be followed at all (the layer deleted, the media offline,
+nothing solved) falls back to the properties the document itself holds, and reports *that*.
+Never a freeze nobody explained, never a crash.
+
+**Convert to keyframes** severs the link and bakes the derived motion into ordinary
+keyframes: one key per composition frame across the layer's span, linear on both sides, on
+the six transform properties and on the zoom. They are real, editable keyframes and the
+graph editor draws them like any others — the bake is honest about there being a lot of
+them. It is one undoable step: the link is cleared *first* inside the batch (so the
+read-only refusal does not stop the very edit that ends it) and restored *last* on undo.
+
+The solves themselves live in the `track/` sidecar ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)
+§3), rebuildable like every sidecar tier; the model reaches them through a store trait, so
+nothing in the document depends on the tracker. The store hands back poses **already in
+Lumit's camera terms** — comp pixels, AE-style position and rotation, a `zoom` — because
+turning a solve's world-to-camera rotations and source-pixel focal into those is a real piece
+of work that belongs beside the solve, not in the model ([impl/tracking.md](impl/tracking.md)
+§5b).
+
 
 ---
 

@@ -23,6 +23,7 @@ import 'api/shell.dart';
 import 'api/solid.dart';
 import 'api/state.dart';
 import 'api/system.dart';
+import 'api/track.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -214,6 +215,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeTextDocument dco_decode_box_autoadd_bridge_text_document(dynamic raw);
 
   @protected
+  BridgeTrackFailure dco_decode_box_autoadd_bridge_track_failure(dynamic raw);
+
+  @protected
   BridgeTransform dco_decode_box_autoadd_bridge_transform(dynamic raw);
 
   @protected
@@ -264,6 +268,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCacheStats dco_decode_bridge_cache_stats(dynamic raw);
+
+  @protected
+  BridgeCameraLink dco_decode_bridge_camera_link(dynamic raw);
 
   @protected
   BridgeClip dco_decode_bridge_clip(dynamic raw);
@@ -383,6 +390,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLayerTiming dco_decode_bridge_layer_timing(dynamic raw);
 
   @protected
+  BridgeLinkState dco_decode_bridge_link_state(dynamic raw);
+
+  @protected
   BridgeMarker dco_decode_bridge_marker(dynamic raw);
 
   @protected
@@ -488,6 +498,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument dco_decode_bridge_text_document(dynamic raw);
+
+  @protected
+  BridgeTrackFailure dco_decode_bridge_track_failure(dynamic raw);
+
+  @protected
+  BridgeTrackPoint dco_decode_bridge_track_point(dynamic raw);
+
+  @protected
+  BridgeTrackStage dco_decode_bridge_track_stage(dynamic raw);
+
+  @protected
+  BridgeTrackStatus dco_decode_bridge_track_status(dynamic raw);
 
   @protected
   BridgeTransform dco_decode_bridge_transform(dynamic raw);
@@ -629,6 +651,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeStrokePoint> dco_decode_list_bridge_stroke_point(dynamic raw);
 
   @protected
+  List<BridgeTrackPoint> dco_decode_list_bridge_track_point(dynamic raw);
+
+  @protected
   List<BridgeTransformProp> dco_decode_list_bridge_transform_prop(dynamic raw);
 
   @protected
@@ -654,6 +679,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
@@ -710,6 +738,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument? dco_decode_opt_box_autoadd_bridge_text_document(
+      dynamic raw);
+
+  @protected
+  BridgeTrackFailure? dco_decode_opt_box_autoadd_bridge_track_failure(
       dynamic raw);
 
   @protected
@@ -941,6 +973,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeTrackFailure sse_decode_box_autoadd_bridge_track_failure(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeTransform sse_decode_box_autoadd_bridge_transform(
       SseDeserializer deserializer);
 
@@ -1000,6 +1036,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCacheStats sse_decode_bridge_cache_stats(SseDeserializer deserializer);
+
+  @protected
+  BridgeCameraLink sse_decode_bridge_camera_link(SseDeserializer deserializer);
 
   @protected
   BridgeClip sse_decode_bridge_clip(SseDeserializer deserializer);
@@ -1139,6 +1178,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeLinkState sse_decode_bridge_link_state(SseDeserializer deserializer);
+
+  @protected
   BridgeMarker sse_decode_bridge_marker(SseDeserializer deserializer);
 
   @protected
@@ -1254,6 +1296,20 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument sse_decode_bridge_text_document(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeTrackFailure sse_decode_bridge_track_failure(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeTrackPoint sse_decode_bridge_track_point(SseDeserializer deserializer);
+
+  @protected
+  BridgeTrackStage sse_decode_bridge_track_stage(SseDeserializer deserializer);
+
+  @protected
+  BridgeTrackStatus sse_decode_bridge_track_status(
       SseDeserializer deserializer);
 
   @protected
@@ -1423,6 +1479,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeTrackPoint> sse_decode_list_bridge_track_point(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeTransformProp> sse_decode_list_bridge_transform_prop(
       SseDeserializer deserializer);
 
@@ -1454,6 +1514,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -1517,6 +1580,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument? sse_decode_opt_box_autoadd_bridge_text_document(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeTrackFailure? sse_decode_opt_box_autoadd_bridge_track_failure(
       SseDeserializer deserializer);
 
   @protected
@@ -1756,6 +1823,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeTextDocument self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_track_failure(
+      BridgeTrackFailure self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_transform(
       BridgeTransform self, SseSerializer serializer);
 
@@ -1821,6 +1892,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_cache_stats(
       BridgeCacheStats self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_camera_link(
+      BridgeCameraLink self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_clip(BridgeClip self, SseSerializer serializer);
@@ -1976,6 +2051,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeLayerTiming self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_link_state(
+      BridgeLinkState self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_marker(BridgeMarker self, SseSerializer serializer);
 
   @protected
@@ -2107,6 +2186,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_text_document(
       BridgeTextDocument self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_track_failure(
+      BridgeTrackFailure self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_track_point(
+      BridgeTrackPoint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_track_stage(
+      BridgeTrackStage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_track_status(
+      BridgeTrackStatus self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_transform(
@@ -2281,6 +2376,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeStrokePoint> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_track_point(
+      List<BridgeTrackPoint> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_transform_prop(
       List<BridgeTransformProp> self, SseSerializer serializer);
 
@@ -2315,6 +2414,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_prim_i_64_strict(
       Int64List self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_32_loose(
+      List<int> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_32_strict(
@@ -2381,6 +2484,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_text_document(
       BridgeTextDocument? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_track_failure(
+      BridgeTrackFailure? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_transform(

@@ -198,6 +198,8 @@ fn layer_kind(
     match kind {
         "camera" => LayerKind::Camera {
             zoom: scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0),
+            // An imported camera is the file's own; nothing has been solved.
+            solve_link: None,
         },
         "light" => LayerKind::Light {
             light: Box::new(light(conv, path, ae, props)),

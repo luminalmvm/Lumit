@@ -17,7 +17,7 @@ pub mod slate;
 use std::path::Path;
 
 pub use audio::AudioBuffer;
-pub use decode::{DecodedFrame, VideoDecoder};
+pub use decode::{DecodedFrame, LumaFrame, VideoDecoder};
 pub use encode::Encoder;
 pub use index::{FrameIndex, IndexEntry};
 pub use probe::{AudioInfo, MediaProbe, VideoInfo};

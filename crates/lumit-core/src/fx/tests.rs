@@ -10543,12 +10543,13 @@ fn every_effect_carries_a_matte_row() {
     use crate::fx::MatteRole;
     for def in BUILTIN_DEFS.iter() {
         let s = def.schema();
-        // The Controls family opts out entirely (K-414). They are the answer to
-        // the question `MatteRole::None` was written for: an effect that touches
-        // no pixel cannot be driven by a picture, so a Matte row on one would be
-        // a control that could never do anything. Every *image* effect below
-        // still has to carry one.
-        if s.category == FxCategory::Controls {
+        // The Controls family opts out entirely (K-414), and so does the Camera
+        // track (K-417) — a handle for a background analysis rather than an
+        // image operation. They are the answer to the question `MatteRole::None`
+        // was written for: an effect that touches no pixel cannot be driven by a
+        // picture, so a Matte row on one would be a control that could never do
+        // anything. Every *image* effect below still has to carry one.
+        if s.category == FxCategory::Controls || s.match_name == "camera_track" {
             assert_eq!(
                 s.matte,
                 MatteRole::None,
@@ -10877,13 +10878,13 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
 fn a_fresh_mask_path_row_is_the_first_mask_entry() {
     assert_eq!(
         default_param_value(&ParamKind::MaskPath { self_default: true }),
-        EffectValue::MaskPath(None)
+        Some(EffectValue::MaskPath(None))
     );
     assert_eq!(
         default_param_value(&ParamKind::MaskPath {
             self_default: false
         }),
-        EffectValue::MaskPath(None)
+        Some(EffectValue::MaskPath(None))
     );
 }
 
@@ -11545,7 +11546,7 @@ fn a_closed_range_resolves_exactly_as_the_float_it_is() {
         assert!(
             matches!(
                 crate::fx::default_param_value(&row.kind),
-                EffectValue::Float(_)
+                Some(EffectValue::Float(_))
             ),
             "{name} — the value side is a Float, as Int and Angle are"
         );
@@ -11569,4 +11570,126 @@ fn a_closed_range_resolves_exactly_as_the_float_it_is() {
         30.0,
         "a closed range resolves through the Float path it always used"
     );
+}
+
+/// **A button is a row with no value** (K-417's fifth ruling).
+///
+/// `ParamKind::Action` makes three promises, and each of them fails silently
+/// without a test: an instance carries no stored value for it, so nothing
+/// animates or serialises; the resolve step puts nothing in the arena, so it is
+/// not in the frame key and pressing Analyse renames no frame; and the backfill
+/// appends nothing, so a project saved before the row existed does not grow one.
+///
+/// Checked on the Camera track, which is the first effect to declare any.
+#[test]
+fn a_button_is_a_row_with_no_value() {
+    let def = BUILTIN_DEFS.get("camera_track").expect("declared");
+    let s = def.schema();
+    let buttons: Vec<&str> = s
+        .params
+        .iter()
+        .filter(|p| p.kind == ParamKind::Action)
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(buttons, ["analyse", "cancel"], "the two the ruling names");
+
+    // No stored value: not from the declaration, not from a fresh instance.
+    for id in &buttons {
+        let kind = s
+            .params
+            .iter()
+            .find(|p| p.id == *id)
+            .expect("declared")
+            .kind;
+        assert!(
+            crate::fx::default_param_value(&kind).is_none(),
+            "{id} has a default value"
+        );
+    }
+    let mut e = instantiate("camera_track").expect("instantiates");
+    for id in &buttons {
+        assert!(e.param(id).is_none(), "{id} was written into the instance");
+    }
+
+    // And the backfill leaves it alone — the walk that exists to add missing
+    // rows must not add this one (K-258 meets K-417).
+    let before = e.params.len();
+    let mut list = vec![e.clone()];
+    crate::fx::backfill_builtin_params(&mut list);
+    assert_eq!(list[0].params.len(), before, "the backfill grew a button");
+
+    // Not in the arena. The effect resolves to no op at all (it is a handle,
+    // not an image operation), so the check that the button never reaches a bag
+    // is made on a bag built from the declaration directly.
+    e.params.clear();
+    assert!(!def.is_image_op(), "the Camera track draws nothing");
+    let (ids, ops) = super::resolve_stack_temporal_named(
+        std::slice::from_ref(&e),
+        0.0,
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        Arc::new(ExpressionContext::detached()),
+    );
+    assert!(
+        ids.is_empty() && ops.is_empty(),
+        "a handle resolved to an op"
+    );
+}
+
+/// The Camera track is the handle K-417 describes: it registers, it files under
+/// Utility, it renders identity, it takes no matte, and its quality knobs are
+/// the ones the ruling names. The status readout is deliberately **not** here —
+/// it is live job state and crosses as job state in stage 2, and a string
+/// parameter pretending to be one would put a progress bar in the save file.
+#[test]
+fn the_camera_track_declares_a_handle_not_a_look() {
+    use crate::fx::effects::camera_track::{density, DENSITY, DENSITY_DEFAULT};
+
+    let def = BUILTIN_DEFS.get("camera_track").expect("registered");
+    let s = def.schema();
+    assert_eq!(s.label, "Camera track");
+    assert_eq!(s.category, FxCategory::Utility);
+    assert_eq!(s.matte, crate::fx::MatteRole::None);
+    assert!(!def.is_image_op());
+
+    let ids: Vec<&str> = s.params.iter().map(|p| p.id).collect();
+    assert_eq!(
+        ids,
+        ["analyse", "cancel", "density", "use_masks", "show_points"],
+        "no matte pair is injected, and nothing else has crept in"
+    );
+    assert_eq!(
+        s.params[2].kind,
+        ParamKind::Choice {
+            options: &["Low", "Normal", "High"],
+            default: DENSITY_DEFAULT,
+            dividers_after: &[],
+        }
+    );
+    assert_eq!(
+        s.params[3].kind,
+        ParamKind::Bool { default: true },
+        "masks exclude by default: a mask on a tracked layer is round the mover"
+    );
+    assert_eq!(
+        s.params[4].kind,
+        ParamKind::Bool { default: true },
+        "the cloud is on after a solve (K-417's fourth ruling)"
+    );
+
+    // Normal is the tracker's own default, which is what makes the other two
+    // honest about being a deliberate move.
+    assert_eq!(density(DENSITY_DEFAULT), (16, 16, 2));
+    assert_eq!(
+        density(99),
+        density(DENSITY_DEFAULT),
+        "unknown reads Normal"
+    );
+    let mut previous = (0, 0, 0);
+    for (n, entry) in DENSITY.iter().enumerate() {
+        assert!(entry > &previous, "density {n} is not denser than the last");
+        previous = *entry;
+    }
 }

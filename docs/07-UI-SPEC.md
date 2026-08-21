@@ -722,6 +722,40 @@ only: no tool gains a gesture on a button it did not already handle.
 - Not built: a **point of interest** (After Effects' two-node camera), the **Unified Camera**
   tool, and depth-of-field handles on the picture.
 
+### 2.3.6 The camera-track point cloud (K-417)
+
+- When a layer carries an enabled **Camera track** whose **Show points** is on and a solve
+  exists for its footage, the solved points MUST be drawn over the picture as **depth-cued
+  dots**: nearer ones larger and at full strength, further ones smaller and faded, in theme
+  colours. Nearness arrives from the engine already normalised over the cloud on the frame
+  being shown — the interface draws it, and does not work it out
+  ([17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md)).
+- The cloud is asked for **once per frame change**, never per rebuild — the Levels histogram's
+  rule (K-413), and the bridge-call budget is the gate.
+- The cloud takes clicks **only while its own layer is the selected one**. Drawn always,
+  clickable then: a cloud that always took the pointer would make the whole shot unselectable,
+  and clicking the picture is how a layer is selected (§2.3).
+- **Selecting**: a click takes the nearest point within reach; `Shift`-click adds (and a second
+  `Shift`-click on a picked point takes it away again); a drag on empty picture sweeps a
+  **marquee** and takes everything inside it; a click on nothing, and `Escape`, clear. The
+  selection is **panel state** — a set of features being worked with, not something the
+  document holds — so it does not survive the panel and is not undoable.
+- With points picked, a **small floating row** appears under them offering **Create null** and
+  **Create solid**. A row rather than a context menu: the gesture that made the selection is a
+  drag on the picture, and requiring a second, hidden gesture to act on it would be the
+  calmer-looking but slower answer. It MUST stay on the panel when the selection sits near an
+  edge.
+- Either command adds a **3D layer at the mean solved position** of the picked points, turned
+  to face the camera at the frame the selection was made on. Naming nothing that was solved
+  MUST be refused rather than putting a layer at the origin.
+- A **solve-linked Camera layer** wears its state as a calm badge in the Transform heading of
+  the Effect controls panel — *following the solve*, *holding the last solved frame*, or *the
+  solve could not be found* — with **Convert to keyframes** beside it. The transform rows are
+  read-only while linked, because the engine refuses the write; the badge is what stops that
+  being a surprise.
+- Not built: hiding points behind the shot's geometry, a point count or filter, deleting a
+  point from the cloud, and setting the ground plane and origin from a selection.
+
 ### 2.4 Motion paths
 
 Position animation MUST draw its motion path in the Viewer for selected layers: keyframe
@@ -1540,6 +1574,22 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   name only: the effect's `match_name`, its schema, its parameters and every lookup by name
   are untouched, and a project saved without a given name is byte-for-byte as it was.
   Parameter rows are **not** renameable — a parameter's name comes from the schema.
+
+  **A parameter can be a button** (K-417). An `Action` row carries no value at all — no
+  number, no keyframe, no undo entry — so it draws as a **button in the value column with the
+  name column left empty**: the button says its own name, and a label beside it repeating the
+  word would be the row said twice. Pressing one is an *event* sent to the engine, not an
+  edit. Reset walks past it, because there is nothing to put back. The Camera track's
+  **Analyse** and **Cancel** are the first two, and the beat detector is waiting.
+
+  **An effect may draw a status under its rows.** Where an effect owns work that happens
+  elsewhere — the Camera track's analysis runs on its own thread, over the media file, while
+  editing carries on — a single calm line sits with its buttons: how many frames have been
+  followed, that the camera is being solved, and when it is done the number that says whether
+  the solve is any good (its point count and mean error), with **Create camera** beside it. A
+  refusal is a plain sentence in the same line, and nothing about the shot has changed. The
+  line is *sampled* while the job moves and left alone when it does not; it is never a
+  progress bar, because the Viewer's is the one progress bar (§2.5).
 
   **Two parameters can share one row.** Two conventions fold, and both exist because the
   pair is one idea and reads worse split in half: an `_x`/`_y` Float neighbour pair draws as

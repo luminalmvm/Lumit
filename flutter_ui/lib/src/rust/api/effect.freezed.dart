@@ -1535,6 +1535,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult Function(BridgeParamKind_Curve value)? curve,
     TResult Function(BridgeParamKind_Slider value)? slider,
+    TResult Function(BridgeParamKind_Action value)? action,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1563,6 +1564,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that);
+      case BridgeParamKind_Action() when action != null:
+        return action(_that);
       case _:
         return orElse();
     }
@@ -1595,6 +1598,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_MaskPath value) maskPath,
     required TResult Function(BridgeParamKind_Curve value) curve,
     required TResult Function(BridgeParamKind_Slider value) slider,
+    required TResult Function(BridgeParamKind_Action value) action,
   }) {
     final _that = this;
     switch (_that) {
@@ -1622,6 +1626,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Slider():
         return slider(_that);
+      case BridgeParamKind_Action():
+        return action(_that);
     }
   }
 
@@ -1651,6 +1657,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult? Function(BridgeParamKind_Curve value)? curve,
     TResult? Function(BridgeParamKind_Slider value)? slider,
+    TResult? Function(BridgeParamKind_Action value)? action,
   }) {
     final _that = this;
     switch (_that) {
@@ -1678,6 +1685,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that);
+      case BridgeParamKind_Action() when action != null:
+        return action(_that);
       case _:
         return null;
     }
@@ -1719,6 +1728,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function()? maskPath,
     TResult Function()? curve,
     TResult Function(double default_, double min, double max)? slider,
+    TResult Function()? action,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1749,6 +1759,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve();
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that.default_, _that.min, _that.max);
+      case BridgeParamKind_Action() when action != null:
+        return action();
       case _:
         return orElse();
     }
@@ -1792,6 +1804,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function() maskPath,
     required TResult Function() curve,
     required TResult Function(double default_, double min, double max) slider,
+    required TResult Function() action,
   }) {
     final _that = this;
     switch (_that) {
@@ -1821,6 +1834,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve();
       case BridgeParamKind_Slider():
         return slider(_that.default_, _that.min, _that.max);
+      case BridgeParamKind_Action():
+        return action();
     }
   }
 
@@ -1860,6 +1875,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function()? maskPath,
     TResult? Function()? curve,
     TResult? Function(double default_, double min, double max)? slider,
+    TResult? Function()? action,
   }) {
     final _that = this;
     switch (_that) {
@@ -1889,6 +1905,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve();
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that.default_, _that.min, _that.max);
+      case BridgeParamKind_Action() when action != null:
+        return action();
       case _:
         return null;
     }
@@ -2690,6 +2708,26 @@ class _$BridgeParamKind_SliderCopyWithImpl<$Res>
           : max // ignore: cast_nullable_to_non_nullable
               as double,
     ));
+  }
+}
+
+/// @nodoc
+
+class BridgeParamKind_Action extends BridgeParamKind {
+  const BridgeParamKind_Action() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeParamKind_Action);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.action()';
   }
 }
 

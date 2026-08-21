@@ -133,7 +133,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn get_camera_zoom(&self) -> Result<Option<BridgeScalar>, BridgeError> {
         let layer = self.item()?;
-        let lumit_core::model::LayerKind::Camera { zoom } = layer.kind else {
+        let lumit_core::model::LayerKind::Camera { zoom, .. } = layer.kind else {
             return Ok(None);
         };
         // Keys on the composition's clock, like every other channel (K-213).
