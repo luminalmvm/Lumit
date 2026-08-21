@@ -83,14 +83,25 @@ void main() {
     testWidgets('Round keeps the K-411 order, pill and all', (tester) async {
       await mount(tester, const ViewerPanelFrb(), ThemeShape.round);
       expect(barKeys(tester), [
-        'viewer-zoom', 'viewer-resolution',
-        'viewer-region', 'viewer-grid', 'viewer-wireframes',
+        'viewer-zoom',
+        'viewer-resolution',
+        'viewer-region',
+        'viewer-grid',
+        'viewer-guides-menu',
+        'viewer-wireframes',
         'viewer-background',
-        'viewer-channel', 'viewer-exposure',
-        'viewer-timecode', 'viewer-playback-mode',
+        'viewer-channel',
+        'viewer-exposure',
+        'viewer-snapshot-take',
+        'viewer-snapshot-show',
+        'viewer-timecode',
+        'viewer-playback-mode',
         'viewer-transport-pill',
-        'viewer-home', 'viewer-step-back', 'viewer-play',
-        'viewer-step-forward', 'viewer-end',
+        'viewer-home',
+        'viewer-step-back',
+        'viewer-play',
+        'viewer-step-forward',
+        'viewer-end',
         'viewer-colour-badge',
       ]);
     });

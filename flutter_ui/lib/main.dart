@@ -567,8 +567,7 @@ class LumitUiState extends ChangeNotifier {
     final at = current == null ? -1 : panels.indexOf(current);
     // Nothing focused yet: the first panel is where a cycle begins, whichever
     // way it was asked to go.
-    final next =
-        at < 0 ? panels.first : panels[(at + by) % panels.length];
+    final next = at < 0 ? panels.first : panels[(at + by) % panels.length];
     activatePanelTab(split, next);
     activePanel.value = next;
     // Which tab a group fronts is part of the arrangement, and the arrangement
@@ -1675,6 +1674,40 @@ class LumitUiState extends ChangeNotifier {
     pushViewerLook();
   }
 
+  /// The Viewer's **overlays** per comp (K-416, docs/07 §2.2 items 5–6): the
+  /// proportional grid and the title/action safe rectangles, drawn over the
+  /// picture by the display and by nothing else.
+  ///
+  /// Keyed by comp exactly as [regionsOfInterest] is, and for the same reason —
+  /// which marks you want over a shot belong to that shot. Nothing here crosses
+  /// the bridge: the engine's picture is untouched, so unlike the region there
+  /// is no push and no re-render, only a repaint. Session only for now; keeping
+  /// a comp's overlays with the project is owed (docs/TODO.md).
+  final Map<String, ({bool grid, bool safeAreas})> viewerOverlaysByComp = {};
+
+  /// The fronted comp's overlays — nothing drawn, until something is asked for.
+  ({bool grid, bool safeAreas}) get viewerOverlays =>
+      viewerOverlaysByComp[_selectedComp?.internalid.toString()] ??
+      (grid: false, safeAreas: false);
+
+  /// Turn one overlay on or off, leaving the other as it is. Two named
+  /// arguments rather than a whole record, for [setViewerStops]'s reason: a
+  /// caller that rebuilt the pair from what it was *drawn* with would carry a
+  /// stale reading for the other half into the write.
+  void setViewerOverlays({bool? grid, bool? safeAreas}) {
+    final id = _selectedComp?.internalid.toString();
+    if (id == null) return;
+    final now = viewerOverlays;
+    final next =
+        (grid: grid ?? now.grid, safeAreas: safeAreas ?? now.safeAreas);
+    if (next.grid || next.safeAreas) {
+      viewerOverlaysByComp[id] = next;
+    } else {
+      viewerOverlaysByComp.remove(id);
+    }
+    notifyListeners();
+  }
+
   /// Whether the Viewer's transparency grid is up (K-352). While it is, the
   /// engine leaves the comp's background colour out of the composite, so
   /// pixels nothing covers arrive transparent and the grid shows through.
@@ -1909,7 +1942,9 @@ class LumitUiState extends ChangeNotifier {
       // The regions, checked against the comps that actually loaded — the
       // same rule every other id in a session gets (K-362).
       for (final e in session.regionsOfInterest.entries) {
-        if (known.containsKey(e.key)) regionsOfInterest[e.key] = List.of(e.value);
+        if (known.containsKey(e.key)) {
+          regionsOfInterest[e.key] = List.of(e.value);
+        }
       }
       for (final id in session.openComps) {
         final comp = known[id];

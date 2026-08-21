@@ -11117,3 +11117,24 @@ unaltered footage, and results map through retimes.
 Lives in a new engine crate `lumit-track`; the how is docs/impl/tracking.md, which
 pins the algorithms and the test plan. UI follows the engine (a Tracking workspace is
 its own later piece).
+
+## K-416 — The Viewer gains overlays and snapshots, in the display
+
+**DECIDED 2026-08-21** (owner-directed, completing K-411's functionality audit against
+After Effects' Composition panel). Two additions to docs/07 §2.2, both preview-only:
+
+**The grid-and-guides menu** (§2.2 items 5–6's first real slice): one icon menu on the
+bar's toggle cluster with checkable entries — Grid, and Title/action safe — drawn as
+overlays on the picture in theme colours, session state per comp. Rulers and draggable
+guides remain their own owed feature (docs/TODO.md); the menu is built so they land as
+entries, not as new chrome.
+
+**Snapshots**: Take snapshot stores what the Viewer is showing; Show snapshot swaps
+the picture to the stored one while held, for the before/after read every grade leans
+on. It is a *display* affordance, so it lives in the display: the stage captures its
+own picture (the RepaintBoundary route the screenshot harness proved) and overlays it
+while held — no engine copy, no cache entry, no export path anywhere near it. One
+slot in v1; AE's four-slot Shift-F5 family can follow on the same mechanism if asked
+for. Preview-only in the K-314 sense, and item 8's badge does not engage for it — a
+held comparison is not a lying picture, it is a second picture, and releasing the
+button is its whole lifecycle.

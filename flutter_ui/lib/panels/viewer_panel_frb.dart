@@ -24,15 +24,21 @@
 // an in-flight counter and a staleness flag, which is a scheduler sitting on the
 // far side of an FFI boundary from everything it had to schedule against.
 //
-// **What is not here.** The scale and rotate gizmo handles, motion paths, masks
-// and the shape tools; guides, the region of interest, and the colour-management
-// indicator. Recorded in docs/TODO.md — none is blocked on the engine.
+// **What is not here.** The scale and rotate gizmo handles, motion paths and
+// masks; rulers and draggable guides, and the wireframe/overlay menu. Recorded
+// in docs/TODO.md — none is blocked on the engine. The grid and the safe areas
+// *are* here (K-416, `viewer_overlays.dart`), as is the region of interest.
 
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+// Aliased, and not as `ui`: half this file already calls the session state
+// `ui`, and a local of that name would shadow the prefix where it is needed.
+import 'dart:ui' as dartui;
 
 import 'package:flutter/gestures.dart';
+// For [RenderRepaintBoundary], which is what a snapshot is photographed from.
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -68,6 +74,7 @@ import 'placeholder.dart';
 import 'viewer_anchor.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
+import 'viewer_overlays.dart';
 import 'viewer_rotate.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
@@ -154,12 +161,94 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// where the theme scope is in reach.
   AnimationLevel _animationLevel = AnimationLevel.all;
 
+  // --- Snapshots (K-416, docs/07 §2.2 item 14) ------------------------------
+  //
+  // A snapshot is a *display* affordance: the picture on screen, kept, and put
+  // back over the picture while a button is held, for the before/after read
+  // every grade leans on. Nothing crosses the bridge — no engine copy, no cache
+  // entry, no export path anywhere near it. What is stored is exactly what the
+  // stage's own [RepaintBoundary] rasterised, which is the picture and not the
+  // marks over it: the wireframes, the region and every tool layer are siblings
+  // of that boundary in the stack rather than children of it.
+
+  /// The boundary the camera photographs: the picture alone.
+  final GlobalKey _pictureKey = GlobalKey();
+
+  /// The one slot. AE's four-slot family can follow on this same mechanism if
+  /// it is ever asked for (K-416); one is what a before/after actually needs.
+  dartui.Image? _snapshot;
+
+  /// Whether the Show button is being held down this instant.
+  bool _showingSnapshot = false;
+
   @override
   void dispose() {
     _unbind();
     _changes?.cancel();
     _zoomMotion.dispose();
+    _snapshot?.dispose();
     super.dispose();
+  }
+
+  /// Photograph the picture as it stands.
+  ///
+  /// At the device's own pixel ratio, so a snapshot held against the live
+  /// picture is the same sharpness rather than a softer copy of it — **but
+  /// never at more pixels than the panel itself has**. The boundary is the
+  /// picture's rectangle, which is the *comp* at this magnification and not the
+  /// panel: at 800 % on an HD comp it is 15360 pixels across (K-230's number),
+  /// and photographing that whole would ask for gigabytes of pixels nobody can
+  /// see, on a button that must never be a risk to press.
+  Future<void> _takeSnapshot() async {
+    final boundary = _pictureKey.currentContext?.findRenderObject();
+    if (boundary is! RenderRepaintBoundary) return;
+    final ratio =
+        MediaQuery.devicePixelRatioOf(context) * _snapshotFit(boundary);
+    final dartui.Image shot;
+    try {
+      shot = await boundary.toImage(pixelRatio: ratio);
+    } catch (_) {
+      // A boundary that has not been painted yet has nothing to hand over.
+      return;
+    }
+    if (!mounted) {
+      shot.dispose();
+      return;
+    }
+    final old = _snapshot;
+    setState(() => _snapshot = shot);
+    // After the frame, not during the swap: the old image may be on screen this
+    // very instant (Show held while Take is pressed), and disposing an image a
+    // live [RawImage] still points at is a crash rather than a saving.
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+  }
+
+  /// How much of the device pixel ratio a snapshot may use: 1 while the picture
+  /// fits the panel, and less once it is bigger, so the stored image is never
+  /// larger than the panel could show. Both edges are covered, so nothing on
+  /// screen is sampled below the resolution it is drawn at.
+  ///
+  /// ponytail: a zoomed-in snapshot is therefore the panel's worth of detail
+  /// and no more — held against a 800 % live picture it is the softer of the
+  /// two. Photographing the visible region instead of the whole picture is the
+  /// upgrade, and it wants the boundary moved rather than a number changed.
+  double _snapshotFit(RenderRepaintBoundary boundary) {
+    final shot = boundary.size;
+    final panel = context.size;
+    if (panel == null || panel.isEmpty || shot.width <= 0 || shot.height <= 0) {
+      return 1;
+    }
+    return math
+        .max(panel.width / shot.width, panel.height / shot.height)
+        .clamp(0.001, 1.0);
+  }
+
+  /// Show the stored picture while the button is down, and stop the moment it
+  /// is up. Releasing the button is the whole of its lifecycle (K-416).
+  void _holdSnapshot(bool held) {
+    if (_snapshot == null && held) return;
+    if (_showingSnapshot == held) return;
+    setState(() => _showingSnapshot = held);
   }
 
   /// Take the Viewer to [scale] (null = fit) and [pan], smoothly when the shell
@@ -352,6 +441,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             onWireframes: () => setState(() => _wireframes = !_wireframes),
             onPlayPause: _togglePlay,
             onSeek: (f) => _seek(comp, ui, f),
+            hasSnapshot: _snapshot != null,
+            onSnapshotTake: _takeSnapshot,
+            onSnapshotHold: _holdSnapshot,
             detached: round,
           ),
         ),
@@ -405,6 +497,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
               uiState: ui,
               fitted: fitted,
               grid: ui.viewerGrid,
+              overlays: ui.viewerOverlays,
+              pictureKey: _pictureKey,
+              snapshot: _showingSnapshot ? _snapshot : null,
               wireframes: _wireframes,
               channel: _channel,
               compSize: size,
@@ -629,6 +724,17 @@ class _Stage extends StatelessWidget {
   final Rect fitted;
   final bool grid;
 
+  /// Which of the guides menu's marks are drawn over the picture (K-416).
+  final ({bool grid, bool safeAreas}) overlays;
+
+  /// The boundary the panel photographs for a snapshot — round the picture
+  /// alone, so the marks over it are not in the photograph.
+  final GlobalKey pictureKey;
+
+  /// The stored snapshot, while the Show button is held; null the rest of the
+  /// time, which is nearly always.
+  final dartui.Image? snapshot;
+
   /// Whether the layer controls are drawn (the bar's wireframe switch).
   final bool wireframes;
   final ViewerChannel channel;
@@ -652,6 +758,9 @@ class _Stage extends StatelessWidget {
     required this.uiState,
     required this.fitted,
     required this.grid,
+    required this.overlays,
+    required this.pictureKey,
+    required this.snapshot,
     required this.wireframes,
     required this.channel,
     required this.compSize,
@@ -805,10 +914,34 @@ class _Stage extends StatelessWidget {
               Positioned.fill(
                 child: CustomPaint(painter: _CheckerPainter(t, fitted)),
               ),
+            // The picture, inside the boundary a snapshot is taken of
+            // (K-416). Everything below in this stack is a sibling of it, so
+            // the photograph is the picture and not the marks over it.
             Positioned.fromRect(
               rect: fitted,
-              child: _Picture(uiState: uiState, channel: channel),
+              child: RepaintBoundary(
+                key: pictureKey,
+                child: _Picture(uiState: uiState, channel: channel),
+              ),
             ),
+            // The grid and the safe areas (K-416): over the picture, under the
+            // layer controls, and worked out from the picture's own rectangle
+            // so they zoom and pan with the shot.
+            if (overlays.grid || overlays.safeAreas)
+              Positioned.fill(
+                key: const ValueKey('viewer-overlay-guides'),
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: ViewerOverlayPainter(
+                      picture: fitted,
+                      grid: overlays.grid,
+                      safeAreas: overlays.safeAreas,
+                      gridLine: t.hairline,
+                      safeLine: t.hairlineStrong,
+                    ),
+                  ),
+                ),
+              ),
             _missingSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
@@ -983,6 +1116,22 @@ class _Stage extends StatelessWidget {
             // picture is a target: a drag handle under the pointer must not
             // take the click that was meant to pick a pixel.
             DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
+            // The held snapshot (K-416), over everything: while it is up the
+            // Viewer is showing a second picture, and a wireframe belonging to
+            // the live one drawn on top of it would be a lie about both. Fitted
+            // to the picture's rectangle as it is *now*, so a zoom taken since
+            // the snapshot compares like with like.
+            if (snapshot case final shot?)
+              Positioned.fromRect(
+                rect: fitted,
+                child: IgnorePointer(
+                  child: RawImage(
+                    key: const ValueKey('viewer-snapshot-overlay'),
+                    image: shot,
+                    fit: BoxFit.fill,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -1571,6 +1720,14 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
+  /// Whether a snapshot has been taken — the only thing that makes Show
+  /// anything but a muted mark (K-416).
+  final bool hasSnapshot;
+  final VoidCallback onSnapshotTake;
+
+  /// Held down, or let go.
+  final ValueChanged<bool> onSnapshotHold;
+
   /// Drawn as a tile of its own — rounded, outlined and shadowed, sitting
   /// below the picture with the canvas showing between (round mode) — rather
   /// than a strip welded to the panel's bottom edge (sharp mode).
@@ -1609,6 +1766,9 @@ class _Toolbar extends StatelessWidget {
     required this.onWireframes,
     required this.onPlayPause,
     required this.onSeek,
+    required this.hasSnapshot,
+    required this.onSnapshotTake,
+    required this.onSnapshotHold,
     this.detached = false,
   });
 
@@ -1731,6 +1891,12 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: _itemGap),
+          // The grid-and-guides menu (K-416, §2.2 items 5-6), beside the
+          // transparency grid because the two are the pair most easily
+          // confused: one is what shows *through* the picture, the other is
+          // what is drawn *over* it.
+          const ViewerGuidesMenu(),
+          const SizedBox(width: _itemGap),
           // The layer controls switch (K-217): the boxes, handles and hover
           // highlight over the picture. An icon rather than a word, because
           // what it governs is a *mark* — and the mark is what it draws.
@@ -1825,6 +1991,55 @@ class _Toolbar extends StatelessWidget {
               ),
             ),
           ],
+
+          // --- Snapshots (K-416, §2.2 item 14): a pair of its own, next to
+          // the exposure group because a snapshot is what the exposure is
+          // usually being judged against. Take photographs the picture; Show
+          // is held down, and puts the photograph back over it.
+          const SizedBox(width: _groupGap),
+          LumitTooltip(
+            message: l10n.tipViewerSnapshotTake,
+            child: HouseButton(
+              key: const ValueKey('viewer-snapshot-take'),
+              small: true,
+              frameless: true,
+              onPressed: onSnapshotTake,
+              child: lumitIcon(
+                LumitIcon.snapshot,
+                size: iconSize,
+                color: t.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: _itemGap),
+          LumitTooltip(
+            message: hasSnapshot
+                ? l10n.tipViewerSnapshotShow
+                : l10n.tipViewerSnapshotNone,
+            // A press and hold, so the raw pointer rather than a tap: the
+            // comparison lasts exactly as long as the button is down, and a
+            // gesture recogniser only reports once it is over.
+            child: Listener(
+              onPointerDown: hasSnapshot ? (_) => onSnapshotHold(true) : null,
+              onPointerUp: hasSnapshot ? (_) => onSnapshotHold(false) : null,
+              onPointerCancel:
+                  hasSnapshot ? (_) => onSnapshotHold(false) : null,
+              child: HouseButton(
+                key: const ValueKey('viewer-snapshot-show'),
+                small: true,
+                frameless: true,
+                // The press is the Listener's; this only says whether the
+                // button is live, which is what mutes it and what stops the
+                // pointer becoming a hand over a control that does nothing.
+                onPressed: hasSnapshot ? () {} : null,
+                child: lumitIcon(
+                  LumitIcon.eye,
+                  size: iconSize,
+                  color: hasSnapshot ? t.textSecondary : t.textDisabled,
+                ),
+              ),
+            ),
+          ),
 
           // --- The clock (K-411 item 4), a field of its own rather than
           // something to find between the transport and a badge. In a slot

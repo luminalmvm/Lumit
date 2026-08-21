@@ -284,10 +284,11 @@ anywhere, including other monitors.
 
 A single compact bar at the bottom of the Viewer. **Arrangement is K-411's**: the bar
 reads as instruments — scale (items 1–2), the view toggles as one icon cluster (7, 4,
-the layer-controls switch, 10), how the pixels read (3, 12, 13), the clock (11), the
-transport with its playback-mode dropdown, then the right-edge readouts (8, 9,
-progress) — with small gaps inside a group and wide gaps between them. Each list is in
-the order it is built in. The items below define what each control does:
+6, the layer-controls switch, 10), how the pixels read (3, 12, 13), the snapshot pair
+(14), the clock (11), the transport with its playback-mode dropdown, then the
+right-edge readouts (8, 9, progress) — with small gaps inside a group and wide gaps
+between them. Each list is in the order it is built in. The items below define what
+each control does:
 
 1. **Magnification** dropdown: Fit, Fit up to 100%, then 25 / 33.3 / 50 / 100 / 200 / 400 /
    800 %. Magnification is display scaling only; it MUST NOT change render resolution.
@@ -327,8 +328,21 @@ the order it is built in. The items below define what each control does:
    background colour). An icon — the checkerboard itself — rather than the word (K-411).
 5. **Wireframe/overlay menu**: layer wireframes, motion paths, mask paths, gizmo visibility,
    and a full wireframe display mode (outlines only, no raster) for heavy comps.
+   **Built so far**: nothing of the menu. The layer-controls switch beside it (K-217)
+   already turns the wireframes, handles and hover highlight on and off as one; the menu
+   that separates them — and the full wireframe display mode — is still owed
+   (docs/TODO.md).
 6. **Guides menu**: rulers (`Ctrl+R`), guides (drag out of rulers; lock/clear), grid,
    title/action safe overlays, snapping-to-guides toggle.
+   **Built so far (K-416)**: the menu itself, on the toggle cluster beside the
+   transparency grid, with two checkable entries — Grid and Title/action safe. The grid
+   is the frame's own **eighths**, drawn as theme hairlines; the safe areas are the
+   standard **90 % action / 80 % title** rectangles, square-cornered hairlines with no
+   labels. Both are worked out from the picture's rectangle, so they zoom and pan with
+   the shot rather than sitting still on the panel, and both are display-side: no engine
+   copy, no cache entry, and nothing an export can see. State is **per comp, in the
+   session** — keeping it with the project is owed, as are rulers, draggable guides and
+   snapping, which land as further entries in this same menu rather than as new chrome.
 7. **Region of interest** (K-362, landed): drag a rectangle; the engine renders only that
    region for preview. MUST be clearable in one click and MUST never affect export. Armed
    from the Viewer bar, swept on the picture, and outlined whenever it is in force. It is a
@@ -363,6 +377,23 @@ the order it is built in. The items below define what each control does:
     reads a picture this way. While it is hidden the tone map MUST also read as **off**
     whatever the comp stored — hiding the control must never strand an engaged look with
     nothing left to turn it off. The exposure of item 12 is never hidden.
+14. **Snapshots** (K-416): two icons beside the exposure group — a camera that takes one,
+    and an eye that shows it. **Take** stores what the Viewer is showing this instant;
+    **Show** is a press and hold, putting the stored picture back over the live one for
+    as long as the button is down, which is the before/after read every grade leans on.
+    One slot in v1 (After Effects' four-slot family can follow on the same mechanism).
+    It is a *display* affordance and lives entirely in the display: the stage photographs
+    its own picture through a `RepaintBoundary` around the picture alone — so the layer
+    controls, the region outline and the guides of item 6 are **not** in the photograph —
+    and nothing crosses to the engine, into a cache, or near an export. Show MUST be muted
+    until a snapshot exists, and MUST say so when hovered. Releasing the button is the
+    whole of a snapshot's lifecycle, so item 8's badge does not engage for it: a held
+    comparison is not a lying picture, it is a second picture. A snapshot MUST NOT store
+    more pixels than the panel can show: the boundary is the picture's rectangle, which
+    at high magnification is the comp and not the panel (an HD comp at 400 % is 7680
+    pixels across), so the capture is scaled down to the panel's own resolution rather
+    than allocating for pixels nobody can see. Photographing only the visible region,
+    which would keep full detail while zoomed in, is owed (docs/TODO.md).
 
 Items 12 and 13 both persist **per comp** with the project, and while either is engaged
 the Viewer MUST say the picture is not the export — item 8's badge is where that lives,

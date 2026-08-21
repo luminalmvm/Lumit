@@ -91,7 +91,24 @@ Flutter is the only frontend (K-174, K-182); git history is the parity reference
 These are v1-scope surfaces it does not yet match.
 
 **Viewer bar ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
-- The wireframe/overlay *menu*; guides menu; region-of-interest.
+- The wireframe/overlay *menu* (§2.2 item 5) — the layer-controls switch turns the
+    lot on and off as one; separating wireframes, motion paths, mask paths and gizmo
+    visibility, and the full wireframe display mode, is owed.
+- **Rulers, draggable guides and snapping-to-guides** (§2.2 item 6). K-416 built the
+    menu, the grid and the title/action safe areas; these three land as further
+    entries in the same menu, which is why it is a menu.
+- **A comp's overlays are session-only** (K-416): the grid and safe-area flags ride
+    `LumitUiState` keyed by comp and are forgotten when Lumit closes. They belong in
+    the per-project session beside the preview resolution and the region of interest.
+- **A zoomed-in snapshot is the panel's worth of detail, not the picture's**
+    (§2.2 item 14). The photograph is capped at the panel's resolution so
+    pressing Take at 400 % cannot ask for a few hundred million pixels; the
+    upgrade is to photograph the *visible region* instead of the whole picture,
+    which keeps full detail and wants the boundary moved rather than a number
+    changed.
+- **GUIDE.md owes a section on the Viewer's overlays and snapshots** (K-416) — what
+    the grid and the safe rectangles are, and why a snapshot never touches the engine.
+    Not written in the landing commit because another branch held the file.
 - **The colour-management badge is a readout and cannot yet be clicked**
     (§2.2 item 8). It is built: always on the bar, naming the display
     transform, and saying the picture is not the export while the exposure or

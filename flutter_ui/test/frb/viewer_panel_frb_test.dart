@@ -28,6 +28,7 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart' show writeScalar;
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
+import 'package:lumit_flutter/panels/viewer_overlays.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_paint.dart';
 import 'package:lumit_flutter/panels/viewer_zoom.dart';
@@ -41,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/widgets/controls.dart' show HouseButton;
 import 'package:lumit_flutter/widgets/dropper_overlay.dart';
 import 'package:uuid/uuid.dart';
 
@@ -72,6 +74,23 @@ void main() {
         uiState: p.uiState as LumitUiState,
         size: const Size(700, 500),
       ));
+      await tester.pump();
+    }
+
+    /// Press a control on the Viewer bar, scrolling it into view first.
+    ///
+    /// **The bar scrolls when the panel is narrower than it wants** (docs/07
+    /// §2.2), and this Viewer is 700 px — narrower than the bar has wanted
+    /// since K-411 put the clock in front of the transport, and narrower again
+    /// since K-416 added the guides menu and the snapshot pair. A tap on a
+    /// control that has scrolled off the end lands on nothing and reads as a
+    /// transport that does not work, which is exactly how it read the first
+    /// time. Anyone on a narrow dock scrolls first too.
+    Future<void> pressBar(WidgetTester tester, String key) async {
+      final button = find.byKey(ValueKey<String>(key));
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
       await tester.pump();
     }
 
@@ -192,39 +211,25 @@ void main() {
       await mount(tester, p);
       final last = p.comp.durationFrames() - 1;
 
-      // The bar scrolls rather than overflowing (docs/07 §2.2), and this
-      // Viewer is 800 px wide — narrower than the bar wants since K-411 put
-      // the clock in front of the transport. So each button is scrolled into
-      // view before it is pressed, exactly as a user on a narrow dock would
-      // have to. Without this a tap lands on nothing and reads as a transport
-      // that does not work.
-      Future<void> press(String key) async {
-        final button = find.byKey(ValueKey<String>(key));
-        await tester.ensureVisible(button);
-        await tester.pump();
-        await tester.tap(button);
-        await tester.pump();
-      }
-
-      await press('viewer-step-forward');
+      await pressBar(tester, 'viewer-step-forward');
       expect(p.uiState.playheadFrame.value, 1);
 
-      await press('viewer-step-back');
+      await pressBar(tester, 'viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
       // Stepping back from the start stays at the start rather than going
       // negative — a frame before the comp is not a frame.
-      await press('viewer-step-back');
+      await pressBar(tester, 'viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
-      await press('viewer-end');
+      await pressBar(tester, 'viewer-end');
       expect(p.uiState.playheadFrame.value, last);
 
-      await press('viewer-step-forward');
+      await pressBar(tester, 'viewer-step-forward');
       expect(p.uiState.playheadFrame.value, last,
           reason: 'and the end is the end');
 
-      await press('viewer-home');
+      await pressBar(tester, 'viewer-home');
       expect(p.uiState.playheadFrame.value, 0);
     });
 
@@ -239,7 +244,7 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       expect(p.uiState.playing.value, isTrue);
       await settleFrb(tester,
@@ -249,7 +254,7 @@ void main() {
       expect(p.uiState.playheadFrame.value, greaterThan(0),
           reason: 'the engine chose frames and the playhead followed them');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       expect(p.uiState.playing.value, isFalse);
       await settleFrb(tester, minRounds: 12, maxRounds: 12);
@@ -277,14 +282,14 @@ void main() {
       p.uiState.workspace.interface.playheadStaysOnStop = true;
       await mount(tester, p);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
           maxRounds: 120,
           until: () => p.uiState.playheadFrame.value > 0);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       await settleFrb(tester, minRounds: 12, maxRounds: 12);
       expect(p.uiState.playheadFrame.value, greaterThan(0),
@@ -313,7 +318,7 @@ void main() {
       await mount(tester, p);
       expect(p.comp.durationFrames(), 6, reason: '0.1 s at 60 fps');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       // Six frames of a software render under a loaded parallel suite can
       // outlast the old four-second ceiling; the wait grows, the assertion
@@ -406,11 +411,14 @@ void main() {
       expect(barKeys(tester), [
         // The picture's scale.
         'viewer-zoom', 'viewer-resolution',
-        // The view toggles.
-        'viewer-region', 'viewer-grid', 'viewer-wireframes',
-        'viewer-background',
+        // The view toggles — the grid-and-guides menu among them (K-416),
+        // beside the transparency grid it is most easily confused with.
+        'viewer-region', 'viewer-grid', 'viewer-guides-menu',
+        'viewer-wireframes', 'viewer-background',
         // How the pixels read.
         'viewer-channel', 'viewer-exposure', 'viewer-tone-map',
+        // Snapshots, a pair of their own beside the exposure group (K-416).
+        'viewer-snapshot-take', 'viewer-snapshot-show',
         // The clock, then the transport and its mode.
         'viewer-timecode', 'viewer-playback-mode',
         'viewer-home', 'viewer-step-back', 'viewer-play',
@@ -420,6 +428,135 @@ void main() {
       ]);
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
+    /// **The grid-and-guides menu draws over the picture and nowhere else**
+    /// (K-416, docs/07 §2.2 items 5–6). Both entries are checkable, both marks
+    /// are painted by the display, and turning the last one off takes the
+    /// painter out of the tree rather than leaving it drawing nothing.
+    testWidgets('the guides menu turns the grid and the safe areas on',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final overlay = find.byKey(const ValueKey('viewer-overlay-guides'));
+      expect(overlay, findsNothing, reason: 'nothing is drawn to begin with');
+
+      Future<void> pick(String entry) async {
+        await pressBar(tester, 'viewer-guides-menu');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey<String>(entry)));
+        await tester.pumpAndSettle();
+      }
+
+      await pick('viewer-guides-grid');
+      expect(p.uiState.viewerOverlays.grid, isTrue);
+      expect(overlay, findsOneWidget);
+      expect(
+        tester
+            .widget<CustomPaint>(
+              find.descendant(of: overlay, matching: find.byType(CustomPaint)),
+            )
+            .painter,
+        isA<ViewerOverlayPainter>()
+            .having((x) => x.grid, 'grid', isTrue)
+            .having((x) => x.safeAreas, 'safeAreas', isFalse),
+      );
+
+      await pick('viewer-guides-safe');
+      expect(p.uiState.viewerOverlays, (grid: true, safeAreas: true));
+
+      // Off again, one at a time: the painter goes only when the last mark has.
+      await pick('viewer-guides-grid');
+      expect(overlay, findsOneWidget, reason: 'the safe areas are still on');
+      await pick('viewer-guides-safe');
+      expect(overlay, findsNothing);
+    });
+
+    /// **A snapshot is a second picture, and releasing the button is its whole
+    /// lifecycle** (K-416, docs/07 §2.2 item 14). Nothing here crosses the
+    /// bridge: the stage photographs its own [RepaintBoundary], and Show puts
+    /// the photograph back over the live picture while it is held.
+    testWidgets('taking a snapshot arms Show, and holding Show displays it',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final take = find.byKey(const ValueKey('viewer-snapshot-take'));
+      final show = find.byKey(const ValueKey('viewer-snapshot-show'));
+      final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
+
+      // Muted until there is something to show — the button says why in its
+      // tooltip, and refuses the press rather than doing nothing quietly.
+      await tester.ensureVisible(show);
+      await tester.pump();
+      expect(tester.widget<HouseButton>(show).onPressed, isNull);
+      expect(shown, findsNothing);
+
+      await tester.ensureVisible(take);
+      await tester.pump();
+      await tester.tap(take);
+      // The photograph is taken off the render tree, which is a real async
+      // round trip rather than a frame.
+      await tester.pumpAndSettle();
+      expect(tester.widget<HouseButton>(show).onPressed, isNotNull,
+          reason: 'a snapshot exists, so Show is live');
+      expect(shown, findsNothing, reason: 'taking one does not display it');
+
+      final hold = await tester.startGesture(tester.getCenter(show));
+      await tester.pump();
+      expect(shown, findsOneWidget,
+          reason: 'held down, the picture is swapped');
+
+      await hold.up();
+      await tester.pump();
+      expect(shown, findsNothing, reason: 'let go, the live picture is back');
+    });
+
+    /// **A snapshot never stores more pixels than the panel can show.** The
+    /// boundary it is photographed from is the picture's rectangle, which is
+    /// the *comp* at this magnification and not the panel: an HD comp at 400 %
+    /// is 7680 logical pixels across, and photographing that at the device's
+    /// own ratio asks for a few hundred million pixels — on a button with no
+    /// warning on it. Uncapped this assertion misses by an order of magnitude
+    /// (and the run before it allocates a gigabyte), so the cap is the
+    /// regression, not the advice.
+    testWidgets('a snapshot taken at 400 % stays the size of the panel',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      await pressBar(tester, 'viewer-zoom');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('400%').last);
+      await tester.pumpAndSettle();
+
+      await pressBar(tester, 'viewer-snapshot-take');
+      await tester.pumpAndSettle();
+
+      final show = find.byKey(const ValueKey('viewer-snapshot-show'));
+      await tester.ensureVisible(show);
+      await tester.pump();
+      final hold = await tester.startGesture(tester.getCenter(show));
+      await tester.pump();
+
+      final image = tester
+          .widget<RawImage>(
+              find.byKey(const ValueKey('viewer-snapshot-overlay')))
+          .image!;
+      final panel = tester.getSize(find.byType(ViewerPanelFrb));
+      final ratio = tester.view.devicePixelRatio;
+      // A little slack: the cap covers both edges, so the longer one comes out
+      // at the panel's size and the other at or above it.
+      expect(image.width, lessThanOrEqualTo((panel.width * ratio).ceil() + 2),
+          reason: 'the photograph is ${image.width} px across on a '
+              '${panel.width} px panel');
+      expect(
+          image.height, lessThanOrEqualTo((panel.height * ratio).ceil() + 2));
+      expect(image.width, greaterThan(1), reason: 'and it is still a picture');
+
+      await hold.up();
+      await tester.pump();
     });
 
     /// **The resolution dropdown is on the bar, and adaptive playback owns it
@@ -503,7 +640,8 @@ void main() {
 
       // It rides the session blob, so it survives into the project's ui_state
       // (K-245) — not the document, so no op and no undo step.
-      expect(p.uiState.session().previewResolutions[p.comp.internalid.toString()],
+      expect(
+          p.uiState.session().previewResolutions[p.comp.internalid.toString()],
           'quarter');
     });
 
@@ -2509,7 +2647,7 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
@@ -2520,7 +2658,7 @@ void main() {
           reason:
               'no audio device, so the engine falls back to its wall clock');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       expect(audioClock().playing, isFalse,
           reason: 'pausing the transport pauses the sound too');
@@ -2748,12 +2886,12 @@ void main() {
       p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
       await mount(tester, p);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       expect(audioClock().seconds, greaterThanOrEqualTo(0),
           reason: 'the sound path engaged without a fault');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-play')));
+      await pressBar(tester, 'viewer-play');
       await tester.pump();
       expect(audioClock().playing, isFalse, reason: 'stop silences it');
     });
@@ -2764,7 +2902,7 @@ void main() {
 
       // The seek must not throw whatever the device situation is — it is on the
       // path of every arrow key.
-      await tester.tap(find.byKey(const ValueKey('viewer-step-forward')));
+      await pressBar(tester, 'viewer-step-forward');
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 1);
       expect(audioClock().seconds, greaterThanOrEqualTo(0));
@@ -2799,8 +2937,8 @@ void main() {
       // registry is cleared while they are on the wire.
       final adopted = p.state.project;
       p.state.openProject(other);
-      await settleFrb(
-          tester, until: () => !identical(p.state.project, adopted));
+      await settleFrb(tester,
+          until: () => !identical(p.state.project, adopted));
 
       expect(tester.takeException(), isNull);
     });

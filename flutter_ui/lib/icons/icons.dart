@@ -70,6 +70,7 @@ import 'package:iconoir_flutter/regular/type.dart' as ic;
 import 'package:iconoir_flutter/regular/camera.dart' as ic;
 import 'package:iconoir_flutter/regular/video_camera.dart' as ic;
 import 'package:iconoir_flutter/regular/view_columns_3.dart' as ic;
+import 'package:iconoir_flutter/regular/view_grid.dart' as ic;
 import 'package:iconoir_flutter/regular/wind.dart' as ic;
 import 'package:iconoir_flutter/regular/zoom_in.dart' as ic;
 import 'package:iconoir_flutter/solid/keyframe.dart' as ics;
@@ -214,6 +215,13 @@ enum LumitIcon {
   /// lattices, and what this toggle draws is filled squares in alternation,
   /// which is the only thing that reads as "nothing is here".
   checkerboard,
+
+  /// The Viewer bar's grid-and-guides menu (K-416): a wire lattice. It is
+  /// deliberately the mark [checkerboard] declined — Iconoir's grids are drawn
+  /// as outlined cells, which is exactly what an overlay grid *is*, where the
+  /// transparency board is filled squares in alternation. The two sit beside
+  /// each other on the bar and must not read as the same switch twice.
+  grid,
 
   /// The Viewer bar's channel picker (K-411): three overlapping circles, the
   /// mark for a picture separated into its channels. Tinted by whichever one
@@ -385,6 +393,7 @@ Widget _glyph(LumitIcon icon, Color color) => switch (icon) {
       LumitIcon.cameraPan => ic.Drag(color: color),
       LumitIcon.cameraDolly => ic.Expand(color: color),
       LumitIcon.toneMap => ic.Hdr(color: color),
+      LumitIcon.grid => ic.ViewGrid(color: color),
       LumitIcon.channels => ic.ColorFilter(color: color),
       LumitIcon.matte => ic.MaskSquare(color: color),
       // Painter-drawn, handled above.

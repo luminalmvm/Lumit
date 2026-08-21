@@ -5176,9 +5176,25 @@
   "@tipViewerExposure": {
     "description": "Tooltip on the Viewer's exposure box. It brightens or darkens the picture on screen and never the export. \"Stop\" is the photographic unit — one stop is a doubling of light."
   },
+  "tipViewerGuides": "Grid and guides",
+  "@tipViewerGuides": {
+    "description": "Tooltip on the Viewer bar's grid-and-guides menu button, which shows an icon and no words. The menu turns on marks drawn over the picture: a grid, and the title/action safe rectangles."
+  },
   "tipViewerPreviewView": "The Viewer's exposure and tone mapping change this picture only, never the export. Tone mapping rolls bright highlights back under 1.",
   "@tipViewerPreviewView": {
     "description": "Tooltip on the Viewer bar's colour-management badge while the exposure or the tone map is engaged. Longer than a name on purpose: it is the only place either control is explained. \"Rolls back under 1\" means very bright values are folded down rather than clipping flat."
+  },
+  "tipViewerSnapshotNone": "No snapshot yet",
+  "@tipViewerSnapshotNone": {
+    "description": "Tooltip on the Viewer bar's show-snapshot button while it is muted, saying why it does nothing: nothing has been photographed to show. Under five words."
+  },
+  "tipViewerSnapshotShow": "Show snapshot — hold",
+  "@tipViewerSnapshotShow": {
+    "description": "Tooltip on the Viewer bar's show-snapshot button. The stored picture is shown for as long as the button is held down, and goes when it is let go. Under five words."
+  },
+  "tipViewerSnapshotTake": "Take snapshot",
+  "@tipViewerSnapshotTake": {
+    "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. Under five words."
   },
   "tipViewerToneMap": "Tone mapping — preview only",
   "@tipViewerToneMap": {
@@ -5958,6 +5974,14 @@
         "type": "String"
       }
     }
+  },
+  "viewerOverlayGrid": "Grid",
+  "@viewerOverlayGrid": {
+    "description": "Entry in the Viewer bar's grid-and-guides menu, with a tick beside it when it is on. It draws a grid of thin lines over the picture, dividing the frame into eighths."
+  },
+  "viewerOverlaySafeAreas": "Title/action safe",
+  "@viewerOverlaySafeAreas": {
+    "description": "Entry in the Viewer bar's grid-and-guides menu, with a tick beside it when it is on. It draws the two broadcast rectangles over the picture: action safe at 90% of the frame and title safe at 80%. Both are long-standing television terms."
   },
   "volume": "Volume",
   "@volume": {
