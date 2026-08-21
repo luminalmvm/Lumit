@@ -410,15 +410,173 @@ prove the grid, so the differential test compares those two within a frame and
 records the delta rather than curve-fitting it. (3) Every funnel-table row the
 fixture does not exercise is marked `reference` in `enums.rs`.
 
-**What phase B needs from here.** A layer's properties hang off its
-`LIST tdgp`, whose children are `tdsb`, `tdsn`, then **alternating `tdmn`
-(the match name, a NUL-terminated 40-byte field) and the node it names** —
-`LIST tdbs` for a leaf, `LIST tdgp` for a group, `LIST OvG2` for Essential
-Properties overrides — closed by `tdmn "ADBE Group End"`. A `tdbs` holds
-`tdsb`, `tdsn`, `tdb4` (124 bytes; dimension count at 2, `animated` at 68) and
-then either `cdat` (static f64s) or `LIST list` = `lhd3` + `ldat`. In the
-fixture's animated Time Remap, `lhd3` is 52 bytes with the **key count at
-offset 8** (3) and the **per-key record size at offset 16** (0x30 = 48), and
-`ldat` is exactly 3 × 48 bytes. Comp markers are not in `cdta` at all: they are
-the `ADBE Marker` property of the hidden `SecL` layer, and that one property's
-node is a `LIST mrst` rather than a `tdbs`.
+### 7.2 Phase B: the property system
+
+**Built.** `crates/lumit-import/src/aep/props.rs` — the `tdgp`/`tdbs`/`tdb4`
+trees, static values, keyframes, effects, masks, shapes, markers and
+expressions — with `tests/aep_differential.rs` grown from five tests to
+thirteen and every recovery number pinned in CI.
+
+**The one thing to understand before any number below means anything: an
+`.aep` stores only what is not at its default.** A layer nobody moved has no
+`ADBE Position` record in it; a solid at 100% opacity has no `ADBE Opacity`.
+That is not damage and it is not something to guess around — the property is
+absent from the capture exactly as it is absent from the file, and the mapping
+layer already treats an absent property as "use the default", which is what
+After Effects does on open. So of the golden capture's **3,319 property leaves,
+2,734 are simply not in the file**; the claim the differential asserts is the
+useful one: *every leaf that is there is right, and nothing is reported that
+After Effects did not report*.
+
+**Recovery on the fixture** (each number an assertion, not a measurement):
+
+| Category | Recovered | Notes |
+|---|---|---|
+| Static property values | **646 exact**, 0 wrong, 0 invented | of 652 leaves the file stores |
+| Keyframes | **27 of 27** (11 properties) | time, value, per-side interpolation, ease, spatial tangents |
+| Expressions | **2 of 2** | source text and the on/off flag, one of each |
+| Effect instances | **13 of 13** | match name, display name (`fnam`), on/off switch |
+| Effect parameters | every one the file stores | names from `pard`, values in DOM units |
+| Masks | **2 of 2** | mode, inverted, RotoBezier, locked, colour, and the paths |
+| Mask paths | static and animated | vertices and both tangents, denormalised |
+| Markers | **4 of 4** | 2 layer, 2 comp (one per comp), time/duration/comment/chapter/label |
+| Separated dimensions | **1 of 1** | followers carry the animation, as the DOM reports it |
+| `CUSTOM_VALUE` blobs | **3 of 3, as raw bytes** | the DOM cannot read these at all |
+| Group on/off switches | all, incl. Layer Styles' derived one | |
+| Property display names | **83, none wrong** | the ones the file holds; the other 1,106 are AE resources, not file data — see below |
+| Text document | match-named, marked unreadable | phase C. A **gradient** is unmeasured: the fixture holds no `GCst` at all |
+
+**Damage is not a crash.** This parser eats untrusted files, so the differential
+also damages the golden one sixty-four deterministic ways — cut short, single
+bytes flipped, chunk sizes overwritten with `0xFFFFFFFF`, runs zeroed — and
+requires an answer from every one: forty-eight parse partially (the walk of a
+damaged container costs that container and no more) and sixteen refuse with a
+typed error. The whole sweep is timed as well as checked, because a length the
+file declared being trusted somewhere shows up as a hang before it shows up as
+anything else.
+
+**End to end**: `map_capture` on the parsed capture and on the golden bundle
+produce documents with **identical counts** — 22 items, 2 comps, 24 layers, 13
+effects, 2 masks, 4 markers, 8 animated transform properties. The import report
+is the only difference: 58 rows against the Bridge's 64, and the six are
+properties the Bridge's own DOM could not read.
+
+**The layouts proved.** Offsets are byte offsets into the chunk body,
+big-endian.
+
+| Record | Offset | Field |
+|---|---|---|
+| `tdsb` (4) | 3 (u8) | bit 0 enabled (a group's own switch, and an effect instance's), bit 1 dimensions-separated on a leaf |
+| | 0 (u8) | RotoBezier, on a mask shape's `tdsb` only |
+| `tdb4` (124) | 2 (u16) | dimension count |
+| | 5 (u8) | bit 3 the property is *spatial* |
+| | 57 (u8) | bit 0 the property carries no numeric value |
+| | 59 (u8) | bit 3 vector, bit 2 integer, **bit 0 colour** |
+| | 68 (u8) | animated |
+| | 119 (u8) | bit 0 the expression is switched **off** |
+| `tdsn` | ▸ `Utf8` | display name; the literal `-_0_/-` is AE's "nobody renamed this" sentinel |
+| `cdat` | 0.. | static value: `dimensions` big-endian f64s, then the ease numbers |
+| `Utf8` in a `tdbs` | — | the expression source |
+| `lhd3` (52) | 10 (u16) | key count |
+| | 18 (u16) | **bytes per record** — the class discriminator; never assume it |
+| | 23 (u8) | list type code, paired with the size |
+| `mkif` (48) | 0/1 (u8) | inverted, locked |
+| | 6 (u16) | mode, the SDK's `PF_MaskMode`: 0 none, 1 add, 2 subtract, 3 intersect, 4 lighten, 5 darken, 6 difference |
+| | 45/46/47 (u8) | outline colour |
+| `shph` (24) | 3 (u8) | bit 0 normalised, **bit 3 open** (so closed = not that bit) |
+| | 4/8/12/16 (f32) | bounding box: left, top, right, bottom |
+| `NmHd` (20) | 8 (u32) | marker duration in **600ths of a second** |
+| | 16 (u8) | label colour |
+| `pard` (148) | 15 (u8) | the SDK parameter type: **11 arbitrary data**, **13/14 topic start/end**, 15 declared-empty |
+| | 16 (strz, 32) | the plug-in's own parameter name — the one scripting reports |
+
+**The keyframe record**, in every class: 8 bytes of header — time as a signed
+32-bit count of the comp's internal timebase units (`cdta`+8) *relative to the
+layer's start*, then in-interpolation (1 linear, 2 bezier, 3 hold),
+out-interpolation, label, and a flag byte with roving at bit 5, temporal
+auto-bezier at 4 and temporal continuity at 3. The payload is chosen by
+`(list type, record size)`:
+
+| Type/size | Class | Payload after the header |
+|---|---|---|
+| 4 / 48 | 1-D | 5 f64: value, in speed, in influence, out speed, out influence |
+| 4 / 80 | 1-D, longer record | the same five, read the same way (reference) |
+| 4 / 88 | 2-D | the same five, ×2 axes, grouped by field |
+| 4 / 128 | 3-D | the same five, ×3 axes |
+| 4 / 104 | 2-D spatial | 3 pad, a spatial flag byte (bit 1 auto-bezier, bit 0 continuous), 4 pad, then 5 f64 (one unknown, then one ease per side, *not* per axis), then value×2, in-tangents×2, out-tangents×2 |
+| 4 / 128 + spatial | 3-D spatial | the same, ×3 |
+| 4 / 152 | colour | 2 f64 unread, 4 ease f64, then A,R,G,B |
+| 4 / 64 | valueless | 2 f64 unread, 4 ease f64 — a mask path's keys, whose *values* are the `shap` records in the sibling `omks`, one per key, in order |
+| 4 / 16 | marker | time and flags only; the comment and duration are the matching `Nmrd` in `mrky` |
+| 4 / 8 | shape point | a pair of big-endian f32s (inside a `shap`, not a keyframe list) |
+
+**Seven conversions the file does not do for you**, each proven against the
+golden capture and each producing a plausible-looking wrong project if missed:
+
+- **Opacity, Scale and Mask Opacity are fractions on disk** and percentages in
+  the DOM. A layer at "1" is a layer nobody notices is wrong until it is.
+- **A colour is A,R,G,B in 0–255** on disk and R,G,B,A in 0–1 in the DOM. Read
+  it in the file's own order and the alpha lands in the red channel.
+- **An effect's two-dimensional point is a fraction of the composition.**
+- **An anchor point is a fraction of the layer's *source*** — but only when the
+  layer has one. A shape, text or null layer stores it in raw pixels.
+- **A mask path is normalised twice**: to its own `shph` bounding box, and that
+  box to the layer's size. Mask space is the *layer's*, not the comp's.
+- **A linear or held key's ease is all zeros in the file.** After Effects works
+  it out on demand: a held side has no speed and the default influence (100/6);
+  a linear side has the segment's own constant speed and the same influence;
+  and at the ends, or against a held neighbour, no speed. A parser that copies
+  the bytes gives every linear key a speed of nought.
+- **A spatial linear speed is the length of the *motion path*, not the chord.**
+  After Effects measures the cubic through the two keys' own spatial handles.
+  On the fixture the chord is up to 2.5% short; walking the curve in 1,024
+  pieces agrees with AE's own number to six significant figures. (The reference
+  implementation uses the chord, so this is measured here rather than borrowed.)
+
+**Five shapes worth knowing about the tree itself:**
+
+- **A layer's properties hang off its own `LIST tdgp`**: `tdsb`, `tdsn`, then
+  alternating `tdmn` (a NUL-terminated 40-byte match name) and the node it
+  names, closed by `tdmn "ADBE Group End"`. The node is `LIST tdbs` for a leaf,
+  `LIST tdgp` for a group, `LIST sspc` for an effect, `LIST om-s` for a path,
+  `LIST otst` for an Orientation, `LIST mrst` for markers, `LIST OvG2` +
+  `LIST tdgp` for Essential Properties overrides.
+- **An effect is `LIST sspc`** = `fnam` (▸ `Utf8`, the display name), `LIST
+  parT` (the parameter definitions), `LIST tdgp` (the values) and `pgui`. Its
+  index-0 slot (`…-0000`) is AE's own internal parameter and is not exposed by
+  scripting, so it must not reach the capture. Parameters match the DOM's by
+  match name directly.
+- **The `CUSTOM_VALUE` blob is a `LIST aRbs` beside the parameter's `tdbs`**,
+  holding one `aRbp` of raw bytes (the default is the identically-shaped `aRbp`
+  in `parT`). Curves' is 1,644 bytes.
+- **`ADBE Layer Styles` has no switch of its own.** Scripting reports it as on
+  when any style below it is on, and Blending Options mirrors that; reading the
+  group's own `tdsb` says "on" for every layer in every project.
+- **Comp markers are not in `cdta`.** They are the `ADBE Marker` property of
+  the hidden `SecL` layer, a `LIST mrst` = a `tdbs` of times beside a `mrky` of
+  `Nmrd` records.
+
+**Owed, and honest about it.** (1) **Property display names** are After
+Effects' own localised resources, not data in the file — a property nobody
+renamed carries the `-_0_/-` sentinel — so 1,106 of the golden's names have no
+source in the project at all. The mapper already falls back to the match name;
+a name table would be a table of Adobe's English strings, which is a separate
+decision. Effect parameters, effect instances and masks *do* get their real
+names: 83 of them, and the differential asserts every one equal to After
+Effects' own, so a drifted `pard` offset cannot hand a parameter its
+neighbour's name unnoticed. (2) **A text document (`btds`)** is its own
+encoding — a COS blob — and arrives carrying its match name and a note saying
+so; phase C. A **gradient (`GCst`)** is owed the same and has none, and this is
+unmeasured rather than done: `fixture.aep` contains no `GCst` chunk at all,
+because the shape layer's gradient sits at its default and the file stores only
+what does not. A fixture with a non-default gradient is owed before anything can
+be claimed about it. (3) **The
+project-level `LIST EfdG`** carries every effect's parameter definitions and is
+the fallback for a layer whose effect has an empty `parT` (Gaussian Blur's is);
+it is not read, which costs only the topic/arbitrary classification for such an
+effect, and none of the fixture's needed it. (4) **A mask path's linear speed**
+is reported by the DOM as exactly 1.0 per segment; one sample cannot say
+whether that is a constant or a duration-derived number, so it is recorded
+rather than curve-fitted. Nothing downstream reads a linear side's speed.
+(5) **Decoding** the arbitrary-data blobs — K-412's sixteen-point Curves target
+is now reachable in principle, since the bytes are in hand.

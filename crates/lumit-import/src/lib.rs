@@ -29,11 +29,21 @@
 //! whole new [`lumit_core::Document`] plus an [`report::ImportReport`] saying
 //! what changed on the way across. Import always makes a *new* project —
 //! merging a capture into one that is already open is later work.
+//!
+//! Since K-418 there is a **second front door**: [`aep::open_aep`] reads an
+//! After Effects project file directly and fills the same [`Capture`], so the
+//! user picks the `.aep` and nothing has to be run inside After Effects at all.
+//! It is a second front end, never a second importer — everything downstream is
+//! shared, and [`Bundle::source`] is the only thing that remembers which way in
+//! was taken. The Bridge stays first-class: it is the fidelity backstop, and it
+//! is what cannot drift when Adobe changes the file format.
 
+pub mod aep;
 pub mod capture;
 pub mod map;
 pub mod report;
 
+pub use aep::open_aep;
 pub use capture::{Capture, Manifest, Report};
 pub use map::map_capture;
 pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
@@ -57,6 +67,22 @@ pub struct Bundle {
     /// Empty when the bundle carries no readable report — the capture is the
     /// work, and a damaged report never costs the user their import.
     pub report: Report,
+    /// Which route produced this. The two are interchangeable downstream, but
+    /// the import report says so, because their honest failure modes differ:
+    /// the Bridge cannot read a `CUSTOM_VALUE` blob and the direct parser can,
+    /// while a new After Effects may break the parser and never the Bridge
+    /// (K-418).
+    pub source: BundleSource,
+}
+
+/// Where a [`Bundle`] came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BundleSource {
+    /// A Lumit Bridge bundle — a folder or a zip written by the walker script.
+    #[default]
+    Bridge,
+    /// An After Effects project file, read directly (K-418).
+    Aep,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -67,6 +93,8 @@ pub enum ImportError {
     Zip(#[from] zip::result::ZipError),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("this After Effects project could not be read: {0}")]
+    Aep(#[from] aep::AepError),
     #[error("not a Lumit bundle")]
     NotABundle,
     #[error(
@@ -116,6 +144,7 @@ pub fn open_bundle(path: &Path) -> Result<Bundle, ImportError> {
         manifest,
         capture,
         report,
+        source: BundleSource::Bridge,
     })
 }
 

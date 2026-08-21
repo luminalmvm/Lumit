@@ -819,25 +819,70 @@ project does not contain).
      The reason-level filter §9 asks for (disabled expressions as their own list)
      belongs with that work; the built filter is by outcome.
 
-**The direct `.aep` parser (K-418, docs/impl/ae-import.md §7) - phase A landed
-2026-08-21; phases B and C are the work.** `crates/lumit-import/src/aep/` reads an
+**The direct `.aep` parser (K-418, docs/impl/ae-import.md §7) - phases A and B landed
+2026-08-21; phase C is the work.** `crates/lumit-import/src/aep/` reads an
 After Effects project file itself and fills the same `Capture` the Bridge writes, so
 the mapping, the effect table and the report are shared unchanged: `rifx.rs` is the
 bounds-checked container walk, `enums.rs` the funnel tables, `mod.rs` the structure
-decode and `open_aep`. `tests/aep_differential.rs` parses `fixture.aep` and compares
-the project block, all 22 items, both comps' settings and all 24 layers against
+decode and `open_aep`, `props.rs` the property system. `tests/aep_differential.rs`
+parses `fixture.aep` and compares the project block, all 22 items, both comps'
+settings, all 24 layers and every property tree against
 `fixture.lum-bundle/capture.json` - AE's own account of the same file - field for
-field; §7.1 is the proved layout map.
- - **Phase B: the property system.** `tdgp`/`tdbs`/`tdb4`/`cdat` and the `lhd3`+`ldat`
-   keyframe records, then effects, masks, text, shapes and expressions - and markers,
-   which are keyframes of `ADBE Marker` (a comp's on its hidden `SecL` layer). Until
-   it lands every layer's `properties` and `markers` arrive empty, and
-   `time_remap_enabled` is the one property fact phase A reads.
+field; §7.1 and §7.2 are the proved layout maps.
+ - **Recovery, asserted in CI** (§7.2 has the table): 646 static property values
+   exact with none wrong and none invented, 27 of 27 keyframes with their ease and
+   spatial tangents, 2 expressions, 13 effect instances, 2 masks with their paths,
+   4 markers, 1 separated-dimension property, and the 3 `CUSTOM_VALUE` blobs as raw
+   bytes - which the Bridge cannot get at all. `map_capture` on the parsed capture
+   and on the golden bundle produce documents with identical counts. The 2,734
+   golden leaves the parser does *not* report are the ones the file does not store,
+   because they are at their defaults. A sixty-four-case damage sweep (truncations,
+   flipped bytes, `0xFFFFFFFF` sizes, zeroed runs, fixed seeds) requires an answer
+   from every one and times the lot: no panic, no hang, typed refusals.
  - **Phase C: the front door.** File ▸ Import takes the `.aep` itself (docs/11 §1),
    the report opens automatically and says which route ran, and skipped chunks - today
    recorded as `Unreadable` rows on the bundle's report - become report rows the panel
-   shows. Then the stretch goal: the Curves `CUSTOM_VALUE` blob is in the file, so
-   K-412's sixteen-point target may be reachable, measured rather than promised.
+   shows. docs/11 §7's remaining policy line lands with it: **a whole-file failure
+   should fall back to "import footage references only" where the footage table is
+   readable**, and today `parse_capture` simply refuses with `NoItemTree`.
+ - **Three doc debts the phases left behind.** (a) `docs/GUIDE.md` has no plain-English
+   section on the direct route at all, which K-007 requires of any new mechanism - the
+   container walk, the property tree and the funnel tables are three concepts a reader
+   has nowhere to meet. (b) docs/11 §7 still says the parser is "reimplemented in Rust
+   inside `lumit-project`" (it is `lumit-import`) and still frames the reference work as
+   "the Kaitai Struct grammar … before vendoring any grammar", which K-418 closed:
+   nothing is vendored and the reference has long since moved to hand-written chunk
+   parsers. (c) An effect **parameter name** now has a CI assertion but an effect
+   parameter *value* in DOM units is asserted only through the shared value sweep;
+   that is enough today and worth naming if the units table grows.
+ - **Two encodings are still owed**: a text document (`btds`) and a gradient
+   (`GCst`). The text document arrives carrying its match name and a note saying the
+   encoding is not decoded, so the report already says so. **The gradient is
+   unmeasured**: `fixture.aep` holds no `GCst` chunk at all - the shape layer's
+   gradient is at its default and the file stores only what is not - so nothing has
+   been proved about it either way, and a fixture with a non-default gradient is owed
+   before anything is claimed. Decoding both is phase C's stretch, alongside
+   **decoding the arbitrary-data blobs** - K-412's sixteen-point Curves target is
+   reachable in principle now that the bytes are in hand, measured rather than
+   promised.
+ - **Property display names are not read, and may never be.** They are After
+   Effects' own localised resources rather than data in the file (a property nobody
+   renamed carries the `-_0_/-` sentinel), so 1,106 of the golden capture's names
+   have no source in the project. The mapper falls back to the match name; effect
+   parameters, effect instances and masks do get their real names - 83 of them, every
+   one asserted equal to AE's own, so a drifted `pard` offset cannot hand a parameter
+   its neighbour's name unnoticed. A name table for the other 1,106 would be a table
+   of Adobe's English strings - a separate decision, not an oversight.
+ - **The project-level `LIST EfdG` fallback is not read.** It carries every effect's
+   parameter definitions and is what tells a real parameter from a topic heading
+   when a layer's own `parT` is empty (Gaussian Blur's is). None of the fixture's
+   effects needed it; an effect that does simply reads its slots as the plain
+   numbers they are stored as.
+ - **A mask path's linear speed is 1.0 per segment in the DOM**, and one sample
+   cannot say whether that is a constant or a duration-derived number, so the
+   differential exempts it rather than curve-fitting. Nothing downstream reads a
+   linear side's speed. A fixture with an animated path over a different duration
+   settles it.
  - **Footage interpretation is not read at all, and needs a fixture that has some.**
    `fixture.aep` is solids and comps with no file footage in it, so path, frame rate,
    alpha, fields, pulldown, loop and missing-ness could not be checked against AE -
