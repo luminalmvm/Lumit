@@ -34,7 +34,7 @@ between frames.
 |---|---|---|
 | **1 — tracks** | Feature detection + pyramidal affine KLT + track store + masks + forward-backward verification. The substrate everything else reads. | **Built** (see §2's "As built") |
 | **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
-| **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | Open |
+| **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | **Built** (see §4's "As built") |
 | **4 — surface** | Bridge + Tracking UI: run, point cloud over the picture, solved camera → a Camera layer, 2D track → keyframed transform / corner-pin export, mask pick. | Open |
 
 Phase 1 first and alone: every later phase's quality is decided by track quality.
@@ -235,6 +235,126 @@ Nine things are deviations from, or decisions under, the wording above:
   same clip solves to the same answer bit-for-bit on one machine, and the tests pin
   statistics rather than raw floats across machines.
 
+### Phase 3, as built
+
+`crates/lumit-track/src/{solve,bundle}.rs` (2026-08-21). The ladder above holds
+end to end. One public entry point:
+
+```
+solve_camera(&TrackSet, &[PairGeometry], &[ZoomBoundary], &SolveSettings)
+    -> Result<CameraSolve, SolveError>
+```
+
+`CameraSolve` is the shape phase 4's export reads: a `SolvedPose` per frame
+(world→camera rotation, camera centre, segment index, the segment's focal
+repeated per frame, that frame's mean reprojection error, and a `PoseSource` of
+`Keyframe`/`Resection`/`Interpolated`), the `SolveSegment` table (frame range,
+focal in source pixels, a `ramp` flag), the `ScenePoint` cloud (track id and
+position, colourless — the tracker reads luma and has no colour to give), the
+keyframe list, the mean reprojection error over every observation the bundle
+saw, and a `notes` list. `SolveError` is a refusal, never a fault: `NoTracks`,
+`NoKeyframes`, `RotationOnly`, `NoPoints`.
+
+Ten things are deviations from, or decisions under, the wording above. Every one
+of them was forced by measuring the version that followed the note literally:
+
+1. **Bougnoux's closed form was written, measured, and replaced.** On the
+   synthetic orbit its per-pair answers ran from 57 px to 578 px for a true
+   300 px, because the formula divides by a quantity that vanishes at the
+   critical configurations and every real shot spends time near one. What
+   survives is the *constraint* it solves — that `K_toᵀ·F·K_from` must have two
+   equal singular values and one zero — minimised numerically over a bounded
+   focal range instead of solved in closed form, on the median over **all** the
+   shot's pairs at once. A 96-step sweep in log-focal finds the basin and forty
+   ternary steps polish it; both are fixed, so the work and the answer are the
+   same every run.
+2. **A zoom cut ties the segments' focals together rather than splitting them
+   apart.** The detector already measured the ratio: a cut's `log_scale` is the
+   median over hundreds of tracks of how much every patch grew, and with pose
+   continuous across the cut that growth *is* the focal ratio. So the whole shot
+   has one focal unknown, each segment's focal is that unknown times the product
+   of the cut ratios before it, and every pair in the shot votes on it. That is
+   both stronger and simpler than per-segment self-calibration, and it is what
+   makes the 300→420 px scope-in come back at 297.3 and 416.7.
+3. **The solve runs twice.** The focal a first pass stands on is the weakest
+   number in the file, and a focal 30 % out bends every relative rotation with
+   it — the essential decomposition's angle scales with it almost proportionally.
+   The second pass re-derives every relative pose from the focal the first pass's
+   bundle settled on, which is the *strongest* number available because it was
+   fitted to every observation at once. Bounded at two (`SolveSettings::passes`):
+   a third moves nothing measurable, and an unbounded loop is not a solve, it is
+   a hope.
+4. **Triangulation does not gate on reprojection; the bundle does.** The first
+   cut of this file refused any point whose initial reprojection exceeded the
+   threshold, and the honest result was `NoPoints` on a shot that solves
+   perfectly well — because before the bundle the model is an *initialisation*,
+   and judging it by the number the bundle exists to minimise throws away exactly
+   the points that are about to be fixed. Triangulation now checks cheirality and
+   ray parallax only, which are the qualitative failures. Reprojection is the
+   gate immediately after the bundle, where it is the right question, and
+   anything it drops is followed by a second bundle over what is left.
+5. **The colinear guard is reported, not fatal.** A dead straight dolly gives
+   every pair the same baseline direction, and direction constraints then say
+   nothing about the *ratios* between baselines — the classic degeneracy of
+   translation averaging. But the point cloud and the bundle do constrain the
+   spacing, so refusing the shot would be wrong; the solve runs and returns
+   `SolveNote::ColinearBaselines`, which says where the answer came from. The
+   test measures the separation rather than trusting it: the straight dolly's
+   direction scatter reads 0.0006, an arced one 0.02–0.04, against a threshold
+   of 0.001.
+6. **A rotation-only shot is a hard refusal.** Where no pair carries a baseline
+   there is no position to solve and no depth to recover, and `SolveError::
+   RotationOnly` says so rather than returning a trajectory the pictures do not
+   contain. The rotations *are* recoverable from the homographies, and a nodal
+   solve — a Camera layer that only turns — is a real product; it is phase 4+
+   work and is in TODO, not smuggled in here.
+7. **A per-segment focal ramp is owed.** The note allows one focal per segment
+   for phase 3 with the ramp case recorded, and that is what shipped: a segment
+   containing a detected zoom ramp is flagged `ramp: true` and reported as
+   `SolveNote::ZoomRamp`, and its focal is one number over the whole run rather
+   than the note's spline knots. The bundle's parameter layout already carries
+   one focal per segment as an independent unknown, so knots are additional
+   columns in the same reduced system rather than a rewrite.
+8. **Resection is a trim, not a random sample.** The note says "RANSAC-lite";
+   what earns its place is a normalised DLT over the frame's tracks, two rounds
+   of dropping whatever disagrees and refitting, then a six-parameter
+   Gauss–Newton refinement sharing the bundle's own Jacobian. Phase 2 has already
+   removed the moving tracks and triangulation has already refused anything that
+   would not sit still, so the outlier rate a random sampler would be paying for
+   is not there. A frame that still cannot be explained is not given a fitted
+   pose: it is interpolated between its neighbours and labelled
+   `PoseSource::Interpolated`, and the count is reported.
+9. **There is still no SVD in the crate.** The essential matrix's factorisation
+   needs `U` and `V`, which is exactly what phase 2 avoided — but the same
+   identity does it again: `V` is the eigenvectors of `EᵀE` from the Jacobi
+   solver, and `uᵢ = E·vᵢ/σᵢ` gives `U` with `u₃ = u₁×u₂`, which also forces
+   `det U = det V = +1` and so makes both `R` candidates proper rotations by
+   construction. The nearest rotation to a matrix (`M·(MᵀM)^(−½)`, with the
+   reflection case handled by flipping the smallest eigendirection) comes from
+   the same solver and is used three times: the homography's rotation, the DLT
+   resection's, and the tests' Umeyama alignment.
+10. **The reduced camera system is dense and factorised outright**, so the
+    bundle is cubic in the *keyframe* count — marked with a `ponytail:` comment
+    at the function. The points, which are the thousands, are marginalised
+    sparsely: each point's `W` block lists only the parameters that actually see
+    it, so the Schur update is quadratic in one point's observation count and not
+    in the problem. The note's own "keyframe counts are small" is what makes the
+    dense half the right trade; a shot that somehow lands thousands of keyframes
+    wants a sparse factorisation there, not a bigger machine.
+
+**Measured on the phase-3 tests** (synthetic, deterministic, in-test): a 25-frame
+orbit recovers its focal as 300.07 px against a true 300 (0.02 %), with an
+absolute trajectory error after similarity alignment of 0.039 % of the
+trajectory's extent and a mean reprojection of 0.10 px over 150 points; a
+30-frame arcing dolly through a 1.4× scope-in at frame 14 finds the cut on the
+right frame and recovers 297.3 px and 416.7 px against 300 and 420 (0.9 % and
+0.8 %), ATE 0.054 %, mean reprojection 0.10 px; with thirty planted movers in the
+orbit, the cloud is exactly the hundred and twenty still tracks and the ATE is
+unchanged at 0.042 %. Phase 2 marks fifteen of the thirty movers as `Moving`;
+the other fifteen are refused later, by cheirality and by the post-bundle
+reprojection gate — both halves of that are asserted, so neither can quietly
+stop working.
+
 ## 5. Test plan
 
 - **Synthetic first, real second.** Phase 1: rendered test sequences (a textured
@@ -291,6 +411,57 @@ Nine things are deviations from, or decisions under, the wording above:
 - Phase 3: a synthetic orbit + a synthetic dolly with a mid-shot zoom cut: solved
   poses within tolerance of ground truth (ATE after similarity alignment), focal
   recovered per segment within 2%, and the zoom cut landing on the right frame.
+  **Landed** as the third part of `crates/lumit-track/src/tests.rs` — eight
+  tests, and like phase 2's they draw nothing: a camera path written down
+  exactly, a known cloud, its projection, and a deterministic sub-pixel jitter
+  standing in for what a good KLT step leaves behind. In order: the orbit,
+  checked on focal, on ATE after a Umeyama alignment (which is not a courtesy —
+  the seven similarity numbers are precisely what no photograph carries), on
+  mean reprojection, on the count of in-between frames actually resectioned
+  rather than guessed, and on nothing having needed interpolation; the arcing
+  dolly through a 1.4× scope-in, checked on the cut's frame, on both segment
+  focals, on pose *continuity* across the cut (the step across it against the
+  typical step either side, because the camera is moving and a step of zero
+  would be the wrong assertion), and on every frame carrying its own segment's
+  focal; thirty planted movers, checked both on how many phase 2 marked and on
+  the cloud being exactly the still tracks; a nodal pan refused with
+  `SolveError::RotationOnly`; a dead straight dolly reporting
+  `SolveNote::ColinearBaselines` while an arced one over the same ground does
+  not; the boundary refusing an empty set and a set with no pairs; the whole
+  solve run twice and compared with `assert_eq!`; and the bundle driven
+  directly, from a start knocked off by a fifth of a unit in position, three
+  quarters of a degree in rotation, a twentieth of a unit per point and four per
+  cent in focal, required to come back to a millionth of a pixel.
+- **The phase-3 thresholds are mutation-checked too.** Flipping the sign of the
+  rotation Jacobian's `−[v]×` term in `bundle.rs` — one `-` — fails five of the
+  eight, including the three that only look at the pipeline's output; flipping
+  the sign of the Schur back-substitution's `Wᵀ·Δc` term fails four, and takes
+  the recovered focal from 300 px to 223.
+- **The margins are not uniform, and the reason is worth writing down.** Where
+  the input carries jitter the threshold sits two to eight times above the
+  measured value — the reprojection means at 0.10 px against 0.2, the dolly's
+  focals at 0.8–0.9 % against 2 %, the trajectory errors at 0.04–0.05 % against
+  0.3–0.4 %. That band is close enough to bite and far enough not to flake on a
+  different libm. But `the_bundle_converges_from_a_perturbed_start` feeds the
+  bundle *noiseless* observations, so its true minimum is exactly zero and it
+  reaches 1.6e−14 px; a threshold picked from the jittered band (0.02 px) was
+  a thousand billion times slack, and a deliberately broken Schur
+  back-substitution slid under it at 0.022 px — the test all but missed the one
+  mutation it exists to catch. Its three thresholds are therefore a millionth
+  of a pixel, a millionth of a pixel of focal, and a millionth of the
+  trajectory's extent: still six to eight orders above the measurement, and
+  decisive. **The rule is that a threshold is set from what the test's own input
+  can achieve, not from a house number.**
+- Two other phase-3 thresholds were placed by measurement rather than by
+  eye after the fact, and say what their tests claim. The mover test's
+  trajectory bound is the clean orbit's own (0.3 %, measured 0.042 %) rather
+  than a looser one, because its stated claim is that movers cost the solve
+  nothing — a slacker bound there would let them start costing something in
+  silence. And the zoom cut's pose-continuity bound is ±15 % of the median step
+  rather than ±60 %: the dolly is a constant-rate arc whose every true step is
+  the same length to five decimals, and every *solved* step lands within 2.3 %
+  of the median, so ±60 % would have passed a camera that jumped half a step at
+  the cut.
 - Real clips (the flow-quality staging folder) are the eyeball harness, not CI.
 
 ## Open questions

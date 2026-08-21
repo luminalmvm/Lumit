@@ -1632,3 +1632,628 @@ fn the_two_view_boundary_refuses_what_it_cannot_use() {
     assert!(select_keyframes(&TrackSet::default(), &s).is_empty());
     assert!(detect_zoom(&TrackSet::default(), &ZoomSettings::default()).is_empty());
 }
+
+// ===========================================================================
+// Phase 3 — the global solve (docs/impl/tracking.md §4, test plan §5).
+//
+// Same discipline as phase 2: the ground truth is a camera path written down
+// exactly and the "footage" is its projection of a known cloud, with a
+// deterministic sub-pixel jitter standing in for what a good KLT step leaves
+// behind. Nothing renders. A test that rendered here would be measuring phase
+// 1 again, and would fail for reasons that have nothing to do with the solve.
+// ===========================================================================
+
+use crate::bundle::{bundle_adjust, BundleCamera, BundleObs};
+use crate::solve::closest_rotation;
+
+/// A cloud spread about the world origin — what an orbiting camera circles.
+fn orbit_cloud(n: usize) -> Vec<[f64; 3]> {
+    (0..n)
+        .map(|i| {
+            let i = i as i64;
+            [
+                -1.5 + 3.0 * hash2(i, 401),
+                -0.9 + 1.8 * hash2(i, 503),
+                -1.5 + 3.0 * hash2(i, 601),
+            ]
+        })
+        .collect()
+}
+
+/// A cloud in front of a dollying camera, spread deep enough to carry parallax
+/// and shallow enough to stay on the raster when the lens jumps to 1.4×.
+fn dolly_cloud(n: usize) -> Vec<[f64; 3]> {
+    (0..n)
+        .map(|i| {
+            let i = i as i64;
+            [
+                -2.2 + 4.4 * hash2(i, 701),
+                -1.3 + 2.6 * hash2(i, 809),
+                9.5 + 5.0 * hash2(i, 907),
+            ]
+        })
+        .collect()
+}
+
+/// A camera orbiting the origin at `radius`, aimed at it, rising and falling a
+/// little so the baselines are not all in one plane.
+fn orbit_cameras(frames: usize, step_deg: f64, radius: f64, focal: f64) -> Vec<Camera> {
+    (0..frames)
+        .map(|i| {
+            let th = (i as f64) * step_deg.to_radians();
+            let mut c = Camera::new(
+                [
+                    radius * th.sin(),
+                    0.25 * (2.0 * th).sin(),
+                    -radius * th.cos(),
+                ],
+                -th,
+                0.0,
+            );
+            c.f = focal;
+            c
+        })
+        .collect()
+}
+
+/// A camera dollying sideways while panning to hold the subject, with the lens
+/// jumping from `before` to `after` between frames `cut` and `cut + 1` — the
+/// owner's scope-in.
+fn dolly_cameras(frames: usize, cut: usize, before: f64, after: f64) -> Vec<Camera> {
+    (0..frames)
+        .map(|i| {
+            let t = i as f64;
+            let th = t * 1.2f64.to_radians();
+            let mut c = Camera::new(
+                [
+                    12.0 * th.sin(),
+                    0.18 * (2.0 * th).sin(),
+                    12.0 - 12.0 * th.cos(),
+                ],
+                -th,
+                0.0,
+            );
+            c.f = if i <= cut { before } else { after };
+            c
+        })
+        .collect()
+}
+
+/// Project a known camera path over a known cloud straight into a
+/// [`TrackSet`], with the per-step affine carrying the true patch scale.
+///
+/// That last part is not decoration: the zoom detector reads `log(scale)` out
+/// of the affine matrices, and the honest scale of a patch between two frames
+/// is `(f₂/z₂)/(f₁/z₁)` — the focal ratio times the depth ratio. Writing the
+/// focal ratio alone would hand the detector a cut it could not have seen, and
+/// writing 1.0 would hide one it must.
+///
+/// Tracks with an id at or above `movers` drift by `drift` per frame.
+fn solve_shot(
+    cams: &[Camera],
+    pts: &[[f64; 3]],
+    movers: usize,
+    drift: [f64; 3],
+    jitter: f64,
+) -> TrackSet {
+    let mut tracks = Vec::new();
+    for (j, p) in pts.iter().enumerate() {
+        let mut points: Vec<TrackPoint> = Vec::new();
+        let mut steps: Vec<TrackStep> = Vec::new();
+        let mut prev: Option<(f64, f64)> = None;
+        for (i, cam) in cams.iter().enumerate() {
+            let k = if j >= movers { i as f64 } else { 0.0 };
+            let x = [
+                p[0] + drift[0] * k,
+                p[1] + drift[1] * k,
+                p[2] + drift[2] * k,
+            ];
+            let Some(u) = cam.project(x) else {
+                break;
+            };
+            let z = cam.depth(x);
+            let (jx, jy) = (
+                jitter * (hash2(j as i64, 3001 + i as i64) - 0.5),
+                jitter * (hash2(j as i64, 6007 + i as i64) - 0.5),
+            );
+            points.push(TrackPoint {
+                frame: i as i64,
+                x: u[0] + jx,
+                y: u[1] + jy,
+            });
+            if let Some((pf, pz)) = prev {
+                let s = (cam.f / z) / (pf / pz);
+                steps.push(TrackStep {
+                    a: [[s, 0.0], [0.0, s]],
+                    ncc: 1.0,
+                    fb: 0.0,
+                });
+            }
+            prev = Some((cam.f, z));
+        }
+        if points.len() < 2 {
+            continue;
+        }
+        tracks.push(Track {
+            id: j as u32,
+            points,
+            steps,
+            state: TrackState::Live,
+            parent: None,
+        });
+    }
+    TrackSet {
+        tracks,
+        width: W,
+        height: H,
+    }
+}
+
+/// Root-mean-square absolute trajectory error after the similarity alignment
+/// (Umeyama), together with the ground-truth path's own extent so the error can
+/// be quoted as a fraction of it.
+///
+/// The alignment is not a courtesy. A camera solve from pictures alone cannot
+/// know the world's origin, orientation or size — those are exactly the seven
+/// numbers no photograph carries — so comparing raw coordinates would measure
+/// the gauge, not the answer.
+fn ate(solved: &[[f64; 3]], truth: &[[f64; 3]]) -> (f64, f64) {
+    assert_eq!(solved.len(), truth.len(), "one solved pose per truth pose");
+    let n = solved.len() as f64;
+    assert!(n >= 3.0, "an alignment needs three poses");
+    let mean = |v: &[[f64; 3]]| {
+        let mut m = [0.0f64; 3];
+        for p in v {
+            for (a, b) in m.iter_mut().zip(p.iter()) {
+                *a += b;
+            }
+        }
+        [m[0] / n, m[1] / n, m[2] / n]
+    };
+    let (ma, mb) = (mean(solved), mean(truth));
+    let mut sigma = [[0.0f64; 3]; 3];
+    let mut var = 0.0f64;
+    for (a, b) in solved.iter().zip(truth.iter()) {
+        let ac = [a[0] - ma[0], a[1] - ma[1], a[2] - ma[2]];
+        let bc = [b[0] - mb[0], b[1] - mb[1], b[2] - mb[2]];
+        for (r, row) in sigma.iter_mut().enumerate() {
+            for (c, cell) in row.iter_mut().enumerate() {
+                *cell += bc[r] * ac[c];
+            }
+        }
+        var += ac[0] * ac[0] + ac[1] * ac[1] + ac[2] * ac[2];
+    }
+    let rot = closest_rotation(&sigma).expect("an aligned pair of paths has a rotation");
+    let apply = |r: &[[f64; 3]; 3], v: [f64; 3]| {
+        [
+            r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
+            r[1][0] * v[0] + r[1][1] * v[1] + r[1][2] * v[2],
+            r[2][0] * v[0] + r[2][1] * v[1] + r[2][2] * v[2],
+        ]
+    };
+    let mut num = 0.0f64;
+    for (a, b) in solved.iter().zip(truth.iter()) {
+        let ac = [a[0] - ma[0], a[1] - ma[1], a[2] - ma[2]];
+        let bc = [b[0] - mb[0], b[1] - mb[1], b[2] - mb[2]];
+        let ra = apply(&rot, ac);
+        num += bc[0] * ra[0] + bc[1] * ra[1] + bc[2] * ra[2];
+    }
+    let scale = if var > 1e-18 { num / var } else { 1.0 };
+    let mut sum = 0.0f64;
+    for (a, b) in solved.iter().zip(truth.iter()) {
+        let ac = [a[0] - ma[0], a[1] - ma[1], a[2] - ma[2]];
+        let bc = [b[0] - mb[0], b[1] - mb[1], b[2] - mb[2]];
+        let ra = apply(&rot, ac);
+        let e = [
+            scale * ra[0] - bc[0],
+            scale * ra[1] - bc[1],
+            scale * ra[2] - bc[2],
+        ];
+        sum += e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
+    }
+    let mut extent = 0.0f64;
+    for a in truth {
+        for b in truth {
+            let d = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt();
+            extent = extent.max(d);
+        }
+    }
+    ((sum / n).sqrt(), extent)
+}
+
+/// Run the whole pipeline — phase 2's keyframes, segmentation and zoom
+/// boundaries, then phase 3 — the way a caller would.
+fn run_solve(
+    set: &mut TrackSet,
+) -> (
+    Vec<PairGeometry>,
+    Vec<ZoomBoundary>,
+    Result<CameraSolve, SolveError>,
+) {
+    let pairs = select_keyframes(set, &GeometrySettings::default());
+    segment_dynamic_tracks(set, &pairs, &SegmentSettings::default());
+    let zooms = detect_zoom(set, &ZoomSettings::default());
+    let solved = solve_camera(set, &pairs, &zooms, &SolveSettings::default());
+    (pairs, zooms, solved)
+}
+
+fn truth_positions(cams: &[Camera]) -> Vec<[f64; 3]> {
+    cams.iter().map(|c| c.c).collect()
+}
+
+// --- The orbit ---------------------------------------------------------------
+
+#[test]
+fn a_synthetic_orbit_solves_to_its_ground_truth() {
+    let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
+    let mut set = solve_shot(&cams, &orbit_cloud(150), usize::MAX, [0.0; 3], 0.3);
+    let (pairs, _, solved) = run_solve(&mut set);
+    assert!(pairs.len() >= 3, "{} keyframe pairs", pairs.len());
+    let solved = solved.expect("an orbit is the friendliest shot there is");
+
+    assert_eq!(solved.poses.len(), cams.len(), "every frame gets a pose");
+    assert_eq!(
+        solved.segments.len(),
+        1,
+        "no lens change means one focal unknown"
+    );
+    let focal = solved.segments.first().map_or(0.0, |s| s.focal_px);
+    assert!(
+        (focal - 300.0).abs() / 300.0 < 0.02,
+        "focal recovered as {focal} px against a true 300"
+    );
+
+    let positions: Vec<[f64; 3]> = solved.poses.iter().map(|p| p.position).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    assert!(
+        rms / extent < 0.003,
+        "trajectory error {rms} over an extent of {extent}"
+    );
+    assert!(
+        solved.mean_reprojection_px < 0.2,
+        "mean reprojection {} px",
+        solved.mean_reprojection_px
+    );
+    assert!(
+        solved.points.len() > 100,
+        "{} points triangulated",
+        solved.points.len()
+    );
+    // The in-between frames are the ones no keyframe pair stands on, and they
+    // have to be resectioned rather than guessed: a solve that only answered
+    // for its keyframes would pass every assertion above.
+    let resected = solved
+        .poses
+        .iter()
+        .filter(|p| p.source == PoseSource::Resection)
+        .count();
+    assert!(
+        resected >= 12,
+        "{resected} of {} frames were resectioned",
+        solved.poses.len()
+    );
+    assert!(
+        !solved
+            .poses
+            .iter()
+            .any(|p| p.source == PoseSource::Interpolated),
+        "nothing had to be interpolated on a shot this clean"
+    );
+}
+
+// --- The dolly with a scope-in ------------------------------------------------
+
+#[test]
+fn a_dolly_through_a_zoom_cut_recovers_both_focals() {
+    let cut = 14usize;
+    let cams = dolly_cameras(30, cut, 300.0, 420.0);
+    let mut set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let (_, zooms, solved) = run_solve(&mut set);
+
+    let cuts: Vec<&ZoomBoundary> = zooms.iter().filter(|z| z.kind == ZoomKind::Cut).collect();
+    assert_eq!(cuts.len(), 1, "one lens cut, got {zooms:?}");
+    assert_eq!(
+        cuts.first().map(|z| z.frame),
+        Some(cut as i64),
+        "the cut lands between {cut} and {}",
+        cut + 1
+    );
+
+    let solved = solved.expect("a dolly carries parallax");
+    assert_eq!(solved.segments.len(), 2, "a cut splits the focal unknown");
+    let (a, b) = (
+        solved.segments.first().map_or(0.0, |s| s.focal_px),
+        solved.segments.get(1).map_or(0.0, |s| s.focal_px),
+    );
+    assert!(
+        (a - 300.0).abs() / 300.0 < 0.02,
+        "first segment focal {a} against a true 300"
+    );
+    assert!(
+        (b - 420.0).abs() / 420.0 < 0.02,
+        "second segment focal {b} against a true 420"
+    );
+
+    // Pose continuity: a scope-in is a lens change, not a jump cut, so the
+    // camera either side of it must be where it was going anyway. The step
+    // across the cut is compared against the steps around it rather than
+    // against zero, because the camera is moving. The path is a constant
+    // angular-rate arc, so every true step is the same length to five decimal
+    // places and every *solved* step lands within 2.3% of the median; ±15% is
+    // six times that, and small enough that half a step of jump would fail.
+    let steps: Vec<f64> = solved
+        .poses
+        .windows(2)
+        .map(|w| match w {
+            [x, y] => {
+                let d = [
+                    y.position[0] - x.position[0],
+                    y.position[1] - x.position[1],
+                    y.position[2] - x.position[2],
+                ];
+                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+            }
+            _ => 0.0,
+        })
+        .collect();
+    let across = steps.get(cut).copied().unwrap_or(0.0);
+    let typical = median(steps.clone());
+    assert!(
+        across < 1.15 * typical && across > 0.85 * typical,
+        "the step across the cut is {across} against a typical {typical}"
+    );
+
+    let positions: Vec<[f64; 3]> = solved.poses.iter().map(|p| p.position).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    assert!(
+        rms / extent < 0.004,
+        "trajectory error {rms} over an extent of {extent}"
+    );
+    assert!(
+        solved.mean_reprojection_px < 0.2,
+        "mean reprojection {} px",
+        solved.mean_reprojection_px
+    );
+    // Every frame reads the focal of the segment it sits in, which is what a
+    // per-frame export writes out.
+    for pose in &solved.poses {
+        let want = if pose.frame <= cut as i64 { a } else { b };
+        assert!(
+            (pose.focal_px - want).abs() < 1e-9,
+            "frame {} carries {} px",
+            pose.frame,
+            pose.focal_px
+        );
+    }
+}
+
+// --- Moving objects ------------------------------------------------------------
+
+#[test]
+fn planted_movers_stay_out_of_the_solve() {
+    let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
+    let cloud = orbit_cloud(150);
+    let movers = 120usize;
+    let mut set = solve_shot(&cams, &cloud, movers, [0.0, 0.05, 0.0], 0.3);
+    let (_, _, solved) = run_solve(&mut set);
+    let solved = solved.expect("thirty movers do not stop a hundred and twenty still points");
+
+    let marked = set
+        .tracks()
+        .iter()
+        .filter(|t| t.state == TrackState::Moving)
+        .count();
+    assert!(marked >= 12, "only {marked} tracks were segmented out");
+    for p in &solved.points {
+        assert!(
+            (p.track as usize) < movers,
+            "track {} moves by itself and reached the cloud",
+            p.track
+        );
+    }
+    // Phase 2 marks the ones whose whole life disagrees; the rest are refused
+    // later, by triangulation and by the post-bundle reprojection gate. Both
+    // halves of that are being asserted here — the count above is well short of
+    // thirty, and not one mover is in the cloud.
+    assert_eq!(
+        solved.points.len(),
+        movers,
+        "every still track and no other should have triangulated"
+    );
+    // And the still world is still solved, to the same accuracy as without them —
+    // which is why this threshold is the clean orbit's own, not a looser one. A
+    // separate, slacker bound here would let the movers cost accuracy silently.
+    let positions: Vec<[f64; 3]> = solved.poses.iter().map(|p| p.position).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    assert!(
+        rms / extent < 0.003,
+        "trajectory error {rms} over an extent of {extent} with movers present"
+    );
+}
+
+// --- Refusals ------------------------------------------------------------------
+
+#[test]
+fn a_rotation_only_sequence_refuses_a_translation_solve() {
+    // One camera centre, a slow pan. There is no baseline anywhere in this
+    // shot, so there is no position to solve and no depth to recover.
+    let cams: Vec<Camera> = (0..14)
+        .map(|i| {
+            let mut c = Camera::new([0.0, 0.0, 0.0], -0.006 * i as f64, 0.0);
+            c.f = 300.0;
+            c
+        })
+        .collect();
+    let mut set = solve_shot(&cams, &dolly_cloud(200), usize::MAX, [0.0; 3], 0.2);
+    let (pairs, _, solved) = run_solve(&mut set);
+    assert!(!pairs.is_empty(), "the pairs themselves are fine");
+    assert!(
+        pairs.iter().all(|g| g.verdict == PairVerdict::RotationOnly),
+        "a nodal pan is a homography, every pair of it"
+    );
+    assert_eq!(
+        solved,
+        Err(SolveError::RotationOnly),
+        "the answer is a refusal, not a made-up trajectory"
+    );
+}
+
+#[test]
+fn a_straight_dolly_reports_its_colinear_baselines() {
+    // A dead straight track: every pair's baseline direction is the same, so
+    // the *ratios* between the baselines are not determined by the directions
+    // at all. The solve still runs — the bundle and the cloud do constrain the
+    // spacing — but it says so rather than pretending the directions did it.
+    let cams: Vec<Camera> = (0..25)
+        .map(|i| {
+            let t = i as f64;
+            let mut c = Camera::new([0.2 * t, 0.0, 0.0], -0.0167 * t, 0.0);
+            c.f = 300.0;
+            c
+        })
+        .collect();
+    let mut set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let (_, _, solved) = run_solve(&mut set);
+    let solved = solved.expect("a straight dolly is solvable, merely under-determined");
+    assert!(
+        solved.notes.contains(&SolveNote::ColinearBaselines),
+        "the degeneracy has to be reported, got {:?}",
+        solved.notes
+    );
+    // An arced dolly over the same ground is not degenerate, and must not be
+    // reported as one — otherwise the note means nothing.
+    let arced = dolly_cameras(25, usize::MAX, 300.0, 300.0);
+    let mut arc_set = solve_shot(&arced, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let (_, _, arc_solved) = run_solve(&mut arc_set);
+    let arc_solved = arc_solved.expect("an arced dolly solves");
+    assert!(
+        !arc_solved.notes.contains(&SolveNote::ColinearBaselines),
+        "an arc is not colinear, got {:?}",
+        arc_solved.notes
+    );
+}
+
+#[test]
+fn the_solve_boundary_refuses_what_it_cannot_use() {
+    let s = SolveSettings::default();
+    assert_eq!(
+        solve_camera(&TrackSet::default(), &[], &[], &s),
+        Err(SolveError::NoTracks)
+    );
+    let cams = orbit_cameras(6, 2.0, 6.0, 300.0);
+    let set = solve_shot(&cams, &orbit_cloud(40), usize::MAX, [0.0; 3], 0.0);
+    assert_eq!(
+        solve_camera(&set, &[], &[], &s),
+        Err(SolveError::NoKeyframes),
+        "no pairs, no solve"
+    );
+}
+
+// --- Determinism ----------------------------------------------------------------
+
+#[test]
+fn two_solves_of_the_same_shot_agree_bit_for_bit() {
+    let cams = orbit_cameras(21, 2.0, 6.0, 300.0);
+    let once = || {
+        let mut set = solve_shot(&cams, &orbit_cloud(140), 120, [0.0, 0.05, 0.0], 0.3);
+        run_solve(&mut set).2
+    };
+    let (a, b) = (once(), once());
+    assert!(a.is_ok(), "the shot solves");
+    assert_eq!(a, b, "the whole solve must agree bit for bit");
+}
+
+// --- The bundle itself ------------------------------------------------------------
+
+#[test]
+fn the_bundle_converges_from_a_perturbed_start() {
+    // The bundle is the one part of phase 3 whose input is not the pipeline's
+    // own output, so it is pinned directly: build a problem whose answer is
+    // known, knock every unknown off it, and require the answer back. A
+    // Jacobian with one sign or one term wrong cannot pass this — it is what
+    // the iteration walks along.
+    let cams = orbit_cameras(9, 4.0, 6.0, 300.0);
+    let cloud = orbit_cloud(60);
+    let centre = [W as f64 / 2.0, H as f64 / 2.0];
+
+    let mut solved: Vec<BundleCamera> = cams
+        .iter()
+        .map(|c| BundleCamera {
+            rot: c.r,
+            pos: c.c,
+            segment: 0,
+        })
+        .collect();
+    let mut obs: Vec<BundleObs> = Vec::new();
+    let mut points: Vec<[f64; 3]> = Vec::new();
+    for (pi, p) in cloud.iter().enumerate() {
+        let mut seen = 0usize;
+        for (ci, cam) in cams.iter().enumerate() {
+            if let Some(u) = cam.project(*p) {
+                obs.push(BundleObs {
+                    cam: ci,
+                    point: pi,
+                    image: u,
+                });
+                seen += 1;
+            }
+        }
+        assert!(seen >= 2, "point {pi} is barely seen");
+        points.push(*p);
+    }
+
+    // Knock everything off: a fifth of a unit on the positions, three quarters
+    // of a degree on the rotations, a twentieth of a unit on the points, four
+    // per cent on the focal. Camera 0 is the gauge and stays put.
+    let mut focals = vec![312.0f64];
+    for (i, cam) in solved.iter_mut().enumerate().skip(1) {
+        let k = i as i64;
+        for (a, axis) in cam.pos.iter_mut().enumerate() {
+            *axis += 0.2 * (hash2(k, 11 + a as i64) - 0.5);
+        }
+        let w = [
+            0.026 * (hash2(k, 31) - 0.5),
+            0.026 * (hash2(k, 37) - 0.5),
+            0.026 * (hash2(k, 41) - 0.5),
+        ];
+        cam.rot = crate::geom::mul3(&crate::bundle::so3_exp(w), &cam.rot);
+    }
+    for (i, p) in points.iter_mut().enumerate() {
+        let k = i as i64;
+        for (a, axis) in p.iter_mut().enumerate() {
+            *axis += 0.05 * (hash2(k, 71 + a as i64) - 0.5);
+        }
+    }
+
+    let report = bundle_adjust(&mut solved, &mut focals, &mut points, &obs, centre, 2.0, 60);
+    assert!(
+        report.initial_mean_px > 3.0,
+        "the perturbation has to be visible: {} px",
+        report.initial_mean_px
+    );
+    // The observations here carry no jitter, so the true minimum is exactly
+    // zero and anything short of machine precision is a defect in the maths
+    // rather than in the data. The measured value is 1.6e-14 px; a threshold of
+    // 0.02 px — a thousand billion times that — passed a deliberately broken
+    // Schur back-substitution at 0.022 px, which is precisely the mutation this
+    // test exists to catch. 1e-6 px is still eight orders above the measurement
+    // and cannot flake on a different libm.
+    assert!(
+        report.mean_px < 1e-6,
+        "converged to {} px from {} px in {} steps",
+        report.mean_px,
+        report.initial_mean_px,
+        report.iterations
+    );
+    let focal = focals.first().copied().unwrap_or(0.0);
+    assert!(
+        (focal - 300.0).abs() < 1e-6,
+        "focal came back as {focal} from a start of 312"
+    );
+    let positions: Vec<[f64; 3]> = solved.iter().map(|c| c.pos).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    assert!(
+        rms / extent < 1e-6,
+        "trajectory error {rms} over an extent of {extent}"
+    );
+}

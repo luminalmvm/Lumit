@@ -281,7 +281,7 @@ pub(crate) fn invert3(m: &Mat3) -> Option<Mat3> {
     Some(out)
 }
 
-fn mat_vec(m: &Mat3, v: [f64; 3]) -> [f64; 3] {
+pub(crate) fn mat_vec(m: &Mat3, v: [f64; 3]) -> [f64; 3] {
     let mut out = [0.0f64; 3];
     for (o, row) in out.iter_mut().zip(m.iter()) {
         *o = row[0] * v[0] + row[1] * v[1] + row[2] * v[2];
@@ -478,7 +478,7 @@ impl Hartley {
 /// (p, q) order until the off-diagonal sum is negligible. Fixed order and a
 /// fixed sweep cap are what make it deterministic; a power method or a QR with
 /// shifts would both be shorter to describe and longer to make reproducible.
-fn eigen_ascending<const N: usize>(m: &[[f64; N]; N]) -> ([f64; N], [[f64; N]; N]) {
+pub(crate) fn eigen_ascending<const N: usize>(m: &[[f64; N]; N]) -> ([f64; N], [[f64; N]; N]) {
     let mut a = *m;
     let mut v = [[0.0f64; N]; N];
     for (i, row) in v.iter_mut().enumerate() {

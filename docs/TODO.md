@@ -946,26 +946,59 @@ list, not a re-statement of the roadmap.
     import, Lottie export, OpenTimelineIO interchange, render-farm/CLI export
     (K-023, K-036).
 
-**Tracking (K-415, docs/impl/tracking.md) - phases 1 and 2 landed (2026-08-20,
-2026-08-21); two phases open.** `crates/lumit-track` holds the track substrate -
+**Tracking (K-415, docs/impl/tracking.md) - phases 1, 2 and 3 landed (2026-08-20,
+2026-08-21); one phase open.** `crates/lumit-track` holds the track substrate -
 Shi-Tomasi detection on a 16x16 bucket grid, pyramidal affine KLT with
 forward-backward and NCC verification, K-408 exclusion masks, re-detection into
-starved buckets - and now the two-view geometry over it: Hartley-normalised
-8-point and 7-point fundamentals inside LO-RANSAC, the GRIC gate that calls a
-pan a pan, parallax-driven keyframe selection, epipolar dynamic-track
-segmentation (which sets `TrackState::Moving` and splits a track that stops
-agreeing), and the zoom cut/ramp detector. Thirty-five tests, all synthetic, no
-assets.
- - **Phase 3 - the solve** (note §4): rotation averaging, global positions,
-   triangulation, one sparse-Schur LM bundle adjustment with per-segment focal.
+starved buckets - the two-view geometry over it (Hartley-normalised 8-point and
+7-point fundamentals inside LO-RANSAC, the GRIC gate that calls a pan a pan,
+parallax-driven keyframe selection, epipolar dynamic-track segmentation, the
+zoom cut/ramp detector), and now the global solve: `solve_camera` returns a
+`CameraSolve` with a pose per frame, a focal per segment, the point cloud and
+the per-frame error. Forty-three tests, all synthetic, no assets.
  - **Phase 4 - the surface** (note §5): bridge and Tracking workspace, point
    cloud over the picture, solved camera to a Camera layer, 2D track to
-   keyframed transform and corner-pin export.
+   keyframed transform and corner-pin export. What phase 3 hands it is in the
+   note's §4 "as built": `CameraSolve.poses` is one `SolvedPose` per frame in
+   frame order, carrying its own `focal_px` so a per-frame export never walks
+   the segment table, and a `PoseSource` saying whether that pose was solved,
+   resectioned, or interpolated - the UI should be able to show the difference.
+   Four things phase 4 has to add rather than read:
+   - **A cancellation token on `solve_camera`.** Phase 1's seam is one frame per
+     `push`; the solve is a single bounded call with no seam inside it, which is
+     fine for a worker and not fine for the bridge (14-ENGINEERING-RULES §1.4).
+     The natural seam is the per-pass loop plus the LM iteration.
+   - **A focal hint.** Every tracker worth using lets the operator type the lens
+     in, and self-calibration is the weakest number in the pipeline (note §4's
+     deviation 1). `SolveSettings` wants an optional `focal_px` that skips the
+     search and pins the first segment; the cut ratios already carry it to the
+     rest.
+   - **A nodal-pan product.** `SolveError::RotationOnly` refuses a shot with no
+     baseline, and that refusal is right for a *camera* solve - but the
+     rotations are recoverable and a Camera layer that only turns is a real
+     deliverable for a locked-off pan. It needs its own output shape and its own
+     decision entry.
+   - **Progress reporting**: the solve has five nameable stages and phase 2 has
+     one more; a bar that says which is running is most of what an operator
+     wants from a solve that takes seconds.
+ - **The zoom ramp is one focal, not a curve** (note §4's deviation 7). A
+   segment containing a detected zoom ramp is flagged and reported as
+   `SolveNote::ZoomRamp`, and its focal is a single number over the whole run
+   where the note asks for spline knots. The bundle already treats each
+   segment's focal as an independent column of the reduced camera system, so
+   knots are more columns in the same solve rather than a rewrite - but nothing
+   reads a ramp's shape today, so it waits for phase 4 to have somewhere to show
+   it.
+ - **Lens distortion (k1/k2) is not solved.** The note's camera model allows an
+   optional pair per segment; phase 3 fixes the principal point at centre and
+   solves focal alone. Two more columns in the same bundle, and the same
+   `ponytail:` ceiling applies.
  - **The coverage gate owes `lumit-track` its `-p` flag** (K-007). CI's
    `cargo llvm-cov` line in `.github/workflows/ci.yml` names the engine crates
    one by one and does not yet name this one; measured locally at 95 % lines,
    well clear of the 80 % floor, so adding it cannot turn CI red. Held back only
-   because the crate landed while other work held that file.
+   because the crate landed while other work held that file, and phases 2 and 3
+   landed the same way.
  - **GUIDE.md owes `lumit-track` its plain-English section** (K-007), now for
    both phases. The crate landed while another workflow held the file, and phase
    2 landed the same way. The prose is written and just needs a home there: the
@@ -973,7 +1006,10 @@ assets.
    `geom.rs` on why two pictures of a still scene are not independent and what a
    fundamental matrix is, `pairs.rs` on outvoting the moving car and on the
    pan-versus-move gate, `segment.rs` on splitting a track that was parked and
-   then drove off, and on telling a scope-in from a lunge.
+   then drove off, and on telling a scope-in from a lunge, `solve.rs` on the six
+   steps from tracks to a camera path, and `bundle.rs` on why eliminating the
+   points is the difference between a solve that finishes and one that does
+   not.
  - **The Shi-Tomasi response map is a whole-frame pass and dominates when
    re-detection runs** - 24.4 ms/frame against 11.0 with re-detection off, on
    100 features over 640x360 (the note's measured number). Its box sums are

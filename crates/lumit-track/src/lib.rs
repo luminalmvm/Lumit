@@ -60,6 +60,7 @@
 //! # Ok::<(), lumit_track::TrackError>(())
 //! ```
 
+mod bundle;
 mod detect;
 mod exclude;
 mod geom;
@@ -67,6 +68,7 @@ mod klt;
 mod pairs;
 mod pyramid;
 mod segment;
+mod solve;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -81,6 +83,10 @@ pub use pairs::{estimate_pair, select_keyframes, GeometrySettings, PairGeometry,
 pub use segment::{
     detect_zoom, segment_dynamic_tracks, SegmentSettings, Segmentation, TrackSplit, ZoomBoundary,
     ZoomKind, ZoomSettings,
+};
+pub use solve::{
+    solve_camera, CameraSolve, PoseSource, ScenePoint, SolveError, SolveNote, SolveSegment,
+    SolveSettings, SolvedPose,
 };
 
 use detect::{BucketGrid, Scratch};
