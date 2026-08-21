@@ -945,6 +945,45 @@ void main() {
       expect(channels.last.keys, hasLength(2));
     });
 
+    /// **A closed range graphs like the float it is** (K-414). The Slider kind
+    /// says which control to draw, not how the number is stored — docs/08 §1.2
+    /// names the graph editor among the affordances it keeps. When the four
+    /// wipes' Completion adopted the kind, this channel resolver was still
+    /// asking for `Float` by name and dropped it, so a keyframed Completion
+    /// could no longer be opened as a curve at all.
+    testWidgets('graphChannels resolves a closed-range effect parameter',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'linear_wipe');
+      final staged = p.layer.getEffects();
+      final fxId = staged.single.id();
+      for (final instance in staged) {
+        instance.setValue(
+          id: 'completion',
+          value: BridgeEffectValue.float(BridgeScalar.keyframed([
+            for (final (f, v) in [(0, 0.0), (100, 100.0)])
+              BridgeKeyframe(
+                time: p.comp.timeOfFrame(frame: f),
+                value: v,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+          ])),
+        );
+      }
+      p.layer.setEffects(effects: staged);
+      final id = p.layer.internallayerId.toString();
+      p.uiState.model.refresh();
+
+      final channels = graphChannels(
+        layers: p.uiState.model.layers,
+        selected: ['$id/effects/$fxId/completion'],
+      );
+      expect(channels, hasLength(1),
+          reason: 'a Slider kind is a float and belongs in the graph');
+      expect(channels.single.keys, hasLength(2));
+    });
+
     /// **A mask's numbers reach the graph** (K-341), and so does its **shape**
     /// once it is keyed (K-344) — as the interpolation parameter, whose slope
     /// is the rate the shape is changing at. A *still* shape has no keys and so

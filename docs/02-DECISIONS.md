@@ -11022,6 +11022,61 @@ gains or loses a feature by this decision — item 8's badge, K-287's clock, K-3
 preview-only pair, K-362's region all keep their exact behaviour — and the Sharp and
 Round shapes both follow it, Round on its detached tile. This is presentation, so the
 regression tests assert grouping and order by key, not pixels.
+
+## K-412 — Curves becomes a real curve
+
+**DECIDED 2026-08-22** (owner-directed). The Curves effect's five fixed inputs (K-396)
+are replaced by a real curve: a new `ParamKind::Curve` whose value is an ordered list
+of 2..16 control points in the unit square (default the identity diagonal), one such
+row per channel — Master, Red, Green, Blue, Alpha, After Effects' own five. K-396's
+parameterisation was the honest floor while no editor existed; the owner has asked for
+the editor, and a curve stored as its points is what an editor edits. The effect is
+days old and unreleased, so the schema is replaced outright rather than migrated.
+
+The evaluation discipline is Lightning's (K-407): the spline — a clamped cubic through
+the points, Photoshop's family, since that is the curve every editor's hand already
+knows — is baked once per resolve into a 257-entry table in f64, and both render paths
+are handed the identical table, so the §1.6 oracle only has to check the *lookup*.
+docs/08 §3.30 keeps its domain semantics (what the axes mean does not change, only how
+many points may bend the line). Curve values do not keyframe in v1, joining File,
+Layer and MaskPath on the static side of the seam; the editor is a custom panel row —
+channel tabs, draggable points, click to add, drag out to remove — in both shapes.
+The AE import row is unchanged: the blob stays unreadable via the Bridge (K-410), so
+Curves still imports as a placeholder; what changes is that the day a blob decoder
+lands, the target can carry the whole curve instead of a five-point sample.
+
+## K-413 — Levels draws its histogram
+
+**DECIDED 2026-08-22** (owner-directed). The Levels effect's panel presentation
+becomes the editor everyone expects: the frame's histogram drawn behind the input
+black, gamma and white handles, with the output range as a bar beneath. Parameters,
+ids and semantics are untouched — this is presentation, so no import or oracle
+changes. The histogram reads from the same data path the Scopes panel reads, fetched
+once per displayed frame and only while the row is on screen — never in a rebuild
+path (the bridge-call budget gates it, as everywhere).
+
+## K-414 — A slider is a kind, and the Expression Controls exist
+
+**DECIDED 2026-08-22** (owner-directed). Two related additions:
+
+**`ParamKind::Slider`** — a bounded number drawn as a track and thumb with its value
+beside it, for parameters whose whole meaning lives inside a closed range. The value
+side stays `EffectValue::Float`, exactly as Int and Angle ride (the kind is the
+control, not the storage). Angle set the precedent: a control with no arrangement of
+existing rows that draws it earns a kind. Existing parameters may adopt it where a
+closed range is the parameter's nature (temperature is the first candidate); adoption
+changes no stored value.
+
+**The Expression Controls family** — Slider Control, Angle Control, Checkbox Control,
+Colour Control and Point Control, as parameter-only identity effects (they render
+nothing; their one row exists to be read by expressions and driven by keyframes),
+which is exactly what they are in After Effects and why half the CC-pack rigs in the
+world are wired through them. They sit in the catalogue under their own **Controls**
+category. Their AE match names are the famous ones (`ADBE Slider Control` et al.) but
+are **not yet in the audited set**: per docs/11's rule they enter the import table
+marked pending until the next audit sitting confirms them — the claimed-matchnames
+list gains the five so that sitting is already prepared.
+
 ## K-415 — Tracking is classical, global, and zoom-aware; learned trackers are a plugin road
 
 **DECIDED 2026-08-22** (owner-directed: object tracking and, more importantly, camera

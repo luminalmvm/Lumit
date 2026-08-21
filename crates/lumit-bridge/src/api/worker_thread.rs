@@ -3116,6 +3116,7 @@ fn trace_scope(
     {
         Ok(trace) => {
             _ = stream.add(WorkerResponse::Scope(crate::api::state::BridgeScopeTrace {
+                kind: req.kind,
                 rgba: trace,
             }));
         }

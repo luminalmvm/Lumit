@@ -294,6 +294,15 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   const factory BridgeEffectValue.maskPath([
     UuidValue? field0,
   ]) = BridgeEffectValue_MaskPath;
+
+  /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
+  /// in the unit square, in x order. Crosses as written — the engine
+  /// straightens what it reads (`CurvePoints::sanitised`), so a panel
+  /// mid-drag need not, and a curve is never refused for being momentarily
+  /// out of order.
+  const factory BridgeEffectValue.curve(
+    List<Float32List> field0,
+  ) = BridgeEffectValue_Curve;
 }
 
 @freezed
@@ -562,6 +571,25 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   /// "First mask" as the unset entry; the mask names come from the read model
   /// the panel already holds, so the row costs no call of its own.
   const factory BridgeParamKind.maskPath() = BridgeParamKind_MaskPath;
+
+  /// A tone curve, drawn as a curve editor (K-412). The panel edits the
+  /// point list itself; there is no range to declare, because the points
+  /// live in the unit square by definition.
+  const factory BridgeParamKind.curve() = BridgeParamKind_Curve;
+
+  /// A closed range (K-414), drawn as a track and thumb with the value
+  /// beside it. `min`/`max` are the travel *and* the hard bound — that is
+  /// what closed means — so the row refuses a typed value outside them.
+  ///
+  /// The value crossing the bridge is a [`BridgeEffectValue::Float`], the
+  /// arrangement `Int` and `Angle` already use: the kind says which control
+  /// to draw, not how the number is stored, so the row keeps every float
+  /// affordance including keyframes and the graph editor.
+  const factory BridgeParamKind.slider({
+    required double default_,
+    required double min,
+    required double max,
+  }) = BridgeParamKind_Slider;
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]

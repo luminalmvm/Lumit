@@ -367,6 +367,23 @@ pub enum BridgeParamKind {
     /// "First mask" as the unset entry; the mask names come from the read model
     /// the panel already holds, so the row costs no call of its own.
     MaskPath,
+    /// A tone curve, drawn as a curve editor (K-412). The panel edits the
+    /// point list itself; there is no range to declare, because the points
+    /// live in the unit square by definition.
+    Curve,
+    /// A closed range (K-414), drawn as a track and thumb with the value
+    /// beside it. `min`/`max` are the travel *and* the hard bound — that is
+    /// what closed means — so the row refuses a typed value outside them.
+    ///
+    /// The value crossing the bridge is a [`BridgeEffectValue::Float`], the
+    /// arrangement `Int` and `Angle` already use: the kind says which control
+    /// to draw, not how the number is stored, so the row keeps every float
+    /// affordance including keyframes and the graph editor.
+    Slider {
+        default: f64,
+        min: f64,
+        max: f64,
+    },
 }
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
@@ -404,6 +421,16 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                     slider_max: slider.1,
                     hard_min: hard.0,
                     hard_max: hard.1,
+                },
+                // A closed range (K-414) crosses as its own kind now that the
+                // panel draws one: a track and thumb with the value beside it.
+                // The *value* still crosses as a Float scalar, so the row keeps
+                // every float path — keyframes, the graph editor, the
+                // expression seed — exactly as an Int row does.
+                ParamKind::Slider { default, range } => BridgeParamKind::Slider {
+                    default,
+                    min: range.0,
+                    max: range.1,
                 },
                 ParamKind::Int {
                     default,
@@ -451,6 +478,7 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                 // entry, and what an unset row comes to is the render's answer,
                 // not a control the panel draws differently.
                 ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
+                ParamKind::Curve => BridgeParamKind::Curve,
             },
         })
         .collect()
@@ -837,6 +865,12 @@ pub enum BridgeEffectValue {
     /// or `None` for "First mask". The *geometry* never crosses — the render
     /// flattens it engine-side, beside the op.
     MaskPath(Option<Uuid>),
+    /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
+    /// in the unit square, in x order. Crosses as written — the engine
+    /// straightens what it reads (`CurvePoints::sanitised`), so a panel
+    /// mid-drag need not, and a curve is never refused for being momentarily
+    /// out of order.
+    Curve(Vec<Vec<f32>>),
 }
 
 impl BridgeEffectValue {
@@ -867,6 +901,9 @@ impl BridgeEffectValue {
             }),
             EffectValue::Layer(layer) => BridgeEffectValue::Layer(*layer),
             EffectValue::MaskPath(mask) => BridgeEffectValue::MaskPath(*mask),
+            EffectValue::Curve(points) => {
+                BridgeEffectValue::Curve(points.iter().map(|xy| xy.to_vec()).collect())
+            }
         }
     }
 
@@ -933,6 +970,18 @@ impl BridgeEffectValue {
             }
             (BridgeEffectValue::MaskPath(mask), EffectValue::MaskPath(target)) => {
                 *target = mask;
+                Ok(())
+            }
+            (BridgeEffectValue::Curve(points), EffectValue::Curve(target)) => {
+                // A pair that is not a pair is dropped rather than refused:
+                // the value is straightened on read anyway, and a row short
+                // of a coordinate is a malformed message, not a kind
+                // mismatch.
+                *target = points
+                    .iter()
+                    .filter(|xy| xy.len() >= 2)
+                    .map(|xy| [xy[0], xy[1]])
+                    .collect();
                 Ok(())
             }
             _ => Err(BridgeError::ParamKindMismatch),

@@ -448,6 +448,18 @@ fn feed_effect_stack(
                         }
                     }
                 }
+                EffectValue::Curve(points) => {
+                    // The shape itself, straightened exactly as the render
+                    // straightens it (K-412) — so two point lists that draw
+                    // the same curve key the same frame, and a list a hand
+                    // wrote out of order does not key a second one.
+                    let curve = lumit_core::fx::CurvePoints::sanitised(points);
+                    h.update(&(curve.points().len() as u32).to_le_bytes());
+                    for xy in curve.points() {
+                        feed_f64(h, f64::from(xy[0]));
+                        feed_f64(h, f64::from(xy[1]));
+                    }
+                }
             }
         }
         // A seeded effect (docs/08 §1.3 Randomness) draws from

@@ -1,8 +1,11 @@
+ADBE Angle Control
 ADBE BEZMESH
 ADBE Black&White
 ADBE Brightness & Contrast 2
 ADBE Broadcast Colors
 ADBE Channel Blur
+ADBE Checkbox Control
+ADBE Color Control
 ADBE Corner Pin
 ADBE CurvesCustom
 ADBE Displacement Map
@@ -29,6 +32,7 @@ ADBE Noise
 ADBE Offset
 ADBE Optics Compensation
 ADBE Photo Filter
+ADBE Point Control
 ADBE Polar Coordinates
 ADBE Posterize
 ADBE Posterize Time
@@ -40,6 +44,7 @@ ADBE Roughen Edges
 ADBE Scribble Fill
 ADBE Set Matte3
 ADBE ShadowHighlight
+ADBE Slider Control
 ADBE Spherize
 ADBE Stroke
 ADBE Texturize

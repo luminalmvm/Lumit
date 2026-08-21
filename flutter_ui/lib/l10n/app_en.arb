@@ -1181,10 +1181,6 @@
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxBlack": "Black",
-  "@fxBlack": {
-    "description": "Effect controls — a Curves knot, the curve's output at input 0."
-  },
   "fxBlades": "Blades",
   "@fxBlades": {
     "description": "Effect controls — a control on Lens flare."
@@ -2560,10 +2556,6 @@
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
-  },
-  "fxWhite": "White",
-  "@fxWhite": {
-    "description": "Effect controls — a Curves knot, the curve's output at input 1."
   },
   "fxWidth": "Width",
   "@fxWidth": {
@@ -5107,6 +5099,10 @@
   "@tipRenderTime": {
     "description": "Tooltip on the Timeline's render-time column. Under five words."
   },
+  "tipResetCurve": "Reset this curve",
+  "@tipResetCurve": {
+    "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. Under five words."
+  },
   "tipResetParameters": "Reset all parameters",
   "@tipResetParameters": {
     "description": "Tooltip on the effect's Reset button. Under five words."
@@ -6530,6 +6526,46 @@
   "fxVerticalBlocks": "Vertical blocks",
   "@fxVerticalBlocks": {
     "description": "Effect controls — a control on Mosaic: how many blocks span the frame's height."
+  },
+  "fxControls": "Controls",
+  "@fxControls": {
+    "description": "Add effect menu category — the effects that hold a value for an expression to read rather than changing the picture."
+  },
+  "fxSliderControl": "Slider control",
+  "@fxSliderControl": {
+    "description": "Effect name in the Add effect menu — holds one number for an expression to read."
+  },
+  "fxSlider": "Slider",
+  "@fxSlider": {
+    "description": "Effect controls — the one control on Slider control: the number it holds."
+  },
+  "fxAngleControl": "Angle control",
+  "@fxAngleControl": {
+    "description": "Effect name in the Add effect menu — holds one angle for an expression to read."
+  },
+  "fxCheckboxControl": "Checkbox control",
+  "@fxCheckboxControl": {
+    "description": "Effect name in the Add effect menu — holds one switch for an expression to read."
+  },
+  "fxCheckbox": "Checkbox",
+  "@fxCheckbox": {
+    "description": "Effect controls — the one control on Checkbox control: the switch it holds."
+  },
+  "fxColourControl": "Colour control",
+  "@fxColourControl": {
+    "description": "Effect name in the Add effect menu — holds one colour for an expression to read."
+  },
+  "fxPointControl": "Point control",
+  "@fxPointControl": {
+    "description": "Effect name in the Add effect menu — holds one place in the frame for an expression to read."
+  },
+  "fxPointX": "Point x",
+  "@fxPointX": {
+    "description": "Effect controls — the across half of the point Point control holds."
+  },
+  "fxPointY": "Point y",
+  "@fxPointY": {
+    "description": "Effect controls — the down half of the point Point control holds."
   },
   "menuImportAe": "Import After Effects bundle…",
   "@menuImportAe": {

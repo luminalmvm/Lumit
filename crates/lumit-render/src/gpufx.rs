@@ -1607,8 +1607,20 @@ impl GpuEffect for Curves {
         p: Params<'_>,
         _aux: AuxSlot<'_>,
     ) -> Tex {
-        let (y, m, mix) = effects::curves::Curves::read(p).packed();
-        fx.curves(ctx, tex, w, h, &lumit_gpu::fx::CurvesOp { y, m, mix })
+        // The five clamped-cubic tables are baked host-side, once, and the
+        // CPU reference reads the identical ones (K-412).
+        let c = effects::curves::Curves::read(p).packed();
+        fx.curves(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::CurvesOp {
+                t: c.t,
+                neutral: c.neutral,
+                mix: c.mix,
+            },
+        )
     }
 }
 

@@ -32,6 +32,10 @@
     {
       "slug": "utility",
       "label": "Utility"
+    },
+    {
+      "slug": "controls",
+      "label": "Controls"
     }
   ],
   "effects": [
@@ -6575,209 +6579,89 @@
       "slug": "curves",
       "match_name": "curves",
       "label": "Curves",
-      "version": 1,
+      "version": 2,
       "category": "Colour",
       "category_slug": "colour",
       "params": [
         {
-          "id": "master_black",
-          "label": "Black",
-          "kind": "float",
+          "id": "master",
+          "label": "Master",
+          "kind": "curve",
           "unit": "raw",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
         },
         {
-          "id": "master_shadows",
-          "label": "Shadows",
-          "kind": "float",
+          "id": "red",
+          "label": "Red",
+          "kind": "curve",
           "unit": "raw",
-          "default": 0.25,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
         },
         {
-          "id": "master_midtones",
-          "label": "Midtones",
-          "kind": "float",
+          "id": "green",
+          "label": "Green",
+          "kind": "curve",
           "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
         },
         {
-          "id": "master_highlights",
-          "label": "Highlights",
-          "kind": "float",
+          "id": "blue",
+          "label": "Blue",
+          "kind": "curve",
           "unit": "raw",
-          "default": 0.75,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
         },
         {
-          "id": "master_white",
-          "label": "White",
-          "kind": "float",
+          "id": "alpha",
+          "label": "Alpha",
+          "kind": "curve",
           "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "red_black",
-          "label": "Black",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "red_shadows",
-          "label": "Shadows",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.25,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "red_midtones",
-          "label": "Midtones",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "red_highlights",
-          "label": "Highlights",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.75,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "red_white",
-          "label": "White",
-          "kind": "float",
-          "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "green_black",
-          "label": "Black",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "green_shadows",
-          "label": "Shadows",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.25,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "green_midtones",
-          "label": "Midtones",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "green_highlights",
-          "label": "Highlights",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.75,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "green_white",
-          "label": "White",
-          "kind": "float",
-          "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "blue_black",
-          "label": "Black",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "blue_shadows",
-          "label": "Shadows",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.25,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "blue_midtones",
-          "label": "Midtones",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "blue_highlights",
-          "label": "Highlights",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.75,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "blue_white",
-          "label": "White",
-          "kind": "float",
-          "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.0,
-          "slider_max": 1.0,
-          "hard_min": 0.0
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
         },
         {
           "id": "mix",
@@ -6805,52 +6689,7 @@
           "default": false
         }
       ],
-      "groups": [
-        {
-          "label": "Master",
-          "params": [
-            "master_black",
-            "master_shadows",
-            "master_midtones",
-            "master_highlights",
-            "master_white"
-          ],
-          "collapsed": false
-        },
-        {
-          "label": "Red",
-          "params": [
-            "red_black",
-            "red_shadows",
-            "red_midtones",
-            "red_highlights",
-            "red_white"
-          ],
-          "collapsed": true
-        },
-        {
-          "label": "Green",
-          "params": [
-            "green_black",
-            "green_shadows",
-            "green_midtones",
-            "green_highlights",
-            "green_white"
-          ],
-          "collapsed": true
-        },
-        {
-          "label": "Blue",
-          "params": [
-            "blue_black",
-            "blue_shadows",
-            "blue_midtones",
-            "blue_highlights",
-            "blue_white"
-          ],
-          "collapsed": true
-        }
-      ]
+      "groups": []
     },
     {
       "slug": "levels",
@@ -9657,7 +9496,7 @@
         {
           "id": "completion",
           "label": "Completion",
-          "kind": "float",
+          "kind": "slider",
           "unit": "raw",
           "default": 50.0,
           "slider_min": 0.0,
@@ -9740,7 +9579,7 @@
         {
           "id": "completion",
           "label": "Completion",
-          "kind": "float",
+          "kind": "slider",
           "unit": "raw",
           "default": 50.0,
           "slider_min": 0.0,
@@ -9818,7 +9657,7 @@
         {
           "id": "completion",
           "label": "Completion",
-          "kind": "float",
+          "kind": "slider",
           "unit": "raw",
           "default": 50.0,
           "slider_min": 0.0,
@@ -10011,7 +9850,7 @@
         {
           "id": "completion",
           "label": "Completion",
-          "kind": "float",
+          "kind": "slider",
           "unit": "raw",
           "default": 50.0,
           "slider_min": 0.0,
@@ -10133,6 +9972,117 @@
           "kind": "bool",
           "unit": "raw",
           "default": false
+        }
+      ],
+      "groups": []
+    },
+    {
+      "slug": "slider-control",
+      "match_name": "slider_control",
+      "label": "Slider control",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [
+        {
+          "id": "slider",
+          "label": "Slider",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        }
+      ],
+      "groups": []
+    },
+    {
+      "slug": "angle-control",
+      "match_name": "angle_control",
+      "label": "Angle control",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [
+        {
+          "id": "angle",
+          "label": "Angle",
+          "kind": "angle",
+          "unit": "raw",
+          "default": 0.0,
+          "dial_step": 15.0
+        }
+      ],
+      "groups": []
+    },
+    {
+      "slug": "checkbox-control",
+      "match_name": "checkbox_control",
+      "label": "Checkbox control",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [
+        {
+          "id": "checkbox",
+          "label": "Checkbox",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": []
+    },
+    {
+      "slug": "colour-control",
+      "match_name": "colour_control",
+      "label": "Colour control",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        }
+      ],
+      "groups": []
+    },
+    {
+      "slug": "point-control",
+      "match_name": "point_control",
+      "label": "Point control",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [
+        {
+          "id": "point_x",
+          "label": "Point x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "point_y",
+          "label": "Point y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
         }
       ],
       "groups": []

@@ -22,6 +22,7 @@
 use super::effects::{
     accumulation_mb::{AccumulationMb, AccumulationMbDef},
     add_grain::{AddGrain, AddGrainDef},
+    angle_control::{AngleControl, AngleControlDef},
     beam::{Beam, BeamDef},
     bezier_warp::{BezierWarp, BezierWarpDef},
     black_and_white::{BlackAndWhite, BlackAndWhiteDef},
@@ -31,8 +32,10 @@ use super::effects::{
     broadcast_safe::{BroadcastSafe, BroadcastSafeDef},
     card_wipe::{CardWipe, CardWipeDef},
     channel_blur::{ChannelBlur, ChannelBlurDef},
+    checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
+    colour_control::{ColourControl, ColourControlDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     curves::{Curves, CurvesDef},
@@ -70,6 +73,7 @@ use super::effects::{
     noise::{Noise, NoiseDef},
     offset::{Offset, OffsetDef},
     photo_filter::{PhotoFilter, PhotoFilterDef},
+    point_control::{PointControl, PointControlDef},
     polar_coordinates::{PolarCoordinates, PolarCoordinatesDef},
     posterize::{Posterize, PosterizeDef},
     posterize_time::{PosterizeTime, PosterizeTimeDef},
@@ -87,6 +91,7 @@ use super::effects::{
     shake::{Shake, ShakeDef},
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
+    slider_control::{SliderControl, SliderControlDef},
     spherize::{Spherize, SpherizeDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
     stroke::{Stroke, StrokeDef},
@@ -222,4 +227,13 @@ crate::catalogue![
     VenetianBlindsDef => VenetianBlinds,
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
+    // The Controls family (K-414), last in the catalogue and so last in the
+    // Add-effect menu, which groups by first appearance here (K-137). The order
+    // inside it is After Effects' own Expression Controls order, which is what
+    // a hand arriving from AE will look for.
+    SliderControlDef => SliderControl,
+    AngleControlDef => AngleControl,
+    CheckboxControlDef => CheckboxControl,
+    ColourControlDef => ColourControl,
+    PointControlDef => PointControl,
 ];

@@ -1435,6 +1435,50 @@ fn dofs_twirls_and_greying_rules_cross_the_bridge() {
     ));
 }
 
+/// A closed range and a curve each cross as **their own kind**, because each
+/// draws a control no arrangement of existing rows draws — a track and thumb,
+/// and the unit square (K-412, K-414, docs/17).
+///
+/// The Slider's *value* is still an ordinary Float, which is the whole point of
+/// the arrangement: the row keeps keyframes, the graph editor and the
+/// expression seed without any of them learning a new kind.
+#[test]
+fn a_closed_range_and_a_curve_each_cross_as_their_own_kind() {
+    use crate::api::effect::{list_parameters, BridgeParamKind};
+
+    let wipe = list_parameters("linear_wipe".into());
+    let completion = wipe
+        .iter()
+        .find(|p| p.id == "completion")
+        .expect("a wipe has a completion");
+    assert!(
+        matches!(
+            completion.kind,
+            BridgeParamKind::Slider {
+                default,
+                min,
+                max,
+            } if default == 50.0 && min == 0.0 && max == 100.0
+        ),
+        "a closed range crosses as a Slider carrying that range, got {:?}",
+        completion.kind
+    );
+
+    let curves = list_parameters("curves".into());
+    for channel in ["master", "red", "green", "blue", "alpha"] {
+        let param = curves
+            .iter()
+            .find(|p| p.id == channel)
+            .unwrap_or_else(|| panic!("curves declares {channel}"));
+        assert!(matches!(param.kind, BridgeParamKind::Curve));
+    }
+    // Mix stays the plain Float it is: its slider ends and its hard bounds
+    // happen to agree, but the *kind* is declared, not inferred from them.
+    assert!(curves
+        .iter()
+        .any(|p| p.id == "mix" && matches!(p.kind, BridgeParamKind::Float { .. })));
+}
+
 /// An unknown effect gets an empty layout rather than an error, for the same
 /// reason its parameter list is empty: a project carrying an effect this build
 /// does not know still opens.

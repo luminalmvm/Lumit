@@ -557,6 +557,20 @@ pub enum EffectValue {
     /// the frame key's, the decode planner's — would each have to learn which
     /// ids were secretly masks.
     MaskPath(Option<Uuid>),
+    /// A tone curve, as its own control points (K-412): an ordered list of
+    /// 2..=16 `[x, y]` pairs in the unit square, the identity diagonal
+    /// `[[0, 0], [1, 1]]` by default.
+    ///
+    /// Static in v1, exactly as [`EffectValue::File`], [`EffectValue::Layer`]
+    /// and [`EffectValue::MaskPath`] are: a list that grows and shrinks has no
+    /// interpolation between two keyframes, which is why After Effects' own
+    /// curve blob steps rather than animating.
+    ///
+    /// Stored as written and straightened on read
+    /// ([`crate::fx::CurvePoints::sanitised`]) rather than on write, so a
+    /// project a hand or an importer edited opens and renders instead of being
+    /// rejected.
+    Curve(Vec<[f32; 2]>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case

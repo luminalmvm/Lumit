@@ -122,6 +122,12 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // no raster (§3.71's fourth note).
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_x") => w * 0.5,
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_y") => h * 0.5,
+            // The Point control (K-414) is the same default once more: a fresh
+            // crosshair belongs in the middle of the frame, which is the only
+            // guess that is never absurd, and a schema constant cannot know the
+            // raster.
+            ("point_control", "point_x") => w * 0.5,
+            ("point_control", "point_y") => h * 0.5,
             // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
             // points are the frame's own corners with the handles at the
             // thirds — the patch that is exactly the identity — and every one
@@ -150,7 +156,11 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
 /// for a parameter the saved instance predates.
 pub fn default_param_value(kind: &ParamKind) -> EffectValue {
     match *kind {
-        ParamKind::Float { default, .. } => EffectValue::Float(Property::fixed(default)),
+        // A Slider stores as a Float like Int and Angle do (K-414) — the kind
+        // is the control drawn, not the value kept.
+        ParamKind::Float { default, .. } | ParamKind::Slider { default, .. } => {
+            EffectValue::Float(Property::fixed(default))
+        }
         // Int is a display/rounding kind; the value is a Float like any
         // other scalar (see the schema's Int docs).
         ParamKind::Int { default, .. } => EffectValue::Float(Property::fixed(default as f64)),
@@ -174,6 +184,10 @@ pub fn default_param_value(kind: &ParamKind) -> EffectValue {
         // and a row that followed the first mask only until the masks were
         // reordered would be the worse of the two behaviours anyway.
         ParamKind::MaskPath { .. } => EffectValue::MaskPath(None),
+        // A fresh curve is the identity diagonal (K-412) — the grade family's
+        // sanctioned exception to the "no no-op default" rule, exactly as the
+        // five fixed knots it replaces were.
+        ParamKind::Curve => EffectValue::Curve(super::params::CURVE_IDENTITY.to_vec()),
     }
 }
 

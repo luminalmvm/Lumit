@@ -133,6 +133,116 @@ pub enum Value {
     /// `AuxSlot`'s answer, not this one: an unset row on a masked layer still
     /// resolves to the first mask, and a named mask can have been deleted.
     MaskPath(bool),
+    /// A tone curve's own control points (K-412), inline.
+    ///
+    /// The one value that carries a *shape* rather than a scalar, and it is
+    /// here rather than beside the op — the way a mask path is — for the
+    /// opposite reason to the mask path's: a curve is at most sixteen pairs
+    /// of numbers the user typed, small enough to stay `Copy`, to be hashed
+    /// field by field into the frame key, and to borrow nothing from the
+    /// document. What it costs is the width of every arena slot, since an
+    /// enum is as wide as its widest variant; what it buys is that both
+    /// render paths bake the identical table from the identical points
+    /// through [`Curves::packed`](crate::fx::effects::curves::Curves::packed),
+    /// with no second list to keep in step. Move it beside the op if the
+    /// arena's width ever shows up in a profile — nothing above here reads
+    /// the points except that one `packed`.
+    Curve(CurvePoints),
+}
+
+/// The most control points a [`ParamKind::Curve`](crate::fx::ParamKind::Curve)
+/// carries (K-412). Sixteen is well past what a grade needs and keeps the
+/// inline form small.
+pub const CURVE_MAX_POINTS: usize = 16;
+
+/// The identity diagonal: the default curve, and what a malformed one falls
+/// back to.
+pub const CURVE_IDENTITY: [[f32; 2]; 2] = [[0.0, 0.0], [1.0, 1.0]];
+
+/// One tone curve's control points, in the unit square, ordered by x (K-412).
+///
+/// Fixed-size and `Copy` so it can live in the arena. Only the first `len`
+/// entries mean anything; the rest are zero, which is what lets `PartialEq`
+/// and the frame key treat two equal curves as equal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurvePoints {
+    xy: [[f32; 2]; CURVE_MAX_POINTS],
+    len: u32,
+}
+
+impl CurvePoints {
+    /// The identity diagonal — a fresh curve, and the fallback for one that
+    /// arrives unreadable.
+    pub const IDENTITY: Self = {
+        let mut xy = [[0.0; 2]; CURVE_MAX_POINTS];
+        xy[1] = [1.0, 1.0];
+        Self { xy, len: 2 }
+    };
+
+    /// Read an arbitrary point list into the canonical form: clamped into the
+    /// unit square, sorted by x, repeated x dropped, capped at
+    /// [`CURVE_MAX_POINTS`], and replaced by [`Self::IDENTITY`] when fewer
+    /// than two points survive.
+    ///
+    /// Quiet on purpose. The list comes off a document that a hand, an older
+    /// build or an importer wrote, and a curve out of order is a curve to
+    /// straighten, not a panic (14-ENGINEERING-RULES §4). Deterministic: the
+    /// sort is stable and the survivor of a repeated x is always the first,
+    /// so the same list always reads to the same curve.
+    #[must_use]
+    pub fn sanitised(points: &[[f32; 2]]) -> Self {
+        let mut sorted: Vec<[f32; 2]> = points
+            .iter()
+            .map(|p| {
+                [
+                    if p[0].is_nan() {
+                        0.0
+                    } else {
+                        p[0].clamp(0.0, 1.0)
+                    },
+                    if p[1].is_nan() {
+                        0.0
+                    } else {
+                        p[1].clamp(0.0, 1.0)
+                    },
+                ]
+            })
+            .collect();
+        sorted.sort_by(|a, b| a[0].total_cmp(&b[0]));
+
+        let mut out = Self {
+            xy: [[0.0; 2]; CURVE_MAX_POINTS],
+            len: 0,
+        };
+        for p in sorted {
+            if out.len as usize >= CURVE_MAX_POINTS {
+                break;
+            }
+            // Two points at one x have no curve between them, and the spline
+            // would divide by that zero gap. The first wins.
+            if out.len > 0 && p[0] <= out.xy[out.len as usize - 1][0] {
+                continue;
+            }
+            out.xy[out.len as usize] = p;
+            out.len += 1;
+        }
+        if out.len < 2 {
+            return Self::IDENTITY;
+        }
+        out
+    }
+
+    /// The points, in x order.
+    #[must_use]
+    pub fn points(&self) -> &[[f32; 2]] {
+        &self.xy[..self.len as usize]
+    }
+}
+
+impl Default for CurvePoints {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
 
 impl Value {
@@ -160,6 +270,9 @@ impl Value {
                 }
             }
             Value::File(v) => v as f32,
+            // A shape is not a number; its first point's output is the least
+            // misleading scalar to give a caller that asked anyway.
+            Value::Curve(c) => c.xy[0][1],
         }
     }
 
@@ -176,6 +289,7 @@ impl Value {
             Value::File(_) => 6,
             Value::Vec4(_) => 7,
             Value::MaskPath(_) => 8,
+            Value::Curve(_) => 9,
         }
     }
 }
@@ -292,6 +406,16 @@ impl<'a> Params<'a> {
     /// path arrived — that is the op's slot's answer, and the honest one.
     pub fn mask_named(&self, id: ParamId) -> bool {
         matches!(self.get(id), Some(Value::MaskPath(true)))
+    }
+
+    /// The tone curve `id`, or the identity diagonal when absent or of
+    /// another kind (K-412) — a missing curve is a straight line, never a
+    /// fault.
+    pub fn curve(&self, id: ParamId) -> CurvePoints {
+        match self.get(id) {
+            Some(Value::Curve(c)) => c,
+            _ => CurvePoints::IDENTITY,
+        }
     }
 
     /// The file-table slot for `id`, or `None` when unset — which resolves to
@@ -482,6 +606,17 @@ impl ResolvedStack {
                     Value::Colour(c) | Value::Vec4(c) => {
                         for ch in c {
                             feed(&ch.to_le_bytes());
+                        }
+                    }
+                    // The live points only — the tail of the fixed array is
+                    // padding by another name, and padding never feeds a key.
+                    // The length goes in first, so two curves sharing a
+                    // prefix cannot hash alike.
+                    Value::Curve(c) => {
+                        feed(&c.len.to_le_bytes());
+                        for p in c.points() {
+                            feed(&p[0].to_le_bytes());
+                            feed(&p[1].to_le_bytes());
                         }
                     }
                 }

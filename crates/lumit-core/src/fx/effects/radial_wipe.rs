@@ -38,13 +38,10 @@ pub struct RadialWipe {
 
     /// How far round the sweep has got, per cent. **50 by default, where AE's
     /// is 0**, for docs/08 §3.39's reason (§1.2: no no-op defaults).
-    #[slider(
-        min = 0.0,
-        max = 100.0,
-        default = 50.0,
-        hard_min = 0.0,
-        hard_max = 100.0
-    )]
+    /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
+    /// complete, so the range is the parameter, and typing past either end
+    /// would offer a picture that does not exist.
+    #[bounded(min = 0.0, max = 100.0, default = 50.0)]
     pub completion: f32,
 
     /// Where the hand begins, degrees, measured from straight up and turning

@@ -14,10 +14,14 @@
 // Transform rows — anchor, position, scale, rotation, opacity, plus the z and
 // x/y-rotation rows when the layer is 3D — in a section of the same shape.
 //
-// **Effects that want their own display** (Levels' histogram, Curves' spline)
-// are the exception this layout expects: [customEffectRows] is asked first, and
-// only when it has nothing to say does the panel fall back to a row per declared
-// parameter. Nothing claims it yet.
+// **Effects that want their own display** are the exception this layout
+// expects. [customEffectDisplay] is asked for a widget to draw *above* the
+// rows, and Levels claims it: a histogram of the frame with its input handles
+// over it and the output range beneath (K-413). The rows themselves are
+// unchanged — the display writes the same values through the same callbacks.
+// Curves' spline is not a display but a **fold**: its five channel curves are
+// five declared parameters folded into one tabbed editor, the way an `_x`/`_y`
+// pair folds into one point row (K-412).
 //
 // Every animatable row carries the stopwatch and the ◄ ◆ ► navigator
 // (keyframe_controls_frb.dart). An animated row shows "animated" in place of its
@@ -50,7 +54,9 @@ import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
+import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 import '../state/drag_payloads.dart';
@@ -683,9 +689,24 @@ class _EffectSection extends StatelessWidget {
           onStackChanged();
         },
       ),
-      // An effect with its own display draws that instead of a row per
-      // parameter; nothing claims one yet.
-      rows: customEffectRows(info.name) ?? _paramRows(id, values),
+      // An effect with its own display (Levels' histogram, K-413) draws it
+      // above its rows; the rows themselves are unchanged.
+      rows: [
+        if (customEffectDisplay(
+          info.name,
+          effectId: id,
+          values: {
+            for (final p in info.values) p.id: stagedValue(id, p.id) ?? p.value,
+          },
+          comp: comp,
+          playheadFrame: playheadFrame,
+          onWrite: onWrite,
+          onLive: onLive,
+        )
+            case final display?)
+          display,
+        ..._paramRows(id, values),
+      ],
     );
   }
 
@@ -825,6 +846,37 @@ class _EffectSection extends StatelessWidget {
     var i = 0;
     while (i < params.length) {
       final param = params[i];
+
+      // **The curve fold** (K-412, docs/08 §3.30). A run of neighbouring Curve
+      // parameters is one editor with a tab each, not one plot per row: five
+      // stacked squares would be five times the height and would still make the
+      // user compare shapes across them. The same folding the `_x`/`_y` point
+      // pair takes, over as many parameters as declare a curve in a row.
+      if (param.kind is BridgeParamKind_Curve) {
+        final run = <BridgeParamInfo>[];
+        while (i < params.length && params[i].kind is BridgeParamKind_Curve) {
+          run.add(params[i]);
+          i += 1;
+        }
+        rows.add(CurveChannelEditor(
+          key: ValueKey<String>('fx-curves-$id'),
+          keyPrefix: 'fx-curves-$id',
+          labels: [for (final p in run) engineLabel(p.label)],
+          curves: [
+            for (final p in run)
+              switch (stagedValue(id, p.id) ?? values[p.id]) {
+                BridgeEffectValue_Curve(:final field0) => curvePointsOf(field0),
+                _ => curveIdentity,
+              },
+          ],
+          resetLabel: l10n.reset,
+          resetTip: l10n.tipResetCurve,
+          onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),
+          onCommit: (c, points) => onWrite(id, run[c].id, curveValue(points)),
+        ));
+        continue;
+      }
+
       final group = byFirstMember[param.id];
       if (group != null) {
         // Consume the whole contiguous member run.
@@ -1113,13 +1165,36 @@ class _TransformSection extends StatelessWidget {
       );
 }
 
-/// The rows an effect that draws its *own* display wants, or null to fall back
-/// to a row per declared parameter.
+/// The display an effect draws *above* its rows, or null for the effects that
+/// draw none — which is nearly all of them.
 ///
-/// Levels wants a histogram with its input and output handles under it; Curves
-/// wants a spline the pointer shapes. Neither is a list of numbered rows, and
-/// forcing them into one would be the wrong control for the job. Nothing claims
-/// a display yet, so this answers null for everything — it exists as the one
-/// place such an effect declares itself, rather than the panel growing a special
-/// case in the middle of its layout when the first one arrives.
-List<Widget>? customEffectRows(String matchName) => null;
+/// **Levels is the one that claims it** (K-413): a histogram of the frame with
+/// its input handles over it and the output range beneath, which is not a list
+/// of numbered rows and would be the wrong control forced into one. The numbers
+/// keep their rows underneath, unchanged; this is presentation, and it writes
+/// through the same two callbacks every row writes through.
+///
+/// Curves does *not* come through here, even though it is the other effect with
+/// a shape for a value. Its five channel curves are five declared parameters
+/// that fold into one tabbed editor, exactly as an `_x`/`_y` pair folds into one
+/// point row — a fold, not a display, and `_paramRows` is where folds live.
+Widget? customEffectDisplay(
+  String matchName, {
+  required UuidValue effectId,
+  required Map<String, BridgeEffectValue> values,
+  required CompositionReference comp,
+  required int playheadFrame,
+  required void Function(UuidValue, String, BridgeEffectValue) onWrite,
+  required void Function(UuidValue, String, BridgeEffectValue) onLive,
+}) =>
+    matchName == 'levels'
+        ? LevelsDisplayFrb(
+            key: ValueKey<String>('fx-levels-display-$effectId'),
+            effectId: effectId,
+            values: values,
+            comp: comp,
+            playheadFrame: playheadFrame,
+            onWrite: onWrite,
+            onLive: onLive,
+          )
+        : null;

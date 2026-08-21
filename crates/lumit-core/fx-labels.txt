@@ -13,6 +13,7 @@ Anamorphic squeeze
 Anchor x
 Anchor y
 Angle
+Angle control
 Animate
 Anticlockwise
 Aperture
@@ -30,7 +31,6 @@ Beam
 Behind
 Bend
 Bezier warp
-Black
 Black and white
 Blades
 Blend
@@ -64,6 +64,8 @@ Centre Y
 Channel
 Channel blur
 Channel offset
+Checkbox
+Checkbox control
 Chromatic aberration
 Circle
 Clip black
@@ -77,6 +79,7 @@ Colour 2
 Colour 3
 Colour balance
 Colour burn
+Colour control
 Colour correction
 Colour dodge
 Colour edge
@@ -89,6 +92,7 @@ Composite on original
 Conductivity state
 Confidence
 Contrast
+Controls
 Conversion
 Cooling filter (80)
 Cooling filter (82)
@@ -375,6 +379,9 @@ Photo filter
 Pin light
 Pinning
 Placement
+Point control
+Point x
+Point y
 Polar coordinates
 Polar to rectangular
 Position x
@@ -468,6 +475,8 @@ Sine
 Single layer, straw
 Size
 Slice repeat
+Slider
+Slider control
 Soft colour
 Soft light
 Softness
@@ -584,7 +593,6 @@ Wave type
 Wave warp
 Wave width
 Wavelength
-White
 Width
 Wiggle type
 Wiggles per second

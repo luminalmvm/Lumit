@@ -19,7 +19,8 @@ effect consists of exactly four parts, and an effect is not mergeable until all 
    per [01-GLOSSARY.md](01-GLOSSARY.md) §3) and MUST be visible to the expression system by
    its stable identifier (`effect("Glow")("Radius")` style access). Parameter types: float,
    integer, boolean, enum, angle (degrees), colour (scene-linear RGBA), 2D point (comp
-   space), curve (bezier LUT), seed (integer), file reference, layer reference, **mask-path
+   space), **curve** (K-412 — an ordered list of 2..16 control points in the unit square,
+   with a clamped cubic through them), seed (integer), file reference, layer reference, **mask-path
    reference** (K-408 — one of the owning layer's masks, whose *geometry* the effect walks),
    and marker-trigger (§1.4).
 2. **A WGSL compute implementation** — the production path, running on wgpu (K-011).
@@ -50,6 +51,16 @@ parameters).
 - **Ranges** declare a slider range and a hard range; sliders MAY be exceeded by typing,
   hard ranges MUST NOT be. Hard ranges MAY be one-sided (K-090): a threshold clamps at
   zero below and is unbounded above where that is the honest shape of the parameter.
+- **Closed ranges are their own kind** (K-414). Where a parameter's whole meaning lives
+  inside one range — a wipe is between not begun and complete, and there is no picture
+  either side of that — the schema declares a **Slider**: one range that is both the
+  slider's travel and the hard bound, drawn as a track and thumb with the value beside it.
+  The stored value is an ordinary float, exactly as an Int's and an Angle's are (the kind
+  is the control, not the storage), so adopting it on an existing parameter moves no stored
+  value, no keyframe and no pixel — and the parameter keeps every float affordance,
+  including the graph editor. It is deliberately *not* the default for a parameter that
+  merely has bounds: Temperature's ±150 slider runs to a ±200 hard range precisely because
+  there is a picture beyond the slider's end, so it stays a plain float.
 - **Defaults** MUST produce a visible, tasteful result on typical 1080p60 game footage —
   the "drop it on and it already looks right" rule. An effect whose default state is a
   no-op is a bug unless the effect is inherently trigger-driven (Flash, Shake in
@@ -107,6 +118,19 @@ parameters).
   raster would let one frame key name two pictures. A row naming nothing, a mask since
   deleted, or a layer with no masks all arrive as an **empty polyline**, which is the effect's
   documented no-op — the same sanctioned exception an unset file or layer takes.
+- **Curve** parameters (K-412) hold a **tone curve as its own control points**: an ordered
+  list of 2..16 `[x, y]` pairs in the unit square, the identity diagonal by default. This is
+  the one parameter whose value is a *shape*, and it is what an editor edits — points move
+  sideways as well as up and down, which is exactly what a row of fixed sliders cannot say.
+  A **clamped cubic** through the points (Photoshop's family) is fitted **host-side** and
+  baked into a 257-entry table per channel, so both render paths are handed identical numbers
+  and neither fits a spline per pixel; §1.6 is then checking the *lookup*, which is the point
+  of baking it. Curve values are **static in v1**, joining File, Layer and mask-path on that
+  side: a list that grows and shrinks has no interpolation between two keyframes, which is
+  precisely why After Effects' own curve blob only ever steps. A list that arrives out of
+  order, outside the square, with a repeated x, or with fewer than two points is
+  **straightened on read** — sorted, clamped, deduplicated, and replaced by the diagonal when
+  nothing usable survives — quietly, because it comes off a document rather than a caller.
 
 ### 1.3 Traits
 
@@ -309,10 +333,12 @@ the invariant the campaign is held to, and it has its own regression test at eac
 The in-box replacements for the scene's paid stack. Two shape rules (K-090): an effect
 does **one thing** (multi-purpose designs split; an all-in-one grading suite may exist
 later as a deliberate exception), and every schema declares a **category** — Blur &
-sharpen, Colour, Distortion, Generate, Stylise, Temporal, Transition, Utility — which is how
+sharpen, Colour, Distortion, Generate, Stylise, Temporal, Transition, Utility, Controls —
+which is how
 the Add-effect menu groups (**Generate** added by K-398, for the effects that *make* pixels
 rather than change them; **Transition** by K-400, for the effects that *remove* the picture
-progressively so a cut can be made out of them). The flow engine is **not** in this list: it is a per-layer option (K-088),
+progressively so a cut can be made out of them; **Controls** by K-414, for the effects that
+change no pixel at all — see §3.80). The flow engine is **not** in this list: it is a per-layer option (K-088),
 specified in §3.1's original text but surfaced as layer UI, not an effect. Summary:
 
 | # | Effect | Replaces | Cost | Temporal window |
@@ -865,8 +891,9 @@ grade's tasteful default is a preset choice — see the browser below):
 **Vignette** (§3.14, shipped) is one of these single-purpose colour effects, because every CC
 pack has one. The remaining "CC" stages arrive the same way: **exposure / white balance**
 (stops; Temperature via Bradford-adapted CCT shift; Tint). **Curves** has landed as §3.30 —
-master + R/G/B, five animatable knots a channel rather than the bezier point list sketched
-here, for the reasons that section gives (K-396).
+master + R/G/B + alpha, each a real point list with a clamped cubic through it, which is the
+point list sketched here (K-412; K-396's five fixed knots a channel were the floor it grew
+from).
 
 **Preset browser.** Colour presets get a dedicated browser (per
 [07-UI-SPEC.md](07-UI-SPEC.md)): a panel of live thumbnails, each preset applied to the
@@ -1958,54 +1985,76 @@ preview and export.
 
 ### 3.30 Curves — the per-channel tone curve
 
-**Parameters:** four channel groups — **Master**, **Red**, **Green**, **Blue** — each
-carrying five knots (**Black**, **Shadows**, **Midtones**, **Highlights**, **White**;
-default 0, 0.25, 0.5, 0.75, 1, slider 0..1, hard min 0 and unbounded above), plus Mix.
-Master shows open, the three colour groups start collapsed.
+**Parameters:** five curves — **Master**, **Red**, **Green**, **Blue**, **Alpha** (After
+Effects' own five) — each an ordered list of **2 to 16 control points in the unit square**,
+the identity diagonal `[[0, 0], [1, 1]]` by default. Plus Mix. The panel draws them as
+channel tabs over one editor, not as five stacked rows.
 
-**The parameter form, and why it is not AE's** (K-396). AE stores `ADBE CurvesCustom` as
-an **arbitrary-data blob**: a list of control points per channel, however many the user
-dragged, in a private serialisation. Arbitrary data is not interpolable, so AE itself only
-ever *holds* it between keyframes — a curve does not animate, it steps. Lumit's parameter
-kinds (§1.1) are float, int, bool, enum, angle, colour, point, seed, file, layer, and none
-of them is "a list of points that grows"; a curve kind would need a value type, a keyframe
-interpolation, a bridge shape and a panel widget before one pixel changed, and would still
-step rather than animate.
+**The parameter form** (K-412, replacing K-396's twenty fixed knots). AE stores
+`ADBE CurvesCustom` as an **arbitrary-data blob**: a list of control points per channel,
+however many the user dragged, in a private serialisation. Arbitrary data is not interpolable,
+so AE itself only ever *holds* it between keyframes — a curve does not animate, it steps.
+Lumit's answer is a real parameter kind rather than a blob: §1.1's **curve** kind, whose value
+is the point list itself and which is **static in v1** for exactly AE's reason. K-396's five
+fixed knots per channel were the honest floor while no editor existed; the owner asked for the
+editor, and a curve stored as its points is what an editor edits. The effect was days old and
+unreleased, so the schema was replaced outright rather than migrated (the version went to 2,
+which is what stops a cached frame from the knot generation appearing in the curve
+generation's picture).
 
-So the v1 form is the honest small one: **five knots per channel at fixed inputs**
-(0, 0.25, 0.5, 0.75, 1), each an ordinary animatable Float carrying the curve's *output*
-at that input. Twenty plain numbers, no new kinds, no new serialisation — and unlike AE's
-blob, every one of them keyframes and takes an expression. The cost is that a knot cannot
-slide sideways: the shape is chosen by moving outputs up and down, not by placing points.
-The import (docs/11 §5) does not care, because it could not carry an arbitrary point list
-into a fixed-kind parameter anyway — it **samples** AE's spline at the five inputs, which
-is a mapped conversion and is reported as one.
+The domain semantics did not change with the form. The **x axis is the input** value and the
+**y axis is the output**, both in the unit square; what moved is only how many points may bend
+the line, and that a point may now slide sideways.
 
-The Effect Controls panel draws these as twenty rows today. A drawn curve widget editing
-the same five numbers is a panel change, not a data change: `customEffectRows` (the hook
-`effect_controls_panel_frb.dart` already asks first, per effect match name) is where it
-lands, and the stored form does not move when it does.
+**Algorithm sketch.** Each channel's points are fitted with a **clamped cubic spline** —
+Photoshop's family, since that is the curve every editor's hand already knows. Between two
+points it is a cubic; at every interior point the second derivative agrees on both sides (the
+C² condition that makes it *the* cubic spline rather than a piecewise guess), solved as a
+tridiagonal system in `f64`; and at the two ends the slope is **clamped to the end secant** —
+the straight line to the neighbouring point. That end condition is what makes a two-point
+curve exactly its own straight line, which the identity diagonal depends on.
 
-**Algorithm sketch.** Each channel's five knots are fitted with a **monotone cubic**
-(Fritsch–Carlson) Hermite spline: the tangents at the knots are the averaged secants,
-limited so the curve **cannot overshoot** between two knots. A plain Catmull–Rom would
-ring — a bright knot pulled up would dip the curve below its neighbour and put a dark halo
-in a highlight roll-off — and a monotone fit is the standard cure. The five knots and the
-five limited tangents are computed **host-side** (`Curves::packed`) so the CPU reference
-and the WGSL kernel evaluate identical numbers and neither fits a spline per pixel.
+The fit is **host-side and once** (`Curves::packed`, Lightning's discipline in §3.74 applied to
+a shape that is the same for every pixel): the spline is sampled into a **257-entry table per
+channel** at inputs `i / 256`, in `f64`, and both render paths are handed the identical tables.
+The CPU reference and the WGSL kernel then do nothing but look up and interpolate, so §1.6 is
+checking the *lookup* rather than two spline fits agreeing by luck.
 
-Evaluation per channel: below input 0 and above input 1 the curve continues **linearly**
-along the end tangent, so scene-linear values above 1 are curved honestly and never clipped
-(§2.1) and slightly negative values stay continuous. Inside, the interval is
-`floor(x × 4)` and the Hermite basis is evaluated in one fixed order on both paths.
+**The clamping rule.** Points live in the unit square, and so does the baked line: every
+sample is clamped into 0..1. A cubic through monotone points can bulge past the highest of
+them, and a tone curve that climbed above the white the user placed would ring a bright halo
+into a roll-off — the same failure a plain Catmull–Rom had, cured here by the box rather than
+by a monotone limiter. Clipping *inputs* is a different matter and does not happen: evaluation
+is `t[i] + (t[i+1] − t[i]) · f` with the **index clamped and the fraction not**, so an input
+below 0 or above 1 continues linearly along the table's first or last segment. Scene-linear
+values above 1 are therefore carried on rather than flattened (§2.1), and slightly negative
+light stays continuous.
 
-The **per-channel curves run first, then Master** — Photoshop's and AE's order, so an
-imported curve set lands the same way round. Unpremultiplied (§2.2): a tone curve is
-non-linear, so it does not commute with premultiplied alpha. `cheap` cost, `Exact` ROI.
+The **per-channel curves run first, then Master** — Photoshop's and AE's order, so an imported
+curve set lands the same way round. **Alpha is its own channel and Master does not touch it**,
+as in AE; the graded colour is re-premultiplied by the *graded* alpha, so a curve that moves
+coverage moves the picture with it rather than leaving a matte scaled twice. Unpremultiplied
+(§2.2): a tone curve is non-linear, so it does not commute with premultiplied alpha. `cheap`
+cost, `Exact` ROI.
 
-**Neutral is the bit-exact identity:** all four channels at the default knots
-short-circuit the whole effect on both paths (a short-circuit, not a reliance on the
-spline reproducing `y = x`), and Mix 0 likewise.
+**Neutral is the bit-exact identity:** all five channels at the identity diagonal
+short-circuit the whole effect on both paths — decided host-side, on the *points*, because a
+kernel cannot afford to compare 1285 numbers a pixel — and Mix 0 likewise. It is a
+short-circuit, not a reliance on the table reproducing `y = x`; that the identity table
+*does* reproduce it bit for bit is pinned separately, because the lookup's arithmetic is all
+powers of two.
+
+**Reading a malformed curve.** A point list that arrives out of x order, outside the square,
+with two points at one x, with more than sixteen points, or with fewer than two is
+**straightened, never refused**: sorted by x, clamped into the square, the first of a repeated
+x kept, the tail past sixteen dropped, and the identity diagonal substituted when fewer than
+two points survive. It comes off a document that a hand, an older build or an importer wrote,
+and 14-ENGINEERING-RULES §4 forbids a panic on one.
+
+**The import is unchanged** (docs/11 §5). AE's point list is the one property AE's own
+scripting cannot read (K-410), so Curves still imports as a placeholder with its unreadable
+property named. What changed is the ceiling: the day a blob decoder lands, the target can
+carry the whole curve rather than a five-point sample of it.
 
 ### 3.31 Levels — input/output black and white with gamma
 
@@ -4595,6 +4644,93 @@ paint style. The dash gate is switched off by the same convention §3.76 already
 continuous outline (a lit share of 2, which cannot be reached by wrapping), so there is not even
 a branch between them. One kernel, one CPU reference, one §1.6 oracle covering all three.
 
+### The Controls category — the effects that change no pixel (K-414)
+
+The five sections below are one family and are read together. Each is a **parameter-only
+identity effect**: it declares one row, renders nothing, and exists so that *other*
+properties can read that row through an expression and so that the timeline can keyframe it
+in one place. They are After Effects' Expression Controls, and half the CC-pack rigs in the
+world are wired through them — one slider on a null driving six things at once, which is a
+rig anybody can find and adjust rather than six copies of the same keyframes.
+
+Four facts hold for all five, so none of them repeats it:
+
+- **They have no image operation.** The declaration says so
+  ([impl/effect-registry.md](impl/effect-registry.md)'s `is_image_op`, the same answer
+  §3.25 Posterize time and §3.26 Motion blur give for their own reason), and the resolve
+  step pushes no op for them at all — nothing is dispatched on either render path, so
+  there is no WGSL kernel, no CPU reference and nothing for §1.6 to compare. They are the
+  first effects in the catalogue for which that is true because they draw nothing *ever*,
+  rather than because they act a level above the stack.
+- **They take no matte.** §2.6's row is a picture that drives an effect, and an effect that
+  touches no pixel cannot be driven by one; the schema declares `MatteRole::None`, which
+  these five are the first to use.
+- **They have no Mix.** Mix is the dissolve back towards the untouched picture (§1.5), and
+  there is no touched picture to dissolve from.
+- **§1.2's "no no-op default" rule does not apply to them.** A control's default is a
+  starting value for someone else's expression, and a Slider control that arrived at some
+  arbitrary non-zero number would be a lie about the rig.
+
+They sit **last in the Add-effect menu** (K-137's order is the catalogue's, and the family
+is appended at its end), in After Effects' own order: Slider, Angle, Checkbox, Colour,
+Point.
+
+### 3.80 Slider control — one number, held
+
+**Parameters:** **Slider** (default 0, slider 0..100, unbounded).
+
+The plain number an expression reads. Its range is **not** the §1.2 Slider *kind* K-414 also
+introduced, and the distinction is the whole point of that kind: a Slider control's numbers
+mean whatever the property reading them means, so a rig wanting 0..3000 is as ordinary as
+one wanting 0..1, and the 0..100 travel is only where the thumb starts. The Slider kind is
+for the opposite case — a parameter whose whole meaning lives inside a closed range, which
+is why the four wipes' Completion adopted it and this row did not.
+
+### 3.81 Angle control — one angle, held
+
+**Parameters:** **Angle** (default 0°, dial, unbounded).
+
+§3.80 with a dial. Unbounded on purpose, exactly as every other angle in the catalogue is
+(§1.1's angle type): an angle animates *through* full turns rather than stopping at 360,
+and a rig that spins something depends on that.
+
+### 3.82 Checkbox control — one switch, held
+
+**Parameters:** **Checkbox** (default off).
+
+The two-way choice an expression branches on, made once in a visible place rather than
+buried in a script. Off by default, which is the reading a rig nobody has set up yet
+should get.
+
+### 3.83 Colour control — one colour, held
+
+**Parameters:** **Colour** (default white, scene-linear RGBA, edit range 0..4).
+
+Where a rig keeps its colour, so that changing the swatch once changes the six effects
+reading it. The 0..4 edit range is the one every colour that carries light declares
+(§2.1): whatever reads this is going to put it in a picture, and a value above 1 is a real
+value there.
+
+### 3.84 Point control — one place in the frame, held
+
+**Parameters:** **Point x**, **Point y** (px@comp, default the centre of the comp).
+
+A crosshair that can be dragged on the picture and keyframed, so one dragged point moves a
+flare, a mask and a light together. It is two parameters rather than one because a point in
+Lumit *is* an adjacent `_x`/`_y` pair the panel folds into one row with a crosshair pick
+(§1.1) — a point needs no schema kind of its own, only the naming convention. The numbers
+are px@comp (K-260), and a fresh instance is centred on the actual comp rather than on the
+schema's nominal 1080p default, for the reason §3.48's corners are.
+
+**The import** (docs/11 §5) maps all five one for one — one property onto one row, same
+units, nothing converted and nothing left behind, which makes them the only rows in the
+table with no report of any kind. Their match names are the famous ones (`ADBE Slider
+Control` and kin) but are **not yet in the audited set**, so they enter the table marked
+**pending** until the next audit sitting confirms them; `tools/ae-audit/
+claimed-matchnames.txt` carries them so that sitting is already prepared. A match name
+that turns out to be wrong costs nothing worse than the placeholder road docs/11 §6
+already specifies for every unclaimed name.
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)
@@ -4604,7 +4740,7 @@ roughly by demand.
 
 | Effect | Scope |
 |---|---|
-| ~~Levels / curves per channel~~ | **Shipped** as §3.31 and §3.30, master + R/G/B. The histogram behind Levels and an alpha channel in both are still Tier 2 |
+| ~~Levels / curves per channel~~ | **Shipped** as §3.31 and §3.30. Curves is master + R/G/B + alpha on real control points (K-412); Levels is master + R/G/B, and its alpha channel is still Tier 2 |
 | ~~Hue/saturation~~ | **Shipped** as §3.33 (master + six ranges). Colourise is still Tier 2 |
 | Tritone / tint | Map shadows/mids/highlights to three colours |
 | Keying | Luma key + colour key + a basic screen key (core matte generation, not Keylight parity at first) |

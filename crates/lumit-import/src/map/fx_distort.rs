@@ -1,5 +1,6 @@
-//! The Distortion, Stylise, Transition and Utility half of the After Effects
-//! effect table ([docs/11-AE-IMPORT.md](../../../../docs/11-AE-IMPORT.md) §5).
+//! The Distortion, Stylise, Transition, Utility and Controls half of the After
+//! Effects effect table
+//! ([docs/11-AE-IMPORT.md](../../../../docs/11-AE-IMPORT.md) §5).
 //!
 //! # In plain terms
 //!
@@ -48,6 +49,15 @@ type Build = for<'a, 'b, 'c> fn(&'a mut Fx<'b, 'c>);
 /// 2026-08-20 against a live After Effects 26.0), never memory: the Atomic
 /// Power effects carry `APC`, Warp is `ADBE WRPMESH`, Iris Wipe is
 /// `ADBE IRIS_WIPE`.
+///
+/// **The five Controls rows are the exception, and are marked PENDING AUDIT**
+/// (K-414): their match names are the famous ones but they are not in the
+/// audited set, because the family landed after that sitting.
+/// `tools/ae-audit/claimed-matchnames.txt` carries them so the next sitting
+/// checks them. Nothing else rests on it: a match name this table has wrong is
+/// a name nothing claims, and an unclaimed name takes the placeholder road with
+/// every parameter kept (docs/11 §5, §6) — which is the failure the whole table
+/// degrades to and the reason a pending row may ship.
 fn row(ae: &str) -> Option<(&'static str, Build)> {
     Some(match ae {
         // --- Utility ---
@@ -85,6 +95,12 @@ fn row(ae: &str) -> Option<(&'static str, Build)> {
         "ADBE IRIS_WIPE" => ("iris_wipe", iris_wipe),
         "ADBE Venetian Blinds" => ("venetian_blinds", venetian_blinds),
         "APC CardWipeCam" => ("card_wipe", card_wipe),
+        // --- Controls (K-414) — PENDING AUDIT (see the note above) ---
+        "ADBE Slider Control" => ("slider_control", slider_control),
+        "ADBE Angle Control" => ("angle_control", angle_control),
+        "ADBE Checkbox Control" => ("checkbox_control", checkbox_control),
+        "ADBE Color Control" => ("colour_control", colour_control),
+        "ADBE Point Control" => ("point_control", point_control),
         _ => return None,
     })
 }
@@ -530,6 +546,42 @@ fn card_wipe(fx: &mut Fx<'_, '_>) {
         // are one absent idea: Lumit keeps cameras on the composition (docs/06).
         fx.not_carried("camera system");
     }
+}
+
+// The Expression Controls (K-414, docs/11 §5's five pending rows). Each is one
+// property onto one row, in the same units, with nothing to convert and nothing
+// left behind — the only rows in this file with no report of any kind. What
+// makes them worth writing down at all is what they carry: the keyframes and
+// the expressions on that one property, which is the whole of a CC-pack rig.
+
+/// AE `ADBE Slider Control` → Slider control (docs/08 §3.80): one number.
+fn slider_control(fx: &mut Fx<'_, '_>) {
+    fx.carry(1, "slider", Unit::Direct);
+}
+
+/// AE `ADBE Angle Control` → Angle control (docs/08 §3.81): degrees on both
+/// sides, and unbounded on both, so a rig that winds past 360 winds past it here.
+fn angle_control(fx: &mut Fx<'_, '_>) {
+    fx.carry(1, "angle", Unit::Direct);
+}
+
+/// AE `ADBE Checkbox Control` → Checkbox control (docs/08 §3.82).
+fn checkbox_control(fx: &mut Fx<'_, '_>) {
+    fx.toggle(1, "checkbox");
+}
+
+/// AE `ADBE Color Control` → Colour control (docs/08 §3.83). The colour crosses
+/// from the project's display space into scene-linear light like every other
+/// imported colour (docs/11 §3).
+fn colour_control(fx: &mut Fx<'_, '_>) {
+    fx.colour(1, "colour");
+}
+
+/// AE `ADBE Point Control` → Point control (docs/08 §3.84): AE's raster pixels
+/// become px@comp, which is the same number read against the composition
+/// (docs/08 §2.3).
+fn point_control(fx: &mut Fx<'_, '_>) {
+    fx.point(1, "point_x", "point_y", Unit::Px);
 }
 
 // ─────────────────────── the machinery underneath ───────────────────────
@@ -2276,6 +2328,68 @@ mod tests {
         assert_eq!(choice(&stretched, "placement"), 0);
         assert_eq!(f(&stretched, "scale"), 100.0);
         assert!(!approximated(&stretched, "Texture Placement"));
+    }
+
+    /// The five Expression Controls carry their one property, keyframes and
+    /// all, and report nothing — there is nothing to convert (K-414). The
+    /// keyframed slider is the case that matters: a CC-pack rig is an animated
+    /// Slider Control and a page of expressions reading it.
+    #[test]
+    fn the_expression_controls_carry_their_one_property() {
+        let r = run(&fx(
+            "ADBE Slider Control",
+            "Slider Control",
+            vec![keyed(
+                "ADBE Slider Control",
+                1,
+                "Slider",
+                &[(0.0, 0.0, 0.0), (2.0, 240.0, 120.0)],
+            )],
+        ));
+        assert_eq!(keys_of(&r, "slider")[1], (2.0, 240.0, 120.0));
+        assert!(r.report.rows.is_empty(), "nothing to report");
+
+        let r = run(&fx(
+            "ADBE Angle Control",
+            "Angle Control",
+            vec![num("ADBE Angle Control", 1, "Angle", 450.0)],
+        ));
+        assert_eq!(f(&r, "angle"), 450.0, "an angle winds past a full turn");
+
+        let r = run(&fx(
+            "ADBE Checkbox Control",
+            "Checkbox Control",
+            vec![num("ADBE Checkbox Control", 1, "Checkbox", 1.0)],
+        ));
+        assert!(boolean(&r, "checkbox"));
+
+        let r = run(&fx(
+            "ADBE Color Control",
+            "Color Control",
+            vec![colour(
+                "ADBE Color Control",
+                1,
+                "Color",
+                [0.5, 0.5, 0.5, 1.0],
+            )],
+        ));
+        match r.inst.param("colour") {
+            Some(EffectValue::Colour(c)) => {
+                let red = c[0].value_at(0.0);
+                assert!(
+                    (red - f64::from(srgb_to_linear(0.5))).abs() < 1e-9,
+                    "the swatch crosses into scene-linear light like every other                      imported colour: {red}"
+                );
+            }
+            other => panic!("not a colour: {other:?}"),
+        }
+
+        let r = run(&fx(
+            "ADBE Point Control",
+            "Point Control",
+            vec![point("ADBE Point Control", 1, "Point", 640.0, 360.0)],
+        ));
+        assert_eq!((f(&r, "point_x"), f(&r, "point_y")), (640.0, 360.0));
     }
 
     /// A conversion cannot rewrite an expression, so a rebased parameter with

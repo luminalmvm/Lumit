@@ -1455,7 +1455,8 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
 - **Parameter widgets** by type: sliders with scrub-drag and click-to-type; **colour
   swatches** opening a picker with an eyedropper that samples the Viewer; **angle dials**;
   **point parameters** with a crosshair button that arms a click-in-Viewer pick (and a
-  draggable on-Viewer handle while the effect is selected); dropdowns; checkboxes; curves
+  draggable on-Viewer handle while the effect is selected); dropdowns; checkboxes;
+  **track-and-thumb sliders** for a closed range (K-414); curve editors
   where an effect defines one. OFX and LFX parameter types map onto these same widgets
   ([12-PLUGINS.md](12-PLUGINS.md)).
 - Every animatable parameter carries the stopwatch and expression toggle inline, mirroring
@@ -1524,11 +1525,40 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   **Round shape keeps its bubble** (K-092): the same rows, wrapped in floating-card chrome.
   The two shapes differ in chrome, not in layout.
 
-  **Effects with their own display** — Levels' histogram, Curves' spline — are the expected
-  exception. `customEffectRows` in `effect_controls_panel_frb.dart` is asked before the panel
-  falls back to a row per declared parameter; it is the one place such an effect declares
-  itself, so the first one does not become a special case in the middle of the layout. Nothing
-  claims a display yet.
+  **Shipped: the closed-range row** (K-414). A **Slider** parameter — one whose whole meaning
+  lives inside a range, a wipe's Completion being the catalogue's clearest — draws as a
+  **track and thumb with the number beside it**, the same arrangement the angle row uses for
+  its dial: the track is a second grip on one value, not a second control, so it sits beside
+  the number rather than under it. The two behave identically — a drag on either previews
+  live and commits once on release — and the row keeps every affordance a float row has,
+  stopwatch and graph editor included, because the value *is* a float. The range is both the
+  travel and the hard bound, so neither grip can leave it and neither can typing.
+
+  **Shipped: the curve editor** (K-412). A **Curve** parameter draws as the unit square with
+  the spline through its points: **drag a point** to move it, **click the line** to add one
+  (up to sixteen), **drag a point well clear of the square** to remove it, and **Reset** puts
+  the channel back to the identity diagonal. The two end points move like any other — the
+  black and white points slide along their edge, which is how an end is crushed or lifted —
+  but are never removed, because a curve needs somewhere to start and finish. A run of
+  neighbouring Curve parameters **folds into one editor with a tab each** (Curves' Master,
+  Red, Green, Blue and Alpha), the third folding convention alongside the point pair and the
+  Matte row; Mix and Matte keep their ordinary rows beneath it. The line drawn is a
+  **display-only** evaluation of the same clamped cubic: the engine's baked table is what
+  grades the frame, and asking it for one per pointer move would be a bridge call a frame
+  (`flutter_ui/lib/widgets/curve_editor.dart` carries the reasoning).
+
+  **Effects with their own display** — Levels' histogram (K-413) — draw a widget **above**
+  their rows, through `customEffectDisplay` in `effect_controls_panel_frb.dart`. Levels shows
+  the frame's histogram with its input black, gamma and white handles over it and the output
+  range as a bar beneath, each handle dragging the Master parameter it marks. It is
+  presentation: every number still has its own row underneath, the parameters and their ids
+  are untouched, and the picture comes from the trace the Scopes panel already reads (§8),
+  asked for once per displayed frame and only while the row is on screen.
+
+  **A control inside this panel uses axis drag recognisers, never a pan.** The panel is a
+  list, and a pan needs twice the slop a single-axis drag does, so an enclosing vertical
+  scroll wins every upward gesture — the curve editor's points and the Levels handles both
+  read as dead until they stopped asking for a pan.
 
   Still to build here: solo, rename, and the expression toggle.
 

@@ -5901,18 +5901,20 @@ fn alpha_corpus(w: u32, h: u32) -> Vec<f32> {
     img
 }
 
-/// The §1.6 oracle for Curves (docs/08 §3.30): a cheap pointwise spline, so
-/// CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and the
-/// identity knot set or Mix 0 is the bit-exact identity on both paths.
+/// The §1.6 oracle for Curves (docs/08 §3.30, K-412): a pointwise table
+/// lookup, so CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable,
+/// and the identity curve set or Mix 0 is the bit-exact identity on both
+/// paths.
 ///
 /// The parameters are built through the effect's own `packed()`, not by hand,
-/// which is the point: the monotone tangents are host maths, and a test that
-/// fitted its own spline would prove the kernel agrees with the test rather
-/// than with the effect.
+/// which is the point: the spline fit is host maths, and a test that fitted
+/// its own would prove the kernel agrees with the test rather than with the
+/// effect. What is left for the oracle to check is the lookup itself, which is
+/// exactly what K-412 wanted of the baking.
 #[test]
 fn wgsl_curves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::curves::Curves;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{CurvePoints, EffectMetadata, Params};
 
     let Ok(ctx) = GpuContext::headless() else {
         crate::no_adapter();
@@ -5925,34 +5927,52 @@ fn wgsl_curves_matches_the_cpu_oracle() {
     let neutral = Curves::read(Params::EMPTY);
     // A film S-curve on Master: shadows down, highlights up.
     let mut s_curve = neutral;
-    s_curve.master_shadows = 0.15;
-    s_curve.master_highlights = 0.88;
-    // A flat interval and a lifted black, which is what exercises the
-    // Fritsch-Carlson limiter — an unlimited cubic would overshoot here.
+    s_curve.master = CurvePoints::sanitised(&[[0.0, 0.0], [0.25, 0.15], [0.75, 0.88], [1.0, 1.0]]);
+    // A long flat run into a sudden rise — the shape a plain cubic overshoots
+    // on, and so the one that exercises the bake's clamp.
     let mut crushed = neutral;
-    crushed.master_black = 0.1;
-    crushed.master_shadows = 0.1;
-    crushed.master_midtones = 0.1;
+    crushed.master = CurvePoints::sanitised(&[[0.0, 0.1], [0.5, 0.1], [0.6, 0.95], [1.0, 1.0]]);
     // Per-channel: a warm grade, blue pulled down, red lifted.
     let mut warm = neutral;
-    warm.blue_midtones = 0.38;
-    warm.red_midtones = 0.62;
+    warm.red = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.62], [1.0, 1.0]]);
+    warm.blue = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.38], [1.0, 1.0]]);
+    // Alpha is its own channel now (K-412): a curve on it must move coverage
+    // and take the premultiplied colour with it, identically on both paths.
+    let mut alpha = neutral;
+    alpha.alpha = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]]);
+    // Sixteen points, the declared maximum, so the tridiagonal solve is
+    // exercised at its widest rather than at three points.
+    let mut wobble = neutral;
+    wobble.master = CurvePoints::sanitised(
+        &(0..16)
+            .map(|i| {
+                let x = i as f32 / 15.0;
+                [x, (x + 0.08 * (x * 9.0).sin()).clamp(0.0, 1.0)]
+            })
+            .collect::<Vec<_>>(),
+    );
 
     for (name, curves, mix) in [
         ("neutral", neutral, 1.0f32),
         ("s-curve", s_curve, 1.0),
         ("crushed", crushed, 1.0),
         ("warm", warm, 1.0),
+        ("alpha", alpha, 1.0),
+        ("wobble", wobble, 1.0),
         ("mixed", s_curve, 0.6),
         ("mix-zero", s_curve, 0.0),
     ] {
         let mut c = curves;
         c.mix = mix * 100.0;
-        let (y, m, mix_amt) = c.packed();
-        let op = CurvesOp { y, m, mix: mix_amt };
+        let packed = c.packed();
+        let op = CurvesOp {
+            t: packed.t,
+            neutral: packed.neutral,
+            mix: packed.mix,
+        };
 
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::curves(&mut cpu, op.y, op.m, op.mix);
+        lumit_core::fx::cpu::curves(&mut cpu, &packed);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let out = fx.curves(&ctx, &tex, w, h, &op);

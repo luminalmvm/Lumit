@@ -65,6 +65,33 @@ pub enum ParamKind {
         /// at zero below and runs unbounded above).
         hard: (Option<f64>, Option<f64>),
     },
+    /// A **bounded** number: a track and a thumb with the value beside it, for
+    /// a parameter whose whole meaning lives inside a closed range (K-414).
+    ///
+    /// The VALUE side is an ordinary [`EffectValue::Float`](crate::model::
+    /// EffectValue::Float), exactly as [`ParamKind::Int`] and
+    /// [`ParamKind::Angle`] ride — the kind is the *control*, not the storage,
+    /// so keyframes, expressions, the graph editor and the resolve step see no
+    /// new shape and an adopting parameter changes no stored value.
+    ///
+    /// The one difference from [`ParamKind::Float`] is that there is no soft
+    /// slider and hard bound to keep apart: `range` is both. A Float declares
+    /// a slider that typing MAY exceed (docs/08 §1.2); a Slider declares the
+    /// only numbers the parameter has — a wipe cannot be less than nought or
+    /// more than fully complete, and offering a box to type 150 into would be
+    /// offering a picture that does not exist.
+    ///
+    /// **Not every closed Float wants to be one.** Adoption is for parameters
+    /// where the range is the parameter's *nature* rather than a range someone
+    /// found sufficient: Temperature's ±150 slider runs to a ±200 hard range
+    /// precisely because there is a picture beyond the slider's end, so it
+    /// stays a Float (K-414's first candidate, examined and declined).
+    Slider {
+        default: f64,
+        /// The closed range: the slider's travel, and the hard bounds, which
+        /// are the same two numbers.
+        range: (f64, f64),
+    },
     /// A whole-number parameter (a blade count, a ghost cap). The VALUE side
     /// is still an `EffectValue::Float` — it animates and serialises exactly
     /// like a Float — the kind only tells the UI to step and display it as an
@@ -196,6 +223,30 @@ pub enum ParamKind {
         /// nothing — for an effect whose path input is genuinely optional.
         self_default: bool,
     },
+    /// A **tone curve**, stored as its own control points (K-412).
+    ///
+    /// # In plain terms
+    ///
+    /// The shape you drag in a Curves panel: a handful of points in a unit
+    /// square, with a smooth line drawn through them. Not a number and not a
+    /// list of numbers at fixed positions — the points move sideways as well
+    /// as up and down, which is what makes it a curve rather than five
+    /// sliders wearing a curve's name.
+    ///
+    /// The value is an [`EffectValue::Curve`](crate::model::EffectValue::
+    /// Curve): an ordered list of **2..=16** points in the unit square,
+    /// defaulting to the identity diagonal `[[0, 0], [1, 1]]`. It is read
+    /// through [`CurvePoints::sanitised`](crate::fx::CurvePoints::sanitised),
+    /// which sorts by x, drops repeated x, clamps into the square and falls
+    /// back to the diagonal — quietly, never a panic
+    /// (14-ENGINEERING-RULES §4), because a curve arriving out of order is a
+    /// document to render, not a fault to report.
+    ///
+    /// **Static in v1**, joining [`ParamKind::File`], [`ParamKind::Layer`] and
+    /// [`ParamKind::MaskPath`] on that side of the seam: a list that grows and
+    /// shrinks has no interpolation between two keyframes, which is exactly
+    /// why After Effects' own curve blob only ever *steps*.
+    Curve,
 }
 
 /// How a transform- or displacement-domain effect treats the border pixels
@@ -359,6 +410,13 @@ pub enum FxCategory {
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
+    /// The effects that hold a **value** rather than change a picture (K-414):
+    /// Slider control, Angle control, Checkbox control, Colour control, Point
+    /// control. Each is one row an expression reads and the timeline keyframes,
+    /// which is what After Effects' Expression Controls are and why half the
+    /// rigs in the world are wired through them. They render nothing at all, so
+    /// no other category describes them.
+    Controls,
 }
 
 impl FxCategory {
@@ -373,11 +431,12 @@ impl FxCategory {
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
+            FxCategory::Controls => "Controls",
         }
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 8] = [
+    pub const ALL: [FxCategory; 9] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -386,6 +445,10 @@ impl FxCategory {
         FxCategory::Temporal,
         FxCategory::Transition,
         FxCategory::Utility,
+        // Last, as it is in the Add-effect menu: the menu groups by first
+        // appearance in the catalogue, and the Controls family is appended at
+        // the end of it (K-137, K-414).
+        FxCategory::Controls,
     ];
 }
 
@@ -426,10 +489,11 @@ pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(
 pub enum MatteRole {
     /// No matte row, no slot, no dissolve.
     ///
-    /// Nothing declares this today. It exists because "every effect" is a claim
-    /// about the effects that exist, and an effect that genuinely cannot be
-    /// driven by a picture should be able to say so rather than carry a row
-    /// that does nothing.
+    /// It exists because "every effect" is a claim about the effects that
+    /// exist, and an effect that genuinely cannot be driven by a picture should
+    /// be able to say so rather than carry a row that does nothing. The
+    /// **Controls family** declares it (K-414): a Slider control touches no
+    /// pixel, so a matte would be a picture gating nothing.
     None,
     /// The generic **strength** semantic: the injected [`MATTE_PARAM`] pair, and
     /// one dissolve beside the registry dispatch

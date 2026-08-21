@@ -223,16 +223,28 @@ struct GammaParams {
     _pad1: f32,
 }
 
-/// One resolved Curves (docs/08 §3.30): five knots and their monotone-cubic
-/// tangents per channel, both computed host-side by `Curves::packed` so the
-/// kernel fits nothing per pixel. Indexed `[knot][channel]`, channel 0 Master
-/// and 1..3 R/G/B. The identity knot set is the bit-exact neutral point.
+/// Entries in one channel's baked tone curve — `lumit_core::fx::cpu::
+/// CURVE_TABLE`, repeated here because `lumit-gpu` does not depend on the
+/// core crate (docs/05).
+pub const CURVE_TABLE: usize = 257;
+
+/// `vec4`s one channel's table occupies in the uniform: 257 rounded up to a
+/// multiple of four.
+const CURVE_VEC4S: usize = CURVE_TABLE.div_ceil(4);
+
+/// One resolved Curves (docs/08 §3.30, K-412): five baked tone-curve tables
+/// and the mix. The spline is fitted host-side by `Curves::packed`, so this
+/// kernel looks up and interpolates and does nothing else — which is what
+/// leaves the §1.6 oracle checking the lookup rather than two spline fits.
+/// Channel 0 is Master, 1..3 R/G/B, 4 Alpha.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurvesOp {
-    /// Knot outputs at the fixed inputs 0, 0.25, 0.5, 0.75, 1.
-    pub y: [[f32; 4]; 5],
-    /// Fritsch–Carlson limited tangents at those knots.
-    pub m: [[f32; 4]; 5],
+    /// `[channel][entry]`: the curve sampled at `entry / 256`.
+    pub t: [[f32; CURVE_TABLE]; 5],
+    /// Every channel is the identity diagonal — the bit-exact passthrough,
+    /// decided host-side because the kernel cannot compare 1285 numbers a
+    /// pixel.
+    pub neutral: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -240,10 +252,13 @@ pub struct CurvesOp {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct CurvesParams {
-    y: [[f32; 4]; 5],
-    m: [[f32; 4]; 5],
+    /// The five tables, each padded up to `CURVE_VEC4S` vec4s — a uniform
+    /// array of scalars would take a 16-byte stride and be four times the
+    /// size.
+    t: [[f32; 4]; 5 * CURVE_VEC4S],
     mix_amt: f32,
-    _pad: [f32; 3],
+    neutral: u32,
+    _pad: [f32; 2],
 }
 
 /// One resolved Levels (docs/08 §3.31): five rows indexed `[row][channel]` —
@@ -643,8 +658,8 @@ impl FxEngine {
 
     /// Apply one Curves (docs/08 §3.30) to a linear working texture, returning
     /// a new texture of the same size. One pointwise pass: the per-channel
-    /// curve then Master, the §2.2 unpremultiply wrap fused into the kernel;
-    /// the identity knot set short-circuits inside it.
+    /// curve then Master, alpha on its own curve, the §2.2 unpremultiply wrap
+    /// fused into the kernel; the identity curve set short-circuits inside it.
     pub fn curves(
         &self,
         ctx: &GpuContext,
@@ -654,6 +669,12 @@ impl FxEngine {
         op: &CurvesOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-curves-out");
+        let mut t = [[0.0f32; 4]; 5 * CURVE_VEC4S];
+        for (c, table) in op.t.iter().enumerate() {
+            for (i, v) in table.iter().enumerate() {
+                t[c * CURVE_VEC4S + i / 4][i % 4] = *v;
+            }
+        }
         self.dispatch(
             ctx,
             &self.curves,
@@ -663,10 +684,10 @@ impl FxEngine {
             w,
             h,
             bytemuck::bytes_of(&CurvesParams {
-                y: op.y,
-                m: op.m,
+                t,
                 mix_amt: op.mix,
-                _pad: [0.0; 3],
+                neutral: u32::from(op.neutral),
+                _pad: [0.0; 2],
             }),
         );
         out

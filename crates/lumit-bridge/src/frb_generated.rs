@@ -8626,6 +8626,10 @@ impl SseDecode for crate::api::effect::BridgeEffectValue {
                 let mut var_field0 = <Option<uuid::Uuid>>::sse_decode(deserializer);
                 return crate::api::effect::BridgeEffectValue::MaskPath(var_field0);
             }
+            9 => {
+                let mut var_field0 = <Vec<Vec<f32>>>::sse_decode(deserializer);
+                return crate::api::effect::BridgeEffectValue::Curve(var_field0);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -9403,6 +9407,19 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
             9 => {
                 return crate::api::effect::BridgeParamKind::MaskPath;
             }
+            10 => {
+                return crate::api::effect::BridgeParamKind::Curve;
+            }
+            11 => {
+                let mut var_default_ = <f64>::sse_decode(deserializer);
+                let mut var_min = <f64>::sse_decode(deserializer);
+                let mut var_max = <f64>::sse_decode(deserializer);
+                return crate::api::effect::BridgeParamKind::Slider {
+                    default: var_default_,
+                    min: var_min,
+                    max: var_max,
+                };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -9630,8 +9647,12 @@ impl SseDecode for crate::api::effect::BridgeScalar {
 impl SseDecode for crate::api::state::BridgeScopeTrace {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <u32>::sse_decode(deserializer);
         let mut var_rgba = <Vec<u8>>::sse_decode(deserializer);
-        return crate::api::state::BridgeScopeTrace { rgba: var_rgba };
+        return crate::api::state::BridgeScopeTrace {
+            kind: var_kind,
+            rgba: var_rgba,
+        };
     }
 }
 
@@ -10478,6 +10499,18 @@ impl SseDecode for Vec<crate::api::layer::LayerReference> {
             ans_.push(<crate::api::layer::LayerReference>::sse_decode(
                 deserializer,
             ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<Vec<f32>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Vec<f32>>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -11768,6 +11801,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectValue {
             crate::api::effect::BridgeEffectValue::MaskPath(field0) => {
                 [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::effect::BridgeEffectValue::Curve(field0) => {
+                [9.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -12775,6 +12811,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeParamKind {
             .into_dart(),
             crate::api::effect::BridgeParamKind::Layer => [8.into_dart()].into_dart(),
             crate::api::effect::BridgeParamKind::MaskPath => [9.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Curve => [10.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Slider { default, min, max } => [
+                11.into_dart(),
+                default.into_into_dart().into_dart(),
+                min.into_into_dart().into_dart(),
+                max.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -13133,7 +13177,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeScalar>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeScopeTrace {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [self.rgba.into_into_dart().into_dart()].into_dart()
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.rgba.into_into_dart().into_dart(),
+        ]
+        .into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -14082,6 +14130,10 @@ impl SseEncode for crate::api::effect::BridgeEffectValue {
                 <i32>::sse_encode(8, serializer);
                 <Option<uuid::Uuid>>::sse_encode(field0, serializer);
             }
+            crate::api::effect::BridgeEffectValue::Curve(field0) => {
+                <i32>::sse_encode(9, serializer);
+                <Vec<Vec<f32>>>::sse_encode(field0, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -14672,6 +14724,15 @@ impl SseEncode for crate::api::effect::BridgeParamKind {
             crate::api::effect::BridgeParamKind::MaskPath => {
                 <i32>::sse_encode(9, serializer);
             }
+            crate::api::effect::BridgeParamKind::Curve => {
+                <i32>::sse_encode(10, serializer);
+            }
+            crate::api::effect::BridgeParamKind::Slider { default, min, max } => {
+                <i32>::sse_encode(11, serializer);
+                <f64>::sse_encode(default, serializer);
+                <f64>::sse_encode(min, serializer);
+                <f64>::sse_encode(max, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -14855,6 +14916,7 @@ impl SseEncode for crate::api::effect::BridgeScalar {
 impl SseEncode for crate::api::state::BridgeScopeTrace {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.kind, serializer);
         <Vec<u8>>::sse_encode(self.rgba, serializer);
     }
 }
@@ -15490,6 +15552,16 @@ impl SseEncode for Vec<crate::api::layer::LayerReference> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::layer::LayerReference>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<Vec<f32>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Vec<f32>>::sse_encode(item, serializer);
         }
     }
 }

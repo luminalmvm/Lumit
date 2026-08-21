@@ -1,228 +1,66 @@
-//! Curves (docs/08 §3.30, K-396): the per-channel tone curve, as five
-//! animatable knots a channel rather than AE's arbitrary point blob.
+//! Curves (docs/08 §3.30, K-412): the per-channel tone curve, as a real
+//! curve — an ordered list of control points a channel, the shape an editor
+//! edits.
+//!
+//! **In plain terms.** Five curves: one for the picture as a whole (Master),
+//! one each for red, green and blue, and one for alpha. Each is a handful of
+//! points in a unit square with a smooth line drawn through them; the line
+//! says what an input brightness comes out as.
+//!
+//! **The line is drawn here, not in the kernel** (K-412, Lightning's
+//! discipline in §3.74). [`Curves::packed`] fits the spline once and writes it
+//! down as a 257-entry table a channel; both render paths are handed the
+//! identical tables and do nothing but look up and interpolate, which is what
+//! leaves the §1.6 oracle checking the *lookup* rather than two spline fits
+//! agreeing by luck.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, Params};
 use lumit_fx_macros::Effect;
 
-/// Curves' four channel groups (docs/08 §3.30). Each group's ids are a
-/// contiguous run of the schema's `params`, which is what lets the panel draw
-/// the twirl in place. Master is the one you reach for first, so it opens; the
-/// three colour channels are the second reach and start closed.
-pub const CURVES_GROUPS: &[ParamGroup] = &[
-    ParamGroup {
-        label: "Master",
-        params: &[
-            "master_black",
-            "master_shadows",
-            "master_midtones",
-            "master_highlights",
-            "master_white",
-        ],
-        collapsed: false,
-        visible_when: None,
-        visible_when_lens_elements: None,
-    },
-    ParamGroup {
-        label: "Red",
-        params: &[
-            "red_black",
-            "red_shadows",
-            "red_midtones",
-            "red_highlights",
-            "red_white",
-        ],
-        collapsed: true,
-        visible_when: None,
-        visible_when_lens_elements: None,
-    },
-    ParamGroup {
-        label: "Green",
-        params: &[
-            "green_black",
-            "green_shadows",
-            "green_midtones",
-            "green_highlights",
-            "green_white",
-        ],
-        collapsed: true,
-        visible_when: None,
-        visible_when_lens_elements: None,
-    },
-    ParamGroup {
-        label: "Blue",
-        params: &[
-            "blue_black",
-            "blue_shadows",
-            "blue_midtones",
-            "blue_highlights",
-            "blue_white",
-        ],
-        collapsed: true,
-        visible_when: None,
-        visible_when_lens_elements: None,
-    },
-];
-
-/// Curves' controls: five knots on each of Master, Red, Green and Blue, at the
-/// fixed inputs 0, 0.25, 0.5, 0.75 and 1. Each knot is that channel's curve
-/// **output** at its input — an ordinary animatable number, unlike AE's
-/// arbitrary-data point list, which only ever steps (docs/08 §3.30, K-396).
+/// Curves' controls: one curve on each of Master, Red, Green, Blue and
+/// Alpha — After Effects' own five (K-412).
 ///
-/// Defaults are the identity curve — every output is its own input — so a
-/// fresh Curves is the bit-exact passthrough: the grade family's sanctioned
-/// exception to the "no no-op default" rule (docs/08 §3.10).
+/// Each curve is an ordered list of 2..=16 points in the unit square, the
+/// identity diagonal by default, so a fresh Curves is the bit-exact
+/// passthrough: the grade family's sanctioned exception to the "no no-op
+/// default" rule (docs/08 §3.10).
 ///
-/// The knot rows repeat their labels across the four groups on purpose: the
-/// group header says which channel, so the row can say what the knot is.
+/// The rows carry only their channel's name because the panel draws them as
+/// channel tabs over one editor (K-412), not as five stacked widgets.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "curves",
     label = "Curves",
-    version = 1,
+    // K-412 replaced K-396's twenty fixed knots outright rather than
+    // migrating them: the effect is days old and unreleased, and a version
+    // bump is what keeps a cached frame from the knot generation out of the
+    // curve generation's picture (docs/08 §1.1).
+    version = 2,
     category = Colour,
     cost = Cheap,
     roi = Exact,
     // §2.2: a tone curve is non-linear, so it does not commute with
     // premultiplied alpha — grading premult would shift matte edges.
     premultiplied = false,
-    groups = CURVES_GROUPS,
 )]
 pub struct Curves {
-    /// Master's output at input 0 — the black point.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, label = "Black")]
-    pub master_black: f32,
-    /// Master's output at input 0.25.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.25,
-        hard_min = 0.0,
-        label = "Shadows"
-    )]
-    pub master_shadows: f32,
-    /// Master's output at input 0.5.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.5,
-        hard_min = 0.0,
-        label = "Midtones"
-    )]
-    pub master_midtones: f32,
-    /// Master's output at input 0.75.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.75,
-        hard_min = 0.0,
-        label = "Highlights"
-    )]
-    pub master_highlights: f32,
-    /// Master's output at input 1 — the white point.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, label = "White")]
-    pub master_white: f32,
-
-    /// Red's output at input 0.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, label = "Black")]
-    pub red_black: f32,
-    /// Red's output at input 0.25.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.25,
-        hard_min = 0.0,
-        label = "Shadows"
-    )]
-    pub red_shadows: f32,
-    /// Red's output at input 0.5.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.5,
-        hard_min = 0.0,
-        label = "Midtones"
-    )]
-    pub red_midtones: f32,
-    /// Red's output at input 0.75.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.75,
-        hard_min = 0.0,
-        label = "Highlights"
-    )]
-    pub red_highlights: f32,
-    /// Red's output at input 1.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, label = "White")]
-    pub red_white: f32,
-
-    /// Green's output at input 0.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, label = "Black")]
-    pub green_black: f32,
-    /// Green's output at input 0.25.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.25,
-        hard_min = 0.0,
-        label = "Shadows"
-    )]
-    pub green_shadows: f32,
-    /// Green's output at input 0.5.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.5,
-        hard_min = 0.0,
-        label = "Midtones"
-    )]
-    pub green_midtones: f32,
-    /// Green's output at input 0.75.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.75,
-        hard_min = 0.0,
-        label = "Highlights"
-    )]
-    pub green_highlights: f32,
-    /// Green's output at input 1.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, label = "White")]
-    pub green_white: f32,
-
-    /// Blue's output at input 0.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, label = "Black")]
-    pub blue_black: f32,
-    /// Blue's output at input 0.25.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.25,
-        hard_min = 0.0,
-        label = "Shadows"
-    )]
-    pub blue_shadows: f32,
-    /// Blue's output at input 0.5.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.5,
-        hard_min = 0.0,
-        label = "Midtones"
-    )]
-    pub blue_midtones: f32,
-    /// Blue's output at input 0.75.
-    #[slider(
-        min = 0.0,
-        max = 1.0,
-        default = 0.75,
-        hard_min = 0.0,
-        label = "Highlights"
-    )]
-    pub blue_highlights: f32,
-    /// Blue's output at input 1.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, label = "White")]
-    pub blue_white: f32,
+    /// The whole picture's curve, applied after the per-channel ones. It does
+    /// not touch alpha, which has its own row — After Effects' arrangement.
+    #[curve(label = "Master")]
+    pub master: CurvePoints,
+    /// Red's own curve, applied before Master.
+    #[curve(label = "Red")]
+    pub red: CurvePoints,
+    /// Green's own curve, applied before Master.
+    #[curve(label = "Green")]
+    pub green: CurvePoints,
+    /// Blue's own curve, applied before Master.
+    #[curve(label = "Blue")]
+    pub blue: CurvePoints,
+    /// Coverage's own curve. The graded colour is re-premultiplied by the
+    /// graded alpha, so bending this bends the matte and the picture together.
+    #[curve(label = "Alpha")]
+    pub alpha: CurvePoints,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
@@ -236,55 +74,29 @@ pub struct Curves {
 }
 
 impl Curves {
-    /// The knots and their monotone-cubic tangents, indexed `[knot][channel]`
-    /// with channel 0 Master and 1..3 R/G/B, plus the mix
+    /// The five baked tables and the mix — the bundle both kernels consume
     /// (docs/impl/effect-registry.md §2.4).
     ///
     /// The spline fit is host maths on purpose: both render paths take the
-    /// tangents this produced, so neither fits a curve per pixel and the two
+    /// table this produced, so neither fits a curve per pixel and the two
     /// cannot disagree about the shape.
     #[must_use]
-    pub fn packed(self) -> ([[f32; 4]; 5], [[f32; 4]; 5], f32) {
-        let channels = [
-            [
-                self.master_black,
-                self.master_shadows,
-                self.master_midtones,
-                self.master_highlights,
-                self.master_white,
-            ],
-            [
-                self.red_black,
-                self.red_shadows,
-                self.red_midtones,
-                self.red_highlights,
-                self.red_white,
-            ],
-            [
-                self.green_black,
-                self.green_shadows,
-                self.green_midtones,
-                self.green_highlights,
-                self.green_white,
-            ],
-            [
-                self.blue_black,
-                self.blue_shadows,
-                self.blue_midtones,
-                self.blue_highlights,
-                self.blue_white,
-            ],
-        ];
-        let mut y = [[0.0f32; 4]; 5];
-        let mut m = [[0.0f32; 4]; 5];
-        for (c, knots) in channels.iter().enumerate() {
-            let tangents = cpu::curve_tangents(*knots);
-            for i in 0..5 {
-                y[i][c] = knots[i];
-                m[i][c] = tangents[i];
-            }
+    pub fn packed(self) -> cpu::CurveTables {
+        let channels = [self.master, self.red, self.green, self.blue, self.alpha];
+        let mut t = [[0.0f32; cpu::CURVE_TABLE]; 5];
+        for (slot, points) in t.iter_mut().zip(channels) {
+            *slot = cpu::curve_table(&points);
         }
-        (y, m, (self.mix / 100.0).clamp(0.0, 1.0))
+        cpu::CurveTables {
+            t,
+            // Neutrality is decided on the *points*, not on the baked
+            // numbers: it is the same comparison the fixed-knot version made,
+            // it costs five equalities instead of 1285, and a curve somebody
+            // dragged into a straight line by hand is a curve, not a
+            // short-circuit.
+            neutral: channels.iter().all(|c| *c == CurvePoints::IDENTITY),
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+        }
     }
 }
 
@@ -297,7 +109,6 @@ impl EffectDef for CurvesDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let (y, m, mix) = Curves::read(p).packed();
-        cpu::curves(rgba, y, m, mix);
+        cpu::curves(rgba, &Curves::read(p).packed());
     }
 }

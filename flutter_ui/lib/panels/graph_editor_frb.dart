@@ -244,7 +244,13 @@ List<GraphChannel> graphChannels({
         if (fx.id.toString() != effectId) continue;
         for (final param in cachedListParameters(fx.name)) {
           if (param.id != paramId) continue;
-          if (param.kind is! BridgeParamKind_Float) continue;
+          // A Slider is a Float inside a closed range (K-414): the kind is the
+          // control, not the storage, so it keeps every float affordance —
+          // docs/08 §1.2 names the graph editor among them.
+          if (param.kind is! BridgeParamKind_Float &&
+              param.kind is! BridgeParamKind_Slider) {
+            continue;
+          }
           BridgeScalar? scalar;
           for (final v in fx.values) {
             if (v.id == param.id && v.value is BridgeEffectValue_Float) {

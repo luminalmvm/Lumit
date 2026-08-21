@@ -163,5 +163,6 @@ pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
         FxCategory::Temporal => "temporal",
         FxCategory::Transition => "transition",
         FxCategory::Utility => "utility",
+        FxCategory::Controls => "controls",
     }
 }

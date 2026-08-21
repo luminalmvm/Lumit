@@ -190,12 +190,30 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
 
 - `list_parameters(effect)` — one `BridgeParamInfo` per declared parameter, in schema order:
     its id, its label, and its **kind**, which is what decides the control drawn. The kinds
-    are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File, Layer and **MaskPath**.
+    are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File, Layer, **MaskPath**,
+    **Curve** and **Slider**.
     A `MaskPath` names one of the *owning layer's* masks (K-408) and crosses as a
     `BridgeEffectValue::MaskPath(Option<Uuid>)` — the mask id, or `None` for the panel's
     "First mask" entry. The **geometry never crosses**: the render flattens the curve
     engine-side, beside the op. The panel builds the dropdown from the mask names already in
     the layer entries it holds, so the row costs no call of its own per rebuild.
+    A `Curve` is a **tone curve** (K-412) and crosses as
+    `BridgeEffectValue::Curve(Vec<Vec<f32>>)` — an ordered list of 2..=16 `[x, y]` pairs in
+    the unit square, the identity diagonal `[[0, 0], [1, 1]]` by default. Here the shape
+    *does* cross, because a curve is at most sixteen pairs of numbers the user dragged and
+    the panel is the thing dragging them. It is **static** (like File, Layer and MaskPath):
+    a list that grows and shrinks has nothing to interpolate between two keyframes, which is
+    why After Effects' own curve blob steps rather than animating. The engine straightens
+    what it reads — sorted by x, repeated x dropped, clamped into the square, and the
+    diagonal when fewer than two points survive — so a panel writing mid-drag never has to,
+    and a write is never refused for being momentarily out of order.
+    A **`Slider`** (K-414 — a closed range) carries `default`, `min` and `max`, and those
+    two numbers are the travel *and* the hard bound, which is exactly what closed means. It
+    is a kind of its own because it draws a control of its own — a track and thumb with the
+    value beside it — the same reason `Angle` is. Its **value** still crosses as a
+    `BridgeEffectValue::Float`, the arrangement `Int` and `Angle` already use: the kind says
+    which control to draw, not how the number is stored, so a Slider row keeps every float
+    path the panel has — keyframes, the graph editor, the expression seed.
 - `list_parameter_groups(effect)` — the twirls (K-145). A group names a *contiguous run* of
     the schema's parameters and renders where its first member sits; an empty label renders
     headerless, and `visible_when_param`/`visible_when_values` hide the whole run while a
@@ -289,7 +307,11 @@ path, documented beside the types in
     channel. In the worker's drain policy each is its own class: a frame, a
     trace and a patch are three different questions, and none may supersede
     another — only its own kind, where the newest wins (a pointer that has moved
-    on makes the previous position worthless).
+    on makes the previous position worthless). A trace **says which trace it is**:
+    `BridgeScopeTrace.kind` echoes the requested code back, because two panels may
+    be asking at once — the Scopes panel and the Levels row's histogram (K-413) —
+    and on one shared stream each has to be able to tell whether the picture that
+    just arrived answers its own question.
 - **Instrumentation rides it too (K-276).** Two further messages come back on the
     same stream, both small and both about a frame rather than being one:
     `WorkerResponse::RenderProgress` (`BridgeRenderProgress`: frame, stage code,

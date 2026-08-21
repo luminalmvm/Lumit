@@ -75,6 +75,14 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
     or derive the roll in *periods* rather than pixels and multiply in `packed()` (no new API,
     but the f64 product rounds once more and so is not bit-identical to the old arm).
 
+- **The effect manual is five pages behind the catalogue.** The catalogue stands at 90 and
+    `web-docs/src/content/docs/effects/` holds 85 pages: K-414's Controls category has no
+    index and no five pages, and the four wipes' Completion still prints as `float` where
+    the schema now says `slider`. `npm run docs:effects` from `web-docs/` creates and
+    refreshes all of it inside the `GENERATED` markers; the five new pages then want their
+    protected prose written by hand. Nothing in CI gates the manual, which is exactly why
+    it is written down here.
+
 ---
 
 ## Now - Flutter frontend parity and regressions
@@ -708,8 +716,15 @@ project does not contain).
    (px@comp, % of the comp diagonal, AE's per cent of the layer, and the two bare factors
    AE reads as decimals), the option collapses and splits §5 names, layer references onto
    the K-395 matte row, AE's two clock-reading controls as keyframes, and thirty-eight
-   conversion tests. Two things are owed:
+   conversion tests. Three things are owed:
    - **The golden-frame tests §5 requires of every mapped conversion**, as above.
+   - **The five Controls match names are claimed but unaudited** (K-414): `ADBE Slider
+     Control`, `ADBE Angle Control`, `ADBE Checkbox Control`, `ADBE Color Control` and
+     `ADBE Point Control` were added to this half after the 2026-08-20 sitting, so
+     docs/11 §5 marks their rows **pending** and `tools/ae-audit/
+     claimed-matchnames.txt` carries them (60 names to 65). The next sitting confirms
+     the five spellings; a wrong one costs only the placeholder road §6 already
+     specifies.
    - **Turbulent displace's Pinning maps at one index**: the audit records a dropdown's
      default but not its option strings, so only AE's own default (every edge) is pinned
      from evidence and every other index is reported rather than guessed. A second audit
@@ -850,10 +865,6 @@ substitutes left in it.
    skips (docs/08 §3.56, §3.54) that the import reports rather than approximates. The
    axis swap is six lines whenever someone misses it; the noise wave types are §3.37's
    field wearing a wave's clothes and probably never want building.
- - **Curves wants a drawn curve editor.** v1 ships the stored form (five knots a
-   channel, K-396) as twenty ordinary rows. The editor is a panel change and not a
-   data one: `customEffectRows` in `effect_controls_panel_frb.dart` is the hook, and a
-   curve authored today survives it.
  - ~~**The noise core is built but only half used.**~~ **Done 2026-08-20.** Turbulent
    displace reads the same field. The WGSL half moved to `fx_noise_core.wgsl`, which is
    prepended to both kernels at pipeline build (WGSL has no `include`), so there is one

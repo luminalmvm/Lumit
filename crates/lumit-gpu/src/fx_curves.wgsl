@@ -1,34 +1,33 @@
-// Curves (docs/08-EFFECTS.md §3.30, K-396): a monotone-cubic tone curve per
-// channel — five knots at the fixed inputs 0, 0.25, 0.5, 0.75, 1, evaluated on
+// Curves (docs/08-EFFECTS.md §3.30, K-412): a tone curve per channel, baked
+// host-side into a 257-entry table and read here as a lookup, evaluated on
 // unpremultiplied colour (§2.2, the wrap fused into the kernel) and
 // re-premultiplied on the way out. Mirrors lumit_core::fx::cpu::curves
 // op-for-op (§1.6: the CPU is the oracle).
 //
-// The spline is NOT fitted here: the knots and their Fritsch-Carlson limited
-// tangents both arrive in the uniform, computed once host-side by
-// `Curves::packed`, so this kernel and the CPU reference evaluate identical
-// numbers and neither fits a curve per pixel.
+// The spline is NOT fitted here. `Curves::packed` fits the clamped cubic once
+// a frame in f64 and writes down 257 samples a channel, so this kernel and the
+// CPU reference read identical numbers and neither draws a curve per pixel —
+// Lightning's discipline (§3.74) on a shape that is the same for every pixel.
 //
-// Lane 0 of every knot is Master, lanes 1..3 are R/G/B. The per-channel curve
-// runs first, then Master — Photoshop's and AE's order.
+// Channel 0 is Master, 1..3 are R/G/B, 4 is Alpha. The per-channel curve runs
+// first, then Master — Photoshop's and AE's order. Master never touches alpha.
+
+// 257 entries a channel, 65 vec4s a channel, five channels.
+const N = 257;
+const V = 65;
 
 struct Params {
-    y: array<vec4<f32>, 5>,  // knot outputs, [knot][channel]
-    m: array<vec4<f32>, 5>,  // monotone tangents, same indexing
-    mix_amt: f32,            // 0..1, blended against the unprocessed input
+    t: array<vec4<f32>, 5 * V>,  // the five tables, four entries a vec4
+    mix_amt: f32,                // 0..1, blended against the unprocessed input
+    neutral: u32,                // every channel is the identity diagonal
     _pad0: f32,
     _pad1: f32,
-    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
-
-// The knot spacing (== cpu::CURVE_H). Uniform by construction, which is what
-// keeps the interval lookup a multiply and a floor.
-const H = 0.25;
 
 // The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
@@ -38,25 +37,25 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// One channel's curve at x (== cpu::curve_at): cubic Hermite between the two
-// knots either side, a straight line along the end tangent outside 0..1 — so
-// scene-linear values above 1 curve honestly and are never clipped (§2.1).
+// Entry i of channel c (== cpu's `t[c][i]`).
+fn tab(c: i32, i: i32) -> f32 {
+    let v = p.t[c * V + (i >> 2)];
+    return v[i & 3];
+}
+
+// One channel's baked curve at x (== cpu::curve_at): a table lookup with
+// linear interpolation. The index is clamped and the fraction is not, so an
+// input outside 0..1 extrapolates along the first or last segment rather than
+// clipping — a scene-linear value above 1 keeps being curved honestly (§2.1)
+// and a slightly negative one stays continuous.
 fn curve_at(x: f32, c: i32) -> f32 {
-    if (x <= 0.0) {
-        return p.y[0][c] + p.m[0][c] * x;
-    }
-    if (x >= 1.0) {
-        return p.y[4][c] + p.m[4][c] * (x - 1.0);
-    }
-    let fi = floor(x * 4.0);
-    let i = min(i32(fi), 3);
-    let t = (x - fi * H) / H;
-    let t2 = t * t;
-    let t3 = t2 * t;
-    return p.y[i][c] * (2.0 * t3 - 3.0 * t2 + 1.0)
-        + p.m[i][c] * H * (t3 - 2.0 * t2 + t)
-        + p.y[i + 1][c] * (-2.0 * t3 + 3.0 * t2)
-        + p.m[i + 1][c] * H * (t3 - t2);
+    let last = f32(N - 1);
+    let s = x * last;
+    let fi = floor(clamp(s, 0.0, last - 1.0));
+    let i = i32(fi);
+    let f = s - fi;
+    let a = tab(c, i);
+    return a + (tab(c, i + 1) - a) * f;
 }
 
 @compute @workgroup_size(8, 8)
@@ -68,22 +67,20 @@ fn curves(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     // Neutral short-circuit (== the CPU reference's early return): the
-    // identity curve on all four channels.
-    if (all(p.y[0] == vec4<f32>(0.0))
-        && all(p.y[1] == vec4<f32>(0.25))
-        && all(p.y[2] == vec4<f32>(0.5))
-        && all(p.y[3] == vec4<f32>(0.75))
-        && all(p.y[4] == vec4<f32>(1.0))) {
+    // identity curve on all five channels, decided host-side.
+    if (p.neutral != 0u) {
         textureStore(dst, xy, o);
         return;
     }
     let u = unpremult(o);
+    let graded_a = curve_at(o.a, 4);
     let v = vec3<f32>(
         curve_at(curve_at(u.r, 1), 0),
         curve_at(curve_at(u.g, 2), 0),
         curve_at(curve_at(u.b, 3), 0),
     );
-    let graded = v * o.a;
+    let graded = v * graded_a;
     let outv = o.rgb * (1.0 - p.mix_amt) + graded * p.mix_amt;
-    textureStore(dst, xy, vec4<f32>(outv, o.a));
+    let outa = o.a * (1.0 - p.mix_amt) + graded_a * p.mix_amt;
+    textureStore(dst, xy, vec4<f32>(outv, outa));
 }

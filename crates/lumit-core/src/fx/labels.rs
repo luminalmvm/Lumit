@@ -107,9 +107,9 @@ mod tests {
     /// A walk that suddenly finds almost nothing is a broken walk, not a small
     /// catalogue — the guard the old scrape had, kept for the same reason.
     #[test]
-    fn the_catalogue_has_the_labels_a_catalogue_of_83_should() {
+    fn the_catalogue_has_the_labels_a_catalogue_of_90_should() {
         assert!(
-            user_facing_labels().len() > 450,
+            user_facing_labels().len() > 600,
             "the catalogue declares far more labels than this - the walk has lost \
              a source of them"
         );

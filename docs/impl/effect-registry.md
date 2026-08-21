@@ -93,9 +93,15 @@ The macro generates, from that one declaration:
 - `const IDS: &[ParamId]` and one `pub const <FIELD>: ParamId` per field, so a lookup in a
   hot loop is a comparison of two `u64`s that were computed at compile time.
 
-Attributes map to `ParamKind` one-for-one: `#[slider]` → `Float`, `#[counter]` → `Int`,
+Attributes map to `ParamKind` one-for-one: `#[slider]` → `Float`, `#[bounded]` → `Slider`
+(K-414 — a closed range, `min`/`max`/`default` and no hard pair, because the range *is* the
+hard pair; the value side stays a float, so adopting it on an existing parameter changes
+nothing but the control), `#[counter]` → `Int`,
 `#[dial]` → `Angle`, `#[toggle]` → `Bool`, `#[choice]` → `Choice`, `#[colour]` → `Colour`,
-`#[seed]` → `Seed`, `#[file]` → `File`, `#[layer]` → `Layer`, `#[mask_path]` → `MaskPath`
+`#[seed]` → `Seed`, `#[file]` → `File`, `#[layer]` → `Layer`, `#[curve]` → `Curve`
+(K-412 — a tone curve's own control points; it takes a label and nothing else, since the
+points live in the unit square by definition and the default is the identity diagonal for
+every one of them), `#[mask_path]` → `MaskPath`
 (K-408 — one of the owning layer's masks, whose geometry rides beside the op; its
 `self_default` defaults to **true**, the other way round from `#[layer]`'s, because an
 effect that wants a path wants the one path most layers have). Group and greying metadata
@@ -165,8 +171,20 @@ pub enum Value {
     /// A file reference resolves to its slot in the stack's file table, for the
     /// same reason.
     File(u32),
+    /// A tone curve's own control points (K-412), inline: at most sixteen
+    /// pairs, small enough to stay `Copy` and to be hashed field by field.
+    Curve(CurvePoints),
 }
 ```
+
+**The curve is the one value that carries a shape, and it is deliberately not a side table.**
+A mask path rides beside the op because a path is a thousand vertices flattened at a
+tolerance; a tone curve is at most sixteen pairs of numbers somebody dragged, so it fits the
+three promises this bag makes — `Copy`, borrows nothing, hashed field by field — where a path
+would break all three. The price is the width of every arena slot, since an enum is as wide as
+its widest variant; the gain is that both render paths bake the identical table from the
+identical points in one `packed()`, with no second list to keep in step. Move it beside the op
+if that width ever shows up in a profile: nothing but `Curves::packed` reads the points.
 
 The storage is an **arena per resolved stack**, not a fixed-size array per effect:
 
@@ -508,6 +526,14 @@ with the same row widgets. Four rules, which are the answers the issue thread ar
 A spare parameter needs no shader at all, which is why the same mechanism gives us the
 "slider effect" the thread wanted: an effect whose whole purpose is to hold values for
 other properties to read. It renders as identity and declares `roi: Exact, cost: Trivial`.
+
+**The Controls family got there first, and without the mechanism** (K-414, docs/08 §3.80).
+Five ordinary declared effects — Slider control, Angle control, Checkbox control, Colour
+control, Point control — each one declared row, `is_image_op() == false`, `matte = false`,
+`roi: Exact, cost: Trivial`. They are what a user actually reaches for, and they needed
+none of §4's machinery, because a row somebody wants on *this* instance is a different
+thing from a row somebody wants on *any* instance. Spare parameters remain worth building
+for the second case; the first is now five lines of catalogue.
 
 ## 5. Traps
 

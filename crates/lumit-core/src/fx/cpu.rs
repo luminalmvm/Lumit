@@ -605,111 +605,226 @@ pub fn tint(rgba: &mut [f32], black: [f32; 3], white: [f32; 3], mix: f32) {
     }
 }
 
-/// The five fixed inputs Curves' knots sit at (docs/08 §3.30), and the
-/// identity outputs they default to — the neutral curve, and the spacing
-/// every evaluation assumes.
-pub const CURVE_X: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+/// Entries in one channel's baked tone curve (K-412): 257 samples of the
+/// spline at `i / 256`, so the last entry is input 1 exactly and the step is
+/// a power of two — which is what keeps the identity curve bit-exact through
+/// the lookup.
+pub const CURVE_TABLE: usize = 257;
 
-/// The gap between two Curves knots. Uniform by construction, which is what
-/// keeps the interval lookup a multiply and a floor.
-pub const CURVE_H: f32 = 0.25;
-
-/// One channel's monotone-cubic tangents at the five knots (docs/08 §3.30),
-/// Fritsch–Carlson limited so the curve cannot overshoot between two knots —
-/// which is what stops a lifted highlight knot from dipping the curve below
-/// its neighbour and ringing a dark halo into a roll-off.
+/// Curves' five baked channel tables and its mix — everything both render
+/// paths read (docs/08 §3.30, K-412).
 ///
-/// Host-side maths (docs/impl/effect-registry.md §2.4): both render paths take
-/// the tangents this produced, so neither fits a spline per pixel and the two
-/// cannot disagree about the shape.
+/// **The spline is fitted once, host-side**
+/// ([`crate::fx::effects::curves::Curves::packed`]), never per pixel and
+/// never twice: the CPU reference and the WGSL kernel are handed the
+/// identical numbers, so §1.6 only has to check the *lookup*. That is
+/// Lightning's discipline (§3.74) applied to a shape that is the same for
+/// every pixel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurveTables {
+    /// `[channel][entry]`: channel 0 Master, 1..3 R/G/B, 4 Alpha.
+    pub t: [[f32; CURVE_TABLE]; 5],
+    /// Every channel is the identity diagonal, so the effect is the bit-exact
+    /// passthrough. Decided host-side because the kernel cannot afford to
+    /// compare 1285 numbers a pixel.
+    pub neutral: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The identity table: `t[i] == i / 256`, what a fresh channel bakes to.
 #[must_use]
-pub fn curve_tangents(y: [f32; 5]) -> [f32; 5] {
-    let mut d = [0.0f32; 4];
-    for i in 0..4 {
-        d[i] = (y[i + 1] - y[i]) / CURVE_H;
+pub fn curve_identity_table() -> [f32; CURVE_TABLE] {
+    let mut t = [0.0f32; CURVE_TABLE];
+    for (i, slot) in t.iter_mut().enumerate() {
+        *slot = i as f32 / (CURVE_TABLE - 1) as f32;
     }
-    let mut m = [
-        d[0],
-        (d[0] + d[1]) / 2.0,
-        (d[1] + d[2]) / 2.0,
-        (d[2] + d[3]) / 2.0,
-        d[3],
-    ];
-    for i in 0..4 {
-        if d[i] == 0.0 {
-            // A flat interval pins both its ends flat, or the cubic would
-            // bulge through a segment the knots say is level.
-            m[i] = 0.0;
-            m[i + 1] = 0.0;
+    t
+}
+
+/// Bake one channel's control points into its 257-entry table (K-412).
+///
+/// # In plain terms
+///
+/// The user drags a few points; this draws the smooth line through them and
+/// writes down where that line is at 257 evenly spaced inputs. Everything
+/// downstream reads the written-down numbers, so nothing has to re-draw the
+/// line for every pixel of every frame.
+///
+/// **The spline is a clamped cubic** — the family Photoshop's curve comes
+/// from, and so the one every editor's hand already knows. Between two points
+/// it is a cubic; at every interior point the second derivative matches on
+/// both sides (that is what makes it *the* cubic spline rather than a
+/// piecewise guess); and at the two ends the slope is **clamped to the end
+/// secant**, the straight line to the neighbouring point. That end condition
+/// is what makes a two-point curve exactly its own straight line, which the
+/// identity diagonal depends on.
+///
+/// **The clamping rule.** Points live in the unit square, and so does the
+/// baked line: every sample is clamped into `0..=1`. A cubic through monotone
+/// points can bulge past its own end points, and a tone curve that climbed
+/// above the white the user placed would ring a bright halo into a roll-off.
+/// Clipping *inputs* is a different matter and does not happen — [`curve_at`]
+/// extrapolates along the table's own end segments, so a scene-linear value
+/// above 1 is carried on rather than flattened (§2.1).
+///
+/// Evaluated in `f64` in one fixed order, so the same points always bake to
+/// the same bytes on every machine (14-ENGINEERING-RULES §5).
+#[must_use]
+pub fn curve_table(points: &crate::fx::CurvePoints) -> [f32; CURVE_TABLE] {
+    const MAX: usize = crate::fx::CURVE_MAX_POINTS;
+    let p = points.points();
+    let n = p.len();
+    let mut x = [0.0f64; MAX];
+    let mut y = [0.0f64; MAX];
+    for i in 0..n {
+        x[i] = f64::from(p[i][0]);
+        y[i] = f64::from(p[i][1]);
+    }
+
+    // Interval widths and secant slopes.
+    let mut h = [0.0f64; MAX];
+    let mut d = [0.0f64; MAX];
+    for i in 0..n - 1 {
+        h[i] = x[i + 1] - x[i];
+        // `sanitised` guarantees a strictly increasing x, so `h` is never 0;
+        // the guard is here because a divide by zero would be a NaN table
+        // rather than a crash, and a NaN table is a black frame nobody can
+        // explain.
+        d[i] = if h[i] > 0.0 {
+            (y[i + 1] - y[i]) / h[i]
         } else {
-            let a = m[i] / d[i];
-            let b = m[i + 1] / d[i];
-            let s = a * a + b * b;
-            if s > 9.0 {
-                let t = 3.0 / s.sqrt();
-                m[i] = t * a * d[i];
-                m[i + 1] = t * b * d[i];
-            }
+            0.0
+        };
+    }
+
+    // Slopes at the points. The two ends are clamped to their secants; the
+    // interior ones come from the C2 condition, a tridiagonal system solved
+    // by the Thomas algorithm (n is at most 16, so this is a handful of
+    // operations).
+    let mut m = [0.0f64; MAX];
+    m[0] = d[0];
+    m[n - 1] = d[n - 2];
+    if n > 2 {
+        let rows = n - 2;
+        let mut lower = [0.0f64; MAX];
+        let mut diag = [0.0f64; MAX];
+        let mut upper = [0.0f64; MAX];
+        let mut rhs = [0.0f64; MAX];
+        for r in 0..rows {
+            let i = r + 1;
+            lower[r] = h[i];
+            diag[r] = 2.0 * (h[i - 1] + h[i]);
+            upper[r] = h[i - 1];
+            rhs[r] = 3.0 * (h[i] * d[i - 1] + h[i - 1] * d[i]);
+        }
+        // The known end slopes move to the right-hand side.
+        rhs[0] -= lower[0] * m[0];
+        lower[0] = 0.0;
+        rhs[rows - 1] -= upper[rows - 1] * m[n - 1];
+        upper[rows - 1] = 0.0;
+
+        for r in 1..rows {
+            let w = if diag[r - 1] != 0.0 {
+                lower[r] / diag[r - 1]
+            } else {
+                0.0
+            };
+            diag[r] -= w * upper[r - 1];
+            rhs[r] -= w * rhs[r - 1];
+        }
+        for r in (0..rows).rev() {
+            let above = if r + 1 < rows { m[r + 2] } else { 0.0 };
+            let num = rhs[r] - upper[r] * above;
+            m[r + 1] = if diag[r] != 0.0 { num / diag[r] } else { 0.0 };
         }
     }
-    m
+
+    // Sample the Hermite pieces at i / 256, walking the intervals forward so
+    // the search is not repeated per sample.
+    let mut table = [0.0f32; CURVE_TABLE];
+    let mut seg = 0usize;
+    for (i, slot) in table.iter_mut().enumerate() {
+        let xi = i as f64 / (CURVE_TABLE - 1) as f64;
+        while seg + 2 < n && xi >= x[seg + 1] {
+            seg += 1;
+        }
+        let v = if xi <= x[0] {
+            // Before the first point and after the last, the clamped end
+            // slope carries on straight — the same line the first and last
+            // cubic pieces leave along, so there is no kink at the join.
+            y[0] + m[0] * (xi - x[0])
+        } else if xi >= x[n - 1] {
+            y[n - 1] + m[n - 1] * (xi - x[n - 1])
+        } else {
+            let hs = h[seg];
+            let t = if hs > 0.0 { (xi - x[seg]) / hs } else { 0.0 };
+            let t2 = t * t;
+            let t3 = t2 * t;
+            y[seg] * (2.0 * t3 - 3.0 * t2 + 1.0)
+                + m[seg] * hs * (t3 - 2.0 * t2 + t)
+                + y[seg + 1] * (-2.0 * t3 + 3.0 * t2)
+                + m[seg + 1] * hs * (t3 - t2)
+        };
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            *slot = v.clamp(0.0, 1.0) as f32;
+        }
+    }
+    table
 }
 
-/// One channel of the Curves spline at `x` (docs/08 §3.30): a cubic Hermite
-/// between the two knots either side, and a straight line along the end
-/// tangent outside 0..1 — so scene-linear values above 1 curve honestly and
-/// are never clipped (§2.1), and slightly negative light stays continuous.
+/// One channel of a baked tone curve at `x` (K-412): a lookup into the
+/// 257-entry table with linear interpolation between entries.
 ///
-/// `y`/`m` are indexed `[knot][channel]`, the shape the uniform carries, so
-/// the WGSL twin reads the identical layout.
+/// The index is clamped but the fraction is not, so an input **outside 0..1
+/// extrapolates along the table's first or last segment** rather than
+/// clipping — which is how a scene-linear value above 1 keeps being curved
+/// honestly (§2.1) and a slightly negative one stays continuous. One
+/// expression, no branches, and the WGSL twin is the same four lines.
+///
+/// Bit-exact on the identity table: `t[i] == i / 256`, every step is a power
+/// of two, and the arithmetic returns `x` unchanged.
 #[must_use]
-pub fn curve_at(x: f32, y: &[[f32; 4]; 5], m: &[[f32; 4]; 5], c: usize) -> f32 {
-    if x <= 0.0 {
-        return y[0][c] + m[0][c] * x;
-    }
-    if x >= 1.0 {
-        return y[4][c] + m[4][c] * (x - 1.0);
-    }
-    let fi = (x * 4.0).floor();
+pub fn curve_at(x: f32, t: &[f32; CURVE_TABLE]) -> f32 {
+    let last = (CURVE_TABLE - 1) as f32;
+    let s = x * last;
+    let fi = s.clamp(0.0, last - 1.0).floor();
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let i = (fi as usize).min(3);
-    let t = (x - fi * CURVE_H) / CURVE_H;
-    let t2 = t * t;
-    let t3 = t2 * t;
-    y[i][c] * (2.0 * t3 - 3.0 * t2 + 1.0)
-        + m[i][c] * CURVE_H * (t3 - 2.0 * t2 + t)
-        + y[i + 1][c] * (-2.0 * t3 + 3.0 * t2)
-        + m[i + 1][c] * CURVE_H * (t3 - t2)
+    let i = (fi as usize).min(CURVE_TABLE - 2);
+    let f = s - fi;
+    let a = t[i];
+    a + (t[i + 1] - a) * f
 }
 
-/// Whether a Curves knot set is the identity curve on all four channels —
-/// the bit-exact neutral point (the WGSL twin runs the same comparison).
-fn curves_neutral(y: &[[f32; 4]; 5]) -> bool {
-    (0..5).all(|i| y[i] == [CURVE_X[i]; 4])
-}
-
-/// Curves (docs/08 §3.30): a monotone-cubic tone curve per channel, on
-/// unpremultiplied colour (§2.2), re-premultiplied on the way out — exactly
-/// Contrast's and Gamma's premultiply handling, a tone curve being non-linear.
+/// Curves (docs/08 §3.30, K-412): a tone curve per channel, baked to a table
+/// host-side and read here as a lookup. On unpremultiplied colour (§2.2),
+/// re-premultiplied on the way out — exactly Contrast's and Gamma's
+/// premultiply handling, a tone curve being non-linear.
+///
 /// The **per-channel curves run first, then Master** (Photoshop's and AE's
-/// order, so an imported curve set lands the same way round); lane 0 of each
-/// knot is Master and lanes 1..3 are R/G/B. Identity knots on all four
-/// channels short-circuit the whole effect (bit-exact identity — a
-/// short-circuit, not a reliance on the spline reproducing `y = x`; the WGSL
-/// twin matches). Continuous everywhere, so it is safe under the §1.6 fp16
-/// ULP oracle; alpha is untouched.
-pub fn curves(rgba: &mut [f32], y: [[f32; 4]; 5], m: [[f32; 4]; 5], mix: f32) {
-    if curves_neutral(&y) {
+/// order, so an imported curve set lands the same way round). **Alpha is its
+/// own channel** and Master does not touch it, as in After Effects; the
+/// graded colour is re-premultiplied by the *graded* alpha, so a curve that
+/// moves coverage moves the picture with it rather than leaving a doubled
+/// matte. Identity curves on all five channels short-circuit the whole effect
+/// (bit-exact identity — a short-circuit, not a reliance on the table
+/// reproducing `y = x`; the WGSL twin matches). Continuous everywhere, so it
+/// is safe under the §1.6 fp16 ULP oracle.
+pub fn curves(rgba: &mut [f32], p: &CurveTables) {
+    if p.neutral {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
     for px in rgba.chunks_exact_mut(4) {
         let a = px[3];
         let u = unpremult(px);
+        let graded_a = curve_at(a, &p.t[4]);
         for c in 0..3 {
-            let v = curve_at(curve_at(u[c], &y, &m, c + 1), &y, &m, 0);
-            let graded = v * a;
-            px[c] = px[c] * (1.0 - mix) + graded * mix;
+            let v = curve_at(curve_at(u[c], &p.t[c + 1]), &p.t[0]);
+            let graded = v * graded_a;
+            px[c] = px[c] * (1.0 - p.mix) + graded * p.mix;
         }
+        px[3] = a * (1.0 - p.mix) + graded_a * p.mix;
     }
 }
 

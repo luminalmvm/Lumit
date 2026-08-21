@@ -16,6 +16,8 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
+import 'dart:typed_data';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -36,6 +38,7 @@ import '../theme/theme.dart';
 import '../widgets/angle_dial.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import '../widgets/curve_editor.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'keyframe_controls_frb.dart';
@@ -243,8 +246,10 @@ class EffectParamRowFrb extends StatelessWidget {
   }
 
   /// The scalar behind this row when the kind is one that can animate, else
-  /// null. Float is the only single-scalar animatable kind the schema declares;
-  /// a colour animates per channel, which the swatch has no room to key.
+  /// null. Float, Int and Slider are the single-scalar animatable kinds the
+  /// schema declares — all three store a float, differing only in the control
+  /// drawn over it; a colour animates per channel, which the swatch has no
+  /// room to key.
   /// Draw `child` as a greyed row when another parameter has taken it over.
   ///
   /// Faded **and** deaf: [IgnorePointer] is what makes the greying honest, since
@@ -257,10 +262,12 @@ class EffectParamRowFrb extends StatelessWidget {
       : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
 
   BridgeScalar? _animatableScalarOf(BridgeEffectValue? value) {
-    // Int is a Float value with integer display (docs/08 §1.2), so it
-    // animates exactly like Float.
+    // Int is a Float value with integer display (docs/08 §1.2), and a Slider is
+    // a Float value inside a closed range (K-414), so both animate exactly like
+    // Float — the kind is the control, not the storage.
     if (param.kind is! BridgeParamKind_Float &&
-        param.kind is! BridgeParamKind_Int) {
+        param.kind is! BridgeParamKind_Int &&
+        param.kind is! BridgeParamKind_Slider) {
       return null;
     }
     return switch (value) {
@@ -354,6 +361,34 @@ class EffectParamRowFrb extends StatelessWidget {
             keyName: '$id-${param.id}',
             integer: true,
             write: (s) => _set(BridgeEffectValue.float(s)),
+          );
+        }
+        return Text('—', style: t.small);
+
+      case BridgeParamKind_Slider(:final min, :final max):
+        if (value case BridgeEffectValue_Float(:final field0)) {
+          return _sliderControl(
+            context,
+            scalar: field0,
+            frame: frame,
+            min: min,
+            max: max,
+            keyName: '$id-${param.id}',
+          );
+        }
+        return Text('—', style: t.small);
+
+      case BridgeParamKind_Curve():
+        if (value case BridgeEffectValue_Curve(:final field0)) {
+          // The lone-curve case. Curves' five channels fold into one tabbed
+          // editor before they ever reach here (the panel's `_paramRows`),
+          // exactly as an `_x`/`_y` pair folds into one point row; a schema
+          // declaring a single curve gets the same plot without the tabs.
+          return CurveEditor(
+            key: ValueKey<String>('fx-curve-$id-${param.id}'),
+            points: curvePointsOf(field0),
+            onLive: (p) => _setLive(curveValue(p)),
+            onCommit: (p) => _set(curveValue(p)),
           );
         }
         return Text('—', style: t.small);
@@ -652,6 +687,96 @@ class EffectParamRowFrb extends StatelessWidget {
       );
     }
     return null;
+  }
+
+  /// A closed range: the track and thumb, with the number beside it (K-414,
+  /// docs/08 §1.2).
+  ///
+  /// The same shape the angle row has, and for the same reason — the track is a
+  /// second grip on one value, not a second control, so it sits beside the
+  /// number rather than under it. `min`/`max` are the travel *and* the hard
+  /// bound, which is what makes the range closed: there is no picture either
+  /// side of a wipe's Completion, so nothing may be typed past its ends either.
+  Widget _sliderControl(
+    BuildContext context, {
+    required BridgeScalar scalar,
+    required int frame,
+    required double min,
+    required double max,
+    required String keyName,
+  }) {
+    // A driven parameter is a line of code, not a number to drag — the same
+    // answer the Float row gives.
+    if (scalar case BridgeScalar_Expression expr) {
+      return EffectParamRowExpression(
+        key: ValueKey<String>('fx-expression-$keyName-${param.hashCode}'),
+        value: expr,
+        comp: comp,
+        frame: frame,
+        layer: currentLayer,
+        set: _set,
+        setLive: _setLive,
+      );
+    }
+
+    final animated = scalar is! BridgeScalar_Static;
+    final shown = animated
+        ? sampleScalar(scalar: scalar, time: timeOfFrame(comp, frame))
+        : scalar.field0;
+
+    void write(double v) {
+      final clamped = v.clamp(min, max).toDouble();
+      _set(BridgeEffectValue.float(animated
+          ? scalarWithValueAt(scalar, clamped, comp, frame)
+          : BridgeScalar.static_(clamped)));
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _scalarField(
+          context,
+          scalar: scalar,
+          frame: frame,
+          sliderMin: min,
+          sliderMax: max,
+          hardMin: min,
+          hardMax: max,
+          keyName: keyName,
+          write: (s) => _set(BridgeEffectValue.float(s)),
+          // The same seed the Float row offers: a closed range keeps every
+          // float affordance (K-414), and turning an expression on must not
+          // move the picture until it is edited.
+          setExpression: () {
+            final sampled = sampleScalarWithContext(
+                scalar: scalar,
+                time: timeOfFrame(comp, frame),
+                layer: currentLayer);
+            _set(BridgeEffectValue.float(
+                BridgeScalar.expression(sampled.toString())));
+          },
+        ),
+        const SizedBox(width: 6),
+        HouseSlider(
+          key: ValueKey<String>('fx-slider-$keyName'),
+          value: shown.clamp(min, max).toDouble(),
+          min: min,
+          max: max,
+          // The number is already beside it, and a second copy of it would
+          // cost the value column room it has not got.
+          showValue: false,
+          width: 78,
+          // A drag previews and commits once on release, exactly as the number
+          // field does, so the two grips behave the same.
+          commitOnRelease: true,
+          onChangeLive: animated
+              ? null
+              : (v) => _setLive(BridgeEffectValue.float(
+                  BridgeScalar.static_(v.clamp(min, max).toDouble()))),
+          onChanged: write,
+        ),
+      ],
+    );
   }
 
   /// A number in degrees with the dial under it (docs/07 §6).
@@ -1307,7 +1432,34 @@ BridgeEffectValue defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       // Unset is "First mask" (K-408), not "no mask" — what it comes to is
       // the engine's answer, not a value written here.
       BridgeParamKind_MaskPath() => const BridgeEffectValue.maskPath(),
+      // A closed range stores an ordinary float (K-414): the kind is the
+      // control, not the storage.
+      BridgeParamKind_Slider(:final default_) =>
+        BridgeEffectValue.float(BridgeScalar.static_(default_)),
+      // Every curve's default is the identity diagonal (K-412) — there is
+      // nothing per-parameter to declare, which is why the kind carries no
+      // fields.
+      BridgeParamKind_Curve() => curveValue(curveIdentity),
     };
+
+/// A curve value's points as plain `[x, y]` pairs, straightened only as far as
+/// the editor needs: the diagonal stands in for anything with fewer than two
+/// usable points, exactly as the engine's own read does (docs/08 §3.30).
+List<List<double>> curvePointsOf(List<Float32List> raw) {
+  final points = <List<double>>[
+    for (final p in raw)
+      if (p.length >= 2) [p[0].toDouble(), p[1].toDouble()],
+  ];
+  return points.length >= 2 ? points : curveIdentity;
+}
+
+/// The bridge value for a point list. Written as the editor holds it — the
+/// engine straightens what it reads, so a curve mid-drag is never refused for
+/// being momentarily out of order (docs/17).
+BridgeEffectValue curveValue(List<List<double>> points) =>
+    BridgeEffectValue.curve([
+      for (final p in points) Float32List.fromList([p[0], p[1]]),
+    ]);
 
 /// One channel of a declared colour default, tolerating a short list — a schema
 /// that names only RGB still resets to an opaque colour rather than throwing.
@@ -1680,9 +1832,16 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                 " = ",
                 style: t.body.copyWith(color: t.textMuted),
               ),
-              Text(
-                value.toStringAsPrecision(6),
-                style: t.mono.copyWith(color: t.textMuted),
+              // Six significant figures can run to twelve characters
+              // ("1.00000e+16"), which is wider than this readout: it gives
+              // way rather than striping the row.
+              Flexible(
+                child: Text(
+                  value.toStringAsPrecision(6),
+                  style: t.mono.copyWith(color: t.textMuted),
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

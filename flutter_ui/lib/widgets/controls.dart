@@ -669,11 +669,9 @@ class BareDropdown<T> extends StatelessWidget {
               for (var i = 0; i < options.length; i++) ...[
                 if (group != null &&
                     group!(options[i]) != null &&
-                    (i == 0 ||
-                        group!(options[i - 1]) != group!(options[i])))
+                    (i == 0 || group!(options[i - 1]) != group!(options[i])))
                   Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
+                    padding: EdgeInsets.fromLTRB(10, i == 0 ? 6 : 10, 10, 2),
                     child: Text(
                       group!(options[i])!,
                       style: t.small.copyWith(color: t.textMuted),
@@ -2428,6 +2426,12 @@ class _HouseSliderState extends State<HouseSlider> {
             final v = _fromDx(d.localPosition.dx, width);
             if (widget.commitOnRelease) {
               setState(() => _pending = v);
+              // Held back from the *document*, not from the picture: a caller
+              // with a live channel (an effect parameter's preview render)
+              // still sees every tick, and only the release commits. Without
+              // this the two options were exclusive, and a slider could either
+              // preview or commit once, never both.
+              widget.onChangeLive?.call(v);
             } else {
               (widget.onChangeLive ?? widget.onChanged)(v);
             }

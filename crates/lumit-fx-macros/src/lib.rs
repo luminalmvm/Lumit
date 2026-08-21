@@ -53,7 +53,8 @@ use syn::{
 #[proc_macro_derive(
     Effect,
     attributes(
-        effect, slider, counter, dial, toggle, choice, colour, seed, file, layer, mask_path
+        effect, slider, bounded, counter, dial, toggle, choice, colour, seed, file, layer,
+        mask_path, curve
     )
 )]
 pub fn derive_effect(input: TokenStream) -> TokenStream {
@@ -403,6 +404,7 @@ struct Param {
 fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
     let known = [
         "slider",
+        "bounded",
         "counter",
         "dial",
         "toggle",
@@ -412,6 +414,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "file",
         "layer",
         "mask_path",
+        "curve",
     ];
     let attr = field
         .attrs
@@ -420,8 +423,9 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         .ok_or_else(|| {
             syn::Error::new(
                 field.span(),
-                "every field is a parameter and needs one of #[slider] #[counter] #[dial] \
-                 #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[mask_path]",
+                "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
+                 #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[mask_path] \
+                 #[curve]",
             )
         })?;
 
@@ -485,6 +489,24 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                         default: #default,
                         slider: (#min, #max),
                         hard: (#hard_min, #hard_max),
+                    }
+                },
+                quote! { p.float(#idc, (#default) as f32) },
+            )
+        }
+        // A closed range, drawn as a track and thumb (K-414). The one
+        // difference from `#[slider]` is that there is no soft/hard pair to
+        // declare: the range *is* both, because a parameter whose whole
+        // meaning lives inside it has nothing to mean outside it.
+        "bounded" => {
+            let default = get("default").unwrap_or_else(|| quote! { 0.0 });
+            let min = get("min").unwrap_or_else(|| quote! { 0.0 });
+            let max = get("max").unwrap_or_else(|| quote! { 1.0 });
+            (
+                quote! {
+                    ::lumit_core::fx::ParamKind::Slider {
+                        default: #default,
+                        range: (#min, #max),
                     }
                 },
                 quote! { p.float(#idc, (#default) as f32) },
@@ -597,6 +619,14 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.mask_named(#idc) },
             )
         }
+        // A tone curve, as its own control points (K-412). No arguments but a
+        // label: the default is the identity diagonal for every one of them,
+        // and there is no range to declare — the points live in the unit
+        // square by definition.
+        "curve" => (
+            quote! { ::lumit_core::fx::ParamKind::Curve },
+            quote! { p.curve(#idc) },
+        ),
         other => {
             return Err(syn::Error::new(
                 attr.span(),

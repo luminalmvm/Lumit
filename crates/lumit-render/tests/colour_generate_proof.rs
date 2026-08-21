@@ -11,7 +11,7 @@
 //! batches, which shipped without one. Eight things have to be looked at:
 //!
 //! 1. **Curves** must lift the shadows and roll the highlights when the master
-//!    knots move, and tint when only one channel's do — not merely brighten.
+//!    curve bends, and tint when only one channel's does — not merely brighten.
 //! 2. **Levels** must crush and stretch the range, and the gamma pair must be
 //!    visibly different from the black/white pair.
 //! 3. **Brightness** must move the picture without the sign confusion AE's two
@@ -46,7 +46,7 @@ use lumit_core::fx::effects::{
     brightness::Brightness, curves::Curves, fill::Fill, fractal_noise::FractalNoise,
     gradient::Gradient, hue_saturation::HueSaturation, levels::Levels, noise::Noise,
 };
-use lumit_core::fx::{EffectMetadata, Params};
+use lumit_core::fx::{CurvePoints, EffectMetadata, Params};
 
 fn to_linear(rgba: &[u8]) -> Vec<f32> {
     rgba.chunks_exact(4)
@@ -119,22 +119,18 @@ fn render_the_eight_colour_and_generate_effects() {
         // ---- Curves: a master S-curve, then a red-only lift (the per-channel
         // proof — a tint no master move can produce).
         let mut s_curve = Curves::read(Params::EMPTY);
-        s_curve.master_shadows = 0.15;
-        s_curve.master_midtones = 0.50;
-        s_curve.master_highlights = 0.85;
-        let (y, m, mix) = s_curve.packed();
+        s_curve.master =
+            CurvePoints::sanitised(&[[0.0, 0.0], [0.25, 0.15], [0.75, 0.85], [1.0, 1.0]]);
         let mut out = lin.clone();
-        cpu::curves(&mut out, y, m, mix);
+        cpu::curves(&mut out, &s_curve.packed());
         write("1-curves-s-curve", &to_srgb(&out));
 
         let mut red_lift = Curves::read(Params::EMPTY);
-        red_lift.red_shadows = 0.45;
-        red_lift.red_midtones = 0.70;
-        red_lift.blue_shadows = 0.10;
-        red_lift.blue_midtones = 0.35;
-        let (y, m, mix) = red_lift.packed();
+        red_lift.red = CurvePoints::sanitised(&[[0.0, 0.0], [0.25, 0.45], [0.5, 0.70], [1.0, 1.0]]);
+        red_lift.blue =
+            CurvePoints::sanitised(&[[0.0, 0.0], [0.25, 0.10], [0.5, 0.35], [1.0, 1.0]]);
         let mut out = lin.clone();
-        cpu::curves(&mut out, y, m, mix);
+        cpu::curves(&mut out, &red_lift.packed());
         write("2-curves-red-lift", &to_srgb(&out));
 
         // ---- Levels: a hard range crush, then a gamma-only move at the same

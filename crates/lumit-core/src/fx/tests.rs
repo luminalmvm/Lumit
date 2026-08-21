@@ -9662,6 +9662,12 @@ fn every_parameter_declares_a_unit() {
     // px@comp and each consumer takes it to its own raster, so the geometry
     // cannot acquire a second unit. Stroke's Spacing is a per cent *of the
     // brush*, so it rides on Brush size and is not here.
+    //
+    // The Controls family (K-414) brings the last two, and they are the one
+    // pair here that never *reaches* the rescale pass: a Point control draws
+    // nothing, so it resolves to no op at all. They are declared px@comp all
+    // the same, because that is what the numbers mean (K-260) and because what
+    // reads them through an expression is going to put them in a picture.
     assert_eq!(
         spatial,
         vec![
@@ -9813,6 +9819,8 @@ fn every_parameter_declares_a_unit() {
             ("iris_wipe", "outer_radius"),
             ("iris_wipe", "inner_radius"),
             ("iris_wipe", "feather"),
+            ("point_control", "point_x"),
+            ("point_control", "point_y"),
         ]
     );
     // The two units are not interchangeable: % diag divides by the diagonal,
@@ -9875,6 +9883,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         Value::File(1),
         Value::Vec4([1.0; 4]),
         Value::MaskPath(true),
+        Value::Curve(CurvePoints::IDENTITY),
     ];
     let mut tags: Vec<u8> = Vec::new();
     for k in kinds {
@@ -9916,6 +9925,9 @@ fn payload_len(v: Value) -> usize {
         Value::Bool(_) | Value::Layer(_) | Value::MaskPath(_) => 1,
         Value::Float(_) | Value::Int(_) | Value::Choice(_) | Value::File(_) => 4,
         Value::Colour(_) | Value::Vec4(_) => 16,
+        // A length, then two floats a live point (K-412) — the unused tail of
+        // the fixed array is padding by another name and never feeds a key.
+        Value::Curve(c) => 4 + 8 * c.points().len(),
     }
 }
 
@@ -10531,6 +10543,25 @@ fn every_effect_carries_a_matte_row() {
     use crate::fx::MatteRole;
     for def in BUILTIN_DEFS.iter() {
         let s = def.schema();
+        // The Controls family opts out entirely (K-414). They are the answer to
+        // the question `MatteRole::None` was written for: an effect that touches
+        // no pixel cannot be driven by a picture, so a Matte row on one would be
+        // a control that could never do anything. Every *image* effect below
+        // still has to carry one.
+        if s.category == FxCategory::Controls {
+            assert_eq!(
+                s.matte,
+                MatteRole::None,
+                "{} is a control and takes no matte",
+                s.match_name
+            );
+            assert!(
+                !def.is_image_op(),
+                "{} declares no matte, so it had better draw nothing",
+                s.match_name
+            );
+            continue;
+        }
         let claims = matches!(
             s.match_name,
             "dof"
@@ -10547,10 +10578,10 @@ fn every_effect_carries_a_matte_row() {
             "{} — only Depth of field, the Lens flare, the Gaussian blur, the Glow,              Turbulent displace, Set matte and Displacement map claim the matte              inside their own maths; anything else that wants a deeper meaning must              say so here too",
             s.match_name
         );
-        // Every effect takes one, whatever it means by it. `MatteRole::None`
-        // exists for an effect that genuinely cannot be driven by a picture and
-        // nothing declares it — if something ever does, this is where it is
-        // argued for.
+        // Every image effect takes one, whatever it means by it.
+        // `MatteRole::None` is for an effect that genuinely cannot be driven by
+        // a picture, and the Controls family above is the whole of that list —
+        // anything else that wants to opt out is argued for here.
         let param = s
             .matte
             .param()
@@ -11214,5 +11245,328 @@ fn a_path_effect_is_told_the_raster_and_the_clock_at_resolve() {
     assert!(
         (with_type(2, 0.30) - 2.4).abs() < 1e-4,
         "Wiggly must drift between them"
+    );
+}
+
+/// **The identity diagonal bakes to the identity table, bit for bit** (K-412).
+///
+/// This is the load-bearing one. A fresh Curves is the passthrough only
+/// because its table reads `t[i] == i / 256` exactly; the neutral
+/// short-circuit hides that inside the effect, so the guarantee is pinned here
+/// on the maths itself, and the lookup is checked to return its input
+/// unchanged at every table entry and between two of them.
+#[test]
+fn the_identity_curve_bakes_and_reads_back_exactly() {
+    use crate::fx::cpu::{curve_at, curve_identity_table, curve_table, CURVE_TABLE};
+
+    let table = curve_table(&CurvePoints::IDENTITY);
+    assert_eq!(table, curve_identity_table());
+    for (i, entry) in table.iter().enumerate() {
+        let x = i as f32 / (CURVE_TABLE - 1) as f32;
+        assert_eq!(*entry, x, "entry {i} must be its own input");
+        assert_eq!(curve_at(x, &table), x, "the lookup must be the identity");
+    }
+    // Between two entries, and outside the unit interval, where the lookup
+    // extrapolates along the end segments rather than clipping (§2.1).
+    for x in [0.001_f32, 0.3337, 0.5 / 256.0, 1.75, 4.0, -0.25] {
+        assert_eq!(curve_at(x, &table), x, "the identity must carry {x}");
+    }
+}
+
+/// **A two-point curve is exactly its own straight line** (K-412): the clamped
+/// end condition sets both slopes to the secant, so the cubic degenerates to
+/// the line through the pair. If this drifts, every default curve drifts.
+#[test]
+fn a_two_point_curve_is_a_straight_line() {
+    use crate::fx::cpu::{curve_table, CURVE_TABLE};
+
+    let points = CurvePoints::sanitised(&[[0.2, 0.1], [0.9, 0.8]]);
+    let table = curve_table(&points);
+    for (i, entry) in table.iter().enumerate() {
+        let x = i as f64 / (CURVE_TABLE - 1) as f64;
+        // Inside the pair the line; outside it the same line continued, since
+        // the end slope is that line's slope.
+        let want = (0.1 + (x - 0.2) * (0.8 - 0.1) / (0.9 - 0.2)).clamp(0.0, 1.0);
+        assert!(
+            (f64::from(*entry) - want).abs() < 1e-6,
+            "entry {i}: {entry} is not on the line ({want})"
+        );
+    }
+}
+
+/// **A monotone point set stays inside the unit square** (K-412). A cubic
+/// through rising points can bulge past the highest of them; a tone curve that
+/// climbed above the white the user placed would ring a bright halo into a
+/// roll-off, which is what the bake's clamp exists to stop.
+#[test]
+fn a_monotone_curve_stays_in_the_unit_square() {
+    use crate::fx::cpu::curve_table;
+
+    for points in [
+        // The overshooting shape: a long flat run, then a sudden rise.
+        &[
+            [0.0, 0.0],
+            [0.1, 0.02],
+            [0.5, 0.05],
+            [0.6, 0.95],
+            [1.0, 1.0],
+        ][..],
+        // A hard S, and a lifted black under a crushed white.
+        &[[0.0, 0.0], [0.25, 0.05], [0.75, 0.95], [1.0, 1.0]][..],
+        &[[0.0, 0.2], [0.5, 0.4], [1.0, 0.9]][..],
+    ] {
+        let table = curve_table(&CurvePoints::sanitised(points));
+        for (i, v) in table.iter().enumerate() {
+            assert!(
+                (0.0..=1.0).contains(v),
+                "entry {i} of {points:?} left the square: {v}"
+            );
+        }
+        // And it really does pass through the points it was given — read the
+        // way the kernels read it, since a control point rarely lands on a
+        // table entry and the lookup is what both paths actually see.
+        for p in points {
+            let at = crate::fx::cpu::curve_at(p[0], &table);
+            assert!(
+                (at - p[1]).abs() < 2e-3,
+                "the curve misses its own point {p:?}: {at}"
+            );
+        }
+    }
+}
+
+/// **A malformed point list is straightened, never refused** (K-412). Out of
+/// order, out of the square, repeated x, too many, too few: each reads to a
+/// curve, quietly, because the list comes off a document a hand or an importer
+/// wrote and 14-ENGINEERING-RULES §4 forbids a panic on it.
+#[test]
+fn a_curve_is_sanitised_on_read() {
+    // Sorted by x, and the square is the square.
+    let messy = CurvePoints::sanitised(&[[0.8, 2.0], [0.2, -1.0], [0.5, 0.5]]);
+    assert_eq!(
+        messy.points(),
+        [[0.2, 0.0], [0.5, 0.5], [0.8, 1.0]],
+        "sorted by x and clamped into the unit square"
+    );
+
+    // Two points at one x have no curve between them; the first wins.
+    let repeated = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.9], [0.5, 0.1], [1.0, 1.0]]);
+    assert_eq!(repeated.points(), [[0.0, 0.0], [0.5, 0.9], [1.0, 1.0]]);
+
+    // Past sixteen, the tail is dropped rather than the list refused.
+    let many: Vec<[f32; 2]> = (0..40).map(|i| [i as f32 / 39.0, 0.5]).collect();
+    assert_eq!(
+        CurvePoints::sanitised(&many).points().len(),
+        CURVE_MAX_POINTS
+    );
+
+    // Fewer than two survivors is not a curve at all: the diagonal stands in.
+    assert_eq!(CurvePoints::sanitised(&[]), CurvePoints::IDENTITY);
+    assert_eq!(CurvePoints::sanitised(&[[0.4, 0.6]]), CurvePoints::IDENTITY);
+    assert_eq!(
+        CurvePoints::sanitised(&[[0.4, 0.6], [0.4, 0.2]]),
+        CurvePoints::IDENTITY
+    );
+    // A NaN is a number nobody typed; it reads as zero rather than poisoning
+    // the sort and, through it, the whole table.
+    assert_eq!(
+        CurvePoints::sanitised(&[[f32::NAN, 0.5], [1.0, 1.0]]).points(),
+        [[0.0, 0.5], [1.0, 1.0]]
+    );
+}
+
+/// **The bake is deterministic** (14-ENGINEERING-RULES §5): the same points
+/// produce byte-identical tables, run after run. The tables are the *only*
+/// thing either render path sees, so a bake that wobbled would be two pictures
+/// from one project.
+#[test]
+fn baking_a_curve_twice_gives_the_same_bytes() {
+    use crate::fx::cpu::curve_table;
+    use crate::fx::effects::curves::Curves;
+
+    let shape = CurvePoints::sanitised(&[[0.0, 0.02], [0.3, 0.18], [0.62, 0.8], [1.0, 0.97]]);
+    let once = curve_table(&shape);
+    let again = curve_table(&shape);
+    assert_eq!(
+        once.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        again.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        "the same points must bake to the same bytes"
+    );
+
+    // And through the effect, which is what both render paths call.
+    let mut fx = Curves::read(Params::EMPTY);
+    fx.master = shape;
+    let packed = fx.packed();
+    assert_eq!(packed.t[0], once);
+    assert_eq!(packed.t, fx.packed().t);
+    assert!(!packed.neutral, "a bent master is not the passthrough");
+    assert!(
+        Curves::read(Params::EMPTY).packed().neutral,
+        "a fresh Curves is the bit-exact passthrough"
+    );
+}
+
+/// **A curve parameter resolves through the arena, straightened, and keys a
+/// frame** (K-412). Curve values are static, so this is the whole of their
+/// resolve: the document's list arrives as a [`Value::Curve`], sanitised, and
+/// two different curves feed two different hashes.
+#[test]
+fn a_curve_parameter_resolves_and_feeds_the_key() {
+    use crate::fx::effects::curves::Curves;
+
+    let mut e = instantiate("curves").expect("curves");
+    assert_eq!(
+        e.param("master"),
+        Some(&EffectValue::Curve(vec![[0.0, 0.0], [1.0, 1.0]])),
+        "a fresh curve is the identity diagonal"
+    );
+
+    for p in &mut e.params {
+        if p.id == "master" {
+            // Deliberately out of order and outside the square.
+            p.value = EffectValue::Curve(vec![[1.0, 1.0], [0.5, 1.4], [0.0, 0.0]]);
+        }
+    }
+    let bag = resolve_bag(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(
+        Params::new(&bag).curve(Curves::MASTER).points(),
+        [[0.0, 0.0], [0.5, 1.0], [1.0, 1.0]],
+        "the arena carries the straightened curve"
+    );
+
+    let hash = |fx: &EffectInstance| {
+        let stack = super::resolve_stack(
+            std::slice::from_ref(fx),
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let mut out: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| out.extend_from_slice(b));
+        out
+    };
+    let mut other = e.clone();
+    for p in &mut other.params {
+        if p.id == "master" {
+            p.value = EffectValue::Curve(vec![[0.0, 0.0], [0.5, 0.2], [1.0, 1.0]]);
+        }
+    }
+    assert_ne!(
+        hash(&e),
+        hash(&other),
+        "two different curves must key two different frames"
+    );
+}
+
+/// **The Controls family holds a value and draws nothing** (K-414).
+///
+/// Five effects whose whole purpose is a row for an expression to read. Three
+/// facts make that true rather than merely intended, and each fails silently
+/// without a test: they resolve to *no op at all* (so nothing is dispatched, on
+/// either render path, for an effect with no kernel to dispatch to); they take
+/// no matte (a picture gating an effect that touches no pixel); and the value is
+/// still there on the instance afterwards, which is what an expression reads.
+#[test]
+fn a_control_effect_holds_its_value_and_draws_nothing() {
+    let family = [
+        ("slider_control", "slider"),
+        ("angle_control", "angle"),
+        ("checkbox_control", "checkbox"),
+        ("colour_control", "colour"),
+        ("point_control", "point_x"),
+    ];
+    for (name, row) in family {
+        let def = BUILTIN_DEFS.get(name).expect("declared");
+        let s = def.schema();
+        assert_eq!(s.category, FxCategory::Controls, "{name}");
+        assert_eq!(s.matte, crate::fx::MatteRole::None, "{name}");
+        assert!(!def.is_image_op(), "{name} draws nothing");
+
+        let e = instantiate(name).unwrap_or_else(|| panic!("{name} does not instantiate"));
+        assert!(
+            e.param(row).is_some(),
+            "{name} carries the row an expression reads"
+        );
+        // The matte pair is not injected, so the row is the whole schema (two
+        // for the point, which is a pair by convention).
+        assert!(
+            s.params.iter().all(|p| p.id != crate::fx::MATTE_PARAM),
+            "{name} was given a matte row it does not want"
+        );
+
+        let (ids, ops) = super::resolve_stack_temporal_named(
+            std::slice::from_ref(&e),
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        assert!(ids.is_empty(), "{name} claimed a slot in the indicator");
+        assert!(ops.is_empty(), "{name} resolved to an op");
+    }
+}
+
+/// **A closed range is a Float wearing a different control** (K-414).
+///
+/// The Slider kind changes what the panel draws and nothing else: the stored
+/// value is an `EffectValue::Float`, the default is the declared one, and the
+/// resolve step produces the same `Value::Float` the parameter produced while it
+/// was a Float. That is the whole promise of adopting it on an existing
+/// parameter — no stored value moves, no picture moves — so it is the whole of
+/// what this pins, on the four wipes that adopted it.
+#[test]
+fn a_closed_range_resolves_exactly_as_the_float_it_is() {
+    use crate::fx::effects::linear_wipe::LinearWipe;
+    for name in ["linear_wipe", "radial_wipe", "venetian_blinds", "card_wipe"] {
+        let s = BUILTIN_DEFS.get(name).expect("declared").schema();
+        let row = s
+            .params
+            .iter()
+            .find(|p| p.id == "completion")
+            .unwrap_or_else(|| panic!("{name} has a Completion"));
+        assert_eq!(
+            row.kind,
+            ParamKind::Slider {
+                default: 50.0,
+                range: (0.0, 100.0)
+            },
+            "{name} — a wipe's Completion is closed"
+        );
+        assert!(
+            matches!(
+                crate::fx::default_param_value(&row.kind),
+                EffectValue::Float(_)
+            ),
+            "{name} — the value side is a Float, as Int and Angle are"
+        );
+    }
+
+    let mut e = instantiate("linear_wipe").expect("declared");
+    for p in &mut e.params {
+        if p.id == "completion" {
+            p.value = EffectValue::Float(Property::fixed(30.0));
+        }
+    }
+    let bag = resolve_bag(
+        std::slice::from_ref(&e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    assert_eq!(
+        Params::new(&bag).float(LinearWipe::COMPLETION, -1.0),
+        30.0,
+        "a closed range resolves through the Float path it always used"
     );
 }

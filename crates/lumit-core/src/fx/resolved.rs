@@ -370,12 +370,15 @@ fn resolve_into_arena(
             }
         };
         let value = match p.kind {
-            ParamKind::Float { default, .. } | ParamKind::Angle { default, .. } => {
-                Value::Float(spatial(
-                    e.float_at_with_context(p.id, lt, context.clone())
-                        .unwrap_or(default),
-                ))
-            }
+            // A Slider is a Float with a closed range (K-414): the kind is the
+            // control, so it resolves through exactly the Float path and an
+            // adopting parameter's output cannot move.
+            ParamKind::Float { default, .. }
+            | ParamKind::Slider { default, .. }
+            | ParamKind::Angle { default, .. } => Value::Float(spatial(
+                e.float_at_with_context(p.id, lt, context.clone())
+                    .unwrap_or(default),
+            )),
             ParamKind::Int { default, .. } => Value::Int(
                 e.float_at_with_context(p.id, lt, context.clone())
                     .map_or(default as i32, |v| v.round() as i32),
@@ -405,6 +408,14 @@ fn resolve_into_arena(
             ParamKind::File { .. } | ParamKind::Layer { .. } | ParamKind::MaskPath { .. } => {
                 continue
             }
+            // A curve is small enough to ride in the bag itself (K-412), so
+            // unlike the three above it needs no slot beside the op. It does
+            // not animate, so there is nothing to evaluate at `lt` — only the
+            // straightening every read applies.
+            ParamKind::Curve => Value::Curve(match e.param(p.id) {
+                Some(EffectValue::Curve(points)) => CurvePoints::sanitised(points),
+                _ => CurvePoints::IDENTITY,
+            }),
         };
         bags.push(ParamId::new(p.id), value);
     }

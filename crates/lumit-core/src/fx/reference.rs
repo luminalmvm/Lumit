@@ -80,8 +80,8 @@ pub struct Matte {
 pub struct Param {
     pub id: &'static str,
     pub label: &'static str,
-    /// `float`, `int`, `angle`, `choice`, `bool`, `colour`, `seed`, `file`,
-    /// `layer`, `mask_path`.
+    /// `float`, `slider`, `int`, `angle`, `choice`, `bool`, `colour`, `seed`,
+    /// `file`, `layer`, `mask_path`, `curve`.
     pub kind: &'static str,
     /// The declared unit: `raw`, `pct_diag`, `px`, `degrees`, `seconds`.
     pub unit: &'static str,
@@ -218,6 +218,18 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
             p.hard_min = hard.0;
             p.hard_max = hard.1;
         }
+        // A closed range prints its ends as both the slider and the hard
+        // bounds, because that is what closed means (K-414): the manual's
+        // table then says the same thing for a Slider as for a Float whose
+        // two ranges happen to coincide, and only the kind differs.
+        ParamKind::Slider { default, range } => {
+            p.kind = "slider";
+            p.default = num(default);
+            p.slider_min = Some(range.0);
+            p.slider_max = Some(range.1);
+            p.hard_min = Some(range.0);
+            p.hard_max = Some(range.1);
+        }
         ParamKind::Int {
             default,
             slider,
@@ -276,6 +288,22 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         ParamKind::MaskPath { self_default } => {
             p.kind = "mask_path";
             p.self_default = Some(self_default);
+        }
+        // A curve's default is its shape, so it prints as the point list
+        // itself (K-412) — the identity diagonal, for every built-in that
+        // declares one.
+        ParamKind::Curve => {
+            p.kind = "curve";
+            p.default = Some(serde_json::Value::Array(
+                crate::fx::params::CURVE_IDENTITY
+                    .iter()
+                    .map(|xy| {
+                        serde_json::Value::Array(
+                            xy.iter().filter_map(|v| num(f64::from(*v))).collect(),
+                        )
+                    })
+                    .collect(),
+            ));
         }
     }
     p
@@ -391,7 +419,7 @@ mod tests {
         let r = reference();
         assert_eq!(r.categories.len(), FxCategory::ALL.len());
         assert_eq!(r.effects.len(), super::super::BUILTINS.len());
-        assert!(r.effects.len() >= 83, "the catalogue has lost effects");
+        assert!(r.effects.len() >= 90, "the catalogue has lost effects");
         for e in &r.effects {
             assert!(!e.slug.is_empty(), "{} has no slug", e.match_name);
             assert!(!e.params.is_empty(), "{} declares no parameters", e.label);

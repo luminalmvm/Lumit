@@ -1628,33 +1628,25 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   fuller version, which shifts the picture along real colour-temperature lines and adds a
   green/magenta Tint axis, is a later Tier-2 job); it is the everyday "make it feel warmer"
   control, and it animates like every other grade.
-- **Curves (K-396).** The grade everyone recognises: a graph of "what came in" against "what
-  goes out", bent where you want it. Lumit's version gives you five handles per channel —
-  black, shadows, midtones, highlights, white — and draws a smooth line through them. Leave
-  them at their defaults and the line is straight, which is no change at all; pull shadows
-  down and highlights up and you have the classic S that adds punch without touching the
-  middle. There is a Master graph for all three colours at once, and a Red, Green and Blue
-  graph for one each.
+- **Curves (K-412).** The grade everyone recognises: a graph of "what came in" against "what
+  goes out", bent where you want it. You get a square with a straight diagonal across it, and
+  you drag points on that line — click the line to add one, up to sixteen, drag one out of the
+  square to throw it away. Leave it alone and it is a straight diagonal, which is no change at
+  all; pull the shadows down and the highlights up and you have the classic S that adds punch
+  without touching the middle. Five of these share the square behind a row of tabs: Master for
+  all three colours at once, then Red, Green, Blue, and Alpha for the matte.
 
-  Two things are worth explaining because they are choices rather than accidents.
-
-  The **smooth line** is a *monotone* spline. A plain smooth curve through five points has a
-  habit of bulging past them — pull one handle up and the curve dips below its neighbour on
-  the way there, which puts a dark ring in a bright roll-off. The monotone kind is the
-  standard cure: it flattens its own slope near a handle rather than overshooting, so the
-  curve only ever goes the way the handles say. The maths for the shape is worked out once,
-  on the processor, before the picture is touched, and both the preview and the export are
-  handed the same numbers — so neither one is fitting its own curve.
-
-  The **five handles do not slide sideways**, and that is the honest limit of this version.
-  After Effects lets you drop points anywhere along a curve, but it stores them in a private
-  blob that cannot be animated — AE itself can only *hold* a curve between keyframes, never
-  tween it. Lumit's five handles are ordinary numbers, so every one of them keyframes and
-  takes an expression, which is the trade: less freedom in where a point sits, and a curve
-  that can actually animate. The panel shows twenty rows today; the drawn graph is a later
-  change to the *panel*, and a curve you author now will still be there when it arrives.
-- **Levels (K-396's sibling, docs/08 §3.31).** The same job as Curves approached from the
-  other end: instead of a shape, five numbers with names you can aim at a histogram.
+  Two things about it are choices rather than accidents, and both are explained properly
+  further down — see "A control that is a shape" and "The editor that shapes the curve". In
+  short: the smooth line is the same *clamped cubic* Photoshop draws, worked out once per
+  frame on the processor so the preview and the export are handed identical numbers; and a
+  curve **does not animate**, because there is no honest half-way between a four-point curve
+  and a nine-point one. After Effects has exactly the same limit for exactly the same reason —
+  its curves hold between keyframes rather than tweening. Where you want a grade that
+  animates, Levels below is the one with keyframable numbers.
+- **Levels (docs/08 §3.31).** The same job as Curves approached from the other end: instead of
+  a shape, five numbers with names you can aim — and, since K-413, the frame's histogram drawn
+  behind them so you can see what you are aiming at.
   **Input black** and **Input white** say which values in the picture should count as black
   and white — drag them inward to fill out a flat capture. **Gamma** bends the middle without
   moving either end. **Output black** and **Output white** say where those two ends land —
@@ -4097,6 +4089,162 @@ pixel is pulled sideways by an amount the noise decides. That is the same field,
 different purpose. One copy of the maths, one copy of the graphics-card version beside it,
 and one test holding the two together; the alternative is two implementations that agree
 right up until the afternoon somebody fixes one of them.
+
+### A control that is a shape — the curve parameter (K-412)
+
+Every effect control so far has been a number, a switch, a colour or a name: things a row in
+the Effect controls panel can show as one widget. Curves is the first that is a **shape**.
+What the user edits is a handful of points in a square, with a smooth line drawn through
+them; the horizontal axis is the brightness going in and the vertical axis is the brightness
+coming out, so a point dragged upwards makes everything at that brightness lighter.
+
+Curves used to fake this. Its first version had five sliders per channel at fixed positions
+along the bottom — you could pull the line up and down at 0, a quarter, a half, three
+quarters and 1, but you could not put a point anywhere else, and you could not add or remove
+one. That was the honest small version while there was no editor to draw a real curve in.
+Now there is, so the stored form became what an editor actually edits: an ordered list of
+between two and sixteen points, defaulting to the straight diagonal that changes nothing.
+
+**Why a curve cannot be animated, when everything else can.** A keyframe works by blending
+two values: half-way between 10 and 20 is 15. Two curves may not even have the same number
+of points, and there is no honest answer to "half-way between a four-point curve and a
+nine-point one" — which point would pair with which? After Effects has exactly this problem
+and solves it the same way: its curves jump from one shape to the next rather than gliding.
+So a curve is stored as a plain value with no keyframes, sitting beside the other things
+that cannot blend — a chosen file, a named layer, a named mask.
+
+**Drawing the line through the points.** The line is a *clamped cubic spline*, which is the
+same family Photoshop's curve comes from — worth matching, because it is the shape every
+colourist's hand already expects. Between each pair of points it is a small cubic curve; the
+pieces are chosen so that the join between two of them is not merely smooth but has the same
+*rate of turn* on both sides, which is what stops the line looking hinged. At the two far
+ends the line is made to leave along the straight line to its neighbour, and that is what
+makes a two-point curve exactly a straight line — which the default diagonal depends on
+being true to the last bit.
+
+**Working it out once instead of two million times.** A frame has millions of pixels, and
+solving the spline for each of them would be absurd, so the engine solves it **once per
+frame** and writes down the answer as a list of 257 numbers per channel: what the line is at
+input 0, at 1/256, at 2/256, and so on to 1. Both the graphics-card version and the CPU
+reference version are handed that same list and do nothing but read from it, taking a
+straight-line blend between the two nearest entries. Two useful things follow. The picture
+cannot differ between the two paths because of the spline, since neither of them draws it —
+that is the same trick the Lightning effect uses for its bolt. And the test that holds the
+two paths together is only checking the *reading*, which is four lines of arithmetic instead
+of a spline solver written twice.
+
+Two rules keep the reading honest. The line is kept inside the square, because a cubic
+through rising points can bulge above the highest of them, and a tone curve that climbed
+above the white you placed would put a bright halo in a highlight roll-off. But *inputs*
+outside 0 to 1 are not clipped: Lumit's pictures are scene-linear, so a value brighter than
+white is a real value, and it carries on along the slope of the line's last stretch rather
+than being flattened.
+
+Finally, the list is **straightened on the way in** rather than policed on the way out. A
+list that arrives out of order, with points outside the square, with two points stacked at
+the same horizontal position, with more than sixteen of them, or with fewer than two is
+sorted, clamped, thinned and — if nothing usable is left — replaced by the plain diagonal.
+It arrives from a saved document, which somebody may have edited by hand or which an
+importer may have written, and a document is something to render as best one can rather than
+something to reject.
+
+### The editor that shapes the curve, and why it draws its own line (K-412)
+
+The panel half of the same feature. Curves' five channels — Master, red, green, blue and
+alpha — are five separate parameters in the schema, but they are drawn as **one square with
+a row of tabs above it**, because five stacked squares would be five times as tall and would
+still leave you comparing shapes across a gap. The panel already does this kind of folding
+twice: a pair of parameters named `something_x` and `something_y` becomes one point row, and
+a layer picker swallows its Invert switch. A run of curve parameters is the third fold.
+Inside the square: drag a point to move it, click the line to add one (up to sixteen), drag a
+point well clear of the square to throw it away, and Reset puts *that channel* back to the
+diagonal. The two end points move like any other — sliding the black point rightwards is how
+you crush an end — but they cannot be thrown away, because a line needs somewhere to start
+and finish.
+
+**The line you see is drawn twice, on purpose.** The panel works the spline out again in
+Dart, purely to draw it. That looks like duplication and would be, except for what the two
+copies are *for*: the engine's copy is the one that grades the frame, and the panel's copy is
+a picture of it. The alternative is to ask the engine for a fresh table every time the
+pointer moves a pixel, which is a trip across the Rust/Flutter boundary per frame of a drag —
+the exact traffic there is a test forbidding. So the panel draws its own line, using the same
+algorithm, and if the last decimal place ever disagreed nobody could see it: the plot is a
+hundred and fifty pixels wide. The file says so at the top, because an undocumented second
+implementation is how two copies quietly drift apart.
+
+**One gesture trap worth writing down.** Flutter calls a free two-dimensional drag a *pan*,
+and a pan has to travel about twice as far as a single-axis drag before the framework decides
+that is what you meant. The Effect controls panel is a scrolling list, and a scrolling list
+watches for exactly that single-axis vertical drag — so it always made up its mind first, and
+every attempt to pull a curve point upwards scrolled the panel instead. The fix is to ask for
+a vertical drag and a horizontal drag rather than a pan: then the inner control and the list
+are competing on equal terms, and the inner one wins. The Levels handles hit the same wall
+and take the same answer.
+
+### Levels shows you the picture it is grading (K-413)
+
+Levels' five numbers per channel are exact but blind: you can type an input black of 0.06
+without knowing whether anything in the shot is that dark. So the row now draws a
+**histogram** — a bar chart of how much of the frame sits at each brightness — with the input
+black, gamma and white handles sitting under it, and the output range as a small bar beneath
+that. Drag the black handle to where the picture actually starts and the shadows go properly
+black.
+
+Nothing about the effect changed for this. The handles write the very same parameters through
+the very same path the numbered rows write through, and those rows are still there underneath;
+this is a second grip on values that already existed, in the way the dial beside an angle is a
+second grip on a number.
+
+The picture itself is borrowed rather than built. Lumit already has a Scopes panel that asks
+the engine to measure a frame and send back a small 256×256 image of the measurement —
+waveform, vectorscope, parade, or exactly the histogram this wants. So the Levels row asks the
+same question, once per frame the playhead lands on and only while the row is on screen. One
+small thing had to be added for it: the reply now says *which* measurement it is. Both panels
+listen on the same channel, so without that a Scopes panel left open on a waveform would paint
+its waveform behind the Levels handles.
+
+### Effects that draw nothing — the Expression controls (K-414)
+
+Every effect so far changes the picture. These five do not, and that is the whole idea. A
+**Slider control** put on a layer adds one number to that layer's Effect controls panel, and
+nothing else happens: no pixel moves. What it is for is to be *read*. Any property in the
+composition can carry a little piece of JavaScript — an **expression** — and that script can
+say "take whatever that slider is set to". So one number, in one visible place, drives six
+things at once, and animating those six things means animating the slider.
+
+That is how nearly every downloadable effects pack is built. A pack's "intensity" dial is a
+Slider control on a null layer with two dozen expressions reading it. There are five of
+them, because there are five kinds of thing worth holding: a number, an angle, a tick box, a
+colour and a point on the screen. After Effects has exactly these five, under exactly these
+names, which is deliberate — somebody arriving with a pack in their hands should find what
+they are looking for.
+
+Four consequences follow from "it draws nothing", and each is a small piece of code that is
+*absent* rather than present. There is no graphics-card program for these effects and no CPU
+version either, so there is nothing for the usual "do both paths agree?" test to compare —
+the first effects in Lumit for which that is true. The engine's render walk skips them
+entirely, so they cost nothing per frame. They have no **Mix** dial, because Mix means
+"fade back towards the untouched picture" and there is no touched picture. And they refuse
+the **Matte** input every other effect carries, because a matte is a picture that decides
+where an effect applies, and an effect that applies nowhere cannot be told where.
+
+### A number that cannot leave its range — the closed slider (K-414)
+
+Most numbers in Lumit have a slider that is a *suggestion*: drag within the range, or type
+past it if you know what you want. A blur radius works that way, and so does Temperature —
+its slider stops at 150 but the number is allowed as far as 200, because there is a real
+picture out there.
+
+Some numbers have nothing outside their range at all. A wipe's **Completion** goes from not
+begun to complete; 150% complete is not a picture, it is a typing mistake. Those parameters
+now say so, in one word on the declaration, and what they get is a track and a thumb with no
+way to leave the ends.
+
+The part worth understanding is what does *not* change when a parameter adopts it. The
+stored number is the same kind of number it always was, so old projects load unchanged, the
+keyframes are the same keyframes, the graph editor still draws it, and an expression still
+reads it. Only the control is different. That is the same trick the angle dial uses: the
+value is a plain number of degrees, and "angle" only says which knob to draw for it.
 
 ### Moving pixels instead of recolouring them — the distort family
 

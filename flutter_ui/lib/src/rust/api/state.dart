@@ -327,20 +327,28 @@ class BridgeSampledPixels {
 /// serialises a `Vec<u8>` one byte at a time, measured at 8.8 ms for a 1080p
 /// frame, which is why the read-back frame transport was deleted.
 class BridgeScopeTrace {
+  /// The trace this picture *is*, echoed back from the request: 0 waveform,
+  /// 1 parade, 2 vectorscope, 3 histogram. Two panels may want traces at
+  /// once — the Scopes panel and the Levels row's histogram (K-413) — and
+  /// they share one response stream, so each has to be able to tell whether
+  /// the picture that just arrived is the one it asked for.
+  final int kind;
   final Uint8List rgba;
 
   const BridgeScopeTrace({
+    required this.kind,
     required this.rgba,
   });
 
   @override
-  int get hashCode => rgba.hashCode;
+  int get hashCode => kind.hashCode ^ rgba.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BridgeScopeTrace &&
           runtimeType == other.runtimeType &&
+          kind == other.kind &&
           rgba == other.rgba;
 }
 

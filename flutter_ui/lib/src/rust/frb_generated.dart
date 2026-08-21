@@ -8226,6 +8226,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeEffectValue_MaskPath(
           dco_decode_opt_Uuid(raw[1]),
         );
+      case 9:
+        return BridgeEffectValue_Curve(
+          dco_decode_list_list_prim_f_32_strict(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -8796,6 +8800,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeParamKind_Layer();
       case 9:
         return BridgeParamKind_MaskPath();
+      case 10:
+        return BridgeParamKind_Curve();
+      case 11:
+        return BridgeParamKind_Slider(
+          default_: dco_decode_f_64(raw[1]),
+          min: dco_decode_f_64(raw[2]),
+          max: dco_decode_f_64(raw[3]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -8990,10 +9002,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeScopeTrace dco_decode_bridge_scope_trace(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 1)
-      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return BridgeScopeTrace(
-      rgba: dco_decode_list_prim_u_8_strict(arr[0]),
+      kind: dco_decode_u_32(arr[0]),
+      rgba: dco_decode_list_prim_u_8_strict(arr[1]),
     );
   }
 
@@ -9528,6 +9541,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   List<LayerReference> dco_decode_list_layer_reference(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_layer_reference).toList();
+  }
+
+  @protected
+  List<Float32List> dco_decode_list_list_prim_f_32_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_list_prim_f_32_strict)
+        .toList();
   }
 
   @protected
@@ -10472,6 +10493,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case 8:
         var var_field0 = sse_decode_opt_Uuid(deserializer);
         return BridgeEffectValue_MaskPath(var_field0);
+      case 9:
+        var var_field0 = sse_decode_list_list_prim_f_32_strict(deserializer);
+        return BridgeEffectValue_Curve(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -11075,6 +11099,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeParamKind_Layer();
       case 9:
         return BridgeParamKind_MaskPath();
+      case 10:
+        return BridgeParamKind_Curve();
+      case 11:
+        var var_default_ = sse_decode_f_64(deserializer);
+        var var_min = sse_decode_f_64(deserializer);
+        var var_max = sse_decode_f_64(deserializer);
+        return BridgeParamKind_Slider(
+            default_: var_default_, min: var_min, max: var_max);
       default:
         throw UnimplementedError('');
     }
@@ -11252,8 +11284,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   @protected
   BridgeScopeTrace sse_decode_bridge_scope_trace(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_u_32(deserializer);
     var var_rgba = sse_decode_list_prim_u_8_strict(deserializer);
-    return BridgeScopeTrace(rgba: var_rgba);
+    return BridgeScopeTrace(kind: var_kind, rgba: var_rgba);
   }
 
   @protected
@@ -12023,6 +12056,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var ans_ = <LayerReference>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_layer_reference(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<Float32List> sse_decode_list_list_prim_f_32_strict(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Float32List>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_list_prim_f_32_strict(deserializer));
     }
     return ans_;
   }
@@ -13043,6 +13089,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeEffectValue_MaskPath(field0: final field0):
         sse_encode_i_32(8, serializer);
         sse_encode_opt_Uuid(field0, serializer);
+      case BridgeEffectValue_Curve(field0: final field0):
+        sse_encode_i_32(9, serializer);
+        sse_encode_list_list_prim_f_32_strict(field0, serializer);
     }
   }
 
@@ -13518,6 +13567,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_i_32(8, serializer);
       case BridgeParamKind_MaskPath():
         sse_encode_i_32(9, serializer);
+      case BridgeParamKind_Curve():
+        sse_encode_i_32(10, serializer);
+      case BridgeParamKind_Slider(
+          default_: final default_,
+          min: final min,
+          max: final max
+        ):
+        sse_encode_i_32(11, serializer);
+        sse_encode_f_64(default_, serializer);
+        sse_encode_f_64(min, serializer);
+        sse_encode_f_64(max, serializer);
     }
   }
 
@@ -13662,6 +13722,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void sse_encode_bridge_scope_trace(
       BridgeScopeTrace self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.kind, serializer);
     sse_encode_list_prim_u_8_strict(self.rgba, serializer);
   }
 
@@ -14241,6 +14302,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_layer_reference(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_list_prim_f_32_strict(
+      List<Float32List> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_list_prim_f_32_strict(item, serializer);
     }
   }
 

@@ -249,6 +249,26 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
 
 ## What has landed
 
+- **The Expression Controls family (2026-08-21, K-414), pending audit** — Slider control
+  (§3.80), Angle control (§3.81), Checkbox control (§3.82), Colour control (§3.83) and
+  Point control (§3.84), in a new **Controls** category, taking **the catalogue to 90**.
+  They are the first effects that declare no image operation because they draw nothing
+  *ever* (Posterize time and the accumulation motion blur declare it because they act a
+  level above the stack), the first to declare `MatteRole::None`, and the first parity
+  entries with no picture to compare — so there is no WGSL kernel, no CPU oracle and
+  nothing for §1.6 to hold together.
+  **Their five match names are in the import table marked PENDING AUDIT.** They are the
+  famous ones (`ADBE Slider Control` and kin) but were not in the 2026-08-20 sitting's
+  audited set, so `tools/ae-audit/claimed-matchnames.txt` grew from 60 names to 65 and the
+  next sitting confirms them. Shipping a pending row is safe here for the reason docs/11 §6
+  gives: a match name this table has wrong is a name nothing claims, and an unclaimed name
+  takes the placeholder road with every parameter kept.
+  It also landed `ParamKind::Slider` (K-414's other half): a closed range drawn as a track
+  and thumb, whose value side is an ordinary float exactly as Int's and Angle's are. The
+  four wipes' **Completion** adopted it and nothing moved — no stored value, no keyframe,
+  no pixel. **Temperature was K-414's named first candidate and declined it**: its ±150
+  slider runs to a ±200 hard range, so there is a picture beyond the slider's end and the
+  range is not the parameter's nature.
 - **The mask seam and the three path effects (2026-08-21, K-408/K-409)** — the mask-path
   input kind (`ParamKind::MaskPath`, the arc-length polyline carriage, the panel's mask
   picker) plus Scribble (§3.78), Stroke (§3.79) and Vegas' Mask/Path half, all three riding
@@ -557,6 +577,11 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   Hue and saturation (§3.33), all four with their WGSL kernels, CPU oracles (worst 1 fp16
   ULP measured), manual pages and docs/11 seed-table entries. Two decisions came out of
   it: K-396 (Curves stores five fixed knots a channel, because AE's point blob has no
-  animatable form here) and K-397 above. The four **took the generic strength matte**:
+  animatable form here) and K-397 above. **K-396 has since been superseded by K-412**
+  (2026-08-22): Curves stores a real point list — 2 to 16 points a channel on five
+  channels including Alpha, static for AE's own reason — so the import's ceiling rose
+  from a five-point sample to the whole curve, and Levels grew the histogram behind its
+  handles (K-413). The row itself is unmoved: the blob is still unreadable through the
+  Bridge, so Curves still imports as a placeholder. The four **took the generic strength matte**:
   none of them wanted the matte inside its maths, since a colour grade dissolved by a
   matte is exactly a colour grade applied where the matte is bright.
