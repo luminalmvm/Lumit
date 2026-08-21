@@ -3238,6 +3238,50 @@ void main() {
       expect(find.byKey(const ValueKey('tl-work-end')), findsOneWidget);
     });
 
+    /// A work-area drag is staged: the document hears nothing until the
+    /// pointer lifts, so the drag costs no writes while moving and one undo
+    /// steps clean back over it (owner, 2026-08-21 — the mid-drag commits
+    /// made the drag lag and undo walk back through every frame crossed).
+    testWidgets('a work-area drag commits once, on release', (tester) async {
+      final p = withComp();
+      // A real span to move, so "unchanged mid-drag" is not vacuously true of
+      // the whole-comp default.
+      p.comp.setWorkArea(
+          span: workAreaWith(
+              comp: p.comp,
+              current: null,
+              wanted: p.comp.durationFrames() ~/ 2,
+              isStart: false));
+      await mount(tester, p);
+
+      final before = workAreaFrames(p.comp);
+      expect(before.whole, isFalse);
+
+      final start = tester
+          .getCenter(find.byKey(const ValueKey('tl-work-start')));
+      final end = tester.getCenter(find.byKey(const ValueKey('tl-work-end')));
+      final gesture = await tester.startGesture(end);
+      await tester.pump();
+      // Cross a good stretch of the span in steps, as a hand does.
+      final step = Offset((start.dx - end.dx) / 12, 0);
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(step);
+        await tester.pump();
+      }
+      expect(workAreaFrames(p.comp), equals(before),
+          reason: 'mid-drag, the document has not been written');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      final after = workAreaFrames(p.comp);
+      expect(after.end, lessThan(before.end),
+          reason: 'the release is the one write');
+
+      p.state.project!.undo();
+      expect(workAreaFrames(p.comp), equals(before),
+          reason: 'one undo returns to the span before the drag');
+    });
+
     /// The lane area is rows all the way down. One layer used to leave the
     /// ground, the seams and the marquee stopping 22 px in, so most of the
     /// area was a hole: nothing to look at and nothing to click on.

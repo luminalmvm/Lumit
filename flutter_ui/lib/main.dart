@@ -4,7 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show Directory, File, Platform;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -316,11 +316,41 @@ class LumitState extends ChangeNotifier {
     // One at a time, for [openProject]'s reason: `_pendingSink` is a single
     // field and two adoptions in flight would have the second take the first's.
     if (opening.value) return null;
+    // Forgiveness before the engine sees the path: people naturally pick the
+    // folder *containing* the bundle, not the bundle itself. One unambiguous
+    // `.lum-bundle` child is what they meant. Presentation routing only — the
+    // engine still decides whether what it is handed opens.
+    var target = path;
+    try {
+      final dir = Directory(path);
+      if (!File('$path/manifest.json').existsSync() && dir.existsSync()) {
+        final bundles = dir
+            .listSync()
+            .whereType<Directory>()
+            .where((d) => d.path.toLowerCase().endsWith('.lum-bundle'))
+            .toList();
+        if (bundles.length == 1) target = bundles.first.path;
+      }
+    } catch (_) {
+      // Unreadable folder: the engine's own refusal will say so.
+    }
     opening.value = true;
     final imported = await LumitBridgeState.importAeBundle(
-        path: path, onChangeStream: _changeSink());
+        path: target, onChangeStream: _changeSink());
     if (imported == null) {
-      postNotice(l10n.aeCouldNotImport(path), error: true);
+      // The commonest miss is being handed an After Effects project rather
+      // than a bundle - the picker asked for a folder and the user reasonably
+      // pointed it at the one holding the .aep. Teach the route instead of
+      // naming a format they have never met.
+      var sawAep = path.toLowerCase().endsWith('.aep');
+      try {
+        sawAep = sawAep ||
+            Directory(path)
+                .listSync()
+                .any((e) => e.path.toLowerCase().endsWith('.aep'));
+      } catch (_) {}
+      postNotice(sawAep ? l10n.aeBundleFromAep : l10n.aeCouldNotImport(path),
+          error: true);
       opening.value = false;
       return null;
     }

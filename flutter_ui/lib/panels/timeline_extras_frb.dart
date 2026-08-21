@@ -1160,18 +1160,26 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       supportedDevices: dragDevices,
                       onHorizontalDragStart: (_) =>
                           setState(() => _dragIsStart = isStart),
+                      // The drag is staged: the band and handle draw from
+                      // `_dragFrame` alone, and the document hears nothing
+                      // until the pointer lifts — one write, one undo step,
+                      // and no bridge chatter while the hand is moving
+                      // (owner, 2026-08-21: a mid-drag commit per frame made
+                      // the drag lag and undo walk back through every frame
+                      // it crossed).
                       onHorizontalDragUpdate: (d) {
                         final frame = axis
                             .frameAt(d.globalPosition.dx - _originX(context));
                         if (frame == _dragFrame) return;
-                        // Drawn from here at once; committed only when the
-                        // drag actually crosses a frame, because the commit
-                        // costs a document write and a panel rebuild while a
-                        // pointer emits many moves per frame of travel.
                         setState(() => _dragFrame = frame);
-                        // A refusal is not an exception for a drag to carry: a
-                        // degenerate comp (no frames to work on) has no valid
-                        // span, and the document simply keeps the one it has.
+                      },
+                      onHorizontalDragEnd: (_) {
+                        final frame = _dragFrame;
+                        setState(() => _dragFrame = null);
+                        if (frame == null) return;
+                        // A refusal is not an exception for a drag to carry:
+                        // a degenerate comp (no frames to work on) has no
+                        // valid span, and the document keeps the one it has.
                         try {
                           widget.onWorkArea!(workAreaWith(
                             comp: comp,
@@ -1180,12 +1188,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
                             isStart: isStart,
                           ));
                         } catch (_) {
-                          // Nothing to recover: the span on screen is the
-                          // document's, and the next move asks again.
+                          // The span on screen snaps back to the document's.
                         }
                       },
-                      onHorizontalDragEnd: (_) =>
-                          setState(() => _dragFrame = null),
+                      // A cancelled drag commits nothing: the band snaps back
+                      // to the document's span, which is what cancel means.
                       onHorizontalDragCancel: () =>
                           setState(() => _dragFrame = null),
                       // The grab stays the ruler's full height — a handle you

@@ -232,6 +232,14 @@
   "@fxBulge": {
     "description": "Effect controls — a control on Spherize."
   },
+  "fxCameraTrack": "Camera track",
+  "@fxCameraTrack": {
+    "description": "Effect name in the Add effect menu — solves the camera motion of a tracked shot."
+  },
+  "fxCancel": "Cancel",
+  "@fxCancel": {
+    "description": "Effect controls — the button that stops a running camera solve on Camera track."
+  },
   "fxCardWipe": "Card wipe",
   "@fxCardWipe": {
     "description": "Effect name in the Add effect menu — turns the frame away as a grid of cards."
@@ -387,6 +395,10 @@
   "fxLightning": "Lightning",
   "@fxLightning": {
     "description": "Effect name in the Add effect menu — draws a forked bolt of lightning."
+  },
+  "fxLow": "Low",
+  "@fxLow": {
+    "description": "Effect controls — a Feature density option on Camera track."
   },
   "fxLowerLeftX": "Lower left x",
   "@fxLowerLeftX": {
@@ -1137,6 +1149,10 @@
   "@fxAmplitude": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxAnalyse": "Analyse",
+  "@fxAnalyse": {
+    "description": "Effect controls — the button that starts the camera solve on Camera track."
+  },
   "fxAnamorphicSqueeze": "Anamorphic squeeze",
   "@fxAnamorphicSqueeze": {
     "description": "Effect controls — a control on Lens flare."
@@ -1636,6 +1652,10 @@
   "fxFastMotionBlur": "Fast motion blur",
   "@fxFastMotionBlur": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxFeatureDensity": "Feature density",
+  "@fxFeatureDensity": {
+    "description": "Effect controls — a control on Camera track."
   },
   "fxFeather": "Feather",
   "@fxFeather": {
@@ -2245,6 +2265,10 @@
   "@fxShiftY": {
     "description": "Effect controls — a control on Offset."
   },
+  "fxShowPoints": "Show points",
+  "@fxShowPoints": {
+    "description": "Effect controls — a control on Camera track."
+  },
   "fxShutter": "Shutter",
   "@fxShutter": {
     "description": "Effect controls — a control on Shake."
@@ -2524,6 +2548,10 @@
   "fxUseFocusPoint": "Use focus point",
   "@fxUseFocusPoint": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxUseMasks": "Use masks",
+  "@fxUseMasks": {
+    "description": "Effect controls — a control on Camera track."
   },
   "fxUseSourceColour": "Use source colour",
   "@fxUseSourceColour": {
@@ -6591,9 +6619,17 @@
   "@fxPointY": {
     "description": "Effect controls — the down half of the point Point control holds."
   },
-  "menuImportAe": "Import After Effects bundle…",
+  "menuImportAe": "After Effects project…",
   "@menuImportAe": {
-    "description": "File menu item — opens a folder chooser for a bundle written by the Lumit Bridge inside After Effects."
+    "description": "Item in the File menu's Import submenu — opens a folder chooser for a bundle written by the Lumit Bridge inside After Effects."
+  },
+  "menuImportFootage": "Import footage…",
+  "@menuImportFootage": {
+    "description": "Item in the File menu's Import submenu — opens the file chooser for video, image and audio files. Also the command palette's name for the same command."
+  },
+  "aeBundleFromAep": "That is an After Effects project file. Lumit reads a bundle exported from inside After Effects: open the project there, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes.",
+  "@aeBundleFromAep": {
+    "description": "Status line notice when the After Effects import was pointed at an .aep file (or a folder holding one) instead of a Lumit Bridge bundle. Teaches the export route; lumit-bridge.jsx is a file name and stays untranslated."
   },
   "aeCouldNotImport": "There is no Lumit bundle at {path}",
   "@aeCouldNotImport": {

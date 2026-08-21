@@ -290,7 +290,7 @@ void main() {
         footagePicker: () async => ['C:/clips/a.mov', 'C:/clips/b.mov'],
       );
 
-      await choose(tester, 'File', 'Import…');
+      await choose(tester, 'File', 'Import footage…', under: 'Import…');
       await tester.pump();
 
       final names = allItems(p.state)
@@ -307,7 +307,7 @@ void main() {
         savePicker: () async => null,
       );
 
-      await choose(tester, 'File', 'Import…');
+      await choose(tester, 'File', 'Import footage…', under: 'Import…');
       await tester.pump();
       expect(p.state.project!.getItems(), isEmpty);
 
@@ -413,7 +413,7 @@ void main() {
         footagePicker: () async => ['C:/clips/hero.mov'],
       );
       await makeComp(tester);
-      await choose(tester, 'File', 'Import…');
+      await choose(tester, 'File', 'Import footage…', under: 'Import…');
       await tester.pump();
       await choose(tester, 'File', 'Save');
       await settleFrb(tester, until: () => File(path).existsSync());

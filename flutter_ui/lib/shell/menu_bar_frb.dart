@@ -295,7 +295,7 @@ class LumitMenuBarFrb extends StatelessWidget {
                 saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
           ),
           PaletteCommand(
-            label: l10n.menuImport,
+            label: l10n.menuImportFootage,
             category: l10n.menuFile,
             run: () => importFootageFrb(app, picker: footagePicker),
           ),
@@ -497,16 +497,21 @@ List<MenuSection> lumitMenus(
                     forcePicker: true, picker: savePicker),
             action: 'file.save.as'),
         MenuEntry.divider(),
-        MenuEntry(
-            l10n.menuImport,
-            project == null
-                ? null
-                : () => importFootageFrb(app, picker: footagePicker),
-            action: 'file.import'),
-        // Not gated on a project: an import *replaces* whatever is loaded, the
-        // way opening a `.lum` does, so it is offered with none.
-        MenuEntry(l10n.menuImportAe,
-            () => importAeBundleFrb(context, app, picker: bundlePicker)),
+        // One Import home (owner, 2026-08-21): footage and the After Effects
+        // route live under a single submenu, so the word "Import" is one place
+        // in the menu however many routes arrive.
+        MenuEntry.submenu(l10n.menuImport, [
+          MenuEntry(
+              l10n.menuImportFootage,
+              project == null
+                  ? null
+                  : () => importFootageFrb(app, picker: footagePicker),
+              action: 'file.import'),
+          // Not gated on a project: an import *replaces* whatever is loaded,
+          // the way opening a `.lum` does, so it is offered with none.
+          MenuEntry(l10n.menuImportAe,
+              () => importAeBundleFrb(context, app, picker: bundlePicker)),
+        ]),
         MenuEntry(
             l10n.menuExport, comp == null ? null : () => exportFrb(context),
             action: 'file.export'),

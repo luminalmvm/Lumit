@@ -64,6 +64,9 @@ void main() {
     Future<void> choose(WidgetTester tester, String menu, String item) async {
       await tester.tap(find.byKey(ValueKey<String>('menu-$menu')));
       await tester.pump();
+      // The AE route lives under the File menu's Import submenu.
+      await tester.tap(find.text(l10n.menuImport));
+      await tester.pump();
       await tester.ensureVisible(find.text(item));
       await tester.pump();
       await tester.tap(find.text(item));
