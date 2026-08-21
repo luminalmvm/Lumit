@@ -1,11 +1,13 @@
 // The After Effects import, end to end on the real engine (docs/11-AE-IMPORT.md,
-// docs/impl/ae-import.md §6 phase 3).
+// docs/impl/ae-import.md §6 phase 3, §7 phase C).
 //
-// One test drives the whole surface the way a person does: File ▸ Import After
-// Effects bundle…, a folder chosen, the engine reads it, the project it built
-// becomes the open one, and the report window says what did not come across
-// whole. The bundle is `crates/lumit-import/tests/fixtures/synthetic.lum-bundle`
-// — referenced where it lies rather than copied, so the fixture the Rust tests
+// Each test drives the whole surface the way a person does: File ▸ Import ▸
+// After Effects project…, a file chosen, the engine reads it, the project it
+// built becomes the open one, and the report window says what did not come
+// across whole. **Both front doors are here** (K-418): the real
+// `tools/ae-bridge/fixtures/fixture.aep` through the primary item, and the
+// Bridge bundle folder through the quieter second one. Both fixtures are
+// referenced where they lie rather than copied, so the fixture the Rust tests
 // pin is the fixture the panel is proved against.
 //
 // **This file's import clears the engine's process-wide project registry**, the
@@ -38,13 +40,19 @@ String get _bundle =>
         .absolute
         .path;
 
+/// The real After Effects project the differential test measures the parser
+/// against (K-418), as an absolute path.
+String get _aep =>
+    File('../tools/ae-bridge/fixtures/fixture.aep').absolute.path;
+
 void main() {
   setUpAll(initEngineForTests);
 
   group('After Effects import (frb)', () {
     Future<({LumitState state, LumitUiState uiState})> mount(
       WidgetTester tester, {
-      required Future<String?> Function() bundlePicker,
+      Future<String?> Function()? aeProjectPicker,
+      Future<String?> Function()? bundlePicker,
     }) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
@@ -52,7 +60,11 @@ void main() {
         child: Builder(builder: (context) {
           final state = context.watch<LumitState>();
           context.watch<LumitUiState>();
-          return LumitMenuBarFrb(app: state, bundlePicker: bundlePicker);
+          return LumitMenuBarFrb(
+            app: state,
+            aeProjectPicker: aeProjectPicker,
+            bundlePicker: bundlePicker,
+          );
         }),
         state: p.state,
         uiState: p.uiState,
@@ -93,7 +105,7 @@ void main() {
       final p = await mount(tester, bundlePicker: () async => elsewhere.path);
       final before = p.state.project;
 
-      await choose(tester, 'File', l10n.menuImportAe);
+      await choose(tester, 'File', l10n.menuImportAeBundle);
       await settleFrb(tester,
           until: () => p.state.notice.value != null);
 
@@ -105,14 +117,38 @@ void main() {
           reason: 'there is no report for an import that never happened');
     });
 
-    // LAST: adopting the imported document clears the engine's project
-    // registry, so every reference held above dies here.
-    testWidgets('a bundle imports, and the report says what changed',
+    /// **A file the parser cannot read fails softly, in the calm words.**
+    ///
+    /// K-418's honest half: a newer After Effects may store something this
+    /// build has not met, and the answer is a sentence naming the Bridge
+    /// route — never a lost project. The file is named `.aep` and holds
+    /// nothing of the sort, which is the same shape as that failure.
+    testWidgets('an unreadable .aep says so and the project stands',
+        (tester) async {
+      final rubbish = File(
+          '${Directory.systemTemp.createTempSync('lumit-bad-aep').path}/broken.aep')
+        ..writeAsStringSync('this is not an After Effects project');
+      final p = await mount(tester, aeProjectPicker: () async => rubbish.path);
+      final before = p.state.project;
+
+      await choose(tester, 'File', l10n.menuImportAe);
+      await settleFrb(tester, until: () => p.state.notice.value != null);
+
+      expect(identical(p.state.project, before), isTrue);
+      expect(p.state.notice.value?.error, isTrue);
+      expect(p.state.notice.value?.message, l10n.aeAepUnreadable);
+      expect(find.text(l10n.aeReportTitle), findsNothing);
+    });
+
+    // Adopting the imported document clears the engine's project registry, so
+    // every reference held above dies here; the two importing tests each mount
+    // their own.
+    testWidgets('a bundle folder imports through the second item',
         (tester) async {
       final p = await mount(tester, bundlePicker: () async => _bundle);
       final before = p.state.project;
 
-      await choose(tester, 'File', l10n.menuImportAe);
+      await choose(tester, 'File', l10n.menuImportAeBundle);
       await settleFrb(tester,
           until: () => find.text(l10n.aeReportTitle).evaluate().isNotEmpty);
 
@@ -166,6 +202,39 @@ void main() {
       for (final grade in BridgeImportOutcome.values) {
         expect(outcomeLabel(grade), isNotEmpty);
       }
+
+      await tester.tap(find.text(l10n.close));
+      await tester.pump();
+      expect(find.text(l10n.aeReportTitle), findsNothing);
+    });
+
+    /// **The seamless front door: a real `.aep`, picked and imported (K-418).**
+    ///
+    /// Nothing is run inside After Effects and no bundle is involved — the
+    /// file the differential test measures the parser against goes in through
+    /// the menu, and the same report window comes out. The four counts are the
+    /// parse's own, taken from what the shared mapping actually made of it
+    /// (`crates/lumit-import/tests/aep_differential.rs` counts the same
+    /// document from the other side); a change here is a change in what the
+    /// parser recovers, not in what the panel shows.
+    ///
+    /// LAST: this adoption clears the engine's project registry.
+    testWidgets('a real .aep imports through the front door', (tester) async {
+      final p = await mount(tester, aeProjectPicker: () async => _aep);
+      final before = p.state.project;
+
+      await choose(tester, 'File', l10n.menuImportAe);
+      await settleFrb(tester,
+          until: () => find.text(l10n.aeReportTitle).evaluate().isNotEmpty);
+
+      expect(identical(p.state.project, before), isFalse,
+          reason: 'the parsed project was adopted');
+      // The golden project's own items, read out of the file itself.
+      expect(itemNames(p.state),
+          containsAll(<String>['Fixture', 'Fixture inner', 'Solids']));
+
+      expect(find.text(l10n.aeSummary(62, 55, 2, 1)), findsOneWidget,
+          reason: 'what the direct parse recovers, end to end');
 
       await tester.tap(find.text(l10n.close));
       await tester.pump();

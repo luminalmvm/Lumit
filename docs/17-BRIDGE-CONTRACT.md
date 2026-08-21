@@ -282,11 +282,15 @@ Nothing here does the work; this is the doorway.
 ### The After Effects import crosses once, as a report
 
 `LumitBridgeState::import_ae_bundle(path, on_change_stream)` is the whole surface of
-[11-AE-IMPORT.md](11-AE-IMPORT.md)'s user half. It reads a Lumit Bridge bundle, maps it to a
-`Document`, and **adopts that document exactly as opening a `.lum` does** — `api::state::adopt`
+[11-AE-IMPORT.md](11-AE-IMPORT.md)'s user half. **One call takes both front doors** (K-418):
+an After Effects project file read directly, or a Lumit Bridge bundle as a folder or a zip.
+The frontend does not choose between them — `lumit_import::open_ae` decides from the bytes
+(RIFX magic is an `.aep`, anything else is a bundle), so the picker's only job is to offer
+both and the report that comes back is the same shape either way. It maps what it opened to a
+`Document` and **adopts that document exactly as opening a `.lum` does** — `api::state::adopt`
 is the one road both take, so the displaced project's media caches, change sink and render
-worker (a whole GPU device) are let go on either route. It answers `None` for a folder that is
-not a bundle, the way `open_project` answers `None` for a `.lum` that will not open; short of
+worker (a whole GPU device) are let go on either route. It answers `None` for a path that is
+neither, the way `open_project` answers `None` for a `.lum` that will not open; short of
 that an import **always completes**, and what could not be carried across is in the report
 rather than in an error. The project it leaves open has no path: an import is not a file.
 

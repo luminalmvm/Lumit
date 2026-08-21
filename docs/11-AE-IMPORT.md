@@ -4,11 +4,14 @@
 The Bridge walker (`tools/ae-bridge/`), the bundle reader and the whole
 capture → `Document` mapping — items, comps, layers, keyframes, masks, mattes, retime,
 the §5 effect table and the §9 report — live in `crates/lumit-import/`
-(docs/impl/ae-import.md §6 phases 1 and 2). **Phase 3 is built too**: File ▸ Import
-After Effects bundle… opens a folder chooser, `LumitBridgeState::import_ae_bundle`
-reads it and adopts the document the way opening a `.lum` does, footage is looked for
-through the same `resolve_all_media` flow (§2.5's absolute-path step only, for the
-reason §2.5 now gives), and the report window (§9) lists what changed. `make-fixture.jsx` **has** now been run
+(docs/impl/ae-import.md §6 phases 1 and 2). **Phase 3 is built too, and since K-418 it
+takes both routes**: File ▸ Import ▸ After Effects project… opens a *file* chooser for
+the `.aep` itself, File ▸ Import ▸ Bridge bundle folder… opens the folder chooser for a
+Bridge bundle, and both call the one `LumitBridgeState::import_ae_bundle`, which decides
+from the bytes which reader to use (§7), maps what it read and adopts the document the way
+opening a `.lum` does. Footage is looked for through the same `resolve_all_media` flow
+(§2.5's absolute-path step only, for the reason §2.5 now gives), and the report window (§9)
+lists what changed whichever route was taken. `make-fixture.jsx` **has** now been run
 on a live After Effects 26.0: `tools/ae-bridge/fixtures/fixture.lum-bundle/` is the
 golden bundle, and `crates/lumit-import/tests/golden.rs` asserts every §5 checklist
 row through the mapped document, alongside the hand-written bundles that document the
@@ -50,7 +53,10 @@ direction): let After Effects itself be the parser. Every keyframe, easing handl
 path, and expression string is available through documented scripting API on any `.aep` the
 user's AE can open — including old versions, which AE upconverts on open. Direct parsing of
 the RIFX container is reverse engineering against an undocumented, version-drifting binary
-format and is therefore permanently second-class (§7).
+format, and that has not changed: K-418 made it the front door because it is seamless and
+because every claim it makes is measured against the Bridge's own account of the golden
+fixture, not because the format became trustworthy. So it is the route that may break on a
+new After Effects, and the Bridge is the one that cannot (§7).
 
 All three routes converge on the same import pipeline: produce a Lumit project fragment,
 run footage relink (§2.5), and present the import report (§9). Every import MUST produce an
@@ -191,11 +197,11 @@ the standard relink flow from [10-FILE-FORMAT.md](10-FILE-FORMAT.md). Import nev
 on missing media.
 
 **Today only the second step runs** (docs/TODO.md). There is no collected `footage/` to
-check, so a file is found where After Effects recorded it and nowhere else: the bundle
-carries an absolute path, and an absolute path re-rooted against the bundle's folder is
-still itself. An import on the machine that ran the Bridge therefore relinks everything;
-one carried to another machine imports every item offline, with a row apiece — which is
-the promised outcome, reached by fewer routes than this list.
+check, so a file is found where After Effects recorded it and nowhere else: the capture
+carries an absolute path, and an absolute path re-rooted against the folder the bundle or
+the `.aep` sits in is still itself. An import on the machine the project was made on
+therefore relinks everything; one carried to another machine imports every item offline,
+with a row apiece — which is the promised outcome, reached by fewer routes than this list.
 
 ---
 
@@ -433,10 +439,10 @@ routes share one mapping, one effect table, one report.
 `.aep` is a RIFX container (RIFF, big-endian sizes, form type `Egg!`) of nested LIST chunks.
 Chunk shapes are publicly known; many field semantics are not, and Adobe changes details
 across versions without documentation. Lumit builds on the community reverse-engineering
-work — the Kaitai Struct grammar from `forticheprod/aep_parser` (the most complete public
-description, maintained for pipeline introspection) and `boltframe/aftereffects-aep-parser`
-(Go, explicitly partial) — reimplemented in Rust inside `lumit-project`, with licence
-compliance checked before vendoring any grammar.
+work — `forticheprod/aep_parser` (the most complete public description, MIT, licence
+checked 2026-08-21) and `boltframe/aftereffects-aep-parser` (Go, MIT, explicitly partial) —
+**read as documentation and reimplemented in Rust** inside `lumit-import`, with attribution
+in the impl note. Nothing is vendored (K-418).
 
 Realistically recoverable: the project item tree and folder structure, footage paths and
 basic interpretation, comp settings, layer stacks with names/types/in-out/start/order,
@@ -453,10 +459,21 @@ Policy:
 - Anything ambiguous imports as a placeholder or as a static value with a report entry —
   the parser MUST NOT guess silently.
 - A parse failure on one chunk skips that chunk and continues; the report lists skipped
-  chunks. Whole-file failure falls back to "import footage references only" where the
-  footage table is readable.
+  chunks. **Built**: those skips arrive as `Reason::ChunkUnreadable` rows on the same
+  summary the mapping's own rows ride, and only on this route — a property the *Bridge*
+  could not read is already an unreadable node in the capture, and saying it twice is
+  worse than not saying it. Whole-file failure falls back to "import footage references
+  only" where the footage table is readable — **not built**: a whole-file failure today
+  is the calm notice naming the Bridge route, and the project already open stands.
 - New AE versions MAY break the parser at any time; this is stated in the UI copy. The
-  Bridge remains the answer for fidelity.
+  Bridge remains the answer for fidelity — and is what the failure notice points at.
+
+**The surface** (K-418, docs/impl/ae-import.md §7 phase C): the user picks the `.aep`
+from File ▸ Import ▸ After Effects project…, and nothing runs inside After Effects at
+all. The route is chosen engine-side by `lumit_import::open_ae`: a folder is a bundle, a
+file whose first four bytes are `RIFX`/`RIFF` is an `.aep`, and anything else goes to the
+bundle reader. The extension is a hint and the magic is the truth, so a renamed project
+still opens and a zipped bundle offered by the same picker is still read as a zip.
 
 `.aepx` (AE's XML save) is the same data with the interesting chunks hex-encoded; it MAY
 share the parser back-end but is not a separate fidelity route.
@@ -488,7 +505,8 @@ Every import ends with the report — a panel listing per-item outcomes, in the 
 - **Navigation**: double-clicking a row selects the item in the Project panel or Timeline.
   **Not built** (docs/TODO.md): rows name their item and do not yet lead to it.
 - **Persistence**: the report is stored in the project (`ae` namespace) and reopenable from
-  the File menu; it is also written next to the bundle as `import-report.json` for tooling.
+  the File menu; it is also written next to what was imported as `import-report.json` for
+  tooling.
   **Not built** (docs/TODO.md): the report lives as long as its window does.
 - Expressions disabled at import are their own filter, so a user can work through them.
   The filter is by outcome today; a reason-level filter comes with the persistence work.

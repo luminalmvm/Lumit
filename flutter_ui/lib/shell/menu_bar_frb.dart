@@ -161,7 +161,11 @@ class LumitMenuBarFrb extends StatelessWidget {
   final Future<String?> Function()? savePicker;
   final Future<List<String>> Function()? footagePicker;
 
-  /// The After Effects bundle chooser — a folder picker (docs/11 §2.1).
+  /// The After Effects project chooser — a file picker for the `.aep` itself
+  /// or a zipped bundle (K-418).
+  final Future<String?> Function()? aeProjectPicker;
+
+  /// The Bridge bundle chooser — a folder picker (docs/11 §2.1).
   final Future<String?> Function()? bundlePicker;
 
   const LumitMenuBarFrb({
@@ -170,6 +174,7 @@ class LumitMenuBarFrb extends StatelessWidget {
     this.openPicker,
     this.savePicker,
     this.footagePicker,
+    this.aeProjectPicker,
     this.bundlePicker,
   });
 
@@ -204,6 +209,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       openPicker: openPicker,
       savePicker: savePicker,
       footagePicker: footagePicker,
+      aeProjectPicker: aeProjectPicker,
       bundlePicker: bundlePicker,
       palette: () => _palette(context),
     );
@@ -434,6 +440,7 @@ List<MenuSection> lumitMenus(
   Future<String?> Function()? openPicker,
   Future<String?> Function()? savePicker,
   Future<List<String>> Function()? footagePicker,
+  Future<String?> Function()? aeProjectPicker,
   Future<String?> Function()? bundlePicker,
   VoidCallback? palette,
 }) {
@@ -509,8 +516,18 @@ List<MenuSection> lumitMenus(
               action: 'file.import'),
           // Not gated on a project: an import *replaces* whatever is loaded,
           // the way opening a `.lum` does, so it is offered with none.
-          MenuEntry(l10n.menuImportAe,
-              () => importAeBundleFrb(context, app, picker: bundlePicker)),
+          // The front door since K-418 — the `.aep` itself.
+          MenuEntry(
+              l10n.menuImportAe,
+              () => importAeBundleFrb(context, app,
+                  picker: aeProjectPicker ?? pickAeProject)),
+          // The Bridge route, kept first-class and quieter: it is what a
+          // studio exports where Lumit is not installed, and the answer that
+          // cannot drift with an After Effects version (K-418).
+          MenuEntry(
+              l10n.menuImportAeBundle,
+              () => importAeBundleFrb(context, app,
+                  picker: bundlePicker ?? pickAeBundle)),
         ]),
         MenuEntry(
             l10n.menuExport, comp == null ? null : () => exportFrb(context),
@@ -948,15 +965,19 @@ Future<void> importFootageFrb(LumitState app,
         {Future<List<String>> Function()? picker}) async =>
     app.importFootagePaths(await (picker ?? pickFootage)());
 
-/// Import an After Effects bundle, then show its report (docs/11 §9).
+/// Import an After Effects project, then show its report (docs/11 §9).
+///
+/// One function for both File ▸ Import rows: the `.aep` picker and the Bridge
+/// bundle folder picker hand it a path, and which route the path takes is the
+/// engine's decision from the bytes (K-418).
 ///
 /// The report is shown whatever it says — an import that adjusted nothing still
 /// opens the window, because "everything came across untouched" is the answer
-/// the user came for. A folder that is not a bundle posts a notice instead and
+/// the user came for. Something that is neither posts a notice instead and
 /// leaves the open project alone.
 Future<void> importAeBundleFrb(BuildContext context, LumitState app,
     {Future<String?> Function()? picker}) async {
-  final path = await (picker ?? pickAeBundle)();
+  final path = await (picker ?? pickAeProject)();
   if (path == null) return;
   final report = await app.importAeBundle(path);
   if (report == null || !context.mounted) return;

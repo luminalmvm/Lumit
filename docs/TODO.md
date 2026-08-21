@@ -793,11 +793,11 @@ project does not contain).
  - **The surface landed 2026-08-20** (phase 3): `LumitBridgeState::import_ae_bundle`
    in `crates/lumit-bridge/src/api/import.rs`, adopting the mapped document through
    the `api::state::adopt` road `open_project` now shares, with footage relinked by
-   `resolve_all_media` against the bundle's folder; File ▸ Import After Effects
-   bundle…; and the report window `flutter_ui/lib/shell/ae_report_frb.dart`. Reasons
+   `resolve_all_media` against the bundle's folder; File ▸ Import ▸ Bridge bundle
+   folder…; and the report window `flutter_ui/lib/shell/ae_report_frb.dart`. Reasons
    cross as a stable id plus their facts and are written in
    `l10n/engine_labels.dart` (K-303), gated by `engine_labels_test.dart` reading the
-   `Reason` enum. Four things are owed:
+   `Reason` enum. Three things are owed:
    - **Footage is found only where After Effects left it.** Of docs/11 §2.5's four
      relink steps only the absolute path runs: there is no collected `footage/`
      to check, the mapper stores the AE absolute path as the *relative* one too,
@@ -806,10 +806,6 @@ project does not contain).
      another machine imports wholly offline. Both later steps want the collected
      copy first — write that, store a genuinely relative path beside it, and the
      re-rooting and fingerprint searches start paying.
-   - **The picker cannot reach a zipped bundle.** `open_bundle` reads a folder or a
-     zip of one; File ▸ Import opens a folder chooser, because a folder is what the
-     walker writes and `file_selector` will not offer both in one dialogue. Unzip
-     first, until there is a picker that offers either.
    - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names
      its comp ▸ layer ▸ property and double-clicking it does nothing. It needs the
      row to carry an id, not just a path, which means the bridge row carrying one.
@@ -819,8 +815,8 @@ project does not contain).
      The reason-level filter §9 asks for (disabled expressions as their own list)
      belongs with that work; the built filter is by outcome.
 
-**The direct `.aep` parser (K-418, docs/impl/ae-import.md §7) - phases A and B landed
-2026-08-21; phase C is the work.** `crates/lumit-import/src/aep/` reads an
+**The direct `.aep` parser (K-418, docs/impl/ae-import.md §7) - phases A, B and C all
+landed 2026-08-21; what is left is depth, not surface.** `crates/lumit-import/src/aep/` reads an
 After Effects project file itself and fills the same `Capture` the Bridge writes, so
 the mapping, the effect table and the report are shared unchanged: `rifx.rs` is the
 bounds-checked container walk, `enums.rs` the funnel tables, `mod.rs` the structure
@@ -839,20 +835,26 @@ field; §7.1 and §7.2 are the proved layout maps.
    because they are at their defaults. A sixty-four-case damage sweep (truncations,
    flipped bytes, `0xFFFFFFFF` sizes, zeroed runs, fixed seeds) requires an answer
    from every one and times the lot: no panic, no hang, typed refusals.
- - **Phase C: the front door.** File ▸ Import takes the `.aep` itself (docs/11 §1),
-   the report opens automatically and says which route ran, and skipped chunks - today
-   recorded as `Unreadable` rows on the bundle's report - become report rows the panel
-   shows. docs/11 §7's remaining policy line lands with it: **a whole-file failure
-   should fall back to "import footage references only" where the footage table is
-   readable**, and today `parse_capture` simply refuses with `NoItemTree`.
- - **Three doc debts the phases left behind.** (a) `docs/GUIDE.md` has no plain-English
+ - **Phase C landed** (docs/impl/ae-import.md §7.3): `lumit_import::open_ae` routes by
+   the file's magic — folder → bundle, `RIFX`/`RIFF` → `open_aep`, else the zip reader —
+   so one bridge call takes both front doors and the picker's only job is to offer both.
+   File ▸ Import ▸ After Effects project… is the file picker (`.aep`, `.zip`), Bridge
+   bundle folder… the quieter folder one; skipped chunks arrive as
+   `Reason::ChunkUnreadable` rows on the same summary, raised only for this route so the
+   Bridge's own unreadables are not said twice; an `.aep` this build cannot read posts a
+   calm notice naming the Bridge route, project standing. Proved end to end by
+   `flutter_ui/test/frb/ae_import_frb_test.dart` on the real `fixture.aep`. **One policy
+   line from docs/11 §7 is still owed**: a whole-file failure should fall back to
+   "import footage references only" where the footage table is readable, and today
+   `parse_capture` simply refuses with `NoItemTree`.
+ - **Corpus testing is owed.** One fixture from one After Effects version proves the
+   offsets it contains and nothing about the ones it does not. Real community project
+   files across several AE versions, run through the parser looking for panics, refusals
+   and empty imports, is what turns "measured on one file" into "measured".
+ - **Two doc debts the phases left behind.** (a) `docs/GUIDE.md` has no plain-English
    section on the direct route at all, which K-007 requires of any new mechanism - the
    container walk, the property tree and the funnel tables are three concepts a reader
-   has nowhere to meet. (b) docs/11 §7 still says the parser is "reimplemented in Rust
-   inside `lumit-project`" (it is `lumit-import`) and still frames the reference work as
-   "the Kaitai Struct grammar … before vendoring any grammar", which K-418 closed:
-   nothing is vendored and the reference has long since moved to hand-written chunk
-   parsers. (c) An effect **parameter name** now has a CI assertion but an effect
+   has nowhere to meet. (b) An effect **parameter name** now has a CI assertion but an effect
    parameter *value* in DOM units is asserted only through the shared value sweep;
    that is enough today and worth naming if the units table grows.
  - **Two encodings are still owed**: a text document (`btds`) and a gradient
@@ -861,10 +863,11 @@ field; §7.1 and §7.2 are the proved layout maps.
    unmeasured**: `fixture.aep` holds no `GCst` chunk at all - the shape layer's
    gradient is at its default and the file stores only what is not - so nothing has
    been proved about it either way, and a fixture with a non-default gradient is owed
-   before anything is claimed. Decoding both is phase C's stretch, alongside
+   before anything is claimed. Decoding both is still owed after phase C, alongside
    **decoding the arbitrary-data blobs** - K-412's sixteen-point Curves target is
    reachable in principle now that the bytes are in hand, measured rather than
-   promised.
+   promised - and **shape-layer and text depth**, which arrive named and marked
+   rather than drawn.
  - **Property display names are not read, and may never be.** They are After
    Effects' own localised resources rather than data in the file (a property nobody
    renamed carries the `-_0_/-` sentinel), so 1,106 of the golden capture's names

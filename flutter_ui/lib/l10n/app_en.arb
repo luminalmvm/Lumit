@@ -928,6 +928,10 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
+  "fileTypeAeProject": "After Effects project",
+  "@fileTypeAeProject": {
+    "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
+  },
   "fileTypeProject": "Lumit project",
   "@fileTypeProject": {
     "description": "A file type in the system's Open dialogue: Lumit's own .lum project files."
@@ -6621,19 +6625,27 @@
   },
   "menuImportAe": "After Effects project…",
   "@menuImportAe": {
-    "description": "Item in the File menu's Import submenu — opens a folder chooser for a bundle written by the Lumit Bridge inside After Effects."
+    "description": "Item in the File menu's Import submenu — opens a file chooser for an After Effects .aep project, which Lumit reads directly."
+  },
+  "menuImportAeBundle": "Bridge bundle folder…",
+  "@menuImportAeBundle": {
+    "description": "The quieter second item in the File menu's Import submenu — opens a folder chooser for a bundle written by the Lumit Bridge script inside After Effects. Bridge is the product name and stays untranslated."
   },
   "menuImportFootage": "Import footage…",
   "@menuImportFootage": {
     "description": "Item in the File menu's Import submenu — opens the file chooser for video, image and audio files. Also the command palette's name for the same command."
   },
-  "aeBundleFromAep": "That is an After Effects project file. Lumit reads a bundle exported from inside After Effects: open the project there, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes.",
+  "aeBundleFromAep": "That folder holds an After Effects project file. Import the project itself with File › Import › After Effects project, or export a bundle from inside After Effects: open the project there, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes.",
   "@aeBundleFromAep": {
-    "description": "Status line notice when the After Effects import was pointed at an .aep file (or a folder holding one) instead of a Lumit Bridge bundle. Teaches the export route; lumit-bridge.jsx is a file name and stays untranslated."
+    "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
+  },
+  "aeAepUnreadable": "This After Effects project could not be read. A newer After Effects may store something this version of Lumit does not know yet; the Lumit Bridge reads it in full: open the project in After Effects, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes with File › Import › Bridge bundle folder.",
+  "@aeAepUnreadable": {
+    "description": "Status line notice when the After Effects import could not read the .aep file it was given. Calm, and points at the Bridge route as the way through; lumit-bridge.jsx is a file name and stays untranslated."
   },
   "aeCouldNotImport": "There is no Lumit bundle at {path}",
   "@aeCouldNotImport": {
-    "description": "Status line notice after the File menu's After Effects import was pointed at a folder that is not a bundle.",
+    "description": "Status line notice after the File menu's After Effects import was pointed at a folder or file that is neither an After Effects project nor a Lumit bundle.",
     "placeholders": { "path": { "type": "String" } }
   },
   "aeReportTitle": "Import report",
@@ -6834,6 +6846,11 @@
   "@aePropertyUnreadable": {
     "description": "Import report row reason, lower case. The placeholder is an After Effects internal property name; leave it as written.",
     "placeholders": { "matchName": { "type": "String" } }
+  },
+  "aeChunkUnreadable": "a record in the project file ({chunk}) could not be read and was skipped",
+  "@aeChunkUnreadable": {
+    "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
+    "placeholders": { "chunk": { "type": "String" } }
   },
   "aeMaskModeUnavailable": "mask mode {aeMode} is not built yet — imported as Add",
   "@aeMaskModeUnavailable": {

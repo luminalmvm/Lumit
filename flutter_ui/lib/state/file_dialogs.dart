@@ -131,11 +131,25 @@ Future<String?> pickThemeSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
-/// Pick a Lumit bundle to import from After Effects (docs/11 §2.1) — a
-/// **folder**, because a folder is what the Bridge's script writes: ExtendScript
-/// has no zip. The reader also opens a zipped bundle, which this dialogue cannot
-/// reach; unzipping it first is the route until there is a picker that offers
-/// both (docs/TODO.md). Null when cancelled.
+/// The After Effects import's own type group (K-418): the project file itself,
+/// and the zip a Bridge bundle travels in.
+XTypeGroup _aeGroup() => XTypeGroup(
+      label: l10n.fileTypeAeProject,
+      extensions: const ['aep', 'zip'],
+    );
+
+/// Pick an After Effects project to import (K-418) — the `.aep` itself, or a
+/// zipped Lumit Bridge bundle. Which one it is is the engine's to decide from
+/// the bytes; this dialogue only has to offer both. Null when cancelled.
+Future<String?> pickAeProject() async {
+  final file = await openFile(acceptedTypeGroups: [_aeGroup()]);
+  return file?.path;
+}
+
+/// Pick a Lumit Bridge bundle **folder** (docs/11 §2.1), because a folder is
+/// what the Bridge's script writes: ExtendScript has no zip. The quieter of the
+/// two import routes since K-418 — a zipped bundle goes through
+/// [pickAeProject]. Null when cancelled.
 Future<String?> pickAeBundle() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 

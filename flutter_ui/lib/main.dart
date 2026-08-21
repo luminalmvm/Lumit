@@ -305,13 +305,14 @@ class LumitState extends ChangeNotifier {
     _adopt(opened);
   }
 
-  /// Import an After Effects bundle and make it the open project (docs/11).
+  /// Import an After Effects project and make it the open one (docs/11) —
+  /// either front door (K-418): the `.aep` itself, or a Lumit Bridge bundle.
   ///
-  /// Answers the report to show, or null when the folder was not a bundle this
-  /// build can read — the previous project stays loaded in that case, exactly
-  /// as it does for a `.lum` that will not open. **A report is not a failure**:
-  /// an import always completes, and everything that could not be carried
-  /// across is a row in it (docs/11 §9).
+  /// Answers the report to show, or null when what was picked is not something
+  /// this build can read — the previous project stays loaded in that case,
+  /// exactly as it does for a `.lum` that will not open. **A report is not a
+  /// failure**: an import always completes, and everything that could not be
+  /// carried across is a row in it (docs/11 §9).
   Future<BridgeImportReport?> importAeBundle(String path) async {
     // One at a time, for [openProject]'s reason: `_pendingSink` is a single
     // field and two adoptions in flight would have the second take the first's.
@@ -338,18 +339,27 @@ class LumitState extends ChangeNotifier {
     final imported = await LumitBridgeState.importAeBundle(
         path: target, onChangeStream: _changeSink());
     if (imported == null) {
-      // The commonest miss is being handed an After Effects project rather
-      // than a bundle - the picker asked for a folder and the user reasonably
-      // pointed it at the one holding the .aep. Teach the route instead of
-      // naming a format they have never met.
-      var sawAep = path.toLowerCase().endsWith('.aep');
+      // Three misses, three answers. An `.aep` the parser could not read is
+      // the one K-418 made possible and the one worth being calm about: a
+      // newer After Effects may store something this build has not met, and
+      // the Bridge route reads it in full. A *folder* holding an `.aep` is the
+      // older mistake — the bundle picker asked for a folder and the user
+      // reasonably pointed it at the project's own — and still teaches the
+      // route. Anything else is simply not a bundle.
+      final aep = path.toLowerCase().endsWith('.aep');
+      var folderOfAep = false;
       try {
-        sawAep = sawAep ||
+        folderOfAep = !aep &&
             Directory(path)
                 .listSync()
                 .any((e) => e.path.toLowerCase().endsWith('.aep'));
       } catch (_) {}
-      postNotice(sawAep ? l10n.aeBundleFromAep : l10n.aeCouldNotImport(path),
+      postNotice(
+          aep
+              ? l10n.aeAepUnreadable
+              : folderOfAep
+                  ? l10n.aeBundleFromAep
+                  : l10n.aeCouldNotImport(path),
           error: true);
       opening.value = false;
       return null;

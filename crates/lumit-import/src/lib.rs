@@ -103,6 +103,62 @@ pub enum ImportError {
     TooNew { version: String },
 }
 
+/// Open whatever the user picked (K-418): an After Effects project file, a
+/// `.lum-bundle` folder, or a zip of one.
+///
+/// The route is decided here rather than in the frontend, so both front doors
+/// are one call. A folder is always a bundle; a file is an `.aep` when its
+/// first four bytes say so. The extension is only ever a hint — the magic is
+/// the truth, so a project someone renamed still opens and a zip named `.aep`
+/// is still read as a zip.
+pub fn open_ae(path: &Path) -> Result<Bundle, ImportError> {
+    if !path.is_dir() && is_rifx(path) {
+        open_aep(path)
+    } else {
+        open_bundle(path)
+    }
+}
+
+/// Add a row for every chunk the direct parser had to skip (docs/11 §7: a
+/// parse failure on one chunk skips that chunk and continues, and the report
+/// lists what was skipped).
+///
+/// Only the `.aep` route's skips are folded in. A property the *Bridge* could
+/// not read is already an unreadable node in the capture, and [`map_capture`]
+/// raises its row from there — adding these on top would say it twice. Those
+/// rows are the ones carrying a match name; a skipped chunk carries a chunk id
+/// and no match name.
+pub fn note_skipped_chunks(bundle: &Bundle, report: &mut ImportReport) {
+    if bundle.source != BundleSource::Aep {
+        return;
+    }
+    for row in &bundle.report.unreadables {
+        if row.match_name.is_some() {
+            continue;
+        }
+        report.row(
+            ItemPath {
+                comp: row.comp.clone(),
+                layer: row.layer.clone(),
+                property: None,
+            },
+            Outcome::Skipped,
+            Reason::ChunkUnreadable {
+                chunk: row.path.clone().unwrap_or_default(),
+            },
+        );
+    }
+}
+
+/// Whether the file begins with a RIFF/RIFX container's magic.
+fn is_rifx(path: &Path) -> bool {
+    let mut magic = [0_u8; 4];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .is_ok()
+        && (&magic == b"RIFX" || &magic == b"RIFF")
+}
+
 /// Open a Lumit Bridge bundle: a `.lum-bundle` folder, or a zip of one.
 ///
 /// Reads `manifest.json` first and stops there if the bundle is from a newer
@@ -217,6 +273,22 @@ mod tests {
 
     fn opened() -> Bundle {
         open_bundle(&fixture()).expect("the synthetic bundle opens")
+    }
+
+    /// The fixture bundle, zipped to `to` the ordinary way — the folder stays a
+    /// prefix on every entry, which is the shape a user's zip really has.
+    fn zip_fixture(to: &Path) {
+        let mut writer = zip::ZipWriter::new(File::create(to).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        for entry in fs::read_dir(fixture()).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            writer
+                .start_file(format!("synthetic.lum-bundle/{name}"), options)
+                .unwrap();
+            writer.write_all(&fs::read(entry.path()).unwrap()).unwrap();
+        }
+        writer.finish().unwrap();
     }
 
     fn comp(capture: &Capture, name: &str) -> Comp {
@@ -634,17 +706,7 @@ mod tests {
     fn the_same_bundle_zipped_opens_identically() {
         let temp = tempfile::tempdir().unwrap();
         let zipped = temp.path().join("synthetic.lum-bundle.zip");
-        let mut writer = zip::ZipWriter::new(File::create(&zipped).unwrap());
-        let options = zip::write::SimpleFileOptions::default();
-        for entry in fs::read_dir(fixture()).unwrap() {
-            let entry = entry.unwrap();
-            let name = entry.file_name().to_string_lossy().into_owned();
-            writer
-                .start_file(format!("synthetic.lum-bundle/{name}"), options)
-                .unwrap();
-            writer.write_all(&fs::read(entry.path()).unwrap()).unwrap();
-        }
-        writer.finish().unwrap();
+        zip_fixture(&zipped);
 
         assert_eq!(open_bundle(&zipped).unwrap(), opened());
     }
@@ -699,5 +761,87 @@ mod tests {
             open_bundle(temp.path()),
             Err(ImportError::NotABundle)
         ));
+    }
+
+    /// **The one front door reads the bytes, not the name (K-418).**
+    ///
+    /// The picker offers `.aep` and `.zip` in one filter, so the extension is
+    /// worth nothing: a project someone renamed must still open, and a bundle
+    /// zip must not be handed to the RIFX parser. The magic decides, and a
+    /// folder is a bundle without any reading at all.
+    #[test]
+    fn the_front_door_routes_by_the_bytes_rather_than_the_name() {
+        assert_eq!(
+            open_ae(&fixture()).expect("a folder is a bundle").source,
+            BundleSource::Bridge
+        );
+
+        // A RIFX file named `.zip`: the bytes win, and it reaches the parser
+        // (which then refuses it for having no item tree, not for its name).
+        let temp = tempfile::tempdir().unwrap();
+        let renamed = temp.path().join("project.zip");
+        fs::write(&renamed, b"RIFX\0\0\0\x04Egg!").unwrap();
+        assert!(matches!(open_ae(&renamed), Err(ImportError::Aep(_))));
+
+        // And the mirror case: a real bundle zip named `.aep`. The bytes are a
+        // zip, so it must open as a bundle rather than reach the RIFX parser —
+        // the failure this guards is routing on the extension, which would
+        // refuse a perfectly good bundle for its name.
+        let misnamed = temp.path().join("bundle.aep");
+        zip_fixture(&misnamed);
+        let opened_zip = open_ae(&misnamed).expect("the bytes are a zip, so it is a bundle");
+        assert_eq!(opened_zip.source, BundleSource::Bridge);
+        assert_eq!(opened_zip, opened());
+
+        // And a file that is neither goes down the bundle road, where the
+        // answer is the plain refusal rather than a RIFX error.
+        let neither = temp.path().join("notes.aep");
+        fs::write(&neither, b"hello").unwrap();
+        assert!(open_ae(&neither).is_err());
+    }
+
+    /// **A chunk the parser had to skip becomes a report row; a property the
+    /// Bridge could not read does not become a second one.**
+    ///
+    /// docs/11 §7's policy is that a skipped chunk is listed, and docs/11 §9's
+    /// is that nothing is said twice. The two meet here: the parser's skips
+    /// carry a chunk id and no match name, and those are the rows folded in.
+    #[test]
+    fn skipped_chunks_are_listed_once_and_only_for_the_direct_route() {
+        let mut bundle = opened();
+        bundle.source = BundleSource::Aep;
+        bundle.report.unreadables = vec![
+            capture::Unreadable {
+                comp: Some("Main".to_string()),
+                path: Some("cdta".to_string()),
+                ..capture::Unreadable::default()
+            },
+            capture::Unreadable {
+                comp: Some("Main".to_string()),
+                layer: Some("clip.mp4".to_string()),
+                path: Some("Curves".to_string()),
+                match_name: Some("ADBE CurvesCustom".to_string()),
+                ..capture::Unreadable::default()
+            },
+        ];
+
+        let mut report = ImportReport::default();
+        note_skipped_chunks(&bundle, &mut report);
+        assert_eq!(report.rows.len(), 1, "the match-named row is the mapper's");
+        assert_eq!(report.rows[0].outcome, Outcome::Skipped);
+        assert_eq!(
+            report.rows[0].reason,
+            Reason::ChunkUnreadable {
+                chunk: "cdta".to_string()
+            }
+        );
+        assert_eq!(report.rows[0].path.comp.as_deref(), Some("Main"));
+
+        // The Bridge's own route says none of this: its unreadables are
+        // already in the capture, and the mapping raises them from there.
+        bundle.source = BundleSource::Bridge;
+        let mut report = ImportReport::default();
+        note_skipped_chunks(&bundle, &mut report);
+        assert!(report.rows.is_empty());
     }
 }

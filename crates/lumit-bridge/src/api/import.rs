@@ -114,15 +114,18 @@ pub struct BridgeImportedProject {
 }
 
 impl LumitBridgeState {
-    /// Import a Lumit Bridge bundle — a `.lum-bundle` folder, or a zip of one —
-    /// and make it the open project.
+    /// Import an After Effects project and make it the open one — either front
+    /// door (K-418): an `.aep` read directly, or a Lumit Bridge bundle as a
+    /// `.lum-bundle` folder or a zip of one. `lumit_import::open_ae` decides
+    /// which by the bytes, so this is one call and one report whichever the
+    /// user picked.
     ///
-    /// `None` when the folder is not a bundle, or is one this build cannot
-    /// read: the previous project stays loaded and the frontend shows its own
-    /// notice, exactly as [`LumitBridgeState::open_project`] does for a `.lum`
-    /// that will not open. Anything short of that is not a failure — an import
-    /// **always completes** (docs/11 §9), and what could not be carried across
-    /// is in the report rather than in an error.
+    /// `None` when what was picked is not either of those, or is one this build
+    /// cannot read: the previous project stays loaded and the frontend shows
+    /// its own notice, exactly as [`LumitBridgeState::open_project`] does for a
+    /// `.lum` that will not open. Anything short of that is not a failure — an
+    /// import **always completes** (docs/11 §9), and what could not be carried
+    /// across is in the report rather than in an error.
     ///
     /// The project it leaves open has **no path**: an import is not a file, and
     /// the first save must ask where to put it.
@@ -136,15 +139,19 @@ impl LumitBridgeState {
         on_change_stream: Option<CallbackStream>,
     ) -> Result<Option<BridgeImportedProject>, BridgeError> {
         let path = PathBuf::from(path);
-        let Ok(bundle) = lumit_import::open_bundle(&path) else {
+        let Ok(bundle) = lumit_import::open_ae(&path) else {
             return Ok(None);
         };
         let (doc, mut report) = lumit_import::map_capture(&bundle.capture);
 
+        // What the direct parser had to skip is the report's to say (docs/11
+        // §7); the engine decides which rows those are.
+        lumit_import::note_skipped_chunks(&bundle, &mut report);
+
         // Footage resolves against the bundle's own folder (docs/11 §2.5's
-        // re-rooting step), and a `.lum-bundle` given as a zip re-roots against
-        // the folder the zip is in. v1 does paths only — the collected
-        // `footage/` copy is a later phase.
+        // re-rooting step); a `.lum-bundle` given as a zip, and an `.aep`,
+        // re-root against the folder the file is in. v1 does paths only — the
+        // collected `footage/` copy is a later phase.
         let media_root = if path.is_dir() {
             path.clone()
         } else {

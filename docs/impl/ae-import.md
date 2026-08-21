@@ -311,6 +311,8 @@ masks, expressions → differential per-category recovery numbers; **C** the sur
 the picker takes the `.aep` file (docs/11 §1's seamless front door), parse → the one
 mapping, plus the stretch goals (the Curves `CUSTOM_VALUE` blob is IN the file, so
 the K-412 sixteen-point target may finally be reachable — measured, not promised).
+A and B are built (§7.1, §7.2); C is built too (§7.3), with the blob decode among
+what it leaves owed.
 
 ### 7.1 Phase A: the layouts that are proved
 
@@ -580,3 +582,45 @@ whether that is a constant or a duration-derived number, so it is recorded
 rather than curve-fitted. Nothing downstream reads a linear side's speed.
 (5) **Decoding** the arbitrary-data blobs — K-412's sixteen-point Curves target
 is now reachable in principle, since the bytes are in hand.
+
+### 7.3 Phase C: the front door
+
+**Built.** The routing is one function, engine-side: `lumit_import::open_ae` takes
+whatever the user picked and answers a `Bundle`. A folder is a Bridge bundle without
+any reading at all; a file whose first four bytes are `RIFX` or `RIFF` goes to
+`open_aep`; anything else goes to `open_bundle`, which reads a zip. The extension is
+only ever a hint — the picker offers `.aep` and `.zip` in one filter and the *magic*
+decides, so a project someone renamed still opens and a bundle zip is never handed to
+the RIFX parser. `LumitBridgeState::import_ae_bundle` calls that one function, so the
+bridge kept its signature and both menu rows are the same call (docs/17).
+
+The menu is two rows under File ▸ Import: **After Effects project…**, the file picker,
+which is the front door; and **Bridge bundle folder…**, the folder picker, quieter and
+first-class forever (K-418). The notice a failure posts follows the same split — an
+`.aep` this build could not read says so calmly and names the Bridge route as the way
+through, and the older mistake of pointing the folder picker at a folder holding an
+`.aep` still teaches both routes.
+
+The report gained one row kind: `Reason::ChunkUnreadable`, raised only for the direct
+route, so docs/11 §7's "the report lists skipped chunks" is true of the summary the
+mapping's own rows ride. It is deliberately not raised for the Bridge's `report.json`,
+whose unreadable properties are already unreadable *nodes* in the capture and already
+have a row from the mapping. The two are told apart by the match name: a skipped chunk
+carries a chunk id and no match name.
+
+**Proved end to end** by `flutter_ui/test/frb/ae_import_frb_test.dart`: the real
+`fixture.aep` is picked from the menu, imports, and the report opens on the parse's own
+counts (62 imported · 55 adjusted · 2 placeholders · 1 skipped — a change there is a
+change in what the parser recovers). The bundle folder route is proved beside it
+through the second row, and a file named `.aep` holding rubbish posts the calm notice
+with the project still standing.
+
+**Owed** (docs/TODO.md): the Curves `CUSTOM_VALUE` blob decode — the bytes are in hand
+(§7.2), the sixteen-point target is not yet reached; the text document (`btds`) and the
+gradient (`GCst`) encodings, and shape-layer contents, which arrive named and marked
+rather than decoded; a fixture with real file footage, without which the footage
+interpretation offsets stay unread by choice; and corpus testing against real projects
+from more than one After Effects version — one fixture proves the offsets it contains
+and nothing about the ones it does not. Also still owed from §7's policy: the
+whole-file fallback to "footage references only", which today is the calm refusal
+instead.

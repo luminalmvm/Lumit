@@ -23,9 +23,11 @@
 //! block, the item tree, comp settings, and the layer stack with its timing,
 //! parentage, switches and blend. **Phase B** ([`props`]) is the property
 //! system — the `tdgp`/`tdbs`/`tdb4` trees, static values, keyframes, effects,
-//! masks, markers and expressions. **Phase C** is the surface, plus the two
-//! encodings still owed: a text document (`btds`) and a gradient (`GCst`),
-//! which arrive named and marked unreadable rather than dropped.
+//! masks, markers and expressions. **Phase C** is the surface: [`crate::open_ae`]
+//! routes a picked path to this reader or to the bundle reader by its magic, and
+//! the File menu offers both. Two encodings are still owed after it — a text
+//! document (`btds`) and a gradient (`GCst`), which arrive named and marked
+//! unreadable rather than dropped.
 //!
 //! One thing about the file is worth saying here because it shapes every
 //! number this route reports: **an `.aep` stores only what is not at its

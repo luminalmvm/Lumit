@@ -1103,3 +1103,25 @@ fn a_precomp_layer_reaches_its_comp_through_the_item_id() {
         );
     }
 }
+
+/// **The real project, renamed `.zip`, still opens as a project (K-418).**
+///
+/// The picker offers `.aep` and `.zip` in one filter, so `open_ae` routes on
+/// the file's first four bytes and never on its name. The lib's own unit test
+/// proves the routing with stubs; this proves it with the golden file, which is
+/// the case that would actually cost a user their import — a project renamed on
+/// the way through a mail server must import, not be refused for its extension.
+#[test]
+fn the_golden_project_opens_under_the_wrong_extension() {
+    let temp = tempfile::tempdir().expect("a temp dir");
+    let renamed = temp.path().join("fixture.zip");
+    std::fs::copy(fixtures().join("fixture.aep"), &renamed).expect("the copy");
+
+    let bundle = lumit_import::open_ae(&renamed).expect("the bytes say .aep, so it parses");
+    assert_eq!(bundle.source, BundleSource::Aep);
+    assert_eq!(
+        bundle.capture,
+        parsed().capture,
+        "the same parse, byte for byte"
+    );
+}

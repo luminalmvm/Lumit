@@ -872,6 +872,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeExpressionDisabledCarried;
     case 'property_unreadable':
       return l10n.aePropertyUnreadable(a('match_name'));
+    case 'chunk_unreadable':
+      return l10n.aeChunkUnreadable(a('chunk'));
 
     // Masks.
     case 'mask_mode_unavailable':

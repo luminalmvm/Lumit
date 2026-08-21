@@ -199,6 +199,11 @@ pub enum Reason {
     /// A property After Effects itself could not read (a `CUSTOM_VALUE`
     /// blob — K-410).
     PropertyUnreadable { match_name: String },
+    /// A record in the `.aep` itself that this build could not read, named by
+    /// its chunk id. Only the direct route raises it (K-418, docs/11 §7: a
+    /// parse failure on one chunk skips that chunk and continues, and the
+    /// report lists what was skipped).
+    ChunkUnreadable { chunk: String },
 
     // --- masks ---
     /// Lighten and Darken mask modes are not built (docs/06 §2); imported as
@@ -394,6 +399,10 @@ impl std::fmt::Display for Reason {
             Self::PropertyUnreadable { match_name } => write!(
                 f,
                 "After Effects could not read {match_name} itself, so there was nothing to import"
+            ),
+            Self::ChunkUnreadable { chunk } => write!(
+                f,
+                "a record in the project file ({chunk}) could not be read and was skipped"
             ),
             Self::MaskModeUnavailable { ae_mode } => {
                 write!(f, "mask mode {ae_mode} is not built yet — imported as Add")
