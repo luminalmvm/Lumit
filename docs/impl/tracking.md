@@ -33,7 +33,7 @@ between frames.
 | Phase | Delivers | Status |
 |---|---|---|
 | **1 — tracks** | Feature detection + pyramidal affine KLT + track store + masks + forward-backward verification. The substrate everything else reads. | **Built** (see §2's "As built") |
-| **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | Open |
+| **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
 | **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | Open |
 | **4 — surface** | Bridge + Tracking UI: run, point cloud over the picture, solved camera → a Camera layer, 2D track → keyframed transform / corner-pin export, mask pick. | Open |
 
@@ -145,6 +145,80 @@ the tracker ever needs to be faster, before any of this moves to WGSL.
   and focal is free. A sustained non-zero value is a zoom ramp (smooth focal within
   the segment).
 
+### Phase 2, as built
+
+`crates/lumit-track/src/{geom,pairs,segment}.rs` (2026-08-21). Everything above
+holds. The surface is four free functions plus two store operations, all in
+**source raster pixels** so nothing downstream converts:
+
+- `fundamental_eight_point`, `fundamental_seven_point`, `homography_dlt`,
+  `sampson_distance`, `transfer_distance`, `project` — the models and residuals,
+  usable on any `&[Correspondence]`, which is what lets the tests drive them from
+  a written-down camera pair instead of from tracks.
+- `estimate_pair(pts, source_size, from, to, &GeometrySettings) -> Option<PairGeometry>`
+  and `TrackSet::pair_geometry(from, to, …)`, the same thing over a stored pair.
+  `PairGeometry` carries both models, the inlier ids, the inlier ratio, the
+  parallax, both GRIC scores and the `PairVerdict`.
+- `select_keyframes(&TrackSet, &GeometrySettings) -> Vec<PairGeometry>`.
+- `segment_dynamic_tracks(&mut TrackSet, &[PairGeometry], &SegmentSettings) -> Segmentation`,
+  and the store operation it uses, `TrackSet::split_track(id, after_frame) -> Option<u32>`.
+- `detect_zoom(&TrackSet, &ZoomSettings) -> Vec<ZoomBoundary>`.
+
+Nine things are deviations from, or decisions under, the wording above:
+
+1. **There is no SVD in the crate and there does not need to be.** Both null
+   spaces are the smallest eigenvectors of the 9×9 normal matrix `AᵀA`, found
+   with a cyclic Jacobi eigensolver (fixed sweep order, fixed cap), and the
+   rank-2 enforcement uses the same solver on `FᵀF`: since `σᵢuᵢ = F vᵢ`,
+   summing `(F vᵢ)vᵢᵀ` over the two largest is exactly the rank-2 truncation
+   with no `U` ever formed. An SVD would have been a dependency or two hundred
+   lines, for this.
+2. **The 7-point cubic's coefficients are read off four evaluations of the
+   determinant** (`α` = 0, 1, −1, 2) rather than expanded symbolically. Same
+   four numbers, a tenth of the algebra, and no transcription risk. The roots
+   come from the trigonometric form where there are three and Cardano where
+   there is one, sorted ascending, so the "walked deterministically" is the sort
+   and not a convention anyone has to remember.
+3. **Two normalisations, doing different jobs.** Each fit applies its own
+   data-driven Hartley conditioning, as pinned. On top of that the *estimator*
+   works in a fixed frame-sized normalisation (centre at the frame's middle,
+   long edge at ±1), which is what turns the pixel threshold into the units the
+   residuals are measured in without that conversion depending on which sample
+   was drawn. Sampson distance is covariant under an isotropic similarity, so
+   thresholding at `pixel_threshold · s` there is exactly thresholding at
+   `pixel_threshold` pixels — the models are handed back denormalised, in pixels.
+4. **The RANSAC loop is one function used twice**, for F (7-point samples,
+   Sampson) and for H (4-point DLT samples, symmetric transfer). The second gets
+   a different seed stream: the same seed would draw the same index sequence,
+   and four of seven indices is not an independent search.
+5. **The early exit is recomputed from the best-so-far inlier count**, so the
+   iteration at which the loop stops is a function of the data alone. It is also
+   floored at the current iteration, so a late improvement cannot make the cap
+   retreat behind where the loop already is.
+6. **GRIC's σ is a setting, not a constant** (`sigma_px`, default 0.75 —
+   half the inlier threshold). The rest is Torr's standard: `r = 4`, `λ₁ = ln r`,
+   `λ₂ = ln(r·n)`, `λ₃ = 2`, `d`/`k` of 3/7 for F and 2/8 for H.
+7. **A split drops the one step that straddled it.** `steps[i]` measures the
+   motion from `points[i]` to `points[i+1]`; the split has just declared that
+   motion was two different things, so it belongs to neither half and both
+   halves keep `steps.len() + 1 == points.len()`. The prefix keeps the id and
+   becomes `Ended`; the suffix takes a fresh id, inherits the state, and records
+   `parent: Some(id)` — one additive field on `Track`.
+8. **Keyframe selection returns a short final pair rather than leaving a gap.**
+   At the tail of a shot there are no frames left to reach for, so the last pair
+   can be below the parallax floor. Dropping it would hand phase 3 a stretch of
+   shot with no geometry at all, which is worse; the pair carries its own
+   `parallax` and phase 3 can weigh it.
+9. **The zoom detector has two thresholds and a cross-check, not one
+   threshold.** `ramp_threshold` (0.004) is the floor above which the lens is
+   moving at all; `cut_threshold` (0.05) is what an isolated pair must clear to
+   be a cut rather than a one-frame ramp; and a cut must additionally be
+   explained by a scale about a single centre (`scale_only_px`, and the fitted
+   log-scale agreeing with the affine matrices' median within `cross_check`).
+   That last is what stops a hard forward dolly reading as a scope-in — near
+   things grow more than far ones, and a scale-only fit says so. It has its own
+   test.
+
 ## 4. Phase 3 — the solve (pinned choices)
 
 - Rotation averaging over the pairwise relative rotations (robust L1→IRLS L2, the
@@ -189,7 +263,31 @@ the tracker ever needs to be faster, before any of this moves to WGSL.
 - Phase 2: synthetic two-view geometry with known F (points from a known camera
   pair + noise + a planted fraction of "moving object" points following a second
   motion): the dominant model's inliers must exclude the planted movers; the
-  GRIC gate must call a rotation-only pair rotation-only.
+  GRIC gate must call a rotation-only pair rotation-only. **Landed** as the
+  second half of `crates/lumit-track/src/tests.rs` — sixteen tests, and not one
+  of them renders a picture. Phase 1's job was pixels-to-tracks and its tests had
+  to draw; phase 2's job is arithmetic over correspondences, so its ground truth
+  is a camera pair written down exactly and its footage is the projection of a
+  known cloud. A test that rendered here would be measuring the tracker again.
+  In order: the eight-point recovered on held-out points (compared by epipolar
+  residual, never by matrix entries — F is only defined up to scale); the same
+  under half a pixel of jitter, which is also the only condition under which the
+  rank-2 enforcement is visible and so is where it is pinned; the seven-point
+  cubic's roots, one exact and the others visibly not; the GRIC gate both ways,
+  each pinning the *homography's own* quality as well as the verdict; LO-RANSAC
+  against twenty planted movers; keyframe selection by parallax; a lifelong mover
+  marked `Moving` with the still world untouched; a mover that starts mid-shot
+  split at the change with both halves' points rejoining to the original exactly;
+  a refused split leaving the store byte-identical; the zoom cut, the ramp, a
+  still lens, and a forward dolly that bursts like a scope-in and must not be
+  called one; the whole pipeline run twice and compared with `assert_eq!`.
+- **The phase-2 thresholds are mutation-checked, not eyeballed.** Flipping one
+  sign in the Sampson numerator fails eight tests; one sign in the DLT row fails
+  two; one coefficient in the cubic fails one; removing the rank-2 enforcement
+  fails one. Every threshold in that half of the file was placed after measuring
+  both the true value and the broken one, and sits in the gap rather than beside
+  either — the determinant bound is nine orders of magnitude from the value that
+  would pass it wrongly.
 - Phase 3: a synthetic orbit + a synthetic dolly with a mid-shot zoom cut: solved
   poses within tolerance of ground truth (ATE after similarity alignment), focal
   recovered per segment within 2%, and the zoom cut landing on the right frame.

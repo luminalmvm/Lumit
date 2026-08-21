@@ -62,14 +62,26 @@
 
 mod detect;
 mod exclude;
+mod geom;
 mod klt;
+mod pairs;
 mod pyramid;
+mod segment;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
 pub use exclude::ExclusionMask;
+pub use geom::{
+    fundamental_eight_point, fundamental_seven_point, homography_dlt, project, sampson_distance,
+    transfer_distance, Mat3,
+};
+pub use pairs::{estimate_pair, select_keyframes, GeometrySettings, PairGeometry, PairVerdict};
+pub use segment::{
+    detect_zoom, segment_dynamic_tracks, SegmentSettings, Segmentation, TrackSplit, ZoomBoundary,
+    ZoomKind, ZoomSettings,
+};
 
 use detect::{BucketGrid, Scratch};
 use pyramid::Pyramid;
@@ -332,6 +344,10 @@ pub struct Track {
     /// always one shorter than `points`.
     pub steps: Vec<TrackStep>,
     pub state: TrackState,
+    /// The track this one was cut from, where phase 2's dynamic segmentation
+    /// found a feature that agreed with the camera and then stopped
+    /// ([`TrackSet::split_track`]). `None` on every detected track.
+    pub parent: Option<u32>,
 }
 
 impl Track {
@@ -475,16 +491,7 @@ impl TrackSet {
             .filter_map(|t| t.step_from(frame))
             .filter_map(|s| s.log_scale())
             .collect();
-        if v.is_empty() {
-            return None;
-        }
-        v.sort_by(f64::total_cmp);
-        let n = v.len();
-        Some(if n % 2 == 1 {
-            v[n / 2]
-        } else {
-            0.5 * (v[n / 2 - 1] + v[n / 2])
-        })
+        geom::median(&mut v)
     }
 
     /// How many tracks were still live at the last frame pushed.
@@ -494,6 +501,67 @@ impl TrackSet {
             .iter()
             .filter(|t| t.state == TrackState::Live)
             .count()
+    }
+
+    /// This pair of frames' two-view geometry — the convenience over
+    /// [`estimate_pair`] that pulls the correspondences itself.
+    #[must_use]
+    pub fn pair_geometry(
+        &self,
+        from: i64,
+        to: i64,
+        settings: &GeometrySettings,
+    ) -> Option<PairGeometry> {
+        estimate_pair(
+            &self.correspondences(from, to),
+            self.source_size(),
+            from,
+            to,
+            settings,
+        )
+    }
+
+    /// Cut a track in two after `after_frame`, handing the suffix a fresh id.
+    ///
+    /// The original keeps its id and every point up to and including
+    /// `after_frame`, and is left [`TrackState::Ended`] because it now stops
+    /// there. The new track carries the points from `after_frame + 1` onwards,
+    /// inherits the original's state, and records the original as its
+    /// [`Track::parent`]. The one step that straddled the cut belongs to
+    /// neither half and is dropped — it measured a frame-to-frame motion that
+    /// the split has just declared was two different things.
+    ///
+    /// Returns the new id, or `None` when there is no such track or the cut
+    /// would leave a half empty.
+    pub fn split_track(&mut self, id: u32, after_frame: i64) -> Option<u32> {
+        let index = self.tracks.binary_search_by_key(&id, |t| t.id).ok()?;
+        // Ids ascend and are never reused, so the last track holds the largest.
+        let new_id = self.tracks.last()?.id.checked_add(1)?;
+        let track = self.tracks.get_mut(index)?;
+        if !track.covers(after_frame) || after_frame >= track.last_frame() {
+            return None;
+        }
+        let cut = usize::try_from(after_frame - track.first_frame()).ok()?;
+        // Validated before anything is moved: a refused split must leave the
+        // store exactly as it found it.
+        if cut + 1 >= track.points.len() {
+            return None;
+        }
+        let points = track.points.split_off(cut + 1);
+        let mut steps = track.steps.split_off(cut.min(track.steps.len()));
+        if !steps.is_empty() {
+            steps.remove(0);
+        }
+        let state = track.state;
+        track.state = TrackState::Ended;
+        self.tracks.push(Track {
+            id: new_id,
+            points,
+            steps,
+            state,
+            parent: Some(id),
+        });
+        Some(new_id)
     }
 }
 
@@ -719,6 +787,7 @@ impl Tracker {
                 }],
                 steps: Vec::new(),
                 state: TrackState::Live,
+                parent: None,
             });
             self.live.push(LiveTrack {
                 index: self.tracks.len() - 1,

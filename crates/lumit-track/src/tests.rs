@@ -812,3 +812,823 @@ fn perf_100_features_over_30_frames_of_640x360() {
         );
     }
 }
+
+// ===========================================================================
+// Phase 2 — two-view geometry (docs/impl/tracking.md §3, test plan §5)
+//
+// No pictures at all from here down. Phase 1's job was to turn pixels into
+// tracks and its tests had to render; phase 2's job is arithmetic over point
+// correspondences, so its ground truth is a camera pair written down exactly
+// and its "footage" is the projection of a known cloud. A test that rendered
+// would be measuring the tracker again.
+// ===========================================================================
+
+/// A pinhole camera with its principal point at the frame centre — the model
+/// docs/impl/tracking.md §4 pins, used here to manufacture correspondences
+/// whose geometry is known rather than estimated.
+#[derive(Clone, Copy)]
+struct Camera {
+    /// World → camera rotation.
+    r: [[f64; 3]; 3],
+    /// Camera centre, in world coordinates.
+    c: [f64; 3],
+    f: f64,
+}
+
+fn mat3_mul(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut out = [[0.0f64; 3]; 3];
+    for (r, row) in out.iter_mut().enumerate() {
+        for (c, cell) in row.iter_mut().enumerate() {
+            *cell = (0..3).map(|k| a[r][k] * b[k][c]).sum();
+        }
+    }
+    out
+}
+
+impl Camera {
+    fn new(c: [f64; 3], yaw: f64, pitch: f64) -> Camera {
+        let (sy, cy) = (yaw.sin(), yaw.cos());
+        let (sp, cp) = (pitch.sin(), pitch.cos());
+        let ry = [[cy, 0.0, -sy], [0.0, 1.0, 0.0], [sy, 0.0, cy]];
+        let rx = [[1.0, 0.0, 0.0], [0.0, cp, -sp], [0.0, sp, cp]];
+        Camera {
+            r: mat3_mul(&rx, &ry),
+            c,
+            f: 300.0,
+        }
+    }
+
+    /// Where `x` lands in this camera's image, or `None` when it is behind the
+    /// camera or off the raster — the same two ways a real feature leaves.
+    fn project(&self, x: [f64; 3]) -> Option<[f64; 2]> {
+        let d = [x[0] - self.c[0], x[1] - self.c[1], x[2] - self.c[2]];
+        let mut v = [0.0f64; 3];
+        for (o, row) in v.iter_mut().zip(self.r.iter()) {
+            *o = row[0] * d[0] + row[1] * d[1] + row[2] * d[2];
+        }
+        if v[2] < 0.5 {
+            return None;
+        }
+        let p = [
+            W as f64 / 2.0 + self.f * v[0] / v[2],
+            H as f64 / 2.0 + self.f * v[1] / v[2],
+        ];
+        if p[0] < 0.0 || p[0] >= W as f64 || p[1] < 0.0 || p[1] >= H as f64 {
+            return None;
+        }
+        Some(p)
+    }
+
+    /// Depth of `x` along this camera's optical axis — what a per-patch scale
+    /// is the ratio of.
+    fn depth(&self, x: [f64; 3]) -> f64 {
+        let d = [x[0] - self.c[0], x[1] - self.c[1], x[2] - self.c[2]];
+        self.r[2][0] * d[0] + self.r[2][1] * d[1] + self.r[2][2] * d[2]
+    }
+}
+
+/// A deterministic cloud in front of the camera, spread in depth — the spread
+/// is the whole point, since a cloud on one plane has no epipolar geometry to
+/// recover.
+fn scene_points(n: usize) -> Vec<[f64; 3]> {
+    (0..n)
+        .map(|i| {
+            let i = i as i64;
+            [
+                -2.5 + 5.0 * hash2(i, 101),
+                -1.5 + 3.0 * hash2(i, 211),
+                7.0 + 9.0 * hash2(i, 307),
+            ]
+        })
+        .collect()
+}
+
+/// Project a cloud into two views. Points with an index at or above `movers`
+/// are displaced by `drift` before the second view — the planted second motion
+/// docs/impl/tracking.md §5 asks for.
+fn pair_correspondences(
+    a: &Camera,
+    b: &Camera,
+    pts: &[[f64; 3]],
+    movers: usize,
+    drift: [f64; 3],
+) -> Vec<Correspondence> {
+    let mut out = Vec::new();
+    for (i, p) in pts.iter().enumerate() {
+        let q = if i >= movers {
+            [p[0] + drift[0], p[1] + drift[1], p[2] + drift[2]]
+        } else {
+            *p
+        };
+        if let (Some(u), Some(v)) = (a.project(*p), b.project(q)) {
+            out.push(Correspondence {
+                id: i as u32,
+                from: u,
+                to: v,
+            });
+        }
+    }
+    out
+}
+
+fn transpose(m: &Mat3) -> Mat3 {
+    let mut out = [[0.0f64; 3]; 3];
+    for (r, row) in m.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            out[c][r] = *v;
+        }
+    }
+    out
+}
+
+// --- The fundamental matrix -------------------------------------------------
+
+#[test]
+fn the_eight_point_fundamental_explains_points_it_never_saw() {
+    let pts = scene_points(80);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.9, 0.08, 0.35], 0.05, -0.02);
+    let all = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    assert!(all.len() > 50, "{} points landed in both views", all.len());
+    let (fit, held) = all.split_at(40);
+
+    let f = fundamental_eight_point(fit).expect("a cloud with depth has a fundamental matrix");
+    // Held out: never in the fit. And the comparison is the epipolar residual,
+    // not the matrix entries — F is only defined up to scale, so entry-by-entry
+    // agreement would be a test of the normalisation and nothing else.
+    for c in held {
+        let r = sampson_distance(&f, c.from, c.to);
+        assert!(r < 1e-6, "held-out residual {r} px on track {}", c.id);
+    }
+
+    // Anti-vacuity. Everything above would also pass for a matrix that
+    // explained *any* pair of points, so: shuffle the second image's points and
+    // the same matrix must refuse them.
+    let refused = held
+        .iter()
+        .enumerate()
+        .filter(|(i, c)| {
+            let other = held[(i + 7) % held.len()];
+            sampson_distance(&f, c.from, other.to) > 2.0
+        })
+        .count();
+    assert!(
+        refused * 10 >= held.len() * 9,
+        "only {refused} of {} shuffled pairs were refused",
+        held.len()
+    );
+    // And the geometry is directional: swapping the two images is a different
+    // question, so the transpose must not answer this one.
+    let ft = transpose(&f);
+    let wrong_way = held
+        .iter()
+        .filter(|c| sampson_distance(&ft, c.from, c.to) > 1.0)
+        .count();
+    assert!(
+        wrong_way * 10 >= held.len() * 9,
+        "{wrong_way} of {} pairs survived a transposed F; the fit is not directional",
+        held.len()
+    );
+}
+
+#[test]
+fn the_eight_point_fundamental_survives_pixel_noise() {
+    let pts = scene_points(80);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.9, 0.08, 0.35], 0.05, -0.02);
+    let mut all = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    // Half a pixel of deterministic jitter on the second image, which is about
+    // what a good KLT step leaves behind (phase 1's p90).
+    for (i, c) in all.iter_mut().enumerate() {
+        let i = i as i64;
+        c.to[0] += 0.5 * (hash2(i, 907) - 0.5);
+        c.to[1] += 0.5 * (hash2(i, 911) - 0.5);
+    }
+    let (fit, held) = all.split_at(45);
+    let f = fundamental_eight_point(fit).expect("noise does not remove the geometry");
+    let residuals: Vec<f64> = held
+        .iter()
+        .map(|c| sampson_distance(&f, c.from, c.to))
+        .collect();
+    let m = median(residuals.clone());
+    assert!(m < 0.35, "median held-out residual {m} px under noise");
+    assert!(
+        quantile(residuals, 0.9) < 1.0,
+        "the tail of a noisy fit still has to stay inside the inlier threshold"
+    );
+    // Noise is also the only condition under which the rank-2 enforcement is
+    // visible: on exact points the linear solution is already singular, and on
+    // noisy ones it is not until it is made so. A rank-3 "fundamental matrix"
+    // has no epipoles at all and is a phase-3 trap, so this is pinned here.
+    // The matrix is unit Frobenius, which is what makes the bound absolute.
+    let d = super::geom::det3(&f).abs();
+    // Enforced this sits around 1e-23; without the enforcement, at this noise
+    // level, around 1e-9. The bound is placed in the gap, not beside either.
+    assert!(
+        d < 1e-18,
+        "the fitted F has determinant {d}; it is not rank 2"
+    );
+}
+
+#[test]
+fn the_seven_point_cubic_finds_the_geometry_among_its_roots() {
+    let pts = scene_points(80);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.9, 0.08, 0.35], 0.05, -0.02);
+    let all = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    // Seven spread across the cloud rather than seven neighbours: a minimal
+    // sample from one corner is degenerate and would prove nothing.
+    let sample: Vec<Correspondence> = all.iter().step_by(all.len() / 7).take(7).copied().collect();
+    assert_eq!(sample.len(), 7);
+
+    let mut candidates = Vec::new();
+    fundamental_seven_point(&sample, &mut candidates);
+    assert!(
+        candidates.len() == 1 || candidates.len() == 3,
+        "a real cubic has one or three real roots, got {}",
+        candidates.len()
+    );
+    let spread = |f: &Mat3| {
+        median(
+            all.iter()
+                .map(|c| sampson_distance(f, c.from, c.to))
+                .collect(),
+        )
+    };
+    // Exactly one root is the true geometry, and on a noise-free minimal sample
+    // it is exact.
+    let best = candidates.iter().map(spread).fold(f64::INFINITY, f64::min);
+    assert!(best < 1e-6, "best seven-point candidate is {best} px out");
+    // Anti-vacuity: the other roots are spurious, so a test that accepted any
+    // candidate would be testing nothing.
+    if candidates.len() == 3 {
+        let worst = candidates.iter().map(spread).fold(0.0f64, f64::max);
+        assert!(
+            worst > 1.0,
+            "all three roots agreed; the cubic is degenerate"
+        );
+    }
+}
+
+// --- The GRIC gate ----------------------------------------------------------
+
+#[test]
+fn the_gric_gate_calls_a_pure_rotation_pair_rotation_only() {
+    // Same camera centre, different aim. There is no baseline, so there is no
+    // parallax and no translation to recover — the pair is usable for rotation
+    // and focal and must never reach the translation solve.
+    let pts = scene_points(90);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.0, 0.0, 0.0], 0.05, 0.02);
+    let corr = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    assert!(corr.len() > 40, "{} points stayed in frame", corr.len());
+    let g = estimate_pair(&corr, (W, H), 0, 1, &GeometrySettings::default())
+        .expect("a rotation pair still estimates");
+    assert_eq!(g.verdict, PairVerdict::RotationOnly);
+    assert!(
+        g.gric_homography + 20.0 < g.gric_fundamental,
+        "GRIC H {} vs F {} — the gate has no margin",
+        g.gric_homography,
+        g.gric_fundamental
+    );
+    assert!(
+        g.parallax < 0.5,
+        "a pure rotation left {} px of parallax",
+        g.parallax
+    );
+    // The gate is a comparison, so it is only worth as much as the homography
+    // it compares against: on a pure rotation that homography has to be the
+    // real infinite homography, not merely the better of two poor answers.
+    let fit = median(
+        corr.iter()
+            .map(|c| transfer_distance(&g.homography, c.from, c.to))
+            .collect(),
+    );
+    assert!(fit < 0.01, "the rotation's own homography is {fit} px out");
+}
+
+#[test]
+fn the_gric_gate_calls_a_translating_pair_translating() {
+    let pts = scene_points(90);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([1.1, 0.05, 0.2], 0.02, 0.0);
+    let corr = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    let g = estimate_pair(&corr, (W, H), 0, 1, &GeometrySettings::default())
+        .expect("a translating pair estimates");
+    assert_eq!(g.verdict, PairVerdict::Translating);
+    assert!(
+        g.gric_fundamental + 20.0 < g.gric_homography,
+        "GRIC F {} vs H {} — the gate has no margin",
+        g.gric_fundamental,
+        g.gric_homography
+    );
+    assert!(
+        g.parallax > 3.0,
+        "a real baseline over this depth spread must show parallax, got {}",
+        g.parallax
+    );
+    assert!(g.inlier_ratio > 0.9, "inlier ratio {}", g.inlier_ratio);
+    // The other side of the same coin: a cloud with depth cannot be flattened,
+    // so the best homography over this pair has to leave real error behind.
+    let fit = median(
+        corr.iter()
+            .map(|c| transfer_distance(&g.homography, c.from, c.to))
+            .collect(),
+    );
+    assert!(
+        fit > 2.0,
+        "a homography explained a moving camera to {fit} px"
+    );
+}
+
+// --- LO-RANSAC against a planted second motion ------------------------------
+
+#[test]
+fn the_dominant_model_refuses_the_planted_second_motion() {
+    let pts = scene_points(90);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([1.1, 0.05, 0.2], 0.02, 0.0);
+    // The camera's baseline is mostly sideways, so a vertical world drift is
+    // squarely off the epipolar lines. A mover that happened to slide *along*
+    // its own epipolar line is invisible to this method and to any other, which
+    // is why the drift is chosen across them.
+    let corr = pair_correspondences(&a, &b, &pts, 60, [0.0, 0.5, 0.0]);
+    let movers = corr.iter().filter(|c| c.id >= 60).count();
+    let statics = corr.len() - movers;
+    assert!(
+        movers > 8 && statics > 30,
+        "{movers} movers, {statics} static"
+    );
+
+    let g = estimate_pair(&corr, (W, H), 0, 1, &GeometrySettings::default())
+        .expect("the still world is the majority");
+    assert_eq!(g.verdict, PairVerdict::Translating);
+    for c in corr.iter().filter(|c| c.id >= 60) {
+        assert!(
+            !g.is_inlier(c.id),
+            "mover {} joined the dominant model at residual {}",
+            c.id,
+            sampson_distance(&g.fundamental, c.from, c.to)
+        );
+    }
+    let kept = corr
+        .iter()
+        .filter(|c| c.id < 60 && g.is_inlier(c.id))
+        .count();
+    assert!(
+        kept * 20 >= statics * 19,
+        "only {kept} of {statics} still-world points inlied"
+    );
+}
+
+// --- A synthetic shot, as a TrackSet ----------------------------------------
+
+/// `frames` views of one cloud, the camera dollying sideways while it pans a
+/// little, written straight into a [`TrackSet`].
+///
+/// Tracks with an id at or above `movers` drift by `drift` per frame from
+/// `drift_from` onward: `drift_from == 0` makes a track that never agrees with
+/// the camera, and a later value makes one that agrees and then stops, which is
+/// the case §3 says to split rather than discard.
+fn synthetic_shot(
+    frames: usize,
+    count: usize,
+    movers: usize,
+    drift: [f64; 3],
+    drift_from: usize,
+) -> TrackSet {
+    let pts = scene_points(count);
+    let cams: Vec<Camera> = (0..frames)
+        .map(|i| {
+            let t = i as f64;
+            Camera::new([0.22 * t, 0.01 * t, 0.03 * t], 0.003 * t, 0.0)
+        })
+        .collect();
+    let mut tracks = Vec::new();
+    for (j, p) in pts.iter().enumerate() {
+        let mut points = Vec::new();
+        for (i, cam) in cams.iter().enumerate() {
+            let k = if j >= movers && i > drift_from {
+                (i - drift_from) as f64
+            } else {
+                0.0
+            };
+            let x = [
+                p[0] + drift[0] * k,
+                p[1] + drift[1] * k,
+                p[2] + drift[2] * k,
+            ];
+            let Some(u) = cam.project(x) else {
+                break;
+            };
+            points.push(TrackPoint {
+                frame: i as i64,
+                x: u[0],
+                y: u[1],
+            });
+        }
+        if points.len() < 2 {
+            continue;
+        }
+        let steps = vec![
+            TrackStep {
+                a: [[1.0, 0.0], [0.0, 1.0]],
+                ncc: 1.0,
+                fb: 0.0,
+            };
+            points.len() - 1
+        ];
+        tracks.push(Track {
+            id: j as u32,
+            points,
+            steps,
+            state: TrackState::Live,
+            parent: None,
+        });
+    }
+    TrackSet {
+        tracks,
+        width: W,
+        height: H,
+    }
+}
+
+#[test]
+fn keyframe_selection_picks_pairs_that_carry_parallax() {
+    let set = synthetic_shot(10, 90, usize::MAX, [0.0; 3], 0);
+    let pairs = select_keyframes(&set, &GeometrySettings::default());
+    assert!(
+        pairs.len() >= 2,
+        "{} keyframe pairs over ten frames",
+        pairs.len()
+    );
+    let mut last = -1i64;
+    for g in &pairs {
+        assert!(g.from > last, "pairs come back in frame order");
+        assert!(g.to > g.from);
+        last = g.from;
+        assert_eq!(g.verdict, PairVerdict::Translating);
+        assert!(
+            g.inlier_ratio > 0.9,
+            "pair {}→{} inliers {}",
+            g.from,
+            g.to,
+            g.inlier_ratio
+        );
+    }
+    // Every pair but the last carries real parallax. The last is the tail of
+    // the shot, where there are no frames left to reach for and a short pair is
+    // better than a gap — that fallback is deliberate, and this is where it is
+    // recorded.
+    let (body, tail) = pairs.split_at(pairs.len() - 1);
+    for g in body {
+        assert!(
+            g.parallax >= GeometrySettings::default().min_parallax_px,
+            "pair {}→{} was chosen at {} px of parallax",
+            g.from,
+            g.to,
+            g.parallax
+        );
+        // Adjacent frames on this dolly do not carry enough parallax, so a
+        // selector that simply returned every neighbouring pair would fail here.
+        assert!(
+            g.to - g.from > 1,
+            "keyframe pairs are spaced by parallax, not by one frame"
+        );
+    }
+    assert!(
+        tail.first().is_some_and(|g| g.to == 9),
+        "selection has to reach the end of the shot, got {:?}",
+        tail.first().map(|g| (g.from, g.to))
+    );
+}
+
+#[test]
+fn a_track_that_never_agrees_with_the_camera_is_marked_moving() {
+    let mut set = synthetic_shot(10, 90, 70, [0.0, 0.16, 0.0], 0);
+    let pairs = select_keyframes(&set, &GeometrySettings::default());
+    assert!(
+        pairs.len() >= 2,
+        "need a profile, got {} pairs",
+        pairs.len()
+    );
+    let seg = segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
+    assert!(seg.splits.is_empty(), "a lifelong mover is not a split");
+
+    let planted: Vec<u32> = set
+        .tracks()
+        .iter()
+        .filter(|t| t.id >= 70 && t.points.len() > 4)
+        .map(|t| t.id)
+        .collect();
+    assert!(
+        planted.len() > 8,
+        "{} movers survived to be judged",
+        planted.len()
+    );
+    for id in &planted {
+        assert!(seg.moving.contains(id), "mover {id} was left in the solve");
+        assert_eq!(
+            set.get(*id).map(|t| t.state),
+            Some(TrackState::Moving),
+            "mover {id} state"
+        );
+    }
+    // And the still world is untouched — a segmentation that marked everything
+    // would satisfy the loop above.
+    let wrongly = set
+        .tracks()
+        .iter()
+        .filter(|t| t.id < 70 && t.state == TrackState::Moving)
+        .count();
+    assert_eq!(
+        wrongly, 0,
+        "{wrongly} still-world tracks were called moving"
+    );
+}
+
+#[test]
+fn a_track_that_stops_agreeing_is_split_at_the_change() {
+    let before = synthetic_shot(10, 90, 70, [0.0, 0.16, 0.0], 4);
+    let mut set = before.clone();
+    let pairs = select_keyframes(&set, &GeometrySettings::default());
+    let seg = segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
+
+    assert!(
+        seg.splits.len() > 5,
+        "only {} tracks were split at the change",
+        seg.splits.len()
+    );
+    for s in &seg.splits {
+        assert!(s.parent >= 70, "a still-world track was split");
+        assert!(s.child > s.parent, "the suffix gets a fresh id");
+        assert!(
+            (2..=6).contains(&s.at_frame),
+            "the split landed on frame {}, and the drift starts after frame 4",
+            s.at_frame
+        );
+        let parent = set.get(s.parent).expect("the parent keeps its id");
+        let child = set.get(s.child).expect("the child is in the store");
+        assert_eq!(parent.state, TrackState::Ended, "the parent now stops");
+        assert_eq!(child.state, TrackState::Moving, "the suffix is the mover");
+        assert_eq!(
+            child.parent,
+            Some(s.parent),
+            "the child remembers its parent"
+        );
+        assert_eq!(parent.parent, None);
+        assert_eq!(parent.last_frame(), s.at_frame);
+        assert_eq!(child.first_frame(), s.at_frame + 1);
+        // Both halves are whole tracks, not fragments with a broken invariant.
+        assert_eq!(parent.steps.len() + 1, parent.points.len());
+        assert_eq!(child.steps.len() + 1, child.points.len());
+
+        // The points survive the cut: prefix then suffix is exactly what the
+        // track had before, in order.
+        let original = before.get(s.parent).expect("the original");
+        let rejoined: Vec<TrackPoint> = parent
+            .points
+            .iter()
+            .chain(child.points.iter())
+            .copied()
+            .collect();
+        assert_eq!(
+            rejoined, original.points,
+            "a split lost or duplicated points"
+        );
+    }
+    // The prefix stayed in the solve: that is the whole reason to split rather
+    // than discard.
+    let kept = set
+        .tracks()
+        .iter()
+        .filter(|t| t.id >= 70 && t.id < 90 && t.state != TrackState::Moving)
+        .count();
+    assert!(
+        kept > 5,
+        "{kept} clean prefixes were kept out of {} splits",
+        seg.splits.len()
+    );
+}
+
+#[test]
+fn a_refused_split_leaves_the_store_alone() {
+    let mut set = synthetic_shot(6, 40, usize::MAX, [0.0; 3], 0);
+    let before = set.clone();
+    let id = set.tracks().first().map(|t| t.id).expect("a track");
+    let last = set.get(id).map(|t| t.last_frame()).expect("a last frame");
+    assert_eq!(set.split_track(id, last), None, "no suffix to cut off");
+    assert_eq!(set.split_track(id, last + 5), None, "outside the track");
+    assert_eq!(set.split_track(u32::MAX, 0), None, "no such track");
+    assert_eq!(set, before, "a refused split must change nothing");
+}
+
+// --- The zoom-burst detector ------------------------------------------------
+
+/// A track set whose only motion is a scale about the frame centre, one factor
+/// per frame — the zoom detector's whole world, and nothing else's.
+fn zoom_shot(scales: &[f64]) -> TrackSet {
+    let c = centre();
+    let tracks = (0..60u32)
+        .map(|j| {
+            let i = i64::from(j);
+            let base = [40.0 + 240.0 * hash2(i, 501), 25.0 + 130.0 * hash2(i, 601)];
+            let points = scales
+                .iter()
+                .enumerate()
+                .map(|(k, s)| TrackPoint {
+                    frame: k as i64,
+                    x: c[0] + (base[0] - c[0]) * s,
+                    y: c[1] + (base[1] - c[1]) * s,
+                })
+                .collect();
+            let steps = scales
+                .windows(2)
+                .map(|w| {
+                    let r = w[1] / w[0];
+                    TrackStep {
+                        a: [[r, 0.0], [0.0, r]],
+                        ncc: 1.0,
+                        fb: 0.0,
+                    }
+                })
+                .collect();
+            Track {
+                id: j,
+                points,
+                steps,
+                state: TrackState::Live,
+                parent: None,
+            }
+        })
+        .collect();
+    TrackSet {
+        tracks,
+        width: W,
+        height: H,
+    }
+}
+
+#[test]
+fn a_zoom_cut_lands_on_the_right_frame() {
+    // The owner's scope-in: nothing, nothing, nothing, a 1.25× jump between
+    // frames 3 and 4, then nothing again.
+    let set = zoom_shot(&[1.0, 1.0, 1.0, 1.0, 1.25, 1.25, 1.25]);
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    assert_eq!(found.len(), 1, "one boundary, got {found:?}");
+    let b = found[0];
+    assert_eq!(b.frame, 3, "the cut sits on the pair 3→4");
+    assert_eq!(b.end_frame, 3, "a cut is one pair wide");
+    assert_eq!(b.kind, ZoomKind::Cut);
+    // Tight on purpose: a sign slip anywhere in the log-scale chain reads as
+    // ln(1/1.25), which this refuses.
+    assert!(
+        (b.log_scale - 1.25f64.ln()).abs() < 0.002,
+        "log scale {} against {}",
+        b.log_scale,
+        1.25f64.ln()
+    );
+}
+
+#[test]
+fn a_zoom_ramp_reads_as_a_ramp() {
+    let scales: Vec<f64> = (0..8).map(|i| 1.012f64.powi(i)).collect();
+    let set = zoom_shot(&scales);
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    assert_eq!(found.len(), 1, "one run, got {found:?}");
+    let b = found[0];
+    assert_eq!(b.kind, ZoomKind::Ramp);
+    assert_eq!((b.frame, b.end_frame), (0, 6), "the ramp spans every pair");
+    assert!(
+        (b.log_scale - 1.012f64.ln()).abs() < 0.002,
+        "ramp log scale {}",
+        b.log_scale
+    );
+}
+
+#[test]
+fn a_still_lens_has_no_boundaries() {
+    let set = zoom_shot(&[1.0, 1.0, 1.0, 1.0, 1.0]);
+    assert!(detect_zoom(&set, &ZoomSettings::default()).is_empty());
+    // And a scale below the ramp threshold is noise, not a zoom: a detector
+    // with no floor would fire on every shot ever taken.
+    let creeping = zoom_shot(&[1.0, 1.001, 1.002, 1.003]);
+    assert!(detect_zoom(&creeping, &ZoomSettings::default()).is_empty());
+}
+
+#[test]
+fn a_forward_lunge_is_not_read_as_a_zoom_cut() {
+    // Everything in frame grows sharply between two frames, so the median log
+    // scale bursts exactly as a scope-in does. But the camera moved: near
+    // things grew more than far ones, a single scale about a single centre
+    // cannot explain the displacements, and the scale-only cross-check is the
+    // whole difference between "the lens changed" and "the camera lunged".
+    let pts = scene_points(90);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.0, 0.0, 2.6], 0.0, 0.0);
+    let tracks: Vec<Track> = pts
+        .iter()
+        .enumerate()
+        .filter_map(|(j, p)| {
+            let (u, v) = (a.project(*p)?, b.project(*p)?);
+            let r = a.depth(*p) / b.depth(*p);
+            Some(Track {
+                id: j as u32,
+                points: vec![
+                    TrackPoint {
+                        frame: 0,
+                        x: u[0],
+                        y: u[1],
+                    },
+                    TrackPoint {
+                        frame: 1,
+                        x: v[0],
+                        y: v[1],
+                    },
+                ],
+                steps: vec![TrackStep {
+                    a: [[r, 0.0], [0.0, r]],
+                    ncc: 1.0,
+                    fb: 0.0,
+                }],
+                state: TrackState::Live,
+                parent: None,
+            })
+        })
+        .collect();
+    assert!(tracks.len() > 30, "{} points stayed in frame", tracks.len());
+    let set = TrackSet {
+        tracks,
+        width: W,
+        height: H,
+    };
+    let burst = set.median_log_scale(0).expect("the lunge does burst");
+    assert!(
+        burst > ZoomSettings::default().cut_threshold,
+        "the burst {burst} has to be big enough to tempt the detector"
+    );
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].kind,
+        ZoomKind::Ramp,
+        "a dolly must not be called a lens cut"
+    );
+}
+
+// --- Determinism ------------------------------------------------------------
+
+#[test]
+fn two_runs_of_the_two_view_pipeline_agree_bit_for_bit() {
+    let once = || {
+        let mut set = synthetic_shot(10, 90, 70, [0.0, 0.16, 0.0], 4);
+        let pairs = select_keyframes(&set, &GeometrySettings::default());
+        let seg = segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
+        let zoom = detect_zoom(&set, &ZoomSettings::default());
+        (set, pairs, seg, zoom)
+    };
+    let (a, b) = (once(), once());
+    assert_eq!(a.1, b.1, "the keyframe pairs must agree bit for bit");
+    assert_eq!(a.2, b.2, "the segmentation must agree bit for bit");
+    assert_eq!(a.3, b.3, "the zoom boundaries must agree bit for bit");
+    assert_eq!(a.0, b.0, "the mutated store must agree bit for bit");
+}
+
+#[test]
+fn the_two_view_boundary_refuses_what_it_cannot_use() {
+    let pts = scene_points(20);
+    let a = Camera::new([0.0, 0.0, 0.0], 0.0, 0.0);
+    let b = Camera::new([0.9, 0.0, 0.0], 0.0, 0.0);
+    let corr = pair_correspondences(&a, &b, &pts, usize::MAX, [0.0; 3]);
+    let s = GeometrySettings::default();
+    assert!(
+        estimate_pair(&corr[..4], (W, H), 0, 1, &s).is_none(),
+        "too few correspondences"
+    );
+    assert!(
+        estimate_pair(&corr, (0, 0), 0, 1, &s).is_none(),
+        "no raster to normalise against"
+    );
+    assert!(
+        fundamental_eight_point(&corr[..7]).is_none(),
+        "the eight-point needs eight"
+    );
+    assert!(homography_dlt(&corr[..3]).is_none(), "the DLT needs four");
+    let mut out = Vec::new();
+    fundamental_seven_point(&corr[..6], &mut out);
+    assert!(out.is_empty(), "the seven-point needs seven");
+
+    // A set of identical points has no geometry, and saying so is not a panic.
+    let flat: Vec<Correspondence> = (0..12)
+        .map(|i| Correspondence {
+            id: i,
+            from: [10.0, 10.0],
+            to: [12.0, 10.0],
+        })
+        .collect();
+    assert!(fundamental_eight_point(&flat).is_none());
+    assert!(homography_dlt(&flat).is_none());
+    assert!(estimate_pair(&flat, (W, H), 0, 1, &s).is_none());
+    assert!(select_keyframes(&TrackSet::default(), &s).is_empty());
+    assert!(detect_zoom(&TrackSet::default(), &ZoomSettings::default()).is_empty());
+}
