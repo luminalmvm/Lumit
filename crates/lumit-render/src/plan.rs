@@ -162,12 +162,17 @@ pub struct PlanContext<'a> {
 ///
 /// The context's `probes` answers what each footage item is; an unprobed item
 /// contributes no job at all and is retried once its probe lands.
+///
+/// `spliced` says this comp is being spliced into its parent by a collapsed
+/// Precomp layer, where the occlusion cull (K-423) does not apply — the same
+/// flag the draw builder takes, so the two skip exactly the same layers.
 pub fn collect_comp_jobs(
     ctx: &PlanContext<'_>,
     comp: &Composition,
     t: f64,
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
+    spliced: bool,
 ) {
     let PlanContext {
         doc,
@@ -177,8 +182,18 @@ pub fn collect_comp_jobs(
     } = *ctx;
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
+    // Occlusion cull (K-423, docs/06 §1.1): the layers under a full-frame
+    // opaque layer are never seen, so their footage is never decoded. The
+    // predicate refuses whenever anything above could reach a layer below,
+    // so nothing a wanted layer references is ever culled.
+    let occluder = (!spliced)
+        .then(|| lumit_core::occlusion::occluder_index(doc, comp, t))
+        .flatten();
     let mut wanted: Vec<Uuid> = Vec::new();
-    for l in &comp.layers {
+    for (idx, l) in comp.layers.iter().enumerate() {
+        if occluder.is_some_and(|o| idx > o) {
+            continue;
+        }
         if l.switches.visible && in_span(l) {
             wanted.push(l.id);
             if let Some(m) = &l.matte {
@@ -296,7 +311,7 @@ pub fn collect_comp_jobs(
                         continue;
                     }
                     visited.push(*nested_id);
-                    collect_comp_jobs(ctx, nested, lt, jobs, visited);
+                    collect_comp_jobs(ctx, nested, lt, jobs, visited, collapsed);
                     visited.pop();
                 }
             }
@@ -451,7 +466,7 @@ pub fn plan_comp_frame_held(
     };
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
-    collect_comp_jobs(&ctx, comp, t, &mut jobs, &mut visited);
+    collect_comp_jobs(&ctx, comp, t, &mut jobs, &mut visited, false);
     jobs
 }
 
@@ -863,6 +878,116 @@ mod tests {
                 "{how} onto a precomp must plan the one decode its footage needs"
             );
             assert_eq!(jobs[0].item, item);
+        }
+    }
+
+    /// **Footage under a full-frame opaque solid plans no decode** (K-423) —
+    /// unless something above the solid reaches it: a matte on the
+    /// solid's upper neighbour keeps the footage wanted, so the matte still
+    /// renders. Fails without the occluder gate on the wanted list.
+    #[test]
+    fn footage_under_an_occluder_plans_no_decode_unless_it_is_referenced() {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MatteChannel,
+            MatteRef, MediaRef, SolidDef, Switches, TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        for referenced in [false, true] {
+            let mut doc = Document::new();
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+            }));
+            let solid = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid,
+                name: "s".into(),
+                colour: LinearColour::BLACK,
+                width: 64,
+                height: 64,
+                extra: serde_json::Map::new(),
+            }));
+            let footage = layer(LayerKind::Footage { item });
+            // Anchored at its top-left corner on the comp's origin: covers it.
+            let cover = layer(LayerKind::Solid { def: solid });
+            let mut above = layer(LayerKind::Null);
+            if referenced {
+                above.matte = Some(MatteRef {
+                    layer: footage.id,
+                    channel: MatteChannel::Alpha,
+                    inverted: false,
+                    source: Default::default(),
+                });
+            }
+            let comp = Composition {
+                id: Uuid::now_v7(),
+                name: "c".into(),
+                width: 64,
+                height: 64,
+                frame_rate: FrameRate::new(60, 1).unwrap(),
+                duration: Duration(Rational::new(10, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers: vec![above, cover, footage],
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            };
+            let probes: HashMap<Uuid, crate::SourceProbe> = [(
+                item,
+                crate::SourceProbe::Video {
+                    fps: 60.0,
+                    width: 64,
+                    height: 64,
+                    frames: 600,
+                    audio: false,
+                },
+            )]
+            .into_iter()
+            .collect();
+            let jobs = plan_comp_frame(&doc, &comp, 0.0, Quality::default(), &probes);
+            if referenced {
+                assert_eq!(jobs.len(), 1, "a matte under the occluder is still decoded");
+            } else {
+                assert!(
+                    jobs.is_empty(),
+                    "footage under the occluder plans no decode"
+                );
+            }
         }
     }
 

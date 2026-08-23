@@ -1042,6 +1042,7 @@ impl HeadlessRenderer {
                 &pixels_by_layer,
                 &mut visited,
                 Some(&keys),
+                false,
             );
             // The comp's backdrop is a way of viewing, not a layer (K-241);
             // with the transparency grid up the Viewer asks for none at all,
@@ -3850,6 +3851,129 @@ mod tests {
 
         assert_eq!((w, h), (w2, h2));
         assert_eq!(without, with, "a Null layer must contribute no pixels");
+    }
+
+    /// **Layers under a full-frame opaque solid are not rendered** (K-423), and
+    /// the picture cannot tell. The same comp is rendered with the cull live
+    /// and with it refused — a Null on top whose matte names the bottom layer
+    /// is a reference to a layer below, which switches the cull off without
+    /// adding a pixel — and the two must be byte-identical, for a solid
+    /// underneath and (where ffmpeg can write the fixture) for footage. The
+    /// draw list proves the cull engaged; the export path stays identical to
+    /// the interactive one (K-031).
+    #[test]
+    fn layers_under_a_full_frame_opaque_solid_are_culled_without_changing_a_pixel() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        // A reference from above to the bottom layer refuses the cull, and a
+        // Null draws nothing, so the picture is the same either way.
+        let refuse_cull = |doc: &mut Document, comp_id: Uuid| {
+            let comp = doc.comp_mut(comp_id).expect("comp");
+            let bottom = comp.layers.last().expect("a layer").id;
+            let mut null = matrix_layer("Ref", LayerKind::Null, cw, ch);
+            null.matte = Some(lumit_core::model::MatteRef {
+                layer: bottom,
+                channel: lumit_core::model::MatteChannel::Alpha,
+                inverted: false,
+                source: Default::default(),
+            });
+            comp.layers.insert(0, null);
+        };
+        let cover = |doc: &mut Document, comp_id: Uuid| {
+            let solid = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid,
+                name: "Cover".into(),
+                colour: LinearColour([0.1, 0.6, 0.2, 1.0]),
+                width: cw,
+                height: ch,
+                extra: serde_json::Map::new(),
+            }));
+            let layer = matrix_layer("Cover", LayerKind::Solid { def: solid }, cw, ch);
+            doc.comp_mut(comp_id).expect("comp").layers.insert(0, layer);
+        };
+
+        let mut scenes: Vec<(&str, Document, Uuid)> = Vec::new();
+        let (solid_doc, solid_comp, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+        scenes.push(("a solid underneath", solid_doc, solid_comp));
+        let dir = std::env::temp_dir().join("lumit-occlusion-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        match lumit_media::index::tests_support::fixture(&dir) {
+            Some(clip) => {
+                let mut doc = Document::new();
+                let item = Uuid::now_v7();
+                doc.items.push(ProjectItem::Footage(FootageItem {
+                    id: item,
+                    name: "fixture.mp4".into(),
+                    media: lumit_core::model::MediaRef {
+                        relative_path: "fixture.mp4".into(),
+                        absolute_path: clip.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                }));
+                let comp_id = push_comp(&mut doc, "Scene", cw, ch);
+                let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
+                doc.comp_mut(comp_id).expect("comp").layers.push(clip_layer);
+                scenes.push(("footage underneath", doc, comp_id));
+            }
+            None => eprintln!("no ffmpeg CLI: the footage row is skipped"),
+        }
+
+        for (name, mut doc, comp_id) in scenes {
+            cover(&mut doc, comp_id);
+            let mut refused = doc.clone();
+            refuse_cull(&mut refused, comp_id);
+            let (culled, refused) = (Arc::new(doc), Arc::new(refused));
+
+            let comp = culled.comp(comp_id).expect("comp");
+            assert_eq!(
+                lumit_core::occlusion::occluder_index(&culled, comp, 0.0),
+                Some(0),
+                "{name}: the cover must be recognised as the occluder"
+            );
+            let refused_comp = refused.comp(comp_id).expect("comp");
+            assert_eq!(
+                lumit_core::occlusion::occluder_index(&refused, refused_comp, 0.0),
+                None,
+                "{name}: a reference to the bottom layer must refuse the cull"
+            );
+            let draws = |doc: &Arc<Document>, comp: &Composition| {
+                let pixels = HashMap::new();
+                crate::build::build_comp_draws(doc, comp, 0.0, &pixels, &mut vec![comp.id]).len()
+            };
+            assert_eq!(draws(&culled, comp), 1, "{name}: only the cover is built");
+            assert!(
+                draws(&refused, refused_comp) >= 1,
+                "{name}: the refused comp builds at all"
+            );
+
+            let (with_cull, w, h) = r
+                .render_rgba(&culled, comp_id, 0, 1.0)
+                .unwrap_or_else(|e| panic!("{name}: culled render failed: {e}"));
+            let (without_cull, w2, h2) = r
+                .render_rgba(&refused, comp_id, 0, 1.0)
+                .unwrap_or_else(|e| panic!("{name}: unculled render failed: {e}"));
+            assert_eq!((w, h), (w2, h2));
+            assert_eq!(
+                with_cull, without_cull,
+                "{name}: the cull must not change a pixel"
+            );
+            let (preview, _, _) = r
+                .render_preview(&culled, comp_id, 0, crate::plan::Quality::default(), 1.0)
+                .expect("preview render");
+            assert_eq!(
+                preview, with_cull,
+                "{name}: preview and export agree (K-031)"
+            );
+        }
     }
 
     /// One layer for the matrix scenarios: full-frame span, centred over its

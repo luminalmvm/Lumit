@@ -11264,3 +11264,19 @@ Precomps are never cached; held re-renders (Posterize, accumulation blur) and dr
 carry no name; a measured frame realises the comp in full so its inner rows get numbers.
 Preview and export stay byte-identical (K-031). `ALGO_VERSION` bumped to 4. This number
 was allocated on the lane3 branch.
+
+**K-423 · DECIDED · Layers under a full-frame opaque layer are not rendered.** The only gates
+on the comp walk were hidden, out of span and solo, so a full-frame solid over a stack of
+footage still decoded, uploaded, effected and composited everything under it. A single
+predicate in `lumit-core` (`occlusion::occluder_index`, docs/06 §1.1) now names the topmost
+layer that provably covers the frame opaquely, and both the draw builder and the decode
+planner skip every layer below it. The v1 predicate is deliberately narrow — a Solid with
+alpha 1, 2D, unrotated, Normal blend at full opacity, no masks, paint, effects or motion blur,
+its axis-aligned placement (parent chain included, nothing driven by an expression) covering
+the comp rectangle; no active camera; no visible Adjustment above it; nothing visible above
+it referencing a layer below as a matte or a layer input; never inside a collapsed Precomp's
+splice — because a wrong cull costs pixels while a refused one costs only speed. Footage
+whose probe reports no alpha is left for a later extension: the predicate sits below the
+probe and would need the answer threaded down the way K-422's `held` question is. The frame
+key keeps hashing culled layers; preview and export stay byte-identical (K-031). This number
+was allocated on the lane3 branch.

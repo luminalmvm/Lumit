@@ -5693,6 +5693,25 @@ layers are blended straight into the parent and there is no one picture to keep.
 measured frame (the timing columns) draws the precomp in full so its inner rows get their
 numbers, then files what it drew.
 
+### What is hidden is not drawn (K-423)
+
+Put a full-frame solid over a stack of footage and nothing under it can be seen — but until
+now the engine drew it all anyway: every file decoded, every effect run, every layer
+blended, and then the solid painted over the lot. Now both halves of the render (the
+planner that decides which frames to read from disk, and the builder that decides what to
+draw) ask one question first: "which is the topmost layer that provably covers the whole
+frame with opaque pixels?" Everything under that layer is skipped.
+
+The word that matters is *provably*. A wrong answer would change the picture, so the
+question is asked as narrowly as possible and says "no" whenever it is unsure. Only a
+plain solid qualifies: fully opaque, not rotated, not 3D, Normal blend at 100%, no masks,
+paint, effects or motion blur, and placed (with any parent it follows) so that it reaches
+every edge of the comp. And the comp itself must give no layer below a back door: no
+camera, no adjustment layer above the solid, nothing above it using a layer below as a
+matte or as an effect's input, and never inside a collapsed precomp (whose layers spill
+past their own comp's edges). Anything else, and everything is drawn exactly as before.
+Footage that has no transparency could qualify one day; it does not yet.
+
 ### The region of interest — working on one corner (K-362)
 
 On a heavy shot every preview frame costs the whole frame, even when you are

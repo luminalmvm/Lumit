@@ -372,7 +372,16 @@ pub fn build_comp_draws(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> Vec<CompLayerDraw> {
-    build_comp_draws_at(doc, comp, t_comp, t_comp, pixels_by_layer, visited, None)
+    build_comp_draws_at(
+        doc,
+        comp,
+        t_comp,
+        t_comp,
+        pixels_by_layer,
+        visited,
+        None,
+        false,
+    )
 }
 
 /// Build a comp's draw list at sample comp time `t_comp`, resolving each layer's
@@ -389,6 +398,12 @@ pub fn build_comp_draws(
 /// `keys` names each non-collapsed Precomp's frame (K-422) so the realiser can
 /// serve it from the nested-frame store; `None` leaves every nested draw
 /// unnamed, which realises it every time.
+///
+/// `spliced` says this comp is being spliced into its parent by a collapsed
+/// Precomp layer (docs/06 §1.4): its layers are not clipped to its own
+/// rectangle, so a layer that covers *this* comp's frame proves nothing about
+/// the parent's, and the occlusion cull (K-423) is switched off.
+#[allow(clippy::too_many_arguments)]
 pub fn build_comp_draws_at(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -397,11 +412,17 @@ pub fn build_comp_draws_at(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
     keys: Option<&dyn crate::cache::NestedKeyer>,
+    spliced: bool,
 ) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
+    // Occlusion cull (K-423, docs/06 §1.1): the same question the decode
+    // planner asks, so a layer skipped here was never decoded either.
+    let occluder = (!spliced)
+        .then(|| lumit_core::occlusion::occluder_index(doc, comp, t_comp))
+        .flatten();
 
     // The caller's Arc: an expression context takes an owned handle, and this
     // shares one rather than deep-cloning the project per build (and per
@@ -573,6 +594,7 @@ pub fn build_comp_draws_at(
                 pixels_by_layer,
                 &mut path,
                 keys,
+                false,
             );
             Some(Box::new(crate::draw::NestedInputDraw {
                 width: nested.width,
@@ -818,6 +840,10 @@ pub fn build_comp_draws_at(
         if !layer.switches.visible || !in_span(layer) || (any_solo && !layer.switches.solo) {
             continue;
         }
+        // Under a full-frame opaque layer: never seen, so never built.
+        if occluder.is_some_and(|o| idx > o) {
+            continue;
+        }
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         // The true frame time in this layer's own time base, for effects a
         // held/sub-frame re-render must not re-sample (docs/impl/
@@ -862,6 +888,7 @@ pub fn build_comp_draws_at(
                         pixels_by_layer,
                         visited,
                         keys,
+                        true,
                     );
                     visited.pop();
 
@@ -921,8 +948,16 @@ pub fn build_comp_draws_at(
                     continue;
                 }
                 visited.push(*nested_id);
-                let nested_draws =
-                    build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited, keys);
+                let nested_draws = build_comp_draws_at(
+                    doc,
+                    nested,
+                    lt,
+                    frame_lt,
+                    pixels_by_layer,
+                    visited,
+                    keys,
+                    false,
+                );
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -1511,6 +1546,7 @@ pub fn below_draws_at(
         pixels_by_layer,
         visited,
         None,
+        false,
     );
     strip_temporal_inputs(&mut draws);
     (draws, crate::track::camera_pose(doc, comp, tau))

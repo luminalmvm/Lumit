@@ -36,6 +36,21 @@ evaluates at whatever time the retime/nesting maths resolves to.
 Identical subgraphs (same footage, same leading effects) compile to a single shared node by
 content-hash deduplication; two layers sharing a source and grade evaluate it once.
 
+**Occlusion (K-423).** A layer that provably paints every pixel of the frame hides the layers
+beneath it, and those are not decoded, uploaded, effected or composited. The draw builder and
+the decode planner ask one predicate (`lumit_core::occlusion::occluder_index`) so they skip
+exactly the same layers, and the cull must be invisible in the picture, so the predicate is
+deliberately narrow. v1 accepts only a Solid layer whose colour has alpha 1, visible and in
+span (soloed if anything is), 2D with zero rotation, Normal blend at 100% opacity, with no
+masks, paint, enabled effects or motion blur, whose axis-aligned placement — its own transform
+and its parent chain, none rotated, 3D, or driven by an expression — covers the comp rectangle.
+It refuses whenever the comp has an active camera, a visible Adjustment layer sits above the
+candidate, or any visible layer above it names a layer below as a matte or an effect's layer
+input; and it is off inside a collapsed Precomp's splice (§1.4), whose layers are not clipped
+to their own comp. Footage that the probe reports as alpha-free is a later extension: the
+predicate lives in `lumit-core`, which knows no probe. The frame key keeps hashing culled
+layers (over-keying is safe); preview and export stay byte-identical (K-031).
+
 ### 1.2 Render order for one layer
 
 For a visual layer at comp time `t`, the compiled subgraph is, in order:
