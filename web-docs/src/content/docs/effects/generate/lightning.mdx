@@ -3,24 +3,13 @@ title: Lightning
 description: "Draws a bolt of lightning between two points."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Lightning is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Lightning is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/generate/lightning.webp"
-      alt="The same frame with Lightning applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Lightning</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Lightning. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Lightning is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Lightning" category="generate" slug="lightning" />
 
 {/* END GENERATED */}
 
@@ -44,9 +33,9 @@ Draws a bolt of lightning which can be animated, and allows for customisation ar
 | **Amplitude** | Slider | 0 to 100 | 12 | - |
 | **Forking** | Slider | 0 to 100 | 45 | - |
 | **Decay** | Slider | 0 to 100 | 30 | - |
-| **Core radius** | Slider | 0 to 40; higher by typing | 3 | Pixels at composition size |
+| **Core radius** | Slider | 0 to 40; higher | 3 | Pixels at composition size |
 | **Core colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
-| **Glow radius** | Slider | 0 to 200; higher by typing | 22 | Pixels at composition size |
+| **Glow radius** | Slider | 0 to 200; higher | 22 | Pixels at composition size |
 | **Glow colour** | Colour | Each channel 0 to 4, scene-linear | 0.25, 0.45, 1, 1 | - |
 | **Glow opacity** | Slider | 0 to 100 | 70 | - |
 | **Composite on original** | Checkbox | On or off | On | - |
@@ -56,7 +45,7 @@ Draws a bolt of lightning which can be animated, and allows for customisation ar
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

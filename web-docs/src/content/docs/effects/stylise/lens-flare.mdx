@@ -3,24 +3,13 @@ title: "Lens flare"
 description: "A flare traced through a real lens."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Lens flare is a [Stylise](/effects/stylise/) effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Lens flare is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/stylise/lens-flare.webp"
-      alt="The same frame with Lens flare applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Lens flare</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Lens flare. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Lens flare is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Lens flare" category="stylise" slug="lens-flare" />
 
 {/* END GENERATED */}
 
@@ -40,14 +29,14 @@ aperture.
 | --- | --- | --- | --- | --- |
 | **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
 | **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
-| **Source width** | Slider | 0 to 400; higher by typing | 0 | Pixels at composition size |
-| **Source height** | Slider | 0 to 400; higher by typing | 0 | Pixels at composition size |
-| **Intensity** | Slider | 0 to 4; higher by typing | 1 | - |
-| **F-stop** | Slider | 1 to 22; down to 0.7 and up to 32 by typing | 2.8 | - |
+| **Source width** | Slider | 0 to 400; higher | 0 | Pixels at composition size |
+| **Source height** | Slider | 0 to 400; higher | 0 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 4; higher | 1 | - |
+| **F-stop** | Slider | 1 to 22; down to 0.7 and up to 32 | 2.8 | - |
 | **Lens** | Dropdown | 7Artisans · 50mm F0.95 · Angenieux · DEM 180mm F2.3 APO · Canon · 50mm f1.2 (1956) · Canon · 85mm f1.5 (1952) · Canon · EF 100mm f2.8 Macro · Canon · EF 400mm f2.8L IS II · Canon · EF 70-200mm f2.8L · Canon · FD 300mm f2.8 SSC Fluorite · Leica · Elmarit 90mm F2.8 · Leica · Summilux 35mm f1.4 · Leica · Summilux-C 100mm T1.4 · Meyer Görlitz · Kino Plasmat 100mm F2 · Meyer Görlitz · Orestor 135mm F2.8 · Ross · F10 APO Process Xpres · Voigtländer · Nokton 35mm F1.2 Asph · Voigtländer · Nokton 50mm F1.0 Asph · Zeiss · Arri Master Prime T1.3 50mm · Zeiss · Biotar 50mm F1.4 · Zeiss · Tessar 100mm F4.5 · Zeiss · Ultra Prime Sonnar 135mm T1.9 | Zeiss · Arri Master Prime T1.3 50mm | - |
 | **Lens file** | File | `.lens` | None | - |
-| **Focus (m)** | Slider | 0.5 to 100; down to 0.2 and higher by typing | 100 | - |
-| **Anamorphic squeeze** | Slider | 1 to 2; down to 0.5 and up to 3 by typing | 1 | - |
+| **Focus (m)** | Slider | 0.5 to 100; down to 0.2 and higher | 100 | - |
+| **Anamorphic squeeze** | Slider | 1 to 2; down to 0.5 and up to 3 | 1 | - |
 | **Blades** | Slider, whole numbers | 3 to 16 | 8 | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
 | **Coating** | Slider | 0 to 1 | 0.75 | - |
@@ -56,19 +45,19 @@ aperture.
 | **Element 1** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
 | **Element ...** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
 | **Element 20** | Dropdown | As the lens file · Uncoated · Single layer, straw · Two layer, magenta · Broadband, green · Broadband, amber · Broadband, blue | As the lens file | - |
-| **Ghost intensity** | Slider | 0 to 4; higher by typing | 1 | - |
-| **Ghost softness** | Slider | 0 to 1; up to 2 by typing | 0.02 | - |
-| **Max ghosts** | Slider, whole numbers | 0 to 150; up to 200 by typing | 60 | - |
-| **Detail** | Slider | 0.25 to 2; up to 4 by typing | 1 | - |
-| **Dispersion** | Slider | 0 to 2; higher by typing | 1 | - |
-| **Starburst intensity** | Slider | 0 to 4; higher by typing | 1 | - |
-| **Scale** | Slider | 0.1 to 4; down to 0.05 and up to 20 by typing | 1 | - |
+| **Ghost intensity** | Slider | 0 to 4; higher | 1 | - |
+| **Ghost softness** | Slider | 0 to 1; up to 2 | 0.02 | - |
+| **Max ghosts** | Slider, whole numbers | 0 to 150; up to 200 | 60 | - |
+| **Detail** | Slider | 0.25 to 2; up to 4 | 1 | - |
+| **Dispersion** | Slider | 0 to 2; higher | 1 | - |
+| **Starburst intensity** | Slider | 0 to 4; higher | 1 | - |
+| **Scale** | Slider | 0.1 to 4; down to 0.05 and up to 20 | 1 | - |
 | **Source** | Dropdown | Manual light · Matte · Lights | Manual light | - |
 | **Light tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **Use source colour** | Checkbox | On or off | On | - |
 | **Matte** | Layer | Any layer in the composition | This layer | - |
-| **Threshold** | Slider | 0 to 1; higher by typing | 1 | - |
-| **Threshold softness** | Slider | 0 to 1; higher by typing | 0.25 | - |
+| **Threshold** | Slider | 0 to 1; higher | 1 | - |
+| **Threshold softness** | Slider | 0 to 1; higher | 0.25 | - |
 | **Quality** | Dropdown | Draft · Normal · High · Ultra | Normal | - |
 | **Blend** | Dropdown | Normal · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Add | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |

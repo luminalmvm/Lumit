@@ -3,24 +3,13 @@ title: Black and white
 description: "Converts to greyscale."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Black and white is a [Colour](/effects/colour/) effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Black and white is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/colour/black-and-white.webp"
-      alt="The same frame with Black and white applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Black and white</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Black and white. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Black and white is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Black and white" category="colour" slug="black-and-white" />
 
 {/* END GENERATED */}
 
@@ -35,12 +24,12 @@ different colors.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Reds** | Slider | -200 to 300; higher by typing | 40 | - |
-| **Yellows** | Slider | -200 to 300; higher by typing | 60 | - |
-| **Greens** | Slider | -200 to 300; higher by typing | 40 | - |
-| **Cyans** | Slider | -200 to 300; higher by typing | 60 | - |
-| **Blues** | Slider | -200 to 300; higher by typing | 20 | - |
-| **Magentas** | Slider | -200 to 300; higher by typing | 80 | - |
+| **Reds** | Slider | -200 to 300; higher | 40 | - |
+| **Yellows** | Slider | -200 to 300; higher | 60 | - |
+| **Greens** | Slider | -200 to 300; higher | 40 | - |
+| **Cyans** | Slider | -200 to 300; higher | 60 | - |
+| **Blues** | Slider | -200 to 300; higher | 20 | - |
+| **Magentas** | Slider | -200 to 300; higher | 80 | - |
 | **Tint** | Checkbox | On or off | Off | - |
 | **Tint colour** | Colour | Each channel 0 to 4, scene-linear | 0.62, 0.44, 0.26, 1 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
@@ -50,7 +39,7 @@ different colors.
 In the Effect Controls panel:
 
 - **Tint colour** is editable while **Tint** is on.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -3,24 +3,13 @@ title: Photo filter
 description: "Warms or cools the input."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Photo filter is a **Colour** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Photo filter is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/colour/photo-filter.webp"
-      alt="The same frame with Photo filter applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Photo filter</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Photo filter. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Photo filter is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Photo filter" category="colour" slug="photo-filter" />
 
 {/* END GENERATED */}
 
@@ -46,7 +35,7 @@ front of a camera lens would.
 In the Effect Controls panel:
 
 - **Colour** is editable while **Filter** is set to Custom.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

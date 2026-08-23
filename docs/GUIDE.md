@@ -7578,7 +7578,10 @@ memory, one composition with that clip on a single layer, puts one effect on the
 layer, renders a frame, and does it again for the next effect. The walk it uses
 is the Viewer's own walk, so a figure on the website is a frame the application
 would genuinely produce. Last, **sharp** encodes the results as WebP into
-`web-docs/public/effects/`, where the pages look for them.
+`web-docs/src/assets/effects/`, where the pages look for them. They sit under
+`src/assets/` rather than `public/` so that Astro's own image pipeline handles
+them, which is what `Compare.astro` — the little component that lays out the
+before-and-after wipe on every effect page — asks it for.
 
 The source comes in two grades, and the difference reaches about four pictures.
 The good grade is a real recording: two short clips of the actual footage and its

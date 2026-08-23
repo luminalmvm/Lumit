@@ -3,24 +3,13 @@ title: Stroke
 description: "Draws a stroke along a mask ."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Stroke is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Stroke is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/generate/stroke.webp"
-      alt="The same frame with Stroke applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Stroke</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Stroke. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Stroke is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Stroke" category="generate" slug="stroke" />
 
 {/* END GENERATED */}
 
@@ -36,9 +25,9 @@ Stroke draws a round stroke along a mask's path.
 | --- | --- | --- | --- | --- |
 | **Mask** | Masks | This layer's masks | First mask | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
-| **Brush size** | Slider | 0.5 to 100; down to 0.1 and higher by typing | 8 | Pixels at composition size |
+| **Brush size** | Slider | 0.5 to 100; down to 0.1 and higher | 8 | Pixels at composition size |
 | **Brush hardness** | Slider | 0 to 100 | 75 | - |
-| **Spacing** | Slider | 1 to 500; higher by typing | 15 | - |
+| **Spacing** | Slider | 1 to 500; higher | 15 | - |
 | **Start** | Slider | 0 to 100 | 0 | - |
 | **End** | Slider | 0 to 100 | 100 | - |
 | **Paint style** | Dropdown | On original · On transparent · Reveal original | On original | - |
@@ -49,7 +38,7 @@ Stroke draws a round stroke along a mask's path.
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

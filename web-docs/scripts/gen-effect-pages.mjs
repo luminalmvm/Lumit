@@ -6,23 +6,32 @@
 // `cargo test -p lumit-core regenerate_fx_reference -- --ignored`). This script
 // turns the JSON into one page per effect and one page per category.
 //
-// It only ever rewrites the block between the GENERATED markers. Everything
-// else on a page - the front matter, the prose about what the effect is for,
-// the notes on what each control does - is hand-written and is never touched.
-// A page that does not exist yet is scaffolded whole, markers included.
+// It only ever rewrites the block between the GENERATED markers, and not even
+// all of that: the opening marker line itself is kept exactly as the page has
+// it. Everything else on a page - the front matter, the prose about what the
+// effect is for, the notes on what each control does - is hand-written and is
+// never touched. A page that does not exist yet is scaffolded whole, markers
+// included.
+//
+// The work is `generate()`, which scripts/gen-effect-pages.test.mjs calls
+// against a temporary directory; running this file as a script is the same work
+// against the repository.
 //
 // Run:  npm run docs:effects        (from web-docs/)
 //       npm run docs:effects -- --check   (fails if anything is out of date)
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REFERENCE = join(here, "../../crates/lumit-core/fx-reference.json");
 const OUT = join(here, "../src/content/docs/effects");
 // Where gen-effect-shots.mjs puts the example pictures.
-const SHOTS = join(here, "../public/effects");
+const SHOTS = join(here, "../src/assets/effects");
+// How an effect page, four folders deep in src/content/docs, reaches
+// src/components. The figure is a component now, so the page needs the import.
+const COMPONENTS = "../../../../components";
 
 // MDX has no HTML comments - `{/* ... */}` is the expression-comment that
 // compiles to nothing. The opening marker is found by its `GENERATED:<tag>`
@@ -31,8 +40,6 @@ const SHOTS = join(here, "../public/effects");
 const begin = (tag) =>
   `{/* GENERATED:${tag} - rewritten by \`npm run docs:effects\`. Edit the prose, not this block. */}`;
 const END = "{/* END GENERATED */}";
-
-const check = process.argv.includes("--check");
 
 /** A number as the manual writes it. */
 const n = (v) => String(v);
@@ -141,16 +148,50 @@ function rowName(effect, p) {
   return group ? `${group.label} › ${p.label}` : p.label;
 }
 
+/** The prefix of a label that ends in a whole number, or null. */
+const numbered = (name) => /^(.*?)(\d+)$/.exec(name)?.[1] ?? null;
+
+/**
+ * Lens flare has one coating dropdown per glass element, twenty of them, and
+ * printing all twenty says the same sentence twenty times. A run of three or
+ * more consecutive rows whose labels differ only by a trailing number and whose
+ * other four cells are identical becomes the first row, an "Element ..." row,
+ * and the last.
+ */
+function collapse(rows) {
+  const out = [];
+  for (let i = 0; i < rows.length; ) {
+    const prefix = numbered(rows[i].name);
+    let j = i;
+    if (prefix !== null) {
+      while (
+        j + 1 < rows.length &&
+        rows[j + 1].cells === rows[i].cells &&
+        numbered(rows[j + 1].name) === prefix
+      ) {
+        j += 1;
+      }
+    }
+    if (j - i >= 2) out.push(rows[i], { name: `${prefix}...`, cells: rows[i].cells }, rows[j]);
+    else for (let k = i; k <= j; k += 1) out.push(rows[k]);
+    i = j + 1;
+  }
+  return out;
+}
+
 function paramTable(effect) {
-  const rows = effect.params.map(
-    (p) =>
-      `| **${cell(rowName(effect, p))}** | ${cell(CONTROL[p.kind] ?? p.kind)} | ${cell(rangeCell(p))} | ` +
-      `${cell(defaultCell(p))} | ${cell(UNIT[p.unit] ?? p.unit)} |`,
+  const rows = collapse(
+    effect.params.map((p) => ({
+      name: cell(rowName(effect, p)),
+      cells:
+        `${cell(CONTROL[p.kind] ?? p.kind)} | ${cell(rangeCell(p))} | ` +
+        `${cell(defaultCell(p))} | ${cell(UNIT[p.unit] ?? p.unit)}`,
+    })),
   );
   return [
     "| Parameter | Control | Range | Default | Unit |",
     "| --- | --- | --- | --- | --- |",
-    ...rows,
+    ...rows.map((r) => `| **${r.name}** | ${r.cells} |`),
   ].join("\n");
 }
 
@@ -187,15 +228,17 @@ function panelNotes(effect) {
   // every page says what it does: the standard strength sentence unless the
   // effect claims the matte inside its own maths, in which case the sentence
   // comes from the effect's own declaration and a page cannot describe a matte
-  // the engine stopped honouring.
+  // the engine stopped honouring. Either sentence supplies its own full stop
+  // when it already ends in one, so the page never gets two.
   const matteRow = effect.params.find((p) => p.id === (effect.matte?.param ?? "matte"));
   if (matteRow) {
-    const meaning =
-      effect.matte?.meaning ??
-      "is an input to an effect, scaling the strength. ";
+    const meaning = (
+      effect.matte?.meaning ?? "is an input to an effect, scaling the strength."
+    ).trim();
+    const stop = meaning.endsWith(".") ? "" : ".";
     const invert = effect.params.find((p) => p.kind === "bool" && p.label === "Invert");
     const swap = invert ? ` **${invert.label}** inverts the mattes for calculating strength.` : "";
-    out.push(`- **${matteRow.label}** ${meaning}.${swap}`);
+    out.push(`- **${matteRow.label}** ${meaning}${stop}${swap}`);
   }
 
   if (!out.length) return "";
@@ -205,13 +248,21 @@ function panelNotes(effect) {
 /** The whole marked block: opening marker, content, closing marker. */
 const marked = (tag, body) => `${begin(tag)}\n\n${body}\n\n${END}`;
 
-/** Replace the marked block in an existing page, or return null if it has none. */
+/**
+ * Replace the marked block in an existing page, or return null if it has none.
+ * The page's own opening marker line survives verbatim: an owner who reworded
+ * that comment keeps their wording, and only what lies between the two markers
+ * is rewritten.
+ */
 function splice(existing, tag, block) {
   const a = existing.indexOf(`{/* GENERATED:${tag}`);
   if (a === -1) return null;
   const b = existing.indexOf(END, a);
   if (b === -1) return null;
-  return existing.slice(0, a) + block + existing.slice(b + END.length);
+  const eol = existing.indexOf("\n", a);
+  const marker = existing.slice(a, eol === -1 ? existing.length : eol);
+  const body = block.slice(block.indexOf("\n"));
+  return existing.slice(0, a) + marker + body + existing.slice(b + END.length);
 }
 
 /**
@@ -228,28 +279,17 @@ function insertAt(existing, anchor, block) {
 ${existing.slice(at)}`;
 }
 
-const changed = [];
-const stranded = [];
-function put(path, tag, scaffold, block, anchor) {
-  const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
-  let next = scaffold;
-  if (existing !== null) {
-    next = splice(existing, tag, block);
-    if (next === null && anchor) next = insertAt(existing, anchor, block);
-    if (next === null) {
-      stranded.push(path);
-      return;
-    }
-  }
-  if (existing === next) return;
-  changed.push(path);
-  if (!check) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, next);
-  }
+/**
+ * The figure is a component, and a component needs an import. The line goes
+ * directly after the front matter, once: a page that already has it is left
+ * alone, so running the generator twice does not stack two imports.
+ */
+function ensureImport(text, importLine) {
+  if (/^import Compare from /m.test(text)) return text;
+  const front = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(text);
+  if (!front) return text;
+  return `${text.slice(0, front[0].length)}\n${importLine}\n${text.slice(front[0].length)}`;
 }
-
-// ---------------------------------------------------------------------------
 
 /**
  * A page's own `description:`, which is the one-line summary its author already
@@ -264,66 +304,91 @@ function description(path) {
 }
 
 /**
- * One category's effects as a table. The second column is each page's own
- * description, so the row says what the effect is for and not merely that it
- * exists.
+ * The example picture, rendered by `npm run docs:effect-shots` from
+ * src/assets/effects/. It is a component, so that both halves of the wipe go
+ * through Astro's image pipeline: a raw `<img>` out of `public/` is what the dev
+ * toolbar's audit objects to, and the figure sits above the fold on every page.
  */
-function effectTable(effects) {
-  return [
-    "| Effect | What it does |",
-    "| --- | --- |",
-    ...effects.map((e) => {
-      const page = join(OUT, e.category_slug, `${e.slug}.mdx`);
-      const link = `[${e.label}](/effects/${e.category_slug}/${e.slug}/)`;
-      return `| ${cell(link)} | ${cell(description(page))} |`;
-    }),
-  ].join("\n");
-}
-
-/**
- * The example picture, rendered by `npm run docs:effect-shots` and served from
- * `public/`. Plain HTML rather than a component: a figure that needs an import
- * line at the top of every page is a figure that goes missing from half of
- * them, and a `public/` path costs nothing when the file is not there yet.
- */
-function exampleFigure(e) {
+function exampleFigure(e, shots) {
   // A couple of effects have no picture and cannot have one: Posterize time is a
   // change to the clock, and Matte key wants a screen the example frame does not
   // contain. The harness says so and writes nothing, and an absent file means an
   // absent figure rather than a broken image.
-  const file = join(SHOTS, e.category_slug, `${e.slug}.webp`);
+  const file = join(shots, e.category_slug, `${e.slug}.webp`);
   if (!existsSync(file)) return "";
-  const size = `width="1280" height="544" loading="lazy" decoding="async"`;
-  return [
-    `<figure class="example">`,
-    `  <div class="compare" style="--split:50%">`,
-    `    <img src="/effects/plate.webp" alt="The frame before ${e.label} is applied" ${size} />`,
-    `    <img class="compare__after" src="/effects/${e.category_slug}/${e.slug}.webp"`,
-    `      alt="The same frame with ${e.label} applied" ${size} />`,
-    `    <span class="compare__handle" aria-hidden="true"></span>`,
-    `    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>`,
-    `    <span class="compare__label compare__label--b" aria-hidden="true">${e.label}</span>`,
-    `    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"`,
-    `      aria-label="Reveal ${e.label}. Left of the handle is the original frame, the right has the ${e.label} applied." />`,
-    `  </div>`,
-    `  <figcaption>Drag the handle. ${e.label} applied on the right, the original frame on the left. </figcaption>`,
-    `</figure>`,
-  ].join("\n");
+  const label = e.label.replaceAll('"', "&quot;");
+  return `<Compare label="${label}" category="${e.category_slug}" slug="${e.slug}" />`;
 }
 
-const ref = JSON.parse(readFileSync(REFERENCE, "utf8"));
-const byCategory = new Map(ref.categories.map((c) => [c.slug, []]));
-for (const e of ref.effects) byCategory.get(e.category_slug)?.push(e);
+// ---------------------------------------------------------------------------
 
-// One page per effect.
-for (const e of ref.effects) {
-  const table = marked("parameters", `${paramTable(e)}${panelNotes(e)}`);
-  const figure = marked("example", exampleFigure(e));
-  const scaffold = `---
+/**
+ * Write (or, with `check`, only count) every page the catalogue implies.
+ * Returns what changed, what has no markers to splice into, and what nothing
+ * claims any more; the caller does the talking.
+ */
+export function generate({
+  reference = REFERENCE,
+  out = OUT,
+  shots = SHOTS,
+  check = false,
+  components = COMPONENTS,
+} = {}) {
+  const importLine = `import Compare from "${components}/Compare.astro";`;
+  const changed = [];
+  const stranded = [];
+
+  function put(path, tag, scaffold, block, anchor, withImport = false) {
+    const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
+    let next = scaffold;
+    if (existing !== null) {
+      next = splice(existing, tag, block);
+      if (next === null && anchor) next = insertAt(existing, anchor, block);
+      if (next === null) {
+        stranded.push(path);
+        return;
+      }
+    }
+    if (withImport) next = ensureImport(next, importLine);
+    if (existing === next) return;
+    changed.push(path);
+    if (!check) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, next);
+    }
+  }
+
+  /**
+   * One category's effects as a table. The second column is each page's own
+   * description, so the row says what the effect is for and not merely that it
+   * exists.
+   */
+  function effectTable(effects) {
+    return [
+      "| Effect | What it does |",
+      "| --- | --- |",
+      ...effects.map((e) => {
+        const page = join(out, e.category_slug, `${e.slug}.mdx`);
+        const link = `[${e.label}](/effects/${e.category_slug}/${e.slug}/)`;
+        return `| ${cell(link)} | ${cell(description(page))} |`;
+      }),
+    ].join("\n");
+  }
+
+  const ref = JSON.parse(readFileSync(reference, "utf8"));
+  const byCategory = new Map(ref.categories.map((c) => [c.slug, []]));
+  for (const e of ref.effects) byCategory.get(e.category_slug)?.push(e);
+
+  // One page per effect.
+  for (const e of ref.effects) {
+    const table = marked("parameters", `${paramTable(e)}${panelNotes(e)}`);
+    const example = exampleFigure(e, shots);
+    const figure = marked("example", example);
+    const scaffold = `---
 title: ${e.label}
 description: What ${e.label} does, and what each of its controls means.
 ---
-
+${example ? `\n${importLine}\n` : ""}
 ${e.label} is a **${e.category}** effect.
 
 ${figure}
@@ -343,16 +408,16 @@ ${e.params.map((p) => `- **${p.label}**`).join("\n")}
 - [${e.category}](/effects/${e.category_slug}/)
 - [Effects](/use/effects/)
 `;
-  const path = join(OUT, e.category_slug, `${e.slug}.mdx`);
-  put(path, "parameters", scaffold, table);
-  put(path, "example", scaffold, figure, "## What it does");
-}
+    const path = join(out, e.category_slug, `${e.slug}.mdx`);
+    put(path, "parameters", scaffold, table);
+    put(path, "example", scaffold, figure, "## What it does", Boolean(example));
+  }
 
-// One page per category.
-for (const c of ref.categories) {
-  const effects = byCategory.get(c.slug) ?? [];
-  const block = marked("list", effectTable(effects));
-  const scaffold = `---
+  // One page per category.
+  for (const c of ref.categories) {
+    const effects = byCategory.get(c.slug) ?? [];
+    const block = marked("list", effectTable(effects));
+    const scaffold = `---
 title: ${c.label}
 description: The ${c.label} effects, and what the family is for.
 sidebar:
@@ -370,25 +435,25 @@ ${block}
 - [All effects](/effects/)
 - [Effects](/use/effects/)
 `;
-  put(join(OUT, c.slug, "index.mdx"), "list", scaffold, block);
-}
+    put(join(out, c.slug, "index.mdx"), "list", scaffold, block);
+  }
 
-// The section index: every category, what it is for, and its own table.
-{
-  const body = ref.categories
-    .map((c) => {
-      const effects = byCategory.get(c.slug) ?? [];
-      const summary = description(join(OUT, c.slug, "index.mdx"));
-      const count = `${effects.length} effect${effects.length === 1 ? "" : "s"}.`;
-      return [
-        `### [${c.label}](/effects/${c.slug}/)`,
-        summary ? `${summary} ${count}` : count,
-        effectTable(effects),
-      ].join("\n\n");
-    })
-    .join("\n\n");
-  const block = marked("list", body);
-  const scaffold = `---
+  // The section index: every category, what it is for, and its own table.
+  {
+    const body = ref.categories
+      .map((c) => {
+        const effects = byCategory.get(c.slug) ?? [];
+        const summary = description(join(out, c.slug, "index.mdx"));
+        const count = `${effects.length} effect${effects.length === 1 ? "" : "s"}.`;
+        return [
+          `### [${c.label}](/effects/${c.slug}/)`,
+          summary ? `${summary} ${count}` : count,
+          effectTable(effects),
+        ].join("\n\n");
+      })
+      .join("\n\n");
+    const block = marked("list", body);
+    const scaffold = `---
 title: Effects
 description: Every built-in effect, what it is for, and what each parameter does.
 sidebar:
@@ -402,14 +467,7 @@ application.
 
 Each page also carries a picture of the effect on one frame of footage. Every
 one of those pictures is rendered by the engine, through the walk the Viewer
-uses, from the frame below.
-
-<figure class="example">
-  <img src="/effects/plate.webp" alt="The untouched frame every example picture starts from"
-    width="1280" height="544" loading="lazy" decoding="async" />
-  <figcaption>The untouched frame. Every example on these pages is this frame with one
-  effect on it.</figcaption>
-</figure>
+uses, from the same untouched frame.
 
 For applying effects, ordering a stack and using adjustment layers, see
 [Effects](/use/effects/).
@@ -418,37 +476,46 @@ For applying effects, ordering a stack and using adjustment layers, see
 
 ${block}
 `;
-  put(join(OUT, "index.mdx"), "list", scaffold, block);
+    put(join(out, "index.mdx"), "list", scaffold, block);
+  }
+
+  // Pages nobody claims any more - a renamed effect leaves its old page behind,
+  // and a stale page is worse than a missing one.
+  const wanted = new Set([
+    "index.mdx",
+    ...ref.categories.map((c) => `${c.slug}/index.mdx`),
+    ...ref.effects.map((e) => `${e.category_slug}/${e.slug}.mdx`),
+  ]);
+  const orphans = [];
+  if (existsSync(out)) {
+    for (const entry of readdirSync(out, { withFileTypes: true, recursive: true })) {
+      if (!entry.isFile()) continue;
+      const rel = join(entry.parentPath ?? entry.path, entry.name)
+        .slice(out.length + 1)
+        .replaceAll("\\", "/");
+      if (!wanted.has(rel)) orphans.push(rel);
+    }
+  }
+
+  return { changed, stranded, orphans };
 }
 
-// Pages nobody claims any more - a renamed effect leaves its old page behind,
-// and a stale page is worse than a missing one.
-const wanted = new Set([
-  "index.mdx",
-  ...ref.categories.map((c) => `${c.slug}/index.mdx`),
-  ...ref.effects.map((e) => `${e.category_slug}/${e.slug}.mdx`),
-]);
-const orphans = [];
-if (existsSync(OUT)) {
-  for (const entry of readdirSync(OUT, { withFileTypes: true, recursive: true })) {
-    if (!entry.isFile()) continue;
-    const rel = join(entry.parentPath ?? entry.path, entry.name)
-      .slice(OUT.length + 1)
-      .replaceAll("\\", "/");
-    if (!wanted.has(rel)) orphans.push(rel);
-  }
-}
+// Run as a script.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const check = process.argv.includes("--check");
+  const { changed, stranded, orphans } = generate({ check });
 
-for (const o of orphans) console.warn(`orphan page (no effect claims it): ${o}`);
-for (const s of stranded) console.warn(`page has no GENERATED markers, left alone: ${s}`);
-if (check) {
-  if (changed.length) {
-    console.error(`out of date:\n${changed.map((c) => `  ${c}`).join("\n")}`);
-    process.exit(1);
+  for (const o of orphans) console.warn(`orphan page (no effect claims it): ${o}`);
+  for (const s of stranded) console.warn(`page has no GENERATED markers, left alone: ${s}`);
+  if (check) {
+    if (changed.length) {
+      console.error(`out of date:\n${changed.map((c) => `  ${c}`).join("\n")}`);
+      process.exit(1);
+    }
+    console.log("effect pages are up to date");
+  } else {
+    console.log(
+      changed.length ? `wrote ${changed.length} page(s)` : "no changes - pages already match the catalogue",
+    );
   }
-  console.log("effect pages are up to date");
-} else {
-  console.log(
-    changed.length ? `wrote ${changed.length} page(s)` : "no changes - pages already match the catalogue",
-  );
 }

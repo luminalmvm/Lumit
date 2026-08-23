@@ -3,24 +3,13 @@ title: "Flash"
 description: "A strobe on a beat."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Flash is a [Stylise](/effects/stylise/) effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Flash is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/stylise/flash.webp"
-      alt="The same frame with Flash applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Flash</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Flash. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Flash is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Flash" category="stylise" slug="flash" />
 
 {/* END GENERATED */}
 
@@ -37,20 +26,20 @@ on beat markers.
 | --- | --- | --- | --- | --- |
 | **Mode** | Dropdown | Manual · Trigger · Strobe | Manual | - |
 | **Trigger** | Slider | 0 to 1 | 0 | - |
-| **Duration** | Slider | 0 to 12; higher by typing | 2 | - |
+| **Duration** | Slider | 0 to 12; higher | 2 | - |
 | **Shape** | Dropdown | Hard · Fade | Hard | - |
-| **Every Nth beat** | Slider | 1 to 8; higher by typing | 1 | - |
+| **Every Nth beat** | Slider | 1 to 8; higher | 1 | - |
 | **Phase offset** | Slider | -8 to 8; any value by typing | 0 | - |
-| **Intensity** | Slider | 0 to 100; up to 400 by typing | 100 | - |
+| **Intensity** | Slider | 0 to 100; up to 400 | 100 | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
-| **Decay** | Slider | 10 to 1000; down to 0 and up to 10000 by typing | 120 | - |
+| **Decay** | Slider | 10 to 1000; down to 0 and up to 10000 | 120 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -10,8 +10,9 @@
 //      something to read.
 //   2. `cargo test -p lumit-render --test effect_examples` renders one frame per
 //      effect and writes raw RGBA8, one file each.
-//   3. sharp encodes those to WebP under public/effects/, where the effect
-//      pages' figures look for them.
+//   3. sharp encodes those to WebP under src/assets/effects/, where the effect
+//      pages' figures look for them. They live under src/assets/ rather than
+//      public/ so that Astro's own image pipeline processes them.
 //
 // Raw RGBA is the handover format because nothing in the Rust workspace encodes
 // an image, and a throwaway encoder written for documentation tooling is exactly
@@ -43,7 +44,7 @@ const DEPTH_CLIP = join(here, "../src/assets/effect-depth.mp4");
 // Also gitignored. A real grade for the LUT page, rather than the plain warm
 // cube the harness writes for itself when this is absent.
 const LUT = join(here, "../src/assets/effect-lut.cube");
-const OUT = join(here, "../public/effects");
+const OUT = join(here, "../src/assets/effects");
 const WORK = join(tmpdir(), "lumit-fx-examples");
 
 const keep = process.argv.includes("--keep");

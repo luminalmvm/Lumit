@@ -3,24 +3,13 @@ title: "Contrast"
 description: "Increase or reduce contrast."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Contrast is a [Colour](/effects/colour/) effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Contrast is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/colour/contrast.webp"
-      alt="The same frame with Contrast applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Contrast</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Contrast. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Contrast is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Contrast" category="colour" slug="contrast" />
 
 {/* END GENERATED */}
 
@@ -34,14 +23,14 @@ Pushes or pulls brightness values from mid-grey.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Contrast** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Contrast** | Slider | 0 to 200; higher | 100 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

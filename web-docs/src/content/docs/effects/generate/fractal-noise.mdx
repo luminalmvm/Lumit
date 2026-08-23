@@ -3,24 +3,13 @@ title: Fractal noise
 description: "Source for generating textures."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Fractal noise is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Fractal noise is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/generate/fractal-noise.webp"
-      alt="The same frame with Fractal noise applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Fractal noise</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Fractal noise. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Fractal noise is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Fractal noise" category="generate" slug="fractal-noise" />
 
 {/* END GENERATED */}
 
@@ -38,17 +27,17 @@ Normally used as a base for more complex effects or textures.
 | **Noise type** | Dropdown | Value · Perlin | Perlin | - |
 | **Fractal type** | Dropdown | Basic · Turbulent | Turbulent | - |
 | **Invert noise** | Checkbox | On or off | Off | - |
-| **Contrast** | Slider | 0 to 400; higher by typing | 100 | - |
+| **Contrast** | Slider | 0 to 400; higher | 100 | - |
 | **Brightness** | Slider | -200 to 200; any value by typing | 0 | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
 | **Uniform scaling** | Checkbox | On or off | On | - |
-| **Scale** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
-| **Scale width** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
-| **Scale height** | Slider | 1 to 2000; higher by typing | 200 | Pixels at composition size |
+| **Scale** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
+| **Scale width** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
+| **Scale height** | Slider | 1 to 2000; higher | 200 | Pixels at composition size |
 | **Offset x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Offset y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Complexity** | Slider, whole numbers | 1 to 10 | 6 | - |
-| **Sub influence** | Slider | 0 to 100; higher by typing | 60 | - |
+| **Sub influence** | Slider | 0 to 100; higher | 60 | - |
 | **Sub scaling** | Slider | 5 to 100 | 55 | - |
 | **Evolution** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | - |
 | **Cycle evolution** | Checkbox | On or off | Off | - |
@@ -67,7 +56,7 @@ In the Effect Controls panel:
 - **Scale width** is editable while **Uniform scaling** is off.
 - **Scale height** is editable while **Uniform scaling** is off.
 - **Cycle** is editable while **Cycle evolution** is on.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -21,14 +21,14 @@ Makes time step, in practice acting as a way to reduce a layers framerate.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Frame rate** | Slider | 1 to 60; down to 0.01 and higher by typing | 12 | - |
+| **Frame rate** | Slider | 1 to 60; down to 0.01 and higher | 12 | - |
 | **Phase** | Slider | -1 to 1; any value by typing | 0 | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

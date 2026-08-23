@@ -3,24 +3,13 @@ title: Drop shadow
 description: "Casts a copy of the layer's own shape behind it."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Drop shadow is a **Stylise** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Drop shadow is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/stylise/drop-shadow.webp"
-      alt="The same frame with Drop shadow applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Drop shadow</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Drop shadow. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Drop shadow is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Drop shadow" category="stylise" slug="drop-shadow" />
 
 {/* END GENERATED */}
 
@@ -37,8 +26,8 @@ creates a copy of the layer's shape and composites it behind the original layer.
 | **Shadow colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
 | **Opacity** | Slider | 0 to 100 | 50 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 135° | - |
-| **Distance** | Slider | 0 to 500; higher by typing | 12 | Pixels at composition size |
-| **Softness** | Slider | 0 to 250; higher by typing | 8 | Pixels at composition size |
+| **Distance** | Slider | 0 to 500; higher | 12 | Pixels at composition size |
+| **Softness** | Slider | 0 to 250; higher | 8 | Pixels at composition size |
 | **Shadow only** | Checkbox | On or off | Off | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -46,7 +35,7 @@ creates a copy of the layer's shape and composites it behind the original layer.
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

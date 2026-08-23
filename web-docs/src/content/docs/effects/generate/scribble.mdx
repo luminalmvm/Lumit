@@ -3,24 +3,13 @@ title: Scribble
 description: "Fills a mask with pencil strokes."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Scribble is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Scribble is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/generate/scribble.webp"
-      alt="The same frame with Scribble applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Scribble</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Scribble. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Scribble is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Scribble" category="generate" slug="scribble" />
 
 {/* END GENERATED */}
 
@@ -37,13 +26,13 @@ Scribble fills a mask with parallel pencil strokes at whatever angle you choose.
 | **Mask** | Masks | This layer's masks | First mask | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 0.85, 0.16, 0.12, 1 | - |
 | **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 30° | - |
-| **Stroke width** | Slider | 0.1 to 20; higher by typing | 2 | Pixels at composition size |
-| **Spacing** | Slider | 1 to 200; down to 0.5 and higher by typing | 8 | Pixels at composition size |
+| **Stroke width** | Slider | 0.1 to 20; higher | 2 | Pixels at composition size |
+| **Spacing** | Slider | 1 to 200; down to 0.5 and higher | 8 | Pixels at composition size |
 | **Path overlap** | Slider | -50 to 50; any value by typing | 4 | Pixels at composition size |
 | **Start** | Slider | 0 to 100 | 0 | - |
 | **End** | Slider | 0 to 100 | 100 | - |
 | **Wiggle type** | Dropdown | Static · Jagged · Wiggly | Static | - |
-| **Wiggles per second** | Slider | 0 to 30; higher by typing | 8 | - |
+| **Wiggles per second** | Slider | 0 to 30; higher | 8 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Opacity** | Slider | 0 to 100 | 100 | - |
 | **Composite on original** | Checkbox | On or off | On | - |
@@ -54,7 +43,7 @@ Scribble fills a mask with parallel pencil strokes at whatever angle you choose.
 In the Effect Controls panel:
 
 - **Wiggles per second** is editable while **Wiggle type** is anything but Static.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

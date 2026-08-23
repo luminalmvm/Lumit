@@ -57,8 +57,9 @@ edit links, and per-page "last updated" dates from git history.
 web-docs/
   astro.config.mjs         title, logo, social, editLink, the three sidebar topics
   src/content/docs/        every page: start/ use/ panels/ engine/ reference/
-  src/components/          PageTitle, LastUpdated, Shot
+  src/components/          PageTitle, LastUpdated, Shot, Compare
   src/assets/shots/        screenshots, plus a README listing wanted ones
+  src/assets/effects/      the engine-rendered effect pictures, one per effect
   src/styles/theme.css     Starlight colour variables matched to the app
 ```
 
@@ -138,6 +139,14 @@ then loads the image and has to do more re-arranging afaik)
 ```
 <Shot file="timeline-outline.png" caption="The outline columns." eager />
 ```
+
+An effect page's before-and-after picture is a different mechanism. Nobody adds
+one by hand: `npm run docs:effect-shots` renders it with the engine into
+`src/assets/effects/<category>/<slug>.webp`, and `npm run docs:effects` writes
+the `<Compare>` tag and its import into the page's generated block. Both halves
+of the wipe go through `Compare.astro`, so Astro's image pipeline processes them
+and the figure loads eagerly, which is what the dev toolbar's audit wants of a
+picture that sits at the top of the page.
 
 ## Task: change navigation
 

@@ -36,143 +36,156 @@ A few conventions run through the whole catalogue:
 
 ### [Blur & sharpen](/effects/blur-sharpen/)
 
-Softening, streaking and detail lift, and how to choose between them. 7 effects.
+Soften, focus, and detail lift. 7 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) | The plain, even softening, and what its two controls mean. |
+| [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) | Basic, simple blur. |
 | [Directional blur](/effects/blur-sharpen/directional-blur/) | A streak along one angle, for impact frames and speed. |
-| [Radial blur](/effects/blur-sharpen/radial-blur/) | A spin or a zoom about a chosen centre. |
-| [Unsharp mask](/effects/blur-sharpen/unsharp-mask/) | A radius-controlled detail lift, with a threshold to spare the grain. |
-| [Sharpen](/effects/blur-sharpen/sharpen/) | The plain sharpen, with one amount and one distance. |
+| [Radial blur](/effects/blur-sharpen/radial-blur/) | A spin or a zoom about a centre point. |
+| [Unsharp mask](/effects/blur-sharpen/unsharp-mask/) | A radius-controlled detail lift. |
+| [Sharpen](/effects/blur-sharpen/sharpen/) | The simple, basic sharpen. |
 | [Depth of field](/effects/blur-sharpen/depth-of-field/) | A lens blur driven by a depth pass, with a real iris. |
 | [Channel blur](/effects/blur-sharpen/channel-blur/) | Blurs red, green, blue and the alpha by separate amounts. |
 
 ### [Colour](/effects/colour/)
 
-The grading family, from exposure and balance through contrast to the looks built on them. 22 effects.
+Colour grading and correction. 22 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Colour balance](/effects/colour/colour-balance/) | Lift, gamma and gain, covering shadows, mid-tones and highlights per channel. |
+| [Colour balance](/effects/colour/colour-balance/) | Lift, gamma, and gain, for shadows, mid-tones and highlights. |
 | [Saturation](/effects/colour/saturation/) | Scale how colourful the picture is, evenly. |
-| [Vibrancy](/effects/colour/vibrancy/) | A saturation lift weighted toward the colours that have least. |
-| [Vignette](/effects/colour/vignette/) | Darken toward the edges, to hold the eye in the middle. |
-| [Exposure](/effects/colour/exposure/) | Brightness in photographic stops. |
-| [Hue shift](/effects/colour/hue-shift/) | Turn the whole colour wheel, with or without holding brightness. |
-| [Contrast](/effects/colour/contrast/) | Spread the picture about mid-grey, or compress it. |
-| [Gamma](/effects/colour/gamma/) | Lift or lower the mid-tones without moving black or white. |
-| [Temperature](/effects/colour/temperature/) | The one-knob warm and cool shift. |
-| [LUT](/effects/colour/lut/) | Apply a grade authored elsewhere, from a .cube file. |
-| [Invert](/effects/colour/invert/) | The colour inverse, with nothing to configure. |
-| [Tint](/effects/colour/tint/) | Map the picture's brightness onto two colours of your choosing. |
-| [Curves](/effects/colour/curves/) | Bend the tone curve where you want it, on the whole picture or one channel. |
-| [Levels](/effects/colour/levels/) | Set the black point, the white point and the bend between them, per channel. |
-| [Brightness](/effects/colour/brightness/) | Lift or drop the picture, and spread or flatten it, in one effect. |
-| [Hue and saturation](/effects/colour/hue-and-saturation/) | Turn, saturate or lighten the whole picture, or just its greens. |
-| [Posterize](/effects/colour/posterize/) | Keeps a handful of evenly spaced shades and throws the rest away, so a smooth gradient becomes flat bands of colour. |
-| [Threshold](/effects/colour/threshold/) | Cuts every pixel to black or white at a brightness you choose, turning a photograph into a stencil. |
-| [Tritone](/effects/colour/tritone/) | Replaces the picture's colours with three of your own: one for the shadows, one for the midtones, one for the highlights. |
-| [Photo filter](/effects/colour/photo-filter/) | Warms or cools the picture as a coloured glass on the lens would, without changing the exposure. |
-| [Black and white](/effects/colour/black-and-white/) | Converts to grey with six sliders that say how bright each colour comes out, the way a coloured filter on black-and-white film did. |
-| [Shadow highlight](/effects/colour/shadow-highlight/) | Opens up dark regions and holds back bright ones, judging each pixel by how bright its surroundings are. |
+| [Vibrancy](/effects/colour/vibrancy/) | A weighted saturation lift. |
+| [Vignette](/effects/colour/vignette/) | Darken toward the edges. |
+| [Exposure](/effects/colour/exposure/) | Adjust exposure. |
+| [Hue shift](/effects/colour/hue-shift/) | Only adjust hue. |
+| [Contrast](/effects/colour/contrast/) | Increase or reduce contrast. |
+| [Gamma](/effects/colour/gamma/) | Lift or lower mid-tones. |
+| [Temperature](/effects/colour/temperature/) | Warm and cool shift. |
+| [LUT](/effects/colour/lut/) | Apply a LUT from a .cube file. |
+| [Invert](/effects/colour/invert/) | Invert an input. |
+| [Tint](/effects/colour/tint/) | Map brightness onto two colours. |
+| [Curves](/effects/colour/curves/) | Adjust the tone curve. |
+| [Levels](/effects/colour/levels/) | Adjust black point, white point and gamma. |
+| [Brightness](/effects/colour/brightness/) | Brighten or darken the image. |
+| [Hue and saturation](/effects/colour/hue-and-saturation/) | Adjust hues, saturation, or lightness. |
+| [Posterize](/effects/colour/posterize/) | Reduce the colour depth of an input. |
+| [Threshold](/effects/colour/threshold/) | Values above threshold white, otherwise black. |
+| [Tritone](/effects/colour/tritone/) | Map brightness onto 3 colours. |
+| [Photo filter](/effects/colour/photo-filter/) | Warms or cools the input. |
+| [Black and white](/effects/colour/black-and-white/) | Converts to greyscale. |
+| [Shadow highlight](/effects/colour/shadow-highlight/) | Adjust shadows and highlights. |
 
 ### [Distortion](/effects/distortion/)
 
-Splitting, shaking and breaking the picture: the impact and glitch family. 20 effects.
+Warps, reshapes, twists, and glitches. 20 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [RGB split](/effects/distortion/rgb-split/) | Offset the colour channels along one angle for the impact fringe. |
-| [Chromatic aberration](/effects/distortion/chromatic-aberration/) | The radial colour fringe a real lens leaves toward the frame's edges. |
-| [Shake](/effects/distortion/shake/) | Seeded camera wobble, with per-axis control and its own motion blur. |
-| [Block glitch](/effects/distortion/block-glitch/) | Tear the picture into displaced, colour-split blocks. |
-| [Scanlines](/effects/distortion/scanlines/) | The CRT line pattern, optionally rolling or interlaced. |
-| [Datamosh](/effects/distortion/datamosh/) | Melt the previous frame along the motion of the current one. |
-| [Turbulent displace](/effects/distortion/turbulent-displace/) | The fractal warp, which swirls the picture with the same noise the Fractal noise effect draws. |
-| [Tile](/effects/distortion/tile/) | Cuts a rectangle out of the picture and stamps it across the frame, with mirrored and offset rows. |
-| [Offset](/effects/distortion/offset/) | Slides the picture, wrapping round, so what leaves one side arrives at the other. |
-| [Mirror](/effects/distortion/mirror/) | Reflects one half of the frame onto the other, about a line you place and turn. |
-| [Lens distort](/effects/distortion/lens-distort/) | Adds or removes the bow a wide lens puts in straight lines, described by field of view. |
-| [Corner pin](/effects/distortion/corner-pin/) | Pulls the four corners of the layer onto four points you place, with true perspective. |
-| [Displacement map](/effects/distortion/displacement-map/) | Pushes this layer's pixels around using the brightness of another layer as a map. |
-| [Polar coordinates](/effects/distortion/polar-coordinates/) | Wraps the frame around its own centre, or unrolls a circle into a straight strip. |
-| [Twirl](/effects/distortion/twirl/) | Wrings the picture round a point, hardest in the middle and easing out to nothing at the rim. |
-| [Spherize](/effects/distortion/spherize/) | Magnifies a circle of the picture as if a glass ball were held over it, or pinches it inward. |
-| [Ripple](/effects/distortion/ripple/) | Sends rings of distortion spreading outward from a point, as a stone dropped into the picture would. |
-| [Wave warp](/effects/distortion/wave-warp/) | Runs a wave across the frame and slides the picture sideways to it, the way a flag ripples. |
-| [Bezier warp](/effects/distortion/bezier-warp/) | Bends the four edges of the picture with twelve draggable points and fills the inside smoothly. |
-| [Warp](/effects/distortion/warp/) | Thirteen named ways of bending a picture, from arc to flag to fisheye to twist, each one slider deep. |
+| [RGB split](/effects/distortion/rgb-split/) | Offset the colour channels. |
+| [Chromatic aberration](/effects/distortion/chromatic-aberration/) | Radial colour fringing. |
+| [Shake](/effects/distortion/shake/) | Seeded camera wobble. |
+| [Block glitch](/effects/distortion/block-glitch/) | Tear the picture into blocks. |
+| [Scanlines](/effects/distortion/scanlines/) | CRT line pattern. |
+| [Datamosh](/effects/distortion/datamosh/) | Melt frames together. |
+| [Turbulent displace](/effects/distortion/turbulent-displace/) | Fractal warping. |
+| [Tile](/effects/distortion/tile/) | Cuts a rectangle and stamps it across the frame. |
+| [Offset](/effects/distortion/offset/) | Slides and wrap the picture. |
+| [Mirror](/effects/distortion/mirror/) | Reflects one half of the frame. |
+| [Lens distort](/effects/distortion/lens-distort/) | Bends the edges of a layer. |
+| [Corner pin](/effects/distortion/corner-pin/) | Pulls the four corners to four placed points. |
+| [Displacement map](/effects/distortion/displacement-map/) | Warps a layer's pixels using a brightness map. |
+| [Polar coordinates](/effects/distortion/polar-coordinates/) | Wraps the frame around its centre. |
+| [Twirl](/effects/distortion/twirl/) | Wrings the picture round a point. |
+| [Spherize](/effects/distortion/spherize/) | Magnifies a circle of the picture. |
+| [Ripple](/effects/distortion/ripple/) | Rings of distortion spreading outward from a point. |
+| [Wave warp](/effects/distortion/wave-warp/) | Runs a wave across the frame. |
+| [Bezier warp](/effects/distortion/bezier-warp/) | Warp with twelve draggable points. |
+| [Warp](/effects/distortion/warp/) | Multiple ways of bending a picture. |
 
 ### [Generate](/effects/generate/)
 
-What the Generate family is for, and which effects belong to it. 11 effects.
+Generate textures, colours, and gradients. 11 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Fill](/effects/generate/fill/) | Replace a layer's colour with one flat colour, keeping its shape and its edges. |
-| [Gradient](/effects/generate/gradient/) | A two-colour ramp across the frame, straight or radiating, with a dither that kills banding. |
-| [Noise](/effects/generate/noise/) | Grain over the picture, flat or film-like, grey or coloured, crawling or frozen. |
-| [Fractal noise](/effects/generate/fractal-noise/) | Soft blobs with smaller blobs on top, animated by depth: the cloud, smoke and turbulence generator. |
-| [Beam](/effects/generate/beam/) | Draws a tapered shaft of light between two points, with a core colour and a rim. |
-| [Lightning](/effects/generate/lightning/) | Draws a jagged, forked bolt of lightning between two points. |
-| [Radio waves](/effects/generate/radio-waves/) | Emits expanding rings, polygons or stars from a point, each fading as it ages. |
-| [Vegas](/effects/generate/vegas/) | Runs a dashed, marching stroke along a contour it finds in the picture, or round a mask you have drawn. |
-| [Add grain](/effects/generate/add-grain/) | Lays film grain over the picture, with a size, a softness and a response that follows the tone. |
-| [Scribble](/effects/generate/scribble/) | Fills a mask you have drawn with pencil strokes, the way a hand shades a shape. |
-| [Stroke](/effects/generate/stroke/) | Walks a round brush along a mask you have drawn, from one point on it to another. |
+| [Fill](/effects/generate/fill/) | Replace a layer's colour with one colour. |
+| [Gradient](/effects/generate/gradient/) | A two-colour ramp across the frame. |
+| [Noise](/effects/generate/noise/) | Monochrome grain over the picture. |
+| [Fractal noise](/effects/generate/fractal-noise/) | Source for generating textures. |
+| [Beam](/effects/generate/beam/) | Draws a tapered shaft of light between two points. |
+| [Lightning](/effects/generate/lightning/) | Draws a bolt of lightning between two points. |
+| [Radio waves](/effects/generate/radio-waves/) | Emits expanding rings. |
+| [Vegas](/effects/generate/vegas/) | Runs a dashed stroke along contours it finds in the picture. |
+| [Add grain](/effects/generate/add-grain/) | Lays film grain over the picture. |
+| [Scribble](/effects/generate/scribble/) | Fills a mask with pencil strokes. |
+| [Stroke](/effects/generate/stroke/) | Draws a stroke along a mask . |
 
 ### [Stylise](/effects/stylise/)
 
-Changing how the picture looks: glow, flare, relief, blocks and drawn edges. 12 effects.
+Add elements to existing footage. 12 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Sprite flare](/effects/stylise/sprite-flare/) | The drawn flare: a glow, a train of ghosts and an anamorphic streak. |
+| [Sprite flare](/effects/stylise/sprite-flare/) | The cheap lens flare. |
 | [Light wrap](/effects/stylise/light-wrap/) | Spill the background's light around a keyed subject's edge. |
-| [Flash](/effects/stylise/flash/) | A hit of colour on a beat, a keyframe, or a strobe grid. |
-| [Glow](/effects/stylise/glow/) | Bloom the picture's bright areas outward, in real light. |
-| [Lens flare](/effects/stylise/lens-flare/) | A flare traced through a real lens prescription, aperture and all. |
-| [Drop shadow](/effects/stylise/drop-shadow/) | Casts a soft, coloured copy of the layer's own shape behind it. |
-| [Roughen edges](/effects/stylise/roughen-edges/) | Chews the outline of a shape with a cloud of fractal noise, so a clean cut-out stops looking cut out. |
-| [Median](/effects/stylise/median/) | Replaces every pixel with the middle value of its neighbours, which removes speckle without softening an edge. |
-| [Mosaic](/effects/stylise/mosaic/) | Cuts the frame into a grid of rectangles and paints each one a single flat colour. |
-| [Find edges](/effects/stylise/find-edges/) | Draws the picture as a line drawing of its own edges: dark lines on white, or glowing lines on black. |
-| [Emboss](/effects/stylise/emboss/) | Treats the picture as a surface with height and lights it from one side, giving the stamped-metal grey relief. |
-| [Texturize](/effects/stylise/texturize/) | Presses another layer into this one as relief, so the picture looks printed on canvas, paper or foil. |
+| [Flash](/effects/stylise/flash/) | A strobe on a beat. |
+| [Glow](/effects/stylise/glow/) | Bloom the picture's bright areas. |
+| [Lens flare](/effects/stylise/lens-flare/) | A flare traced through a real lens. |
+| [Drop shadow](/effects/stylise/drop-shadow/) | Casts a copy of the layer's own shape behind it. |
+| [Roughen edges](/effects/stylise/roughen-edges/) | Chews the outline of a shape with fractal noise. |
+| [Median](/effects/stylise/median/) | Replaces every pixel with the median value of its neighbours. |
+| [Mosaic](/effects/stylise/mosaic/) | Cuts the frame into rectangles and paints each a single colour. |
+| [Find edges](/effects/stylise/find-edges/) | Draws the picture as a line drawing of its edges. |
+| [Emboss](/effects/stylise/emboss/) | Treats the picture as a surface with height, and lights from one side. |
+| [Texturize](/effects/stylise/texturize/) | Use another layer as relief. |
 
 ### [Temporal](/effects/temporal/)
 
-Effects that read other frames, or change which frame is drawn. 4 effects.
+Effects that read other frames, or rely on time. 4 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Echo](/effects/temporal/echo/) | Composite a run of earlier frames for trails and speed lines. |
-| [Posterize time](/effects/temporal/posterize-time/) | Hold time on a coarser grid for the stop-motion, on-twos look. |
+| [Echo](/effects/temporal/echo/) | Composite a run of earlier frames for trails. |
+| [Posterize time](/effects/temporal/posterize-time/) | Hold time on a coarser time grid. |
 | [Motion blur](/effects/temporal/motion-blur/) | Re-render the scene below at sub-frame moments and average them. |
-| [Fast motion blur](/effects/temporal/fast-motion-blur/) | Smear each pixel along the motion measured in the footage. |
+| [Fast motion blur](/effects/temporal/fast-motion-blur/) | Smear each pixel along motion in footage. |
 
 ### [Transition](/effects/transition/)
 
-The Transition effects, and what the family is for. 5 effects.
+Transition between other layers. 5 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Linear wipe](/effects/transition/linear-wipe/) | Sweeps a straight edge across the frame, removing everything behind it. |
-| [Radial wipe](/effects/transition/radial-wipe/) | Sweeps a wedge around a centre, like a hand going round a clock. |
-| [Venetian blinds](/effects/transition/venetian-blinds/) | Closes the frame with a rank of slats, like a window blind. |
-| [Iris wipe](/effects/transition/iris-wipe/) | Opens a polygon or a star out of the middle of the frame. |
-| [Card wipe](/effects/transition/card-wipe/) | Turns the frame away as a grid of cards, one wave at a time. |
+| [Linear wipe](/effects/transition/linear-wipe/) | Sweeps a straight edge across the frame. |
+| [Radial wipe](/effects/transition/radial-wipe/) | Sweeps a wedge around a centre. |
+| [Venetian blinds](/effects/transition/venetian-blinds/) | Closes the frame with slats. |
+| [Iris wipe](/effects/transition/iris-wipe/) | Opens a polygon from the middle of the frame. |
+| [Card wipe](/effects/transition/card-wipe/) | Turns the frame away as a grid of cards. |
 
 ### [Utility](/effects/utility/)
 
-Four effects with a practical job to do. 4 effects.
+Useful tools for specific tasks. 5 effects.
 
 | Effect | What it does |
 | --- | --- |
-| [Transform](/effects/utility/transform/) | The transform properties as a stack entry, for adjustment layers. |
+| [Transform](/effects/utility/transform/) | The transform properties as an effect. |
 | [Matte key](/effects/utility/matte-key/) | Pull a green or blue screen to transparency, with despill. |
-| [Set matte](/effects/utility/set-matte/) | Takes a channel of another layer as this layer's transparency. |
-| [Broadcast safe](/effects/utility/broadcast-safe/) | Measures each pixel's composite signal amplitude and pulls the illegal ones back, or shows you which they are. |
+| [Set matte](/effects/utility/set-matte/) | Takes a channel of another layer as transparency. |
+| [Broadcast safe](/effects/utility/broadcast-safe/) | Measures and displays illegal pixels. |
+| [Camera track](/effects/utility/camera-track/) | What Camera track does, and what each of its controls means. |
+
+### [Controls](/effects/controls/)
+
+The Controls effects, and what the family is for. 5 effects.
+
+| Effect | What it does |
+| --- | --- |
+| [Slider control](/effects/controls/slider-control/) | What Slider control does, and what each of its controls means. |
+| [Angle control](/effects/controls/angle-control/) | What Angle control does, and what each of its controls means. |
+| [Checkbox control](/effects/controls/checkbox-control/) | What Checkbox control does, and what each of its controls means. |
+| [Colour control](/effects/controls/colour-control/) | What Colour control does, and what each of its controls means. |
+| [Point control](/effects/controls/point-control/) | What Point control does, and what each of its controls means. |
 
 {/* END GENERATED */}

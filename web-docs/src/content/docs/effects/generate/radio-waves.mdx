@@ -3,24 +3,13 @@ title: Radio waves
 description: "Emits expanding rings."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Radio waves is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Radio waves is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/generate/radio-waves.webp"
-      alt="The same frame with Radio waves applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Radio waves</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Radio waves. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Radio waves is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Radio waves" category="generate" slug="radio-waves" />
 
 {/* END GENERATED */}
 
@@ -36,16 +25,16 @@ A point repeatedly emits a shape.
 | --- | --- | --- | --- | --- |
 | **Producer x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Producer y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
-| **Time** | Slider | 0 to 10; higher by typing | 3 | Seconds |
-| **Frequency** | Slider | 0.1 to 20; down to 0.01 and higher by typing | 2 | - |
-| **Expansion** | Slider | 0 to 1000; higher by typing | 260 | Pixels at composition size |
-| **Lifespan** | Slider | 0.1 to 10; down to 0.02 and higher by typing | 2 | Seconds |
+| **Time** | Slider | 0 to 10; higher | 3 | Seconds |
+| **Frequency** | Slider | 0.1 to 20; down to 0.01 and higher | 2 | - |
+| **Expansion** | Slider | 0 to 1000; higher | 260 | Pixels at composition size |
+| **Lifespan** | Slider | 0.1 to 10; down to 0.02 and higher | 2 | Seconds |
 | **Sides** | Slider, whole numbers | 3 to 64 | 32 | - |
 | **Star** | Checkbox | On or off | Off | - |
 | **Star depth** | Slider | 0 to 100 | 50 | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
 | **Spin** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
-| **Stroke width** | Slider | 0 to 100; higher by typing | 4 | Pixels at composition size |
+| **Stroke width** | Slider | 0 to 100; higher | 4 | Pixels at composition size |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 0.25, 0.7, 1, 1 | - |
 | **Opacity** | Slider | 0 to 100 | 100 | - |
 | **Fade in** | Slider | 0 to 100 | 15 | - |
@@ -58,7 +47,7 @@ A point repeatedly emits a shape.
 In the Effect Controls panel:
 
 - **Star depth** is editable while **Star** is on.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

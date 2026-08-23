@@ -30,7 +30,7 @@ specified but not yet built, as are the inside and outside garbage masks.
 | --- | --- | --- | --- | --- |
 | **View** | Dropdown | Final result · Screen matte · Status | Final result | - |
 | **Screen colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0.6, 0, 1 | - |
-| **Screen gain** | Slider | 0 to 200; higher by typing | 100 | - |
+| **Screen gain** | Slider | 0 to 200; higher | 100 | - |
 | **Screen balance** | Slider | 0 to 100 | 50 | - |
 | **Despill bias** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
 | **Alpha bias** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
@@ -47,7 +47,7 @@ specified but not yet built, as are the inside and outside garbage masks.
 In the Effect Controls panel:
 
 - **Screen matte** groups **Clip black**, **Clip white**, **Clip rollback**, **Replace method**, **Replace colour**, and starts closed.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

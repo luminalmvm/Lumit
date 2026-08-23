@@ -38,7 +38,7 @@
 }
 
 /* An effect page's example picture. Rendered by the engine, encoded by
-   scripts/gen-effect-shots.mjs, served from public/effects/. */
+   scripts/gen-effect-shots.mjs, laid out by src/components/Compare.astro. */
 figure.example {
   margin: 1.5rem 0;
 }

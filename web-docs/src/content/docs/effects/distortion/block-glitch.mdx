@@ -3,24 +3,13 @@ title: "Block glitch"
 description: "Tear the picture into blocks."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Block glitch is a [Distortion](/effects/distortion/) effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Block glitch is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/distortion/block-glitch.webp"
-      alt="The same frame with Block glitch applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Block glitch</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Block glitch. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Block glitch is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Block glitch" category="distortion" slug="block-glitch" />
 
 {/* END GENERATED */}
 
@@ -37,10 +26,10 @@ slice of themselves.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Intensity** | Slider | 0 to 1 | 0.35 | - |
-| **Block size** | Slider | 4 to 128; down to 2 and higher by typing | 24 | Pixels at composition size |
+| **Block size** | Slider | 4 to 128; down to 2 and higher | 24 | Pixels at composition size |
 | **Rows/columns jitter** | Slider | 0 to 100 | 25 | - |
-| **Displacement** | Slider | 0 to 15; up to 100 by typing | 3 | Per cent of the composition diagonal |
-| **Channel offset** | Slider | 0 to 10; up to 50 by typing | 1 | Per cent of the composition diagonal |
+| **Displacement** | Slider | 0 to 15; up to 100 | 3 | Per cent of the composition diagonal |
+| **Channel offset** | Slider | 0 to 10; up to 50 | 1 | Per cent of the composition diagonal |
 | **Slice repeat** | Slider | 0 to 100 | 20 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
@@ -49,7 +38,7 @@ slice of themselves.
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -3,24 +3,13 @@ title: Turbulent displace
 description: "Fractal warping."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Turbulent displace is a **Distortion** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Turbulent displace is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/distortion/turbulent-displace.webp"
-      alt="The same frame with Turbulent displace applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Turbulent displace</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Turbulent displace. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Turbulent displace is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Turbulent displace" category="distortion" slug="turbulent-displace" />
 
 {/* END GENERATED */}
 
@@ -39,7 +28,7 @@ draws.
 | --- | --- | --- | --- | --- |
 | **Displacement** | Dropdown | Turbulent · Horizontal · Vertical | Turbulent | - |
 | **Amount** | Slider | -500 to 500; any value by typing | 50 | Pixels at composition size |
-| **Size** | Slider | 1 to 2000; higher by typing | 100 | Pixels at composition size |
+| **Size** | Slider | 1 to 2000; higher | 100 | Pixels at composition size |
 | **Complexity** | Slider, whole numbers | 1 to 10 | 3 | - |
 | **Offset x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Offset y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
@@ -56,7 +45,7 @@ In the Effect Controls panel:
 
 - **Evolution options** groups **Cycle evolution**, **Cycle**, and starts closed.
 - **Cycle** is editable while **Cycle evolution** is on.
-- **Matte** scales the displacement per pixel: white warps at the full Amount, grey warps a little, black not at all — where a strength dissolve would blend a fully-warped picture over an unwarped one and show both edges at once. **Invert** reads the matte the other way round, light for dark.
+- **Matte** scales the displacement per pixel: white warps at the full Amount, grey warps a little, black not at all — where a strength dissolve would blend a fully-warped picture over an unwarped one and show both edges at once. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

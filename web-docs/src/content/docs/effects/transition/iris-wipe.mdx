@@ -3,24 +3,13 @@ title: Iris wipe
 description: "Opens a polygon from the middle of the frame."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Iris wipe is a **Transition** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Iris wipe is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/transition/iris-wipe.webp"
-      alt="The same frame with Iris wipe applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Iris wipe</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Iris wipe. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Iris wipe is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Iris wipe" category="transition" slug="iris-wipe" />
 
 {/* END GENERATED */}
 
@@ -37,11 +26,11 @@ Opening a hole in the layer, which expands until it wipes the entire frame.
 | **Iris centre x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Iris centre y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Iris points** | Slider, whole numbers | 6 to 32 | 6 | - |
-| **Outer radius** | Slider | 0 to 100; higher by typing | 15 | Per cent of the composition diagonal |
+| **Outer radius** | Slider | 0 to 100; higher | 15 | Per cent of the composition diagonal |
 | **Use inner radius** | Checkbox | On or off | Off | - |
-| **Inner radius** | Slider | 0 to 100; higher by typing | 7.5 | Per cent of the composition diagonal |
+| **Inner radius** | Slider | 0 to 100; higher | 7.5 | Per cent of the composition diagonal |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | - |
-| **Feather** | Slider | 0 to 500; higher by typing | 0 | Pixels at composition size |
+| **Feather** | Slider | 0 to 500; higher | 0 | Pixels at composition size |
 | **Mix** | Slider | 0 to 100 | 100 | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
@@ -49,7 +38,7 @@ Opening a hole in the layer, which expands until it wipes the entire frame.
 In the Effect Controls panel:
 
 - **Inner radius** is editable while **Use inner radius** is on.
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

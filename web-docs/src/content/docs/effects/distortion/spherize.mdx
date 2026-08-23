@@ -3,24 +3,13 @@ title: Spherize
 description: "Magnifies a circle of the picture."
 ---
 
+import Compare from "../../../../components/Compare.astro";
+
 Spherize is a **Distortion** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<figure class="example">
-  <div class="compare" style="--split:50%">
-    <img src="/effects/plate.webp" alt="The frame before Spherize is applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <img class="compare__after" src="/effects/distortion/spherize.webp"
-      alt="The same frame with Spherize applied" width="1280" height="544" loading="lazy" decoding="async" />
-    <span class="compare__handle" aria-hidden="true"></span>
-    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
-    <span class="compare__label compare__label--b" aria-hidden="true">Spherize</span>
-    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
-      aria-label="Reveal Spherize. Left of the handle is the untouched frame, right of it is the effect." />
-  </div>
-  <figcaption>Drag the handle. Spherize is on the right, the untouched frame on the left,
-  at settings chosen to make the effect plain rather than subtle.</figcaption>
-</figure>
+<Compare label="Spherize" category="distortion" slug="spherize" />
 
 {/* END GENERATED */}
 
@@ -35,7 +24,7 @@ acts like a fisheye lens.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Radius** | Slider | 0 to 100; higher by typing | 25 | Per cent of the composition diagonal |
+| **Radius** | Slider | 0 to 100; higher | 25 | Per cent of the composition diagonal |
 | **Bulge** | Slider | -100 to 100 | 100 | - |
 | **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
@@ -45,7 +34,7 @@ acts like a fisheye lens.
 
 In the Effect Controls panel:
 
-- **Matte** scales how much of the effect each pixel gets: white applies it in full, black leaves the pixel as it arrived, grey part way. **Invert** reads the matte the other way round, light for dark.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 
