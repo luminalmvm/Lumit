@@ -9,8 +9,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 import { generate } from "./gen-effect-pages.mjs";
@@ -115,7 +115,7 @@ function fixture() {
 
   const run = () => generate({ reference, out, shots, components: "../../../../components" });
   const page = () => readFileSync(join(out, "stylise", "fake-flare.mdx"), "utf8");
-  return { dir, out, run, page };
+  return { dir, out, reference, shots, run, page };
 }
 
 test("the hand-written prose and the owner's marker survive", () => {
@@ -188,6 +188,86 @@ test("an effect with no picture gets no figure and no import", () => {
     const page = readFileSync(join(f.out, "stylise", "no-picture.mdx"), "utf8");
     assert.ok(!page.includes("import Compare"), "an imported component nothing uses");
     assert.ok(!page.includes("<Compare"), "a figure for a picture that is not there");
+  } finally {
+    rmSync(f.dir, { recursive: true, force: true });
+  }
+});
+
+// The section index is the other half-and-half page: the owner writes a heading
+// and a sentence for every category, the generator writes only the table under
+// each one. Categories have no page of their own any more.
+
+const INDEX_PROSE = [
+  "## Effect categories",
+  "### Stylise",
+  "A sentence about the Stylise family, in the owner's own words.",
+];
+
+const INDEX = `---
+title: Effects
+description: Every built-in effect.
+---
+
+${INDEX_PROSE[0]}
+
+${INDEX_PROSE[1]}
+
+${INDEX_PROSE[2]}
+
+{/* GENERATED:list:stylise - rewritten by \`npm run docs:effects\`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Something stale](/effects/stylise/something-stale/) | A row nobody claims. |
+
+{/* END GENERATED */}
+`;
+
+test("the index keeps its headings and prose, and only its tables are rewritten", () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.out, "index.mdx"), INDEX);
+    f.run();
+    const page = readFileSync(join(f.out, "index.mdx"), "utf8");
+    for (const line of INDEX_PROSE) assert.ok(page.includes(line), `lost: ${line}`);
+    assert.ok(!page.includes("Something stale"), "the old table was left behind");
+    assert.ok(page.includes("| [Fake flare](/effects/stylise/fake-flare/) |"));
+    assert.equal(page.split("### Stylise").length - 1, 1, "the heading was duplicated");
+  } finally {
+    rmSync(f.dir, { recursive: true, force: true });
+  }
+});
+
+test("a category the index does not mention yet gets a scaffold and a warning", () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.out, "index.mdx"), INDEX);
+    // A category the engine has and the page has never heard of.
+    writeFileSync(
+      f.reference,
+      JSON.stringify({
+        ...REFERENCE,
+        categories: [...REFERENCE.categories, { slug: "temporal", label: "Temporal" }],
+      }),
+    );
+    const { scaffolded } = f.run();
+    const page = readFileSync(join(f.out, "index.mdx"), "utf8");
+    assert.deepEqual(scaffolded, ["Temporal"]);
+    assert.ok(page.includes("### Temporal"), "no scaffold heading");
+    assert.ok(page.includes("{/* GENERATED:list:temporal"), "no scaffold block");
+  } finally {
+    rmSync(f.dir, { recursive: true, force: true });
+  }
+});
+
+test("no category index page is written", () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.out, "index.mdx"), INDEX);
+    const { changed, orphans } = f.run();
+    assert.ok(!existsSync(join(f.out, "stylise", "index.mdx")), "a category page came back");
+    assert.ok(!changed.some((p) => p.endsWith(`stylise${sep}index.mdx`)), changed.join(", "));
+    assert.ok(!orphans.includes("index.mdx"), "the section index counted as an orphan");
   } finally {
     rmSync(f.dir, { recursive: true, force: true });
   }

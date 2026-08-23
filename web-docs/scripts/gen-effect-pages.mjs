@@ -4,7 +4,10 @@
 // units - are written down once, in Rust, on the effect's declaration. The
 // engine exports that as crates/lumit-core/fx-reference.json (regenerate it with
 // `cargo test -p lumit-core regenerate_fx_reference -- --ignored`). This script
-// turns the JSON into one page per effect and one page per category.
+// turns the JSON into one page per effect, plus one table per category on the
+// section index. Categories have no page of their own: their headings and the
+// sentences under them live on src/content/docs/effects/index.mdx, hand-written,
+// and only the table under each heading is generated.
 //
 // It only ever rewrites the block between the GENERATED markers, and not even
 // all of that: the opening marker line itself is kept exactly as the page has
@@ -68,6 +71,16 @@ const UNIT = {
 
 /** Escape the characters that would break out of a Markdown table cell. */
 const cell = (s) => String(s).replaceAll("|", "\\|").replaceAll("\n", " ");
+
+/**
+ * The id Starlight's Markdown gives a heading, so a link can point at one. This
+ * is github-slugger's rule for the labels a category can have: lower case, drop
+ * anything that is not a word character, a hyphen or a space, then spaces to
+ * hyphens - which is why "Blur & sharpen" becomes "blur--sharpen", two hyphens,
+ * one for each space around the ampersand that went away.
+ */
+const anchor = (label) =>
+  label.toLowerCase().replace(/[^\w\- ]/g, "").replaceAll(" ", "-");
 
 function rangeCell(p) {
   switch (p.kind) {
@@ -337,13 +350,14 @@ export function generate({
   const importLine = `import Compare from "${components}/Compare.astro";`;
   const changed = [];
   const stranded = [];
+  const scaffolded = [];
 
-  function put(path, tag, scaffold, block, anchor, withImport = false) {
+  function put(path, tag, scaffold, block, insertAnchor, withImport = false) {
     const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
     let next = scaffold;
     if (existing !== null) {
       next = splice(existing, tag, block);
-      if (next === null && anchor) next = insertAt(existing, anchor, block);
+      if (next === null && insertAnchor) next = insertAt(existing, insertAnchor, block);
       if (next === null) {
         stranded.push(path);
         return;
@@ -405,7 +419,7 @@ ${e.params.map((p) => `- **${p.label}**`).join("\n")}
 
 ## Related
 
-- [${e.category}](/effects/${e.category_slug}/)
+- [${e.category}](/effects/#${anchor(e.category)})
 - [Effects](/use/effects/)
 `;
     const path = join(out, e.category_slug, `${e.slug}.mdx`);
@@ -413,46 +427,14 @@ ${e.params.map((p) => `- **${p.label}**`).join("\n")}
     put(path, "example", scaffold, figure, "## What it does", Boolean(example));
   }
 
-  // One page per category.
-  for (const c of ref.categories) {
-    const effects = byCategory.get(c.slug) ?? [];
-    const block = marked("list", effectTable(effects));
-    const scaffold = `---
-title: ${c.label}
-description: The ${c.label} effects, and what the family is for.
-sidebar:
-  order: 0
----
-
-## What this family does
-
-## The effects
-
-${block}
-
-## Related
-
-- [All effects](/effects/)
-- [Effects](/use/effects/)
-`;
-    put(join(out, c.slug, "index.mdx"), "list", scaffold, block);
-  }
-
-  // The section index: every category, what it is for, and its own table.
+  // The section index: one hand-written heading and sentence per category, each
+  // with a generated table under it. The headings and the prose are the owner's
+  // and are never rewritten; only the block tagged with the category's slug is.
+  // A category the page does not mention yet - a new one in the engine - gets an
+  // empty scaffold appended and a warning, because the description is prose and
+  // prose is not this script's to write.
   {
-    const body = ref.categories
-      .map((c) => {
-        const effects = byCategory.get(c.slug) ?? [];
-        const summary = description(join(out, c.slug, "index.mdx"));
-        const count = `${effects.length} effect${effects.length === 1 ? "" : "s"}.`;
-        return [
-          `### [${c.label}](/effects/${c.slug}/)`,
-          summary ? `${summary} ${count}` : count,
-          effectTable(effects),
-        ].join("\n\n");
-      })
-      .join("\n\n");
-    const block = marked("list", body);
+    const path = join(out, "index.mdx");
     const scaffold = `---
 title: Effects
 description: Every built-in effect, what it is for, and what each parameter does.
@@ -473,17 +455,34 @@ For applying effects, ordering a stack and using adjustment layers, see
 [Effects](/use/effects/).
 
 ## The categories
-
-${block}
 `;
-    put(join(out, "index.mdx"), "list", scaffold, block);
+
+    const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
+    let next = existing ?? scaffold;
+    for (const c of ref.categories) {
+      const tag = `list:${c.slug}`;
+      const block = marked(tag, effectTable(byCategory.get(c.slug) ?? []));
+      const spliced = splice(next, tag, block);
+      if (spliced !== null) {
+        next = spliced;
+        continue;
+      }
+      scaffolded.push(c.label);
+      next = `${next.trimEnd()}\n\n### ${c.label}\n\n${block}\n`;
+    }
+    if (existing !== next) {
+      changed.push(path);
+      if (!check) {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, next);
+      }
+    }
   }
 
   // Pages nobody claims any more - a renamed effect leaves its old page behind,
   // and a stale page is worse than a missing one.
   const wanted = new Set([
     "index.mdx",
-    ...ref.categories.map((c) => `${c.slug}/index.mdx`),
     ...ref.effects.map((e) => `${e.category_slug}/${e.slug}.mdx`),
   ]);
   const orphans = [];
@@ -497,16 +496,19 @@ ${block}
     }
   }
 
-  return { changed, stranded, orphans };
+  return { changed, stranded, orphans, scaffolded };
 }
 
 // Run as a script.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const check = process.argv.includes("--check");
-  const { changed, stranded, orphans } = generate({ check });
+  const { changed, stranded, orphans, scaffolded } = generate({ check });
 
   for (const o of orphans) console.warn(`orphan page (no effect claims it): ${o}`);
   for (const s of stranded) console.warn(`page has no GENERATED markers, left alone: ${s}`);
+  for (const c of scaffolded) {
+    console.warn(`category "${c}" was appended to the effects index - write its description`);
+  }
   if (check) {
     if (changed.length) {
       console.error(`out of date:\n${changed.map((c) => `  ${c}`).join("\n")}`);
