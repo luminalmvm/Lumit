@@ -8193,3 +8193,39 @@ and their reasons are logged as K-438 to K-449 in `docs/02-DECISIONS.md`; what F
 windowing support actually offers today, and what to test before believing it, is
 `docs/impl/multi-window.md`.
 
+## 15. Lumit's own icons, in plain terms
+
+Until now the little pictures in the interface came from somebody else's set, fetched from
+a package the way you might drop a stock logo into a title sequence. The redesign draws
+its own instead, so that every glyph shares one grid, one line weight and one temperament
+— the difference between a set and a collection.
+
+A glyph is not a picture file. It is a short line of drawing instructions: move here, draw
+a line to there, put a circle of this radius at that point, on a sixteen-by-sixteen grid.
+All 116 of them live together in one data file, grouped by where they are used — tools,
+layer switches, transport, the Viewer bar, and so on — with one line each. That file is
+the set. If a glyph looks wrong, that one line is where it is wrong, and reading the file
+top to bottom is a fair way to see the whole set at once.
+
+Code cannot read that data file while the application is running without paying for it, so
+a small tool converts it: it reads every glyph, wraps it in the same frame — same grid,
+same 1.5-unit stroke, same round ends — and writes out a Dart file with one named entry
+per glyph. Changing a glyph is therefore a one-line edit and one command to re-run the
+tool. The written-out file is generated, never hand-edited; its header says so, and a test
+compares it back against the data file, so a forgotten re-run fails the build rather than
+quietly shipping the old drawing.
+
+The naming matters more than it sounds. Because each glyph becomes a named entry rather
+than a string of text, asking for a glyph that does not exist is caught when the code is
+compiled, not when a button turns up blank in front of you.
+
+Nothing in a glyph says what colour it is. Each one is drawn in "whatever colour the text
+around me is", so a glyph in a dim row is dim, the same glyph under the mouse brightens
+with the row, and an active one goes accent — with no second copy of the drawing anywhere.
+The single exception is the Viewer's channels indicator, whose three overlapping circles
+show which of red, green and blue you are looking at. Those colours are not a design
+choice, they are the current state of the Viewer, so the stored glyph is plain like all
+the others and the Viewer paints it when it draws it.
+
+At this stage the set exists and is tested but is not yet wired into any panel; the old
+icons stay on screen until the panels phase replaces them one panel at a time.
