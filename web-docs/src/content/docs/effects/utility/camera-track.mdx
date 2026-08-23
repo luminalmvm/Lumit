@@ -1,6 +1,6 @@
 ---
 title: Camera track
-description: What Camera track does, and what each of its controls means.
+description: "Works out how the camera moved in a shot."
 ---
 
 Camera track is a **Utility** effect.
@@ -13,14 +13,22 @@ Camera track is a **Utility** effect.
 
 ## What it does
 
+Tracks the footage and solves the camera that shot it. Apply it to the footage or
+precomp layer and press **Analyse**. You can keep editing while it runs. The effect
+doesn't change the picture, it holds the controls and shows the tracked points once
+it's done. A [camera](/use/camera/) layer can then be linked to the solve.
+
+The whole source clip is analysed, so every clip using that footage shares the one
+solve. Trimming, moving or retiming a clip doesn't track it again.
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Analyse** | action | - | - | - |
-| **Cancel** | action | - | - | - |
+| **Analyse** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
 | **Feature density** | Dropdown | Low · Normal · High | Normal | - |
 | **Use masks** | Checkbox | On or off | On | - |
 | **Show points** | Checkbox | On or off | On | - |
@@ -29,13 +37,18 @@ Camera track is a **Utility** effect.
 
 ## What each control does
 
-- **Analyse**
-- **Cancel**
-- **Feature density**
-- **Use masks**
-- **Show points**
+- **Analyse**: start tracking.
+- **Cancel**: stop a track that's running.
+- **Feature density**: how many points are tracked. More is slower but copes better
+  with hard footage.
+- **Use masks**: masks on the layer are left out of the track. Use this for anything
+  moving on its own, like a person.
+- **Show points**: draws the solved points over the picture. Select some to create a
+  null or solid at their position.
 
 ## Related
 
+- [Cameras and 3D](/use/camera/)
+- [Masks](/use/masks/)
 - [Utility](/effects/#utility)
 - [Effects](/use/effects/)

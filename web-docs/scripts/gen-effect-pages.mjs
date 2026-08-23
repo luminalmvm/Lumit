@@ -53,6 +53,7 @@ const CONTROL = {
   angle: "Dial",
   choice: "Dropdown",
   bool: "Checkbox",
+  action: "Button",
   colour: "Colour",
   seed: "Seed",
   file: "File",
