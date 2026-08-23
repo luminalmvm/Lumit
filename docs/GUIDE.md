@@ -3635,7 +3635,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   (handy after a big edit, or if you just want a clean start) — the on-disk cache is left
   alone since clearing it would mean re-decoding footage from scratch. Beside it, a
   **Background fill** switch controls whether Lumit spends its idle moments quietly decoding
-  the frames around wherever the playhead sits, so scrubbing nearby feels instant — switch it
+  the frames around wherever the playhead sits, so scrubbing nearby feels instant — it
+  works its way round the whole work area (off the end and back to the start, the way a
+  loop plays), filling the graphics card first and then ordinary memory, so a loop that
+  fits in the two together plays warm from end to end — switch it
   off and Lumit does nothing until you actually ask for a frame, trading that warm cache for a
   quieter machine when you're doing something else at the same time. On by default, matching
   what Lumit always did. Underneath that, a **Cache root folder** row shows where the on-disk

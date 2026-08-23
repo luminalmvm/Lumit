@@ -124,6 +124,23 @@ while playing:
   per mouse event; pre-roll on play start = fill ring before starting the audio stream
   (≤ 150 ms budget).
 
+### 5.1 The idle fill
+
+When no request has arrived for ~200 ms the worker fills the cache one frame per turn, in
+`playback::fill_order` (docs/06 §5.5): two frames ahead of the last-shown frame for every
+one behind, nearest first. Both directions wrap round the work area, because playback
+loops it; the order ends when every frame in `[first, last]` has come up once. The walk's
+reach is `(VRAM budget + RAM budget) / frame bytes`. The card is filled first; after that
+each render evicts the card's stalest frame, whose read-back lands in RAM and on disk, so
+the whole work area ends up held in one tier or the other. Three rules keep it from
+spinning: a frame held on the card is skipped; a frame held in memory is uploaded only
+while the card has room for it (a promotion into a full card would evict something that
+the next turn promotes back); a frame on disk only is asked for as the walk passes and
+the walk carries on. One upload or one render is a turn's work, so a request never waits
+for more than one frame. Tests: `the_fill_order_is_forward_biased_and_complete`
+(playback.rs), `the_fill_keeps_going_into_memory_once_the_card_is_full`
+(worker_thread.rs).
+
 ## 6. Test plan
 
 1. Cancellation latency: start a deliberately slow 4 s render, bump epoch — all workers

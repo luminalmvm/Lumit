@@ -1284,25 +1284,35 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         state.fill_exhausted = true;
         return;
     }
-    // **What the fill keeps is a WINDOW around the playhead**, as many frames as
-    // the budget holds, in `fill_order`'s forward-biased shape. It used to stop
-    // outright as soon as the cache was within one frame of full — which meant
-    // that once the cache filled, moving the playhead banked nothing ever again:
-    // the frames it wanted were new, and the ones in the way were far off and
-    // stale. Letting it render inside the window puts the eviction decision
-    // where it belongs, with the LRU, which drops the stalest and largest first
-    // — the far side of where you now are. It still terminates: the walk is
-    // bounded, and every frame in the window ends up held.
-    let window = (budget / frame_bytes).max(1);
+    // **The fill does not stop at the card.** It used to keep a window around
+    // the playhead, as many frames as the card's budget holds, and stop there
+    // — which meant playback looping a work area longer than the window
+    // re-rendered its far side every pass, while the worker sat idle. Now the
+    // walk carries on: a frame rendered once the card is full pushes the
+    // card's stalest frame out, and an eviction is a read-back into the RAM
+    // tier (and on to disk). The eviction decision stays with the LRU, which
+    // drops the stalest and cheapest first. What the walk leaves behind is the
+    // card full and the rest of the work area held below it, so a loop that
+    // fits in VRAM plus RAM plays warm from end to end. The reach is bounded
+    // by both budgets, so the walk never cycles frames through disk.
+    //
+    // A frame held below is **climbed only while the card has room**. Once it
+    // is full, promoting one would push another down — and the next turn
+    // would promote that one, for ever. A frame in memory is warm enough; it
+    // goes up when playback asks for it.
+    let (_, ram_budget, _, _, _) = crate::framecache::stats();
+    // ponytail: the RAM budget is shared with every other comp and scale; a
+    // fill that counts only its own frames can over-reach by what they hold.
+    let reach = (budget + ram_budget) / frame_bytes;
     // Frames the disk holds are asked for as the walk passes them, and the walk
     // carries on. A load is a message to another thread, thus queueing several
     // costs nothing here — and by the time the fill comes round again they have
     // arrived and gone onto the card, which is what makes a re-opened project
     // warm up by *reading* rather than by rendering everything a second time.
-    // The window's names are all of this one snapshot: probe it once, then
+    // The walk's names are all of this one snapshot: probe it once, then
     // each name is computed at most once per edit (see `frame_name`).
     state.renderer.presync_items(&document, comp_ref.id);
-    for frame in crate::playback::fill_order(anchor, first, last).take(window) {
+    for frame in crate::playback::fill_order(anchor, first, last).take(reach) {
         // Naming the frame is what tells the fill whether there is anything to
         // do — and under content keying the name is the same one every tier files
         // it under, so a frame already held anywhere is skipped without a render.
@@ -1318,7 +1328,13 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // frame is due *now* and wrong here. After a re-opened project this
             // is the difference between reading a session's cache back and
             // rendering the whole of it a second time.
-            if crate::framecache::contains(key) || state.disk.contains(key) {
+            let in_memory = crate::framecache::contains(key);
+            if in_memory || state.disk.contains(key) {
+                let (used, budget, _) = state.renderer.frame_texture_stats();
+                let room = used + frame_bytes <= budget;
+                if in_memory && !room {
+                    continue;
+                }
                 let provenance = lumit_render::FrameProvenance {
                     comp: comp_ref.id,
                     frame,
@@ -3758,6 +3774,11 @@ mod tests {
     /// A project with one composition holding one solid layer, and the
     /// composition's id.
     fn project_with_solid() -> (crate::api::project::ProjectReference, Uuid) {
+        project_with_solid_of(60)
+    }
+
+    /// The same, `frames` frames long at 30 fps.
+    fn project_with_solid_of(frames: i64) -> (crate::api::project::ProjectReference, Uuid) {
         use lumit_core::model::{Composition, LinearColour, ProjectItem};
         use lumit_core::time::{Duration, FrameRate, Rational};
 
@@ -3769,7 +3790,7 @@ mod tests {
             width: 64,
             height: 32,
             frame_rate: FrameRate::new(30, 1).expect("30 fps"),
-            duration: Duration(Rational::new(2, 1).expect("2 s")),
+            duration: Duration(Rational::new(frames, 30).expect("a duration")),
             background: LinearColour([0.0, 0.0, 0.0, 0.0]),
             work_area: None,
             layers: Vec::new(),
@@ -3870,6 +3891,94 @@ mod tests {
         assert_eq!(state.pending_measure, None);
         super::measure_pending(&mut state);
         assert_eq!(profiles.lock().expect("profiles").len(), 1, "measured once");
+    }
+
+    /// **The fill does not stop at the card.** A 50-frame work area with room
+    /// for 20 frames on the card used to end with 20 held and 30 never
+    /// visited, and playback looping the work area re-rendered the far side
+    /// every pass. Now the walk wraps and carries on past the window: what
+    /// the card pushes out lands in memory, and the whole work area ends up
+    /// held in one tier or the other. Fails without the change: the loop
+    /// below ends with thirty frames in neither.
+    #[test]
+    fn the_fill_keeps_going_into_memory_once_the_card_is_full() {
+        let (project, comp) = project_with_solid_of(50);
+        // A still solid names every frame the same (content keying), so the
+        // solid turns: fifty frames, fifty names.
+        {
+            let layer = {
+                let state = project.state().expect("state");
+                let state = state.read().expect("read");
+                state.store.snapshot().comp(comp).expect("comp").layers[0].id
+            };
+            let state = project.state().expect("state");
+            let state = state.write().expect("write");
+            state
+                .store
+                .commit(lumit_core::Op::SetTransformProperty {
+                    comp,
+                    layer,
+                    prop: lumit_core::model::TransformProp::Rotation,
+                    animation: lumit_core::anim::Animation::Expression("time * 90".into()),
+                })
+                .expect("animated");
+        }
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        // Room for twenty 64x32 frames, and a little slack.
+        let frame_bytes = 64 * 32 * 4;
+        state
+            .renderer
+            .set_frame_texture_budget(frame_bytes * 20 + frame_bytes / 2);
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        // The user is looking at frame 7; that is the fill's anchor.
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let quality = still_quality(1.0);
+        let bgra = super::zero_copy_wants_bgra();
+        super::prepare_frame(&mut state, &document, comp, 7, quality, bgra, true)
+            .expect("the shown frame");
+        state.last_shown = Some((CompositionReference::new(state.project.id, comp), 7, 1.0));
+        state.fill_exhausted = false;
+        // Idle turns until the fill has nothing left; each turn also collects
+        // what the card handed back, as the worker loop does.
+        for _ in 0..2_000 {
+            if state.fill_exhausted {
+                break;
+            }
+            super::idle_fill(&mut state, &mut stream);
+            super::drain_demotions(&mut state);
+        }
+        assert!(state.fill_exhausted, "the fill terminates");
+        // Read-backs still in flight land over the next few turns.
+        for _ in 0..200 {
+            super::drain_demotions(&mut state);
+        }
+        let mut on_card = 0;
+        let mut missing = Vec::new();
+        for frame in 0..50u64 {
+            let key = state
+                .renderer
+                .frame_key(&document, comp, frame, quality)
+                .expect("a solid is nameable");
+            if state.renderer.has_frame_texture(key, bgra) {
+                on_card += 1;
+            } else if !crate::framecache::contains(key) {
+                missing.push(frame);
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "held on the card or in memory: missing {missing:?}"
+        );
+        assert!(
+            on_card <= 20,
+            "the card's window is still the card's budget, got {on_card}"
+        );
     }
 
     fn playback(mode: BridgePlaybackMode, last: u64) -> Playback {

@@ -720,12 +720,20 @@ disk). It yields to any interactive request via epoch cancellation and is the fi
 degradation ladder pauses. Concurrency adapts to measured per-frame cost and memory headroom
 (the MFR lesson) — never a fixed thread count.
 
-**As built.** The fill renders one frame per idle turn, forward-biased two frames ahead for
-each one behind, after a ~200 ms lull — **into VRAM**, the same tier a scrub renders into,
-not into RAM with a write-behind: the copy down to memory and disk is the idle backup's job
-(below), one frame per lull. Its reach is therefore the VRAM budget divided by one frame's
-bytes at the current preview scale: the fill walks that many frames outward from the
-playhead and keeps that window held, and the LRU drops the far side as the playhead moves.
+**As built (K-424).** The fill renders one frame per idle turn, forward-biased two frames
+ahead for each one behind, after a ~200 ms lull — **into VRAM first**, the same tier a
+scrub renders into. Both walks **wrap at the ends of the work area**: playback loops it, so
+the frame after the last is the first, and the forward walk carries on there rather than
+stopping; the walk ends when every frame has been visited once. Once the card is full the
+fill **keeps going into RAM**: each further render pushes the card's stalest frame out, and
+an eviction is a read-back into memory (and on to disk), so what the walk leaves behind is
+the card full and the rest of the work area held below it — a loop that fits in VRAM plus
+RAM plays warm from end to end. The reach is the two budgets together divided by one
+frame's bytes at the current preview scale, so the walk never cycles frames through disk.
+The LRU stays the eviction authority; the fill never chooses a victim. A frame already
+held in memory is climbed back onto the card only while the card has room — promoting one
+into a full card would push another down, and the next turn would promote that one, for
+ever — otherwise it counts as warm where it is and goes up when playback asks for it.
 
 **And a second job runs on the same lull: the idle backup.** A frame reached the disk tier by
 one route only — pushed out of the VRAM cache, read back on the way down, parked. That route

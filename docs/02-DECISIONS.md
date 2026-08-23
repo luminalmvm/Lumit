@@ -11280,3 +11280,19 @@ whose probe reports no alpha is left for a later extension: the predicate sits b
 probe and would need the answer threaded down the way K-422's `held` question is. The frame
 key keeps hashing culled layers; preview and export stay byte-identical (K-031). This number
 was allocated on the lane3 branch.
+
+**K-424 · DECIDED · The idle fill wraps the work area and keeps going into RAM.** Supersedes
+the bound in K-187 ("bounded by the budget — it stops before the LRU would churn"). The
+fill used to keep a window of VRAM-budget frames around the playhead and stop: it never
+wrapped to the start of the work area, and the far side of a loop longer than the window
+was evicted as the walk went forward, so playback re-rendered it every pass while the
+worker sat idle. Now `fill_order` wraps in both directions (playback loops the work area,
+so the frame after the last is the first) and ends when every frame has been visited once,
+2:1 throughout; and the walk's reach is VRAM plus RAM rather than VRAM alone — once the
+card is full each render evicts its stalest frame into memory, which is the existing
+demotion path, so the whole work area ends up held in one tier or the other. The LRU stays
+the eviction authority. One rule keeps it from churning: a frame held in memory is climbed
+only while the card has room. Regression tests:
+`the_fill_order_is_forward_biased_and_complete` (playback.rs) and
+`the_fill_keeps_going_into_memory_once_the_card_is_full` (worker_thread.rs). This number
+was allocated on the lane3 branch.

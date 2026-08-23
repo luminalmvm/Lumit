@@ -129,8 +129,10 @@ pub(crate) const DISK_LOAD_GRACE: std::time::Duration = std::time::Duration::fro
 /// with the forward bias the owner asked for): two frames ahead for every one
 /// behind — you are about to watch forward, but a small rewind should be warm
 /// too. Yields every frame in `[first, last]` except the anchor itself,
-/// nearest first per direction; when one direction runs out the other simply
-/// continues.
+/// nearest first per direction, and **both directions wrap**: playback loops
+/// the work area, so the frame after the last one is the first, and that is
+/// what the forward walk goes on to once it reaches the end. The walk ends
+/// when every frame has been visited once, which is where the two ends meet.
 pub(crate) fn fill_order(anchor: u64, first: u64, last: u64) -> impl Iterator<Item = u64> {
     // An empty or inverted range yields nothing rather than panicking. `clamp`
     // panics when its bounds cross, and they crossed for real: a work area
@@ -150,25 +152,25 @@ pub(crate) fn fill_order(anchor: u64, first: u64, last: u64) -> impl Iterator<It
     let anchor = anchor.clamp(first, last);
     let mut ahead = anchor;
     let mut behind = anchor;
+    let mut left = last - first;
     let mut step = 0u64;
-    std::iter::from_fn(move || loop {
-        let ahead_left = ahead < last;
-        let behind_left = behind > first;
-        if !ahead_left && !behind_left {
+    std::iter::from_fn(move || {
+        if left == 0 {
             return None;
         }
+        left -= 1;
         // The pattern: positions 0 and 1 of every three go forward, 2 back.
+        // Neither direction ever runs out, because each wraps round the work
+        // area; the count above is what stops the two from meeting.
         let forward = step % 3 != 2;
         step += 1;
-        if forward && ahead_left {
-            ahead += 1;
-            return Some(ahead);
+        if forward {
+            ahead = if ahead == last { first } else { ahead + 1 };
+            Some(ahead)
+        } else {
+            behind = if behind == first { last } else { behind - 1 };
+            Some(behind)
         }
-        if !forward && behind_left {
-            behind -= 1;
-            return Some(behind);
-        }
-        // The wanted direction is exhausted; the loop tries the other.
     })
 }
 
@@ -214,8 +216,9 @@ mod tests {
     }
 
     /// The fill order walks outward from the playhead, two ahead for every
-    /// one behind, covers every frame exactly once, and keeps going in the
-    /// remaining direction when one side runs out.
+    /// one behind, covers every frame exactly once, and wraps at either end
+    /// of the work area — playback loops it, so the frame after the last is
+    /// the first — keeping the 2:1 interleave all the way round.
     #[test]
     fn the_fill_order_is_forward_biased_and_complete() {
         let order: Vec<u64> = fill_order(10, 0, 20).collect();
@@ -225,9 +228,14 @@ mod tests {
         let expected: Vec<u64> = (0..=20).filter(|&f| f != 10).collect();
         assert_eq!(all, expected, "every frame once, never the anchor");
 
-        // Anchor at the end: everything comes from behind.
-        let backwards: Vec<u64> = fill_order(5, 0, 5).collect();
-        assert_eq!(backwards, vec![4, 3, 2, 1, 0]);
+        // Anchor near the end: the forward walk wraps to the start instead of
+        // stopping, the backward walk wraps to the end, 2:1 throughout.
+        let wrapped: Vec<u64> = fill_order(4, 0, 5).collect();
+        assert_eq!(wrapped, vec![5, 0, 3, 1, 2], "ahead wraps 5 -> 0");
+        let from_start: Vec<u64> = fill_order(0, 0, 5).collect();
+        assert_eq!(from_start, vec![1, 2, 5, 3, 4], "behind wraps 0 -> 5");
+        // A work area that does not start at zero wraps to ITS start.
+        assert_eq!(fill_order(9, 7, 9).collect::<Vec<_>>(), vec![7, 8]);
         // Anchor clamped into range, single-frame comp yields nothing.
         assert_eq!(fill_order(99, 0, 0).count(), 0);
         // An impossible range yields nothing rather than panicking. This is the
