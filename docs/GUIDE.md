@@ -6193,6 +6193,30 @@ down and the coarse picture stays until you release. That would need a timer per
 gesture at every drag site, for a case that release answers a moment later
 anyway.
 
+### How far an effect reaches, and why the tile has a margin (K-433)
+
+A blur does not read only the pixel it is writing. To put a 2 000-pixel radius on
+one pixel it reads 2 000 pixels in every direction around it. So when the engine
+works on a piece of a frame rather than the whole thing, it has to hand the effect
+a piece with a **margin** of spare picture round the outside — otherwise the blur
+runs out of neighbours at the edge of the piece and the seam shows.
+
+Every effect therefore declares how far it reaches: nothing at all (a brightness
+change needs only its own pixel), the whole frame (a directional blur whose length
+can be typed to anything), or a margin of so many pixels. That margin is quoted in
+the same unit as every distance in Lumit — pixels at composition size — and it is
+sized from the effect's own *largest* setting, so no value you can type can ever
+reach past it. Gaussian blur's radius stops at 2 000, so its margin is 2 000. Where
+a setting has no ceiling, the margin is twice the end of the slider.
+
+It used to be quoted as a percentage of the frame's diagonal, which was wrong once
+every radius became a plain pixel count: a quarter of a 1080p diagonal is 551
+pixels, and a 2 000-pixel blur would have been cut off at the edge of its own tile.
+Being pixels, the margin now shrinks with the preview exactly as the radius does —
+half the radius at Half resolution wants half the margin — and it never falls below
+one pixel, so even a kernel that reads only its immediate neighbours still gets them
+at Quarter.
+
 ### Telling how long a frame is taking, and where the time went (K-276)
 
 Two readouts, one mechanism. Both come from a small recorder the engine builds

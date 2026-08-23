@@ -153,7 +153,7 @@ Every effect declares, statically:
 | Trait | Values | Consumed by |
 |---|---|---|
 | **Cost class** | `trivial` (pointwise), `cheap` (small fixed kernel), `moderate` (large-radius / multi-pass), `heavy` (iterative or flow-based) | Adaptive degradation ordering, background render budgeting |
-| **ROI support** | `exact` (output pixel needs only the same input pixel), `padded(r)` (needs input dilated by radius r, in the effect's declared units), `full-frame` (needs the whole input) | Region-of-interest rendering, tiling |
+| **ROI support** | `exact` (output pixel needs only the same input pixel), `padded(r)` (needs input dilated by radius r, in **px@comp** — scaled to the raster in play exactly as a px@comp parameter is, K-433), `full-frame` (needs the whole input) | Region-of-interest rendering, tiling |
 | **Temporal window** | Set of source-relative frame offsets required, e.g. `{0}`, `{-1, 0, +1}`, `{-n..0}` for echoes | Cache prefetcher and decode planner (§2.5) |
 | **Alpha mode** | `premultiplied` (default) or `unpremultiplied` (§2.2) | Host unpremultiply/re-premultiply wrapping |
 | **Cancellation points** | `per-pass` and/or `per-tile` | Epoch-based cancellation on scrub (K-017): every pass boundary and tile boundary MUST check the epoch and abandon work |
@@ -1778,7 +1778,7 @@ Operates on **premultiplied** colour (the aperture gathers the working premultip
 coverage and colour blur together). The **Display** diagnostic modes short-circuit before the
 gather and write their view directly, ignoring the blur, the composite and Mix; every shipped
 mode is continuous, so the §1.6 oracle covers them all (none excluded). `moderate`
-cost, ROI a padded gather (the static declaration covers the 40 px aperture at ≥ 1080p), `{0}`
+cost, ROI a padded gather (the static declaration is twice the 40 px Aperture slider, whose hard maximum is open), `{0}`
 temporal. Category **Blur & sharpen**. A zero effective aperture (master or both sides at 0), a
 depth everywhere inside the sharp band, or `Mix 0` are all bit-exact passthroughs, pinned by
 the kernel oracle.
@@ -2759,7 +2759,7 @@ two overlapping copies of every edge. A scaled vector shows one edge, in a place
 the two. That difference is the whole reason §2.6 has an override at all, and it is tested
 by picture (`crates/lumit-render/tests/distort_proof.rs`) as well as by ULP.
 
-`moderate` cost, `PaddedPctDiag(25)` ROI (the Amount slider's own reach), `seeded`. Mix 0
+`moderate` cost, `PaddedPx(1000)` ROI (twice the Amount slider's own reach, its hard maximum being open), `seeded`. Mix 0
 is the bit-exact identity, and so is Amount 0.
 
 **Not in v1:** AE's Bulge, Twist and the three "Smoother" variants (each a different vector
@@ -3063,7 +3063,7 @@ Three notes:
   this one: on holds the border pixel outward (a bright edge does not darken), off lets the
   frame fall away into transparency. Depth of field's row (§3.22) is the precedent.
 
-`moderate` cost, `PaddedPctDiag(25)` ROI — the largest radius any one channel can reach.
+`moderate` cost, `PaddedPx(2000)` ROI — the largest radius any one channel can reach.
 Mix 0 is the bit-exact identity, and so are four zero radii.
 
 **The Matte scales all four radii (K-426, §2.6):** Gaussian blur's own override four times
@@ -3284,7 +3284,7 @@ Five things that are decision rather than derivation:
   must supply — the same one §3.44 takes. A displacement map with no map is not a
   displacement.
 
-`cheap` cost, `padded(25 % diag)` ROI — the Amount sliders' own reach. Mix 0 is the bit-exact
+`cheap` cost, `padded(1000 px@comp)` ROI — twice the Amount sliders' own reach, their hard maximum being open. Mix 0 is the bit-exact
 identity, and so are both Amounts at 0 and an unbound Matte row.
 
 **How it differs from Turbulent displace (§3.38),** since the two sit next to each other in
@@ -3532,7 +3532,7 @@ Four notes:
   crest was, which is never what a waving flag looks like. §3.38 makes the same choice.
 - **Both lengths are px@comp** (§2.3), AE's being raster pixels; the import divides through.
 
-`cheap` cost, `PaddedPctDiag(25)` ROI. Mix 0 and Wave height 0 are both the bit-exact
+`cheap` cost, `PaddedPx(1000)` ROI (twice Wave height's slider, its hard maximum being open). Mix 0 and Wave height 0 are both the bit-exact
 identity. K-399's metric.
 
 **The Matte scales Wave height (K-427, §2.6):** the slide is shorter where the matte is
@@ -3773,7 +3773,7 @@ leaves a narrower ramp in the alpha and therefore a narrower band to chew. The o
 coarsely where the matte is white and finely — down to untouched — where it is dark, which no
 dissolve can draw, since a dissolve only cross-fades one bite size over the whole shape.
 
-`moderate` cost (one gaussian plus up to ten octaves a pixel), `PaddedPctDiag(25)` ROI. Mix 0
+`moderate` cost (one gaussian plus up to ten octaves a pixel), `PaddedPx(1000)` ROI (twice Border's slider, its hard maximum being open). Mix 0
 and Border 0 are both the bit-exact identity. Seeded (§2.4): the field is a function of Seed
 and Evolution and never of a clock, so the same frame roughens the same way in the preview and
 in the export.
@@ -4024,7 +4024,7 @@ depends on the shot around it — which is a grade that cannot be scrubbed backw
 what this effect is. Lumit's amounts are the user's, and an imported instance arrives with
 AE's default pair written in.
 
-Blurring means `PaddedPctDiag(25)` ROI and `moderate` cost. Unpremultiplied (§2.2); alpha
+Blurring means `PaddedPx(2000)` ROI — Radius' own hard maximum — and `moderate` cost. Unpremultiplied (§2.2); alpha
 untouched. **Both amounts and Midtone contrast at 0 short-circuits to the bit-exact identity**
 on both paths — the blur is not even run — and Mix 0 likewise.
 
@@ -4095,7 +4095,7 @@ whole effect takes at Radius 0.
 
 Edges repeat (the border pixel is held outward), which is the only edge policy a median
 wants: a transparent surround would win the vote on a corner pixel and eat the frame's own
-border. Unpremultiplied (§2.2), `heavy` cost, `PaddedPctDiag(2)` ROI. Mix 0 is the
+border. Unpremultiplied (§2.2), `heavy` cost, `PaddedPx(3)` ROI (Radius' own hard maximum). Mix 0 is the
 bit-exact identity.
 
 ### 3.65 Mosaic — the frame in flat blocks
@@ -4173,7 +4173,7 @@ Two decisions:
   name in one panel is a control nobody can point at. AE's "Blend With Original" is Mix.
 
 Alpha is untouched, so the drawing keeps the layer's shape. Unpremultiplied (§2.2), edges
-repeat. `cheap` cost, `PaddedPctDiag(1)` ROI (one raster pixel). Mix 0 is the bit-exact
+repeat. `cheap` cost, `PaddedPx(1)` ROI (one pixel, and a padding never resolves below one raster pixel). Mix 0 is the bit-exact
 identity; there is no neutral setting, an edge map being the whole point.
 
 ### 3.67 Emboss — the picture as grey relief
@@ -4217,7 +4217,7 @@ black matte therefore gives the **flat mid-grey sheet**, not the picture back �
 the effect off. Mix is still what turns the effect down.
 
 Alpha is untouched. Unpremultiplied (§2.2), edges repeat. `cheap` cost,
-`PaddedPctDiag(2)` ROI. Mix 0 is the bit-exact identity.
+`PaddedPx(40)` ROI (twice Relief's slider, its hard maximum being open). Mix 0 is the bit-exact identity.
 
 ### 3.68 Texturize — another layer pressed into this one as relief
 
@@ -4274,7 +4274,7 @@ subject, the matte is how much of it presses in.
 Premultiplied (§2.2) — the relief is a multiply, and multiplying premultiplied colour by a
 scalar is the same operation as multiplying straight colour by it, so no round trip is
 needed and the shape is untouched. The texture's own taps *are* unpremultiplied, so a
-texture with a soft edge does not read as black there. `cheap` cost, `PaddedPctDiag(2)`
+texture with a soft edge does not read as black there. `cheap` cost, `PaddedPx(40)`
 ROI. Mix 0 and an unset Texture are both the bit-exact identity.
 
 ### 3.69 Broadcast safe — the signal clamped to a legal amplitude
@@ -4856,7 +4856,7 @@ halves: the contour kernel and the shared path drawing claim it the same way, so
 marching round a level set and one marching round a mask fade identically. With Composite on
 original off a black matte leaves the pixel transparent.
 
-`cheap` cost, `PaddedPctDiag(1.0)` ROI (a 3×3 Sobel — declared for the contour half, and kept
+`cheap` cost, `PaddedPx(1)` ROI (a 3×3 Sobel — declared for the contour half, and kept
 on the path half, where it is merely generous). Premultiplied (§2.2). Mix 0 is the bit-exact
 identity, and so are Width 0 and Opacity 0 — and on Mask/Path, so is an unset mask row, a
 deleted mask or a layer with no masks (§1.2’s documented no-op).

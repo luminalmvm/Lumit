@@ -16,7 +16,8 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = BlurSharpen,
     cost = Cheap,
-    roi = PaddedPctDiag(4.0),
+    // Radius' own hard maximum: 100 px@comp.
+    roi = PaddedPx(100.0),
     // §2.2: operates on unpremultiplied colour.
     premultiplied = false,
     // K-395: the matte scales the amount, inside the kernel (the owner's

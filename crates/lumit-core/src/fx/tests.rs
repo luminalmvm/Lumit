@@ -9989,6 +9989,102 @@ fn no_parameter_is_a_per_cent_of_the_diagonal() {
     );
 }
 
+/// **The ROI tile padding is px@comp too, and resolves exactly as a `Px`
+/// parameter does** (K-433). Gaussian blur's Radius and Gaussian blur's padding
+/// are the same 2 000 px@comp; at Full and at Half preview they must still come
+/// out the same number of raster pixels, or the tile clips the radius on one of
+/// them.
+#[test]
+fn the_roi_padding_follows_the_raster_like_a_px_radius() {
+    let mut e = instantiate("blur").expect("Gaussian blur is declared");
+    for p in &mut e.params {
+        if p.id == "radius" {
+            p.value = EffectValue::Float(Property::fixed(2000.0));
+        }
+    }
+    let roi = BUILTIN_DEFS
+        .get("blur")
+        .expect("declared")
+        .schema()
+        .traits
+        .roi;
+    for px_scale in [1.0f32, 0.5] {
+        let b = resolve_migrated::<effects::blur::Blur>(
+            &[e.clone()],
+            0.0,
+            1920f32.hypot(1080.0),
+            px_scale,
+            &MarkerContext::NONE,
+        );
+        assert_eq!(
+            roi.padding_raster_px(px_scale),
+            Some(b.packed().0.ceil() as u32),
+            "the padding and the radius must resolve alike at px_scale {px_scale}"
+        );
+    }
+    assert_eq!(roi.padding_raster_px(1.0), Some(2000));
+    assert_eq!(roi.padding_raster_px(0.5), Some(1000));
+    // One pixel of reach stays one raster pixel however coarse the preview.
+    assert_eq!(Roi::PaddedPx(1.0).padding_raster_px(0.25), Some(1));
+    assert_eq!(Roi::Exact.padding_raster_px(0.5), Some(0));
+    assert_eq!(
+        Roi::FullFrame.padding_raster_px(1.0),
+        None,
+        "a full-frame effect has no finite padding"
+    );
+}
+
+/// **Every padding covers its effect's own hard maximum** (K-433). The old
+/// declaration was 25 % of the comp diagonal — 551 pixels on a 1080p frame, a
+/// quarter of Gaussian blur's 2 000 px hard maximum — so a typed radius clipped
+/// at the tile edge. The last assertion is that figure, and fails against it.
+#[test]
+fn the_roi_padding_covers_the_hard_max_radius_at_1080p() {
+    let hard_max = |name: &str, id: &str| -> f64 {
+        let p = BUILTIN_DEFS
+            .get(name)
+            .and_then(|d| d.schema().params.iter().find(|p| p.id == id))
+            .unwrap_or_else(|| panic!("{name}.{id} is declared"));
+        match p.kind {
+            ParamKind::Float {
+                hard: (_, Some(max)),
+                ..
+            }
+            | ParamKind::Slider {
+                range: (_, max), ..
+            } => max,
+            _ => panic!("{name}.{id} has no closed hard maximum"),
+        }
+    };
+    let padding = |name: &str| match BUILTIN_DEFS
+        .get(name)
+        .expect("declared")
+        .schema()
+        .traits
+        .roi
+    {
+        Roi::PaddedPx(px) => px,
+        other => panic!("{name} declares {other:?}, not a pixel padding"),
+    };
+    for (name, id) in [
+        ("blur", "radius"),
+        ("channel_blur", "red"),
+        ("shadow_highlight", "radius"),
+        ("rgb_split", "amount"),
+        ("sharpen", "radius"),
+        ("median", "radius"),
+    ] {
+        assert!(
+            padding(name) >= hard_max(name, id) as f32,
+            "{name}'s padding must cover its own hard maximum"
+        );
+    }
+    assert!(
+        0.25 * 1920f32.hypot(1080.0) < hard_max("blur", "radius") as f32,
+        "25 % of a 1080p diagonal never covered a 2 000 px radius"
+    );
+}
+
 /// Two kinds holding the same number must not hash alike, or a Choice of 1 and a
 /// Bool of true would share a cache entry.
 #[test]

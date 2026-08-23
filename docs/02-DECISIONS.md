@@ -11722,3 +11722,36 @@ Regression test: `lens_flare_auto_exposure_reads_the_native_stop` (lumit-core fx
 — two working f-stops on one lens bake bit-identically the same gain, and the stopped-down
 frame renders measurably dimmer. No new user-facing strings. This number was allocated on
 the lane3 branch.
+
+## K-433 — The ROI tile paddings are pixels at composition size too
+
+**DECIDED 2026-08-23** (owner-directed follow-up to K-419, which converted every
+*parameter* to px@comp and left the ROI paddings behind). `Roi::PaddedPctDiag(pct)` is
+**removed** and replaced by `Roi::PaddedPx(px)`: the margin of spare input an effect needs
+around a tile is quoted in px@comp, and `Roi::padding_raster_px(px_scale)` resolves it by
+the same multiplication a `Unit::Px` parameter gets in the resolve step — so a padding and
+the radius it exists to cover move together under preview resolution. It rounds up to whole
+pixels and never resolves below one, so a 3×3 kernel still has its neighbours at Quarter.
+
+This supersedes the padding half of K-419 (`Unit::PctDiag` now stays only for the reference
+format) and every `PaddedPctDiag` figure the Wave 2 batches recorded in docs/08.
+
+**Why it was wrong.** Since K-419 every radius is a pixel count, so a percentage of the
+diagonal no longer tracks anything the user can type: 25 % of a 1080p diagonal is 551
+pixels, and Gaussian blur's hard maximum is 2 000 — a typed radius clipped at the tile edge
+on any comp that size or smaller. Each of the seventeen declarations is now sized from the
+effect's **own hard maximum** (Gaussian blur and Channel blur 2 000, Shadow highlight 2 000,
+RGB split 500, Unsharp mask 100, Median 3, the two one-pixel kernels 1). Where the hard
+maximum is open — a value may be typed past the slider — the padding is the slider's
+maximum **doubled**, said so in a comment at the declaration: Displacement map, Turbulent
+displace, Wave warp and Roughen edges 1 000, Light wrap 400, Depth of field 80, Emboss and
+Texturize 40, Sharpen 16.
+
+Nothing consumes the padding yet — no tiling scheduler exists — so no rendered pixel moves;
+this is the declaration and its resolver being made honest before something reads them.
+The OFX/plugin surface (docs/12) never named `PaddedPctDiag`, so nothing is kept deprecated,
+and `fx-reference.json` does not export ROI, so it is not regenerated.
+
+Regression tests: `the_roi_padding_follows_the_raster_like_a_px_radius` and
+`the_roi_padding_covers_the_hard_max_radius_at_1080p` (lumit-core `fx/tests.rs`) — the
+second fails against the old 25 % figure. No new user-facing strings.

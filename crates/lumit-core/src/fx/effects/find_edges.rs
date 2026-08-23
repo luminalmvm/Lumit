@@ -25,8 +25,9 @@ use lumit_fx_macros::Effect;
     category = Stylise,
     // Eight taps a pixel.
     cost = Cheap,
-    // One raster pixel of reach, which no comp makes as much as 1 % of.
-    roi = PaddedPctDiag(1.0),
+    // One pixel of reach (a 3x3 kernel); the padding never resolves below one
+    // raster pixel, so Quarter preview still gets its neighbour.
+    roi = PaddedPx(1.0),
     // §2.2: a gradient of premultiplied colour is a gradient of the coverage
     // wherever the coverage moves, which puts a line round every soft edge.
     premultiplied = false,

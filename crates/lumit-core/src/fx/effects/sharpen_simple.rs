@@ -17,9 +17,9 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = BlurSharpen,
     cost = Cheap,
-    // A fixed 3×3 kernel reads one pixel out; % diag of one raster pixel is
-    // tiny, so 1 % over-covers at any sensible resolution.
-    roi = PaddedPctDiag(1.0),
+    // The kernel reads Radius pixels out. That hard maximum is open, so the
+    // padding is the slider's 8 px@comp doubled.
+    roi = PaddedPx(16.0),
     // §2.2: sharpening premultiplied haloes matte edges.
     premultiplied = false,
     // K-395: the matte scales the amount, inside the kernel (the owner's

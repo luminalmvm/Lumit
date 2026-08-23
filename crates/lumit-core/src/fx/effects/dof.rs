@@ -124,12 +124,12 @@ pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
     version = 1,
     category = BlurSharpen,
     cost = Moderate,
-    // Aperture is px@comp (up to 40); 3 % of the comp diagonal covers that on a
-    // 1080p+ raster and over-covers smaller ones — a safe static bound for a
-    // runtime-sized gather (docs/impl/layer-input.md). The aperture polygon is
-    // INSCRIBED in that circle at every Roundness and Deform (see
-    // `aperture_blades`), so shaping it can only ever gather fewer taps.
-    roi = PaddedPctDiag(3.0),
+    // Aperture is px@comp and its hard maximum is open (typing above the 40 px
+    // slider is allowed), so the padding is the slider maximum doubled — a safe
+    // static bound for a runtime-sized gather (docs/impl/layer-input.md). The
+    // aperture polygon is INSCRIBED in that circle at every Roundness and
+    // Deform (see `aperture_blades`), so shaping it can only gather fewer taps.
+    roi = PaddedPx(80.0),
     premultiplied = true, // the aperture gathers premultiplied colour (fx_dof.wgsl)
     groups = DOF_GROUPS,
     enabled_when = DOF_ENABLED_WHEN,

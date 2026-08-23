@@ -38,8 +38,9 @@ pub const SHADOW_HIGHLIGHT_GROUPS: &[ParamGroup] = &[ParamGroup {
     category = Colour,
     // One gaussian, then one pointwise pass.
     cost = Moderate,
-    // Radius' own reach, exactly as the Gaussian blur declares its own.
-    roi = PaddedPctDiag(25.0),
+    // Radius' own hard maximum in px@comp, exactly as the Gaussian blur
+    // declares its own.
+    roi = PaddedPx(2000.0),
     // §2.2: a gain about a luma is a grade, and a grade does not commute with
     // premultiplied alpha.
     premultiplied = false,

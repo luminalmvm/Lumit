@@ -32,8 +32,9 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = Generate,
     cost = Cheap,
-    // A 3×3 Sobel.
-    roi = PaddedPctDiag(1.0),
+    // A 3×3 Sobel: one pixel of reach, and the padding never resolves below one
+    // raster pixel.
+    roi = PaddedPx(1.0),
     premultiplied = true,
     enabled_when = VEGAS_ENABLED_WHEN,
     // K-428: the matte scales the amount, inside the kernel (the owner's rule

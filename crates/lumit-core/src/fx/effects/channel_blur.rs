@@ -18,9 +18,9 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = BlurSharpen,
     cost = Moderate,
-    // The largest radius any ONE channel can reach — the sliders' own maximum,
-    // exactly as the Gaussian blur declares its own (§3.8).
-    roi = PaddedPctDiag(25.0),
+    // The largest radius any ONE channel can reach — the sliders' own hard
+    // maximum in px@comp, exactly as the Gaussian blur declares its own (§3.8).
+    roi = PaddedPx(2000.0),
     premultiplied = true,
     // K-395: the matte scales the amount, inside the kernel (the owner's
     // rule for mattes); the generic strength dissolve does not also run.

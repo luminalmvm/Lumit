@@ -17,9 +17,9 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = BlurSharpen,
     cost = Moderate,
-    // The Radius slider's own maximum (its own effect now, no longer sharing
-    // the family's largest reach).
-    roi = PaddedPctDiag(25.0),
+    // The Radius slider's own hard maximum, in px@comp (K-433): 2 000 px is
+    // the farthest a typed radius can reach, so the tile is never short of it.
+    roi = PaddedPx(2000.0),
     // K-395: the blur claims the injected Matte row inside its own maths — see
     // the `matte` doc below for what it means. The generic strength dissolve
     // does not also run.

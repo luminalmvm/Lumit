@@ -30,9 +30,10 @@ use lumit_fx_macros::Effect;
     category = Distortion,
     // One map read and one bilinear tap a pixel.
     cost = Cheap,
-    // The Amount sliders' own reach: 500 px@comp is a shade under 25 % of a
-    // 1080p diagonal, exactly as Turbulent displace's is.
-    roi = PaddedPctDiag(25.0),
+    // The Amount sliders' own reach. Their hard maximum is open (a push may be
+    // typed past the slider), so the padding is the slider's 500 px@comp
+    // doubled, exactly as Turbulent displace's is.
+    roi = PaddedPx(1000.0),
     premultiplied = true,
     // K-395: the matte is not a strength here, it is the map — the whole input
     // the effect exists to read. The generic strength dissolve does not also run.

@@ -30,9 +30,10 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = Stylise,
     cost = Moderate,
-    // The wrap reaches Width inside the edge and the blur reads Width out;
-    // 10 % of the diagonal covers any sane setting.
-    roi = PaddedPctDiag(10.0),
+    // The wrap reaches Width inside the edge and the blur reads Width out.
+    // Width's hard maximum is open, so the padding is its 200 px@comp slider
+    // doubled — which also covers both halves of that reach at the slider.
+    roi = PaddedPx(400.0),
     // The band is read off the foreground's own alpha, which only means
     // anything premultiplied.
     premultiplied = true,

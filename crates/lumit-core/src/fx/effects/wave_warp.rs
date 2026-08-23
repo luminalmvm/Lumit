@@ -23,9 +23,9 @@ use lumit_fx_macros::Effect;
     category = Distortion,
     // One wave shape and one bilinear tap a pixel.
     cost = Cheap,
-    // Wave height's own reach: 500 px@comp is a shade under 25 % of a 1080p
-    // diagonal, and the pin ramp only ever shortens the slide.
-    roi = PaddedPctDiag(25.0),
+    // Wave height's own reach; its hard maximum is open, so the padding is the
+    // slider's 500 px@comp doubled, and the pin ramp only shortens the slide.
+    roi = PaddedPx(1000.0),
     premultiplied = true,
     // K-427: the matte scales the displacement, inside the kernel (the
     // owner's rule for mattes); the generic strength dissolve does not also run.

@@ -145,10 +145,20 @@ match:
 | `Degrees` | an angle | nothing |
 | `Seconds` | a duration | nothing (rational time is resolved upstream) |
 
-`PctDiag` (% of the comp diagonal, × `diag_px / 100`) is still in the enum for the ROI
-padding declarations and the reference format, but **no parameter may declare it**; the
-owner's rule is that no distance in Lumit is a percentage of the diagonal, and
-`no_parameter_is_a_per_cent_of_the_diagonal` in `fx/tests.rs` fails the build on one.
+`PctDiag` (% of the comp diagonal, × `diag_px / 100`) is still in the enum for the
+reference format, but **no parameter may declare it**; the owner's rule is that no distance
+in Lumit is a percentage of the diagonal, and `no_parameter_is_a_per_cent_of_the_diagonal`
+in `fx/tests.rs` fails the build on one.
+
+**The ROI tile padding is px@comp too** (K-433). An effect declares `roi = PaddedPx(n)`,
+sized from its *own* hard maximum — Gaussian blur's 2 000 px radius pads 2 000 — and where
+that maximum is open (a value may be typed past the slider) it pads the slider's maximum
+doubled and says so in a comment. `Roi::padding_raster_px(px_scale)` resolves it, ×
+`px_scale`, which is the same multiplication a `Px` parameter gets, so the padding and the
+radius it has to cover move together under preview resolution. It rounds up and never falls
+below one raster pixel, so a 3×3 kernel still gets its neighbour at Quarter. The old
+`PaddedPctDiag(pct)` is gone: 25 % of a 1080p diagonal is 551 px, and a typed 2 000 px
+radius clipped at the tile edge.
 
 `rescale_px` becomes one generic pass over the bag: rescale every value whose declared unit
 is spatial (`Px`). An effect cannot forget to be rescaled, which was possible before and

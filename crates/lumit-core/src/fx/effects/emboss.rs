@@ -24,8 +24,9 @@ use lumit_fx_macros::Effect;
     category = Stylise,
     // Two bilinear taps a pixel.
     cost = Cheap,
-    // Relief's own reach: 20 px@comp, comfortably inside 2 % of any diagonal.
-    roi = PaddedPctDiag(2.0),
+    // Relief's own reach. Its hard maximum is open, so the padding is the
+    // slider's 20 px@comp doubled.
+    roi = PaddedPx(40.0),
     // §2.2: a difference of premultiplied colour is a difference of the coverage
     // wherever the coverage moves.
     premultiplied = false,

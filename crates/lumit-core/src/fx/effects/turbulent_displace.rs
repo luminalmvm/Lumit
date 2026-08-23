@@ -51,9 +51,10 @@ pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     category = Distortion,
     // Up to ten octaves of 3-D noise, twice, plus a bilinear tap.
     cost = Moderate,
-    // The Amount slider's own reach: 500 px@comp is a shade under 25 % of a
-    // 1080p diagonal, and the pin ramp only ever shortens the pull.
-    roi = PaddedPctDiag(25.0),
+    // The Amount slider's own reach; its hard maximum is open, so the padding
+    // is the slider's 500 px@comp doubled, and the pin ramp only ever shortens
+    // the pull.
+    roi = PaddedPx(1000.0),
     premultiplied = true,
     seeded = true,
     groups = TURBULENT_DISPLACE_GROUPS,

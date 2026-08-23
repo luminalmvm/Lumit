@@ -57,8 +57,9 @@ pub const ROUGHEN_EDGES_ENABLED_WHEN: &[EnabledWhen] = &[
     category = Stylise,
     // A gaussian pass, then up to ten octaves of 3-D noise a pixel.
     cost = Moderate,
-    // Border's own reach: 500 px@comp is a shade under 25 % of a 1080p diagonal.
-    roi = PaddedPctDiag(25.0),
+    // Border's own reach. Its hard maximum is open, so the padding is the
+    // slider's 500 px@comp doubled.
+    roi = PaddedPx(1000.0),
     premultiplied = true,
     seeded = true,
     groups = ROUGHEN_EDGES_GROUPS,

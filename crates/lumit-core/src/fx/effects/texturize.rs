@@ -61,8 +61,9 @@ pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
     category = Stylise,
     // Two bilinear taps a pixel.
     cost = Cheap,
-    // Relief's own reach, as §3.67's is.
-    roi = PaddedPctDiag(2.0),
+    // Relief's own reach, as §3.67's is. Its hard maximum is open, so the
+    // padding is the slider's 20 px@comp doubled.
+    roi = PaddedPx(40.0),
     // The relief is a multiply, and multiplying premultiplied colour by a scalar
     // is the same operation as multiplying straight colour by it — so no round
     // trip, and the shape is untouched.

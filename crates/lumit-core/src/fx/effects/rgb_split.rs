@@ -60,7 +60,8 @@ pub enum Split {
     version = 1,
     category = Distortion,
     cost = Cheap,
-    roi = PaddedPctDiag(25.0),
+    // Amount's own hard maximum: 500 px@comp.
+    roi = PaddedPx(500.0),
     // K-427: the matte scales the displacement, inside the kernel (the
     // owner's rule for mattes); the generic strength dissolve does not also run.
     matte = (

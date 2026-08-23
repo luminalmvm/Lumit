@@ -28,9 +28,8 @@ use lumit_fx_macros::Effect;
     // The catalogue's only `heavy` single-pass kernel, and it earns it: 1 225
     // compare-exchanges a pixel at the cap (§3.64 decision 2).
     cost = Heavy,
-    // Radius's own reach: 3 px@comp, which on any comp small enough to care is
-    // still well under 2 % of the diagonal.
-    roi = PaddedPctDiag(2.0),
+    // Radius's own hard maximum: 3 px@comp, and it may not be typed past.
+    roi = PaddedPx(3.0),
     // §2.2: a median of premultiplied colour would rank a soft edge by its
     // coverage rather than by its colour.
     premultiplied = false,

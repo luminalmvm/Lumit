@@ -14,10 +14,33 @@ pub enum CostClass {
 pub enum Roi {
     /// Output pixel needs only the same input pixel.
     Exact,
-    /// Needs input dilated by a radius, in % of the comp diagonal (§2.3).
-    PaddedPctDiag(f32),
+    /// Needs input dilated by a radius in **px@comp** — pixels at composition
+    /// size, the unit every distance in Lumit is in (K-419, K-433). Sized from
+    /// the effect's own hard maximum, so a typed radius can never reach past
+    /// the tile it was given.
+    PaddedPx(f32),
     /// Needs the whole input.
     FullFrame,
+}
+
+impl Roi {
+    /// The padding in raster pixels at the raster in play. `px_scale` is raster
+    /// pixels per comp pixel — exactly the factor a [`Unit::Px`](super::Unit::Px)
+    /// parameter is multiplied by in the resolve step, so a padding and the
+    /// radius it has to cover move together under preview resolution.
+    ///
+    /// Rounded up, and never below one pixel: a padding is a whole number of
+    /// pixels, and a neighbourhood of one raster pixel is still one raster pixel
+    /// at Quarter. `None` is [`Roi::FullFrame`] — no finite padding exists.
+    pub fn padding_raster_px(self, px_scale: f32) -> Option<u32> {
+        match self {
+            Roi::Exact => Some(0),
+            // clamp, not `as`, so a nonsense scale cannot wrap: the cast
+            // saturates and nothing panics (docs/14).
+            Roi::PaddedPx(px) => Some((px * px_scale).ceil().clamp(1.0, u32::MAX as f32) as u32),
+            Roi::FullFrame => None,
+        }
+    }
 }
 
 /// Static trait declaration (docs/08 §1.3), read by the scheduler and caches.
