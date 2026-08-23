@@ -665,7 +665,11 @@ degradation ladder pauses. Concurrency adapts to measured per-frame cost and mem
 (the MFR lesson) — never a fixed thread count.
 
 **As built.** The fill renders one frame per idle turn, forward-biased two frames ahead for
-each one behind, after a ~200 ms lull.
+each one behind, after a ~200 ms lull — **into VRAM**, the same tier a scrub renders into,
+not into RAM with a write-behind: the copy down to memory and disk is the idle backup's job
+(below), one frame per lull. Its reach is therefore the VRAM budget divided by one frame's
+bytes at the current preview scale: the fill walks that many frames outward from the
+playhead and keeps that window held, and the LRU drops the far side as the playhead moves.
 
 **And a second job runs on the same lull: the idle backup.** A frame reached the disk tier by
 one route only — pushed out of the VRAM cache, read back on the way down, parked. That route

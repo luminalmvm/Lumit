@@ -11214,3 +11214,20 @@ bundle import stays a first-class citizen forever (studios export where Lumit is
 installed). The Kaitai/licence open question in docs/11 closes: nothing is vendored;
 the MIT parsers are read as documentation and reimplemented under Lumit's own rules,
 with attribution in the impl note.
+
+**K-420 · DECIDED · A cached frame is shown at once and measured afterwards.** An
+amendment to K-276 (4) and (8) together. (4) made a measured frame a composited one and
+stepped over the whole cache ladder while the clock was on; (8) then turned the clock on
+by default. Put together, every scrub onto a frame the cache bar showed green composited
+it again — fenced at every layer and every effect — on arrival, and the bar's green was
+a promise the Viewer did not keep. The owner's ruling: keep (8), and **serve the hit,
+measure afterwards.** A held frame on the card, in memory or on disk is served to a
+measured request exactly as to any other; the worker notes that it was, and on its
+next idle lull composites that one frame again with measuring on and discards the
+picture, so the column fills one idle turn after the picture. Idle fill and playback
+stay unmeasured, so nothing is measured that nobody is looking at. Two fixes landed
+beside it: the 1% cache key is taken from the scale rounded to a thousandth first, so
+the bar and the scrub name a frame alike (about one scale in twenty landed on
+different 1% steps before); and the Scopes read a frame held on the card back rather
+than compositing it again, and no longer re-request the frame they already show. This
+number was allocated on the lane3 branch.

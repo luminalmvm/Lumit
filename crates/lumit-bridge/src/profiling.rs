@@ -7,7 +7,9 @@
 //! Measuring a frame makes the processor wait for the graphics card at every
 //! layer and every effect (see `lumit_render::profile`), which is exactly the
 //! overlap a fast preview depends on. So the frontend says when it wants the
-//! numbers, and the worker reads that wish before each frame.
+//! numbers, and the worker reads that wish before each frame. A frame a tier
+//! already holds is served regardless, and measured on the idle turn after
+//! (K-420): the picture never waits for its own numbers.
 //!
 //! One flag, one atomic: it is written from Dart's thread and read on the
 //! render thread, and neither may wait for the other — the same shape the cache

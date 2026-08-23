@@ -33,10 +33,6 @@ enum ScopeKind { waveform, parade, vectorscope, histogram }
 /// The engine's fixed trace size.
 const int _traceEdge = 256;
 
-/// No more than one trace request in flight per this long. A trace is a real
-/// render, so a scrub must not queue one per frame it passes through.
-const Duration _throttle = Duration(milliseconds: 120);
-
 class ScopesPanelFrb extends StatefulWidget {
   const ScopesPanelFrb({super.key});
 
@@ -49,8 +45,6 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   ui.Image? _trace;
   StreamSubscription<WorkerResponse>? _responses;
 
-  final Stopwatch _since = Stopwatch()..start();
-  Duration _lastRequest = Duration.zero;
   int _lastFrame = -1;
 
   @override
@@ -191,16 +185,14 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   void _requestIfDue(LumitUiState state, int frame) {
     final comp = state.selectedComp;
     if (comp == null) return;
-    // Same frame, and too soon — nothing to ask for. A *different* frame is
-    // always worth a request, and so is `_lastFrame = -1`, which is how the
-    // kind picker forces one through without waiting out the throttle. A second
-    // unconditional throttle check used to sit here and swallow both.
-    if (frame == _lastFrame && _since.elapsed - _lastRequest < _throttle) {
-      return;
-    }
+    // Same frame — nothing to ask for: the trace already shows it. Every
+    // rebuild of this panel used to ask again once a throttle had elapsed,
+    // and each of those was a trace the engine had to make. A *different*
+    // frame is always worth a request, as is `_lastFrame = -1`, which is how
+    // the kind picker forces one through.
+    if (frame == _lastFrame) return;
 
     _lastFrame = frame;
-    _lastRequest = _since.elapsed;
     final t = ThemeScope.of(context).theme;
     comp.renderScope(
       frame: BigInt.from(frame),

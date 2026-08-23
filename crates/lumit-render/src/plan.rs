@@ -85,10 +85,19 @@ impl Quality {
     /// step by construction: the width in the name is the width the pixels were
     /// decoded at, whoever asked. It also stops a window resize from re-decoding
     /// for a scale change too small to see.
+    ///
+    /// The scale is taken to the nearest thousandth **first**, because that is
+    /// the form the cache bar asks in (`scale_q`, docs/06 §5.6) while a scrub
+    /// asks with the raw float. Flooring the raw float straight to a 1% step
+    /// put about one scale in twenty on a different step from its own
+    /// thousandth — 0.4296 floors to 42%, its thousandth 0.430 to 43% — so the
+    /// bar named those frames differently from the way they were banked and
+    /// drew them empty. Integer arithmetic throughout, so naming a scale and
+    /// naming its thousandth give the same answer by construction.
     #[must_use]
     pub fn keyed_scale(self) -> f32 {
-        let step = (self.display_scale.clamp(0.05, 1.0) * 100.0) as u32;
-        step as f32 / 100.0
+        let thousandths = (self.display_scale.clamp(0.05, 1.0) * 1000.0).round() as u32;
+        (thousandths / 10) as f32 / 100.0
     }
 
     /// One decode-width policy for requests AND cache keys — if these ever
@@ -430,6 +439,31 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// **A scale and its thousandth are named the same** — the scrub asks with
+    /// the raw float, the cache bar with the scale rounded to a thousandth, and
+    /// a frame banked by one must be found by the other. Flooring the raw float
+    /// to 1% put about one scale in twenty on a different step from its own
+    /// thousandth; fails without the quantise-first step.
+    #[test]
+    fn keyed_scale_agrees_with_its_own_thousandth() {
+        let quality = |scale: f32| Quality {
+            auto_res: true,
+            display_scale: scale,
+            ..Quality::default()
+        };
+        let mut s = 0.05_f32;
+        while s <= 1.0 {
+            let rounded = (s * 1000.0).round() / 1000.0;
+            assert_eq!(
+                quality(s).keyed_scale(),
+                quality(rounded).keyed_scale(),
+                "scale {s} and its thousandth {rounded} must key alike"
+            );
+            assert_eq!(quality(s).tag(), quality(rounded).tag());
+            s += 0.0001;
+        }
+    }
 
     /// **Two scales the tag calls equal must decode to the same width.**
     ///

@@ -577,13 +577,11 @@ impl HeadlessRenderer {
     /// Whether the frames from here on are being measured **and** there is
     /// somewhere for the numbers to go.
     ///
-    /// The caller that owns the tiers above this renderer asks, because a
-    /// measured frame has to be a *composited* one: a frame served from a cache
-    /// costs nothing and therefore reveals nothing, and the whole point of the
-    /// switch is to find out what the composite costs. Without this a warm
-    /// composition — one the idle fill has already made — showed no numbers at
-    /// all however long you looked at it (found on macOS, and it is every
-    /// platform).
+    /// The caller that owns the tiers above this renderer asks, because only a
+    /// *composited* frame yields numbers: a frame served from a cache costs
+    /// nothing and therefore reveals nothing. The cache is still allowed to
+    /// answer a measured request (K-420) — the caller notes that it did, and
+    /// composites the frame again for its numbers when the editor is idle.
     #[must_use]
     pub fn measuring(&self) -> bool {
         self.measuring && self.profile.is_some()
@@ -1334,12 +1332,13 @@ impl HeadlessRenderer {
         name: Option<u128>,
     ) -> Result<PreparedFrame, String> {
         let key = name.map(|k| (k, bgra));
-        // A measured frame is composited even when one is already held: a cache
-        // hit is free, so it has nothing to say about what the layers cost, and
-        // a column of numbers that only fills in on frames nobody has visited
-        // is worse than no column. The re-render is the price of asking, and
-        // the switch is off unless somebody is (see [`Self::measuring`]).
-        if let Some(key) = key.filter(|_| !self.measuring()) {
+        // A held frame is served whether or not this frame is being measured
+        // (K-420). A cache hit has nothing to say about what the layers cost,
+        // but refusing it meant a frame the bar showed green was composited
+        // again — and fenced at every layer — on arrival. The owner of the
+        // tiers measures such a frame afterwards, in an idle moment, rather
+        // than making the user wait for the numbers.
+        if let Some(key) = key {
             if let Some(held) = self.frame_textures.get(&key) {
                 self.frame_texture_hits += 1;
                 return Ok(PreparedFrame {
@@ -1615,6 +1614,26 @@ impl HeadlessRenderer {
         // displaces has the same right to fall downstairs.
         self.start_demotions();
         Some(PreparedFrame { texture })
+    }
+
+    /// Read a held frame's pixels back off the card, as tight 8-bit bytes in
+    /// the channel order it is held in — `(width, height, bytes)`.
+    ///
+    /// For the Scopes: a frame the Viewer is showing from the card is the frame
+    /// they should trace, and reading it back is a copy where compositing it
+    /// again was a render. This one waits for the card, which is the right
+    /// trade for a trace — it is throttled to a few a second and was paying
+    /// for a whole composite — and the wrong one for anything on the
+    /// preview's critical path, which is what [`Self::start_backup`] and the
+    /// demotions use the asynchronous read-back for. Does not touch the
+    /// entry's eviction recency. `None` when the frame is not held, or the
+    /// read-back fails.
+    #[must_use]
+    pub fn read_back_frame_texture(&self, key: u128, bgra: bool) -> Option<(u32, u32, Vec<u8>)> {
+        let held = self.frame_textures.peek(&(key, bgra))?;
+        let parts = self.parts.as_ref()?;
+        let bytes = parts.colour.readback8(&self.gpu, &held.texture).ok()?;
+        Some((held.texture.width(), held.texture.height(), bytes))
     }
 
     /// How many times the held set has changed — bumped by every insert, every

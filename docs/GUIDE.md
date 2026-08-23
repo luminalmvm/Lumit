@@ -5913,13 +5913,18 @@ row was not in the last measured frame. If the engine refuses the switch, the st
 the console carries one line per switching on and one more on the first frame
 actually measured.
 
-**A measured frame is a re-made frame.** Lumit keeps finished frames — on the
-graphics card, in memory, on disk — so returning to one costs a copy rather
-than a render. A copy has nothing to say about what the layers cost, so while
-the stopwatch is on the engine steps over all of that and composites the frame
-properly. That is why switching it on also re-asks for the frame you are looking
-at: otherwise the column would sit empty until you happened to scrub somewhere
-nothing had been made yet.
+**A held frame is shown first and measured afterwards.** Lumit keeps finished
+frames — on the graphics card, in memory, on disk — so returning to one costs a
+copy rather than a render. A copy has nothing to say about what the layers cost.
+The engine used to refuse the copy while the clock was on and composite the
+frame again, which meant a frame the cache bar showed green still made you wait
+on arrival — with measuring on by default, that was every scrub. Now the held
+frame is shown at once, the worker makes a note of it, and on its next idle
+moment (about a fifth of a second after you stop) it composites that one frame
+again with the stopwatch running and throws the picture away: the numbers land
+in the column a moment after the picture, and the picture never waits for them.
+Switching the clock on still re-asks for the frame you are looking at, so the
+column fills where you are rather than where you next scrub to.
 
 **Why it has a switch.** Work for the graphics card is *handed over*, not
 performed: the call that blurs a layer returns long before the card has blurred
