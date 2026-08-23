@@ -456,7 +456,7 @@ After Effects did not report*.
 
 | Category | Recovered | Notes |
 |---|---|---|
-| Static property values | **646 exact**, 0 wrong, 0 invented | of 652 leaves the file stores |
+| Static property values | **684 exact**, 0 wrong, 0 invented | 646 of the 652 leaves the file stores, plus the 38 Position and Anchor Point defaults written in for the records After Effects leaves out — each asserted against AE's own number, which is what makes them recovered rather than guessed |
 | Keyframes | **27 of 27** (11 properties) | time, value, per-side interpolation, ease, spatial tangents |
 | Expressions | **2 of 2** | source text and the on/off flag, one of each |
 | Effect instances | **13 of 13** | match name, display name (`fnam`), on/off switch |

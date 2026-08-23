@@ -810,14 +810,14 @@ project does not contain).
    cross as a stable id plus their facts and are written in
    `l10n/engine_labels.dart` (K-303), gated by `engine_labels_test.dart` reading the
    `Reason` enum. Three things are owed:
-   - **Footage is found only where After Effects left it.** Of docs/11 §2.5's four
-     relink steps only the absolute path runs: there is no collected `footage/`
-     to check, the mapper stores the AE absolute path as the *relative* one too,
-     and an absolute path re-rooted against the bundle's folder is still itself.
-     A bundle imported on the machine that wrote it relinks; one carried to
-     another machine imports wholly offline. Both later steps want the collected
-     copy first — write that, store a genuinely relative path beside it, and the
-     re-rooting and fingerprint searches start paying.
+   - **The collected `footage/` copy is still owed.** Of docs/11 §2.5's four relink
+     steps, the absolute path and the search-folder sweep both run (K-438, 2026-08-24:
+     whatever the first three resolver steps leave lost is looked for by file name
+     under the folder the `.aep` or bundle was picked from, one walk for all of them),
+     so a project copied across with its media beside it now comes up linked. What is
+     left is the collected copy and the hash verification that wants it: write the
+     `footage/` folder, store a genuinely relative path beside it, and the re-rooting
+     and fingerprint steps start paying too.
    - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names
      its comp ▸ layer ▸ property and double-clicking it does nothing. It needs the
      row to carry an id, not just a path, which means the bridge row carrying one.
@@ -837,8 +837,10 @@ parses `fixture.aep` and compares the project block, all 22 items, both comps'
 settings, all 24 layers and every property tree against
 `fixture.lum-bundle/capture.json` - AE's own account of the same file - field for
 field; §7.1 and §7.2 are the proved layout maps.
- - **Recovery, asserted in CI** (§7.2 has the table): 646 static property values
-   exact with none wrong and none invented, 27 of 27 keyframes with their ease and
+ - **Recovery, asserted in CI** (§7.2 has the table): 684 static property values
+   exact with none wrong and none invented - the 646 the file stores, plus the 38
+   Position and Anchor Point defaults the parser writes in for the records After
+   Effects leaves out, each asserted against AE's own number - 27 of 27 keyframes with their ease and
    spatial tangents, 2 expressions, 13 effect instances, 2 masks with their paths,
    4 markers, 1 separated-dimension property, and the 3 `CUSTOM_VALUE` blobs as raw
    bytes - which the Bridge cannot get at all. `map_capture` on the parsed capture
@@ -898,13 +900,16 @@ field; §7.1 and §7.2 are the proved layout maps.
    differential exempts it rather than curve-fitting. Nothing downstream reads a
    linear side's speed. A fixture with an animated path over a different duration
    settles it.
- - **Footage interpretation is not read at all, and needs a fixture that has some.**
-   `fixture.aep` is solids and comps with no file footage in it, so path, frame rate,
-   alpha, fields, pulldown, loop and missing-ness could not be checked against AE -
-   and an unchecked offset is exactly the silently-wrong import this route exists to
-   avoid. One more sitting with real footage in the project unblocks the whole group,
-   and the differential test asserts the fixture still has none so the exemption
-   cannot rot.
+ - **Footage interpretation is not read, and needs a fixture that has some.**
+   `fixture.aep` is solids and comps with no file footage in it, so frame rate, alpha,
+   fields, pulldown, loop and missing-ness could not be checked against AE - and an
+   unchecked offset is exactly the silently-wrong import this route exists to avoid.
+   One more sitting with real footage in the project unblocks the whole group, and the
+   differential test asserts the fixture still has none so the exemption cannot rot.
+   **The path is the exception and now lands** (2026-08-24): it comes out of the
+   self-naming JSON in `LIST Als2` ▸ `alas` rather than out of an offset, and the item
+   takes the file's base name where nobody renamed it - without which a project of file
+   footage imported as a list of blank rows pointing nowhere. `aep::tests` covers both.
  - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
    two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
    inclusive indices on an internal grid; with one sample the grid cannot be proved,
