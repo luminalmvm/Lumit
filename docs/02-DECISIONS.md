@@ -12125,3 +12125,25 @@ rules, recorded together here; each lives in the spec noted.
   than adding a dot; the path column sits at the right of the list; the preview card
   carries name, size, rate, duration and codec (docs/07 §3.1).
 - **Paired dialog buttons share one width** (15-DESIGN §12A.4).
+
+## K-449 — Multi-window waits for Flutter; the redesign does not
+
+**DECIDED 2026-08-24.** Supersedes the **ordering** half of K-444; the dialog pattern
+itself stands unchanged. Flutter's windowing support is not shippable: it exists only on
+the main channel behind `--enable-windowing`, its API is annotated internal with breaking
+changes promised even in patch versions, and no stable release carries it
+(docs/impl/multi-window.md §1). Lumit pins stable Flutter, so the redesign cannot wait on
+it and must not take a production dependency on it.
+
+The redesign therefore runs in these phases: **1** the theme tokens, the bundled fonts and
+the icon set; **2** panels and windows, with dialogs built **in-window** in the K-444
+pattern using ordinary framework dialogs (`showDialog`) — not a stopgap but the documented
+migration prep, since with windowing enabled `showDialog` becomes a real child dialog
+window with no per-dialog rewrite; **3** the node graph and the Nodes workspace; **4** the
+website.
+
+**Multi-window becomes its own later phase**, gated on Flutter stabilising the API on the
+stable channel un-flagged, and opened by the Viewer-texture spike in
+docs/impl/multi-window.md §6 — whether a second window can composite the engine's shared
+texture is the one Lumit-specific risk no release note answers, and it decides whether
+multi-monitor Viewers can ever be promised.

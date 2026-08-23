@@ -376,23 +376,19 @@ it fills unevenly; feeding the profiler's measured costs back as the weights is 
 fix. Also unbuilt: an **export**'s progress still has its own path
 ([07-UI-SPEC.md](07-UI-SPEC.md) §14) rather than sharing this one.
 
-## Now - the redesign programme (K-438..K-448)
+## Now - the redesign programme (K-438..K-449)
 
-The 2026-08-23 redesign lands in five phases, in this order; 15-DESIGN §12A and the
+The 2026-08-23 redesign lands in four phases, in this order; 15-DESIGN §12A and the
 approved mockups govern the layouts. Phase 1 is Now; each later phase becomes Now when
-the one before it lands. Delete each phase here when it lands, as with everything else.
+the one before it lands. Multi-window is a fifth phase that waits on Flutter (K-449) and
+does not gate the four. Delete each phase here when it lands, as with everything else.
 
-- **Phase 1 - the Flutter multi-window upgrade** (K-444). The windowing foundation
-    lands first, on the current look, so dialogs and pop-ups become real OS windows
-    before any of them is redrawn - upgrade regressions stay separable from redesign
-    regressions. The old pop-out-panel-windows rebuild item (K-182) is folded
-    into this phase.
-- **Phase 2 - theme groundwork** (K-438, K-439, K-440): the `animated` token and the
+- **Phase 1 - theme groundwork** (K-438, K-439, K-440): the `animated` token and the
     three-greys-at-rest audit; Hanken Grotesk and Geist Mono bundled (replacing the
     old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
     on its 16 px grammar and embedded as Flutter icons; the three-way Chrome labels
     setting with its word-carrying tooltips.
-- **Phase 3 - panels and windows** (K-441, K-442, K-443, K-444): the effect controls
+- **Phase 2 - panels and windows** (K-441, K-442, K-443, K-444, K-449): the effect controls
     (fixed columns, square stopwatch, reserved keyframe-nav slot, linked vector
     wells, the crosshair point picker, Mix row with blend mode and matte channel,
     Matte row with invert), the Timeline (Layers/Graph modes, the Animated filter,
@@ -400,13 +396,16 @@ the one before it lands. Delete each phase here when it lands, as with everythin
     tier-coloured cache bar, the work-area band, trimmed-extent outlines) and Graph
     mode's surface (the filtered colour-ticked outline, edge-to-edge curves, the
     fixed value gutter, the Value/Speed strip), the Project panel, the Viewer bar,
-    Settings, the welcome screen, and **the export window plus the export queue
-    window** on the K-444 dialog pattern. This phase owns, rather than tracking
+    Settings, the welcome screen, and **the export dialog plus the export queue** on
+    the K-444 pattern. Every dialog is built **in-window**, as an ordinary
+    `showDialog` overlay - that is the migration prep, not a stopgap: when windowing
+    ships, `showDialog` becomes a real child window with no per-dialog rewrite
+    (K-449, docs/impl/multi-window.md §5). This phase owns, rather than tracking
     separately: the export dialog and queue rework, the easing and graph-surface
     rework, the switch-column-at-minimum-width polish, the editable-value colour
     treatment (decided by K-439, built here), and the rest of the redesign's visual
     polish list.
-- **Phase 4 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
+- **Phase 3 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
     second view of the effect stack that can also wire effects together, auto-wire
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
     workspace with the small viewer and short timeline, and the Node preview panel
@@ -414,10 +413,20 @@ the one before it lands. Delete each phase here when it lands, as with everythin
     document-model question stays open until this phase's design step answers it.
     Particulate (K-446) is
     designed against the points stream this phase's types introduce.
-- **Phase 5 - the website**: lumitlab.com ported into the new styling - current
+- **Phase 4 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
     own download button, screenshot sections and hover-play feature videos; type set
     in Geist, unless a near-neighbour wins the side-by-side comparison.
+- **Later, gated - the Flutter multi-window upgrade** (K-449, K-444, K-182). Blocked
+    upstream: windowing is main-channel-only, flagged, and its API promises breaking
+    changes, so Lumit takes no production dependency on it until it reaches the
+    stable channel un-flagged - re-check the status line in
+    **docs/impl/multi-window.md** §1 before planning any of it. The phase opens with
+    that note's cheap spike (§6 step 2): can a second window composite the engine's
+    shared Viewer texture at all? Then the `WindowManager` root on the main window
+    only, the welcome window, the dialogs (mostly free), the settings/theme/queue
+    windows, and last the satellite tear-off panels - which is where the old
+    pop-out-panel-windows rebuild item (K-182) is folded in.
 
 ## Next - engine/bridge follow-ups
 

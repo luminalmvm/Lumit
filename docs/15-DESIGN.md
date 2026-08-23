@@ -839,10 +839,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - The per-effect **Mix row** carries blend mode and matte channel; the **Matte row** carries
   an invert.
 
-### 12A.4 Dialogs (K-444)
+### 12A.4 Dialogs (K-444, K-449)
 
-Every popup is — once the multi-window foundation lands — a **real OS window**, not an
-in-window overlay, and they all share one pattern:
+Every popup is built in-window today and becomes a **real OS window** when multi-window
+ships (K-449: the toolkit support is not stable yet; ordinary framework dialogs are the
+migration path). Either way they all share one pattern:
 
 - a kicker title strip;
 - an optional page-tab row under it (Export: General / Encoder / Colour / Metadata);

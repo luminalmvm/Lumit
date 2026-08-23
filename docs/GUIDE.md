@@ -8172,18 +8172,24 @@ getting its own icon set for this — one glyph per word, all drawn to the same 
 stroke so they look like one family. Whatever the setting, hovering always shows the word,
 in one or two words, never a paragraph.
 
-**How it lands.** The overhaul runs in phases, in this order: first the windowing upgrade,
-so dialogs and pop-ups can become real windows of their own rather than overlays inside
-the main one; then the theme groundwork — the new colour tokens, the bundled fonts, the
-icon set; then the panels and windows one by one (effect controls, timeline, project,
-viewer, settings, the welcome screen, and the export window with its queue); then the
-node graph and its workspace; and finally the website, restyled to match. Doing the
-windowing first means any breakage it causes shows up on the old look, where it is easy
-to tell apart from the redesign's own changes.
+**How it lands.** The overhaul runs in phases, in this order: first the theme groundwork —
+the new colour tokens, the bundled fonts, the icon set; then the panels and windows one by
+one (effect controls, timeline, project, viewer, settings, the welcome screen, and the
+export dialog with its queue); then the node graph and its workspace; and finally the
+website, restyled to match. Giving each dialog a window of its own — a floating export
+dialog the taskbar knows about, a second viewer on a second monitor — comes later, as a
+phase of its own, because the feature is not finished in Flutter, the toolkit Lumit's
+interface is built on: it exists only in Flutter's development builds, behind a switch,
+with the warning that it will change. The consolation is that waiting costs nothing.
+Dialogs built the ordinary way today, as overlays inside the one window, are exactly the
+ones that turn into real windows when the toolkit is ready — the same code, re-parented,
+rather than rewritten.
 
 **The mockups are the reference.** Each panel was designed as a full-size picture first
 and approved by the owner before any code moves. When a question comes up about where
 something sits or how big it is, the answer is read off the approved mockup, not
 re-argued in code review. The written rules live in `docs/15-DESIGN.md`; the decisions
-and their reasons are logged as K-438 to K-448 in `docs/02-DECISIONS.md`.
+and their reasons are logged as K-438 to K-449 in `docs/02-DECISIONS.md`; what Flutter's
+windowing support actually offers today, and what to test before believing it, is
+`docs/impl/multi-window.md`.
 
