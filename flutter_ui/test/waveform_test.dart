@@ -411,6 +411,81 @@ void main() {
       }
     });
 
+    /// Both rows (K-437). A Timeline lane hands the painter twice its own
+    /// height, so a centred wave sits **on the divider** between the empty
+    /// Waveform-twirl row above and the lane's own row: the divider is the
+    /// bottom of the drawn band less one row, which is canvas y 0 here.
+    test('a centred wave given both rows sits on the divider between them', () {
+      final painter = WaveformPainter(
+        peaks: peaks(start: 0, end: 1, bands: 1, values: loud(32)),
+        originSeconds: 0,
+        secondsPerPixel: 1 / 32,
+        left: 0,
+        right: 32,
+        colours: colours,
+        height: 44,
+      );
+      final lines = strokes(painter, const Size(32, 22));
+      expect(lines, isNotEmpty);
+      final top = lines.map((l) => math.min(l.a.dy, l.b.dy)).reduce(math.min);
+      final bottom =
+          lines.map((l) => math.max(l.a.dy, l.b.dy)).reduce(math.max);
+      expect(top, lessThan(0),
+          reason: 'the upper half reaches into the row above');
+      expect(bottom, greaterThan(0),
+          reason: 'and the lower half stays in the lane\'s own row');
+      // Symmetrical about the divider, and spanning both rows rather than one.
+      expect(top, closeTo(-bottom, 0.01));
+      expect(bottom - top, greaterThan(22 * 1.5),
+          reason: 'the paint rect spans the pair, not one of them');
+      expect(bottom - top, lessThanOrEqualTo(44));
+    });
+
+    /// The other mode fills the pair too: it keeps its floor and reaches up
+    /// through both rows instead of one.
+    test('a wave from the floor given both rows rises through both', () {
+      final painter = WaveformPainter(
+        peaks: peaks(start: 0, end: 1, bands: 1, values: loud(32)),
+        originSeconds: 0,
+        secondsPerPixel: 1 / 32,
+        left: 0,
+        right: 32,
+        colours: colours,
+        style: const WaveformStyle(multiwave: false, fromBottom: true),
+        height: 44,
+      );
+      final lines = strokes(painter, const Size(32, 22));
+      expect(lines, isNotEmpty);
+      for (final line in lines) {
+        expect(math.max(line.a.dy, line.b.dy), closeTo(21, 0.01),
+            reason: 'the floor is still the bottom of the lane\'s own row');
+      }
+      final top = lines.map((l) => math.min(l.a.dy, l.b.dy)).reduce(math.min);
+      expect(top, lessThan(0), reason: 'a full-scale wave uses both rows');
+    });
+
+    /// A clip passes no height and keeps the box it is drawn in — the doubling
+    /// belongs to the lane, which has an empty row above it to borrow.
+    test('with no height given, the wave stays inside its own box', () {
+      for (final fromBottom in [false, true]) {
+        final painter = WaveformPainter(
+          peaks: peaks(start: 0, end: 1, bands: 1, values: loud(32)),
+          originSeconds: 0,
+          secondsPerPixel: 1 / 32,
+          left: 0,
+          right: 32,
+          colours: colours,
+          style: WaveformStyle(multiwave: false, fromBottom: fromBottom),
+        );
+        for (final line in strokes(painter, const Size(32, 22))) {
+          expect(math.min(line.a.dy, line.b.dy), greaterThanOrEqualTo(0),
+              reason: 'fromBottom: $fromBottom');
+          expect(math.max(line.a.dy, line.b.dy), lessThanOrEqualTo(22),
+              reason: 'fromBottom: $fromBottom');
+        }
+      }
+    });
+
     test('no peaks, or empty peaks, draw nothing at all', () {
       for (final held in [
         null,

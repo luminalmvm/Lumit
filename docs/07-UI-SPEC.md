@@ -1869,7 +1869,10 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
   their box, bucketed through the clip's own map so a ramp's transients land where they are
   heard, and carried along when the clip is slid. A **retimed layer's** lane stretches the
   same way (K-436): its buckets are taken in the layer's clock and mapped through its Retime,
-  so a slowed passage is drawn wide because it is wide. Waveforms draw as a three-band
+  so a slowed passage is drawn wide because it is wide. The lane is drawn across **both** its
+  own row and the empty one its Waveform twirl sits in (K-437), so a centred wave sits on the
+  divider between them and one from the floor rises through the pair; the rows themselves do
+  not grow. Waveforms draw as a three-band
   **multiwave** stack (bass / middle / treble) by default, drawn over one another around one
   centre line rather than in separate lanes (K-284); Settings ▸ Interface ▸ Editing ▸
   *Waveforms show the frequency stack* turns it off for one plain wave, and *Waveforms rise

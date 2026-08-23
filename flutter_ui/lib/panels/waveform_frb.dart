@@ -48,6 +48,15 @@
 // far better in a short row and is the shape most NLEs draw. Centred is the
 // default because it is what the eye expects of a *wave*; from the bottom is
 // there for anyone who would rather have the height.
+//
+// **How much room it has** is the last of it (K-437). A waveform lane in the
+// Timeline is only ever open under its own **Waveform** twirl, and that twirl's
+// own row is empty lane space — so the lane is drawn twice a row tall, standing
+// on its own floor and reaching up through the row above. A centred wave then
+// sits about the divider between the two, which is where silence actually is,
+// and one rising from the floor gets both rows to rise through. Only the
+// painting reaches up; the row is the height it always was, so nothing in the
+// outline or the lane stack moves.
 
 import 'dart:math' as math;
 
@@ -195,6 +204,18 @@ class WaveformPainter extends CustomPainter {
   /// touch the row's edges.
   final double inset;
 
+  /// How tall to draw, when that is taller than the row the painter sits in.
+  /// The wave is anchored to the **bottom** of `size` and reaches up past its
+  /// top; null means the row's own height, which is what a clip uses.
+  ///
+  /// The Timeline's lane passes twice a row here (K-437). A waveform row is
+  /// only ever there under its own **Waveform** twirl, and that twirl's row is
+  /// empty lane space — so the wave is given both rows and a centred one is
+  /// drawn about the divider between them, which is the line silence actually
+  /// sits on. Nothing about the layout moves: the row is the height it always
+  /// was, and only the painting reaches above it.
+  final double? height;
+
   const WaveformPainter({
     required this.peaks,
     required this.originSeconds,
@@ -204,6 +225,7 @@ class WaveformPainter extends CustomPainter {
     required this.colours,
     this.style = const WaveformStyle(),
     this.inset = 1,
+    this.height,
   });
 
   /// The bands to draw, back to front: which slice of the answer each one is,
@@ -237,21 +259,24 @@ class WaveformPainter extends CustomPainter {
     // One lane, whichever this is: the stack is drawn *through* the wave, not
     // beside it.
     final stacked = bands.length > 1;
-    // Centred about silence, or stood on the floor of the row. Standing on the
+    // The band the wave is drawn in: as tall as [height] asks for, standing on
+    // the bottom of the row and reaching up from there. Equal to the row
+    // itself unless a lane has borrowed the empty row above it.
+    final tall = height ?? size.height;
+    final top = size.height - tall;
+    // Centred about silence, or stood on the floor of the band. Standing on the
     // floor spends the whole height on one rectified half, so `reach` is twice
     // what a centred wave's is.
-    final baseline =
-        style.fromBottom ? size.height - inset : size.height / 2;
+    final baseline = style.fromBottom ? top + tall - inset : top + tall / 2;
     // How far each band sits above the one behind it, and how much room that
-    // costs the wave itself. Proportional to the row so a tall clip fans wider
+    // costs the wave itself. Proportional to the band so a tall clip fans wider
     // than a 22 px lane, and capped at both ends: below a pixel the offset is
     // invisible, above a few it eats more amplitude than it earns.
-    final step = stacked ? (size.height * 0.08).clamp(1.0, 4.0) : 0.0;
+    final step = stacked ? (tall * 0.08).clamp(1.0, 4.0) : 0.0;
     final fan = step * (bands.length - 1);
     final reach = math.max(
       0.5,
-      (style.fromBottom ? size.height - inset * 2 : size.height / 2 - inset) -
-          fan,
+      (style.fromBottom ? tall - inset * 2 : tall / 2 - inset) - fan,
     );
     final buckets = held.buckets;
     final span = held.endSeconds - held.startSeconds;
@@ -322,7 +347,8 @@ class WaveformPainter extends CustomPainter {
       old.right != right ||
       old.colours != colours ||
       old.style != style ||
-      old.inset != inset;
+      old.inset != inset ||
+      old.height != height;
 
   /// A background painter's default is to absorb hits across its whole rect,
   /// which would eat the keyframe marquee underneath. The lane is a picture,

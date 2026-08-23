@@ -11893,3 +11893,28 @@ on the window alone and an edit elsewhere in the document asks the engine for no
 Regression tests: "a retimed layer's waveform stretches with the map"
 (`timeline_panel_frb_test.dart`), which also pins that the identity map — switching Retime on
 without shaping it — changes nothing.
+
+## K-437 — The waveform lane is drawn on the divider, across both of its rows
+
+**DECIDED 2026-08-23.** The Timeline's waveform lane paints at **twice** the row height,
+anchored to the bottom of its own row and reaching up through the row above it. A centred
+wave then sits on the **divider** between the two; one standing on the floor rises through
+both. The row's height is unchanged: only the painting reaches up, so the outline and the
+lanes stay level (K-208's rule that the two halves agree on every height is untouched).
+
+**Why there is a row to borrow.** A waveform lane only ever exists under its own **Waveform**
+twirl (K-281), and that twirl's row is empty lane space — a label on the outline side and
+nothing at all on the lane side. So the pair is already there, and one of them was being
+spent on nothing while the wave was squeezed into 22 pixels beside it.
+
+**Why the divider is the right line.** A centred waveform is symmetrical about silence, and
+the divider is the strongest horizontal line the lane area draws. Putting silence on it means
+the drawing is read against a line that is really there rather than against an invented one
+inside a row, and it doubles the amplitude the wave has to spend without moving a single row.
+The from-the-bottom mode (K-285) keeps its floor and simply gains the room above it.
+
+Regression tests: "a centred wave given both rows sits on the divider between them", "a wave
+from the floor given both rows rises through both" and "with no height given, the wave stays
+inside its own box" (`waveform_test.dart` — the last is what keeps a Sequence clip's wave
+inside its clip box, which has no empty row to borrow), and "the waveform lane is drawn across
+both rows" (`timeline_panel_frb_test.dart`).

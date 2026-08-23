@@ -2625,6 +2625,18 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the file in one straight sweep, as it always did; only a retimed one pays for the per-column
   lookup. Clips on a Sequence layer worked this way from the start — this is the layer lane
   catching up with them.
+- **The waveform sits on the line between its two rows (K-437)** — the waveform lane lives
+  under a **Waveform** twirl, and that twirl has a row of its own with nothing in it: a label
+  on the left and blank space across the whole width of the timeline. So there were two rows
+  there and only one of them was carrying a picture. The wave is now drawn across both. A
+  centred wave is symmetrical about silence, and the divider between two rows is the strongest
+  horizontal line in the lane area — so silence is put *on* that line and the wave goes up into
+  the empty row and down into its own, twice as tall as before and read against a line that is
+  really there. The from-the-bottom mode keeps its floor and simply has twice the height to
+  rise through. Nothing about the layout changed: the rows are the height they always were and
+  every layer below stays exactly where it was, because only the *painting* reaches up past its
+  row. (A clip's waveform is left alone — a clip is a box on a row, with no spare row beside it
+  to borrow.)
 - **`L` opens a layer's sound (K-281)** — press `L` with layers selected and their **Audio**
   group opens; press it again and the waveform lane opens under it; a third time shuts the
   layer. The same three-tap shape `U` has for animated properties, and for the same reason:

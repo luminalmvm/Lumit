@@ -141,6 +141,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   window to `PeakPyramid::range` in one pass, so only a layer that has actually been
   retimed pays for the per-bucket walk. A reshaped map changes the answer without moving
   the window, so a retimed layer's fetch key carries the document revision as well.
+- **The lane is drawn across both of its rows** (K-437). A waveform lane only ever exists
+  under its own **Waveform** twirl, whose row is empty lane space — so the lane paints at
+  twice the row height, standing on its own floor and reaching up through the row above. A
+  centred wave then sits on the **divider** between the two, which is a line that is really
+  there rather than an invented one inside a row; one rising from the floor gets the pair to
+  rise through. Only the painting reaches up: the row keeps its height, so the outline and
+  the lanes stay level. A Sequence clip's wave is unchanged — it is drawn inside the clip's
+  own box, which has no empty row beside it to borrow.
 - Waveforms appear: on Audio layers (always), on Footage layers with audio (expandable
   lane), and **inside Sequence layer clips** — each clip draws the waveform of its own
   source range, so a cut's audio content is visible exactly where the clip sits. Clip

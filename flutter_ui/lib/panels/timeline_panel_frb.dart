@@ -7061,6 +7061,13 @@ class _LayerArea extends StatelessWidget {
               right: axis.xOf(outFrame),
               colours: t.waveform,
               style: waveformStyle,
+              // Both rows (K-437): the lane's own, and the empty one belonging
+              // to the **Waveform** twirl directly above it. A centred wave
+              // then sits on the divider between the two rather than inside
+              // half of one, and a wave rising from the floor has the pair to
+              // rise through. The paint reaches up; the row does not grow, so
+              // the outline and the lanes stay level.
+              height: _rowHeight * 2,
             ),
           );
         },

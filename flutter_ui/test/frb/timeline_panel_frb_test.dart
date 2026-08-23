@@ -4417,6 +4417,40 @@ void main() {
           reason: 'still only the one — a solid has nothing to be heard');
     });
 
+    /// The open lane is drawn over **both** rows — its own, and the empty one
+    /// the Waveform twirl sits in directly above it (K-437). The row itself
+    /// keeps its height; only the painting reaches up, so nothing in the
+    /// outline or the lane stack moves.
+    testWidgets('the waveform lane is drawn across both rows', (tester) async {
+      final p = withComp();
+      final audible =
+          p.state.project!.importFootage(path: _wavFile('both-rows.wav'));
+      p.comp.addFootageLayer(footage: audible, asSequence: false);
+      await mount(tester, p);
+      final layer = p.comp.getLayers().first;
+      await settleFrb(tester, minRounds: 8);
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+      await tester.pump();
+      await tester.tap(find.text('Audio'));
+      await tester.pump();
+      await tester.tap(find.text('Waveform'));
+      await tester.pump();
+
+      final lane =
+          find.byKey(ValueKey<String>('tl-wave-${layer.internallayerId}'));
+      expect(lane, findsOneWidget);
+      final row = tester.getRect(lane);
+      final painter =
+          (tester.widget<CustomPaint>(lane).painter) as WaveformPainter;
+      expect(painter.height, closeTo(row.height * 2, 0.01),
+          reason: 'the paint rect spans the pair of rows');
+      // Anchored to the bottom of its own row, so what it borrows is the row
+      // above — the empty one belonging to the twirl.
+      expect(row.height, greaterThan(0));
+    });
+
     /// A clip on a Sequence layer draws its own sound inside its own box, the
     /// way a Footage layer's lane does (K-280): a cut is aimed at what you can
     /// see, and on a Sequence layer what you are cutting is the clip.
