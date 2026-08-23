@@ -29,6 +29,9 @@
 //!   cargo test -p lumit-render --release --test effect_examples -- --ignored --nocapture
 //! ```
 //!
+//! `LUMIT_FX_EXAMPLES_ONLY=<match name>` (for example `accumulation_mb`) renders
+//! just that effect, for iterating on one picture.
+//!
 //! ## The neutral report
 //!
 //! Many effects do nothing at their declared defaults, which is correct — a
@@ -382,19 +385,22 @@ fn wants_scene_below(match_name: &str) -> bool {
 /// A whip across the frame, for the effect that samples the scene beneath it.
 ///
 /// The motion is the layer's own transform rather than the footage's, and that
-/// is a workaround rather than a preference: accumulation motion blur with
-/// **Force all** on renders a solid black frame when the layer beneath it
-/// carries a retime, whichever interpolation that retime uses. Glow on the same
-/// adjustment layer is fine and the same effect over a transform-animated layer
-/// is fine, so the fault is in the retimed path. Point the example back at
-/// `wants_speed_up` once that is fixed, and the two motion blur pages will show
-/// the same footage motion treated two ways.
+/// is what accumulation motion blur can actually see: its sub-frame samples
+/// re-render the stack beneath with the footage **held** at the frame-time
+/// decode (docs/impl/temporal-rerender.md §2), so a retime of the plate gives
+/// every sample the same pixels and the average is the plate back, unblurred.
+/// Only transforms, effects and the camera move between samples, so the example
+/// moves the transform. (An earlier note here blamed a black frame on the
+/// retimed path; `a_retimed_layer_under_forced_accumulation_mb_is_not_black` in
+/// `headless.rs` pins that it renders, just without any smear.)
 ///
 /// The layer crosses the frame, and the sampled moment is the one where it sits
 /// dead centre, so the framing matches every other picture in the manual and the
 /// page's before-and-after wipe has nothing to jump across. Scale sits two per
 /// cent over so the extreme samples inside the shutter still have picture to show
-/// at the frame edge instead of a sliver of background.
+/// at the frame edge instead of a sliver of background. The span matches the
+/// 2.4x the other motion blur page plays at, near enough: 1800 pixels over two
+/// seconds is a little over a frame width a second.
 fn animate_whip(plate: &mut Layer, span: Rational) {
     let key = |t: Rational, v: f64| lumit_core::anim::Keyframe {
         time: t,
@@ -406,26 +412,26 @@ fn animate_whip(plate: &mut Layer, span: Rational) {
     plate.transform.scale_y = Property::fixed(102.0);
     plate.transform.position_x = Property {
         animation: lumit_core::anim::Animation::Keyframed(vec![
-            key(Rational::ZERO, -700.0),
-            key(span, 700.0),
+            key(Rational::ZERO, -900.0),
+            key(span, 900.0),
         ]),
         extra: serde_json::Map::new(),
     };
 }
 
-/// Both motion blurs have only what the footage itself is doing to work with, so
-/// both examples play the plate faster through the frame they are sampled at.
-/// Same frame, same speed, same motion: the difference between the two pictures
-/// is then the difference between the two effects, which is the point.
+/// Fast motion blur reads motion out of the footage itself, so its example plays
+/// the plate faster through the frame it is sampled at. (Accumulation motion blur
+/// cannot read a retime, see `animate_whip`, so that page moves the transform at
+/// a matching rate instead.)
 fn wants_speed_up(match_name: &str) -> bool {
     match_name == "motion_blur"
 }
 
-/// Play the whole clip through the middle second of the composition: two seconds
-/// of source in one, which is double speed, and the midpoint falls exactly on the
-/// frame every other picture uses. Written as two plain keyframes because a rate
-/// ramp has to be integrated to know where it lands, and landing on a different
-/// frame from the rest of the manual is the one thing this example must not do.
+/// Play the whole clip through 2 / 2.4 seconds of composition time centred on the
+/// sampled frame (keys at 1 s ∓ 5/12 s): 2.4x, with the midpoint exactly on the frame every
+/// other picture uses. Written as two plain keyframes because a rate ramp has to
+/// be integrated to know where it lands, and landing on a different frame from
+/// the rest of the manual is the one thing this example must not do.
 fn animate_speed_up(plate: &mut Layer) {
     let key = |t: Rational, v: f64| lumit_core::anim::Keyframe {
         time: t,
@@ -435,8 +441,8 @@ fn animate_speed_up(plate: &mut Layer) {
     };
     plate.retime = Some(Property {
         animation: lumit_core::anim::Animation::Keyframed(vec![
-            key(rat(1, 2), 0.0),
-            key(rat(3, 2), DURATION_S as f64),
+            key(rat(7, 12), 0.0),
+            key(rat(17, 12), DURATION_S as f64),
         ]),
         extra: serde_json::Map::new(),
     });
@@ -733,7 +739,13 @@ fn render_every_effect_example() {
     let mut skipped: Vec<String> = Vec::new();
     let mut made = 0usize;
 
+    // LUMIT_FX_EXAMPLES_ONLY=<match name> restricts the run to one effect,
+    // for iterating on a single picture without the full several-minute run.
+    let only = std::env::var("LUMIT_FX_EXAMPLES_ONLY").ok();
     for e in &reference.effects {
+        if only.as_deref().is_some_and(|o| o != e.match_name) {
+            continue;
+        }
         if let Some(why) = unillustrable(e.match_name) {
             skipped.push(format!("{}: {why}", e.slug));
             continue;

@@ -26,6 +26,9 @@
 //
 // Run:  npm run docs:effect-shots
 //       npm run docs:effect-shots -- --keep    (leave the working files behind)
+//
+// To redo one picture, set LUMIT_FX_EXAMPLES_ONLY=<match name> (for example
+// accumulation_mb) before running; the cargo test then renders only that effect.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

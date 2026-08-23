@@ -3961,6 +3961,105 @@ mod tests {
         }
     }
 
+    /// A retimed footage layer beneath an accumulation motion blur adjustment
+    /// with Force on all layers renders the footage, whichever interpolation
+    /// the retime uses. Pinned because the manual's harness once reported a
+    /// solid black frame for exactly this stack; the footage is held across the
+    /// samples (docs/impl/temporal-rerender.md §2), so no smear is expected,
+    /// but a picture is.
+    #[test]
+    fn a_retimed_layer_under_forced_accumulation_mb_is_not_black() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        use lumit_core::retime::Interpolation;
+        let rows: Vec<(&str, Option<Property>, Interpolation)> = vec![
+            ("no retime", None, Interpolation::Nearest),
+            (
+                "retime nearest",
+                Some(lumit_core::model::Layer::identity_retime(
+                    Rational::ZERO,
+                    Rational::new(2, 1).unwrap(),
+                )),
+                Interpolation::Nearest,
+            ),
+            (
+                "retime blend",
+                Some(lumit_core::model::Layer::identity_retime(
+                    Rational::ZERO,
+                    Rational::new(2, 1).unwrap(),
+                )),
+                Interpolation::Blend,
+            ),
+        ];
+        for (name, retime, interpolation) in rows {
+            let mut doc = Document::new();
+            let item = Uuid::now_v7();
+            doc.items
+                .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    id: item,
+                    name: "fixture.mp4".into(),
+                    media: lumit_core::model::MediaRef {
+                        relative_path: "fixture.mp4".into(),
+                        absolute_path: clip.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                }));
+            let comp_id = Uuid::now_v7();
+            let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
+            clip_layer.retime = retime;
+            clip_layer.interpolation = interpolation;
+            let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, 320, 240);
+            let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+            for p in &mut mb.params {
+                match p.id.as_str() {
+                    "force_all" => p.value = lumit_core::model::EffectValue::Bool(true),
+                    "samples" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(4.0))
+                    }
+                    _ => {}
+                }
+            }
+            adjust.effects = vec![mb];
+            doc.items.push(ProjectItem::Composition(Composition {
+                id: comp_id,
+                name: "Scene".into(),
+                width: 320,
+                height: 240,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(2, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers: vec![adjust, clip_layer],
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            }));
+            let store = DocumentStore::new(doc);
+            let doc = store.snapshot();
+            let (rgba, _, _) = r
+                .render_rgba(&doc, comp_id, 10, 1.0)
+                .unwrap_or_else(|e| panic!("{name}: render failed: {e}"));
+            assert!(
+                rgba.chunks_exact(4)
+                    .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8),
+                "{name}: a retimed layer under Force on all layers rendered black"
+            );
+        }
+    }
+
     /// The footage rows of the K-031 matrix: plain footage, Retime blend and
     /// Retime flow — the rows where the two walks run genuinely different
     /// decode machinery, so they are the ones the swap most needs proven.
