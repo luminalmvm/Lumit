@@ -174,6 +174,10 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   - **Tap tempo**: tap a key in time with playback to seed the BPM estimate.
 - Beat markers are ordinary markers with a `beat` label: deletable, draggable, and stored
   in the project file. Re-running detection offers replace or merge.
+- **While it runs**: detection is seconds-long on a long composition, so the shell puts up
+  the same card it shows while a project opens, reading "Detecting beats", and takes it
+  down when the markers land — or when the analysis finds nothing, which a composition
+  with no audio is entitled to.
 - **Snapping**: when snap is enabled, edit points, layer in/out points, keyframes, the
   work area, and marker-trigger effects ([08-EFFECTS.md](08-EFFECTS.md) §1.4) snap to beat
   markers during drags, with the standard snap affordance from

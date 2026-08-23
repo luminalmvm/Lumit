@@ -276,6 +276,15 @@ class LumitState extends ChangeNotifier {
   /// [previewReady] is what ends it.
   final ValueNotifier<bool> opening = ValueNotifier(false);
 
+  /// The line on the card shown over the shell while some other seconds-long
+  /// job runs, or null when none is. Beat detection is the first of them.
+  ///
+  /// Separate from [opening] because the two say different things: [opening] is
+  /// a document being swapped underneath the panels, this is the document
+  /// standing still while something works on it. Set it through `showBusyWhile`
+  /// (shell/splash.dart) so the card cannot be left up by a job that failed.
+  final ValueNotifier<String?> busy = ValueNotifier(null);
+
   /// The Viewer has something to show, or there is nothing for it to show —
   /// either way the shell can come out from behind its progress bar.
   ///
@@ -2300,8 +2309,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (!mounted) return false;
     // The overlay swallows the pointer; keys are routed globally rather than
     // through the tree, so they have to be swallowed here. A command aimed at
-    // the document being replaced has nothing left to run against.
-    if (context.read<LumitState>().opening.value) return true;
+    // the document being replaced has nothing left to run against, and one
+    // aimed at a document being worked on would race the job doing it.
+    final app = context.read<LumitState>();
+    if (app.opening.value || app.busy.value != null) return true;
     return _onKey(
             context.read<LumitState>(), context.read<LumitUiState>(), event) ==
         KeyEventResult.handled;
@@ -2325,6 +2336,10 @@ class _LumitAppViewState extends State<LumitAppView> {
           builder: (context, opening, _) =>
               opening ? const OpeningOverlay() : const SizedBox.shrink(),
         ),
+        // The same card for a job working on the document that is already open
+        // — beat detection. The two never overlap: nothing can be started
+        // against a document that is still being read.
+        BusyOverlay(busy: state.busy),
       ]),
     );
   }

@@ -7,6 +7,7 @@
 // Driven by one AnimationController rather than timers, so tests can
 // pumpAndSettle through it and nothing is left pending.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
@@ -31,8 +32,15 @@ const List<String> bootLines = [
 ///
 /// The bar is indeterminate: reading a `.lum` reports no progress, so it sweeps
 /// rather than claiming to know how far along it is.
+///
+/// [label] names what is being waited for. It defaults to opening a project,
+/// which is what the card was built for; a job that takes the same seconds and
+/// wants the same "hands off, this is working" reads its own line instead — see
+/// [BusyOverlay].
 class OpeningOverlay extends StatefulWidget {
-  const OpeningOverlay({super.key});
+  final String? label;
+
+  const OpeningOverlay({super.key, this.label});
 
   @override
   State<OpeningOverlay> createState() => _OpeningOverlayState();
@@ -73,7 +81,8 @@ class _OpeningOverlayState extends State<OpeningOverlay>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(l10n.openingProject, style: t.bodyPrimary),
+                Text(widget.label ?? l10n.openingProject,
+                    style: t.bodyPrimary),
                 const SizedBox(height: 12),
                 AnimatedBuilder(
                   animation: _sweep,
@@ -87,6 +96,41 @@ class _OpeningOverlayState extends State<OpeningOverlay>
       ),
     );
   }
+}
+
+/// The opening card over the shell for any other job that takes seconds.
+///
+/// A job the interface must not be used during — beat detection is the first —
+/// puts its line into [busy] while it runs and clears it after, and this shows
+/// the same card the rest of the time it shows nothing. The bar sweeps: the
+/// engine reports no fraction for these jobs, and a bar that invented one would
+/// be lying about work it cannot see.
+class BusyOverlay extends StatelessWidget {
+  final ValueListenable<String?> busy;
+
+  const BusyOverlay({super.key, required this.busy});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String?>(
+        valueListenable: busy,
+        builder: (context, label, _) => label == null
+            ? const SizedBox.shrink()
+            : OpeningOverlay(label: label),
+      );
+}
+
+/// Run [job] with the card up, labelled [label], and take it down when the job
+/// settles either way.
+///
+/// The card comes down on a failure as much as on a success: a job that ends in
+/// nothing — no audio to find beats in — must not leave the shell covered.
+Future<void> showBusyWhile(
+  ValueNotifier<String?> busy,
+  String label,
+  Future<void> job,
+) {
+  busy.value = label;
+  return job.whenComplete(() => busy.value = null);
 }
 
 class SplashOverlay extends StatefulWidget {

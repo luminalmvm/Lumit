@@ -5442,6 +5442,20 @@ those answers are in flight, the rest of them come back as errors. They are
 caught and dropped rather than reported: there is no missing media in a document
 that is gone, and the panel is about to be rebuilt from the new one anyway.
 
+**The same card covers other slow jobs.** Beat detection reads every audible
+thing in a composition and can spend seconds doing it. Without a sign that
+anything is happening, the command reads as one that did not land, so the shell
+puts the opening card up for the duration with its own line — "Detecting beats"
+— and takes it down when the markers arrive. The plumbing is one line of state:
+`LumitState.busy` holds the words to show, or nothing when nothing is running,
+and `BusyOverlay` (`shell/splash.dart`) is what watches it. Jobs set it through
+`showBusyWhile`, which puts the words up and clears them when the job settles
+**either way** — a comp with no audio finds no beats, and that is a finish, not
+a reason to leave the interface covered.
+
+The bar sweeps rather than filling: the analysis reports no fraction of itself,
+and a bar that invented one would be describing work nobody is measuring.
+
 ### The bridge
 
 `crates/lumit-bridge` builds to one shared library the app loads at startup. It

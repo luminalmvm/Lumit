@@ -697,6 +697,10 @@
   "@deleteStroke": {
     "description": "Context-menu item: remove one brush stroke."
   },
+  "detectingBeats": "Detecting beats",
+  "@detectingBeats": {
+    "description": "The line on the card covering the shell while beat detection runs."
+  },
   "disarmRazor": "Disarm razor",
   "@disarmRazor": {
     "description": "Menu item: put the blade down."

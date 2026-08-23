@@ -37,6 +37,7 @@ import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../shell/splash.dart';
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
@@ -5216,10 +5217,16 @@ class _Toolbar extends StatelessWidget {
       case 'beats':
         // Seconds-long on a long comp, so it runs off-thread and the markers
         // appear when it finishes; a comp with no audio, or a machine with no
-        // pipeline, says so by doing nothing rather than by an alarm.
-        comp
-            .detectBeats(sensitivityPercent: 50)
-            .then((_) => onChanged(), onError: (_) {});
+        // pipeline, says so by doing nothing rather than by an alarm. The card
+        // is up for those seconds so the silence is not mistaken for a command
+        // that did not land, and it comes down either way.
+        showBusyWhile(
+          context.read<LumitState>().busy,
+          l10n.detectingBeats,
+          comp
+              .detectBeats(sensitivityPercent: 50)
+              .then<void>((_) => onChanged(), onError: (_) {}),
+        );
       case _:
         return;
     }
