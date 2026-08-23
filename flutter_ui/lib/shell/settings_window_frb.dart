@@ -757,7 +757,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _flag(
             t,
             'settings-multiwave',
-            l10n.settingsWaveformsShowTheFrequencyStack,
+            l10n.settingsWaveformFrequencyStack,
             l10n.settingsHelpWaveformsShowTheFrequencyStack,
             value: settings.multiwaveWaveforms, set: (on) {
           settings.multiwaveWaveforms = on;
@@ -766,7 +766,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _flag(
             t,
             'settings-waveform-from-bottom',
-            l10n.settingsWaveformsRiseFromTheBottom,
+            l10n.settingsWaveformsFromBottom,
             l10n.settingsHelpWaveformsRiseFromTheBottom,
             value: settings.waveformsFromBottom, set: (on) {
           settings.waveformsFromBottom = on;

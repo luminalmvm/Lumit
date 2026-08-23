@@ -4394,11 +4394,11 @@
   },
   "settingsHelpWaveformsRiseFromTheBottom": "A waveform stands on the floor of its row instead of being centred about silence, each column reaching up by how far the sound swung either way. Half of a centred wave is a mirror of the other half, so this spends the whole row on the half that says something — useful in a short row. Applies to the single wave and the frequency stack alike.",
   "@settingsHelpWaveformsRiseFromTheBottom": {
-    "description": "Settings window: the sentence under the settingsWaveformsRiseFromTheBottom setting."
+    "description": "Settings window: the sentence under the settingsWaveformsFromBottom setting."
   },
   "settingsHelpWaveformsShowTheFrequencyStack": "A layer's waveform draws as three stacked waves — bass, middle and treble — instead of one. A loud passage is a solid block on a single wave whichever instrument is playing; the stack shows the kick apart from the hats, so a cut can be aimed at either. Turn it off for one plain wave.",
   "@settingsHelpWaveformsShowTheFrequencyStack": {
-    "description": "Settings window: the sentence under the settingsWaveformsShowTheFrequencyStack setting."
+    "description": "Settings window: the sentence under the settingsWaveformFrequencyStack setting."
   },
   "settingsHelpWhenTheMachineCannotKeep": "Adaptive keeps time and softens the picture; every frame keeps the picture and takes the time it needs.",
   "@settingsHelpWhenTheMachineCannotKeep": {
@@ -4560,12 +4560,12 @@
   "@settingsVideoArrivesAsASequence": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsWaveformsRiseFromTheBottom": "Waveforms rise from the bottom",
-  "@settingsWaveformsRiseFromTheBottom": {
+  "settingsWaveformFrequencyStack": "Waveform frequency stack",
+  "@settingsWaveformFrequencyStack": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsWaveformsShowTheFrequencyStack": "Waveforms show the frequency stack",
-  "@settingsWaveformsShowTheFrequencyStack": {
+  "settingsWaveformsFromBottom": "Waveforms from the bottom",
+  "@settingsWaveformsFromBottom": {
     "description": "Settings window: the name of one setting."
   },
   "settingsWhenTheMachineCannotKeep": "When the machine cannot keep up",
