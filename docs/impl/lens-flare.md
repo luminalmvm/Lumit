@@ -608,7 +608,15 @@ the picked lens; an element with no row keeps the file's own coating.
 
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)
-with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). The gain ceiling is
+with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). **The probe is shot
+at the lens's NATIVE stop** (K-426), never the working one: the gain is a property of the
+glass — how much light this prescription's ghosts put on the sensor when its iris is
+open — and reading the working f-number instead made it roughly `(f/native)²`, an
+exposure that cancelled the stop-down exactly. A lens rendered the same flare brightness
+at f/16 as wide open, which no lens does. **Stopping down now dims the flare**, by the
+square of `stop_scale`, because the iris passes less light and nothing puts it back;
+a user who wants the old brightness at a small aperture raises **Intensity**, which is
+that knob. The gain ceiling is
 **64** (K-261): a wash-only lens has almost no probe energy, and an unbounded loop would
 amplify the residue into a lit-up artefact field — capped, such a lens renders honestly
 dim, which is what that glass does. The bake key is §5d.
@@ -637,7 +645,7 @@ all exact, cut it to that figure:
 What remains is the trace itself, near the arithmetic floor for scalar code — which is why
 the fix was never a faster bake but a bake that does not block.
 
-### 5d. The bake key, and what stays per-frame (K-425)
+### 5d. The bake key, and what stays per-frame (K-425, amended K-426)
 
 **The bake key holds the lens and the iris, and nothing else.** `bake_key_with` hashes the
 library pick, the `lens_file` override's **content** hash, the per-element coatings
@@ -661,15 +669,27 @@ about ten bakes and the cache holds them.
 Why it is safe: **nothing the frame computes is snapped.** `fstop_scale`, the iris mask the
 trace weights every pupil corner by, `effective_roundness`'s wide-open blend and
 `ghost_fresnel_number` all read the raw dial, so the ghosts shrink, turn and re-fringe
-continuously. Only two things come out of the bake with an iris in them — the starburst
-sprite and the auto-exposure gain — and those step, by about 1.7% a step.
+continuously. **Exactly one thing comes out of the bake with an iris in it — the starburst
+sprite** — and that steps, by about 1.7% a step.
+
+**What the working f-number is still doing in the key** (K-426 asked, since the exposure
+gain no longer reads it): one thing, the starburst. `bake_aperture_field` takes
+`effective_roundness(p.roundness, p.fstop, native_fstop)`, so the K-260 wide-open blend —
+a real iris's blades retracting behind the circular bore as it opens — decides how round
+the diffracting hole is, and the sprite's spikes with it. That blend is live for any
+working stop under `3 × native`, which is most of the dial's useful range, so the f-number
+stays a bake input and stays snapped. Nothing else in `bake_with` reads it: the pair
+ranking, the spread probes and the reflectance table are the prescription's, and the
+exposure probe is shot at `native_fstop`. Hence the exposure no longer steps at all — the
+gain is one number per lens, whatever the aperture is doing.
 
 **Why the aperture is not simply moved out of the bake**, which is the design that would
 need no steps at all: it cannot be. The sprite is the aperture's Fourier amplitude
-(§5, eight field slices, ~0.12 s) and the gain is a thumbnail render of the whole flare
-(~0.5 s). Both are precomputations of the iris by their nature, not shaping that could be
-applied per frame; a per-frame FFT would spend the effect's entire budget on the starburst
-alone. The snapped key is the second-best answer and is recorded as such.
+(§5, eight field slices, ~0.12 s), a precomputation of the iris by its nature and not
+shaping that could be applied per frame; a per-frame FFT would spend the effect's entire
+budget on the starburst alone. The snapped key is the second-best answer and is recorded
+as such. (The exposure probe is the other ~0.5 s of the bake and is just as unmovable,
+but it is no longer a *reason for the snap*: it does not read the working stop.)
 
 **A provisional frame is named, and then checked** (K-425, superseding K-350's rule). A
 frame that fell back to the previous lens is still a frame nobody may bank — the tiers are
@@ -1022,6 +1042,9 @@ the other cannot silently clamp to Divide.
    count is 0 for an exact frame, 1 for the frame that stood the previous lens in, and
    still 1 once the bake has landed
    (`lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one`).
+7d. **The exposure is the lens's, not the iris's (K-426)**: two working f-stops on one
+   lens bake bit-identically the same `energy_gain`, and the stopped-down frame renders
+   measurably dimmer for it (`lens_flare_auto_exposure_reads_the_native_stop`).
 8. **Neutrals and blend (K-289)**: Normal shows the element alone on opaque black; Add
    reproduces the historical `in + flare` with saturating alpha; every option resolves
    and an index past the menu clamps; the blend table matches its formulas by hand; the

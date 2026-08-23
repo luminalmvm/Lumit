@@ -11372,3 +11372,31 @@ halves of the cache's promise: two f-stops inside a step key the same *and* bake
 bit-identically), and the substitution counts added to
 `lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one` (lumit-gpu).
 No new user-facing strings. This number was allocated on the lane3 branch.
+
+**K-426 · DECIDED · The flare's auto-exposure reads the native stop, so stopping down dims
+it honestly.** Amends K-425 (2), which recorded the exposure gain stepping with the snapped
+working f-number as a deliberate trade, and settles the residue that entry left: on a slow
+f-stop ramp the whole flare's brightness stepped about 1.7% at every twentieth-of-a-stop
+boundary, because the auto-exposure probe (K-258) rendered its thumbnail at the working
+aperture and its gain therefore tracked roughly `(f/native)²`.
+
+The fix is the physical one rather than a finer step. **The probe is shot at the lens's
+native (maximum-aperture) f-number.** The gain is a property of the glass — how much light
+this prescription's ghosts put on the sensor with the iris open — and measuring it through
+a closed iris made it cancel the stop-down exactly: a lens rendered the same flare
+brightness at f/16 as wide open, which no lens does. Stopping down now dims the flare by
+the square of `fstop_scale`, as the light the iris passes dims; **Intensity** is the user's
+knob for putting it back, and no shipped parameter moves. The default frame is
+correspondingly dimmer at the default f/2.8 on a fast prime, which is the visible change.
+
+Two consequences worth stating. The exposure no longer steps at all under an animated
+aperture — one gain per lens, whatever the iris is doing. And the working f-number stays a
+bake-key input, but for **one** reason only: `effective_roundness`'s K-260 wide-open blend
+decides how round the diffracting hole is, so it shapes the starburst sprite. The K-425
+snap therefore stays exactly as it is (the sprite is an FFT and cannot move per-frame),
+now documented as covering the sprite alone — impl/lens-flare.md §5c, §5d.
+
+Regression test: `lens_flare_auto_exposure_reads_the_native_stop` (lumit-core fx/tests.rs)
+— two working f-stops on one lens bake bit-identically the same gain, and the stopped-down
+frame renders measurably dimmer. No new user-facing strings. This number was allocated on
+the lane3 branch.

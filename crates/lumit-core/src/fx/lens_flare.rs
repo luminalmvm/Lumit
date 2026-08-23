@@ -3231,7 +3231,16 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         light_count: 0,
         intensity: 1.0,
         lens: p.lens,
-        fstop: p.fstop,
+        // The probe is shot at the lens's NATIVE stop, never the working one
+        // (K-426): the gain is a property of the glass, not of how far the
+        // iris is closed. Reading the working stop made the gain roughly
+        // `(f/native)²` and it cancelled the stop-down — a lens rendered the
+        // same brightness at f/16 as wide open, which no lens does — and it
+        // put the working f-number under the exposure half of the bake, so a
+        // ramped aperture stepped the whole flare's brightness at every
+        // snapped step. Stopped down, the flare now dims as the light the
+        // iris passes dims; Intensity is the dial that puts it back.
+        fstop: native_fstop,
         focus_m: 100.0,
         blades: p.blades,
         aperture_rotation_deg: p.aperture_rotation_deg,

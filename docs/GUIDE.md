@@ -5476,9 +5476,29 @@ holds all ten.
 
 Nothing you can see moving is rounded. The ghosts read the exact f-stop you set — they
 shrink and turn smoothly as the iris closes, frame by frame. What steps, by about 1.7% at a
-time, is the starburst's shape and the flare's overall brightness. That is a deliberate
-trade, and it is the honest one: without it an animated aperture is not a lens that caches
-badly, it is a lens that cannot be cached at all.
+time, is the starburst's shape. That is a deliberate trade, and it is the honest one:
+without it an animated aperture is not a lens that caches badly, it is a lens that cannot
+be cached at all.
+
+### Stopping down dims the flare (K-426)
+
+The flare sets its own overall brightness. Every lens in the library throws a different
+amount of light around inside itself, by factors of hundreds, so when the effect finishes
+working out a lens it renders one tiny test picture and works out how much to multiply by
+to bring that lens into a sensible range. That multiplier is the flare's exposure.
+
+It used to be measured with the iris wherever you had left it — and that quietly undid the
+aperture. Close the iris and the test picture came out dark, so the multiplier went up by
+exactly as much as the iris had taken away, and the flare on screen was the same brightness
+at f/16 as it was wide open. A real lens does not behave like that: a smaller hole passes
+less light and its flare fades with it, which is why photographers stop down to kill one.
+
+The test picture is now always shot with the iris **open** — at the lens's own widest
+f-number — so the multiplier describes the glass and nothing else. Stopping down dims the
+flare, as it should, and the amount is honest: the light falls off with the square of how
+far you closed. If you want a small aperture *and* a bright flare, that is what
+**Intensity** is for. As a side effect the flare's brightness no longer steps at all when
+you animate the f-stop, since the exposure has stopped depending on it.
 
 **And one related hole, closed at the same time.** You can point the flare at your own
 `.lens` file instead of a bundled lens. The bake noticed when you edited that file, because

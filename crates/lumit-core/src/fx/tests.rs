@@ -5412,6 +5412,51 @@ fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
     );
 }
 
+/// **The auto-exposure gain belongs to the lens, not to the iris** (K-426):
+/// the probe is shot at the prescription's native stop, so two working
+/// f-stops on one lens close the loop to bit-identically the same gain — and
+/// the frame that is stopped down is honestly dimmer for it, as a real lens
+/// is.
+///
+/// Reading the working stop made the gain roughly `(f/native)²`, which
+/// cancelled the stop-down entirely (the same brightness at f/16 as wide
+/// open) and put the exposure under the snapped half of the bake, so a slow
+/// aperture ramp stepped the whole flare's brightness at every step boundary.
+#[test]
+fn lens_flare_auto_exposure_reads_the_native_stop() {
+    use crate::fx::lens_flare::*;
+    let seed = default_flare_params();
+    let wide = LensFlareParams { fstop: 2.0, ..seed };
+    let stopped = LensFlareParams {
+        fstop: 11.0,
+        ..seed
+    };
+    let (bw, bs) = (bake(&wide), bake(&stopped));
+    assert!(
+        bw.native_fstop < wide.fstop,
+        "both stops must be below the lens's maximum aperture ({}) for this \
+         to measure anything",
+        bw.native_fstop
+    );
+    assert_eq!(
+        bw.energy_gain, bs.energy_gain,
+        "the exposure gain must not move with the working aperture"
+    );
+
+    // And the honest half: the light the iris passes falls with the square of
+    // the stop scale, and nothing puts it back any more.
+    let (w, h) = (96u32, 54u32);
+    let energy = |p: &LensFlareParams, b: &FlareBaked| -> f32 {
+        cpu_flare(p, b, w, h, &manual_light(p, w, h)).iter().sum()
+    };
+    let (open, shut) = (energy(&wide, &bw), energy(&stopped, &bs));
+    assert!(open > 0.0, "the reference must render something to measure");
+    assert!(
+        shut < open * 0.9,
+        "stopping down must dim the flare: {open} wide open, {shut} stopped down"
+    );
+}
+
 /// One splat through the full K-380 deposit — pyramid, then resolve — into a
 /// flat `w × h × 3` buffer, which is the shape every kernel test below reads.
 /// Splats small enough for level 0 land bit-exactly as they always did (the
