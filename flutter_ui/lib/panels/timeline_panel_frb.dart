@@ -206,12 +206,25 @@ class LayerRow {
   /// height on the two sides.
   final double? sequenceExtra;
 
+  /// Whether this layer's source carries sound, and whether it has a picture
+  /// to show (K-435). What the switches column reads to draw only the switches
+  /// this layer can actually use: no audible switch on a solid that has never
+  /// made a sound, no visibility switch on a music track that has never shown
+  /// anything.
+  ///
+  /// Carried here, decided once by the panel, because answering either means
+  /// probing the media — the cost K-184 exists to keep out of a row's build.
+  final bool hasAudio;
+  final bool hasPicture;
+
   const LayerRow({
     required this.entry,
     required this.id,
     required this.open,
     required this.foldRows,
     required this.sequenceExtra,
+    this.hasAudio = false,
+    this.hasPicture = true,
   });
 
   /// This block's height: its own row, the rows it draws, and its open view.
@@ -226,6 +239,7 @@ List<LayerRow> layerRows({
   required List<BridgeLayerEntry> layers,
   required Set<String> open,
   required Map<String, bool> hasAudio,
+  Map<String, bool> hasPicture = const {},
   Map<String, double> sequenceExtra = const {},
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
@@ -244,6 +258,11 @@ List<LayerRow> layerRows({
           flowParams: flowParams[id],
           volumeDb: volumeDb[id]),
       sequenceExtra: sequenceExtra[id],
+      hasAudio: hasAudio[id] ?? false,
+      // Until the probe has answered, a layer is assumed to have a picture:
+      // the visibility switch is the one every layer but a music track uses,
+      // so appearing and then going is far less startling than the reverse.
+      hasPicture: hasPicture[id] ?? true,
     ));
   }
   return out;
@@ -404,6 +423,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// yet", and a layer with no entry simply shows no Audio group until the
   /// answer arrives.
   final Map<String, bool> _hasAudio = {};
+
+  /// Which layers have a picture to show, by id (K-435) — the mirror of
+  /// [_hasAudio], cached for the same reason and filled in the same pass.
+  /// A layer with no entry is assumed to have one: the visibility switch is
+  /// the one nearly every layer uses.
+  final Map<String, bool> _hasPicture = {};
 
   /// Each layer's waveform peaks, by id — the stretch of its source the lanes
   /// are currently showing, summarised to one bucket per pixel column (K-280).
@@ -754,13 +779,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         ui.setSelection([layer]);
       });
 
-  /// Fill in any layer's has-audio answer we do not have, off the build.
+  /// Fill in any layer's has-audio and has-picture answers we do not have, off
+  /// the build. Both come from probing the source, so both are asked once per
+  /// layer and remembered (K-184, K-435).
   void _refreshAudio(List<BridgeLayerEntry> layers) {
     for (final entry in layers) {
       final id = entry.layer.internallayerId.toString();
       if (_hasAudio.containsKey(id)) continue;
       // Claim the slot first, so a rebuild mid-probe does not probe twice.
       _hasAudio[id] = false;
+      // Asked here, beside the audio question, and never from a build: it is
+      // synchronous across the seam, so a build asking it would probe on the
+      // UI thread. The answer decides whether the row draws a visibility
+      // switch at all, so it is wanted for every layer, not only footage.
+      _hasPicture[id] = entry.layer.hasPicture();
       entry.layer.hasAudio().then((has) {
         if (!mounted || _hasAudio[id] == has) return;
         setState(() {
@@ -2169,6 +2201,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         layers: layers,
         open: _open,
         hasAudio: _hasAudio,
+        hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
         flowParams: _flowParams,
         volumeDb: _volumeDb);
@@ -5618,6 +5651,8 @@ class _Outline extends StatelessWidget {
                   highlighted: highlighted == rows[i].id ||
                       selectedProperties.any((p) => isUnderPath(rows[i].id, p)),
                   open: rows[i].open,
+                  hasAudio: rows[i].hasAudio,
+                  hasPicture: rows[i].hasPicture,
                   onToggleOpen: () => onToggle(rows[i].id),
                   onSelect: () => onSelect(rows[i].entry.layer),
                   onChanged: onChanged,
@@ -5695,6 +5730,13 @@ class _OutlineRow extends StatefulWidget {
   /// selection, so the two states read apart at a glance.
   final bool highlighted;
   final bool open;
+
+  /// What this layer can do (K-435), so the switches column offers only that:
+  /// no audible switch where there is no sound, no visibility switch where
+  /// there is no picture. Passed down from the panel — probing for either
+  /// answer must never happen in a row's build.
+  final bool hasAudio;
+  final bool hasPicture;
   final VoidCallback onToggleOpen;
   final VoidCallback onSelect;
   final VoidCallback onChanged;
@@ -5727,6 +5769,8 @@ class _OutlineRow extends StatefulWidget {
     required this.selected,
     required this.highlighted,
     required this.open,
+    this.hasAudio = false,
+    this.hasPicture = true,
     required this.onToggleOpen,
     required this.onSelect,
     required this.onChanged,
@@ -5935,20 +5979,34 @@ class _OutlineRowState extends State<_OutlineRow> {
   /// Group 1: visibility · audio · solo · lock · shy. The first two swap
   /// their glyph when off — a closed eye, a muted speaker — rather than only
   /// dimming, so the off state reads at a glance.
+  ///
+  /// **Only what the layer can do** (K-435). The eye is drawn for a layer with
+  /// a picture, the speaker for a layer with sound — so an Audio layer has no
+  /// eye, and a solid, a title, a shape or an image-only clip has no speaker.
+  /// A control that does nothing when clicked is worse than no control: you
+  /// have to click it to find out. Each keeps its cell's width either way, so
+  /// the switches stay in their columns down the stack and the ones a row does
+  /// have sit where the eye reads for them.
   Widget _switchCells(BuildContext context, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _switch(context, id, 'visible', LumitIcon.eye, switches.visible,
-            BridgeLayerSwitch.visible,
-            offIcon: LumitIcon.eyeClosed,
-            tip: switches.visible ? l10n.switchVisible : l10n.switchHidden),
-        _switch(context, id, 'audible', LumitIcon.audio, switches.audible,
-            BridgeLayerSwitch.audible,
-            offIcon: LumitIcon.mute,
-            tip: switches.audible ? l10n.switchAudible : l10n.switchMuted),
+        if (widget.hasPicture)
+          _switch(context, id, 'visible', LumitIcon.eye, switches.visible,
+              BridgeLayerSwitch.visible,
+              offIcon: LumitIcon.eyeClosed,
+              tip: switches.visible ? l10n.switchVisible : l10n.switchHidden)
+        else
+          const SizedBox(width: switchCellWidth, height: _rowHeight),
+        if (widget.hasAudio)
+          _switch(context, id, 'audible', LumitIcon.audio, switches.audible,
+              BridgeLayerSwitch.audible,
+              offIcon: LumitIcon.mute,
+              tip: switches.audible ? l10n.switchAudible : l10n.switchMuted)
+        else
+          const SizedBox(width: switchCellWidth, height: _rowHeight),
         // A circle, hollow until soloed.
         _switch(context, id, 'solo', LumitIcon.circleFilled, switches.solo,
             BridgeLayerSwitch.solo,

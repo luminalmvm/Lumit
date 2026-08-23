@@ -11855,6 +11855,7 @@ can migrate it: deciding it means probing the media, and the project loader has 
 Regression tests: `an_audio_layers_switches_never_change_the_picture` and
 `soloing_an_audio_layer_does_not_blank_the_picture` (lumit-eval),
 `audio_only_media_is_omitted_not_slated` (lumit-render `headless.rs`),
-`the_sound_of_a_clip_can_be_its_own_layer` (lumit-bridge `api/tests.rs`), and
-`an_audio_row_has_no_visibility_switch_and_an_image_row_has_no_audio_switch`
-(`timeline_switches_frb_test.dart`). New user-facing string: `addAudioOnly`.
+`the_sound_of_a_clip_can_be_its_own_layer` (lumit-bridge `api/tests.rs`), "an audio row has
+no visibility switch and an image row has no audio switch"
+(`timeline_panel_frb_test.dart`) and "Add audio only puts a clip's sound in the open comp"
+(`project_panel_frb_test.dart`). New user-facing string: `addAudioOnly`.

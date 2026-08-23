@@ -3536,9 +3536,11 @@ void main() {
 
       double dx(String key) =>
           tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
+      // No `tl-audible` here: a solid has never made a sound, so since K-435 it
+      // is offered no speaker. Its cell keeps its width, which is why the
+      // switches after it still line up with the header's columns.
       final order = [
         'tl-visible-$id',
-        'tl-audible-$id',
         'tl-solo-$id',
         'tl-locked-$id',
         'tl-shy-$id',
@@ -3588,7 +3590,6 @@ void main() {
 
       for (final key in [
         'tl-visible-$id',
-        'tl-audible-$id',
         'tl-solo-$id',
         'tl-locked-$id',
         'tl-shy-$id',
@@ -4263,6 +4264,52 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(radius(), greaterThan(before),
           reason: 'the parameter drag reached the document');
+    });
+
+    /// **The switches column shows only what the layer can do (K-435).**
+    ///
+    /// A music track has never shown anything, so it is offered no eye; a solid
+    /// has never made a sound, so it is offered no speaker. Both halves are
+    /// asserted together, and each row is checked for the switch it *should*
+    /// still have — a bug that drew nothing at all would otherwise pass.
+    ///
+    /// The wav is placed through the ordinary route, so this also pins that a
+    /// file with no picture becomes an Audio layer on its own.
+    testWidgets(
+        'an audio row has no visibility switch and an image row has no audio switch',
+        (tester) async {
+      final p = withComp();
+      final silent = p.comp.addSolidLayer();
+      final music = p.state.project!.importFootage(path: _wavFile('row.wav'));
+      p.comp.addFootageLayer(footage: music, asSequence: false);
+      await mount(tester, p);
+
+      final audioLayer = p.comp.getLayers().first;
+      // The probe is a real trip into FFmpeg, so the answers arrive after a
+      // frame or two rather than during the first build.
+      await settleFrb(tester, minRounds: 8);
+
+      expect(audioLayer.getKind(), BridgeLayerKind.audio,
+          reason: 'a file with no picture is placed as an Audio layer');
+
+      final audioId = audioLayer.internallayerId;
+      expect(find.byKey(ValueKey<String>('tl-visible-$audioId')), findsNothing,
+          reason: 'an Audio layer has nothing to show, so it is offered no eye');
+      expect(find.byKey(ValueKey<String>('tl-audible-$audioId')), findsOneWidget,
+          reason: 'but it does have sound, so it keeps its speaker');
+
+      final solidId = silent.internallayerId;
+      expect(find.byKey(ValueKey<String>('tl-audible-$solidId')), findsNothing,
+          reason: 'a solid can never be heard, so it is offered no speaker');
+      expect(find.byKey(ValueKey<String>('tl-visible-$solidId')), findsOneWidget,
+          reason: 'but it does draw, so it keeps its eye');
+
+      // The cells still line up: the switches after the missing one sit in the
+      // same column on both rows, because a hidden switch keeps its width.
+      double dx(String key) =>
+          tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
+      expect(dx('tl-solo-$audioId'), dx('tl-solo-$solidId'));
+      expect(dx('tl-shy-$audioId'), dx('tl-shy-$solidId'));
     });
 
     /// The Audio group is offered only where there is sound to set. Both halves

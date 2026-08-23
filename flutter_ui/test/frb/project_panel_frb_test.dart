@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/footage.dart'
     show FootageReference, LumitMediaStatus;
 import 'package:lumit_flutter/src/rust/api/project_item.dart'
     show ItemReference_Composition, ItemReference_Footage;
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
@@ -261,6 +262,57 @@ void main() {
       expect(rowText('Shots'), findsOneWidget);
       expect(find.text('Compositions'), findsNothing,
           reason: 'the rename reached the document, not just the field');
+    });
+
+    /// **Add audio only (K-435):** the sound of a clip, as its own layer in the
+    /// open composition. Offered only where there is a composition to put it
+    /// in — a layer placed nowhere is not an action.
+    testWidgets('Add audio only puts a clip\'s sound in the open comp',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      Future<void> openMenu() async {
+        await tester.tapAt(
+          tester.getCenter(rowText('shot.mov')),
+          buttons: kSecondaryButton,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      // No comp open: the entry is not there to be clicked.
+      await openMenu();
+      expect(find.byKey(const ValueKey('project-menu-add-audio-only')),
+          findsNothing,
+          reason: 'nowhere to put a layer, so nothing is offered');
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      await tester.pumpAndSettle();
+
+      await openMenu();
+      await tester
+          .tap(find.byKey(const ValueKey('project-menu-add-audio-only')));
+      await tester.pumpAndSettle();
+
+      final layers = comp.getLayers();
+      expect(layers, hasLength(1));
+      expect(layers.first.getKind(), BridgeLayerKind.audio,
+          reason: 'the sound arrived as an Audio layer, not a footage layer');
+      expect(layers.first.hasPicture(), isFalse);
+
+      // One op: one undo takes it away again.
+      p.state.project!.undo();
+      expect(comp.getLayers(), isEmpty);
     });
 
     testWidgets('a blank rename is refused and the old name survives',
