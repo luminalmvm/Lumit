@@ -587,6 +587,78 @@ void main() {
       );
     });
 
+    /// **A Viewer that has grown asks for the frame again** (K-420).
+    ///
+    /// On Auto the scale a frame is rendered at is whatever the panel could
+    /// show when it laid itself out, and the first layout of a session happens
+    /// at whatever size the window opened at. Nothing re-requested the frame
+    /// when the panel then grew — growing a panel is neither an edit nor a move
+    /// of the playhead — so the first picture stayed at the coarser scale until
+    /// something else happened to move.
+    ///
+    /// This lives among the budgets because it is one: the fix asks for a frame
+    /// from a layout, and a layout runs constantly. The count is what says it
+    /// asks once for the change rather than once per frame.
+    testWidgets('a Viewer that grows asks for the frame again', (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addSolidLayer();
+      p.uiState.setSelectedComp(comp);
+
+      final width = ValueNotifier<double>(400);
+      addTearDown(width.dispose);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1200, 700),
+        child: ValueListenableBuilder<double>(
+          valueListenable: width,
+          builder: (context, w, _) => Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: w,
+              height: 700,
+              child: const ViewerPanelFrb(),
+            ),
+          ),
+        ),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      final narrow = p.uiState.viewerScale;
+
+      counter
+        ..reset()
+        ..counting = true;
+      width.value = 1100;
+      // Two frames: the layout that measures the wider panel, then the one the
+      // request it schedules is made on.
+      await tester.pump();
+      await tester.pump();
+      counter.counting = false;
+
+      expect(p.uiState.viewerScale, greaterThan(narrow),
+          reason: 'the wider panel can show more of the composition');
+      expect(
+        counter.calls['composition_reference_render_frame'] ?? 0,
+        greaterThan(0),
+        reason: 'the picture stayed at the scale the window opened at:\n'
+            '${counter.ranking()}',
+      );
+      // Once for the change, not once for each layout it caused.
+      expect(
+        counter.calls['composition_reference_render_frame'] ?? 0,
+        lessThanOrEqualTo(2),
+        reason: 'a layout asked for a frame every time it ran:\n'
+            '${counter.ranking()}',
+      );
+
+      await settleFrb(
+        tester,
+        until: () => p.uiState.previewProgress.idle,
+        maxRounds: 100,
+      );
+    });
+
     /// **Panning the picture must ask the engine nothing (K-230).**
     ///
     /// A pan moves where the picture is drawn and changes nothing else, but it

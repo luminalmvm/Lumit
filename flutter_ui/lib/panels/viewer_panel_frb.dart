@@ -670,7 +670,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       LumitUiState state, Rect fitted, BridgeCompSize size, double fit) {
     if (size.width == 0) return;
     _shownScale = fitted.width / size.width;
-    state.reportViewerScale(_shownScale > fit ? _shownScale : fit);
+    state.reportViewerScale(
+      _shownScale > fit ? _shownScale : fit,
+      // A zoom in flight lays out on every tick of it. The scale it passes
+      // through on the way is not one to ask the engine for a frame at
+      // (K-420); the one it lands on is.
+      settled: !_zoomMotion.isAnimating,
+    );
   }
 
   /// The magnification actually on screen, last time the picture was laid out.
@@ -1111,32 +1117,51 @@ class _Stage extends StatelessWidget {
             // whenever Show points is on and a solve exists, and taking the
             // pointer only while that layer is the selected one — a cloud that
             // always took clicks would make the whole shot unselectable.
-            if (_cloud() case final cloud?)
-              // Listened to rather than read: the playhead moving does not
-              // rebuild this panel by itself (it asks the engine for a frame,
-              // and the picture arriving is what redraws), and the cloud has to
-              // follow the frame it is drawn over.
-              Positioned.fill(
-                child: ValueListenableBuilder<int>(
-                  valueListenable: uiState.playheadFrame,
-                  builder: (context, frame, _) => ViewerTrackLayer(
-                    key: ValueKey<String>(
-                        'viewer-track-${cloud.layer.internallayerId}'),
-                    tracked: cloud.layer,
-                    selecting: cloud.selecting,
-                    fitted: fitted,
-                    compSize: Size(
-                      compSize.width.toDouble(),
-                      compSize.height.toDouble(),
-                    ),
-                    playheadFrame: frame,
-                    revision: uiState.model.heldRevision,
-                    accent: t.accent,
-                    mark: t.textPrimary,
-                    onChanged: onChanged,
-                  ),
+            //
+            // **Under a listener of its own** (K-420). Two things decide
+            // whether there is a cloud at all, and neither of them rebuilds
+            // this panel: switching the effect off, which is a change to the
+            // model, and an analysis landing, which is a change to nothing the
+            // document holds. Read outside a builder, the cloud stayed on the
+            // picture after the effect was disabled and stayed off it after a
+            // solve arrived, in both cases until the frame happened to change.
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: Listenable.merge(
+                  [uiState.model, uiState.solveLanded],
                 ),
+                builder: (context, _) {
+                  final cloud = _cloud();
+                  // An empty box takes no hit of its own, so the picture under
+                  // it stays clickable.
+                  if (cloud == null) return const SizedBox.shrink();
+                  // Listened to rather than read: the playhead moving does not
+                  // rebuild this panel by itself (it asks the engine for a
+                  // frame, and the picture arriving is what redraws), and the
+                  // cloud has to follow the frame it is drawn over.
+                  return ValueListenableBuilder<int>(
+                    valueListenable: uiState.playheadFrame,
+                    builder: (context, frame, _) => ViewerTrackLayer(
+                      key: ValueKey<String>(
+                          'viewer-track-${cloud.layer.internallayerId}'),
+                      tracked: cloud.layer,
+                      selecting: cloud.selecting,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      playheadFrame: frame,
+                      revision: uiState.model.heldRevision,
+                      generation: uiState.solveLanded.value,
+                      accent: t.accent,
+                      mark: t.textPrimary,
+                      onChanged: onChanged,
+                    ),
+                  );
+                },
               ),
+            ),
             // The region of interest (K-362): the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a

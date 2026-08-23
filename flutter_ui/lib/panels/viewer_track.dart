@@ -53,6 +53,12 @@ class ViewerTrackLayer extends StatefulWidget {
   final int playheadFrame;
   final BigInt? revision;
 
+  /// Bumped when an analysis lands a solve (K-420). A third thing to key the
+  /// read by, because a solve arriving changes what the engine would answer
+  /// while changing neither of the other two — the frame is where it was, and
+  /// a solve is not an edit, so the document's revision has not moved.
+  final int generation;
+
   final Color accent;
   final Color mark;
 
@@ -85,6 +91,7 @@ class ViewerTrackLayer extends StatefulWidget {
     required this.compSize,
     required this.playheadFrame,
     required this.revision,
+    this.generation = 0,
     required this.accent,
     required this.mark,
     required this.selecting,
@@ -107,6 +114,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   /// ask again.
   int? _askedFrame;
   BigInt? _askedRevision;
+  int? _askedGeneration;
 
   @override
   void initState() {
@@ -144,14 +152,17 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
       if (_points.isNotEmpty) setState(() => _points = const []);
       _askedFrame = null;
       _askedRevision = null;
+      _askedGeneration = null;
       return;
     }
     if (_askedFrame == widget.playheadFrame &&
-        _askedRevision == widget.revision) {
+        _askedRevision == widget.revision &&
+        _askedGeneration == widget.generation) {
       return;
     }
     _askedFrame = widget.playheadFrame;
     _askedRevision = widget.revision;
+    _askedGeneration = widget.generation;
     List<BridgeTrackPoint> next;
     try {
       next = (widget.fetch ?? _fromEngine)(tracked, widget.playheadFrame);

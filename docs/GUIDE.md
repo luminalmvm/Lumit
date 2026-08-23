@@ -5872,6 +5872,33 @@ can sit at Quarter while the title card in the next tab stays at Auto, and each
 remembers its own. It is remembered with the project but is not part of the
 work, so it makes no undo step.
 
+**Auto asks again when the panel changes size (K-420).** On Auto the number of
+pixels a frame is made at is decided when the Viewer measures itself, and the
+first measurement of a session happens at whatever size the window opened at.
+Nothing used to notice afterwards: making a panel bigger is not an edit and does
+not move the playhead, so the coarse first frame stayed on screen until
+something else happened to change it — which, paused, could be a long time.
+Lumit now compares the new measurement with the old one and asks for the frame
+again when they differ, rounded to whole percent because that is how finely the
+engine tells one frame's scale from another's. Two things are deliberately left
+out: a fixed tier (Full, Half, Third, Quarter), which is a choice the panel has
+no say in, and the middle of a zoom, which lays the picture out dozens of times
+on its way to where it is going — only the size it lands on is asked for.
+
+**The point cloud follows the switch and the solve (K-420).** When a shot has
+been analysed by the **Camera track** effect, Lumit knows where a few hundred
+features of the scene sit in space, and draws them over the picture as dots
+whenever that effect's **Show points** is on. Which dots to draw is worked out
+from two things: which frame is on screen, and where the document stands. That was enough
+for everything the *user* does to the document — but not for two moments that
+change what should be drawn without changing either. Switching the effect off is
+one: the dots stayed until the frame next changed. An analysis finishing is the
+other: a solve is the answer to minutes of work on the media file, not an edit,
+so the document is where it was and the frame is where it was, and the dots did
+not arrive. Both are now told. The Viewer watches the read model, so the switch
+takes effect at once; and Lumit keeps a small counter that a landing solve bumps,
+which the cloud treats as a third reason to ask the engine again.
+
 **The background swatch** sits next to the transparency grid button, and the
 two are opposite sides of one question — what is behind the picture. The grid
 is a way of *looking* (it changes nothing about the composition). The swatch

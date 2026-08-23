@@ -11296,3 +11296,24 @@ only while the card has room. Regression tests:
 `the_fill_order_is_forward_biased_and_complete` (playback.rs) and
 `the_fill_keeps_going_into_memory_once_the_card_is_full` (worker_thread.rs). This number
 was allocated on the lane3 branch.
+
+**K-420 · DECIDED · The Viewer asks again when it changes size, and the point cloud follows
+the effect and the solve.** Three frontend staleness bugs with one shape: something changed
+what should be on screen, and nothing told the thing that draws it. (1) On Auto the render
+scale is measured by the Viewer's layout, and `LumitUiState.reportViewerScale` only stored
+it — so the first frame of a session was made at the size the window opened at and stayed
+there, because growing a panel is neither an edit nor a move of the playhead. It now
+compares the new scale with the old at 1 % granularity (the engine's own key resolution) and
+schedules one `requestFrame` after the frame; a fixed tier is exempt, and the Viewer passes
+`settled: false` while its zoom animation runs, so a flight asks for the frame it lands on
+rather than one per tick. (2) The point cloud's presence was read outside any listener, so
+disabling the Camera track left the dots on the picture; the block now sits under a
+`ListenableBuilder` on the read model. (3) A landed solve changes what the engine would
+answer while moving neither the playhead nor the document's revision — the cloud's whole
+read memo — so the dots did not appear until the frame changed. A `solveLanded` counter on
+`LumitUiState`, bumped by the Camera track card on the Done transition beside a
+`requestFrame`, is the third key. Regression tests: `a Viewer that grows asks for the frame
+again` (bridge_call_budget_test.dart, where it also holds the budget: one request for the
+change, not one per layout), `disabling the effect removes the cloud, with no frame change`
+and `a landed solve is read without the playhead moving` (camera_track_frb_test.dart). No
+new user-facing strings. This number was allocated on the lane3 branch.
