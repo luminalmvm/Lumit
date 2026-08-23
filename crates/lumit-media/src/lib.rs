@@ -12,6 +12,7 @@ pub mod decode;
 pub mod encode;
 pub mod index;
 pub mod probe;
+pub mod sequence;
 pub mod slate;
 
 use std::path::Path;
@@ -21,6 +22,7 @@ pub use decode::{DecodedFrame, LumaFrame, VideoDecoder};
 pub use encode::Encoder;
 pub use index::{FrameIndex, IndexEntry};
 pub use probe::{AudioInfo, MediaProbe, VideoInfo};
+pub use sequence::{MediaSource, Run};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {

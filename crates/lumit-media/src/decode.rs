@@ -15,6 +15,7 @@
 //! never an error.
 
 use crate::index::FrameIndex;
+use crate::sequence::MediaSource;
 use crate::MediaError;
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avformat::AVFormatContextInput;
@@ -22,7 +23,6 @@ use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext;
 use rsmpeg::UnsafeDerefMut;
-use std::path::Path;
 
 /// A decoded frame as straight (non-premultiplied) RGBA8, sRGB-encoded.
 /// Linearisation happens on the GPU per docs/06-RENDER-PIPELINE.md; this CPU
@@ -122,19 +122,19 @@ fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
 }
 
 impl VideoDecoder {
-    pub fn open(path: &Path, index: FrameIndex) -> Result<Self, MediaError> {
-        Self::open_with(path, index, true)
+    pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
+        Self::open_with(src, index, true)
     }
 
     /// As [`Self::open`], with hardware decode refusable — the knob the
     /// decoder settings page will drive, and what the hw/sw agreement test
     /// pins its ground truth with.
     pub fn open_with(
-        path: &Path,
+        src: impl Into<MediaSource>,
         index: FrameIndex,
         allow_hardware: bool,
     ) -> Result<Self, MediaError> {
-        let input = crate::probe::open_input(path)?;
+        let input = crate::probe::open_input(&src.into())?;
         let (stream_index, par) = input
             .streams()
             .iter()
