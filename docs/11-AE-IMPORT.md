@@ -196,12 +196,16 @@ with full interpretation settings intact, listed in the import report; relinking
 the standard relink flow from [10-FILE-FORMAT.md](10-FILE-FORMAT.md). Import never blocks
 on missing media.
 
-**Today only the second step runs** (docs/TODO.md). There is no collected `footage/` to
-check, so a file is found where After Effects recorded it and nowhere else: the capture
-carries an absolute path, and an absolute path re-rooted against the folder the bundle or
-the `.aep` sits in is still itself. An import on the machine the project was made on
-therefore relinks everything; one carried to another machine imports every item offline,
-with a row apiece — which is the promised outcome, reached by fewer routes than this list.
+**Today the second and fourth steps run** (docs/TODO.md). There is no collected `footage/`
+to check, and the third step is a no-op by construction — the capture carries an absolute
+path, and an absolute path re-rooted against the folder the bundle or the `.aep` sits in is
+still itself — so an import on the machine the project was made on relinks everything from
+the recorded path alone. An import **carried to another machine** falls to the fourth step,
+which needs no user direction on import because the folder to search is known: the one the
+`.aep` was picked from, walked recursively and matched by file name
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2 step 3b). A project copied across with its media
+beside it therefore comes up linked; anything genuinely absent imports offline with a row
+apiece, and hash verification waits on the fingerprints a save has not written yet.
 
 ---
 

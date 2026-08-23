@@ -11918,3 +11918,38 @@ from the floor given both rows rises through both" and "with no height given, th
 inside its own box" (`waveform_test.dart` — the last is what keeps a Sequence clip's wave
 inside its clip box, which has no empty row to borrow), and "the waveform lane is drawn across
 both rows" (`timeline_panel_frb_test.dart`).
+
+## K-438 — Media is looked for by name beside the project, and a relink rewrites the longest prefix
+
+**DECIDED 2026-08-24.** Two additions to the relink resolver of
+[10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2, both of them the same observation from two ends:
+**a path that is wrong is still evidence.**
+
+**Step 3b — by file name, under the project's own folder.** After steps 1 to 3 have run,
+whatever is still lost is looked for by its file name anywhere below the project's folder.
+It is the weakest match, so it goes last and only over what nothing else found, and the tree
+is walked **once** for all the missing items rather than once each. What it answers is the
+case none of the other three can: an After Effects import on a second computer. Such a
+project carries the paths of the machine it was made on and has **no fingerprints at all**,
+because nothing has ever been saved — so steps 1 to 3 come back empty even when every clip
+is sitting in a subfolder beside the `.aep`. Where two files share a name the first in walk
+order answers for both; that ambiguity is real, and the fingerprint search above resolves it
+once the project has been saved once.
+
+**The sibling relink rewrites the longest prefix, not the parent folder.** `path_mapping`
+used to answer the *directory* the relinked file moved between, which relinks only the
+siblings that lived in that one folder. It now answers the longest rewrite the move supports:
+everything the old path and the new one share at the end did not move, and the prefix in
+front of it did. An edit's footage is forty-eight clips in forty-eight different subfolders
+under one root, and the root is what moves — under the old mapping, relinking one clip found
+none of the others, because none of them was in that folder.
+
+**Why not make either of these a search the user configures.** They both use a folder that is
+already known and already meaningful — the one the project or the `.aep` was picked from, and
+the one the user just pointed at in the relink dialogue. A preference would be a question
+asked in place of an answer that was already there. User-configured search roots stay what
+they are: step 3's, for the fingerprint search.
+
+Regression tests: "what nothing else found is looked for by name beside the project" and
+"path mapping relinks siblings under the same move" (`lumit-project`), and "relinking one
+clip rewrites the prefix for every other lost clip" (`lumit-bridge`).

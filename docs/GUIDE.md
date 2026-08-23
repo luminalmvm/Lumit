@@ -2676,17 +2676,30 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   relative path says? (This is why moving the whole project folder now just works.) If not,
   does an old save's absolute path still point somewhere real? If not, the fingerprint
   search combs the project's folder tree for a file with the same content — so footage that
-  was reorganised into a subfolder is found by what it *is*, not where it was. Anything
-  still missing is named in a notice and its reference kept intact.
+  was reorganised into a subfolder is found by what it *is*, not where it was. And for
+  anything still lost after all that, one last sweep looks for it **by file name** anywhere
+  under the project's folder. That last one is deliberately the weakest, which is why it goes
+  last, and it exists for a case none of the others can help with: a project imported from
+  After Effects on a different computer. Such a project carries the paths of the machine it
+  was made on and has no fingerprints at all — nothing has ever been saved — so if the clips
+  are sitting in a subfolder beside it, their names are the only thing left to go on.
+  Anything still missing after that is named in a notice and its reference kept intact.
 - **When footage goes missing, you see colour bars** — the broadcast test pattern, the same
   one a television shows with no signal. The reasoning is that the alternative is worse: a
   missing layer that renders *black* looks exactly like a deliberate edit, so the mistake
   can survive all the way into an exported file. Bars cannot be mistaken for anything but
   "there is nothing here". They appear in the Viewer and in exports alike, for the same
   reason. In the Project panel the item wears a crossed-link icon and a **Relink…** button;
-  pointing it at the file's new home also relinks every *other* missing file sitting in that
-  same folder, in one undo step — losing a folder of footage is then one dialogue rather
-  than twenty. The pattern itself is drawn by arithmetic at whatever size is needed, not
+  pointing it at the file's new home also relinks every *other* missing file that moved the
+  same way, in one undo step — losing a folder of footage is then one dialogue rather than
+  twenty. "The same way" is worked out from the one file you did point at: whatever its old
+  path and its new path have in common *at the end* is the part that did not move, and
+  everything in front of that is the part that did. So if an edit kept forty-eight clips in
+  forty-eight different subfolders and the whole tree was moved to another drive, relinking
+  any one of them — however deep — tells Lumit where the root went, and it looks for each of
+  the others in its own subfolder under the new root. Files it does not find that way it
+  still looks for by name beside the one you picked, and it never repoints an item that is
+  working or one whose predicted file is not actually there. The pattern itself is drawn by arithmetic at whatever size is needed, not
   loaded from a bundled image, so it is crisp at any resolution and adds nothing to the
   download. When something *is* missing, a toggle appears beside the Project panel's search
   box (and on any footage row's right-click menu) that filters the panel down to just the

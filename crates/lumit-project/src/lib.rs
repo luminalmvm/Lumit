@@ -649,8 +649,8 @@ pub fn resolve_all_media(
     search_roots: &[PathBuf],
 ) -> (usize, Vec<String>) {
     let mut relinked = 0;
-    let mut missing = Vec::new();
-    for item in &mut doc.items {
+    let mut unresolved = Vec::new();
+    for (index, item) in doc.items.iter_mut().enumerate() {
         let ProjectItem::Footage(f) = item else {
             continue;
         };
@@ -661,26 +661,119 @@ pub fn resolve_all_media(
                 }
                 f.media.absolute_path = path.to_string_lossy().into_owned();
             }
-            Resolved::Missing => missing.push(f.name.clone()),
+            Resolved::Missing => unresolved.push(index),
+        }
+    }
+    if unresolved.is_empty() {
+        return (relinked, Vec::new());
+    }
+
+    // Step 3b: whatever is still lost, looked for **by file name** under the
+    // project's own folder. This is the weakest of the matches, so it runs last
+    // and only for what nothing else found — and it is the one that answers the
+    // ordinary case: a project that arrived beside its footage but with the
+    // paths of the machine it was made on written into it, which is every
+    // After Effects import on a second computer. The tree is walked once for
+    // all of them rather than once each, because forty-eight lost clips would
+    // otherwise be forty-eight walks of the same folder.
+    let beside = files_by_name(project_dir);
+    let mut missing = Vec::new();
+    for index in unresolved {
+        let Some(ProjectItem::Footage(f)) = doc.items.get_mut(index) else {
+            continue;
+        };
+        let found = file_name_of(&f.media.relative_path)
+            .or_else(|| file_name_of(&f.media.absolute_path))
+            .and_then(|name| beside.get(name));
+        match found {
+            Some(path) => {
+                relinked += 1;
+                f.media.absolute_path = path.to_string_lossy().into_owned();
+            }
+            None => missing.push(f.name.clone()),
         }
     }
     (relinked, missing)
 }
 
+/// Every file under `root`, by file name, first one in walk order winning.
+///
+/// Symlinks are not followed, so the walk cannot cycle. Two files of the same
+/// name in different subfolders are a genuine ambiguity and the first found
+/// answers for both; the fingerprint search above it is what tells them apart
+/// once a project has been saved.
+fn files_by_name(root: &Path) -> std::collections::HashMap<String, PathBuf> {
+    let mut out = std::collections::HashMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                stack.push(entry.path());
+            } else if kind.is_file() {
+                out.entry(entry.file_name().to_string_lossy().into_owned())
+                    .or_insert_with(|| entry.path());
+            }
+        }
+    }
+    out
+}
+
 /// The directory remapping implied by one file moving from `old` to `new`,
 /// used to relink siblings that moved the same way (docs/10 §2). Defined only
-/// for a pure relocation — same file name, different directory; None for a
-/// rename (a changed name cannot generalise to siblings) or a non-move.
+/// for a pure relocation — the file kept its name; None for a rename (a changed
+/// name cannot generalise to siblings) or a non-move.
+///
+/// The mapping is the **longest** rewrite the move supports: everything the two
+/// paths share at the end is the part that did not move, and what is left in
+/// front of it is the prefix that did. A whole footage tree carried to another
+/// drive keeps every folder under it, so one relinked clip deep inside it maps
+/// the root rather than only the folder the clip sits in — which is what lets
+/// the other forty-seven clips, in forty-seven different subfolders, come back
+/// with it.
 #[must_use]
 pub fn path_mapping(old: &Path, new: &Path) -> Option<(PathBuf, PathBuf)> {
-    if old.file_name()? != new.file_name()? {
+    use std::path::Component;
+    let old: Vec<Component<'_>> = old.components().collect();
+    let new: Vec<Component<'_>> = new.components().collect();
+    let shared = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    // Nothing shared at the end means the file was renamed, which says nothing
+    // about where anybody else went.
+    let (from, to) = (
+        old.get(..old.len() - shared)?,
+        new.get(..new.len() - shared)?,
+    );
+    if shared == 0 || from.is_empty() || to.is_empty() {
         return None;
     }
-    let (old_dir, new_dir) = (old.parent()?, new.parent()?);
-    if old_dir == new_dir {
-        return None;
-    }
-    Some((old_dir.to_path_buf(), new_dir.to_path_buf()))
+    let join = |parts: &[Component<'_>]| -> PathBuf {
+        parts.iter().copied().map(Component::as_os_str).collect()
+    };
+    Some((join(from), join(to)))
+}
+
+/// The file name at the end of a stored path, split on **both** separators.
+///
+/// `Path::file_name` splits on the separator of the machine it is running on,
+/// and a media reference is written on whichever machine made the project — a
+/// Windows path handed to it on macOS comes back whole, so every name match
+/// against one silently fails. Paths in a project are text until they are
+/// resolved, so they are taken apart as text.
+#[must_use]
+pub fn file_name_of(path: &str) -> Option<&str> {
+    path.rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
 }
 
 /// Apply a [`path_mapping`] to a sibling's old path: if it lived under the
@@ -1064,6 +1157,54 @@ mod tests {
         assert_eq!(abs(1), moved.to_string_lossy(), "found by content");
     }
 
+    /// **An import from another machine finds its footage beside the project.**
+    ///
+    /// The paths written into an After Effects project are the paths of the
+    /// computer it was made on, and there are no fingerprints yet — nothing
+    /// was ever saved — so steps 1 to 3 all come back empty on a second
+    /// machine even when every file is sitting right there in a subfolder.
+    /// Step 3b looks for what is left by file name under the project's own
+    /// folder, which is the one thing that is true about a project someone
+    /// copied across with its media.
+    #[test]
+    fn what_nothing_else_found_is_looked_for_by_name_beside_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let buried = dir.path().join("Clips").join("Cine1");
+        fs::create_dir_all(&buried).unwrap();
+        fs::write(buried.join("Depth.avi"), b"clip").unwrap();
+
+        let mut doc = Document::new();
+        // As an import leaves it: both paths are the other machine's.
+        let mut found = footage("Depth.avi");
+        found.media.relative_path = "D:/Elsewhere/Clips/Cine1/Depth.avi".into();
+        found.media.absolute_path = found.media.relative_path.clone();
+        let mut lost = footage("Missing.avi");
+        lost.media.relative_path = "D:/Elsewhere/Clips/Cine1/Missing.avi".into();
+        lost.media.absolute_path = lost.media.relative_path.clone();
+        for (i, item) in [found, lost].into_iter().enumerate() {
+            apply(
+                &mut doc,
+                &Op::AddItem {
+                    index: i,
+                    item: Box::new(ProjectItem::Footage(item)),
+                },
+            )
+            .unwrap();
+        }
+
+        let (relinked, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
+        assert_eq!(relinked, 1);
+        assert_eq!(missing, vec!["Missing.avi".to_string()]);
+        match &doc.items[0] {
+            ProjectItem::Footage(f) => assert_eq!(
+                f.media.absolute_path,
+                buried.join("Depth.avi").to_string_lossy(),
+                "found by name however deep it sits"
+            ),
+            _ => unreachable!(),
+        }
+    }
+
     /// The pure relative-path arithmetic behind the rebase.
     #[test]
     fn relative_between_walks_up_and_down() {
@@ -1257,6 +1398,20 @@ mod tests {
             None,
             "a sibling outside the moved folder does not relink"
         );
+        // A whole tree carried to another drive maps its *root*, not the one
+        // folder the relinked file happens to sit in — otherwise a clip four
+        // folders down brings back only its own neighbours.
+        let deep = path_mapping(
+            Path::new("/old/edit/Clips/Cine1/Depth.avi"),
+            Path::new("/new/place/Clips/Cine1/Depth.avi"),
+        )
+        .expect("a tree move maps");
+        assert_eq!(
+            apply_mapping(&deep, Path::new("/old/edit/Clips/Cine5/World.avi")),
+            Some(PathBuf::from("/new/place/Clips/Cine5/World.avi")),
+            "a sibling in a different subfolder relinks under the same move"
+        );
+
         // A rename (different file name) does not generalise to siblings.
         assert_eq!(
             path_mapping(Path::new("/a/b/clip.mp4"), Path::new("/x/y/renamed.mp4")),

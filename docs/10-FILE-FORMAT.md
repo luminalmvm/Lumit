@@ -78,14 +78,29 @@ promised the file never contains. Projects saved before K-173 may still carry on
 read and honoured as a fallback, and disappears on their next save. On open:
 
 1. Try relative path → 2. a legacy file's absolute path, if present → 3. fingerprint search
-   in user-configured search roots and the project's folder tree → 4. mark **missing**
-   (placeholder slate, never a blocking error), offer the relink dialogue.
+   in user-configured search roots and the project's folder tree → 3b. **by file name**
+   under the project's own folder tree, for whatever the first three did not find → 4. mark
+   **missing** (placeholder slate, never a blocking error), offer the relink dialogue.
 
-Steps 1–3 are wired (`resolve_all_media`, run before anything probes); step 4's dialogue is
+Step 3b is the weakest match and so it runs last, and only over what is still lost: it is
+what answers a project that arrived beside its media but carrying another machine's paths,
+which is every After Effects import on a second computer, where there are no fingerprints
+yet because nothing has been saved (K-438). The tree is walked **once** for all the missing
+items rather than once each, and where two files share a name the first in walk order
+answers for both — the fingerprint search above it is what tells those apart once a project
+has been saved.
+
+Steps 1–3b are wired (`resolve_all_media`, run before anything probes); step 4's dialogue is
 future work — today missing files are named in a notice and keep their reference untouched,
 so a later relink loses nothing.
 
-Relinking one file automatically relinks siblings that resolve under the same path mapping.
+Relinking one file automatically relinks siblings that moved the same way (K-438). The
+mapping is the **longest** rewrite the move supports: whatever the old path and the new one
+share at the end did not move, and the prefix in front of it did, so relinking one clip four
+folders deep inside a footage tree brings back every other lost item under that same root —
+in its own subfolder, not only in the folder the user happened to pick. A sibling is
+repointed only when it is currently broken *and* the file the rewrite predicts exists; a
+sibling the rewrite does not reach falls back to a file of its name beside the picked one.
 
 **Collect for sharing**: an explicit command copies the project plus all referenced media
 into one folder, rewriting references relative — the mechanism behind community project

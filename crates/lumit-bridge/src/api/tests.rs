@@ -204,6 +204,92 @@ fn relink_refuses_a_blank_or_useless_path() {
     std::fs::remove_file(&picked).ok();
 }
 
+/// **Relinking one clip deep inside a moved tree brings the rest of the tree
+/// with it.**
+///
+/// The shape this exists for is an edit's footage: forty-eight clips in
+/// forty-eight different subfolders under one root, and the root is what moved.
+/// Matching siblings by file name in the folder the user picked finds none of
+/// them, because none of them is in that folder. What the move actually says is
+/// a prefix rewrite — the tail the two paths share did not move, everything in
+/// front of it did — and applying that to every other lost item is one gesture
+/// instead of forty-eight.
+#[test]
+fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    for (folder, file) in [("Cine1", "Depth.avi"), ("Cine5", "World.avi")] {
+        std::fs::create_dir_all(root.join("Clips").join(folder)).expect("tree");
+        std::fs::write(root.join("Clips").join(folder).join(file), b"clip").expect("clip");
+    }
+
+    // Where the project says they were: another root entirely, as an import
+    // from another machine leaves them.
+    let old_root = std::path::Path::new("/nowhere/Set Me Free Edit");
+    let footage = |name: &str, folder: &str| FootageItem {
+        id: Uuid::now_v7(),
+        name: name.into(),
+        media: MediaRef {
+            relative_path: name.into(),
+            absolute_path: old_root
+                .join("Clips")
+                .join(folder)
+                .join(name)
+                .to_string_lossy()
+                .into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let picked_item = footage("Depth.avi", "Cine1");
+    let sibling = footage("World.avi", "Cine5");
+    let (picked_id, sibling_id) = (picked_item.id, sibling.id);
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        for (index, item) in [
+            ProjectItem::Footage(picked_item),
+            ProjectItem::Footage(sibling),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            state
+                .store
+                .commit(Op::AddItem {
+                    index,
+                    item: Box::new(item),
+                })
+                .expect("seeded");
+        }
+    }
+
+    let new_path = root.join("Clips").join("Cine1").join("Depth.avi");
+    FootageReference::new(project.id, picked_id)
+        .relink(new_path.to_string_lossy().into_owned())
+        .expect("relinked");
+
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let media_of = |id: Uuid| match doc.item(id) {
+        Some(ProjectItem::Footage(f)) => f.media.absolute_path.clone(),
+        _ => panic!("the footage is still there"),
+    };
+    assert_eq!(media_of(picked_id), new_path.to_string_lossy());
+    assert_eq!(
+        media_of(sibling_id),
+        root.join("Clips")
+            .join("Cine5")
+            .join("World.avi")
+            .to_string_lossy(),
+        "the sibling four folders away moved with the root, not with the folder"
+    );
+}
+
 /// A placed clip must land in the composition; the span/size fallbacks are what
 /// let a *missing* file still place, so the user can relink rather than being
 /// unable to add it at all.

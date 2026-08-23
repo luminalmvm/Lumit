@@ -92,13 +92,26 @@ impl FootageReference {
     }
 
     /// Point this footage item at `path`, and fix every *other* missing item
-    /// whose file name turns up in the same folder — one undo step for the lot.
+    /// that moved the same way — one undo step for the lot.
     ///
     /// The sibling sweep is the behaviour that makes relinking a moved project
     /// bearable: footage almost always moves as a folder, so relinking one clip
-    /// by hand should not mean relinking forty. A sibling is only touched when it
-    /// currently fails to resolve *and* a file of its name exists beside the
-    /// picked one, so a healthy item is never repointed.
+    /// by hand should not mean relinking forty. It works two ways, in order.
+    ///
+    /// **The path rewrite** (docs/10 §2) is the one that carries a whole tree.
+    /// Where the file went tells you where its folder went: everything the old
+    /// path and the new one share at the end did not move, and the prefix in
+    /// front of it did. Every other lost item whose stored path begins with that
+    /// old prefix is looked for under the new one — so relinking one clip four
+    /// folders deep brings back the forty-seven others in forty-seven *different*
+    /// subfolders, which is exactly the shape of an edit's footage.
+    ///
+    /// **Beside the picked file**, by name, is the fallback for the flatter case
+    /// — a folder of clips whose paths share nothing useful.
+    ///
+    /// A sibling is only touched when it currently fails to resolve *and* the
+    /// file the rewrite predicts actually exists, so a healthy item is never
+    /// repointed and a guess is never saved.
     #[frb(sync)]
     pub fn relink(&self, path: String) -> Result<(), BridgeError> {
         if path.trim().is_empty() {
@@ -126,6 +139,25 @@ impl FootageReference {
             let folder = picked.parent().map(std::path::Path::to_path_buf);
             let project_dir = p.path.as_deref().and_then(|p| p.parent());
 
+            // Where a reference says its file was, whether or not it is there:
+            // the session's absolute path when the project carries one, and
+            // otherwise the saved relative path against the project's folder.
+            // This is the *old* side of the rewrite, so it must be the stored
+            // path rather than a resolved one — a resolved path is by definition
+            // one that was not lost.
+            let stored = |media: &lumit_core::model::MediaRef| -> Option<PathBuf> {
+                if !media.absolute_path.is_empty() {
+                    return Some(PathBuf::from(&media.absolute_path));
+                }
+                project_dir.map(|dir| dir.join(&media.relative_path))
+            };
+            let mapping = match doc.item(self.id) {
+                Some(lumit_core::model::ProjectItem::Footage(target)) => {
+                    stored(&target.media).and_then(|old| lumit_project::path_mapping(&old, &picked))
+                }
+                _ => None,
+            };
+
             let mut ops = Vec::new();
             for item in &doc.items {
                 let lumit_core::model::ProjectItem::Footage(other) = item else {
@@ -141,15 +173,23 @@ impl FootageReference {
                     if Self::resolve_path(&p, other).is_some_and(|p| p.is_file()) {
                         continue;
                     }
-                    let Some(folder) = &folder else { continue };
-                    let name = std::path::Path::new(&other.media.relative_path)
-                        .file_name()
-                        .map(std::ffi::OsString::from)
-                        .unwrap_or_else(|| std::ffi::OsString::from(&other.name));
-                    let candidate = folder.join(name);
-                    if !candidate.is_file() {
+                    let moved_with_it = mapping
+                        .as_ref()
+                        .zip(stored(&other.media))
+                        .and_then(|(mapping, old)| lumit_project::apply_mapping(mapping, &old))
+                        .filter(|candidate| candidate.is_file());
+                    let beside_it = || {
+                        let folder = folder.as_ref()?;
+                        // Split on both separators: a path written on the other
+                        // sort of machine comes back whole from `file_name`.
+                        let name = lumit_project::file_name_of(&other.media.relative_path)
+                            .unwrap_or(other.name.as_str());
+                        let candidate = folder.join(name);
+                        candidate.is_file().then_some(candidate)
+                    };
+                    let Some(candidate) = moved_with_it.or_else(beside_it) else {
                         continue;
-                    }
+                    };
                     candidate
                 };
 
