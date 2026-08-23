@@ -138,6 +138,12 @@ pub const FX_CACHE_DEFAULT_BUDGET: usize = 256 * 1024 * 1024;
 /// that effect, because the picture the one before it produced is still held
 /// under a name nothing in the edit changed.
 ///
+/// The same store holds **nested frames** (K-422): a non-collapsed Precomp's
+/// finished linear texture, under its own frame key mixed with the raster it
+/// was made at ([`nested_texture_key`]). One store, one budget, one set of
+/// clear hooks; the two kinds of entry cannot collide because each name
+/// begins with its own tag.
+///
 /// VRAM only, and deliberately so: an intermediate is worth keeping for the
 /// seconds between two edits of the same stack, not across sessions. It sits
 /// in [`crate::realise::Realiser`] beside the LUT cache and is consulted by
@@ -147,10 +153,20 @@ pub const FX_CACHE_DEFAULT_BUDGET: usize = 256 * 1024 * 1024;
 pub struct FxCache {
     lru: lumit_cache::ByteLru<u128, CachedTex>,
     keep: bool,
+    /// Nested frames the decode planner was told are held for the frame being
+    /// rendered (K-422, [`Self::pin_nested`]). A plan that skipped a nested
+    /// comp's decodes on the strength of a lookup must find the texture still
+    /// here when the realiser asks, whatever this frame's own inserts evict
+    /// in between — so the planner's lookup takes a handle, and the handle
+    /// lives until the next frame's plan drops it.
+    pins: std::collections::HashMap<u128, Tex>,
     /// Test hooks: how many kernels [`run_ops`] actually ran against this
     /// cache, and how many ops it skipped because their output was held.
     runs: u64,
     hits: u64,
+    /// Test hooks (K-422): nested frames realised, and served held.
+    nested_made: u64,
+    nested_served: u64,
 }
 
 impl Default for FxCache {
@@ -165,9 +181,52 @@ impl FxCache {
         Self {
             lru: lumit_cache::ByteLru::new(budget_bytes),
             keep: false,
+            pins: std::collections::HashMap::new(),
             runs: 0,
             hits: 0,
+            nested_made: 0,
+            nested_served: 0,
         }
+    }
+
+    /// The finished texture of a nested comp's frame, by the name the realiser
+    /// files it under (K-422), or `None` when it must be realised. Counted.
+    pub fn nested(&mut self, key: u128) -> Option<Tex> {
+        let held = self
+            .pins
+            .get(&key)
+            .cloned()
+            .or_else(|| self.lru.get(&key).map(|t| t.0.clone()));
+        if held.is_some() {
+            self.nested_served += 1;
+        } else {
+            self.nested_made += 1;
+        }
+        held
+    }
+
+    /// File a nested comp's finished frame under its name (K-422), when the
+    /// cache is taking entries ([`Self::keep_outputs`]).
+    pub fn put_nested(&mut self, key: u128, tex: Tex) {
+        if self.keep {
+            self.lru.insert(key, CachedTex(tex));
+        }
+    }
+
+    /// Whether a nested frame is held, for the decode planner (K-422) — and if
+    /// it is, hold it for the frame about to be rendered (see `pins`).
+    pub fn pin_nested(&mut self, key: u128) -> bool {
+        if let Some(t) = self.lru.get(&key) {
+            self.pins.insert(key, t.0.clone());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Drop the previous frame's pins: called as each frame's plan begins.
+    pub fn unpin_nested(&mut self) {
+        self.pins.clear();
     }
 
     /// Whether the renders that follow may *add* to the cache. Lookups always
@@ -182,6 +241,7 @@ impl FxCache {
 
     pub fn clear(&mut self) {
         self.lru.clear();
+        self.pins.clear();
     }
 
     /// `(used_bytes, budget_bytes, entries)`.
@@ -199,6 +259,30 @@ impl FxCache {
     pub fn counts(&self) -> (u64, u64) {
         (self.runs, self.hits)
     }
+
+    /// `(nested frames realised, nested frames served held)` since
+    /// construction (K-422).
+    #[must_use]
+    pub fn nested_counts(&self) -> (u64, u64) {
+        (self.nested_made, self.nested_served)
+    }
+}
+
+/// The name a nested comp's finished texture is filed under (K-422): its
+/// frame key, and the two things that decide the texture's shape which the
+/// key does not — the exact render scale the realiser allocates at (the key
+/// holds the 1% tier, and two scales in one tier can differ by a pixel) and
+/// the sample count the device resolved to.
+#[must_use]
+pub fn nested_texture_key(frame_key: u128, render_scale: f32, samples: u32) -> u128 {
+    let mut h = blake3::Hasher::new();
+    h.update(b"nested/1/");
+    h.update(&frame_key.to_le_bytes());
+    h.update(&render_scale.to_bits().to_le_bytes());
+    h.update(&samples.to_le_bytes());
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    u128::from_le_bytes(k)
 }
 
 /// One layer-input slot as [`run_ops`] receives it — the realised twin of

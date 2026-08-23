@@ -606,6 +606,15 @@ impl HeadlessRenderer {
         })
     }
 
+    /// `(nested frames realised, nested frames served held)` since the
+    /// renderer was made (K-422).
+    #[must_use]
+    pub fn nested_frame_counts(&self) -> (u64, u64) {
+        self.parts
+            .as_ref()
+            .map_or((0, 0), |parts| parts.fx_cache.borrow().nested_counts())
+    }
+
     /// Whether the frames from here on are being measured **and** there is
     /// somewhere for the numbers to go.
     ///
@@ -931,7 +940,40 @@ impl HeadlessRenderer {
         // The frame's recorder: absent unless somebody is drawing a bar for
         // this frame or reading its numbers (docs/13 §7.1).
         let watcher = self.profiler_for(comp_id, frame);
-        let jobs = plan_comp_frame(doc, comp, t, quality, &ProbeView(&self.probe_cache));
+        // The nested-frame store (K-422): what the builder names each Precomp
+        // by, and what the planner asks before decoding into one. Both use
+        // the one keyer, so the name the plan found held is the name the
+        // realiser asks for. A measured frame realises every Precomp so its
+        // inner rows get numbers (see `Realiser::realise_nested`), so it must
+        // not skip their decodes either.
+        let probes = ProbeView(&self.probe_cache);
+        let keys = crate::cache::NestedKeys {
+            doc,
+            probes: &probes,
+            quality,
+        };
+        let jobs = {
+            let held = |nested: &Composition, lt: f64| -> bool {
+                let Some(parts) = self.parts.as_ref() else {
+                    return false;
+                };
+                let Some(key) = crate::cache::NestedKeyer::nested_key(&keys, nested, lt) else {
+                    return false;
+                };
+                let scale = composite_scale(quality);
+                let samples = self.gpu.sample_count(doc.anti_aliasing.samples());
+                parts
+                    .fx_cache
+                    .borrow_mut()
+                    .pin_nested(crate::fxops::nested_texture_key(key, scale, samples))
+            };
+            if let Some(parts) = self.parts.as_ref() {
+                parts.fx_cache.borrow_mut().unpin_nested();
+            }
+            let held: Option<crate::plan::HeldNested<'_>> =
+                if watcher.is_none() { Some(&held) } else { None };
+            crate::plan::plan_comp_frame_held(doc, comp, t, quality, &probes, held)
+        };
         if let Some(w) = &watcher {
             w.planned();
         }
@@ -992,8 +1034,15 @@ impl HeadlessRenderer {
             if let Some(w) = &watcher {
                 w.building();
             }
-            let draws =
-                crate::build::build_comp_draws(doc, comp, t, &pixels_by_layer, &mut visited);
+            let draws = crate::build::build_comp_draws_at(
+                doc,
+                comp,
+                t,
+                t,
+                &pixels_by_layer,
+                &mut visited,
+                Some(&keys),
+            );
             // The comp's backdrop is a way of viewing, not a layer (K-241);
             // with the transparency grid up the Viewer asks for none at all,
             // so what nothing covers arrives with zero alpha and the grid
@@ -4696,6 +4745,189 @@ mod tests {
             r.effect_cache_stats().0 .2,
             0,
             "Clear cache empties the intermediates with the frames"
+        );
+    }
+
+    /// **A precomp's frames are cached as one unit** (K-422, K-031).
+    ///
+    /// A nested comp is realised once and then served by its own name: a
+    /// parent edit, and a second parent frame the nested comp is static
+    /// across, both serve it held; an edit inside it realises it again; the
+    /// warm picture is byte-for-byte what a cold renderer (the export path)
+    /// makes; a collapsed Precomp is never cached, since its inner draws
+    /// composite against the parent's stack; and Clear cache empties it.
+    #[test]
+    fn a_nested_comp_is_realised_once_and_served_by_its_own_name() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.1, 0.8, 1.0]);
+        let (mut doc, comp_id, _) = matrix_base(16, 16, red);
+        let (child_doc, child_id, child_solid) = matrix_base(16, 16, blue);
+        for item in child_doc.items {
+            doc.items.push(item);
+        }
+        let layer = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, 16, 16);
+        let layer_id = layer.id;
+        doc.comp_mut(comp_id).unwrap().layers.insert(0, layer);
+        let store = DocumentStore::new(doc);
+
+        r.keep_effect_outputs(true);
+        let _ = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!(r.nested_frame_counts(), (1, 0), "a cold frame realises it");
+
+        // A parent-only edit: the Precomp layer turns, the nested comp does not.
+        store
+            .commit(lumit_core::Op::SetTransformProperty {
+                comp: comp_id,
+                layer: layer_id,
+                prop: lumit_core::model::TransformProp::Rotation,
+                animation: lumit_core::anim::Animation::Static(30.0),
+            })
+            .expect("rotated");
+        let doc = store.snapshot();
+        let warm = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(r.nested_frame_counts(), (1, 1), "served by its own name");
+        let _ = r.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (1, 2),
+            "a second parent frame the nested comp is static across is served too"
+        );
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let cold = cold.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(warm, cold, "a warm preview is the picture an export makes");
+
+        // An edit inside the nested comp renames its frame.
+        store
+            .commit(lumit_core::Op::SetSolidDef {
+                def: child_solid,
+                name: "Base".into(),
+                colour: LinearColour([0.1, 0.8, 0.1, 1.0]),
+                width: 16,
+                height: 16,
+            })
+            .expect("recoloured");
+        let inner = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (2, 2),
+            "an inner edit realises it again"
+        );
+        assert_ne!(inner, warm, "and the picture changed");
+
+        // A collapsed Precomp is spliced into the parent, never named.
+        store
+            .commit(lumit_core::Op::SetLayerCollapse {
+                comp: comp_id,
+                layer: layer_id,
+                collapse: true,
+            })
+            .expect("collapsed");
+        let doc = store.snapshot();
+        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (2, 2),
+            "a collapsed precomp is never cached"
+        );
+
+        r.clear_frame_textures();
+        assert_eq!(r.effect_cache_stats().0 .2, 0, "Clear cache empties it");
+    }
+
+    /// **A parent edit does not decode the footage inside a held precomp**
+    /// (K-422), and the picture it serves is the cold one. The planner skips
+    /// the nested comp's jobs on the store's word, and the realiser then finds
+    /// the texture the planner pinned — so a frame rendered with no nested
+    /// pixels in hand is still the right frame. Skips without an ffmpeg CLI to
+    /// write the fixture.
+    #[test]
+    fn a_parent_edit_does_not_decode_the_footage_inside_a_held_precomp() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items
+            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                id: item,
+                name: "fixture.mp4".into(),
+                media: lumit_core::model::MediaRef {
+                    relative_path: "fixture.mp4".into(),
+                    absolute_path: clip.to_string_lossy().into_owned(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+            }));
+        let (inner_doc, inner_id, _) = matrix_base(32, 24, LinearColour([0.0, 0.0, 0.0, 0.0]));
+        for it in inner_doc.items {
+            doc.items.push(it);
+        }
+        doc.comp_mut(inner_id).unwrap().layers =
+            vec![matrix_layer("Clip", LayerKind::Footage { item }, 32, 24)];
+        let (outer_doc, comp_id, _) = matrix_base(32, 24, LinearColour([0.2, 0.2, 0.2, 1.0]));
+        for it in outer_doc.items {
+            doc.items.push(it);
+        }
+        let pre = matrix_layer("Nested", LayerKind::Precomp { comp: inner_id }, 32, 24);
+        let pre_id = pre.id;
+        doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
+        let store = DocumentStore::new(doc);
+        let q = crate::plan::Quality::default();
+
+        r.keep_effect_outputs(true);
+        r.render_preview(&store.snapshot(), comp_id, 3, q, 1.0)
+            .expect("cold");
+        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
+        assert_eq!(decoded, 1, "the nested footage is what this comp decodes");
+
+        store
+            .commit(lumit_core::Op::SetTransformProperty {
+                comp: comp_id,
+                layer: pre_id,
+                prop: lumit_core::model::TransformProp::Rotation,
+                animation: lumit_core::anim::Animation::Static(20.0),
+            })
+            .expect("rotated");
+        let doc = store.snapshot();
+        let (warm, w, h) = r.render_preview(&doc, comp_id, 3, q, 1.0).expect("warm");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (1, 1),
+            "served from the pinned texture"
+        );
+        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
+        assert_eq!(decoded, 0, "and the plan asked for no decode at all");
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let (cold, cw, ch) = cold.render_preview(&doc, comp_id, 3, q, 1.0).expect("cold");
+        assert_eq!((w, h), (cw, ch));
+        assert_eq!(
+            warm, cold,
+            "the held nested frame is the picture a cold walk makes"
         );
     }
 

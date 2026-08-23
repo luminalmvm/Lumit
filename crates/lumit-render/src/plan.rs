@@ -132,6 +132,10 @@ impl Quality {
     }
 }
 
+/// The nested-frame question a plan asks (K-422, [`PlanContext::held`]):
+/// "is this comp's frame at this layer time already a finished texture?"
+pub type HeldNested<'a> = &'a dyn Fn(&Composition, f64) -> bool;
+
 /// The inputs a plan walk carries down the Precomp recursion, unchanged at
 /// every depth: what the media is and how coarsely to decode. Bundled so the
 /// recursive walk stays readable.
@@ -139,6 +143,17 @@ pub struct PlanContext<'a> {
     pub doc: &'a Document,
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
+    /// Answers "is this nested comp's frame, at this layer time, already held
+    /// as a finished texture?" (K-422). When it is, the planner asks for none
+    /// of that comp's decodes: the realiser will serve the texture and never
+    /// look at the pixels. This is the one place planning knows a cache exists
+    /// — the module header's "pure and cheap" is kept by making it a question
+    /// the caller answers, and the coupling is worth it because without it a
+    /// held Precomp still cost every source decode inside it, which is most of
+    /// what rendering a Precomp costs. The answerer must *hold* what it says
+    /// yes to until the frame is realised (`FxCache::pin_nested`), or a yes
+    /// here becomes a nested comp realised from no pixels.
+    pub held: Option<HeldNested<'a>>,
 }
 
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
@@ -158,6 +173,7 @@ pub fn collect_comp_jobs(
         doc,
         quality,
         probes,
+        held,
     } = *ctx;
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
@@ -266,6 +282,19 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
+                    // A held nested frame wants no decodes (K-422). Asked only
+                    // where the builder will ask by the same name: at the live
+                    // time (a Posterize-held layer is built at another time,
+                    // by a walk with no keyer) and for a Precomp that is not
+                    // collapsed (a collapsed one is spliced in, never named).
+                    let live = sample_times[idx] == t;
+                    let collapsed = matches!(
+                        lumit_core::model::collapse_state(doc, comp, layer, lt),
+                        lumit_core::model::CollapseState::Active
+                    );
+                    if live && !collapsed && held.is_some_and(|held| held(nested, lt)) {
+                        continue;
+                    }
                     visited.push(*nested_id);
                     collect_comp_jobs(ctx, nested, lt, jobs, visited);
                     visited.pop();
@@ -400,10 +429,25 @@ pub fn plan_comp_frame(
     quality: Quality,
     probes: &dyn SourceProbes,
 ) -> Vec<CompJob> {
+    plan_comp_frame_held(doc, comp, t, quality, probes, None)
+}
+
+/// [`plan_comp_frame`] with the nested-frame answerer (K-422,
+/// [`PlanContext::held`]).
+#[must_use]
+pub fn plan_comp_frame_held(
+    doc: &Document,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    probes: &dyn SourceProbes,
+    held: Option<HeldNested<'_>>,
+) -> Vec<CompJob> {
     let ctx = PlanContext {
         doc,
         quality,
         probes,
+        held,
     };
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
@@ -820,5 +864,124 @@ mod tests {
             );
             assert_eq!(jobs[0].item, item);
         }
+    }
+
+    /// **A held nested frame wants no decodes** (K-422). A Precomp whose frame
+    /// the store already holds contributes none of its footage jobs — that is
+    /// what makes a parent edit free of the nested comp's decodes — while a
+    /// collapsed Precomp (spliced in, never named) still decodes whatever the
+    /// answerer says. Fails without the `held` question in the Precomp arm.
+    #[test]
+    fn a_held_nested_frame_plans_no_decodes_but_a_collapsed_one_still_does() {
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp = |layers: Vec<Layer>| Composition {
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        }));
+        let inner = comp(vec![layer(LayerKind::Footage { item })]);
+        let inner_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        let outer = comp(vec![layer(LayerKind::Precomp { comp: inner_id })]);
+        let outer_id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+            item,
+            crate::SourceProbe::Video {
+                fps: 60.0,
+                width: 64,
+                height: 64,
+                frames: 600,
+                audio: false,
+            },
+        )]
+        .into_iter()
+        .collect();
+        let asked = std::cell::Cell::new(0usize);
+        let held = |nested: &Composition, lt: f64| {
+            asked.set(asked.get() + 1);
+            assert_eq!(nested.id, inner_id);
+            assert_eq!(lt, 0.0);
+            true
+        };
+        let plan = |doc: &Document, held: Option<HeldNested<'_>>| {
+            plan_comp_frame_held(
+                doc,
+                doc.comp(outer_id).unwrap(),
+                0.0,
+                Quality::default(),
+                &probes,
+                held,
+            )
+        };
+        assert_eq!(
+            plan(&doc, None).len(),
+            1,
+            "no answerer: the footage decodes"
+        );
+        assert!(
+            plan(&doc, Some(&held)).is_empty(),
+            "held: nothing to decode"
+        );
+        assert_eq!(asked.get(), 1);
+
+        doc.comp_mut(outer_id).unwrap().layers[0].switches.collapse = true;
+        assert_eq!(
+            plan(&doc, Some(&held)).len(),
+            1,
+            "a collapsed precomp is never named, so it always decodes"
+        );
+        assert_eq!(asked.get(), 1, "and is never asked about");
     }
 }

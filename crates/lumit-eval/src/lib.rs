@@ -48,7 +48,7 @@ pub mod schedule;
 ///   now covers the project's sample count, and turning the setting on by
 ///   default changes what every comp renders to. Every version-2 frame was made
 ///   without anti-aliasing, so none of them may be served again.
-pub const ALGO_VERSION: u32 = 3;
+pub const ALGO_VERSION: u32 = 4;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -126,13 +126,30 @@ pub fn comp_frame_key(
     quality: Quality,
     stamper: &dyn SourceStamper,
 ) -> Option<FrameKey> {
-    let mut visited = Vec::new();
-    let mut h = blake3::Hasher::new();
     // Takes the document as an `&Arc` because an expression context needs an
     // owned handle on it: the caller's Arc is shared, so naming a frame clones
     // a pointer, never the project. (A deep clone here once cost hundreds of
     // MB per cache-bar refinement turn on a large project.)
-    feed_comp(&mut h, doc, comp, t, quality, stamper, &mut visited)?;
+    comp_key_visited(doc, comp, t, quality, stamper, &mut Vec::new())
+}
+
+/// [`comp_frame_key`] with the ancestor chain threaded through, so a nested
+/// comp's own key (K-422) is made with a fresh hasher — the name it has on its
+/// own, the one `lumit-render` files its finished texture under — while a comp
+/// that contains itself still stops at the cycle. For an acyclic project the
+/// key this makes for a nested comp is exactly `comp_frame_key` of that comp
+/// at that time, which is what lets the builder and the planner name a
+/// Precomp layer's frame without walking the parent at all.
+fn comp_key_visited(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<FrameKey> {
+    let mut h = blake3::Hasher::new();
+    feed_comp(&mut h, doc, comp, t, quality, stamper, visited)?;
     let bytes = h.finalize();
     let mut k = [0u8; 16];
     k.copy_from_slice(&bytes.as_bytes()[..16]);
@@ -999,11 +1016,17 @@ fn feed_source(
                 h.update(b"nocomp");
                 return Some(());
             };
+            // The nested comp is named on its own (K-422) and the parent
+            // folds in that 16-byte name rather than the nested walk itself.
+            // The parent's semantics are unchanged — an edit inside still
+            // renames every frame that shows it — but the nested frame now
+            // has a key of its own, the one the renderer caches its texture
+            // under, and that key is the same whichever parent asks for it.
             h.update(b"precomp/");
             visited.push(*comp);
-            let r = feed_comp(h, doc, nested, lt, quality, stamper, visited);
+            let r = comp_key_visited(doc, nested, lt, quality, stamper, visited);
             visited.pop();
-            r?;
+            h.update(&r?.0.to_le_bytes());
         }
         LayerKind::Camera { .. } => {
             h.update(b"camera"); // draws nothing; pose is hashed at comp level

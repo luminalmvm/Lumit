@@ -5665,8 +5665,33 @@ names, so nothing can be stale, and Clear cache empties it along with the frames
 **fills** from committed renders — a drag reads from it (that is the point) but does not
 write, and neither does playback, so a long run cannot push your working stack out. And a
 few things do not take part yet: an effect that reads another layer's picture (a matte, a
-plate, a depth pass), a temporal effect reading neighbouring frames, and stacks on precomps,
-text, shapes and adjustment layers. Those run as they always did, and are the follow-up.
+plate, a depth pass), a temporal effect reading neighbouring frames, and stacks on text,
+shapes and adjustment layers. Those run as they always did, and are the follow-up. (Stacks
+on precomps joined in with K-422, below, once a precomp's picture had a name.)
+
+### A precomp's frames are kept as one picture (K-422)
+
+Precompose a finished section and you expect to stop paying for it: the manual says so.
+Until now the engine did not keep that promise. Every time the parent frame was drawn, the
+Precomp layer walked into its comp and drew every layer inside it again — and decoded every
+piece of footage inside it again — even when nothing inside had changed.
+
+Now a nested comp's frame has a name of its own. The frame-naming described above already
+folded the whole nested comp into the parent's name; it now names the nested comp first, on
+its own, and folds that one name into the parent. The parent's name still changes when
+anything inside changes, so nothing is ever stale — but the nested frame's name is the same
+whichever parent asks for it, at whatever position on the parent's timeline, and that name
+is what the finished picture is filed under. Draw a precomp once and the next parent frame
+that wants it — a different frame of the parent, a parent edit, the same precomp used in
+three places — takes the picture off the shelf. The decode planner asks the same question
+before it reads any file, so a held precomp costs no decodes either.
+
+It lives in the same store as the per-effect pictures (K-421), with the same rules: it
+fills only from committed renders, Clear cache empties it, and it is gone with the card's
+memory. Two things stay outside it. A **collapsed** Precomp is never kept, because its
+layers are blended straight into the parent and there is no one picture to keep. And a
+measured frame (the timing columns) draws the precomp in full so its inner rows get their
+numbers, then files what it drew.
 
 ### The region of interest — working on one corner (K-362)
 

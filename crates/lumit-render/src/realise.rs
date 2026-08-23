@@ -189,7 +189,7 @@ impl Realiser<'_> {
                 // Precomp layer's picture does (K-266); anything else is
                 // the uploaded source pixels.
                 let linear = if let Some(n) = &d.nested {
-                    self.realise(n.camera, n.width, n.height, n.background, &n.draws)
+                    self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
                     let src = self
                         .engine
@@ -257,6 +257,39 @@ impl Realiser<'_> {
         layers: &[CompLayerDraw],
     ) -> wgpu::Texture {
         self.realise_region(camera, width, height, background, layers, None)
+    }
+
+    /// A nested comp's picture (K-422): the texture held under its frame key
+    /// when there is one, else [`Self::realise`] and — on a committed render —
+    /// file it. The three places a Precomp is realised (a layer, a matte, a
+    /// layer input) all come through here, so "the same nested comp used in
+    /// five places renders once" (docs/06 §5.2) holds for every one of them.
+    /// The texture is read-only downstream — the stack and the composite both
+    /// make new textures — so handing the same one out twice is safe.
+    pub fn realise_nested(
+        &self,
+        key: Option<u128>,
+        camera: Option<lumit_core::model::CameraPose>,
+        width: u32,
+        height: u32,
+        background: [f64; 4],
+        layers: &[CompLayerDraw],
+    ) -> wgpu::Texture {
+        let Some(key) = key else {
+            return self.realise(camera, width, height, background, layers);
+        };
+        let key = crate::fxops::nested_texture_key(key, self.render_scale, self.samples);
+        // A measured walk (docs/13 §7.1) wants a number on every row inside
+        // the Precomp too, so it realises the nested comp whether or not the
+        // picture is held — and still files what it made.
+        if self.profiler.is_none() {
+            if let Some(held) = self.fx_cache.borrow_mut().nested(key) {
+                return held;
+            }
+        }
+        let made = self.realise(camera, width, height, background, layers);
+        self.fx_cache.borrow_mut().put_nested(key, made.clone());
+        made
     }
 
     /// As [`Self::realise`], but compositing only `region` of the composition
@@ -557,7 +590,8 @@ impl Realiser<'_> {
                     background,
                     draws,
                     camera,
-                } => self.realise(*camera, *width, *height, *background, draws),
+                    key,
+                } => self.realise_nested(*key, *camera, *width, *height, *background, draws),
                 DrawSource::Adjust => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic
@@ -695,7 +729,14 @@ impl Realiser<'_> {
                     // Precomp layer's picture does (K-268, the K-266 layer-input
                     // shape); anything else is the uploaded source pixels.
                     let linear = if let Some(n) = &m.nested {
-                        self.realise(n.camera, n.width, n.height, n.background, &n.draws)
+                        self.realise_nested(
+                            n.key,
+                            n.camera,
+                            n.width,
+                            n.height,
+                            n.background,
+                            &n.draws,
+                        )
                     } else {
                         let src = self
                             .engine

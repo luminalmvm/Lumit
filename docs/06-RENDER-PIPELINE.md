@@ -466,9 +466,17 @@ every effect's output under a content name (§5.2). It never demotes and nothing
 into it; its purpose is the seconds between two edits of one stack, so that editing the last
 effect of a layer re-runs that effect and no other. It is bounded (256 MB by default, a
 setter beside the frame budget), empties with Clear cache, and is written only by committed,
-non-playback renders — a drag and a playback run read it and leave it alone. The general
-node-output cache the K-178 evaluator will own is still not built; this is the effect-stack
-slice of it, ahead of the evaluator, built where the stacks actually run.
+non-playback renders — a drag and a playback run read it and leave it alone. The same store
+holds **nested frames** (K-422): a non-collapsed Precomp's finished linear texture, filed
+under the nested comp's own frame key (§5.2) mixed with the exact render scale and sample
+count the texture was made at, and served wherever that comp is realised — as a layer, as a
+matte, as an effect's layer input. The decode planner asks the store before it plans a
+nested comp's decodes, and plans none for a held frame; what it says is held it pins until
+the frame is realised, so its answer cannot be evicted out from under the realiser. A
+collapsed Precomp is never cached: its inner draws are spliced into the parent's list and
+composite against the parent's stack, so there is no one picture to keep. The general
+node-output cache the K-178 evaluator will own is still not built; these are the
+effect-stack and precomp slices of it, ahead of the evaluator, built where the work runs.
 
 **"Ahead of the playhead" applies to BOTH lower rungs, and neither used to.** The ring renders
 ahead of the clock, so a frame is composited before it is shown — but the trip *up* the ladder
@@ -579,6 +587,16 @@ thus the width in the name is the width the pixels were decoded at.
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
 nowhere, so an entry can never be a promise the renderer did not keep.
 
+**A nested comp is named on its own (K-422).** The key used to fold a Precomp layer's comp
+into the parent's hasher inline, so the nested frame had no name of its own. It is now made
+with a fresh hasher — `comp_frame_key` of the nested comp at the layer's time on the flick
+grid, at the same quality tier — and the parent folds in that 16-byte name. The parent's
+semantics are unchanged (an inner edit still renames every parent frame that shows the
+comp), and the nested name is the same whichever parent asks, at whatever comp time, which
+is what "the same nested comp used in five places renders once" above rests on. The
+builder carries the name on the nested draw, the realiser files and serves the texture
+under it, and the decode planner skips a held comp's decodes by it. `ALGO_VERSION` 4.
+
 **The per-effect names (K-421).** An intermediate is named exactly as the formula above says
 a node is, with the chain made explicit: `key_k = H(input, raster, bake generation,
 op_0 … op_k)`, where each op contributes its effect name and algorithm version, every
@@ -586,9 +604,9 @@ resolved parameter value (post-expression, post-rescale — the numbers the kern
 and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
 content hash, a mask path by its vertices. The input is the layer's source *by identity*,
 not by its bytes — the decode job's fields for footage, the colour and size for a solid —
-plus the masks and paint baked into it and the raster size. In v1 only pictures made from
-bytes have a name: a nested comp, a text or shape layer and an adjustment layer's composite
-run their stacks uncached. And an op that binds a picture nobody named — another layer's
+plus the masks and paint baked into it and the raster size; a nested comp's input is its own
+frame key (K-422). A text or shape layer and an adjustment layer's composite have no name
+yet and run their stacks uncached. And an op that binds a picture nobody named — another layer's
 texture as a plate or a matte, the neighbour frames, the flow field — **breaks the chain**:
 it and everything after it have no name, because a name that omitted an input would be a
 wrong picture filed under a true-looking label. `ThisLayer` and an unset reference are

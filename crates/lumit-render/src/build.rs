@@ -362,7 +362,9 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
 /// Bottom-up order; matte sources come from decoded pixels (precomp mattes
 /// await the GPU mask pass, mirroring export). The ordinary render entry: draws
 /// at comp time `t_comp` with every effect resolved at `t_comp` too — a thin
-/// wrapper over [`build_comp_draws_at`] with the sample and frame times equal.
+/// wrapper over [`build_comp_draws_at`] with the sample and frame times equal
+/// and no nested-frame keyer, so every Precomp realises afresh (the test
+/// entry; the renderer calls [`build_comp_draws_at`] with its keyer).
 pub fn build_comp_draws(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -370,7 +372,7 @@ pub fn build_comp_draws(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> Vec<CompLayerDraw> {
-    build_comp_draws_at(doc, comp, t_comp, t_comp, pixels_by_layer, visited)
+    build_comp_draws_at(doc, comp, t_comp, t_comp, pixels_by_layer, visited, None)
 }
 
 /// Build a comp's draw list at sample comp time `t_comp`, resolving each layer's
@@ -383,6 +385,10 @@ pub fn build_comp_draws(
 /// the rest of the scene is sampled. `frame_t` threads through nested Precomps
 /// (each layer's own `start_offset` subtracted) so the flag is honoured at every
 /// depth.
+///
+/// `keys` names each non-collapsed Precomp's frame (K-422) so the realiser can
+/// serve it from the nested-frame store; `None` leaves every nested draw
+/// unnamed, which realises it every time.
 pub fn build_comp_draws_at(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -390,6 +396,7 @@ pub fn build_comp_draws_at(
     frame_t: f64,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
+    keys: Option<&dyn crate::cache::NestedKeyer>,
 ) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
     let in_span = |l: &lumit_core::model::Layer| {
@@ -558,14 +565,22 @@ pub fn build_comp_draws_at(
             let frame_slt = lumit_core::time::layer_time(frame_t, src.start_offset.0);
             let mut path = visited_path.clone();
             path.push(*nested_id);
-            let draws =
-                build_comp_draws_at(doc, nested, slt, frame_slt, pixels_by_layer, &mut path);
+            let draws = build_comp_draws_at(
+                doc,
+                nested,
+                slt,
+                frame_slt,
+                pixels_by_layer,
+                &mut path,
+                keys,
+            );
             Some(Box::new(crate::draw::NestedInputDraw {
                 width: nested.width,
                 height: nested.height,
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
                 camera: crate::track::camera_pose(doc, nested, slt),
+                key: keys.and_then(|k| k.nested_key(nested, slt)),
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -839,8 +854,15 @@ pub fn build_comp_draws_at(
                     lumit_core::model::CollapseState::Active
                 ) {
                     visited.push(*nested_id);
-                    let mut inner =
-                        build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited);
+                    let mut inner = build_comp_draws_at(
+                        doc,
+                        nested,
+                        lt,
+                        frame_lt,
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                    );
                     visited.pop();
 
                     let own = lumit_gpu::place_matrix(
@@ -900,7 +922,7 @@ pub fn build_comp_draws_at(
                 }
                 visited.push(*nested_id);
                 let nested_draws =
-                    build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited);
+                    build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited, keys);
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -915,6 +937,10 @@ pub fn build_comp_draws_at(
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws: nested_draws,
                         camera: crate::track::camera_pose(doc, nested, lt),
+                        // The nested frame's own name (K-422). `lt` is on the
+                        // flick grid already (`layer_time`), so a Precomp
+                        // layer moved by whole frames keeps its names.
+                        key: keys.and_then(|k| k.nested_key(nested, lt)),
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -1201,12 +1227,15 @@ pub fn build_comp_draws_at(
             DrawSource::Pixels { .. } | DrawSource::Adjust => None,
         };
         // The name the per-effect cache files this stack's outputs under
-        // (K-421): only a picture made from bytes has one in v1.
+        // (K-421): a picture made from bytes, or — since K-422 named it — a
+        // nested comp's frame, whose texture is exactly what the stack runs on
+        // (`op_keys` folds in the raster size, so the render scale is covered).
         let fx_input_key = match &source {
             DrawSource::Pixels { tex_w, tex_h, .. } => {
                 fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
-            DrawSource::Nested { .. } | DrawSource::Adjust => None,
+            DrawSource::Nested { key, .. } => *key,
+            DrawSource::Adjust => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack.
@@ -1472,7 +1501,17 @@ pub fn below_draws_at(
             l.switches.motion_blur = true;
         }
     }
-    let mut draws = build_comp_draws_at(doc, &below_comp, tau, frame_t, pixels_by_layer, visited);
+    // No nested-frame keyer (K-422): a held re-render strips the temporal
+    // inputs below, so a Precomp in it is not the picture its name would claim.
+    let mut draws = build_comp_draws_at(
+        doc,
+        &below_comp,
+        tau,
+        frame_t,
+        pixels_by_layer,
+        visited,
+        None,
+    );
     strip_temporal_inputs(&mut draws);
     (draws, crate::track::camera_pose(doc, comp, tau))
 }

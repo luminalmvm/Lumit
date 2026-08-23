@@ -11247,3 +11247,20 @@ node-output cache the K-178 evaluator will own, built ahead of it where the stac
 and it does not change the evaluator plan. Preview and export remain byte-identical
 (K-031): a held prefix is the same texture a cold walk makes. This number was allocated
 on the lane3 branch.
+
+**K-422 · DECIDED · A precomp's frames are cached as one unit.** The manual promised that a
+precomposed section caches as one unit, and docs/06 §5.2 that the same nested comp used in
+five places renders once; neither was true — a non-collapsed Precomp layer walked its comp,
+decoded its footage and realised every inner layer on every parent frame, and the frame
+key folded the nested comp into the parent's hasher inline so the nested frame had no name.
+Now `lumit-eval` names a nested comp with a fresh hasher (its own `comp_frame_key` at the
+layer time on the flick grid, same quality tier) and folds that name into the parent; the
+draw builder carries it on the nested draw; the realiser serves the nested comp's linear
+texture from the K-421 store by that name mixed with the exact render scale and sample
+count, and files it on committed renders; and the decode planner asks the store (through
+a caller-supplied answerer, the one place planning knows a cache exists) and plans no
+decodes for a held comp, pinning what it relies on until the frame is realised. Collapsed
+Precomps are never cached; held re-renders (Posterize, accumulation blur) and draft renders
+carry no name; a measured frame realises the comp in full so its inner rows get numbers.
+Preview and export stay byte-identical (K-031). `ALGO_VERSION` bumped to 4. This number
+was allocated on the lane3 branch.

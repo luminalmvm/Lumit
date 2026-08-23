@@ -143,6 +143,20 @@ pub fn frame_key(
     probes: &dyn SourceProbes,
 ) -> Option<u128> {
     let t = frame as f64 / comp.frame_rate.fps().max(1.0);
+    frame_key_at(doc, comp, t, quality, probes)
+}
+
+/// [`frame_key`] at a comp time rather than an integer frame — the form a
+/// nested comp is named in, since a Precomp layer's time is its layer time,
+/// which need not land on the nested comp's own frame grid.
+#[must_use]
+pub fn frame_key_at(
+    doc: &std::sync::Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    probes: &dyn SourceProbes,
+) -> Option<u128> {
     let stamper = Stamper::new(doc, probes, quality);
     lumit_eval::comp_frame_key(
         doc,
@@ -154,6 +168,32 @@ pub fn frame_key(
         &stamper,
     )
     .map(|k| k.0)
+}
+
+/// Names a nested comp's frame for the draw builder and the decode planner
+/// (K-422, docs/06 §5.2): the key [`frame_key_at`] gives that comp at that
+/// layer time, the same whichever parent asks for it. `None` when the frame
+/// must not be cached — some footage unprobed, or a draft render, whose
+/// decode is narrower than the settled name would claim.
+pub trait NestedKeyer {
+    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128>;
+}
+
+/// The renderer's [`NestedKeyer`]: the document, the probes a render already
+/// gathered, and the quality it renders at.
+pub struct NestedKeys<'a> {
+    pub doc: &'a std::sync::Arc<Document>,
+    pub probes: &'a dyn SourceProbes,
+    pub quality: Quality,
+}
+
+impl NestedKeyer for NestedKeys<'_> {
+    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128> {
+        if self.quality.draft {
+            return None;
+        }
+        frame_key_at(self.doc, nested, lt, self.quality, self.probes)
+    }
 }
 
 /// Frame count of a comp preview (comp duration × comp rate).
