@@ -11859,3 +11859,37 @@ Regression tests: `an_audio_layers_switches_never_change_the_picture` and
 no visibility switch and an image row has no audio switch"
 (`timeline_panel_frb_test.dart`) and "Add audio only puts a clip's sound in the open comp"
 (`project_panel_frb_test.dart`). New user-facing string: `addAudioOnly`.
+
+## K-436 — A retimed layer's waveform is bucketed through its Retime map
+
+**DECIDED 2026-08-23.** `LayerReference::audio_peaks` takes its window in the **layer's own
+clock**, not the source's, and maps each bucket's edges through
+`Layer::source_time_at` before asking the pyramid. A layer that has been retimed therefore
+draws a wave that stretches, slows and reverses with its map, exactly as a Sequence clip's
+already did through `Clip::source_time` (K-280).
+
+**What was wrong.** The lane's mapping was a straight line in x, and so was the fetch: the
+Timeline asked for `[view − start_offset, …)` and drew bucket *i* at column *i*. That is
+right for every layer playing at speed 1 and wrong for every layer that is not. A layer
+slowed to half filled the left half of its bar with the whole of its sound and drew silence
+across the right half; a reversed layer drew its wave the wrong way round. The picture and
+the sound disagreed about which moment a column stood for, which is the one thing a waveform
+in a Timeline exists to tell you.
+
+**Why the layer's clock and not the source's.** Layer time is what a column of the lane *is*
+— comp time less the layer's start offset — so the caller already had it and the change
+costs the bridge nothing: an un-retimed layer's map is the identity, and its window means
+exactly what it meant before. Source time cannot be the unit of the window at all once a map
+is in the way, because the window would then have to be non-contiguous.
+
+**The straight path is kept.** Only a layer that *has* a Retime property pays for the
+per-bucket walk; an un-retimed one still hands the whole window to `PeakPyramid::range` in
+one pass, which is the common case and the fast one.
+
+**Refetching.** A reshaped map changes the answer without moving the window, so the lane's
+fetch key carries the document revision **for retimed layers only**. An ordinary layer keys
+on the window alone and an edit elsewhere in the document asks the engine for nothing.
+
+Regression tests: "a retimed layer's waveform stretches with the map"
+(`timeline_panel_frb_test.dart`), which also pins that the identity map — switching Retime on
+without shaping it — changes nothing.

@@ -2812,15 +2812,28 @@ impl LayerReference {
     }
 
     /// The layer's source audio summarised across `[start_seconds,
-    /// end_seconds)` of the **source's own clock**, in `buckets` buckets
+    /// end_seconds)` of the **layer's own clock**, in `buckets` buckets
     /// (K-280, superseding the fixed 2 048 of K-172).
     ///
-    /// Source time, not comp time, is what makes a trim or a drag free: the
-    /// peaks belong to the file, so the Timeline's lane maps them through the
-    /// live in/out/offset each paint and the transients travel with the bar. The
-    /// *window* is what makes the resolution follow the zoom — a lane showing
-    /// two seconds asks for two seconds, and gets a bucket per pixel column of
-    /// them, however far in the Timeline is zoomed.
+    /// Layer time, not comp time, is what makes a trim or a drag free: the
+    /// window is fixed to where the layer starts its source, so the Timeline's
+    /// lane maps it through the live in/out/offset each paint and the
+    /// transients travel with the bar. The *window* is what makes the
+    /// resolution follow the zoom — a lane showing two seconds asks for two
+    /// seconds, and gets a bucket per pixel column of them, however far in the
+    /// Timeline is zoomed.
+    ///
+    /// **A retimed layer's wave stretches with its map** (K-436). Layer time
+    /// and source time are the same line only while the layer plays at speed
+    /// 1; once it has a Retime ([`lumit_core::model::Layer::source_time_at`])
+    /// they are not, and buckets taken evenly in source time would put the
+    /// transients in the wrong columns — a half-speed layer's wave would fill
+    /// half its bar and stop. So each bucket's edges are mapped through that
+    /// map here, exactly as a Sequence clip's are through its own
+    /// ([`Self::clip_audio_peaks`]): the lane still draws bucket `i` at column
+    /// `i`, and a slow passage is drawn wide because it *is* wide. An
+    /// un-retimed layer maps through the identity and takes the straight,
+    /// one-pass path it always did.
     ///
     /// `multiwave` asks for the three-band stack (bass, middle, treble) instead
     /// of the single full-range wave.
@@ -2864,11 +2877,36 @@ impl LayerReference {
             };
 
             let buckets = buckets.min(MAX_PEAK_BUCKETS) as usize;
+            // Where each bucket's edge lands in the source, through the
+            // layer's Retime. One more edge than buckets, so neighbouring
+            // buckets share theirs and no sliver of source falls between two
+            // columns. `None` for an un-retimed layer: its map is the identity
+            // line, so the pyramid can bucket the window itself in one pass.
+            let edges: Option<Vec<f64>> = layer.retime.as_ref().map(|_| {
+                let step = (end_seconds - start_seconds) / buckets.max(1) as f64;
+                (0..=buckets)
+                    .map(|i| layer.source_time_at(start_seconds + step * i as f64))
+                    .collect()
+            });
             let bands = BridgeAudioPeaks::bands_of(multiwave);
             let mut values = Vec::with_capacity(bands.len() * buckets * 3);
             for band in &bands {
-                for block in pyramid.range(*band, start_seconds, end_seconds, buckets) {
-                    values.extend_from_slice(&[block.min, block.max, block.rms]);
+                match &edges {
+                    None => {
+                        for block in pyramid.range(*band, start_seconds, end_seconds, buckets) {
+                            values.extend_from_slice(&[block.min, block.max, block.rms]);
+                        }
+                    }
+                    Some(edges) => {
+                        for i in 0..buckets {
+                            let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
+                                values.extend_from_slice(&[0.0, 0.0, 0.0]);
+                                continue;
+                            };
+                            let block = pyramid.window(*band, a, b);
+                            values.extend_from_slice(&[block.min, block.max, block.rms]);
+                        }
+                    }
                 }
             }
             Ok(BridgeAudioPeaks {

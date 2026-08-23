@@ -534,7 +534,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         pixels: _laneViewport,
       );
       if (request == null) continue;
-      final key = '${request.key}|$multiwave';
+      // A retimed layer's buckets are taken through its Retime map (K-436), so
+      // reshaping the map changes the answer without moving the window. Only a
+      // retimed layer pays for that: an ordinary one keys on the window alone
+      // and an edit anywhere else in the document asks for nothing.
+      final retimed =
+          entry.info.retime == null ? '' : '|${ui.model.heldRevision}';
+      final key = '${request.key}|$multiwave$retimed';
       // Claimed before the fetch starts, so a rebuild mid-decode does not ask
       // twice for the same window.
       if (_peakKeys[id] == key) continue;

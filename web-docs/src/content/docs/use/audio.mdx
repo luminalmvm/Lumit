@@ -23,18 +23,16 @@ muting one never costs you rendered frames.
 
 ## Waveforms
 
-In the Timeline, a Footage layer draws its audio waveform in its lane. The drawing
-is trimmed and retimed along with the layer.
+In the Timeline, a Footage layer draws its audio waveform in its lane, and clips inside a
+[Sequence layer](/use/sequence-layers/) draw theirs inside their own box. The drawing is
+trimmed and retimed along with the layer, so a slowed passage is drawn wide and a reversed
+one is drawn backwards.
 
 There are several options in **Edit ▸ Settings ▸ Interface** for how to display waveforms.
 
 | Settting | What it does |
 | **Waveforms show the frequency stack** | splits the waveform into low, mid, and high frequency bands to help you differentiate them or make it more obvious when a beat occurs. |
 | **Waveforms rise from the bottom** | Instead of the waveform being centred in the row, and displaying the same audio on each side, this displays effectively one half of that, but it can take up to twice the height. | 
-
-:::note[Partially built]
-Clips inside a [Sequence layer](/use/sequence-layers/) do not draw waveforms yet.
-:::
 
 ## Beat markers
 

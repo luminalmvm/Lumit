@@ -131,6 +131,16 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   better in a short row. It applies to the single wave and the stack alike, and it changes
   nothing about what is fetched: the peaks are the same either way, so switching it repaints
   and asks the engine for nothing.
+- **A retimed layer's wave stretches with its map** (K-436). A lane's window is in the
+  **layer's own clock**, and each bucket's edges are mapped through the layer's Retime
+  (`Layer::source_time_at`) before the pyramid is asked — the same shape a clip's buckets
+  already had through `Clip::source_time`. Bucketed evenly in source time instead, a layer
+  slowed to half filled the left half of its bar with the whole of its sound and drew
+  silence across the right half: the picture and the wave disagreed about which moment a
+  column stood for. An un-retimed layer maps through the identity and still hands its whole
+  window to `PeakPyramid::range` in one pass, so only a layer that has actually been
+  retimed pays for the per-bucket walk. A reshaped map changes the answer without moving
+  the window, so a retimed layer's fetch key carries the document revision as well.
 - Waveforms appear: on Audio layers (always), on Footage layers with audio (expandable
   lane), and **inside Sequence layer clips** — each clip draws the waveform of its own
   source range, so a cut's audio content is visible exactly where the clip sits. Clip

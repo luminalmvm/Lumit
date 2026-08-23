@@ -2610,6 +2610,21 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   editors draw. It applies to the plain wave and the frequency stack alike, and it is only a
   matter of drawing — nothing is re-read from the file when you flip it. It is on by default; Settings ▸ Interface ▸ Editing has a switch that puts the single
   plain wave back. (The idea is BLICK's, an editor that does the same thing.)
+- **A slowed layer's waveform is slowed too (K-436)** — a waveform is drawn column by column,
+  and each column has to stand for the moment of sound you would actually hear if the playhead
+  were there. For a layer playing at normal speed that is easy: a second of the bar is a second
+  of the file, so the drawing and the file run side by side. Retime a layer, though, and they
+  stop running side by side — half speed means a second of the bar is half a second of the
+  file, and reversing means the bar runs through the file backwards. The lane used to ignore
+  that and lay the file out evenly along the bar anyway, which meant a layer slowed to half
+  drew all of its sound crammed into the left half of its bar and silence across the right,
+  where what you actually hear is spread across the whole thing. Now every column is looked up
+  through the layer's Retime — the same map that decides which *frame* the column shows — so
+  the wave stretches, squeezes and reverses exactly as the picture does, and a beat you can see
+  is a beat you can hear at that spot. A layer nobody has retimed takes a shortcut and reads
+  the file in one straight sweep, as it always did; only a retimed one pays for the per-column
+  lookup. Clips on a Sequence layer worked this way from the start — this is the layer lane
+  catching up with them.
 - **`L` opens a layer's sound (K-281)** — press `L` with layers selected and their **Audio**
   group opens; press it again and the waveform lane opens under it; a third time shuts the
   layer. The same three-tap shape `U` has for animated properties, and for the same reason:

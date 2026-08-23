@@ -24,6 +24,7 @@ import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
+import 'package:lumit_flutter/panels/waveform_frb.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -4416,6 +4417,135 @@ void main() {
           reason: 'still only the one — a solid has nothing to be heard');
     });
 
+    /// A clip on a Sequence layer draws its own sound inside its own box, the
+    /// way a Footage layer's lane does (K-280): a cut is aimed at what you can
+    /// see, and on a Sequence layer what you are cutting is the clip.
+    testWidgets('a Sequence layer\'s clips draw their sound', (tester) async {
+      final p = withComp();
+      // Two files, because no test can hand-write a container holding both a
+      // picture and a soundtrack. The y4m is what makes this a Sequence layer
+      // at all — only media that *runs* is placed as clips (K-246) — and the
+      // relink then points that same item at a file with sound in it, which is
+      // what the clip's waveform is drawn from.
+      final footage =
+          p.state.project!.importFootage(path: _highRateVideoFile('cut.y4m'));
+      p.comp.addFootageLayer(footage: footage, asSequence: true);
+      footage.relink(path: _wavFile('clip.wav'));
+      await mount(tester, p);
+      final layer = p.comp.getLayers().first;
+      await settleFrb(tester, minRounds: 8);
+
+      final clip = layer.getInfo().clips.single;
+      final wave = find.byKey(ValueKey<String>('seq-wave-${clip.id}'));
+      expect(wave, findsNothing, reason: 'the view is shut to begin with');
+
+      // Double-clicking the bar opens the clip view. Retried: the first tap
+      // selects and can rebuild the row under the second, which on a loaded
+      // runner reads as two singles rather than a double.
+      final bar = find
+          .byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
+      final view =
+          find.byKey(ValueKey<String>('tl-seq-${layer.internallayerId}'));
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.tap(bar);
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.tap(bar);
+        await tester.pumpAndSettle();
+        await settleFrb(tester, until: () => view.evaluate().isNotEmpty);
+        if (view.evaluate().isNotEmpty) break;
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+      expect(view, findsOneWidget, reason: 'the clip view opened');
+
+      // The peaks are a real decode, so they arrive a frame or two later.
+      await settleFrb(tester,
+          until: () => wave.evaluate().isNotEmpty, maxRounds: 60);
+      expect(wave, findsOneWidget, reason: 'the clip draws its waveform');
+      final painter = (tester.widget<CustomPaint>(wave).painter)
+          as WaveformPainter;
+      expect(painter.peaks?.values.any((v) => v.abs() > 0.01), isTrue,
+          reason: 'and what it draws is the sound, not silence');
+    });
+
+    /// **A retimed layer's wave stretches with its map** (K-436). The buckets
+    /// are taken in the layer's own clock and mapped through its Retime, so a
+    /// half-speed layer showing the first tenth of its bar is showing the
+    /// first *twentieth* of its source — which for this file is the silent
+    /// half. Bucketed evenly in source time instead, the tone would still be
+    /// there and the transients would sit in the wrong columns.
+    testWidgets('a retimed layer\'s waveform stretches with the map',
+        (tester) async {
+      final p = withComp();
+      // Silence for the first half of the file, a tone for the second.
+      final audible = p.state.project!
+          .importFootage(path: _wavFile('ramp.wav', halfSilent: true));
+      p.comp.addFootageLayer(footage: audible, asSequence: false);
+      await mount(tester, p);
+      final layer = p.comp.getLayers().first;
+      await settleFrb(tester, minRounds: 8);
+
+      Future<List<double>> band(double from, double to) async {
+        final peaks = await tester.runAsync(() => layer.audioPeaks(
+              startSeconds: from,
+              endSeconds: to,
+              buckets: 64,
+              multiwave: false,
+            ));
+        return [for (final v in peaks!.values) v.abs()];
+      }
+
+      double loudest(List<double> v, int fromBucket, int toBucket) {
+        var most = 0.0;
+        for (var i = fromBucket * 3; i < toBucket * 3; i++) {
+          if (v[i] > most) most = v[i];
+        }
+        return most;
+      }
+
+      // Un-retimed: the layer's clock is the source's, so the file's two
+      // halves land in the lane's two halves.
+      final plain = await band(0, 0.1);
+      expect(loudest(plain, 0, 30), lessThan(0.05),
+          reason: 'the first half of the file is silent');
+      expect(loudest(plain, 34, 64), greaterThan(0.2),
+          reason: 'and the second half carries the tone');
+
+      // The identity map changes nothing: switching Retime on is not retiming.
+      expect(layer.toggleRetimeProperty(), isTrue);
+      final identity = await band(0, 0.1);
+      expect(loudest(identity, 0, 30), lessThan(0.05));
+      expect(loudest(identity, 34, 64), greaterThan(0.2));
+
+      // Half speed: layer time 0.2 s reaches source time 0.1 s.
+      layer.setRetimeProperty(
+        value: BridgeScalar.keyframed([
+          const BridgeKeyframe(
+            time: BridgeRational(num: 0, den: 1),
+            value: 0,
+            interpIn: BridgeSideInterp.linear(),
+            interpOut: BridgeSideInterp.linear(),
+          ),
+          const BridgeKeyframe(
+            time: BridgeRational(num: 1, den: 5),
+            value: 0.05,
+            interpIn: BridgeSideInterp.linear(),
+            interpOut: BridgeSideInterp.linear(),
+          ),
+        ]),
+      );
+
+      // The same tenth of a second of the bar now reads the first twentieth
+      // of the file, which is silence all the way across.
+      final slow = await band(0, 0.1);
+      expect(loudest(slow, 0, 64), lessThan(0.05),
+          reason: 'at half speed the whole window is still the silent half');
+      // And twice the window reaches the tone again, in the same place the
+      // un-retimed lane found it: the drawing has stretched, not moved.
+      final wide = await band(0, 0.2);
+      expect(loudest(wide, 0, 30), lessThan(0.05));
+      expect(loudest(wide, 34, 64), greaterThan(0.2));
+    });
+
     /// `L` opens a layer's sound, `LL` its waveform, `LLL` shuts it (K-281) —
     /// the same three-tap shape `U` has. A layer selected but silent is left
     /// alone rather than opened onto a group it has not got.
@@ -4520,14 +4650,17 @@ Future<void> openFold(
 /// a `testWidgets` body hangs the test outright (see frb_test_support.dart). The
 /// point is only that FFmpeg reports an audio stream, so the samples can be
 /// anything.
-String _wavFile(String name) {
+String _wavFile(String name, {bool halfSilent = false}) {
   final dir = Directory.systemTemp.createTempSync('lumit-audio');
   final file = File('${dir.path}/$name');
-  file.writeAsBytesSync(_tinyWav());
+  file.writeAsBytesSync(_tinyWav(halfSilent: halfSilent));
   return file.path;
 }
 
-Uint8List _tinyWav() {
+/// `halfSilent` puts the tone in the second half of the file and silence in
+/// the first, so a test can tell *which stretch of the source* a lane is
+/// showing — which is the whole question a retimed waveform asks.
+Uint8List _tinyWav({bool halfSilent = false}) {
   const rate = 8000;
   const samples = 800;
   const dataBytes = samples * 2;
@@ -4554,6 +4687,7 @@ Uint8List _tinyWav() {
   // a test asking "does the waveform carry signal" has signal to find.
   final data = Uint8List(dataBytes);
   for (var i = 0; i < samples; i++) {
+    if (halfSilent && i < samples ~/ 2) continue;
     final v = (i ~/ 25).isEven ? 16384 : -16384;
     data[i * 2] = v & 0xff;
     data[i * 2 + 1] = (v >> 8) & 0xff;

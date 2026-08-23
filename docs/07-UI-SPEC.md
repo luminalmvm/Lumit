@@ -1867,7 +1867,9 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
   zoom or the scroll moves that window, so the drawn detail follows the zoom instead of
   stretching one fixed summary. Sequence-layer **clips** draw their own waveform inside
   their box, bucketed through the clip's own map so a ramp's transients land where they are
-  heard, and carried along when the clip is slid. Waveforms draw as a three-band
+  heard, and carried along when the clip is slid. A **retimed layer's** lane stretches the
+  same way (K-436): its buckets are taken in the layer's clock and mapped through its Retime,
+  so a slowed passage is drawn wide because it is wide. Waveforms draw as a three-band
   **multiwave** stack (bass / middle / treble) by default, drawn over one another around one
   centre line rather than in separate lanes (K-284); Settings ▸ Interface ▸ Editing ▸
   *Waveforms show the frequency stack* turns it off for one plain wave, and *Waveforms rise
