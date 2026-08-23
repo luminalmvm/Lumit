@@ -1,6 +1,25 @@
 // @ts-check
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import starlightSidebarTopics from "starlight-sidebar-topics";
+
+// The effect categories come from the engine's own catalogue, so the sidebar can
+// say "Blur & sharpen" where the folder on disk says "blur-sharpen". Read once,
+// here, and skip any category that has no generated pages on disk yet.
+const fxReference = JSON.parse(
+  readFileSync(new URL("../crates/lumit-core/fx-reference.json", import.meta.url), "utf8"),
+);
+const effectCategories = fxReference.categories
+  .filter((c) =>
+    existsSync(fileURLToPath(new URL(`./src/content/docs/effects/${c.slug}`, import.meta.url))),
+  )
+  .map((c) => ({
+    label: c.label,
+    collapsed: true,
+    autogenerate: { directory: `effects/${c.slug}` },
+  }));
 
 // docs.lumitlab.com - its own Cloudflare Pages project so the subdomain is a real
 // deployment target rather than a redirect. Shares the marketing site's palette.
@@ -40,22 +59,92 @@ r.addEventListener("input",set);set()})})`,
       editLink: {
         baseUrl: "https://github.com/luminalmvm/Lumit/edit/main/web-docs/",
       },
-      // Using the application comes first and stays first. The engine section is
-      // background reading - nobody needs it to edit, so it sits below.
-      sidebar: [
-        { label: "Start here", autogenerate: { directory: "start" } },
-        { label: "Using Lumit", autogenerate: { directory: "use" } },
-        { label: "The panels", autogenerate: { directory: "panels" } },
-        // One page per effect, generated from the engine's own catalogue by
-        // scripts/gen-effect-pages.mjs. Long, so it starts collapsed, and each
-        // category is its own collapsed subgroup.
-        {
-          label: "Effects",
-          collapsed: true,
-          autogenerate: { directory: "effects", collapsed: true },
-        },
-        { label: "How Lumit works", autogenerate: { directory: "engine" } },
-        { label: "Reference", autogenerate: { directory: "reference" } },
+      // The sidebar is split into three tabs across the top of the page, each
+      // with its own list underneath. There is no `sidebar` option here on
+      // purpose - the plugin below owns it, and Starlight refuses both at once.
+      plugins: [
+        starlightSidebarTopics(
+          [
+            // Read in order, once: install it, learn the shape of a composition.
+            {
+              label: "Tutorials",
+              link: "/start/install/",
+              icon: "open-book",
+              items: [{ label: "Start here", autogenerate: { directory: "start" } }],
+            },
+            // The working manual. Five groups roughly in the order a shot is
+            // made, then one page per panel of the application.
+            {
+              label: "Guides",
+              link: "/use/projects/",
+              icon: "pencil",
+              items: [
+                {
+                  label: "Using Lumit",
+                  items: [
+                    {
+                      label: "Projects and media",
+                      items: ["use/projects", "use/importing", "use/compositions", "use/export"],
+                    },
+                    {
+                      label: "Layers",
+                      items: [
+                        "use/layers",
+                        "use/transform",
+                        "use/blend-modes",
+                        "use/masks",
+                        "use/mattes",
+                        "use/sequence-layers",
+                        "use/text",
+                        "use/shapes",
+                        "use/paint",
+                        "use/camera",
+                      ],
+                    },
+                    {
+                      label: "Animation",
+                      items: [
+                        "use/keyframes",
+                        "use/graph-editor",
+                        "use/retime",
+                        "use/expressions",
+                        "use/markers",
+                        "use/audio",
+                      ],
+                    },
+                    {
+                      label: "Effects",
+                      items: ["use/effects", "use/fx-console", "use/presets"],
+                    },
+                    {
+                      label: "The application",
+                      items: ["use/preview", "use/settings", "use/workspaces"],
+                    },
+                  ],
+                },
+                { label: "The panels", autogenerate: { directory: "panels" } },
+              ],
+            },
+            // Look-up material: the effect catalogue, generated one page per
+            // effect by scripts/gen-effect-pages.mjs, and the background reading.
+            {
+              label: "Reference",
+              link: "/effects/",
+              icon: "information",
+              items: [
+                {
+                  label: "Effects",
+                  collapsed: true,
+                  items: [{ slug: "effects" }, ...effectCategories],
+                },
+                { label: "How Lumit works", autogenerate: { directory: "engine" } },
+                { label: "Reference", autogenerate: { directory: "reference" } },
+              ],
+            },
+          ],
+          // The site root is a landing page and belongs to no topic.
+          { exclude: ["/"] },
+        ),
       ],
     }),
   ],
