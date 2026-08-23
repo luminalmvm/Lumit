@@ -403,6 +403,18 @@ project that opens and is wrong:
   there, not `NORMAL`.
 - **"Is somebody's matte" is a fact about the other layer.** `is_track_matte` is
   filled in after the whole stack is read, from who points at whom.
+- **Two defaults are not zero, and absent-means-default makes them the parser's
+  to write in.** After Effects starts a layer's **Position at the centre of the
+  composition** and its **Anchor Point at the centre of the layer's source**, so
+  a layer nobody moved has no record for either and reading the absence as
+  (0, 0) pins its top-left corner to the top-left of the frame and pivots every
+  scale and rotation from that corner. `place_at_defaults` writes both in, where
+  the two rasters are already in hand. Three layer kinds keep the zero anchor
+  because that *is* AE's default for them — shape, text and null, none of which
+  draws a source rectangle — and a camera or a light gets neither, the DOM not
+  offering them on a rig. Both properties are reported three-dimensional
+  whatever the layer's 3D switch says. All of it is asserted against After
+  Effects' own numbers in the differential test.
 
 **Owed, and honest about it.** (1) The **footage interpretation** fields — path,
 frame rate, alpha, fields, pulldown, loop, missing — are not read at all: the
@@ -525,7 +537,10 @@ golden capture and each producing a plausible-looking wrong project if missed:
   it in the file's own order and the alpha lands in the red channel.
 - **An effect's two-dimensional point is a fraction of the composition.**
 - **An anchor point is a fraction of the layer's *source*** — but only when the
-  layer has one. A shape, text or null layer stores it in raw pixels.
+  layer has one. A shape, text or null layer stores it in raw pixels. A precomp
+  layer's "source" is the composition it points at, whose size lives in *that*
+  comp's `cdta` and not in its item row, so every comp's raster is read before
+  any layer is.
 - **A mask path is normalised twice**: to its own `shph` bounding box, and that
   box to the layer's size. Mask space is the *layer's*, not the comp's.
 - **A linear or held key's ease is all zeros in the file.** After Effects works

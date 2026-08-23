@@ -50,7 +50,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::capture::{
-    Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Switches, Unreadable,
+    Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Property, Switches, Unreadable,
 };
 use crate::{Bundle, BundleSource, ImportError, Manifest, Report, FORMAT};
 use rifx::{
@@ -150,9 +150,23 @@ pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
         .filter_map(|(index, item)| item.id.map(|id| (id, index)))
         .collect();
 
+    // A precomp layer's "source size" is the size of the composition it points
+    // at, and a comp's item row does not carry one — the size lives in the
+    // comp's own `cdta`. So every comp's raster is read up front, before any
+    // layer is, because a layer can name a comp that has not been walked yet.
+    let by_comp_id: HashMap<i64, (f64, f64)> = comp_chunks
+        .iter()
+        .filter_map(|(id, chunk)| {
+            let settings = chunk.children().ok().find(|c| c.id == *b"cdta")?;
+            let width = u16_at(settings.body, 140)?;
+            let height = u16_at(settings.body, 142)?;
+            Some((*id, (f64::from(width), f64::from(height))))
+        })
+        .collect();
+
     let comps = comp_chunks
         .into_iter()
-        .map(|(id, chunk)| read_comp(id, &chunk, &items, &by_id, &mut skipped))
+        .map(|(id, chunk)| read_comp(id, &chunk, &items, &by_id, &by_comp_id, &mut skipped))
         .collect();
 
     Ok(Parsed {
@@ -361,6 +375,16 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
     }
 }
 
+/// The rasters a layer's property tree is read against: the composition the
+/// layer sits in, and every composition's own size — because a precomp layer's
+/// source size is the size of the comp it points at, and a comp's item row does
+/// not carry one.
+#[derive(Clone, Copy)]
+struct Rasters<'a> {
+    comp: (f64, f64),
+    by_comp_id: &'a HashMap<i64, (f64, f64)>,
+}
+
 /// A composition's settings and its layer stack.
 ///
 /// Only `LIST:Layr` children are layers. A comp also holds `DLay`, `SLay` and
@@ -373,6 +397,7 @@ fn read_comp(
     entry: &Chunk<'_>,
     items: &[Item],
     by_id: &HashMap<i64, usize>,
+    by_comp_id: &HashMap<i64, (f64, f64)>,
     skipped: &mut Vec<Unreadable>,
 ) -> Comp {
     let inside: Vec<Chunk<'_>> = entry.children().ok().collect();
@@ -431,10 +456,14 @@ fn read_comp(
         f64::from(comp.width.unwrap_or_default()),
         f64::from(comp.height.unwrap_or_default()),
     );
+    let rasters = Rasters {
+        comp: size,
+        by_comp_id,
+    };
 
     for (position, record) in records.iter().enumerate() {
         let index = u32::try_from(position).unwrap_or(0).saturating_add(1);
-        match read_layer(index, record, items, by_id, &indices, timebase, size) {
+        match read_layer(index, record, items, by_id, &indices, timebase, rasters) {
             Some((layer, mut rows)) => {
                 comp.layers.push(layer);
                 for row in &mut rows {
@@ -539,8 +568,9 @@ fn read_layer(
     by_id: &HashMap<i64, usize>,
     indices: &HashMap<u32, u32>,
     timebase: f64,
-    comp_size: (f64, f64),
+    rasters: Rasters<'_>,
 ) -> Option<(Layer, Vec<Unreadable>)> {
+    let comp_size = rasters.comp;
     let inside: Vec<Chunk<'_>> = record.children().ok().collect();
     let descriptor = inside.iter().find(|chunk| chunk.id == *b"ldta")?;
     let d = descriptor.body;
@@ -665,11 +695,16 @@ fn read_layer(
     // layer's source size, whether it has one at all, and where its clock
     // starts — is settled by now.
     let source_size = source
-        .map(|item| {
-            (
+        .map(|item| match item.kind.as_deref() {
+            // A comp's item row carries no size; its own settings record does.
+            Some("comp") => source_id
+                .and_then(|id| rasters.by_comp_id.get(&id))
+                .copied()
+                .unwrap_or(comp_size),
+            _ => (
                 f64::from(item.width.unwrap_or_default()),
                 f64::from(item.height.unwrap_or_default()),
-            )
+            ),
         })
         .unwrap_or(comp_size);
     let ctx = props::Ctx {
@@ -681,7 +716,7 @@ fn read_layer(
         start: start_time,
         in_effect: false,
     };
-    let (properties, markers, mut rows) = match inside.iter().find(|c| c.is_list(b"tdgp")) {
+    let (mut properties, markers, mut rows) = match inside.iter().find(|c| c.is_list(b"tdgp")) {
         Some(group) => {
             let read = props::read_group(group, ctx);
             (
@@ -692,6 +727,9 @@ fn read_layer(
         }
         None => (Vec::new(), Vec::new(), Vec::new()),
     };
+    if !is_rig {
+        place_at_defaults(&mut properties, ctx, kind != "null");
+    }
     let layer_name = name.clone().unwrap_or_else(|| format!("layer {index}"));
     for row in &mut rows {
         row.layer = Some(layer_name.clone());
@@ -733,6 +771,56 @@ fn read_layer(
         },
         rows,
     ))
+}
+
+/// The two placing properties After Effects does not default to zero, written
+/// in where the file left them out.
+///
+/// The module's opening rule — an `.aep` stores only what is *not* at its
+/// default — is harmless for everything whose default is zero, and quietly
+/// wrong for the two that place the layer: **Position starts at the centre of
+/// the composition and the Anchor Point at the centre of the layer's own
+/// source**. Read as (0, 0) instead, a layer nobody moved pins its top-left
+/// corner to the top-left of the frame, and every scale and rotation on it
+/// pivots from that corner. So the defaults are put back here, where the comp's
+/// size and the source's size are both already in hand, rather than guessed at
+/// downstream where neither is.
+///
+/// Three kinds of layer keep the **zero** anchor, which is After Effects' own
+/// default for them: a shape, a text layer, and a null. None of the three draws
+/// a source rectangle — a shape and a text layer are drawn around their own
+/// origin, and a null is a handle with nothing in it (the 100×100 solid behind
+/// it is plumbing, not a picture) — so there is nothing to centre on. A camera
+/// and a light are left alone entirely: the scripting DOM does not offer these
+/// two properties on a rig in this form.
+fn place_at_defaults(properties: &mut [Property], ctx: props::Ctx<'_>, centre_anchor: bool) {
+    let Some(group) = properties
+        .iter_mut()
+        .find(|node| node.match_name.as_deref() == Some("ADBE Transform Group"))
+        .and_then(|node| node.group.as_mut())
+    else {
+        return;
+    };
+    let mut centre = |match_name: &str, (width, height): (f64, f64)| {
+        if group
+            .iter()
+            .any(|node| node.match_name.as_deref() == Some(match_name))
+        {
+            return;
+        }
+        // Scripting reports both as three-dimensional whatever the layer's own
+        // 3D switch says, so the depth is present and zero.
+        group.push(Property {
+            match_name: Some(match_name.to_string()),
+            value_type: Some("point3".to_string()),
+            value: Some(serde_json::json!([width / 2.0, height / 2.0, 0.0])),
+            ..Property::default()
+        });
+    };
+    centre("ADBE Position", ctx.comp);
+    if ctx.has_source && centre_anchor {
+        centre("ADBE Anchor Point", ctx.layer);
+    }
 }
 
 /// Whether the layer's Time Remap is switched on.

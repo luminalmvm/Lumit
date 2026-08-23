@@ -625,9 +625,14 @@ fn every_stored_property_value_matches_after_effects() {
         "the parser never reports a property After Effects did not"
     );
     // The pins. A regression that stops reading a subtree drops the first; one
-    // that starts guessing at a default lifts it.
+    // that starts guessing at a default lifts it. The 38 above the 646 the file
+    // actually stores are the two placing properties After Effects does not
+    // default to zero — Position at the centre of the comp, Anchor Point at the
+    // centre of the source — written in by the parser and asserted here against
+    // After Effects' own numbers, which is what makes them a recovery rather
+    // than a guess.
     assert_eq!(
-        agreed, 646,
+        agreed, 684,
         "static property values recovered exactly from the .aep"
     );
     assert_eq!(exempt, 6, "the exempt leaves, enumerated in the module doc");
