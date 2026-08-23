@@ -630,7 +630,7 @@ impl GpuEffect for RgbSplit {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         // The Wavelength tier runs a different kernel, which is why the effect's
         // `packed` answers with a mode rather than a tuple. The offset vector and
@@ -650,6 +650,7 @@ impl GpuEffect for RgbSplit {
                     tex,
                     w,
                     h,
+                    aux.matte(),
                     &lumit_gpu::fx::RgbSplitOp {
                         dx,
                         dy,
@@ -673,6 +674,7 @@ impl GpuEffect for RgbSplit {
                     tex,
                     w,
                     h,
+                    aux.matte(),
                     &lumit_gpu::fx::SpectralSplitOp {
                         dx,
                         dy,
@@ -701,7 +703,7 @@ impl GpuEffect for ChromaticAberration {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         match effects::chromatic_aberration::ChromaticAberration::read(p).packed() {
             effects::chromatic_aberration::Fringe::Classic {
@@ -713,6 +715,7 @@ impl GpuEffect for ChromaticAberration {
                 tex,
                 w,
                 h,
+                aux.matte(),
                 &lumit_gpu::fx::ChromaticAberrationOp {
                     amount_px,
                     tints,
@@ -734,6 +737,7 @@ impl GpuEffect for ChromaticAberration {
                     tex,
                     w,
                     h,
+                    aux.matte(),
                     &lumit_gpu::fx::SpectralSplitOp {
                         dx,
                         dy,
@@ -1241,10 +1245,10 @@ impl GpuEffect for Offset {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (shift, mix) = effects::offset::Offset::read(p).packed();
-        fx.offset(ctx, tex, w, h, shift, mix)
+        fx.offset(ctx, tex, w, h, aux.matte(), shift, mix)
     }
 }
 
@@ -1281,7 +1285,7 @@ impl GpuEffect for LensDistort {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let l = effects::lens_distort::LensDistort::read(p).packed();
         fx.lens_distort(
@@ -1289,6 +1293,7 @@ impl GpuEffect for LensDistort {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::LensDistortOp {
                 active: l.active,
                 tan_half_fov: l.tan_half_fov,
@@ -1315,7 +1320,7 @@ impl GpuEffect for CornerPin {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let c = effects::corner_pin::CornerPin::read(p).packed();
         fx.corner_pin(
@@ -1323,6 +1328,7 @@ impl GpuEffect for CornerPin {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::CornerPinOp {
                 inv: c.inv,
                 active: c.active,
@@ -1403,7 +1409,7 @@ impl GpuEffect for Twirl {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let t = effects::twirl::Twirl::read(p).packed();
         fx.twirl(
@@ -1411,6 +1417,7 @@ impl GpuEffect for Twirl {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::TwirlOp {
                 centre: t.centre,
                 radius: t.radius,
@@ -1435,7 +1442,7 @@ impl GpuEffect for Spherize {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let s = effects::spherize::Spherize::read(p).packed();
         fx.spherize(
@@ -1443,6 +1450,7 @@ impl GpuEffect for Spherize {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::SpherizeOp {
                 centre: s.centre,
                 radius: s.radius,
@@ -1467,7 +1475,7 @@ impl GpuEffect for Ripple {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let r = effects::ripple::Ripple::read(p).packed();
         fx.ripple(
@@ -1475,6 +1483,7 @@ impl GpuEffect for Ripple {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::RippleOp {
                 centre: r.centre,
                 radius: r.radius,
@@ -1502,7 +1511,7 @@ impl GpuEffect for WaveWarp {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let v = effects::wave_warp::WaveWarp::read(p).packed();
         fx.wave_warp(
@@ -1510,6 +1519,7 @@ impl GpuEffect for WaveWarp {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::WaveWarpOp {
                 dir: v.dir,
                 perp: v.perp,
@@ -1538,7 +1548,7 @@ impl GpuEffect for BezierWarp {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let b = effects::bezier_warp::BezierWarp::read(p).packed();
         fx.bezier_warp(
@@ -1546,6 +1556,7 @@ impl GpuEffect for BezierWarp {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::BezierWarpOp {
                 pts: b.pts,
                 steps: b.steps,
@@ -1568,7 +1579,7 @@ impl GpuEffect for Warp {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let a = effects::warp::Warp::read(p).packed();
         fx.warp(
@@ -1576,6 +1587,7 @@ impl GpuEffect for Warp {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::WarpOp {
                 style: a.style,
                 bend: a.bend,
@@ -2360,11 +2372,15 @@ impl GpuEffect for Transform {
         // the CPU reference and the kernel consume identical numbers (K-031).
         let (m, off, opacity) =
             lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, opacity);
+        // No matte: the Transform keeps the strength dissolve (scaling a
+        // whole-frame move is not a picture a per-pixel matte should draw;
+        // the Shake is the one that claims this kernel's matte, K-427).
         fx.transform(
             ctx,
             tex,
             w,
             h,
+            None,
             &lumit_gpu::fx::TransformOp {
                 m,
                 off,
@@ -2391,7 +2407,7 @@ impl GpuEffect for Shake {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         use effects::shake::{Shake as ShakeParams, Shaken};
         // Shake dispatches the Transform kernel (docs/08 §3.4: a
@@ -2414,11 +2430,15 @@ impl GpuEffect for Shake {
                 );
                 let (m, off, opacity) =
                     lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                // **The shake claims its matte** (K-427): it scales the
+                // displacement the wobble gives each pixel, read where the
+                // pixel lands, so a soft matte turns the shove into a warp.
                 fx.transform(
                     ctx,
                     tex,
                     w,
                     h,
+                    aux.matte(),
                     &lumit_gpu::fx::TransformOp {
                         m,
                         off,
@@ -2445,6 +2465,7 @@ impl GpuEffect for Shake {
                     tex,
                     w,
                     h,
+                    aux.matte(),
                     &lumit_gpu::fx::ShakeMbOp {
                         taps,
                         count: samples.len() as u32,
@@ -2509,7 +2530,7 @@ impl GpuEffect for BlockGlitch {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         // The tick is the resolve-time discretised layer time (K-385), already
         // in the bag; the wrapper does no time maths of its own, exactly as it
@@ -2531,6 +2552,7 @@ impl GpuEffect for BlockGlitch {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::BlockGlitchOp {
                 intensity,
                 seed,
@@ -2559,7 +2581,7 @@ impl GpuEffect for Scanlines {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         // Intensity carries an old project's folded Darkness and the roll is
         // this frame's offset — both resolve-time derivations (K-385), already
@@ -2572,6 +2594,7 @@ impl GpuEffect for Scanlines {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::ScanlinesOp {
                 intensity,
                 period_px,

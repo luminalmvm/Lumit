@@ -49,6 +49,13 @@ pub enum Fringe {
     // declared statically across every comp resolution; full-frame is the safe
     // static bound.
     roi = FullFrame,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white fringes at the full Amount, grey less, \
+         black not at all",
+    ),
 )]
 pub struct ChromaticAberration {
     /// px@comp (§2.3): peak channel offset, reached at the corner distance from

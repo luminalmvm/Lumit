@@ -36,6 +36,14 @@ use lumit_fx_macros::Effect;
     // Four points anywhere: the output pixel can come from anywhere in the input.
     roi = FullFrame,
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the pull from the frame's own corners per pixel, read where the \
+         pixel lands: white moves it all the way to the pinned position, grey \
+         part way, black leaves it where it was",
+    ),
 )]
 pub struct CornerPin {
     /// px@comp: where the frame's top-left corner ends up.

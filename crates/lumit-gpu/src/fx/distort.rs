@@ -99,7 +99,8 @@ struct TileParams {
 struct OffsetParams {
     shift: [f32; 2],
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale the shift by the matte (K-427).
+    matte_on: f32,
 }
 
 #[repr(C)]
@@ -145,6 +146,9 @@ struct LensDistortParams {
     /// spellable in the kernel.
     enabled: u32,
     reverse: u32,
+    /// 1 = scale the displacement by the matte (K-427).
+    matte_on: f32,
+    _pad: [f32; 3],
 }
 
 /// One resolved Corner pin (docs/08 §3.48). Mirrors
@@ -175,7 +179,8 @@ struct CornerPinParams {
     /// `active` in the op and the CPU reference; **`enabled` here**, because
     /// `active` is a reserved keyword in WGSL (fx_lensdistort.wgsl's note).
     enabled: u32,
-    _pad0: u32,
+    /// 1 = scale the pull from the corners by the matte (K-427).
+    matte_on: f32,
 }
 
 /// One resolved Displacement map (docs/08 §3.49). Mirrors
@@ -240,7 +245,8 @@ struct TwirlParams {
     inv_radius: f32,
     angle: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Angle by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -268,7 +274,8 @@ struct SpherizeParams {
     inv_radius: f32,
     bulge: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Bulge by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -305,7 +312,8 @@ struct RippleParams {
     turns: f32,
     mix_amt: f32,
     asymmetric: u32,
-    _pad0: u32,
+    /// 1 = scale Wave height by the matte (K-427).
+    matte_on: f32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -345,7 +353,8 @@ struct WaveWarpParams {
     inv_pin_band: f32,
     mix_amt: f32,
     shape: u32,
-    _pad0: u32,
+    /// 1 = scale Wave height by the matte (K-427).
+    matte_on: f32,
     _pad1: u32,
 }
 
@@ -370,7 +379,8 @@ struct BezierWarpParams {
     q: [[f32; 4]; 6],
     mix_amt: f32,
     steps: u32,
-    _pad0: u32,
+    /// 1 = scale the bend from the straight frame by the matte (K-427).
+    matte_on: f32,
     _pad1: u32,
 }
 
@@ -398,7 +408,8 @@ struct WarpParams {
     v_distort: f32,
     mix_amt: f32,
     style: u32,
-    _pad0: u32,
+    /// 1 = scale Bend and both distortions by the matte (K-427).
+    matte_on: f32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -413,14 +424,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RippleOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-ripple-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.ripple,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -433,7 +446,7 @@ impl FxEngine {
                 turns: op.turns,
                 mix_amt: op.mix,
                 asymmetric: u32::from(op.asymmetric),
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
                 _pad2: 0,
             }),
@@ -450,14 +463,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &WaveWarpOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-wave-warp-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.wave_warp,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -470,7 +485,7 @@ impl FxEngine {
                 inv_pin_band: op.inv_pin_band,
                 mix_amt: op.mix,
                 shape: op.shape,
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
             }),
         );
@@ -486,6 +501,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &BezierWarpOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-bezier-warp-out");
@@ -498,11 +514,12 @@ impl FxEngine {
                 op.pts[i * 2 + 1][1],
             ];
         }
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.bezier_warp,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -510,7 +527,7 @@ impl FxEngine {
                 q,
                 mix_amt: op.mix,
                 steps: op.steps,
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
             }),
         );
@@ -526,14 +543,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &WarpOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-warp-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.warp,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -543,7 +562,7 @@ impl FxEngine {
                 v_distort: op.v_distort,
                 mix_amt: op.mix,
                 style: op.style,
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
                 _pad2: 0,
             }),
@@ -561,15 +580,17 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &CornerPinOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-corner-pin-out");
         let row = |r: [f32; 3]| [r[0], r[1], r[2], 0.0];
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.corner_pin,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -580,7 +601,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 edge: op.edge,
                 enabled: u32::from(op.active),
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -670,14 +691,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &TwirlOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-twirl-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.twirl,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -687,7 +710,7 @@ impl FxEngine {
                 inv_radius: op.inv_radius,
                 angle: op.angle,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -703,14 +726,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &SpherizeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-spherize-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.spherize,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -720,7 +745,7 @@ impl FxEngine {
                 inv_radius: op.inv_radius,
                 bulge: op.bulge,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -809,28 +834,31 @@ impl FxEngine {
 
     /// Apply one Offset (docs/08 §3.40) to a linear working texture, returning a
     /// new texture of the same size. One wrapped bilinear tap a pixel.
+    #[allow(clippy::too_many_arguments)]
     pub fn offset(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         shift: [f32; 2],
         mix: f32,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-offset-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.offset,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&OffsetParams {
                 shift,
                 mix_amt: mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -882,14 +910,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &LensDistortOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-lens-distort-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.lens_distort,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -901,6 +931,8 @@ impl FxEngine {
                 edge: op.edge,
                 enabled: u32::from(op.active),
                 reverse: u32::from(op.reverse),
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 3],
             }),
         );
         out

@@ -377,6 +377,35 @@ helper on each path (`cpu::matte_toward` and its WGSL twin): `neutral·(1 − k)
 spelled so that k = 1 is the value to the bit, which is what keeps an empty matte
 byte-identical to the effect before the claim (K-258).
 
+**And the matte scales the displacement of every distortion (K-427, the same rule).** A
+distortion's amount is a distance: how far a pixel is moved. The matte multiplies *that*,
+per pixel, so a grey matte is a smaller move rather than a full move faded back — which is
+the difference between a warp and a double exposure of a warped picture over a still one.
+Fourteen more effects claim their matte that way, each naming what it scales in its
+declaration (and so in the manual's Matte row): RGB split's and Chromatic aberration's
+Amount (both tiers, Wavelength included), the Shake's Amplitude and Rotation amount,
+Block glitch's Intensity, Offset's shift, Lens distort's distortion (toward the identity),
+Corner pin's and Bezier warp's displacement from the frame's own corners, Twirl's Angle,
+Spherize's Bulge, Ripple's and Wave warp's Wave height, and Warp's Bend with both
+distortions. Scanlines is the exception in form and not in rule: scaling its Intensity
+would be the dissolve to the bit, so the matte **divides its Line period** instead — the
+lines spread apart as the matte darkens and are too far apart to see at black (the divide
+floors at `cpu::SCANLINES_MIN_K`) — and Intensity is left alone.
+
+**k is read at the destination pixel** — where the pixel lands, not where it was fetched
+from — for every one of the fourteen, which is the only choice that makes the matte's own
+picture line up with the picture the viewer sees: the frame the matte draws is the frame
+that comes out. It is what turns a whole-frame move into a warp, and it is why a black
+matte on Corner pin leaves a pixel exactly where it was rather than leaving it transparent.
+
+Where scaling the amount is *mathematically* the dissolve, nothing changes and the effect
+keeps the strength semantic (the rule's own test): **Datamosh** is exactly that — its
+output is `current·(1 − Intensity) + melted·Intensity`, so Intensity·k and the dissolve are
+the same arithmetic — and **Tile, Mirror and Polar coordinates** have no amount to scale at
+all, being a repeat, a reflection and a change of coordinates. Turbulent displace (K-395)
+and Displacement map (K-402) had already claimed theirs, on this rule before it was written
+down.
+
 The difference is worth stating once, because it is the whole reason the hook exists. The
 dissolve can only change *how much of a finished effect* survives; it cannot change what
 the effect did. A blur dissolved to a half still gathered from the full radius — a sharp
@@ -776,6 +805,14 @@ once did; off → Transparent). The Auto-scale cover (which zoomed in to keep ev
 covered) is gone; the Edges control handles the revealed border instead. Style presets and
 Triggered mode (§1.4) follow; shipped parameters are stable when they do.
 
+**The Matte scales the displacement (K-427, §2.6):** the shove, the twist and the zoom the
+wobble gives a pixel are all pulled toward none by the matte at the pixel they land on, so
+a half-grey matte on a 6 px shove is the 3 px shove and a soft matte turns a frame-wide
+shove into a **warp** — one part of the picture moving while another stays put, which no
+dissolve of a shaken frame can be. The motion-blurred tier scales every sub-frame tap the
+same way. The Transform effect (§3.5) shares this kernel and does **not** claim it: it
+keeps the strength dissolve.
+
 ### 3.5 Transform — the transform properties as an effect (K-090)
 
 Position, Anchor, Scale, Rotation, Opacity — the layer transform group, as a stack entry.
@@ -838,6 +875,11 @@ exposure) and preview equals export (K-031).
 same three-tinted-tap idea, but growing radially from the frame centre rather than along an
 angle. It carries the same three-colour channel picker and the same Wavelength/Samples
 dispersion (K-144) — see §3.15.
+
+**The Matte scales Amount on both (K-427, §2.6):** the offset vector the three taps spread
+across is multiplied by the matte at the pixel it is read for, in both the classic tier and
+the Wavelength one, so the fringe is genuinely narrower where the matte is grey rather than
+a wide fringe faded back. A black matte returns the pixel untouched.
 
 ### 3.7 Flash — beat-aware strobe
 
@@ -1157,6 +1199,17 @@ Reset. The schema bumps version 2 → 3; pre-release, no migration is required (
 keeps its look). `temporal: {-1, 0}` remains the schema's static declaration and
 `stack_flow_neighbour` reads the match name the same static way it reads Motion blur's.
 
+**The Matte, on all three (K-427, §2.6).** **Block glitch** scales its **Intensity** per
+pixel, before any hash is read, so the jitter, the displacement, the channel split and the
+slice odds all shrink together where the matte darkens — a genuinely calmer glitch, not a
+loud one faded back. **Scanlines** cannot take that route, because scaling its Intensity
+*is* the generic dissolve to the bit; the matte **divides its Line period** instead, so the
+lines spread apart as the matte darkens and vanish at black (the divide floors at
+`cpu::SCANLINES_MIN_K`, a period ten thousand times the set one), and Intensity is left
+alone. **Datamosh** keeps the strength dissolve, for the rule's own reason: its output is
+`current·(1 − Intensity) + melted·Intensity`, so scaling Intensity per pixel and dissolving
+per pixel are the same arithmetic, and there is nothing for a claim to add.
+
 ### 3.13 Echo — frame echo and trails (speed lines)
 
 **Parameters:** Echo count (1–32), Spacing (frames, may be negative to echo forward),
@@ -1273,6 +1326,10 @@ the CPU reference or the WGSL kernel: the radial offset's scale factor is an exa
 Amount 0, so every tap collapses onto its own pixel and the tinted sum returns the input for
 the primary defaults — the same un-guarded style RGB split's own kernel uses (asserted
 bit-exact by test).
+
+**The Matte scales Amount (K-427, §2.6),** in both tiers, exactly as §3.6's does: the
+radial offset is multiplied by the matte at the pixel it is read for, so the fringe narrows
+toward the frame's own colours where the matte darkens.
 
 ### 3.16 Exposure
 
@@ -2659,6 +2716,11 @@ a constant speed) and because it is the same number twice otherwise. The import 
 
 `cheap` cost, `FullFrame` ROI. Mix 0 and a zero shift are both the bit-exact identity.
 
+**The Matte scales the shift (K-427, §2.6):** each pixel reads through `shift · k` for the
+matte's strength at that pixel, so part of the frame can slide while the rest stays — a
+shear or a smear of the wrap rather than the whole picture moving. The wrap is unchanged;
+only how far each pixel reaches into it is.
+
 ### 3.41 Mirror — one half reflected onto the other
 
 **Parameters:** Centre x and Centre y (px@comp, default 960, 540), Angle (dial, degrees,
@@ -2736,6 +2798,12 @@ Four things that are decision rather than derivation:
 
 `moderate` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity, and so is Field of view
 0 (the kernel short-circuits rather than dividing by a zero tangent).
+
+**The Matte scales the distortion (K-427, §2.6):** the sample position is pulled back toward
+the pixel's own centre by the matte, read where the pixel lands, so the Field of view's
+effect fades toward the identity as the matte darkens — the bend is genuinely weaker there,
+not a fully bent frame dissolved over a straight one. A black matte is the untouched
+picture.
 
 **Not in v1:** AE's Resize / Optimal Pixels, which grow the layer's own bounds. Lumit
 renders effects at the frame's raster (§2.3) and has no per-effect resize; the same picture
@@ -3018,6 +3086,13 @@ Five things that are decision rather than derivation:
 within a last-bit rounding of the perspective divide, which is not the same claim and is not
 made as one: the map is the identity but the sample still travels through a division.
 
+**The Matte scales the pull from the corners (K-427, §2.6),** in the owner's words: the
+matte multiplies the offset the handles set, so where the matte is black the pixel stays
+where it was — the untouched picture, not a transparent one. It is read where the pixel
+lands, so a soft matte pins part of the frame to its own corners while the rest travels to
+the pinned quad. A pixel behind the projection's horizon stays transparent whatever the
+matte says: there is no position to pull it back from.
+
 **Not in v1:** AE's Bezier Warp and Mesh Warp, which bend the edges *between* the corners.
 Both are Tier B ([impl/ae-effect-parity.md](impl/ae-effect-parity.md)). Nor is AE's
 "expand output" — Lumit renders effects at the frame's raster (§2.3), as §3.42 records.
@@ -3162,6 +3237,11 @@ Three notes:
 
 `cheap` cost, `FullFrame` ROI. Mix 0, Angle 0 and Radius 0 are all the bit-exact identity.
 
+**The Matte scales Angle (K-427, §2.6):** a half-grey matte on a 200° twirl draws the 100°
+twirl, to the byte — the picture the control at half draws, which no dissolve of the 200°
+picture can be. Read at the destination pixel, so the falloff over the disc is the matte's
+own shape crossed with the radius ramp.
+
 ### 3.52 Spherize — a glass ball held over the picture
 
 **Parameters:** Radius (px@comp, 0..2000, default 550, hard min 0), Bulge (per cent, −100..100,
@@ -3202,6 +3282,11 @@ Four notes:
 
 `cheap` cost, `FullFrame` ROI. Mix 0, Bulge 0 and Radius 0 are all the bit-exact identity.
 One arc sine or sine a pixel — §3.42's fourth note, K-399's metric.
+
+**The Matte scales Bulge (K-427, §2.6):** the matte multiplies Bulge toward 0 before the
+map is blended, so the glass is genuinely shallower where the matte is grey — and the
+Bulge-0 short-circuit above then catches a black matte, which is why it costs no
+resampling.
 
 ### 3.53 Ripple — rings spreading from a point
 
@@ -3257,6 +3342,10 @@ Four things that are decision rather than derivation:
 identity. One sine and cosine a pixel, so K-399's metric applies: judged on absolute
 difference over the smooth corpus.
 
+**The Matte scales Wave height (K-427, §2.6):** the rings are shallower where the matte is
+grey and flat where it is black, the envelope and the ring spacing untouched — so the water
+can be still at one side of the disc and moving at the other.
+
 ### 3.54 Wave warp — a travelling wave across the frame
 
 Maps AE's Wave Warp ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
@@ -3306,6 +3395,11 @@ Four notes:
 
 `cheap` cost, `PaddedPctDiag(25)` ROI. Mix 0 and Wave height 0 are both the bit-exact
 identity. K-399's metric.
+
+**The Matte scales Wave height (K-427, §2.6):** the slide is shorter where the matte is
+grey — the wave's shape, width and speed are the host's and unchanged, only its amplitude
+varies across the frame. The pinned edges keep their own ramp width, so a pinned border is
+still exactly still whatever the matte says.
 
 **Not shipped:** AE's Noise and Smooth Noise wave types (a wave shape that needs a seed is a
 §3.37 field, and §3.38 is the effect that warps by one), its Warp Axis swap, and its
@@ -3383,6 +3477,12 @@ Four things that are decision rather than derivation:
 `moderate` cost (Quality patch evaluations and Jacobians a pixel), `FullFrame` ROI. Mix 0 is
 the bit-exact identity, and so — by the snap above — is the default patch. K-399's metric.
 
+**The Matte scales the bend from the straight frame (K-427, §2.6),** in the owner's words:
+the matte multiplies the offset the handles set, after the solve and its snap, so where the
+matte is black the pixel stays where it was. It is read where the pixel lands. A pixel
+outside the patch stays transparent whatever the matte says — there is no solution to pull
+it toward.
+
 ### 3.56 Warp — the thirteen bend presets
 
 Maps AE's Warp ([11-AE-IMPORT.md](11-AE-IMPORT.md)), which is Photoshop's.
@@ -3456,6 +3556,10 @@ Four notes:
 
 `cheap` cost, `FullFrame` ROI. Mix 0 and Bend 0 with both distortions 0 are the bit-exact
 identity. K-399's metric.
+
+**The Matte scales Bend and both distortions (K-427, §2.6):** all three are multiplied by
+the matte at the destination pixel before the style runs, so a grey matte is a shallower
+bend seen at a shallower angle, and a black one is the identity the line above names.
 
 **Not shipped:** AE's Warp Axis switch (which transposes the whole effect), and its Shell
 Lower and Shell Upper styles. Both are reported by the import.

@@ -10587,10 +10587,29 @@ fn every_effect_carries_a_matte_row() {
         // Black and white, Tint, Curves, Levels, Invert, LUT, Broadcast safe,
         // Contrast, Vignette) keep the strength dissolve because scaling
         // their amount IS that dissolve, and Threshold because it has no
-        // honest per-pixel form.
+        // honest per-pixel form. The Distortion family claims it the same way
+        // (K-427): the matte scales the displacement, read at the destination
+        // pixel. Datamosh stays on the dissolve because scaling its Intensity
+        // IS the dissolve to the bit; Tile, Mirror and Polar coordinates have
+        // no amount to scale. The Transform effect shares the Shake's kernel
+        // but never binds a matte.
         let claims = matches!(
             s.match_name,
             "dof"
+                | "rgb_split"
+                | "chromatic_aberration"
+                | "shake"
+                | "block_glitch"
+                | "scanlines"
+                | "offset"
+                | "lens_distort"
+                | "corner_pin"
+                | "bezier_warp"
+                | "twirl"
+                | "spherize"
+                | "ripple"
+                | "wave_warp"
+                | "warp"
                 | "lens_flare"
                 | "blur"
                 | "glow"
@@ -10618,7 +10637,7 @@ fn every_effect_carries_a_matte_row() {
         assert_eq!(
             !s.matte.generic(),
             claims,
-            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426); anything else that wants a deeper meaning              must say so here too",
+            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426, K-427); anything else that wants a deeper meaning              must say so here too",
             s.match_name
         );
         // Every image effect takes one, whatever it means by it.

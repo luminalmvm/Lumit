@@ -65,6 +65,14 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     // the frame key reads (lumit-eval).
     seeded = true,
     groups = SHAKE_GROUPS,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the shake's displacement per pixel, read where the pixel lands: \
+         white moves it the full Amplitude and Rotation amount, grey less, \
+         black leaves it still, so a soft matte turns the shove into a warp",
+    ),
 )]
 pub struct Shake {
     /// px@comp (§2.3): how far the wobble roams. Declared `Px`, so the resolve

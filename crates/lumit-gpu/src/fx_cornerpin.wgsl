@@ -18,13 +18,32 @@ struct Params {
     mix_amt: f32,     // 0..1, blended against the unprocessed input
     edge: u32,        // 0 transparent, 1 repeat, 2 mirror
     enabled: u32,     // 0 = a degenerate quad = the exact identity
-    _pad0: u32,
+    matte_on: f32,    // 1 = the matte scales the pull from the corners (K-427)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // == fx_lensdistort.wgsl's edge_idx and cpu::edge_index. -1 means transparent.
 fn edge_idx(i: i32, len: i32) -> i32 {
@@ -98,7 +117,16 @@ fn corner_pin(@builtin(global_invocation_id) gid: vec3<u32>) {
     let d = p.n2.x * px + p.n2.y * py + p.n2.z;
     var v = vec4<f32>(0.0);
     if (d > 0.0) {
-        v = bilinear_edge(u / d * f32(size.x), t / d * f32(size.y), size);
+        var sx = u / d * f32(size.x);
+        var sy = t / d * f32(size.y);
+        // The matte scales the displacement toward none, read at the
+        // destination pixel (K-427, == cpu::corner_pin_matted).
+        if (p.matte_on != 0.0) {
+            let k = matte_k(xy);
+            sx = matte_toward(sx, px, k);
+            sy = matte_toward(sy, py, k);
+        }
+        v = bilinear_edge(sx, sy, size);
     }
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + v * p.mix_amt);
 }

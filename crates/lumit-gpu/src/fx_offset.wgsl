@@ -9,13 +9,26 @@
 struct Params {
     shift: vec2<f32>,   // raster pixels
     mix_amt: f32,       // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,      // 1 = the matte scales the shift (K-427)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // == cpu::bilinear_wrap's `at`: WGSL's `%` on i32 keeps the sign of the dividend
 // exactly as Rust's does, so the double fold lands in 0..len on both.
@@ -51,8 +64,13 @@ fn offset(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let v = bilinear_wrap(f32(xy.x) + 0.5 - p.shift.x,
-                          f32(xy.y) + 0.5 - p.shift.y,
+    // The matte scales the shift per pixel (K-427, == cpu::offset_matted).
+    var k = 1.0;
+    if (p.matte_on != 0.0) {
+        k = matte_k(xy);
+    }
+    let v = bilinear_wrap(f32(xy.x) + 0.5 - p.shift.x * k,
+                          f32(xy.y) + 0.5 - p.shift.y * k,
                           size);
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + v * p.mix_amt);
 }

@@ -14,7 +14,7 @@ struct Params {
     v_distort: f32,      // ±0.9
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     style: u32,          // 0..12, docs/08 §3.56's table order
-    _pad0: u32,
+    matte_on: f32,       // 1 = the matte scales Bend and both distortions (K-427)
     _pad1: u32,
     _pad2: u32,
 };
@@ -23,6 +23,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 const PI: f32 = 3.1415927;
 
@@ -127,10 +140,16 @@ fn warp(@builtin(global_invocation_id) gid: vec3<u32>) {
     let py = f32(xy.y) + 0.5;
     let u = px / half_w - 1.0;
     let v = py / half_h - 1.0;
-    let m = warp_style(p.style, u, v, p.bend, half_w / half_h);
+    // The matte scales Bend and both distortions per pixel (K-427,
+    // == cpu::warp_matted).
+    var k = 1.0;
+    if (p.matte_on != 0.0) {
+        k = matte_k(xy);
+    }
+    let m = warp_style(p.style, u, v, p.bend * k, half_w / half_h);
     // Both tapers are taken from the style's output, so neither feeds the other.
-    let du = m.x / (1.0 + p.v_distort * m.y);
-    let dv = m.y / (1.0 + p.h_distort * m.x);
+    let du = m.x / (1.0 + p.v_distort * k * m.y);
+    let dv = m.y / (1.0 + p.h_distort * k * m.x);
     let sx = px + (du - u) * half_w;
     let sy = py + (dv - v) * half_h;
     let val = bilinear_transparent(sx, sy, size);

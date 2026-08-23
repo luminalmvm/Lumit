@@ -18,7 +18,7 @@ struct Params {
     inv_radius: f32,     // 1 / radius, floored host-side
     angle: f32,          // radians; positive turns the picture clockwise
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,       // 1 = the matte scales Angle (K-427)
     _pad1: f32,
 };
 
@@ -26,6 +26,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // == cpu::bilinear_edge with the Transparent policy (edge == 0).
 // The tap NEVER loads out of bounds. A guard that early-returns before the
@@ -77,7 +90,12 @@ fn twirl(@builtin(global_invocation_id) gid: vec3<u32>) {
     var sy = py;
     if (r < p.radius) {
         let t = 1.0 - r * p.inv_radius;
-        let phi = p.angle * t * t;
+        // The matte scales Angle per pixel (K-427, == cpu::twirl_matted).
+        var angle = p.angle;
+        if (p.matte_on != 0.0) {
+            angle = angle * matte_k(xy);
+        }
+        let phi = angle * t * t;
         let s = sin(phi);
         let c = cos(phi);
         // R(-phi) applied to the offset: the picture turns by +phi.

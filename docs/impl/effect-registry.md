@@ -459,6 +459,34 @@ same coefficients in `f32` (`cpu::hue_matrix_px`). Contrast and Vignette stay on
 `Strength` because scaling their amount *is* the dissolve, and Threshold because a cut has
 no honest per-pixel form that returns the colour picture at black.
 
+**And the Distortion family claims it the same way (K-427, docs/08 §2.6):** a distortion's
+amount is a *distance*, so the matte multiplies the displacement per pixel. Fourteen more
+declare `matte = ("matte", "<what it scales>")` on the shape above, unchanged — RGB split's
+and Chromatic aberration's Amount (both tiers, so the shared `spectral_split` kernel takes
+a matte too), the Shake's wobble, Block glitch's Intensity, Offset's shift, Lens distort's
+distortion, Corner pin's and Bezier warp's pull from the corners, Twirl's Angle, Spherize's
+Bulge, Ripple's and Wave warp's Wave height, and Warp's Bend with both distortions. Two
+things are worth knowing when reading them:
+
+- **k is read at the destination pixel**, always: the kernel already runs per output pixel
+  and `matte_k(xy)` is that pixel's, so the matte's picture lines up with the picture that
+  comes out. For the effects that resample through a solved position — Shake, Lens distort,
+  Corner pin, Bezier warp — the pull is `matte_toward` applied to the *sample coordinate*
+  against the pixel's own centre, which is the same helper the colour claims use and makes
+  a black matte the untouched pixel rather than a transparent one.
+- **Two kernels are shared and only one side claims.** `fx_transform.wgsl` serves both the
+  Transform effect and the Shake: the Shake passes `aux.matte()`, Transform passes `None`
+  and keeps the dissolve, and `matte_on` in the uniform is what tells them apart.
+  `fx_spectral.wgsl` serves the Wavelength tier of both splits and takes the matte from
+  either.
+
+Scanlines is the one that changes shape rather than scale: `intensity · k` would be the
+dissolve to the bit, so the matte divides **Line period** instead, floored at
+`cpu::SCANLINES_MIN_K` (`1e-4`, the identical literal in the WGSL) so black is lines too
+far apart to see. Datamosh keeps `Strength` for the K-426 reason — `current·(1 − i) +
+melted·i` makes `i·k` and the dissolve the same arithmetic — and Tile, Mirror and Polar
+coordinates have no amount to scale.
+
 Each one's sentence lives in its own declaration and reaches `fx-reference.json`, so the
 manual's parameter table prints what that effect's matte does rather than the generic
 sentence (K-395: an override documents its meaning in the schema prose). The macro will

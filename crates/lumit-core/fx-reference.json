@@ -1194,7 +1194,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white splits the channels the full distance, grey less, black not at all"
+      }
     },
     {
       "slug": "chromatic-aberration",
@@ -1351,7 +1355,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white fringes at the full Amount, grey less, black not at all"
+      }
     },
     {
       "slug": "flash",
@@ -3667,7 +3675,11 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp"
+      }
     },
     {
       "slug": "block-glitch",
@@ -3825,7 +3837,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Intensity per pixel: white glitches at the full Intensity, grey gently, black not at all"
+      }
     },
     {
       "slug": "scanlines",
@@ -3949,7 +3965,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "widens Line period per pixel: white keeps the set period, grey spreads the lines apart, black spreads them too far to see"
+      }
     },
     {
       "slug": "datamosh",
@@ -4564,7 +4584,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the shift per pixel, read where the pixel lands: white slides the full distance, grey less, black not at all"
+      }
     },
     {
       "slug": "mirror",
@@ -4826,7 +4850,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the distortion per pixel, read where the pixel lands: white bends at the full Field of view, grey less, black not at all"
+      }
     },
     {
       "slug": "corner-pin",
@@ -4998,7 +5026,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the pull from the frame's own corners per pixel, read where the pixel lands: white moves it all the way to the pinned position, grey part way, black leaves it where it was"
+      }
     },
     {
       "slug": "displacement-map",
@@ -5368,7 +5400,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Angle per pixel: white twirls the full Angle, grey less, black not at all"
+      }
     },
     {
       "slug": "spherize",
@@ -5494,7 +5530,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Bulge per pixel: white bulges the full amount, grey less, black not at all"
+      }
     },
     {
       "slug": "ripple",
@@ -5649,7 +5689,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Wave height per pixel: white ripples the full height, grey less, black not at all"
+      }
     },
     {
       "slug": "wave-warp",
@@ -5804,7 +5848,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Wave height per pixel: white slides the full height, grey less, black not at all"
+      }
     },
     {
       "slug": "bezier-warp",
@@ -6159,7 +6207,11 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the bend from the straight frame per pixel, read where the pixel lands: white bends it all the way, grey part way, black leaves it where it was"
+      }
     },
     {
       "slug": "warp",
@@ -6302,7 +6354,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Bend and both distortions per pixel: white bends the full amount, grey less, black not at all"
+      }
     },
     {
       "slug": "fill",

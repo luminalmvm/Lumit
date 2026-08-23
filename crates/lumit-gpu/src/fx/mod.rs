@@ -391,9 +391,10 @@ impl FxEngine {
         self.dispatch_matted(ctx, pipeline, src, orig, None, dst, w, h, params)
     }
 
-    /// [`Self::dispatch`] with a **Matte** bound (K-395, docs/08 §2.6) — the
-    /// two kernels that claim the matte inside their own maths (the Gaussian
-    /// blur's radius, the Glow's seed gate) instead of taking the generic
+    /// [`Self::dispatch`] with a **Matte** bound (K-395, docs/08 §2.6) — for
+    /// the kernels that claim the matte inside their own maths, scaling the
+    /// control the effect names (a blur's radius, a colour amount, a
+    /// distortion's displacement: K-426, K-427) instead of taking the generic
     /// dissolve.
     ///
     /// `None` binds `src` in the matte's place. A texture binding cannot be left

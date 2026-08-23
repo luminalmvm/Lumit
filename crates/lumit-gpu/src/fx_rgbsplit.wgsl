@@ -14,7 +14,7 @@ struct Params {
     scale_g: f32,
     scale_b: f32,
     mix_amt: f32,   // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,  // 1 = the matte scales Amount (K-427)
     _pad1: f32,
 };
 
@@ -22,6 +22,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // Clamp-addressed bilinear sample at continuous pixel-centre coordinates
 // (== cpu::bilinear, same arithmetic order).
@@ -55,7 +68,11 @@ fn rgb_split(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
-    let off = vec2<f32>(p.dx, p.dy);
+    var off = vec2<f32>(p.dx, p.dy);
+    // The matte scales Amount per pixel (K-427, == cpu::rgb_split_matted).
+    if (p.matte_on != 0.0) {
+        off = off * matte_k(xy);
+    }
     let o = textureLoad(src, xy, 0);
     // Three tinted taps (T17): taps 0/1 along −offset·scale, tap 2 along
     // +offset·scale, each read in full colour then multiplied by its tint and

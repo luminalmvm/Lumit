@@ -18,7 +18,7 @@ struct Params {
     opacity: f32,     // 0..1, multiplied into premultiplied RGBA
     mix_amt: f32,     // 0..1, blended against the unprocessed input
     edge: u32,        // 0 transparent, 1 repeat, 2 mirror
-    _pad0: f32,
+    matte_on: f32,    // 1 = the matte scales the displacement (K-427, Shake only)
     _pad1: f32,
     _pad2: f32,
 };
@@ -27,6 +27,25 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // Resolve a tap index under the edge policy; -1 means transparent (no tap).
 // == fx_dirblur.wgsl's edge_idx and cpu::edge_index.
@@ -90,8 +109,15 @@ fn transform(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(src, xy, 0);
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     // q = m·p + off, in the CPU reference's exact expression order.
-    let qx = p.m.x * pos.x + p.m.y * pos.y + p.off.x;
-    let qy = p.m.z * pos.x + p.m.w * pos.y + p.off.y;
+    var qx = p.m.x * pos.x + p.m.y * pos.y + p.off.x;
+    var qy = p.m.z * pos.x + p.m.w * pos.y + p.off.y;
+    // The matte scales the displacement toward none, read at the destination
+    // pixel (K-427, == cpu::transform_matted). Only the Shake binds one.
+    if (p.matte_on != 0.0) {
+        let k = matte_k(xy);
+        qx = matte_toward(qx, pos.x, k);
+        qy = matte_toward(qy, pos.y, k);
+    }
     let v = bilinear_edge(qx, qy, size) * p.opacity;
     let outv = o * (1.0 - p.mix_amt) + v * p.mix_amt;
     textureStore(dst, xy, outv);

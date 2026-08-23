@@ -519,7 +519,7 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
             tints,
             mix,
         };
-        let out = fx.rgb_split(&ctx, &tex, w, h, &op);
+        let out = fx.rgb_split(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -530,7 +530,7 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
                  worst {worst} fp16 ULP"
         );
 
-        let out2 = fx.rgb_split(&ctx, &tex, w, h, &op);
+        let out2 = fx.rgb_split(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU rgb split must be bit-stable");
     }
@@ -582,7 +582,7 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
             count,
             mix,
         };
-        let out = fx.spectral_split(&ctx, &tex, w, h, &op);
+        let out = fx.spectral_split(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -595,7 +595,7 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
                  worst {worst} fp16 ULP"
         );
 
-        let out2 = fx.spectral_split(&ctx, &tex, w, h, &op);
+        let out2 = fx.spectral_split(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU spectral split must be bit-stable");
     }
@@ -636,7 +636,7 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
             tints,
             mix,
         };
-        let out = fx.chromatic_aberration(&ctx, &tex, w, h, &op);
+        let out = fx.chromatic_aberration(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -654,7 +654,7 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
             );
         }
 
-        let out2 = fx.chromatic_aberration(&ctx, &tex, w, h, &op);
+        let out2 = fx.chromatic_aberration(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU chromatic aberration must be bit-stable");
     }
@@ -1701,7 +1701,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             mix,
             edge,
         };
-        let out = fx.transform(&ctx, &tex, w, h, &op);
+        let out = fx.transform(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1714,7 +1714,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             );
         }
 
-        let out2 = fx.transform(&ctx, &tex, w, h, &op);
+        let out2 = fx.transform(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU transform must be bit-stable");
     }
@@ -1829,7 +1829,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
             mix,
             edge,
         };
-        let out = fx.transform(&ctx, &tex, w, h, &op);
+        let out = fx.transform(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1842,7 +1842,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
             );
         }
 
-        let out2 = fx.transform(&ctx, &tex, w, h, &op);
+        let out2 = fx.transform(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU shake must be bit-stable");
     }
@@ -1940,7 +1940,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
             mix,
         };
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.shake_mb(&ctx, &tex, w, h, &op);
+        let out = fx.shake_mb(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1948,7 +1948,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
         assert_ne!(gpu, img, "{name}: the motion blur moves pixels");
 
-        let out2 = fx.shake_mb(&ctx, &tex, w, h, &op);
+        let out2 = fx.shake_mb(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU shake motion blur must be bit-stable");
     }
@@ -1969,6 +1969,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         &tex,
         w,
         h,
+        None,
         &ShakeMbOp {
             taps,
             count: 1,
@@ -1982,6 +1983,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         &tex,
         w,
         h,
+        None,
         &TransformOp {
             m,
             off,
@@ -2181,7 +2183,7 @@ fn wgsl_block_glitch_matches_the_cpu_oracle() {
             slice_frac: case.slice_frac,
             mix: case.mix,
         };
-        let out = fx.block_glitch(&ctx, &tex, w, h, &op);
+        let out = fx.block_glitch(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -2191,7 +2193,7 @@ fn wgsl_block_glitch_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{}: must be the bit-exact passthrough", case.name);
         }
 
-        let out2 = fx.block_glitch(&ctx, &tex, w, h, &op);
+        let out2 = fx.block_glitch(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU block_glitch must be bit-stable");
     }
@@ -2269,7 +2271,7 @@ fn wgsl_scanlines_matches_the_cpu_oracle() {
             interlace: case.interlace,
             mix: case.mix,
         };
-        let out = fx.scanlines(&ctx, &tex, w, h, &op);
+        let out = fx.scanlines(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -2279,7 +2281,7 @@ fn wgsl_scanlines_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{}: must be the bit-exact passthrough", case.name);
         }
 
-        let out2 = fx.scanlines(&ctx, &tex, w, h, &op);
+        let out2 = fx.scanlines(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU scanlines must be bit-stable");
     }
@@ -7328,7 +7330,7 @@ fn wgsl_offset_matches_the_cpu_oracle() {
     ] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::offset(&mut cpu, w, h, [sx, sy], mix);
-        let out = fx.offset(&ctx, &tex, w, h, [sx, sy], mix);
+        let out = fx.offset(&ctx, &tex, w, h, None, [sx, sy], mix);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
         eprintln!("offset {name}: worst {worst} ulp");
@@ -7506,6 +7508,7 @@ fn wgsl_lens_distort_matches_the_cpu_oracle() {
             &tex,
             w,
             h,
+            None,
             &LensDistortOp {
                 active: p.active,
                 tan_half_fov: p.tan_half_fov,
@@ -8583,7 +8586,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
         let p = c.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::corner_pin(&mut cpu, w, h, &p);
-        let out = fx.corner_pin(&ctx, &tex, w, h, &op_of(c));
+        let out = fx.corner_pin(&ctx, &tex, w, h, None, &op_of(c));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("corner_pin {name}: worst {worst}");
@@ -8603,7 +8606,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
             _ => assert!(gpu != img, "{name}: the pin must actually move something"),
         }
 
-        let out2 = fx.corner_pin(&ctx, &tex, w, h, &op_of(c));
+        let out2 = fx.corner_pin(&ctx, &tex, w, h, None, &op_of(c));
         assert_eq!(
             gpu,
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -8614,7 +8617,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
     // **A keystone converges.** The pinned picture's covered span is narrower at
     // the top than at the bottom — the projective part doing its work, which an
     // affine map cannot do.
-    let out = fx.corner_pin(&ctx, &tex, w, h, &op_of(keystone));
+    let out = fx.corner_pin(&ctx, &tex, w, h, None, &op_of(keystone));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let span = |y: u32| -> u32 {
         (0..w)
@@ -8978,7 +8981,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
         let p = t.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::twirl(&mut cpu, w, h, &p);
-        let out = fx.twirl(&ctx, &tex, w, h, &op_of(t));
+        let out = fx.twirl(&ctx, &tex, w, h, None, &op_of(t));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("twirl {name}: worst {worst}");
@@ -8993,7 +8996,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
 
     // **Nothing outside the circle moves.** The frame's corners sit well beyond a
     // radius of 10 from (16, 12), and must arrive untouched.
-    let out = fx.twirl(&ctx, &tex, w, h, &op_of(hard));
+    let out = fx.twirl(&ctx, &tex, w, h, None, &op_of(hard));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for (x, y) in [(0u32, 0u32), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
         let i = ((y * w + x) * 4) as usize;
@@ -9105,7 +9108,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
         let p = s.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::spherize(&mut cpu, w, h, &p);
-        let out = fx.spherize(&ctx, &tex, w, h, &op_of(s));
+        let out = fx.spherize(&ctx, &tex, w, h, None, &op_of(s));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("spherize {name}: worst {worst}");
@@ -9119,7 +9122,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
     }
 
     // **Nothing outside the ball moves.**
-    let out = fx.spherize(&ctx, &tex, w, h, &op_of(base));
+    let out = fx.spherize(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for (x, y) in [(0u32, 0u32), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
         let i = ((y * w + x) * 4) as usize;
@@ -9231,7 +9234,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
         let p = r.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::ripple(&mut cpu, w, h, &p);
-        let out = fx.ripple(&ctx, &tex, w, h, &op_of(r));
+        let out = fx.ripple(&ctx, &tex, w, h, None, &op_of(r));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("ripple {name}: worst {worst}");
@@ -9247,7 +9250,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     // **Nothing outside the circle moves**, and **the epicentre does not move**.
     // The second is the envelope's whole purpose: rho·(1 − rho)² is zero there,
     // so the one pixel with no radial direction is never asked for one.
-    let out = fx.ripple(&ctx, &tex, w, h, &op_of(base));
+    let out = fx.ripple(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for (x, y) in [(0u32, 0u32), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
         let i = ((y * w + x) * 4) as usize;
@@ -9348,7 +9351,7 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
         let p = v.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::wave_warp(&mut cpu, w, h, &p);
-        let out = fx.wave_warp(&ctx, &tex, w, h, &op_of(*v));
+        let out = fx.wave_warp(&ctx, &tex, w, h, None, &op_of(*v));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("wave_warp {name}: worst {worst}");
@@ -9362,7 +9365,7 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
     }
 
     // **Pinning the left edge alone stills the left column and nothing else.**
-    let out = fx.wave_warp(&ctx, &tex, w, h, &op_of(left));
+    let out = fx.wave_warp(&ctx, &tex, w, h, None, &op_of(left));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let column = |img: &[f32], x: u32| -> Vec<f32> {
         (0..h)
@@ -9474,7 +9477,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
         let p = b.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::bezier_warp(&mut cpu, w, h, &p);
-        let out = fx.bezier_warp(&ctx, &tex, w, h, &op_of(b));
+        let out = fx.bezier_warp(&ctx, &tex, w, h, None, &op_of(b));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("bezier_warp {name}: worst {worst}");
@@ -9497,11 +9500,16 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
     // is a fraction of a pixel of colour.
     let mut fine = bowed;
     fine.quality = 12;
-    let a =
-        readback_linear_f32(&ctx, &fx.bezier_warp(&ctx, &tex, w, h, &op_of(fine)), w, h).unwrap();
+    let a = readback_linear_f32(
+        &ctx,
+        &fx.bezier_warp(&ctx, &tex, w, h, None, &op_of(fine)),
+        w,
+        h,
+    )
+    .unwrap();
     let b = readback_linear_f32(
         &ctx,
-        &fx.bezier_warp(&ctx, &tex, w, h, &op_of(coarse)),
+        &fx.bezier_warp(&ctx, &tex, w, h, None, &op_of(coarse)),
         w,
         h,
     )
@@ -9554,7 +9562,7 @@ fn wgsl_warp_matches_the_cpu_oracle() {
         a.bend = 60.0;
         let mut cpu = img.clone();
         lumit_core::fx::cpu::warp(&mut cpu, w, h, &a.packed());
-        let out = fx.warp(&ctx, &tex, w, h, &op_of(a));
+        let out = fx.warp(&ctx, &tex, w, h, None, &op_of(a));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("warp style {style}: worst {worst}");
@@ -9564,7 +9572,8 @@ fn wgsl_warp_matches_the_cpu_oracle() {
         let mut flat = a;
         flat.bend = 0.0;
         let straight =
-            readback_linear_f32(&ctx, &fx.warp(&ctx, &tex, w, h, &op_of(flat)), w, h).unwrap();
+            readback_linear_f32(&ctx, &fx.warp(&ctx, &tex, w, h, None, &op_of(flat)), w, h)
+                .unwrap();
         assert_eq!(
             straight, img,
             "style {style} at Bend 0 must be the identity"
@@ -9593,7 +9602,7 @@ fn wgsl_warp_matches_the_cpu_oracle() {
     for (name, a) in [("tapered", tapered), ("mixed", faded), ("mix-zero", off)] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::warp(&mut cpu, w, h, &a.packed());
-        let out = fx.warp(&ctx, &tex, w, h, &op_of(a));
+        let out = fx.warp(&ctx, &tex, w, h, None, &op_of(a));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("warp {name}: worst {worst}");
@@ -12830,5 +12839,812 @@ fn the_matte_pulls_posterize_levels_toward_256() {
     assert!(
         worst < 1.0 / 64.0,
         "a black matte must be a step too fine to see, not {worst}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The matte scales the displacement (K-427, docs/08 §2.6): the distortion
+// claims. Every one runs through `check_matte_claim`, so each is held to the
+// same four facts as the blur and colour claims — parity under a ramp matte,
+// the empty matte equal to the old function to the byte, a half matte that is
+// NOT the generic dissolve, and parity there too.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_matte_scales_the_rgb_split_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let (amount, angle, scale, mix) = (4.0f32, 33.0f32, [1.0f32, 0.0, 1.0], 1.0f32);
+    let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, angle);
+    let op = RgbSplitOp {
+        dx,
+        dy,
+        scale,
+        tints,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "rgb_split (classic)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::rgb_split_matted(
+                    px, w, h, amount, angle, scale, tints, mix, m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::rgb_split(px, w, h, amount, angle, scale, tints, mix);
+            },
+            gpu: &|t, m| fx.rgb_split(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    // The Wavelength mode runs its own kernel and claims the same Amount.
+    let samples = 16i32;
+    let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+    let sop = SpectralSplitOp {
+        dx,
+        dy,
+        amount_px: amount,
+        radial: false,
+        basis,
+        count,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "rgb_split (wavelength)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::spectral_split_matted(
+                    px, w, h, amount, angle, false, samples, tints, mix, m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::spectral_split(
+                    px, w, h, amount, angle, false, samples, tints, mix,
+                );
+            },
+            gpu: &|t, m| fx.spectral_split(&ctx, t, w, h, m, &sop),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_chromatic_aberration_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let (amount, mix) = (10.0f32, 1.0f32);
+    let op = ChromaticAberrationOp {
+        amount_px: amount,
+        tints,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "chromatic_aberration (classic)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::chromatic_aberration_matted(px, w, h, amount, tints, mix, m);
+            },
+            plain: &|px| lumit_core::fx::cpu::chromatic_aberration(px, w, h, amount, tints, mix),
+            gpu: &|t, m| fx.chromatic_aberration(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    // Its Wavelength mode is the radial spectral split.
+    let samples = 16i32;
+    let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, 0.0);
+    let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+    let sop = SpectralSplitOp {
+        dx,
+        dy,
+        amount_px: amount,
+        radial: true,
+        basis,
+        count,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "chromatic_aberration (wavelength)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::spectral_split_matted(
+                    px, w, h, amount, 0.0, true, samples, tints, mix, m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::spectral_split(
+                    px, w, h, amount, 0.0, true, samples, tints, mix,
+                );
+            },
+            gpu: &|t, m| fx.spectral_split(&ctx, t, w, h, m, &sop),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_shake_displacement() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    // A wobble with all three parts, so the displacement the matte scales is
+    // a shove, a twist and a zoom together.
+    let wobble = lumit_core::fx::ShakeSample {
+        offset_px: [5.0, -3.0],
+        rotation_deg: 6.0,
+        zoom: 1.04,
+    };
+    let (edge, mix) = (1u32, 1.0f32);
+    let (anchor, position, scale, rot) =
+        lumit_core::fx::shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
+    let (m, off, opacity) = lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+    let op = TransformOp {
+        m,
+        off,
+        opacity,
+        mix,
+        edge,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "shake (plain)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, mt| {
+                lumit_core::fx::cpu::transform_matted(
+                    px, w, h, anchor, position, scale, rot, edge, 1.0, mix, mt,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::transform(
+                    px, w, h, anchor, position, scale, rot, edge, 1.0, mix,
+                );
+            },
+            gpu: &|t, mt| fx.transform(&ctx, t, w, h, mt, &op),
+            tol: 2e-2,
+        },
+    );
+    // A pure shove under a flat half matte is exactly half the Amplitude: the
+    // picture the matte draws is the one a shake at half the Amplitude draws,
+    // not a blend of the shoved picture over the still one.
+    let shove = [6.0f32, 4.0];
+    let (a1, p1, s1, r1) = lumit_core::fx::shake_affine(w, h, shove, 0.0, 1.0);
+    let (a2, p2, s2, r2) = lumit_core::fx::shake_affine(w, h, [3.0, 2.0], 0.0, 1.0);
+    let n = (w * h) as usize;
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
+    let mut matted = img.clone();
+    lumit_core::fx::cpu::transform_matted(&mut matted, w, h, a1, p1, s1, r1, edge, 1.0, 1.0, &flat);
+    let mut half = img.clone();
+    lumit_core::fx::cpu::transform(&mut half, w, h, a2, p2, s2, r2, edge, 1.0, 1.0);
+    assert!(
+        worst_diff(&matted, &half) < 1e-5,
+        "a half matte on a 6,4 shove must be the 3,2 shove"
+    );
+
+    // The shake's own motion blur: every sub-frame tap scales the same way.
+    let mut samples = [lumit_core::fx::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
+    for (i, s) in samples.iter_mut().enumerate() {
+        let t = i as f32 / (SHAKE_MB_SAMPLES - 1) as f32 - 0.5;
+        *s = lumit_core::fx::ShakeSample {
+            offset_px: [5.0 + 4.0 * t, -3.0 - 2.0 * t],
+            rotation_deg: 6.0 * (1.0 + t),
+            zoom: 1.04 + 0.02 * t,
+        };
+    }
+    let mut taps = [ShakeMbTap {
+        m: [1.0, 0.0, 0.0, 1.0],
+        off: [0.0, 0.0],
+    }; SHAKE_MB_SAMPLES];
+    let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
+    for ((t, o), s) in taps.iter_mut().zip(ops.iter_mut()).zip(samples.iter()) {
+        let (anchor, position, scale, rot) =
+            lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+        let (m, off, _opacity) = lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+        *t = ShakeMbTap { m, off };
+        *o = (m, off);
+    }
+    let mbop = ShakeMbOp {
+        taps,
+        count: SHAKE_MB_SAMPLES as u32,
+        edge,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "shake (motion blur)",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, mt| {
+                lumit_core::fx::cpu::transform_average_matted(px, w, h, &ops, edge, mix, mt);
+            },
+            plain: &|px| lumit_core::fx::cpu::transform_average(px, w, h, &ops, edge, mix),
+            gpu: &|t, mt| fx.shake_mb(&ctx, t, w, h, mt, &mbop),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_block_glitch_intensity() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let op = BlockGlitchOp {
+        intensity: 0.8,
+        seed: 11,
+        tick: 4,
+        block_size_px: 6.0,
+        jitter_frac: 0.3,
+        amount_px: 4.0,
+        chan_px: 1.5,
+        slice_frac: 0.4,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "block_glitch",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::block_glitch_matted(
+                    px,
+                    w,
+                    h,
+                    op.intensity,
+                    op.seed,
+                    op.tick,
+                    op.block_size_px,
+                    op.jitter_frac,
+                    op.amount_px,
+                    op.chan_px,
+                    op.slice_frac,
+                    op.mix,
+                    m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::block_glitch(
+                    px,
+                    w,
+                    h,
+                    op.intensity,
+                    op.seed,
+                    op.tick,
+                    op.block_size_px,
+                    op.jitter_frac,
+                    op.amount_px,
+                    op.chan_px,
+                    op.slice_frac,
+                    op.mix,
+                );
+            },
+            gpu: &|t, m| fx.block_glitch(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_widens_the_scanline_period() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let op = ScanlinesOp {
+        intensity: 0.8,
+        period_px: 4.0,
+        roll_px: 2.5,
+        interlace: true,
+        mix: 1.0,
+    };
+    let run = |px: &mut [f32], m: &[f32]| {
+        lumit_core::fx::cpu::scanlines_matted(
+            px,
+            w,
+            h,
+            op.intensity,
+            op.period_px,
+            op.roll_px,
+            op.interlace,
+            op.mix,
+            m,
+        );
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "scanlines",
+            w,
+            h,
+            img: &img,
+            cpu: &run,
+            plain: &|px| {
+                lumit_core::fx::cpu::scanlines(
+                    px,
+                    w,
+                    h,
+                    op.intensity,
+                    op.period_px,
+                    op.roll_px,
+                    op.interlace,
+                    op.mix,
+                );
+            },
+            gpu: &|t, m| fx.scanlines(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    let n = (w * h) as usize;
+    // A half matte is the lines at twice the period — not the same lines half
+    // as dark, which is what scaling Intensity (the dissolve) would give.
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
+    let mut half = img.clone();
+    run(&mut half, &flat);
+    let mut doubled = img.clone();
+    lumit_core::fx::cpu::scanlines(
+        &mut doubled,
+        w,
+        h,
+        op.intensity,
+        op.period_px * 2.0,
+        op.roll_px,
+        op.interlace,
+        op.mix,
+    );
+    assert_eq!(
+        half, doubled,
+        "a half matte must be the lines at twice the period"
+    );
+    // A black matte is no visible lines at all: the picture comes back whole.
+    let black: Vec<f32> = (0..n).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
+    let mut none = img.clone();
+    run(&mut none, &black);
+    assert_eq!(none, img, "a black matte must leave no line on the picture");
+}
+
+#[test]
+fn the_matte_scales_the_offset_shift() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+    let (shift, mix) = ([7.0f32, -5.0f32], 1.0f32);
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "offset",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::offset_matted(px, w, h, shift, mix, m),
+            plain: &|px| lumit_core::fx::cpu::offset(px, w, h, shift, mix),
+            gpu: &|t, m| fx.offset(&ctx, t, w, h, m, shift, mix),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_lens_distortion() {
+    use lumit_core::fx::effects::lens_distort::LensDistort;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut l = LensDistort::read(Params::EMPTY);
+    l.centre_x = 16.0;
+    l.centre_y = 12.0;
+    l.fov = 120.0;
+    l.edge = 1;
+    let p = l.packed();
+    let op = LensDistortOp {
+        active: p.active,
+        tan_half_fov: p.tan_half_fov,
+        reverse: p.reverse,
+        half_kind: p.half_kind,
+        centre: p.centre,
+        edge: p.edge,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "lens_distort",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::lens_distort_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::lens_distort(px, w, h, &p),
+            gpu: &|t, m| fx.lens_distort(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_corner_pin_pull() {
+    use lumit_core::fx::effects::corner_pin::CornerPin;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut c = CornerPin::read(Params::EMPTY);
+    c.upper_left_x = 8.0;
+    c.upper_left_y = 2.0;
+    c.upper_right_x = 24.0;
+    c.upper_right_y = 2.0;
+    c.lower_left_x = 0.0;
+    c.lower_left_y = 22.0;
+    c.lower_right_x = 32.0;
+    c.lower_right_y = 22.0;
+    c.edge = 1;
+    let p = c.packed();
+    let op = CornerPinOp {
+        inv: p.inv,
+        active: p.active,
+        edge: p.edge,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "corner_pin",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::corner_pin_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::corner_pin(px, w, h, &p),
+            gpu: &|t, m| fx.corner_pin(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    // The owner's words: where the matte is black the pixel stays where it
+    // was — a black matte is the untouched picture, not a transparent one.
+    let n = (w * h) as usize;
+    let black: Vec<f32> = (0..n).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
+    let mut still = img.clone();
+    lumit_core::fx::cpu::corner_pin_matted(&mut still, w, h, &p, &black);
+    assert!(
+        worst_diff(&still, &img) < 1e-5,
+        "a black matte must leave every pixel where it was"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_bezier_warp_bend() {
+    use lumit_core::fx::effects::bezier_warp::BezierWarp;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let (fw, fh) = (w as f32, h as f32);
+    let mut b = BezierWarp::read(Params::EMPTY);
+    b.upper_left_x = 0.0;
+    b.upper_left_y = 0.0;
+    b.upper_right_x = fw;
+    b.upper_right_y = 0.0;
+    b.lower_right_x = fw;
+    b.lower_right_y = fh;
+    b.lower_left_x = 0.0;
+    b.lower_left_y = fh;
+    b.top_left_tangent_x = fw / 3.0;
+    b.top_left_tangent_y = -6.0;
+    b.top_right_tangent_x = fw * 2.0 / 3.0;
+    b.top_right_tangent_y = -6.0;
+    b.right_top_tangent_x = fw;
+    b.right_top_tangent_y = fh / 3.0;
+    b.right_bottom_tangent_x = fw;
+    b.right_bottom_tangent_y = fh * 2.0 / 3.0;
+    b.bottom_left_tangent_x = fw / 3.0;
+    b.bottom_left_tangent_y = fh + 6.0;
+    b.bottom_right_tangent_x = fw * 2.0 / 3.0;
+    b.bottom_right_tangent_y = fh + 6.0;
+    b.left_top_tangent_x = 0.0;
+    b.left_top_tangent_y = fh / 3.0;
+    b.left_bottom_tangent_x = 0.0;
+    b.left_bottom_tangent_y = fh * 2.0 / 3.0;
+    let p = b.packed();
+    let op = BezierWarpOp {
+        pts: p.pts,
+        steps: p.steps,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "bezier_warp",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::bezier_warp_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::bezier_warp(px, w, h, &p),
+            gpu: &|t, m| fx.bezier_warp(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_twirl_angle() {
+    use lumit_core::fx::effects::twirl::Twirl;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut t = Twirl::read(Params::EMPTY);
+    t.centre_x = 16.0;
+    t.centre_y = 12.0;
+    t.radius = 10.0;
+    t.angle = 200.0;
+    let p = t.packed();
+    let op = TwirlOp {
+        centre: p.centre,
+        radius: p.radius,
+        inv_radius: p.inv_radius,
+        angle: p.angle,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "twirl",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::twirl_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::twirl(px, w, h, &p),
+            gpu: &|tex, m| fx.twirl(&ctx, tex, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    // A half matte on 200° IS the twirl at 100°: the same picture, to the
+    // byte, that the control at half draws — which no dissolve of the 200°
+    // picture can be.
+    let n = (w * h) as usize;
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
+    let mut matted = img.clone();
+    lumit_core::fx::cpu::twirl_matted(&mut matted, w, h, &p, &flat);
+    let mut half = t;
+    half.angle = 100.0;
+    let mut at_half = img.clone();
+    lumit_core::fx::cpu::twirl(&mut at_half, w, h, &half.packed());
+    assert!(
+        worst_diff(&matted, &at_half) < 1e-5,
+        "a half matte on 200° must be the 100° twirl"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_spherize_bulge() {
+    use lumit_core::fx::effects::spherize::Spherize;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut s = Spherize::read(Params::EMPTY);
+    s.centre_x = 16.0;
+    s.centre_y = 12.0;
+    s.radius = 11.0;
+    s.bulge = 100.0;
+    let p = s.packed();
+    let op = SpherizeOp {
+        centre: p.centre,
+        radius: p.radius,
+        inv_radius: p.inv_radius,
+        bulge: p.bulge,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "spherize",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::spherize_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::spherize(px, w, h, &p),
+            gpu: &|t, m| fx.spherize(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_ripple_height() {
+    use lumit_core::fx::effects::ripple::Ripple;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut r = Ripple::read(Params::EMPTY);
+    r.centre_x = 16.0;
+    r.centre_y = 12.0;
+    r.radius = 12.0;
+    r.wave_height = 2.5;
+    r.wave_width = 5.0;
+    let p = r.packed();
+    let op = RippleOp {
+        centre: p.centre,
+        radius: p.radius,
+        inv_radius: p.inv_radius,
+        amount: p.amount,
+        inv_width: p.inv_width,
+        turns: p.turns,
+        asymmetric: p.asymmetric,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "ripple",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::ripple_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::ripple(px, w, h, &p),
+            gpu: &|t, m| fx.ripple(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_wave_warp_height() {
+    use lumit_core::fx::effects::wave_warp::WaveWarp;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut v = WaveWarp::read(Params::EMPTY);
+    v.wave_height = 3.0;
+    v.wave_width = 14.0;
+    let p = v.packed();
+    let op = WaveWarpOp {
+        dir: p.dir,
+        perp: p.perp,
+        height: p.height,
+        inv_width: p.inv_width,
+        turns: p.turns,
+        shape: p.shape,
+        pin: p.pin,
+        inv_pin_band: p.inv_pin_band,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "wave_warp",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::wave_warp_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::wave_warp(px, w, h, &p),
+            gpu: &|t, m| fx.wave_warp(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_warp_bend() {
+    use lumit_core::fx::effects::warp::Warp;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    // Bulge with both perspective tapers, so all three scaled controls matter.
+    let mut a = Warp::read(Params::EMPTY);
+    a.style = 4;
+    a.bend = 60.0;
+    a.horizontal_distortion = 40.0;
+    a.vertical_distortion = -30.0;
+    let p = a.packed();
+    let op = WarpOp {
+        style: p.style,
+        bend: p.bend,
+        h_distort: p.h_distort,
+        v_distort: p.v_distort,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "warp",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::warp_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::warp(px, w, h, &p),
+            gpu: &|t, m| fx.warp(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
     );
 }

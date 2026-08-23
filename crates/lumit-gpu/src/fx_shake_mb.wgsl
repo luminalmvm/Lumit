@@ -28,13 +28,32 @@ struct Params {
     count: u32,     // active taps, 1..=MAX_TAPS
     edge: u32,      // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,   // 0..1, blended against the unprocessed input
-    _pad: f32,
+    matte_on: f32,  // 1 = the matte scales every tap's displacement (K-427)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // Resolve a tap index under the edge policy; -1 means transparent (no tap).
 // == fx_transform.wgsl's edge_idx and cpu::edge_index.
@@ -98,13 +117,23 @@ fn shake_mb(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(src, xy, 0);
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     let n = min(p.count, MAX_TAPS);
+    // The matte scales every tap's displacement toward none, read at the
+    // destination pixel (K-427, == cpu::transform_average_matted).
+    var mk = 1.0;
+    if (p.matte_on != 0.0) {
+        mk = matte_k(xy);
+    }
     var acc = vec4<f32>(0.0);
     for (var k: u32 = 0u; k < n; k = k + 1u) {
         let m = p.taps[k].m;
         let off = p.taps[k].off;
         // q = m·p + off, in the CPU reference's exact expression order.
-        let qx = m.x * pos.x + m.y * pos.y + off.x;
-        let qy = m.z * pos.x + m.w * pos.y + off.y;
+        var qx = m.x * pos.x + m.y * pos.y + off.x;
+        var qy = m.z * pos.x + m.w * pos.y + off.y;
+        if (p.matte_on != 0.0) {
+            qx = matte_toward(qx, pos.x, mk);
+            qy = matte_toward(qy, pos.y, mk);
+        }
         acc = acc + bilinear_edge(qx, qy, size);
     }
     let avg = acc / f32(n);

@@ -36,7 +36,8 @@ struct RgbSplitParams {
     scale_g: f32,
     scale_b: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Amount by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -74,7 +75,8 @@ struct SpectralSplitParams {
     radial: u32,
     count: u32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Amount by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -100,7 +102,8 @@ struct ChromaticAberrationParams {
     tints: [[f32; 4]; 3],
     amount: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Amount by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -114,14 +117,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RgbSplitOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-rgb-split-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.rgb_split,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -137,7 +142,7 @@ impl FxEngine {
                 scale_g: op.scale[1],
                 scale_b: op.scale[2],
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -154,14 +159,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &SpectralSplitOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-spectral-split-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.spectral_split,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -173,7 +180,7 @@ impl FxEngine {
                 radial: u32::from(op.radial),
                 count: op.count,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -190,14 +197,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ChromaticAberrationOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-chromatic-aberration-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.chromatic_aberration,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -209,7 +218,7 @@ impl FxEngine {
                 ],
                 amount: op.amount_px,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );

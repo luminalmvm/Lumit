@@ -174,6 +174,44 @@ pub fn transform(
     opacity: f32,
     mix: f32,
 ) {
+    transform_matted(
+        rgba,
+        w,
+        h,
+        anchor,
+        position,
+        scale,
+        rotation_deg,
+        edge,
+        opacity,
+        mix,
+        &[],
+    );
+}
+
+/// [`transform`] driven by a matte (K-395, docs/08 §2.6) — the Shake's claim
+/// (K-427): each pixel's matte strength `k` scales **the displacement the
+/// wobble gives that pixel** toward none, `q = p·(1 − k) + q·k` in
+/// [`matte_toward`]'s form, read at the destination pixel. For the offset that
+/// is exactly Amplitude·k; the rotation and the zoom scale by the offset they
+/// make at that pixel, so a grey matte turns a frame-wide shove into a warp
+/// and a black one leaves the pixel where it was. The Transform effect never
+/// passes a matte (it keeps the strength dissolve). An empty matte is the
+/// unmatted path to the byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn transform_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    anchor: [f32; 2],
+    position: [f32; 2],
+    scale: [f32; 2],
+    rotation_deg: f32,
+    edge: u32,
+    opacity: f32,
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     // A collapsed (zero-scale) image is invisible: opacity 0, and the
     // sample point no longer matters (super::transform_op's rule).
@@ -181,10 +219,11 @@ pub fn transform(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let k = matte_strength(matte, i);
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let qx = m[0] * px + m[1] * py + o[0];
-            let qy = m[2] * px + m[3] * py + o[1];
+            let qx = matte_toward(m[0] * px + m[1] * py + o[0], px, k);
+            let qy = matte_toward(m[2] * px + m[3] * py + o[1], py, k);
             // `edge` picks how the revealed border is sampled (0 Transparent,
             // 1 Repeat, 2 Mirror): the Transform effect passes 0 (its
             // long-standing behaviour); Shake passes its Edges control.
@@ -214,6 +253,22 @@ pub fn transform_average(
     edge: u32,
     mix: f32,
 ) {
+    transform_average_matted(rgba, w, h, ops, edge, mix, &[]);
+}
+
+/// [`transform_average`] driven by a matte (K-395, K-427): every sub-frame
+/// tap's displacement is scaled toward none by the destination pixel's matte
+/// strength, exactly as [`transform_matted`] scales the single tap. An empty
+/// matte is the unmatted path to the byte (K-258).
+pub fn transform_average_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    ops: &[([f32; 4], [f32; 2])],
+    edge: u32,
+    mix: f32,
+    matte: &[f32],
+) {
     if ops.is_empty() {
         return;
     }
@@ -222,12 +277,13 @@ pub fn transform_average(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let k = matte_strength(matte, i);
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
             let mut acc = [0.0f32; 4];
             for (m, o) in ops {
-                let qx = m[0] * px + m[1] * py + o[0];
-                let qy = m[2] * px + m[3] * py + o[1];
+                let qx = matte_toward(m[0] * px + m[1] * py + o[0], px, k);
+                let qy = matte_toward(m[2] * px + m[3] * py + o[1], py, k);
                 let s = bilinear_edge(&original, w, h, qx, qy, edge);
                 for c in 0..4 {
                     acc[c] += s[c];
@@ -1427,10 +1483,14 @@ fn matte_strength(matte: &[f32], i: usize) -> f32 {
 /// **In plain terms.** The matte scales the *amount* of an effect, not its
 /// result: white keeps the control where the user set it, black puts it at
 /// the value that does nothing (an Amount of 0, a Gamma of 1, a Saturation
-/// of 100), grey lands between. Every kernel in the blur, sharpen and colour
-/// families applies this to its named control *before* its maths runs, which
-/// is what makes a half-grey matte on Gamma give `pow(x, 1/lerp(1, g, ½))`
-/// rather than a fade between the graded and the ungraded picture.
+/// of 100), grey lands between. Every kernel in the blur, sharpen, colour and
+/// distortion families applies this to its named control *before* its maths
+/// runs, which is what makes a half-grey matte on Gamma give
+/// `pow(x, 1/lerp(1, g, ½))` rather than a fade between the graded and the
+/// ungraded picture — and a half-grey matte on a 200° Twirl give the 100°
+/// twirl rather than a ghost of the 200° one (K-426, K-427). A distortion's
+/// neutral is the pixel's own position, so its kernels pass the sample
+/// coordinate as `value` and the pixel centre as `neutral`.
 ///
 /// Spelled in exactly this form, and the WGSL twins spell it the same way
 /// (never `mix()`), because at `k = 1` it is `value` to the bit — `v·1 + n·0`
@@ -1650,16 +1710,25 @@ fn bilinear_wrap(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32) -> [f32; 4] {
 /// round both axes. A zero shift and Mix 0 are both the bit-exact identity — a
 /// sample at the pixel's own centre is reproduced exactly by bilinear.
 pub fn offset(rgba: &mut [f32], w: u32, h: u32, shift: [f32; 2], mix: f32) {
+    offset_matted(rgba, w, h, shift, mix, &[]);
+}
+
+/// [`offset`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **the shift** it is read through, so a grey matte slides that part of
+/// the frame less and a black one not at all. An empty matte is the unmatted
+/// path to the byte (K-258).
+pub fn offset_matted(rgba: &mut [f32], w: u32, h: u32, shift: [f32; 2], mix: f32, matte: &[f32]) {
     let original = rgba.to_vec();
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let k = matte_strength(matte, i);
             let v = bilinear_wrap(
                 &original,
                 w,
                 h,
-                x as f32 + 0.5 - shift[0],
-                y as f32 + 0.5 - shift[1],
+                x as f32 + 0.5 - shift[0] * k,
+                y as f32 + 0.5 - shift[1] * k,
             );
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v[c] * mix;
@@ -1728,6 +1797,15 @@ pub struct LensDistortParams {
 /// removes exactly the same one. Field of view 0 and Mix 0 are both the
 /// bit-exact identity.
 pub fn lens_distort(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams) {
+    lens_distort_matted(rgba, w, h, p, &[]);
+}
+
+/// [`lens_distort`] driven by a matte (K-395, K-427): each pixel's matte
+/// strength scales **the distortion's displacement** at that pixel toward
+/// none ([`matte_toward`] on the sample position), so the field of view's
+/// effect fades to the identity where the matte darkens. Read at the
+/// destination pixel. An empty matte is the unmatted path to the byte (K-258).
+pub fn lens_distort_matted(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams, matte: &[f32]) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
     let half = match p.half_kind {
@@ -1756,7 +1834,11 @@ pub fn lens_distort(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams) {
                     f * theta.min(LENS_MAX_THETA).tan()
                 };
                 let scale = radius / r;
-                (p.centre[0] + dx * scale, p.centre[1] + dy * scale)
+                let k = matte_strength(matte, i);
+                (
+                    matte_toward(p.centre[0] + dx * scale, px, k),
+                    matte_toward(p.centre[1] + dy * scale, py, k),
+                )
             };
             let v = bilinear_edge(&original, w, h, sx, sy, p.edge);
             for c in 0..4 {
@@ -1794,6 +1876,17 @@ pub struct CornerPinParams {
 ///
 /// Mix 0 and a degenerate quad are both the bit-exact identity.
 pub fn corner_pin(rgba: &mut [f32], w: u32, h: u32, p: &CornerPinParams) {
+    corner_pin_matted(rgba, w, h, p, &[]);
+}
+
+/// [`corner_pin`] driven by a matte (K-395, K-427): each pixel's matte
+/// strength scales **the displacement from the frame's own corners** toward
+/// none — the matte multiplies the offset the handles set, so where it is
+/// black the pixel stays where it was. Read at the destination pixel. A pixel
+/// behind the projection's horizon stays transparent whatever the matte says:
+/// there is no position to pull it back from. An empty matte is the unmatted
+/// path to the byte (K-258).
+pub fn corner_pin_matted(rgba: &mut [f32], w: u32, h: u32, p: &CornerPinParams, matte: &[f32]) {
     if !p.active {
         return;
     }
@@ -1808,7 +1901,15 @@ pub fn corner_pin(rgba: &mut [f32], w: u32, h: u32, p: &CornerPinParams) {
             let t = p.inv[1][0] * px + p.inv[1][1] * py + p.inv[1][2];
             let d = p.inv[2][0] * px + p.inv[2][1] * py + p.inv[2][2];
             let v = if d > 0.0 {
-                bilinear_edge(&original, w, h, u / d * fw, t / d * fh, p.edge)
+                let k = matte_strength(matte, i);
+                bilinear_edge(
+                    &original,
+                    w,
+                    h,
+                    matte_toward(u / d * fw, px, k),
+                    matte_toward(t / d * fh, py, k),
+                    p.edge,
+                )
             } else {
                 [0.0f32; 4]
             };
@@ -1978,6 +2079,14 @@ pub struct TwirlParams {
 ///
 /// Mix 0, Angle 0 and Radius 0 are all the bit-exact identity.
 pub fn twirl(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams) {
+    twirl_matted(rgba, w, h, p, &[]);
+}
+
+/// [`twirl`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Angle** before the turn is taken, read at the destination pixel,
+/// so a grey matte is a gentler twirl there and not a full twirl faded back.
+/// An empty matte is the unmatted path to the byte (K-258).
+pub fn twirl_matted(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams, matte: &[f32]) {
     let original = rgba.to_vec();
     for y in 0..h {
         for x in 0..w {
@@ -1991,7 +2100,8 @@ pub fn twirl(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams) {
                 (px, py)
             } else {
                 let t = 1.0 - r * p.inv_radius;
-                let (sin, cos) = (p.angle * t * t).sin_cos();
+                let angle = p.angle * matte_strength(matte, i);
+                let (sin, cos) = (angle * t * t).sin_cos();
                 // R(−φ) applied to the offset: the picture turns by +φ.
                 (
                     p.centre[0] + dx * cos + dy * sin,
@@ -2031,6 +2141,13 @@ pub struct SpherizeParams {
 /// leaves the sample radius exactly its own, and a sample at the pixel's own
 /// centre is reproduced exactly by bilinear.
 pub fn spherize(rgba: &mut [f32], w: u32, h: u32, p: &SpherizeParams) {
+    spherize_matted(rgba, w, h, p, &[]);
+}
+
+/// [`spherize`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Bulge** toward 0 before the map is blended, read at the
+/// destination pixel. An empty matte is the unmatted path to the byte (K-258).
+pub fn spherize_matted(rgba: &mut [f32], w: u32, h: u32, p: &SpherizeParams, matte: &[f32]) {
     use std::f32::consts::PI;
     let original = rgba.to_vec();
     for y in 0..h {
@@ -2046,18 +2163,19 @@ pub fn spherize(rgba: &mut [f32], w: u32, h: u32, p: &SpherizeParams) {
             // GPU that compiles that division as a reciprocal-multiply answers a
             // hair under 1 — which is a whole picture of resampling for an
             // effect the user has turned off.
-            let (sx, sy) = if r >= p.radius || r <= 0.0 || p.bulge == 0.0 {
+            let bulge = p.bulge * matte_strength(matte, i);
+            let (sx, sy) = if r >= p.radius || r <= 0.0 || bulge == 0.0 {
                 (px, py)
             } else {
                 // Clamped: a radius rounded a hair below `r` would hand `asin`
                 // an argument above 1 and it would answer NaN.
                 let rho = (r * p.inv_radius).min(1.0);
-                let target = if p.bulge >= 0.0 {
+                let target = if bulge >= 0.0 {
                     (2.0 / PI) * rho.asin()
                 } else {
                     (rho * PI * 0.5).sin()
                 };
-                let scale = (rho + (target - rho) * p.bulge.abs()) / rho;
+                let scale = (rho + (target - rho) * bulge.abs()) / rho;
                 (p.centre[0] + dx * scale, p.centre[1] + dy * scale)
             };
             let v = bilinear_edge(&original, w, h, sx, sy, 0);
@@ -2102,6 +2220,13 @@ pub struct RippleParams {
 ///
 /// Mix 0, Radius 0 and Wave height 0 are all the bit-exact identity.
 pub fn ripple(rgba: &mut [f32], w: u32, h: u32, p: &RippleParams) {
+    ripple_matted(rgba, w, h, p, &[]);
+}
+
+/// [`ripple`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Wave height** before the rings move it, read at the destination
+/// pixel. An empty matte is the unmatted path to the byte (K-258).
+pub fn ripple_matted(rgba: &mut [f32], w: u32, h: u32, p: &RippleParams, matte: &[f32]) {
     use std::f32::consts::TAU;
     let original = rgba.to_vec();
     for y in 0..h {
@@ -2112,12 +2237,13 @@ pub fn ripple(rgba: &mut [f32], w: u32, h: u32, p: &RippleParams) {
             let dx = px - p.centre[0];
             let dy = py - p.centre[1];
             let r = (dx * dx + dy * dy).sqrt();
-            let (sx, sy) = if r >= p.radius || r <= 0.0 || p.amount == 0.0 {
+            let amount = p.amount * matte_strength(matte, i);
+            let (sx, sy) = if r >= p.radius || r <= 0.0 || amount == 0.0 {
                 (px, py)
             } else {
                 let rho = (r * p.inv_radius).min(1.0);
                 let one = 1.0 - rho;
-                let env = rho * one * one * p.amount;
+                let env = rho * one * one * amount;
                 let phase = TAU * (r * p.inv_width - p.turns);
                 let (sin, cos) = phase.sin_cos();
                 // The unit radial, and the unit tangential a quarter-turn
@@ -2215,6 +2341,15 @@ pub fn wave_shape(shape: u32, t: f32) -> f32 {
 ///
 /// Mix 0 and Wave height 0 are both the bit-exact identity.
 pub fn wave_warp(rgba: &mut [f32], w: u32, h: u32, p: &WaveWarpParams) {
+    wave_warp_matted(rgba, w, h, p, &[]);
+}
+
+/// [`wave_warp`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Wave height** before the slide, read at the destination pixel. The
+/// pinned edges keep their ramp width (`inv_pin_band` is the host's), so a
+/// pinned border is still exactly still. An empty matte is the unmatted path
+/// to the byte (K-258).
+pub fn wave_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &WaveWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
     let (cx, cy) = (fw * 0.5, fh * 0.5);
@@ -2234,7 +2369,7 @@ pub fn wave_warp(rgba: &mut [f32], w: u32, h: u32, p: &WaveWarpParams) {
                 * (1.0 + p.pin[1] * (ramp(fw - 0.5 - px) - 1.0))
                 * (1.0 + p.pin[2] * (ramp(py - 0.5) - 1.0))
                 * (1.0 + p.pin[3] * (ramp(fh - 0.5 - py) - 1.0));
-            let s = p.height * wave * pin;
+            let s = p.height * matte_strength(matte, i) * wave * pin;
             let v = bilinear_edge(&original, w, h, px + p.perp[0] * s, py + p.perp[1] * s, 1);
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
@@ -2332,6 +2467,17 @@ fn coons(pts: &[[f32; 2]; 12], u: f32, v: f32) -> ([f32; 2], [f32; 2], [f32; 2])
 /// [`BEZ_SNAP_PX`] of its own centre is snapped to it, so an unbent region of a
 /// bent frame is bit-exact rather than resampled.
 pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
+    bezier_warp_matted(rgba, w, h, p, &[]);
+}
+
+/// [`bezier_warp`] driven by a matte (K-395, K-427): each pixel's matte
+/// strength scales **the displacement from the identity patch** toward none,
+/// after the solve and its snap ([`matte_toward`] on the sample position), so
+/// the matte multiplies the offset the handles set and a black matte leaves
+/// the pixel where it was. Read at the destination pixel; a pixel outside the
+/// patch stays transparent, since there is no solution to pull toward. An
+/// empty matte is the unmatted path to the byte (K-258).
+pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
     for y in 0..h {
@@ -2368,7 +2514,15 @@ pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
                     sx = px;
                     sy = py;
                 }
-                bilinear_edge(&original, w, h, sx, sy, 0)
+                let k = matte_strength(matte, i);
+                bilinear_edge(
+                    &original,
+                    w,
+                    h,
+                    matte_toward(sx, px, k),
+                    matte_toward(sy, py, k),
+                    0,
+                )
             };
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v4[c] * p.mix;
@@ -2463,6 +2617,14 @@ pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
 /// coordinate — which is what makes Bend 0 with both distortions 0 the bit-exact
 /// identity rather than a rounding away from one.
 pub fn warp(rgba: &mut [f32], w: u32, h: u32, p: &WarpParams) {
+    warp_matted(rgba, w, h, p, &[]);
+}
+
+/// [`warp`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Bend and both distortions** toward 0 before the style runs, read
+/// at the destination pixel. An empty matte is the unmatted path to the byte
+/// (K-258).
+pub fn warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &WarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
     let half_w = w as f32 * 0.5;
     let half_h = h as f32 * 0.5;
@@ -2473,11 +2635,12 @@ pub fn warp(rgba: &mut [f32], w: u32, h: u32, p: &WarpParams) {
             let py = y as f32 + 0.5;
             let u = px / half_w - 1.0;
             let v = py / half_h - 1.0;
-            let m = warp_style(p.style, u, v, p.bend, half_w / half_h);
+            let k = matte_strength(matte, i);
+            let m = warp_style(p.style, u, v, p.bend * k, half_w / half_h);
             // The two perspective tapers, both taken from the style's output so
             // neither feeds the other (§3.56's fourth note).
-            let du = m[0] / (1.0 + p.v_distort * m[1]);
-            let dv = m[1] / (1.0 + p.h_distort * m[0]);
+            let du = m[0] / (1.0 + p.v_distort * k * m[1]);
+            let dv = m[1] / (1.0 + p.h_distort * k * m[0]);
             let sx = px + (du - u) * half_w;
             let sy = py + (dv - v) * half_h;
             let val = bilinear_edge(&original, w, h, sx, sy, 0);
@@ -3637,11 +3800,31 @@ pub fn rgb_split(
     tints: [[f32; 3]; 3],
     mix: f32,
 ) {
+    rgb_split_matted(rgba, w, h, amount_px, angle_deg, scale, tints, mix, &[]);
+}
+
+/// [`rgb_split`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// scales **Amount** — the offset vector — before the three taps are read. An
+/// empty matte is the unmatted path to the byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn rgb_split_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount_px: f32,
+    angle_deg: f32,
+    scale: [f32; 3],
+    tints: [[f32; 3]; 3],
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let (dx, dy) = super::rgb_split_offset(amount_px, angle_deg);
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let k = matte_strength(matte, i);
+            let (dx, dy) = (dx * k, dy * k);
             let pos = (x as f32 + 0.5, y as f32 + 0.5);
             // Three tinted taps (T17): taps 0/1 along −offset, tap 2 along
             // +offset, each sampled in full colour then multiplied by its
@@ -3705,6 +3888,37 @@ pub fn spectral_split(
     tints: [[f32; 3]; 3],
     mix: f32,
 ) {
+    spectral_split_matted(
+        rgba,
+        w,
+        h,
+        amount_px,
+        angle_deg,
+        radial,
+        samples,
+        tints,
+        mix,
+        &[],
+    );
+}
+
+/// [`spectral_split`] driven by a matte (K-395, K-427): each pixel's matte
+/// strength scales **Amount** — the offset the taps spread across, linear or
+/// radial — before they are read. An empty matte is the unmatted path to the
+/// byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn spectral_split_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount_px: f32,
+    angle_deg: f32,
+    radial: bool,
+    samples: i32,
+    tints: [[f32; 3]; 3],
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let taps = super::spectral_taps(samples, tints);
     let (dx, dy) = super::rgb_split_offset(amount_px, angle_deg);
@@ -3720,6 +3934,8 @@ pub fn spectral_split(
             } else {
                 (dx, dy)
             };
+            let m = matte_strength(matte, i);
+            let (ox, oy) = (ox * m, oy * m);
             let mut acc = [0.0f32; 3];
             for tap in &taps {
                 let t = tap[3];
@@ -3757,6 +3973,21 @@ pub fn chromatic_aberration(
     tints: [[f32; 3]; 3],
     mix: f32,
 ) {
+    chromatic_aberration_matted(rgba, w, h, amount_px, tints, mix, &[]);
+}
+
+/// [`chromatic_aberration`] driven by a matte (K-395, K-427): each pixel's
+/// matte strength scales **Amount** — the radial offset — before the three taps
+/// are read. An empty matte is the unmatted path to the byte (K-258).
+pub fn chromatic_aberration_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount_px: f32,
+    tints: [[f32; 3]; 3],
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
     let diag = (fw * fw + fh * fh).sqrt();
@@ -3766,7 +3997,8 @@ pub fn chromatic_aberration(
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let pos = (x as f32 + 0.5, y as f32 + 0.5);
-            let (ox, oy) = ((pos.0 - cx) * k, (pos.1 - cy) * k);
+            let m = matte_strength(matte, i);
+            let (ox, oy) = ((pos.0 - cx) * k * m, (pos.1 - cy) * k * m);
             let mut acc = [0.0f32; 3];
             for (tap, tint) in [-1.0f32, 0.0, 1.0].iter().zip(tints.iter()) {
                 let s = bilinear(&original, w, h, pos.0 + tap * ox, pos.1 + tap * oy);
@@ -5660,6 +5892,45 @@ pub fn block_glitch(
     slice_frac: f32,
     mix: f32,
 ) {
+    block_glitch_matted(
+        rgba,
+        w,
+        h,
+        intensity,
+        seed,
+        tick,
+        block_size_px,
+        jitter_frac,
+        amount_px,
+        chan_px,
+        slice_frac,
+        mix,
+        &[],
+    );
+}
+
+/// [`block_glitch`] driven by a matte (K-395, K-427): each pixel's matte
+/// strength scales **Intensity** before any hash is read, so the jitter, the
+/// displacement, the channel split and the slice odds all shrink together
+/// where the matte darkens. The neutral short-circuit reads the host's
+/// Intensity, as it always did. An empty matte is the unmatted path to the
+/// byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn block_glitch_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    intensity: f32,
+    seed: u32,
+    tick: i32,
+    block_size_px: f32,
+    jitter_frac: f32,
+    amount_px: f32,
+    chan_px: f32,
+    slice_frac: f32,
+    mix: f32,
+    matte: &[f32],
+) {
     if intensity == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
@@ -5668,6 +5939,7 @@ pub fn block_glitch(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let intensity = intensity * matte_strength(matte, i);
             let pos = (x as f32 + 0.5, y as f32 + 0.5);
 
             let bx0 = (pos.0 / bw).floor();
@@ -5736,6 +6008,43 @@ pub fn scanlines(
     interlace: bool,
     mix: f32,
 ) {
+    scanlines_matted(
+        rgba,
+        w,
+        h,
+        intensity,
+        period_px,
+        roll_px,
+        interlace,
+        mix,
+        &[],
+    );
+}
+
+/// The floor on a matte strength before it divides Scanlines' Line period
+/// ([`scanlines_matted`]): black reads as a period ten thousand times the set
+/// one, which no frame is tall enough to show a line of. The WGSL twin floors
+/// at the identical literal.
+pub const SCANLINES_MIN_K: f32 = 1e-4;
+
+/// [`scanlines`] driven by a matte (K-395, K-427): each pixel's matte strength
+/// `k` **widens the Line period to `period ÷ k`** — the lines spread apart as
+/// the matte darkens and vanish at black ([`SCANLINES_MIN_K`] keeps the divide
+/// finite) — because scaling Intensity would be the generic dissolve to the
+/// bit, and the owner's rule names that as the test. Intensity is untouched.
+/// An empty matte is the unmatted path to the byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn scanlines_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    intensity: f32,
+    period_px: f32,
+    roll_px: f32,
+    interlace: bool,
+    mix: f32,
+    matte: &[f32],
+) {
     if intensity == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
@@ -5744,6 +6053,7 @@ pub fn scanlines(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let period = period / matte_strength(matte, i).max(SCANLINES_MIN_K);
             let pos_y = y as f32 + 0.5;
             let mut c = [
                 original[i],

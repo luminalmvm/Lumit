@@ -23,6 +23,13 @@ use lumit_fx_macros::Effect;
     cost = Cheap,
     roi = FullFrame,
     seeded = true, // its pixels are a function of time under constant parameters
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Intensity per pixel: white glitches at the full Intensity, grey \
+         gently, black not at all",
+    ),
 )]
 pub struct BlockGlitch {
     /// The master dial (§1.2): scales every hashed quantity. 0 is the bit-exact

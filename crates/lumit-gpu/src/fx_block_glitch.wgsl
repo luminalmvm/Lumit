@@ -18,7 +18,7 @@ struct Params {
     chan: f32,
     slice_frac: f32,
     mix_amt: f32,
-    _pad0: f32,
+    matte_on: f32,  // 1 = the matte scales Intensity (K-427)
     _pad1: f32,
     _pad2: f32,
 };
@@ -27,6 +27,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // A 32-bit avalanche mixer (== lumit_core::fx::splitmix32, identical
 // wrapping u32 ops in the same order — exact on every GPU, so CPU and GPU
@@ -94,28 +107,34 @@ fn block_glitch(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     let bw = max(p.block_size, 1.0);
+    // The matte scales Intensity per pixel, before any hash is read (K-427,
+    // == cpu::block_glitch_matted); the short-circuit above read the host's.
+    var intensity = p.intensity;
+    if (p.matte_on != 0.0) {
+        intensity = intensity * matte_k(xy);
+    }
 
     // Grid jitter (docs/08 §3.12 status note): a hashed offset of the
     // *nominal* block, scaled by Intensity, decides which block a pixel
     // reads.
     let bx0 = i32(floor(pos.x / bw));
     let by0 = i32(floor(pos.y / bw));
-    let jx = (block_hash01(0u, bx0, by0) - 0.5) * 2.0 * p.jitter_frac * bw * p.intensity;
-    let jy = (block_hash01(1u, bx0, by0) - 0.5) * 2.0 * p.jitter_frac * bw * p.intensity;
+    let jx = (block_hash01(0u, bx0, by0) - 0.5) * 2.0 * p.jitter_frac * bw * intensity;
+    let jy = (block_hash01(1u, bx0, by0) - 0.5) * 2.0 * p.jitter_frac * bw * intensity;
     let jpos = vec2<f32>(pos.x + jx, pos.y + jy);
     let bx = i32(floor(jpos.x / bw));
     let by = i32(floor(jpos.y / bw));
 
-    let dx = (block_hash01(2u, bx, by) - 0.5) * 2.0 * p.amount * p.intensity;
-    let dy = (block_hash01(3u, bx, by) - 0.5) * 2.0 * p.amount * p.intensity;
-    let chan = (block_hash01(4u, bx, by) - 0.5) * 2.0 * p.chan * p.intensity;
+    let dx = (block_hash01(2u, bx, by) - 0.5) * 2.0 * p.amount * intensity;
+    let dy = (block_hash01(3u, bx, by) - 0.5) * 2.0 * p.amount * intensity;
+    let chan = (block_hash01(4u, bx, by) - 0.5) * 2.0 * p.chan * intensity;
     let slice_u = block_hash01(5u, bx, by);
     let slice_h_u = block_hash01(6u, bx, by);
 
     // Slice repeat: fold the block's own local Y to a short hashed repeat
     // height instead of a plain read.
     var eff_y = jpos.y;
-    if (slice_u < p.slice_frac * p.intensity) {
+    if (slice_u < p.slice_frac * intensity) {
         let local_y = jpos.y - f32(by) * bw;
         let repeat_h = max(slice_h_u * bw * 0.25, 1.0);
         let folded = local_y - floor(local_y / repeat_h) * repeat_h;

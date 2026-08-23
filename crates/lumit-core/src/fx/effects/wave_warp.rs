@@ -27,6 +27,13 @@ use lumit_fx_macros::Effect;
     // diagonal, and the pin ramp only ever shortens the slide.
     roi = PaddedPctDiag(25.0),
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Wave height per pixel: white slides the full height, grey less, \
+         black not at all",
+    ),
 )]
 pub struct WaveWarp {
     /// The wave's shape. All five run between −1 and 1 over one wave; Square

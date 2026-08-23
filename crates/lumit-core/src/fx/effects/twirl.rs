@@ -22,6 +22,13 @@ use lumit_fx_macros::Effect;
     // The circle can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Angle per pixel: white twirls the full Angle, grey less, black \
+         not at all",
+    ),
 )]
 pub struct Twirl {
     /// How far the middle is turned, degrees. A positive angle turns the picture

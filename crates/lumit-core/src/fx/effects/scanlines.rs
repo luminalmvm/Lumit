@@ -25,6 +25,13 @@ use lumit_fx_macros::Effect;
     // never a neighbour, so the region of interest is exact.
     cost = Cheap,
     roi = Exact,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "widens Line period per pixel: white keeps the set period, grey spreads \
+         the lines apart, black spreads them too far to see",
+    ),
 )]
 pub struct Scanlines {
     /// The single dial (FX-13, K-147): 0..1 is how dark the dark lines get — 0

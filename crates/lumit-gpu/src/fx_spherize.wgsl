@@ -15,7 +15,7 @@ struct Params {
     inv_radius: f32,     // 1 / radius, floored host-side
     bulge: f32,          // -1..1; the sign chooses the map, the magnitude blends
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,       // 1 = the matte scales Bulge (K-427)
     _pad1: f32,
 };
 
@@ -23,6 +23,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 const PI: f32 = 3.1415927;
 
@@ -74,18 +87,23 @@ fn spherize(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = sqrt(dx * dx + dy * dy);
     var sx = px;
     var sy = py;
+    // The matte scales Bulge per pixel (K-427, == cpu::spherize_matted).
+    var bulge = p.bulge;
+    if (p.matte_on != 0.0) {
+        bulge = bulge * matte_k(xy);
+    }
     // Bulge 0 short-circuits (see cpu::spherize): the blend would leave `scale`
     // at rho / rho, and this backend's reciprocal-multiply division answers a
     // hair under 1 — a whole picture of resampling for an effect turned off.
-    if (r < p.radius && r > 0.0 && p.bulge != 0.0) {
+    if (r < p.radius && r > 0.0 && bulge != 0.0) {
         // Clamped: a radius rounded a hair below r would hand asin an argument
         // above 1 and it would answer NaN.
         let rho = min(r * p.inv_radius, 1.0);
         var mapped = sin(rho * PI * 0.5);
-        if (p.bulge >= 0.0) {
+        if (bulge >= 0.0) {
             mapped = (2.0 / PI) * asin(rho);
         }
-        let scale = (rho + (mapped - rho) * abs(p.bulge)) / rho;
+        let scale = (rho + (mapped - rho) * abs(bulge)) / rho;
         sx = p.centre.x + dx * scale;
         sy = p.centre.y + dy * scale;
     }

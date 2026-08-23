@@ -61,6 +61,13 @@ pub enum Split {
     category = Distortion,
     cost = Cheap,
     roi = PaddedPctDiag(25.0),
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white splits the channels the full distance, \
+         grey less, black not at all",
+    ),
 )]
 pub struct RgbSplit {
     /// px@comp (§2.3); the impact-frame staple is a keyframed spike on this.

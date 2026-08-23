@@ -18,7 +18,7 @@ struct Params {
     turns: f32,          // Evolution / 360, in whole waves
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     asymmetric: u32,     // 1 = add the tangential half of the wave
-    _pad0: u32,
+    matte_on: f32,       // 1 = the matte scales Wave height (K-427)
     _pad1: u32,
     _pad2: u32,
 };
@@ -27,6 +27,19 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 const TAU: f32 = 6.2831855;
 
@@ -70,10 +83,15 @@ fn ripple(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = sqrt(dx * dx + dy * dy);
     var sx = px;
     var sy = py;
-    if (r < p.radius && r > 0.0 && p.amount != 0.0) {
+    // The matte scales Wave height per pixel (K-427, == cpu::ripple_matted).
+    var amount = p.amount;
+    if (p.matte_on != 0.0) {
+        amount = amount * matte_k(xy);
+    }
+    if (r < p.radius && r > 0.0 && amount != 0.0) {
         let rho = min(r * p.inv_radius, 1.0);
         let one = 1.0 - rho;
-        let env = rho * one * one * p.amount;
+        let env = rho * one * one * amount;
         let phase = TAU * (r * p.inv_width - p.turns);
         let sn = sin(phase);
         let cs = cos(phase);

@@ -125,7 +125,9 @@ struct TransformParams {
     opacity: f32,
     mix_amt: f32,
     edge: u32,
-    _pad0: f32,
+    /// 1 = scale the displacement by the matte (K-427) — the Shake's claim;
+    /// the Transform effect never binds one.
+    matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 }
@@ -179,7 +181,8 @@ struct ShakeMbParams {
     count: u32,
     edge: u32,
     mix_amt: f32,
-    _pad: f32,
+    /// 1 = scale every tap's displacement by the matte (K-427).
+    matte_on: f32,
 }
 
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
@@ -218,7 +221,8 @@ struct BlockGlitchParams {
     chan: f32,
     slice_frac: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Intensity by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 }
@@ -248,7 +252,8 @@ struct ScanlinesParams {
     roll_px: f32,
     interlace: u32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = widen Line period by the matte (K-427).
+    matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 }
@@ -456,20 +461,26 @@ impl FxEngine {
     /// output pixel takes a single bilinear tap through the host-computed
     /// inverse affine, transparent outside the frame, opacity folded in.
     /// Identity parameters reproduce the input bit-exactly.
+    ///
+    /// `matte` is the Shake's claim (K-427): it scales the displacement the
+    /// affine gives each pixel toward none, read at the destination pixel. The
+    /// Transform effect passes `None` and keeps the strength dissolve.
     pub fn transform(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &TransformOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-transform-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.transform,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -479,7 +490,7 @@ impl FxEngine {
                 opacity: op.opacity,
                 mix_amt: op.mix,
                 edge: op.edge,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
                 _pad2: 0.0,
             }),
@@ -497,6 +508,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ShakeMbOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-shake-mb-out");
@@ -508,11 +520,12 @@ impl FxEngine {
             dst.m = s.m;
             dst.off = [s.off[0], s.off[1], 0.0, 0.0];
         }
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.shake_mb,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -521,7 +534,7 @@ impl FxEngine {
                 count: op.count.clamp(1, SHAKE_MB_SAMPLES as u32),
                 edge: op.edge,
                 mix_amt: op.mix,
-                _pad: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -537,14 +550,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &BlockGlitchOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-block-glitch-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.block_glitch,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -558,7 +573,7 @@ impl FxEngine {
                 chan: op.chan_px,
                 slice_frac: op.slice_frac,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
                 _pad2: 0.0,
             }),
@@ -575,14 +590,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ScanlinesOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-scanlines-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.scanlines,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -592,7 +609,7 @@ impl FxEngine {
                 roll_px: op.roll_px,
                 interlace: u32::from(op.interlace),
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
                 _pad2: 0.0,
             }),

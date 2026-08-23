@@ -11296,3 +11296,48 @@ black matte under Multiply squares the source, exactly as an effect at amount 0 
 **Held by** `check_matte_claim` (`lumit-gpu/src/fx/tests.rs`): per effect, parity under a
 ramp matte and bit-stability, the empty matte equal to the old function to the byte, a
 flat half matte *not* equal to the generic dissolve, and parity there too.
+
+## K-427 — The matte scales the displacement of every distortion, at the destination pixel
+
+**Status: DECIDED (2026-08-23).** Numbered K-427 because K-425 and K-426 are already taken
+on main and K-420..K-424 are reserved by another branch.
+
+**Decision.** The owner's rule for mattes (K-426), applied to the Distortion category: a
+distortion's amount is a **distance**, so the matte multiplies *the displacement* per pixel
+before the maths runs. Fourteen effects claim their matte on that basis — RGB split's and
+Chromatic aberration's Amount (both tiers), the Shake's Amplitude and Rotation amount,
+Block glitch's Intensity, Offset's shift, Lens distort's distortion, Corner pin's and
+Bezier warp's pull from the frame's own corners, Twirl's Angle, Spherize's Bulge, Ripple's
+and Wave warp's Wave height, Warp's Bend with both distortions. Turbulent displace (K-395)
+and Displacement map (K-402) had already claimed theirs on this rule before it was written
+down. Each names what it scales in its declaration, which is what the manual prints.
+
+**k is read at the destination pixel, everywhere.** A distortion runs backwards — it asks,
+per output pixel, which input pixel belongs there — so the matte could be read at either
+end. The destination is the only choice under which the matte's own picture is the picture
+that comes out: paint a black region and *that* region of the finished frame is the one
+that did not move. It is also what makes the claim visible on a whole-frame move: a soft
+matte on the Shake turns a shove into a **warp**, one picture that moved by different
+amounts, where the dissolve gives two of every edge.
+
+**Two exceptions, both by the rule's own test.** **Scanlines** cannot scale Intensity —
+that is the generic dissolve to the bit — so its matte **divides Line period** instead:
+the lines spread apart as the matte darkens and are too far apart to see at black, the
+divide floored at `cpu::SCANLINES_MIN_K` (`1e-4`, the identical literal in the WGSL), with
+Intensity untouched. **Datamosh keeps `MatteRole::Strength`**: its output is
+`current·(1 − Intensity) + melted·Intensity`, so scaling Intensity per pixel and dissolving
+per pixel are the same arithmetic — the rulings that named it are therefore not carried
+out, for K-426's reason. **Tile, Mirror and Polar coordinates** keep `Strength` too: a
+repeat, a reflection and a change of coordinates have no amount to scale.
+
+**Mechanics are K-426's, unchanged.** `cpu::matte_toward` and its WGSL twin for the pulls,
+`_matted` CPU twins with the old names kept as the `&[]` wrappers (an empty matte is the
+pre-claim function byte for byte, K-258), a `matte_on` in each uniform reading binding 4,
+`dispatch_matted`, `aux.matte()`. Two kernels are shared and only one side claims:
+`fx_transform.wgsl` serves the Shake (which binds a matte) and the Transform effect (which
+passes `None` and keeps the dissolve), and `fx_spectral.wgsl` serves the Wavelength tier of
+both splits.
+
+**Held by** `check_matte_claim` per effect, plus three pictures a dissolve cannot draw: a
+half matte on a 6,4 shove is the 3,2 shove, a half matte on a 200° twirl is the 100° twirl,
+and a half matte on Scanlines is the lines at twice the period. No new strings.

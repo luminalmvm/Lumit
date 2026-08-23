@@ -27,6 +27,13 @@ use lumit_fx_macros::Effect;
     // The rings can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Wave height per pixel: white ripples the full height, grey \
+         less, black not at all",
+    ),
 )]
 pub struct Ripple {
     /// How far the rings reach, px@comp (§2.3). Outside it the picture is

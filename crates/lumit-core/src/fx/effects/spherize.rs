@@ -25,6 +25,13 @@ use lumit_fx_macros::Effect;
     // The ball can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Bulge per pixel: white bulges the full amount, grey less, black \
+         not at all",
+    ),
 )]
 pub struct Spherize {
     /// How wide the ball is, px@comp (§2.3). Declared `Px`, so the resolve

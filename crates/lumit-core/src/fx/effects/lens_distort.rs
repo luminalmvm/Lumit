@@ -25,6 +25,13 @@ use lumit_fx_macros::Effect;
     // A strong bend pulls the corners in from well outside the frame.
     roi = FullFrame,
     premultiplied = true,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the distortion per pixel, read where the pixel lands: white \
+         bends at the full Field of view, grey less, black not at all",
+    ),
 )]
 pub struct LensDistort {
     /// Degrees: the frame's rectilinear field of view, spanning the half-extent

@@ -1079,6 +1079,37 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   to it, which is what the Matte row already did. None of this changes a saved
   project: an effect with no matte bound runs the very same code it always did.
 
+  **And for a distortion, the knob is a distance (K-427).** Every effect in the
+  Distortion group moves pixels, and how far it moves them is its amount — so
+  the matte multiplies *that*. Point a Twirl's Matte at a soft gradient and the
+  twirl is genuinely gentler where the gradient is grey; a half-grey matte on a
+  200° twirl draws exactly the picture 100° would. The same idea covers the
+  whole group: a shorter shift for Offset, a shallower ripple, a narrower
+  colour fringe, a weaker lens bend, a smaller pull toward the pinned corners.
+
+  This is where a matte does something a fade truly cannot. Fade a shaken frame
+  back by half and you get the shaken picture ghosted over the still one — two
+  of every edge, a double exposure. Halve the shake's *amplitude* and you get
+  one picture that has simply moved less. So a soft matte on a Shake turns a
+  frame-wide shove into a **warp**: part of the picture jolts, part of it stays
+  put, and it is still one picture. That is the whole point of the rule.
+
+  One detail decides how it looks, and it is worth naming: **the matte is read
+  where the pixel lands, not where it came from.** A distortion works backwards
+  — for each pixel of the output it asks "which part of the input belongs
+  here?" — so it could read the matte at either end. Lumit reads it at the
+  output, always, which means the shape you paint in the matte is the shape you
+  see in the finished frame. Paint a black circle and that circle of the
+  picture is the one that stays still.
+
+  Two effects in the group take a different road for an honest reason. Scanlines
+  could not scale its Intensity, because fading scanlines and making them
+  fainter are the same picture; so its matte spreads the **lines further apart**
+  instead, until at black they are too far apart to see at all. Datamosh is left
+  alone entirely, for Contrast's reason — its Intensity dial *is* a fade, so
+  there was nothing to change. Tile, Mirror and Polar coordinates have no "how
+  far" at all: they repeat, reflect and re-map, and each keeps the plain fade.
+
   **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
   picture, and a picture is the wrong thing for some effects. Think of a brush
   that travels along a line you have drawn, from 20 % of the way along to 80 %,

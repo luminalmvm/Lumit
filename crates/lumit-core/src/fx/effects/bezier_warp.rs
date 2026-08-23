@@ -86,6 +86,14 @@ pub const BEZIER_WARP_GROUPS: &[ParamGroup] = &[
     roi = FullFrame,
     premultiplied = true,
     groups = BEZIER_WARP_GROUPS,
+    // K-427: the matte scales the displacement, inside the kernel (the
+    // owner's rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the bend from the straight frame per pixel, read where the \
+         pixel lands: white bends it all the way, grey part way, black leaves \
+         it where it was",
+    ),
 )]
 pub struct BezierWarp {
     /// px@comp: the picture's upper-left corner goes here. §3.48's name.
