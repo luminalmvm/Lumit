@@ -753,6 +753,11 @@ class LumitTheme {
 
   static const String fontFamily = 'Hanken Grotesk';
 
+  /// Hanken Grotesk has no Cyrillic; Inter stays bundled as the fallback so
+  /// the Ukrainian and Kazakh locales keep a designed face instead of the
+  /// platform default.
+  static const List<String> fontFamilyFallback = ['Inter'];
+
   /// The face every number, timecode and container label is set in
   /// (docs/15-DESIGN.md §7.1, K-438). The fallbacks only matter if the bundled
   /// asset is missing, and both platform names resolve to a monospaced face.
@@ -764,12 +769,14 @@ class LumitTheme {
 
   TextStyle get heading => TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       fontSize: 16,
       color: textPrimary,
       decoration: TextDecoration.none,
       fontWeight: FontWeight.w500);
   TextStyle get body => TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       fontSize: 11,
       color: textSecondary,
       decoration: TextDecoration.none,
@@ -782,6 +789,7 @@ class LumitTheme {
   TextStyle get bodyStrong => body.copyWith(fontWeight: FontWeight.w500);
   TextStyle get small => TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       fontSize: 10,
       color: textMuted,
       decoration: TextDecoration.none,
