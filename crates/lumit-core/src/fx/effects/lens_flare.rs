@@ -333,12 +333,14 @@ pub struct LensFlare {
 
     /// The working f-stop: stops the iris down from the lens's native f-number.
     /// Wider (a smaller number) grows the ghost discs and softens the starburst
-    /// ringing.
+    /// ringing. The default is the default lens's native stop (the Master
+    /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
+    /// brightest - stopping down dims it honestly (K-426).
     #[slider(
         label = "F-stop",
         min = 1.0,
         max = 22.0,
-        default = 2.8,
+        default = 1.3,
         hard_min = 0.7,
         hard_max = 32.0
     )]
