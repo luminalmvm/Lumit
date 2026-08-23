@@ -1,0 +1,168 @@
+// The shared chrome primitives, held to docs/15-DESIGN.md's redesign rules
+// (K-438/K-439): the kicker every container label is set in, the inset well an
+// editable number sits in, and the one filled button a surface is allowed.
+//
+// These are the pieces every panel inherits, so they are asserted here on the
+// primitives themselves rather than once per panel.
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
+
+void main() {
+  final t = LumitTheme.dark();
+
+  Widget host(Widget child) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: ThemeScope(
+          theme: t,
+          animationLevel: AnimationLevel.none,
+          showTooltips: false,
+          child: Overlay(
+            initialEntries: [
+              OverlayEntry(builder: (_) => Center(child: child))
+            ],
+          ),
+        ),
+      );
+
+  group('The kicker (§7.1)', () {
+    test('is Geist Mono, 9-11 px, wide-tracked, caps-toned and muted', () {
+      final k = t.kicker;
+      expect(k.fontFamily, LumitTheme.monoFontFamily);
+      expect(k.fontSize, inInclusiveRange(9, 11));
+      // Tracking is stated in ems by the spec and in logical pixels by
+      // Flutter, so it is the ratio that has to land in the band.
+      final em = k.letterSpacing! / k.fontSize!;
+      expect(em, inInclusiveRange(0.08, 0.12));
+      expect(k.color, t.textMuted);
+    });
+
+    /// State reads from colour alone — a heavier or larger active label would
+    /// shuffle every tab beside it each time the front one changed.
+    test('the active variant differs only in colour', () {
+      expect(t.kickerOn.color, t.textPrimary);
+      expect(t.kickerOn.fontSize, t.kicker.fontSize);
+      expect(t.kickerOn.fontWeight, t.kicker.fontWeight);
+      expect(t.kickerOn.letterSpacing, t.kicker.letterSpacing);
+      expect(t.kickerOn.fontFamily, t.kicker.fontFamily);
+    });
+  });
+
+  group('The value well (§2.1, §3.1)', () {
+    BoxDecoration wellOf(WidgetTester tester) => tester
+        .widget<Container>(find.descendant(
+          of: find.byType(DragValueField),
+          matching: find.byType(Container),
+        ))
+        .decoration! as BoxDecoration;
+
+    TextStyle numberOf(WidgetTester tester) => tester
+        .widget<Text>(find.descendant(
+          of: find.byType(DragValueField),
+          matching: find.byType(Text),
+        ))
+        .style!;
+
+    Widget field() => DragValueField(
+          value: 42,
+          min: 0,
+          max: 100,
+          onChanged: (_) {},
+        );
+
+    /// At rest the well is a recess, not a raised box: darker than the panel
+    /// it sits in, inside a plain hairline, with the number in mono.
+    testWidgets('rests as a surface0 inset inside a hairline', (tester) async {
+      await tester.pumpWidget(host(field()));
+      await tester.pump();
+
+      final d = wellOf(tester);
+      expect(d.color, t.surface0);
+      expect((d.border! as Border).top.color, t.hairline);
+
+      final style = numberOf(tester);
+      expect(style.fontFamily, LumitTheme.monoFontFamily);
+      expect(style.color, t.textPrimary);
+    });
+
+    /// While the value is actually in hand it turns accent — and goes back the
+    /// moment the pointer lifts, because feedback leaves no trace (§12A.5).
+    testWidgets('turns accent while being dragged, and back on release',
+        (tester) async {
+      await tester.pumpWidget(host(field()));
+      await tester.pump();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(DragValueField)),
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(20, 0));
+      await tester.pump();
+
+      expect(numberOf(tester).color, t.accent);
+      expect((wellOf(tester).border! as Border).top.color, t.accent);
+
+      // A second move, so the drag actually ticks: the first is spent starting
+      // the gesture, and a released drag that never ticked is treated as a
+      // click and opens the editor instead (K-319).
+      await gesture.moveBy(const Offset(20, 0));
+      await tester.pump();
+
+      await gesture.up();
+      await tester.pump();
+      expect(numberOf(tester).color, t.textPrimary,
+          reason: 'the scrub left no trace behind');
+    });
+  });
+
+  /// THE single filled button per surface — the whole of the accent's button
+  /// job (§3.1), with the label at the far end of the ramp in mono capitals.
+  testWidgets('the primary button is the accent fill', (tester) async {
+    await tester.pumpWidget(host(
+      HouseButton(primary: true, onPressed: () {}, child: const Text('Export')),
+    ));
+    await tester.pump();
+
+    final d = tester
+        .widget<AnimatedContainer>(find.descendant(
+          of: find.byType(HouseButton),
+          matching: find.byType(AnimatedContainer),
+        ))
+        .decoration! as BoxDecoration;
+    expect(d.color, t.accent);
+
+    final style = tester
+        .widget<DefaultTextStyle>(find
+            .descendant(
+              of: find.byType(HouseButton),
+              matching: find.byType(DefaultTextStyle),
+            )
+            .first)
+        .style;
+    expect(style.color, t.surface0);
+    expect(style.fontFamily, LumitTheme.monoFontFamily);
+    expect(find.text('EXPORT'), findsOneWidget,
+        reason: 'capitals are the style, not the arb string');
+  });
+
+  /// A secondary action is an outline over the panel's own surface, so a
+  /// resting panel never gains a fourth grey (§2.1's three greys at rest).
+  testWidgets('the secondary button is an outline, not a fill', (tester) async {
+    await tester.pumpWidget(host(
+      HouseButton(onPressed: () {}, child: const Text('Cancel')),
+    ));
+    await tester.pump();
+
+    final d = tester
+        .widget<AnimatedContainer>(find.descendant(
+          of: find.byType(HouseButton),
+          matching: find.byType(AnimatedContainer),
+        ))
+        .decoration! as BoxDecoration;
+    expect(d.color, isNull);
+    expect((d.border! as Border).top.color, t.hairlineStrong);
+  });
+}

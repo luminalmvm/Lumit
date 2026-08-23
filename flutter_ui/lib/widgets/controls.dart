@@ -77,9 +77,20 @@ class ThemeScope extends InheritedWidget {
       old.showTooltips != showTooltips;
 }
 
-/// A borderless hover-reactive button: idle `surface3` fill (or nothing when
-/// `frameless`), hover `surface4` + strong hairline, press strong fill +
-/// accent edge — the egui widget-state table.
+/// The house button, in the three faces docs/15-DESIGN.md gives it (K-439):
+///
+/// - **Secondary** (the default): an outline and nothing else — a
+///   `hairline_strong` border with the panel's own surface showing through, so
+///   a resting panel keeps to its three greys however many buttons it carries
+///   (§2.1). `frameless` drops even the outline.
+/// - **Primary** ([primary]): THE single filled action on the surface — an
+///   `accent` fill with the label at the far end of the ramp, in mono capitals
+///   (§3.1's closed accent job list, §12A.4's dialog footer).
+/// - **Dropdown** ([dropdown]): a `surface2` well-adjacent face with a plain
+///   `hairline` border and no raised fill.
+///
+/// Hover and press are fill steps over whichever face is set — `surface3` then
+/// `hairline_strong` (§2.3).
 class HouseButton extends StatefulWidget {
   final Widget child;
   final VoidCallback? onPressed;
@@ -88,9 +99,13 @@ class HouseButton extends StatefulWidget {
   final EdgeInsets? padding;
 
   /// The default action of the window it sits in — what `Enter` presses
-  /// (K-243). Drawn with the accent edge it would otherwise only get under the
-  /// pointer, which is what docs/15 §2 keeps the one accent for.
+  /// (K-243), and the one filled button the surface is allowed (§3.1).
   final bool primary;
+
+  /// The closed face of a dropdown: `surface2` and a plain hairline rather
+  /// than the secondary button's outline, so a picker reads as something to
+  /// open rather than as an action to take.
+  final bool dropdown;
 
   /// Take keyboard focus on first build — for the default button of a
   /// confirmation window, so `Enter` presses it the moment the window opens
@@ -119,6 +134,7 @@ class HouseButton extends StatefulWidget {
     this.small = false,
     this.padding,
     this.primary = false,
+    this.dropdown = false,
     this.autofocus = false,
     this.active = false,
   });
@@ -148,8 +164,20 @@ class _HouseButtonState extends State<HouseButton> {
     Color? edge;
     // The label, when the fill under it decides what colour it has to be.
     Color? label;
+    // The label's own style, for the one face that sets it: mono capitals.
+    TextStyle? labelStyle;
     if (!enabled) {
       fill = widget.frameless ? null : t.surface2;
+      // A dead primary drops the accent but keeps the shape of its word: the
+      // Export button must not change case as the path field is filled in.
+      if (widget.primary) labelStyle = t.kicker.copyWith(color: t.textDisabled);
+    } else if (widget.primary) {
+      // The single filled action (§3.1, §12A.4). Ahead of every other state:
+      // what `Enter` presses must be findable at a glance whatever the pointer
+      // is doing, so hover lifts the fill rather than replacing it.
+      fill = _hover || _down ? t.accentHover : t.accent;
+      label = t.surface0;
+      labelStyle = t.kicker.copyWith(color: t.surface0);
     } else if (widget.active) {
       // Ahead of hover and press: which one is in force must not blink off
       // under the pointer. Hover lifts it to `accentHover` instead.
@@ -161,13 +189,22 @@ class _HouseButtonState extends State<HouseButton> {
       if (round) label = t.surface0;
     } else if (_down) {
       fill = t.hairlineStrong;
-      edge = t.accent;
-    } else if (_hover) {
-      fill = t.surface4;
       edge = t.hairlineStrong;
+    } else if (_hover) {
+      fill = t.surface3;
+      edge = t.hairlineStrong;
+    } else if (widget.dropdown) {
+      fill = t.surface2;
+      edge = _focused ? t.accent : t.hairline;
     } else {
-      fill = widget.frameless ? null : t.surface3;
-      if (widget.primary || _focused) edge = t.accent;
+      // Idle: an outline over the panel's own surface, not a raised fill —
+      // a widget at rest adds no fourth grey to the panel (§2.1, §2.3).
+      fill = null;
+      edge = _focused
+          ? t.accent
+          : widget.frameless
+              ? null
+              : t.hairlineStrong;
     }
     final pad = widget.padding ??
         (widget.small
@@ -213,17 +250,30 @@ class _HouseButtonState extends State<HouseButton> {
           ),
           child: DefaultTextStyle(
             style: enabled
-                ? (label == null
-                    ? t.bodyPrimary
-                    : t.bodyPrimary.copyWith(color: label))
-                : t.body.copyWith(color: t.textDisabled),
-            child: widget.child,
+                ? (labelStyle ??
+                    (label == null
+                        ? t.bodyPrimary
+                        : t.bodyPrimary.copyWith(color: label)))
+                : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
+            child: _capitalised(widget.child, widget.primary),
           ),
         ),
       ),
     );
   }
 }
+
+/// The primary button's label in capitals, when it is a plain word.
+///
+/// Flutter has no text transform, and the capitals are a *style* rather than
+/// part of the phrase — the arb file keeps one sentence-case key, translated
+/// once — so the upper-casing happens here on the way to the screen. A child
+/// that is anything but a bare [Text] (an icon, a row) is handed back
+/// untouched.
+Widget _capitalised(Widget child, bool on) =>
+    on && child is Text && child.data != null
+        ? Text(child.data!.toUpperCase(), style: child.style)
+        : child;
 
 /// One row in a dropdown/menu popup.
 class MenuRow extends StatefulWidget {
@@ -591,9 +641,11 @@ Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       children: [
         face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
         const SizedBox(width: 4),
+        // A small quiet mark: the border already says this is a control, so
+        // the caret only has to say which kind (§12A, no raised look).
         CustomPaint(
-          size: const Size(9, 9),
-          painter: _CaretPainter(t.textSecondary),
+          size: const Size(7, 7),
+          painter: _CaretPainter(t.textMuted),
         ),
       ],
     );
@@ -647,6 +699,7 @@ class BareDropdown<T> extends StatelessWidget {
       // so nothing moves sideways.
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       onPressed: onChanged == null ? null : () => _open(context, t),
+      dropdown: true,
       child: _dropdownFace(t, label(value), face: face),
     );
   }
@@ -760,6 +813,7 @@ class BareSearchDropdown extends StatelessWidget {
         );
         if (picked != null) onChanged(picked);
       },
+      dropdown: true,
       child: _dropdownFace(t, label),
     );
   }
@@ -962,6 +1016,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
         );
         if (picked != null) onChanged(picked.$1);
       },
+      dropdown: true,
       child: _dropdownFace(t, label),
     );
   }
@@ -1980,9 +2035,19 @@ double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
         ? 0.1
         : 1;
 
-/// egui's DragValue: drag horizontally to adjust, click to type, right-click
-/// for Reset / Copy / Paste (egui's built-in drag-value menu). [resetTo] is the
-/// field's known default — Reset appears only when a call site supplies one.
+/// The **value well** (docs/15-DESIGN.md §2.1/§3.1, K-439): drag horizontally
+/// to adjust, click to type, right-click for Reset / Copy / Paste.
+///
+/// In plain terms, a number you can edit is drawn as a *recess* rather than as
+/// a raised box — a `surface0` fill, darker than the panel around it, inside a
+/// hairline. The well is what says "editable", so a resting panel keeps to its
+/// three greys however many numbers it carries, and no colour has to be spent
+/// saying it. The number itself is mono (§7.1's absolute rule) and turns
+/// `accent` while it is actually being dragged; `animated` for a keyed property
+/// is the panels phase's to wire, since nothing tells the well that yet.
+///
+/// [resetTo] is the field's known default — Reset appears only when a call site
+/// supplies one.
 class DragValueField extends StatefulWidget {
   final num value;
   final num min;
@@ -2001,10 +2066,9 @@ class DragValueField extends StatefulWidget {
   /// number, and `+1.4` parses as readily as `1.4`.
   final bool signed;
 
-  /// The resting background. Defaults to `surface3`, which reads as a field on
-  /// a panel — but a dialogue's own surface *is* surface3, so a field there has
-  /// to be darker to look like something you can type into. Only the resting
-  /// colour: hover stays the standard lift, so the affordance is unchanged.
+  /// The well's own fill, for the rare ground `surface0` cannot sit on. It is
+  /// the inset every well now takes by default (§2.1), so a call site has no
+  /// reason to pass anything.
   final Color? fill;
   final ValueChanged<num> onChanged;
 
@@ -2060,6 +2124,11 @@ class _DragValueFieldState extends State<DragValueField>
   bool _editing = false;
   bool _hover = false;
   bool _focused = false;
+
+  /// A scrub is under the pointer right now — the one thing that turns the
+  /// number `accent` (§3.1). Transient and local, like all feedback (§12A.5):
+  /// it goes the moment the pointer lifts and leaves no trace behind.
+  bool _dragging = false;
   double _dragAccum = 0;
 
   /// The last value ticked this drag (via [onChangeLive]/[onChanged]), or
@@ -2229,7 +2298,9 @@ class _DragValueFieldState extends State<DragValueField>
           decoration: BoxDecoration(
             color: t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(color: t.accent),
+            // `animated`, not `accent`: the focused value field is the one
+            // focus that means "you are about to change a value" (§3.1).
+            border: Border.all(color: t.animated),
           ),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
@@ -2242,7 +2313,9 @@ class _DragValueFieldState extends State<DragValueField>
                 key: textFieldKey,
                 controller: _controller,
                 focusNode: _focus,
-                style: t.bodyPrimary,
+                // Mono while focused too — the number must not change width
+                // between reading it and typing over it (§7.1).
+                style: t.mono.copyWith(color: t.textPrimary),
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
@@ -2280,6 +2353,7 @@ class _DragValueFieldState extends State<DragValueField>
         onHorizontalDragStart: (_) {
           _dragAccum = 0;
           _lastDragValue = null;
+          setState(() => _dragging = true);
           widget.onChangeStart?.call();
         },
         onHorizontalDragUpdate: (d) {
@@ -2300,6 +2374,7 @@ class _DragValueFieldState extends State<DragValueField>
         onHorizontalDragEnd: (_) {
           final v = _lastDragValue;
           _lastDragValue = null;
+          setState(() => _dragging = false);
           if (v != null) {
             (widget.onChangeEnd ?? widget.onChanged)(v);
           } else {
@@ -2315,22 +2390,35 @@ class _DragValueFieldState extends State<DragValueField>
         },
         onHorizontalDragCancel: () {
           _lastDragValue = null;
+          setState(() => _dragging = false);
           widget.onDragCancel?.call();
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: _hover ? t.surface4 : (widget.fill ?? t.surface3),
+            // The inset stays the inset in every state: a well does not lift
+            // under the pointer, because then it would stop being a recess
+            // (§2.1). Hover and scrub speak through the edge instead.
+            color: widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            // Reserved even when not hovered — see HouseButton above. The
-            // accent edge while keyboard-focused is the focus ring (§6.5).
             border: Border.all(
-                color: _focused
+                color: _dragging
                     ? t.accent
-                    : (_hover ? t.hairlineStrong : const Color(0x00000000)),
+                    // The one focus ring that is `animated` rather than
+                    // `accent`: it means "you are about to change a value"
+                    // (§3.1, §6.5).
+                    : _focused
+                        ? t.animated
+                        : _hover
+                            ? t.hairlineStrong
+                            : t.hairline,
                 width: 1),
           ),
-          child: Text(_format(widget.value), style: t.bodyPrimary),
+          child: Text(
+            _format(widget.value),
+            textAlign: TextAlign.right,
+            style: t.mono.copyWith(color: _dragging ? t.accent : t.textPrimary),
+          ),
         ),
       ),
     );

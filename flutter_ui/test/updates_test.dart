@@ -112,7 +112,8 @@ void main() {
       expect(service.busy, isFalse);
     });
 
-    test('the same version is up to date, and the row goes back to offering '
+    test(
+        'the same version is up to date, and the row goes back to offering '
         'a check', () async {
       final service = _service(
         version: '0.2.0',
@@ -146,8 +147,8 @@ void main() {
     });
 
     test('no network is a sentence, not a crash', () async {
-      final service = _service(
-          fetch: (_) async => throw const SocketException('no route'));
+      final service =
+          _service(fetch: (_) async => throw const SocketException('no route'));
       await service.check();
       expect(service.stage, UpdateStage.failed);
       expect(service.failure, 'Could not check for updates');
@@ -202,7 +203,8 @@ void main() {
                 size: body.length, digest: digest),
           ]),
           folder: () => scratch,
-          download: (url, into, {required onProgress, required cancelled}) async {
+          download: (url, into,
+              {required onProgress, required cancelled}) async {
             into.writeAsBytesSync(body);
             onProgress(body.length, body.length);
           },
@@ -247,7 +249,9 @@ void main() {
       await service.downloadUpdate();
 
       expect(service.stage, UpdateStage.failed);
-      expect(service.failure, 'The downloaded update did not match its '
+      expect(
+          service.failure,
+          'The downloaded update did not match its '
           'checksum');
       expect(scratch.listSync(), isEmpty);
     });
@@ -317,7 +321,8 @@ void main() {
           _asset('lumit-0.2.0.dmg', size: body.length),
           _asset('lumit-0.2.0-linux-x64.tar.gz', size: body.length),
         ]),
-        download: (url, into, {required onProgress, required cancelled}) async =>
+        download: (url, into,
+                {required onProgress, required cancelled}) async =>
             into.writeAsBytesSync(body),
         launch: (file, _) async => launched.add(file),
         quit: () => quits.add(1),
@@ -330,8 +335,7 @@ void main() {
     test('Windows starts the installer and leaves', () async {
       final launched = <File>[];
       final quits = <int>[];
-      final service =
-          await ready('windows', launched: launched, quits: quits);
+      final service = await ready('windows', launched: launched, quits: quits);
       await service.install();
       expect(launched.single.path, endsWith('setup.exe'));
       expect(quits, hasLength(1));
@@ -354,7 +358,8 @@ void main() {
           _asset('lumit-0.2.0-linux-x64.tar.gz', size: body.length),
           _asset('lumit-0.2.0-linux-x64.flatpak', size: body.length),
         ]),
-        download: (url, into, {required onProgress, required cancelled}) async =>
+        download: (url, into,
+                {required onProgress, required cancelled}) async =>
             into.writeAsBytesSync(body),
         launch: (file, _) async => launched.add(file),
         quit: () => quits.add(1),
@@ -414,9 +419,7 @@ void main() {
         () {
       expect(
         UpdateRelease.parse(_releaseJson(),
-                platform: 'macos',
-                kind: InstallKind.bundle,
-                replaceable: true)
+                platform: 'macos', kind: InstallKind.bundle, replaceable: true)
             ?.assetName,
         'lumit-0.2.0-macos-arm64.zip',
       );
@@ -471,12 +474,13 @@ void main() {
       final service = _service(
         platform: 'linux',
         site: site,
-        folder: () => Directory('${tmp.path}/downloads')
-          ..createSync(recursive: true),
+        folder: () =>
+            Directory('${tmp.path}/downloads')..createSync(recursive: true),
         fetch: (_) async => _releaseJson(assets: [
           _asset('lumit-0.2.0-linux-x64.tar.gz', size: body.length),
         ]),
-        download: (url, into, {required onProgress, required cancelled}) async =>
+        download: (url, into,
+                {required onProgress, required cancelled}) async =>
             into.writeAsBytesSync(body),
         extract: (archive, into) async {
           if (emptyArchive) return;
@@ -514,8 +518,9 @@ void main() {
       await h.service.downloadUpdate();
       await h.service.install();
 
-      expect(File('${h.site.root.path}/lumit_flutter').readAsStringSync(),
-          '0.1.0', reason: 'the working Lumit is untouched');
+      expect(
+          File('${h.site.root.path}/lumit_flutter').readAsStringSync(), '0.1.0',
+          reason: 'the working Lumit is untouched');
       expect(h.service.stage, UpdateStage.failed);
       expect(h.relaunched, isEmpty);
       expect(h.site.unpacking.existsSync(), isFalse);
@@ -616,7 +621,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('update-save-restart')), findsNothing);
-      expect(find.text('Restart now'), findsOneWidget);
+      // The filled action's capitals are the style's, not the arb string's
+      // (docs/15-DESIGN.md §7.1), so the word on screen is upper-cased.
+      expect(find.text('Restart now'.toUpperCase()), findsOneWidget);
     });
 
     testWidgets('Later keeps the update waiting rather than losing it',

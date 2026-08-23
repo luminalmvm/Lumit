@@ -366,8 +366,7 @@ class _GhostPill extends StatelessWidget {
         border: Border.all(color: theme.accent, width: 1),
         boxShadow: theme.floatShadow,
       ),
-      child: Text(title,
-          style: theme.bodyStrong.copyWith(color: theme.textPrimary)),
+      child: Text(title.toUpperCase(), style: theme.kickerOn),
     );
   }
 }
@@ -465,7 +464,13 @@ class _DividerState extends State<_Divider> {
   }
 }
 
-/// A tab group: the 26 px tab bar of pill tabs plus the active pane's body.
+/// The header strip every tab group wears: 22 px of `surface2` under Sharp
+/// (docs/15-DESIGN.md §2.1 — "faint surfaces: tab bars, bottom bars, panel
+/// headers"), with the pane body on `surface1` below it. Round keeps the canvas
+/// showing between its cards instead, so its strip stays `surface0`.
+const double _headerStripHeight = 22;
+
+/// A tab group: the 22 px header strip of pill tabs plus the active pane's body.
 class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
@@ -491,7 +496,7 @@ class _TabGroup extends StatelessWidget {
     return Column(
       children: [
         Container(
-          height: 26,
+          height: _headerStripHeight,
           color: barColour,
           child: Row(
             children: [
@@ -641,9 +646,17 @@ class _TabPillState extends State<_TabPill> {
       fill = t.surface2;
       textColour = t.textMuted;
     }
+    // A panel's name is a container label, so it is a kicker (§7.1, K-438):
+    // one size, one weight, capitals applied here rather than in the arb file.
+    // Which tab is fronted reads from the colour and the accent tick alone —
+    // never from a bigger or heavier word, which would shuffle the strip every
+    // time the front tab changed.
+    final style =
+        (widget.active ? t.kickerOn : t.kicker).copyWith(color: textColour);
+    final label = Text(widget.title.toUpperCase(), style: style);
     final pill = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: fill,
@@ -659,14 +672,12 @@ class _TabPillState extends State<_TabPill> {
                 // accent dot on an accent field is not a dot. It is the same
                 // mark either way; nothing about it reports state.
                 _HeaderDot(
-                    text: t.bodyStrong,
-                    colour: widget.active ? textColour : t.accent),
+                    text: style, colour: widget.active ? textColour : t.accent),
                 const SizedBox(width: 5),
-                Text(widget.title,
-                    style: t.bodyStrong.copyWith(color: textColour)),
+                label,
               ],
             )
-          : Text(widget.title, style: t.bodyStrong.copyWith(color: textColour)),
+          : label,
     );
     return _DragSource(
       panel: widget.panel,

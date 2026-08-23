@@ -799,6 +799,36 @@ class LumitTheme {
   /// reads as an aside rather than as another thing to fill in
   /// (docs/15-DESIGN.md §7.1).
   TextStyle get caption => small.copyWith(fontSize: 9);
+
+  /// **Every container label** (docs/15-DESIGN.md §7.1, K-438): panel titles,
+  /// section headers, column headers, tab labels, dialog titles, attribution.
+  ///
+  /// In plain terms, a kicker is the small capitalised word above a thing that
+  /// says what the thing is. Lumit sets all of them in Geist Mono, small, with
+  /// the letters spaced out, and quiet — so everything the *application* names
+  /// looks unmistakably different from everything the *user* names, which stays
+  /// sentence-case Hanken Grotesk.
+  ///
+  /// The capitals are the *style*, not the string: a widget upper-cases what it
+  /// is handed, so the translated phrase in the arb file stays an ordinary
+  /// sentence and no key has to be spelled twice.
+  TextStyle get kicker => TextStyle(
+        fontFamily: monoFontFamily,
+        fontFamilyFallback: monoFontFamilyFallback,
+        fontSize: 10,
+        // +0.10em, the middle of §7.1's 0.08–0.12 band. Flutter measures
+        // tracking in logical pixels, so an em is the font size.
+        letterSpacing: 10 * 0.10,
+        color: textMuted,
+        decoration: TextDecoration.none,
+        fontWeight: FontWeight.w500,
+      );
+
+  /// The kicker of the container that is *in force* — the fronted dock tab, the
+  /// section being edited. Only the colour changes: same face, same size, same
+  /// tracking, same weight, so nothing shifts by a pixel when the active one
+  /// moves (§7.1 — state reads from colour, never from size or weight).
+  TextStyle get kickerOn => kicker.copyWith(color: textPrimary);
   TextStyle get mono => TextStyle(
       fontFamily: monoFontFamily,
       fontFamilyFallback: monoFontFamilyFallback,

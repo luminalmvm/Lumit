@@ -49,7 +49,8 @@ void main() {
           easingPresets.firstWhere((p) => p.id == 'overshoot').curve);
     });
 
-    testWidgets('the box stays up, so one shape goes to selection after '
+    testWidgets(
+        'the box stays up, so one shape goes to selection after '
         'selection', (tester) async {
       final m = await mount(tester, claimed: true);
 
@@ -92,8 +93,8 @@ void main() {
       await mount(tester, claimed: false);
 
       expect(find.text('Shapes apply in the value lens.'), findsOneWidget);
-      final apply = tester.widget<HouseButton>(
-          find.byKey(const ValueKey('easing-apply')));
+      final apply = tester
+          .widget<HouseButton>(find.byKey(const ValueKey('easing-apply')));
       expect(apply.onPressed, isNull,
           reason: 'a persistent panel must not offer a button that does '
               'nothing');
@@ -108,8 +109,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('Shapes apply in the value lens.'), findsNothing);
-      final apply = tester.widget<HouseButton>(
-          find.byKey(const ValueKey('easing-apply')));
+      final apply = tester
+          .widget<HouseButton>(find.byKey(const ValueKey('easing-apply')));
       expect(apply.onPressed, isNotNull);
     });
 
@@ -117,7 +118,9 @@ void main() {
         (tester) async {
       await mount(tester, claimed: true);
       expect(find.text('Close'), findsNothing);
-      expect(find.text('Apply'), findsOneWidget);
+      // Apply is the panel's filled action, and a filled action wears its
+      // capitals as a style rather than as a second string (§7.1).
+      expect(find.text('Apply'.toUpperCase()), findsOneWidget);
     });
   }, skip: !engineAvailable);
 }

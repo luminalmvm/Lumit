@@ -14,6 +14,11 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
+/// A dock tab, by the panel's name. Tab labels are kickers (docs/15-DESIGN.md
+/// §7.1), so what is on screen is the capitalised form of the sentence-case
+/// string — the transform is the style's, not the arb file's.
+Finder _tab(String title) => find.text(title.toUpperCase());
+
 /// A scrollable panel body whose State construction is counted, so a test can
 /// prove the State object survived (was not rebuilt from scratch). Reads/writes
 /// its scroll through a controller supplied from outside, so the offset lives
@@ -210,11 +215,11 @@ void main() {
         reason: 'dock rebuilds never cascade into hidden tabs');
 
     // Showing it builds it; hiding it again freezes it at that count.
-    await tester.tap(find.text('Hierarchy'));
+    await tester.tap(_tab('Hierarchy'));
     await tester.pump();
     expect(builds[Panel.hierarchy], isNotNull);
     final shown = builds[Panel.hierarchy]!;
-    await tester.tap(find.text('Project'));
+    await tester.tap(_tab('Project'));
     await tester.pump();
     active.value = null;
     await tester.pump();
@@ -250,11 +255,11 @@ void main() {
     await tester.pump();
     expect(controller.offset, 90);
 
-    await tester.tap(find.text('Hierarchy')); // the second tab's pill
+    await tester.tap(_tab('Hierarchy')); // the second tab's pill
     await tester.pump();
     expect(find.text('body of Hierarchy'), findsOneWidget);
 
-    await tester.tap(find.text('Project')); // back to the first tab's pill
+    await tester.tap(_tab('Project')); // back to the first tab's pill
     await tester.pump();
 
     expect(controller.offset, 90,
