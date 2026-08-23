@@ -141,8 +141,11 @@ impl Rational {
 /// bit — so a moved keyframed layer would sample every animated value a ulp
 /// off and earn a different frame key for the same picture. Quantising `t`
 /// onto the grid, subtracting exactly and converting once gives bit-identical
-/// local time for equal rationals, so cached frames survive a move. An
-/// off-grid or overflowing `t` falls back to the plain subtraction.
+/// local time for equal rationals, so cached frames survive a move. Every `t`
+/// is quantised, sub-frame shutter samples included (the grid is 1/705 600 000
+/// s, far below anything a sample can tell apart, and the same pure function
+/// runs on the preview and export paths); only a non-finite or overflowing `t`
+/// falls back to the plain subtraction.
 #[inline]
 pub fn layer_time(t: f64, start_offset: Rational) -> f64 {
     Rational::from_f64_on_grid(t, Rational::FLICK_DEN)

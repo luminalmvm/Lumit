@@ -251,13 +251,22 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     let budget = crate::framecache::vram::budget();
     if budget != state.applied_vram_budget {
         state.applied_vram_budget = budget;
-        state.renderer.set_frame_texture_budget(budget);
+        // One VRAM budget, shared: a quarter holds the per-effect and nested
+        // intermediates (K-421, K-422), the rest holds finished frames. Without
+        // the split the intermediates sat outside the number the user set.
+        let intermediates = budget / 4;
+        state.renderer.set_effect_cache_budget(intermediates);
+        state
+            .renderer
+            .set_frame_texture_budget(budget - intermediates);
         state.fill_exhausted = false;
     }
     // What the cache is holding to, read back from the cache itself rather than
     // from the wish above — so the meter cannot claim a budget the renderer
-    // never took.
-    crate::framecache::vram::publish_applied(state.renderer.frame_texture_stats().1);
+    // never took. Both stores count: the frames and the intermediates.
+    crate::framecache::vram::publish_applied(
+        state.renderer.frame_texture_stats().1 + state.renderer.effect_cache_stats().0 .1,
+    );
     let clears = crate::framecache::vram::clears();
     if clears != state.seen_vram_clears {
         state.seen_vram_clears = clears;
@@ -1332,7 +1341,12 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             if in_memory || state.disk.contains(key) {
                 let (used, budget, _) = state.renderer.frame_texture_stats();
                 let room = used + frame_bytes <= budget;
-                if in_memory && !room {
+                // A full card climbs nothing, from memory or from disk: a
+                // promotion would push another frame down, and the next turn
+                // would promote that one, round and round through the disk
+                // for ever. Frames below stay where they are until playback
+                // or a scrub asks for them.
+                if !room {
                     continue;
                 }
                 let provenance = lumit_render::FrameProvenance {
@@ -3979,6 +3993,68 @@ mod tests {
         assert!(
             on_card <= 20,
             "the card's window is still the card's budget, got {on_card}"
+        );
+
+        // **A full card climbs nothing from disk either.** Move one memory-held
+        // frame down to disk and out of memory, then run the fill again: the
+        // frame must stay on disk. Before the guard covered disk as well as
+        // memory, the fill uploaded it, the card pushed another frame down,
+        // memory pushed a third onto disk, and the next turn found that one
+        // and started again - an idle loop with no fixed point.
+        let keys: Vec<_> = (0..50u64)
+            .map(|f| {
+                state
+                    .renderer
+                    .frame_key(&document, comp, f, quality)
+                    .expect("nameable")
+            })
+            .collect();
+        let parked = keys
+            .into_iter()
+            .find(|k| {
+                !state.renderer.has_frame_texture(*k, bgra) && crate::framecache::contains(*k)
+            })
+            .expect("a frame held in memory only");
+        let (w, h, bytes) = crate::framecache::get(parked).expect("its bytes");
+        // The disk tier parks nothing until it has a folder.
+        let dir = tempfile::tempdir().expect("a folder for the disk tier");
+        state
+            .disk
+            .tx
+            .send(lumit_render::diskio::Cmd::SetRoot(Some(
+                dir.path().to_path_buf(),
+            )))
+            .expect("the disk thread");
+        assert!(state
+            .disk
+            .park(parked, w, h, bgra, std::sync::Arc::new(bytes), 1, 1000));
+        for _ in 0..500 {
+            if state.disk.contains(parked) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(state.disk.contains(parked), "the park landed");
+        crate::framecache::clear();
+        let card_before = state.renderer.frame_texture_stats().0;
+        state.fill_exhausted = false;
+        for _ in 0..200 {
+            if state.fill_exhausted {
+                break;
+            }
+            super::idle_fill(&mut state, &mut stream);
+            super::collect_disk_loads(&mut state);
+            super::drain_demotions(&mut state);
+        }
+        assert!(state.fill_exhausted, "the second pass terminates");
+        assert!(
+            !state.renderer.has_frame_texture(parked, bgra),
+            "a disk-held frame is not climbed onto a full card"
+        );
+        assert_eq!(
+            state.renderer.frame_texture_stats().0,
+            card_before,
+            "the card is untouched"
         );
     }
 
