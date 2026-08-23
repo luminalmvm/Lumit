@@ -66,10 +66,11 @@ void main() {
         ))
         .style!;
 
-    Widget field() => DragValueField(
+    Widget field({bool keyed = false}) => DragValueField(
           value: 42,
           min: 0,
           max: 100,
+          keyed: keyed,
           onChanged: (_) {},
         );
 
@@ -85,7 +86,17 @@ void main() {
 
       final style = numberOf(tester);
       expect(style.fontFamily, LumitTheme.monoFontFamily);
+      expect(style.fontSize, 13, reason: '§7.1: property values are 13px mono');
       expect(style.color, t.textPrimary);
+    });
+
+    /// A keyed property rests `animated` — the only other stateful colour in
+    /// chrome (§3.1), and the well is where a keyframed value says so.
+    testWidgets('rests animated when the property is keyed', (tester) async {
+      await tester.pumpWidget(host(field(keyed: true)));
+      await tester.pump();
+
+      expect(numberOf(tester).color, t.animated);
     });
 
     /// While the value is actually in hand it turns accent — and goes back the

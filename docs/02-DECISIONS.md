@@ -12147,3 +12147,15 @@ stable channel un-flagged, and opened by the Viewer-texture spike in
 docs/impl/multi-window.md §6 — whether a second window can composite the engine's shared
 texture is the one Lumit-specific risk no release note answers, and it decides whether
 multi-monitor Viewers can ever be promised.
+
+## K-450 — The filled action's label is a kicker; the secondary button is outlined
+
+**DECIDED 2026-08-24.** Amends the phrasing of K-439 and 15-DESIGN §2.3 where the approved
+mockups already differ; the three-greys rule and the borderless grammar otherwise stand.
+
+- **The single filled action's label is a kicker** — 10px Geist Mono caps, +0.08–0.12em,
+  in `surface_0` on the `accent` fill (15-DESIGN §7.1's new row). It is the one place a
+  kicker's colour is decided by the fill under it rather than being `text_muted`.
+- **The secondary button rests as a `hairline_strong` outline**, a deliberate exception to
+  the borderless-widget rule (§2.3) for buttons only: a dialog's non-default action has to
+  be findable beside the filled one without spending a fourth grey on it.

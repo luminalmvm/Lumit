@@ -92,7 +92,9 @@ class _ConfirmClearDisk extends StatelessWidget {
                   primary: true,
                   autofocus: true,
                   onPressed: () => onChoose(true),
-                  child: Text(l10n.delete, style: t.small),
+                  // No style here: the filled action sets its own label
+                  // (mono capitals, §7.1).
+                  child: Text(l10n.delete),
                 ),
               ],
             ),

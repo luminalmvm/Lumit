@@ -149,7 +149,11 @@ Interactive widgets are **borderless** (K-084, the rerun grammar): idle, hovered
 are *fill* steps, never stroke changes. Under the three-greys rule (§2.1, K-439) the idle
 step is quiet — a widget at rest sits on its panel's own surface (or `surface_2` where a
 strip already earns it), and `surface_3` → `hairline_strong` are the hover → pressed steps;
-input wells are the §2.1 inset, not a raised fill.
+input wells are the §2.1 inset, not a raised fill. **Buttons are the one exception** (K-450):
+the secondary button rests as a `hairline_strong` *outline* over the panel's own surface,
+because the approved dialog pattern (§12A.4) needs a button to be findable beside the single
+filled action without adding a fourth grey — the exception is buttons only, and it is still a
+resting outline, not a stroke that changes with hover or press.
 `shadow_float` (black @ 50%, offset 0/15, blur 50 — rerun's float shadow) is permitted solely
 on: modal dialogs, menus/popovers, panels while being drag-undocked, and drag ghosts (clips or
 assets in flight) — **under Sharp**. The Round shape (K-092, §7.3) is a deliberate exception:
@@ -539,6 +543,7 @@ chrome sits above 13px except dialog body emphasis**:
 | Size | Face | Use |
 |---|---|---|
 | 9–11px | Geist Mono, caps, +0.08–0.12em, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution |
+| 10px | Geist Mono, caps, +0.08–0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
 | 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on |
 | 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
 | 11px | Geist Mono | Layer bar labels, axis numbers, units |

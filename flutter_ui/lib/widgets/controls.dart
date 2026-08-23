@@ -2042,9 +2042,9 @@ double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
 /// a raised box — a `surface0` fill, darker than the panel around it, inside a
 /// hairline. The well is what says "editable", so a resting panel keeps to its
 /// three greys however many numbers it carries, and no colour has to be spent
-/// saying it. The number itself is mono (§7.1's absolute rule) and turns
-/// `accent` while it is actually being dragged; `animated` for a keyed property
-/// is the panels phase's to wire, since nothing tells the well that yet.
+/// saying it. The number itself is mono at 13px (§7.1's absolute rule, and its
+/// property-value row) and turns `accent` while it is actually being dragged,
+/// `animated` when the property is keyed ([keyed]).
 ///
 /// [resetTo] is the field's known default — Reset appears only when a call site
 /// supplies one.
@@ -2065,6 +2065,11 @@ class DragValueField extends StatefulWidget {
   /// crosses zero. Display only: what is typed, copied and pasted is the plain
   /// number, and `+1.4` parses as readily as `1.4`.
   final bool signed;
+
+  /// The property this well edits has keyframes on it, so the number rests in
+  /// `animated` rather than `text_primary` (§3.1). A live drag still wins: a
+  /// value in hand is `accent` whether or not it is keyed.
+  final bool keyed;
 
   /// The well's own fill, for the rare ground `surface0` cannot sit on. It is
   /// the inset every well now takes by default (§2.1), so a call site has no
@@ -2103,6 +2108,7 @@ class DragValueField extends StatefulWidget {
     this.suffix,
     this.resetTo,
     this.signed = false,
+    this.keyed = false,
     this.fill,
     this.onChangeStart,
     this.onChangeLive,
@@ -2314,8 +2320,9 @@ class _DragValueFieldState extends State<DragValueField>
                 controller: _controller,
                 focusNode: _focus,
                 // Mono while focused too — the number must not change width
-                // between reading it and typing over it (§7.1).
-                style: t.mono.copyWith(color: t.textPrimary),
+                // between reading it and typing over it (§7.1) — same 13px as
+                // the resting number, so nothing reflows on the click either.
+                style: t.mono.copyWith(fontSize: 13, color: t.textPrimary),
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
@@ -2417,7 +2424,14 @@ class _DragValueFieldState extends State<DragValueField>
           child: Text(
             _format(widget.value),
             textAlign: TextAlign.right,
-            style: t.mono.copyWith(color: _dragging ? t.accent : t.textPrimary),
+            style: t.mono.copyWith(
+              fontSize: 13,
+              color: _dragging
+                  ? t.accent
+                  : widget.keyed
+                      ? t.animated
+                      : t.textPrimary,
+            ),
           ),
         ),
       ),
