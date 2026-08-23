@@ -329,14 +329,18 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RoughenEdgesOp,
     ) -> wgpu::Texture {
+        // The whole claim: Border IS this blur's radius, and the matte scales a
+        // radius per pixel already (K-428, K-395). The second pass needs no
+        // matte of its own — a narrower ramp is a narrower band to chew.
         let soft = self.blur(
             ctx,
             src,
             w,
             h,
-            None,
+            matte,
             &super::BlurOp {
                 radius_px: op.border_px,
                 // Transparent: the shape's own edge is what is being measured,
@@ -641,6 +645,11 @@ struct MedianParams {
     keep: i32,
     alpha_on: f32,
     mix_amt: f32,
+    /// 1 = the matte scales Radius per pixel (K-428).
+    matte_on: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// One resolved Mosaic (docs/08 §3.65). Mirrors
@@ -703,6 +712,11 @@ struct EmbossParams {
     offset: [f32; 2],
     contrast: f32,
     mix_amt: f32,
+    /// 1 = the matte scales Relief per pixel (K-428).
+    matte_on: f32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// One resolved Texturize (docs/08 §3.68). Mirrors
@@ -729,7 +743,8 @@ struct TexturizeParams {
     inv_scale: f32,
     placement: u32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = the matte scales Relief per pixel (K-428).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -746,14 +761,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &MedianOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-median-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.median,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -762,6 +779,10 @@ impl FxEngine {
                 keep: op.keep.max(1),
                 alpha_on: op.alpha_on,
                 mix_amt: op.mix,
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out
@@ -834,14 +855,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &EmbossOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-emboss-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.emboss,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -849,6 +872,10 @@ impl FxEngine {
                 offset: op.offset,
                 contrast: op.contrast,
                 mix_amt: op.mix,
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
+                _pad1: 0.0,
+                _pad2: 0.0,
             }),
         );
         out
@@ -862,6 +889,7 @@ impl FxEngine {
     /// single pass, `src` is already its own unprocessed original. **An unset
     /// row is the identity**, returned here rather than in the kernel, because a
     /// texture that does not exist is not a texture of zero relief.
+    #[allow(clippy::too_many_arguments)]
     pub fn texturize(
         &self,
         ctx: &GpuContext,
@@ -869,17 +897,19 @@ impl FxEngine {
         w: u32,
         h: u32,
         texture: Option<&wgpu::Texture>,
+        matte: Option<&wgpu::Texture>,
         op: &TexturizeOp,
     ) -> wgpu::Texture {
         let Some(texture) = texture else {
             return src.clone();
         };
         let out = work_texture(ctx, w, h, "fx-texturize-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.texturize,
             src,
             texture,
+            matte,
             &out,
             w,
             h,
@@ -889,7 +919,7 @@ impl FxEngine {
                 inv_scale: op.inv_scale,
                 placement: op.placement,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );

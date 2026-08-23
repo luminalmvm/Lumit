@@ -1110,6 +1110,33 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   there was nothing to change. Tile, Mirror and Polar coordinates have no "how
   far" at all: they repeat, reflect and re-map, and each keeps the plain fade.
 
+  **For the things that draw and the things that stylise, the knob is what it
+  always was (K-428).** The same rule, applied to the last two groups. Where an
+  effect draws something on top of the picture — a bolt of lightning, expanding
+  radio rings, a scribble, a brush stroke, marching dashes, a cast shadow — the
+  matte scales *the drawn thing's opacity*, so it fades along its own length and
+  leaves the picture underneath alone. Where an effect has a size, the matte
+  scales the size: Median's Radius, Roughen edges' Border, Emboss's and
+  Texturize's Relief. Add grain's Intensity is scaled too, and because grain is
+  laid on in perceptual light and squared back, half the Intensity really is a
+  finer grain rather than a half-faded coarse one.
+
+  Two of these are worth seeing to believe. A half-grey matte on a Median set to
+  Radius 2 gives you *exactly* the picture Radius 1 gives — a genuinely smaller
+  window, so you can despeckle a noisy sky and leave a face untouched with one
+  painted matte. And a black matte on Emboss gives the flat grey sheet rather
+  than the picture back, because Emboss at Relief 0 is a flat sheet with no light
+  on it; turning the relief down is not the same as turning the effect off, and
+  the matte turns the relief down.
+
+  Four in these groups are left on the plain fade for the honest reason Contrast
+  was: **Noise**, **Flash**, **Sprite flare** and **Light wrap** each add a plain
+  amount of something to the picture, so turning that amount down and fading the
+  result back are the same arithmetic and there was nothing to change. Fill,
+  Gradient, Fractal noise, Beam, Mosaic and Find edges have no amount of their
+  own at all — they replace the picture — so they keep the fade too. Glow keeps
+  its cleverer seed gate and the Lens flare its source detection.
+
   **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
   picture, and a picture is the wrong thing for some effects. Think of a brush
   that travels along a line you have drawn, from 20 % of the way along to 80 %,

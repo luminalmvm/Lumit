@@ -7720,7 +7720,7 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
     ] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::drop_shadow(&mut cpu, w, h, &d.packed());
-        let out = fx.drop_shadow(&ctx, &tex, w, h, &op_of(d));
+        let out = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(d));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("drop_shadow {name}: worst {worst}");
@@ -7731,7 +7731,7 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
             }
             _ => assert!(gpu != img, "{name}: the shadow must actually appear"),
         }
-        let out2 = fx.drop_shadow(&ctx, &tex, w, h, &op_of(d));
+        let out2 = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(d));
         assert_eq!(
             gpu,
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -7742,7 +7742,7 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
     // The corpus is opaque on the left half and transparent on the right, so the
     // alpha edge runs down the middle. At 135° the shadow falls down-and-right,
     // which puts coverage just right of that edge.
-    let out = fx.drop_shadow(&ctx, &tex, w, h, &op_of(base));
+    let out = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let alpha_at = |x: u32, y: u32| gpu[((y * w + x) * 4 + 3) as usize];
     assert!(
@@ -7756,7 +7756,7 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
 
     // Shadow only keeps the shadow and nothing else: the shape's own colour is
     // gone from the middle of the opaque half.
-    let only_out = fx.drop_shadow(&ctx, &tex, w, h, &op_of(only));
+    let only_out = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(only));
     let only_px = readback_linear_f32(&ctx, &only_out, w, h).unwrap();
     let i = ((14 * w + 6) * 4) as usize;
     assert!(
@@ -9736,7 +9736,7 @@ fn wgsl_roughen_edges_matches_the_cpu_oracle() {
         let p = r.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::roughen_edges(&mut cpu, w, h, &p);
-        let out = fx.roughen_edges(&ctx, &tex, w, h, &op_of(r));
+        let out = fx.roughen_edges(&ctx, &tex, w, h, None, &op_of(r));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("roughen_edges {name}: worst {worst}");
@@ -10393,7 +10393,7 @@ fn wgsl_median_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::median(&mut cpu, w, h, &p);
         let op = op_of(m);
-        let out = fx.median(&ctx, &tex, w, h, &op);
+        let out = fx.median(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -10408,7 +10408,7 @@ fn wgsl_median_matches_the_cpu_oracle() {
             );
         }
 
-        let out2 = fx.median(&ctx, &tex, w, h, &op);
+        let out2 = fx.median(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU median must be bit-stable");
     }
@@ -10700,7 +10700,7 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::emboss(&mut cpu, w, h, &p);
         let op = op_of(e);
-        let out = fx.emboss(&ctx, &tex, w, h, &op);
+        let out = fx.emboss(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
@@ -10712,7 +10712,7 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the relief must actually stamp");
         }
 
-        let out2 = fx.emboss(&ctx, &tex, w, h, &op);
+        let out2 = fx.emboss(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU emboss must be bit-stable");
     }
@@ -10838,7 +10838,7 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::texturize(&mut cpu, &qweave, w, h, &p);
         let op = op_of(t);
-        let out = fx.texturize(&ctx, &tex, w, h, Some(&weave_tex), &op);
+        let out = fx.texturize(&ctx, &tex, w, h, Some(&weave_tex), None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
@@ -10850,7 +10850,7 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the texture must actually press");
         }
 
-        let out2 = fx.texturize(&ctx, &tex, w, h, Some(&weave_tex), &op);
+        let out2 = fx.texturize(&ctx, &tex, w, h, Some(&weave_tex), None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU texturize must be bit-stable");
     }
@@ -10862,6 +10862,7 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
         &tex,
         w,
         h,
+        None,
         None,
         &op_of(of(0, 100.0, 1.0, 100.0, 100.0)),
     );
@@ -11251,7 +11252,7 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
         }
     };
     let run = |l: Lightning| {
-        let out = fx.lightning(&ctx, &tex, w, h, &op_of(l));
+        let out = fx.lightning(&ctx, &tex, w, h, None, &op_of(l));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
 
@@ -11397,7 +11398,7 @@ fn wgsl_radio_waves_matches_the_cpu_oracle() {
         }
     };
     let run = |r: RadioWaves| {
-        let out = fx.radio_waves(&ctx, &tex, w, h, &op_of(r));
+        let out = fx.radio_waves(&ctx, &tex, w, h, None, &op_of(r));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
 
@@ -11536,7 +11537,7 @@ fn wgsl_vegas_matches_the_cpu_oracle() {
         }
     };
     let run = |v: Vegas| {
-        let out = fx.vegas(&ctx, &tex, w, h, &op_of(v));
+        let out = fx.vegas(&ctx, &tex, w, h, None, &op_of(v));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
 
@@ -11643,7 +11644,7 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
         }
     };
     let run = |g: AddGrain, tick: i32| {
-        let out = fx.add_grain(&ctx, &tex, w, h, &op_of(g, tick));
+        let out = fx.add_grain(&ctx, &tex, w, h, None, &op_of(g, tick));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
 
@@ -11862,7 +11863,7 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
         mix: p.mix,
     };
     let run = |p: &cpu::PathDrawParams| {
-        let out = fx.path_draw(&ctx, &tex, w, h, &op_of(p));
+        let out = fx.path_draw(&ctx, &tex, w, h, None, &op_of(p));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
     let covered = |a: &[f32]| -> usize {
@@ -13644,6 +13645,550 @@ fn the_matte_scales_the_warp_bend() {
             cpu: &|px, m| lumit_core::fx::cpu::warp_matted(px, w, h, &p, m),
             plain: &|px| lumit_core::fx::cpu::warp(px, w, h, &p),
             gpu: &|t, m| fx.warp(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The matte scales the amount (K-428, docs/08 §2.6): the Generate and Stylise
+// claims. Every one runs through `check_matte_claim`, so each is held to the
+// same four facts — parity under a ramp, bit-stability, an empty matte that IS
+// the pre-claim function, and a half matte that is NOT the generic dissolve.
+//
+// The drawn effects are set to their "on transparent" composite here, which is
+// where the claim and the dissolve part company: at a black matte the drawing
+// is simply not drawn, and with the layer that arrived already discarded there
+// is nothing for a dissolve to fade back to.
+// ---------------------------------------------------------------------------
+
+/// A flat matte of one grey, at this test's raster — the picture a dissolve is
+/// held against when the claim's own answer has to be named exactly.
+fn flat_matte(w: u32, h: u32, grey: f32) -> Vec<f32> {
+    (0..(w * h) as usize)
+        .flat_map(|_| [grey, grey, grey, 1.0])
+        .collect()
+}
+
+/// The corpus as the harness sees it: fp16-quantised, so a CPU answer compared
+/// against another CPU answer starts from the same bits the GPU was given.
+fn quantised(img: &[f32]) -> Vec<f32> {
+    img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
+}
+
+#[test]
+fn the_matte_scales_the_add_grain_intensity() {
+    use lumit_core::fx::effects::add_grain::AddGrain;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let mut g = AddGrain::read(Params::EMPTY);
+    g.seed = 20_260_823;
+    g.intensity = 200.0;
+    let p = g.packed(37);
+    let op = AddGrainOp {
+        amplitude: p.amplitude,
+        inv_size: p.inv_size,
+        softness: p.softness,
+        tonal: p.tonal,
+        monochrome: p.monochrome,
+        seed: p.seed,
+        tick: p.tick,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "add_grain",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::add_grain_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::add_grain(px, w, h, &p),
+            gpu: &|t, m| fx.add_grain(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_lightning_opacity() {
+    use lumit_core::fx::effects::lightning::Lightning;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 32u32);
+    let img = smooth_corpus(w, h);
+    let mut l = Lightning::read(Params::EMPTY);
+    l.origin_x = 5.0;
+    l.origin_y = 27.0;
+    l.direction_x = 43.0;
+    l.direction_y = 5.0;
+    l.core_radius = 1.0;
+    l.glow_radius = 5.0;
+    l.seed = 20_260_823;
+    l.composite_on_original = false;
+    let p = l.packed();
+    let op = LightningOp {
+        segments: p.segments,
+        fades: p.fades,
+        count: p.count,
+        core_radius: p.core_radius,
+        glow_radius: p.glow_radius,
+        glow_opacity: p.glow_opacity,
+        core_colour: p.core_colour,
+        glow_colour: p.glow_colour,
+        composite: p.composite,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "lightning",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::lightning_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::lightning(px, w, h, &p),
+            gpu: &|t, m| fx.lightning(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_radio_waves_opacity() {
+    use lumit_core::fx::effects::radio_waves::RadioWaves;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 48u32);
+    let img = smooth_corpus(w, h);
+    let mut r = RadioWaves::read(Params::EMPTY);
+    r.centre_x = 24.0;
+    r.centre_y = 24.0;
+    r.expansion = 8.0;
+    r.stroke_width = 1.5;
+    r.time = 2.5;
+    r.composite_on_original = false;
+    let p = r.packed();
+    let op = RadioWavesOp {
+        centre: p.centre,
+        vertex: p.vertex,
+        normal: p.normal,
+        period: p.period,
+        rotation: p.rotation,
+        spin: p.spin,
+        newest: p.newest,
+        count: p.count,
+        time: p.time,
+        period_s: p.period_s,
+        expansion: p.expansion,
+        lifespan: p.lifespan,
+        half_width: p.half_width,
+        fade_in: p.fade_in,
+        fade_out: p.fade_out,
+        colour: p.colour,
+        opacity: p.opacity,
+        composite: p.composite,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "radio_waves",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::radio_waves_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::radio_waves(px, w, h, &p),
+            gpu: &|t, m| fx.radio_waves(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_vegas_opacity() {
+    use lumit_core::fx::effects::vegas::Vegas;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 32u32);
+    let img = smooth_corpus(w, h);
+    let mut v = Vegas::read(Params::EMPTY);
+    v.width = 3.0;
+    v.segment_length = 12.0;
+    v.threshold = 55.0;
+    v.composite_on_original = false;
+    let p = v.packed();
+    let op = VegasOp {
+        from_alpha: p.from_alpha,
+        level: p.level,
+        half_width: p.half_width,
+        band: p.band,
+        inv_segment: p.inv_segment,
+        duty: p.duty,
+        phase: p.phase,
+        colour: p.colour,
+        opacity: p.opacity,
+        composite: p.composite,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "vegas",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::vegas_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::vegas(px, w, h, &p),
+            gpu: &|t, m| fx.vegas(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+
+    // **A black matte leaves the pixel empty, and no dissolve can.** With
+    // Composite on original off the layer that arrived is already gone, so
+    // "draw nothing here" is transparency — where a strength dissolve would
+    // hand the whole picture back.
+    let mut dark = quantised(&img);
+    lumit_core::fx::cpu::vegas_matted(&mut dark, w, h, &p, &flat_matte(w, h, 0.0));
+    assert!(
+        dark.iter().all(|v| *v == 0.0),
+        "a black matte on Vegas painting on transparent must leave nothing at all"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_path_drawing_opacity() {
+    use lumit_core::fx::cpu;
+    use lumit_core::fx::effects::{scribble::Scribble, stroke::Stroke};
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 32u32);
+    let img = smooth_corpus(w, h);
+    let ellipse = oracle_ellipse(w, h);
+    let squiggle = oracle_squiggle(w, h);
+
+    let op_of = |p: &cpu::PathDrawParams| PathDrawOp {
+        segments: p.segments,
+        arcs: p.arcs,
+        count: p.count,
+        half_width: p.half_width,
+        band: p.band,
+        inv_segment: p.inv_segment,
+        duty: p.duty,
+        phase: p.phase,
+        wiggle_amp: p.wiggle_amp,
+        wiggle_freq: p.wiggle_freq,
+        wiggle_tick: p.wiggle_tick,
+        seed: p.seed,
+        colour: p.colour,
+        opacity: p.opacity,
+        style: p.style,
+        mix: p.mix,
+    };
+
+    // Scribble's hatch, laid on transparent.
+    let mut s = Scribble::read(Params::EMPTY);
+    s.spacing = 5.0;
+    s.stroke_width = 1.5;
+    s.composite_on_original = false;
+    let sp = s.packed(&ellipse, 1.0, 3.5);
+    // Stroke's brush, revealing the original — the drawing as a hole.
+    let mut b = Stroke::read(Params::EMPTY);
+    b.brush_size = 5.0;
+    b.paint_style = cpu::PAINT_REVEAL_ORIGINAL;
+    let bp = b.packed(&squiggle, 1.0);
+
+    for (name, p) in [("scribble", sp), ("stroke", bp)] {
+        let op = op_of(&p);
+        check_matte_claim(
+            &ctx,
+            &MatteClaim {
+                name,
+                w,
+                h,
+                img: &img,
+                cpu: &|px, m| cpu::path_draw_matted(px, w, h, &p, m),
+                plain: &|px| cpu::path_draw(px, w, h, &p),
+                gpu: &|t, m| fx.path_draw(&ctx, t, w, h, m, &op),
+                tol: 2e-2,
+            },
+        );
+    }
+}
+
+#[test]
+fn the_matte_scales_the_drop_shadow_opacity() {
+    use lumit_core::fx::effects::drop_shadow::DropShadow;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+    // Shadow only: the mode in which scaling the shadow's Opacity is not the
+    // dissolve, because there is no layer left underneath to fade back to.
+    let mut d = DropShadow::read(Params::EMPTY);
+    d.distance = 6.0;
+    d.softness = 3.0;
+    d.shadow_only = true;
+    let p = d.packed();
+    let op = DropShadowOp {
+        colour: p.colour,
+        opacity: p.opacity,
+        offset: p.offset,
+        softness_px: p.softness_px,
+        shadow_only: p.shadow_only,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "drop_shadow",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::drop_shadow_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::drop_shadow(px, w, h, &p),
+            gpu: &|t, m| fx.drop_shadow(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_roughen_edges_border() {
+    use lumit_core::fx::effects::roughen_edges::RoughenEdges;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = disc_corpus(w, h);
+    let mut r = RoughenEdges::read(Params::EMPTY);
+    r.border = 4.0;
+    r.scale = 8.0;
+    r.offset_x = 16.0;
+    r.offset_y = 12.0;
+    r.seed = 7;
+    let p = r.packed();
+    let op = RoughenEdgesOp {
+        seed: p.field.seed,
+        octaves: p.field.octaves,
+        gain: p.field.gain,
+        lacunarity: p.field.lacunarity,
+        cycle: p.field.cycle,
+        flags: u32::from(p.field.perlin) | (u32::from(p.field.turbulent) << 1),
+        offset: p.offset,
+        inv_scale: p.inv_scale,
+        z: p.z,
+        border_px: p.border_px,
+        influence: p.influence,
+        half_width: p.half_width,
+        colour: p.colour,
+        colour_on: p.colour_on,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "roughen_edges",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::roughen_edges_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::roughen_edges(px, w, h, &p),
+            gpu: &|t, m| fx.roughen_edges(&ctx, t, w, h, m, &op),
+            tol: 3e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_median_radius() {
+    use lumit_core::fx::effects::median::Median;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = speckled_corpus(w, h);
+    let of = |radius: f32| {
+        let mut m = Median::read(Params::EMPTY);
+        m.radius = radius;
+        m
+    };
+    let p = of(2.0).packed();
+    let n = (2 * p.radius + 1) * (2 * p.radius + 1);
+    let op = MedianOp {
+        radius: p.radius,
+        keep: (n + 1) / 2,
+        alpha_on: f32::from(u8::from(p.alpha)),
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "median",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::median_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::median(px, w, h, &p),
+            gpu: &|t, m| fx.median(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+
+    // **A half matte on Radius 2 IS the Radius 1 median** — the picture a
+    // Radius 1 window makes, not a half fade of the Radius 2 one. That is the
+    // whole claim in one equality, and no dissolve can produce it.
+    let mut half = quantised(&img);
+    lumit_core::fx::cpu::median_matted(&mut half, w, h, &p, &flat_matte(w, h, 0.5));
+    let mut narrow = quantised(&img);
+    lumit_core::fx::cpu::median(&mut narrow, w, h, &of(1.0).packed());
+    assert_eq!(
+        half, narrow,
+        "a half matte on Radius 2 must BE the Radius 1 median, to the bit"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_emboss_relief() {
+    use lumit_core::fx::effects::emboss::Emboss;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let of = |relief: f32| {
+        let mut e = Emboss::read(Params::EMPTY);
+        e.relief = relief;
+        e
+    };
+    let p = of(4.0).packed();
+    let op = EmbossOp {
+        offset: p.offset,
+        contrast: p.contrast,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "emboss",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::emboss_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::emboss(px, w, h, &p),
+            gpu: &|t, m| fx.emboss(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+
+    // **A black matte is the flat sheet, not the picture.** Relief 0 is mid-grey
+    // with no light on it (§3.67), so the honest answer at a black matte is that
+    // sheet — where a dissolve would give the untouched picture back.
+    let mut dark = quantised(&img);
+    lumit_core::fx::cpu::emboss_matted(&mut dark, w, h, &p, &flat_matte(w, h, 0.0));
+    let mut flat = quantised(&img);
+    lumit_core::fx::cpu::emboss(&mut flat, w, h, &of(0.0).packed());
+    assert_eq!(
+        dark, flat,
+        "a black matte on Emboss must BE the Relief 0 sheet, to the bit"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_texturize_relief() {
+    use lumit_core::fx::effects::texturize::Texturize;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    // The same coarse weave the oracle test embosses.
+    let mut weave = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let u = x as f32 / (w - 1) as f32;
+            let v = y as f32 / (h - 1) as f32;
+            let g = 0.5 + 0.4 * ((u * 18.0).sin() * (v * 14.0).cos());
+            weave[i] = g;
+            weave[i + 1] = g;
+            weave[i + 2] = g;
+            weave[i + 3] = 1.0;
+        }
+    }
+    let qweave = quantised(&weave);
+    let weave_tex = upload_linear_f32(&ctx, &weave, w, h);
+
+    let mut t = Texturize::read(Params::EMPTY);
+    t.scale = 100.0;
+    t.relief = 3.0;
+    let p = t.packed();
+    let op = TexturizeOp {
+        offset: p.offset,
+        contrast: p.contrast,
+        inv_scale: p.inv_scale,
+        placement: p.placement,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "texturize",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::texturize_matted(px, &qweave, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::texturize(px, &qweave, w, h, &p),
+            gpu: &|tx, m| fx.texturize(&ctx, tx, w, h, Some(&weave_tex), m, &op),
             tol: 2e-2,
         },
     );

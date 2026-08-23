@@ -29,6 +29,12 @@ use lumit_fx_macros::Effect;
     // §2.2: a difference of premultiplied colour is a difference of the coverage
     // wherever the coverage moves.
     premultiplied = false,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Relief per pixel: white raises the full relief, grey a shallower          one, black leaves the sheet flat",
+    ),
 )]
 pub struct Emboss {
     /// Degrees, from straight up and clockwise — §3.43's convention, which is

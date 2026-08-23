@@ -38,6 +38,12 @@ pub const RADIO_WAVES_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     roi = Exact,
     premultiplied = true,
     enabled_when = RADIO_WAVES_ENABLED_WHEN,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Opacity per pixel: white draws the waves in full, grey faintly,          black nothing at all",
+    ),
 )]
 pub struct RadioWaves {
     /// Where the waves are emitted, px@comp (K-260: point parameters are

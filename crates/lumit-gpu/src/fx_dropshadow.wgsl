@@ -17,7 +17,7 @@ struct Params {
     opacity: f32,          // 0..1
     mix_amt: f32,          // 0..1, blended against the unprocessed input
     shadow_only: u32,
-    _pad0: u32,
+    matte_on: f32,         // 1 = the matte scales the shadow's Opacity (K-428)
     _pad1: u32,
     _pad2: u32,
 };
@@ -26,6 +26,25 @@ struct Params {
 @group(0) @binding(1) var soft: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // == cpu::bilinear_edge with the Transparent policy (edge == 0): a shape
 // touching the frame border casts a shadow that leaves the frame, and repeating
@@ -63,9 +82,16 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
+    // The matte pulls the shadow's Opacity toward 0 per pixel, read where the
+    // shadow FALLS rather than where the shape stands (K-428), so the matte's
+    // own picture is the picture of where the shadow lands.
+    var opacity = p.opacity;
+    if (p.matte_on != 0.0) {
+        opacity = matte_toward(opacity, 0.0, matte_k(xy));
+    }
     let k = bilinear_transparent(f32(xy.x) + 0.5 - p.offset.x,
                                  f32(xy.y) + 0.5 - p.offset.y,
-                                 size).a * p.opacity;
+                                 size).a * opacity;
     let shadow = vec4<f32>(p.colour.rgb * k, k);
     // Source OVER shadow, premultiplied — the shadow is BELOW, which is the
     // whole reason this is an effect and not a duplicated layer.

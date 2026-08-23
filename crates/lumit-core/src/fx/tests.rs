@@ -10592,7 +10592,13 @@ fn every_effect_carries_a_matte_row() {
         // pixel. Datamosh stays on the dissolve because scaling its Intensity
         // IS the dissolve to the bit; Tile, Mirror and Polar coordinates have
         // no amount to scale. The Transform effect shares the Shake's kernel
-        // but never binds a matte.
+        // but never binds a matte. Generate and Stylise claim it the same way
+        // again (K-428): the grain's Intensity, the drawn thing's Opacity, the
+        // shadow's Opacity, Border, Radius and Relief. Noise, Flash, Sprite
+        // flare and Light wrap keep the dissolve there, because each adds a
+        // linear amount to the picture and scaling it IS the dissolve; Fill,
+        // Gradient, Fractal noise, Beam, Mosaic and Find edges have no amount
+        // of their own to scale.
         let claims = matches!(
             s.match_name,
             "dof"
@@ -10633,6 +10639,17 @@ fn every_effect_carries_a_matte_row() {
                 | "photo_filter"
                 | "shadow_highlight"
                 | "posterize"
+                | "add_grain"
+                | "lightning"
+                | "radio_waves"
+                | "vegas"
+                | "scribble"
+                | "stroke"
+                | "drop_shadow"
+                | "roughen_edges"
+                | "median"
+                | "emboss"
+                | "texturize"
         );
         assert_eq!(
             !s.matte.generic(),

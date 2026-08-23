@@ -32,6 +32,12 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     cost = Moderate,
     premultiplied = true,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all",
+    ),
 )]
 pub struct Stroke {
     /// Which of the layer's masks to walk (K-408). Unset is **First mask**,

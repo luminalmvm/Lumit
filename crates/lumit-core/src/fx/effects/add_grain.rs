@@ -29,6 +29,12 @@ use lumit_fx_macros::Effect;
     // evenly over it.
     premultiplied = false,
     seeded = true,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Intensity per pixel: white grains at the full Intensity, grey          more finely, black not at all",
+    ),
 )]
 pub struct AddGrain {
     /// How strong the grain is, per cent. 0 is the bit-exact passthrough; the

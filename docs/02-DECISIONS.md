@@ -11341,3 +11341,70 @@ both splits.
 **Held by** `check_matte_claim` per effect, plus three pictures a dissolve cannot draw: a
 half matte on a 6,4 shove is the 3,2 shove, a half matte on a 200° twirl is the 100° twirl,
 and a half matte on Scanlines is the lines at twice the period. No new strings.
+
+## K-428 — The matte scales the amount of every generator and stylise effect
+
+**Status: DECIDED (2026-08-23).** Numbered K-428 because K-425, K-426 and K-427 are already
+taken on main and K-420..K-424 are reserved by another branch.
+
+**Decision.** The owner's rule for mattes (K-426), applied to the Generate and Stylise
+categories. Two shapes of amount, one rule:
+
+- **A thing drawn over the picture has an opacity**, and the matte multiplies that, so the
+  drawing fades along its own length and what lies underneath is untouched. Lightning's
+  bolt (its core's coverage and its Glow opacity together), Radio waves' Opacity, Vegas'
+  Opacity, Scribble's and Stroke's Opacity, and Drop shadow's shadow Opacity.
+- **A thing with a size has that size scaled.** Roughen edges' Border, Median's Radius,
+  Emboss's and Texturize's Relief — and Add grain's Intensity, which belongs here rather
+  than with the additive grains because its wobble is added on the perceptual value and
+  squared back.
+
+Eleven claims. Each names what it scales in its declaration, which is what the manual
+prints.
+
+**Four rulings are not carried out, by the rule's own test.** **Noise**, **Flash**,
+**Sprite flare** and **Light wrap** were each named for their Amount or Intensity, and each
+adds a *linear* amount of something to the picture — grain onto unpremultiplied colour, a
+colour lerped toward, additive light, a screened spill. For all four, `out(amount·k)` is
+`lerp(input, out(amount), k)` identically, so scaling the amount and running the generic
+dissolve are the same arithmetic and there is nothing to change: they keep
+`MatteRole::Strength`, for K-426's reason and Datamosh's (K-427). This is not a judgement
+call — `check_matte_claim` refuses a claim that is the dissolve, so the gate would fail.
+**Fill, Gradient, Fractal noise, Beam, Mosaic and Find edges** keep Strength as the task
+ruled: they replace the picture rather than adding an amount to it. Glow keeps its seed
+gate (K-395) and the Lens flare its source detection.
+
+**Two claims draw a picture the dissolve provably cannot.** A half matte on a **Median** set
+to Radius 2 is *exactly* the Radius 1 median, to the bit — a genuinely smaller window, which
+is what lets one painted matte despeckle a sky and leave a face alone. A black matte on
+**Emboss** is the flat mid-grey sheet, to the bit, and not the picture back: Relief 0 is
+that sheet and not the identity (§3.67), so this is the one place in the batch where a black
+matte does not mean "leave the pixel alone" — honestly, because the matte turns Relief down
+rather than turning Emboss off. The drawn effects make their own case in the composite
+modes that replace rather than overlay: with Composite on original off, or on Paint on
+transparent or Reveal original, a black matte leaves transparency where the dissolve hands
+the whole picture back.
+
+**k is read at the destination pixel**, as K-427 fixed for the distortions. It matters once,
+on **Drop shadow**: the shadow's Opacity is scaled where the shadow *falls*, not where the
+shape stands, so the matte's own picture is the picture of where the shadow goes. Its blur
+takes no matte at all — that blur is taken where the shape is, and a per-pixel softness there
+would soften the wrong picture.
+
+**Mechanics are K-426's, unchanged.** `matte_toward` on each path, `_matted` CPU twins with
+the old names kept as the `&[]` wrappers (an empty matte is the pre-claim function byte for
+byte, K-258), a `matte_on` in each uniform reading binding 4, `dispatch_matted`,
+`aux.matte()`. Two reuses are worth naming. **Roughen edges' whole claim is one argument**:
+Border *is* the radius of the §3.8 gaussian it already runs, and that blur has scaled a
+radius per pixel since K-395, so the claim is `None` becoming `matte` at one call site on
+each path. And **`path_draw` is shared by three effects** — Scribble, Stroke and Vegas'
+Mask/Path half — all of which claim, so unlike K-427's `fx_transform.wgsl` there is no side
+that passes `None`. It scales the sample's result rather than the Opacity field, because
+that result *is* coverage × Opacity and Opacity enters nowhere else. **Median** is the only
+kernel whose loop bound the matte moves: `keep` is now derived from the pixel's own radius
+instead of read from the uniform, and a pixel whose radius comes to 0 takes the short-circuit
+the whole effect takes at Radius 0.
+
+**Held by** `check_matte_claim` per effect (parity under a ramp, bit-stability, the empty
+matte equal to the old function to the byte, a flat half matte *not* equal to the generic
+dissolve, and parity there too), plus the three equalities above. No new strings.

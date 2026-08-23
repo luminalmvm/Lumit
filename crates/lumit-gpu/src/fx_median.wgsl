@@ -27,12 +27,35 @@ struct Params {
     keep: i32,       // ceil(N / 2) for this radius, computed host-side
     alpha_on: f32,   // 1 to median the coverage too, 0 to leave it
     mix_amt: f32,    // 0..1, blended against the unprocessed input
+    matte_on: f32,   // 1 = the matte scales Radius per pixel (K-428)
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // == cpu::MEDIAN_MAX_RADIUS and cpu::MEDIAN_KEEP. Held to those constants by the
 // §1.6 oracle test.
@@ -57,11 +80,21 @@ fn median(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let r = clamp(p.radius, 0, MAX_RADIUS);
+    // The matte pulls Radius toward 0 per pixel, before the window is swept
+    // (K-428): a genuinely narrower window, rounded with `floor(x + ½)` so
+    // WGSL's tie-to-even cannot part company with Rust's tie-away-from-zero.
+    var r = clamp(p.radius, 0, MAX_RADIUS);
+    if (p.matte_on != 0.0) {
+        let scaled = matte_toward(f32(r), 0.0, matte_k(xy));
+        r = clamp(i32(floor(scaled + 0.5)), 0, MAX_RADIUS);
+    }
     if (r <= 0) {
         textureStore(dst, xy, o);
         return;
     }
+    // The rank the network has to carry, for THIS pixel's window (== the CPU
+    // reference's `keep`); the host's own `p.keep` is the same number at r.
+    let keep = ((2 * r + 1) * (2 * r + 1) + 1) / 2;
     var sorted: array<vec4<f32>, 25>;
     for (var i = 0; i < KEEP; i++) {
         sorted[i] = vec4<f32>(PAD, PAD, PAD, PAD);
@@ -76,7 +109,7 @@ fn median(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
             // The bubble: each rung keeps the smaller of what it held and what
             // is passing through, and hands the larger on.
-            for (var j = 0; j < p.keep; j++) {
+            for (var j = 0; j < keep; j++) {
                 let lo = min(sorted[j], v);
                 let hi = max(sorted[j], v);
                 sorted[j] = lo;
@@ -84,7 +117,7 @@ fn median(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
     }
-    let med = sorted[p.keep - 1];
+    let med = sorted[keep - 1];
     // `select`, not a lerp: the CPU reference chooses one of the two values
     // outright, and `a + (b - a)·1` is not bit-exactly `b`.
     let out_a = select(o.a, med.a, p.alpha_on > 0.5);

@@ -42,6 +42,12 @@ const MAX_POINTS: usize = STEPS + 1;
     roi = Exact,
     premultiplied = true,
     seeded = true,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the bolt's opacity per pixel: white draws the core and glow in          full, grey faintly, black nothing at all",
+    ),
 )]
 pub struct Lightning {
     /// Where the bolt leaves from, px@comp (K-260: point parameters are PIXELS).

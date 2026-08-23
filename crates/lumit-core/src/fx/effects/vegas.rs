@@ -36,6 +36,12 @@ use lumit_fx_macros::Effect;
     roi = PaddedPctDiag(1.0),
     premultiplied = true,
     enabled_when = VEGAS_ENABLED_WHEN,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Opacity per pixel: white draws the stroke in full, grey faintly,          black nothing at all",
+    ),
 )]
 pub struct Vegas {
     /// Where the line comes from. Luminance is AE's Image Contours; Alpha

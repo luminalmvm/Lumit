@@ -5279,6 +5279,19 @@ pub struct DropShadowParams {
 /// only honest reading: a shape touching the frame border casts a shadow that
 /// leaves the frame, and repeating the border pixel outward would smear it.
 pub fn drop_shadow(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams) {
+    drop_shadow_matted(rgba, w, h, p, &[]);
+}
+
+/// [`drop_shadow`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls the **shadow's Opacity toward 0** ([`matte_toward`]), read
+/// where the shadow lands rather than where the shape stands — so the matte's
+/// own picture is the picture of where the shadow falls.
+///
+/// Not the generic dissolve: on Shadow only there is nothing under the shadow to
+/// dissolve back to, so a black matte leaves the pixel empty where the dissolve
+/// would hand the layer back. An empty matte is the unmatted path to the byte
+/// (K-258).
+pub fn drop_shadow_matted(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams, matte: &[f32]) {
     let original = rgba.to_vec();
     // The shared §3.8 gaussian, on the whole picture: only the alpha is read
     // back out of it, and blurring four channels costs exactly what the WGSL
@@ -5295,7 +5308,7 @@ pub fn drop_shadow(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams) {
                 x as f32 + 0.5 - p.offset[0],
                 y as f32 + 0.5 - p.offset[1],
                 0,
-            )[3] * p.opacity;
+            )[3] * matte_toward(p.opacity, 0.0, matte_strength(matte, d));
             let shadow = [p.colour[0] * k, p.colour[1] * k, p.colour[2] * k, k];
             let src_a = original[d + 3];
             for c in 0..4 {
@@ -5365,6 +5378,26 @@ fn smoothstep_between(lo: f32, hi: f32, x: f32) -> f32 {
 /// is what "no colour" looks like and a grown edge painted with it would read as
 /// soot.
 pub fn roughen_edges(rgba: &mut [f32], w: u32, h: u32, p: &RoughenEdgesParams) {
+    roughen_edges_matted(rgba, w, h, p, &[]);
+}
+
+/// [`roughen_edges`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls **Border toward 0** ([`matte_toward`], inside the gaussian
+/// that measures the edge), so the outline is chewed coarsely where the matte is
+/// white and finely — down to untouched — where it is dark.
+///
+/// The claim rides entirely on [`blur_gaussian_matted`], because Border *is* the
+/// radius of that blur: the ramp it leaves in the alpha is the distance field the
+/// roughening cuts, and a narrower ramp is a narrower band to chew. Nothing a
+/// dissolve can draw, which would cross-fade one bite size over the whole shape.
+/// An empty matte is the unmatted path to the byte (K-258).
+pub fn roughen_edges_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &RoughenEdgesParams,
+    matte: &[f32],
+) {
     if !p.active {
         return;
     }
@@ -5372,7 +5405,7 @@ pub fn roughen_edges(rgba: &mut [f32], w: u32, h: u32, p: &RoughenEdgesParams) {
     // The shared §3.8 gaussian, on the whole picture — the same reuse §3.43
     // makes, and here the blurred alpha *is* the distance field.
     let mut soft = original.clone();
-    blur_gaussian(&mut soft, w, h, p.border_px, 0, 1.0);
+    blur_gaussian_matted(&mut soft, w, h, p.border_px, 0, 1.0, matte);
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -6484,18 +6517,39 @@ const MEDIAN_PAD: f32 = 1e30;
 /// eat the frame's own border. Unpremultiplied (§2.2); the coverage is medianed
 /// only when `alpha` says so. Radius 0 is the bit-exact identity.
 pub fn median(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams) {
-    let r = p.radius.clamp(0, MEDIAN_MAX_RADIUS);
-    if r == 0 {
+    median_matted(rgba, w, h, p, &[]);
+}
+
+/// [`median`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls its **Radius toward 0** ([`matte_toward`], rounded with
+/// the batch's `floor(x + ½)` so WGSL's tie-to-even cannot part company with
+/// Rust's tie-away-from-zero) before the window is swept.
+///
+/// The window itself is narrower where the matte is dark — a despeckle that
+/// works hard on the sky and leaves the face alone — which is a picture no
+/// dissolve can draw, since a dissolve only ever fades one window size back over
+/// the source. A pixel whose radius comes to 0 is left exactly as it arrived,
+/// which is the same short-circuit the whole effect takes at Radius 0 (the WGSL
+/// twin matches). An empty matte is the unmatted path to the byte (K-258).
+pub fn median_matted(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams, matte: &[f32]) {
+    let radius = p.radius.clamp(0, MEDIAN_MAX_RADIUS);
+    if radius == 0 {
         return;
     }
-    let n = (2 * r + 1) * (2 * r + 1);
-    // The 1-based rank of the median among `n` samples, and therefore how many
-    // of the smallest the network has to carry.
-    let keep = ((n + 1) / 2) as usize;
     let src = rgba.to_vec();
     let (wi, hi) = (w as i64, h as i64);
     for y in 0..hi {
         for x in 0..wi {
+            let d = ((y * wi + x) * 4) as usize;
+            let scaled = matte_toward(radius as f32, 0.0, matte_strength(matte, d));
+            let r = ((scaled + 0.5).floor() as i32).clamp(0, MEDIAN_MAX_RADIUS);
+            if r == 0 {
+                continue; // no window: the pixel as it arrived, to the bit
+            }
+            let n = (2 * r + 1) * (2 * r + 1);
+            // The 1-based rank of the median among `n` samples, and therefore how
+            // many of the smallest the network has to carry.
+            let keep = ((n + 1) / 2) as usize;
             let mut sorted = [[MEDIAN_PAD; 4]; MEDIAN_KEEP];
             for dy in -r..=r {
                 let sy = (y + i64::from(dy)).clamp(0, hi - 1);
@@ -6517,7 +6571,6 @@ pub fn median(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams) {
                 }
             }
             let med = sorted[keep - 1];
-            let d = ((y * wi + x) * 4) as usize;
             let out_a = if p.alpha { med[3] } else { rgba[d + 3] };
             for c in 0..3 {
                 rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + med[c] * out_a * p.mix;
@@ -6692,6 +6745,19 @@ pub struct EmbossParams {
 /// Unpremultiplied (§2.2); alpha is untouched. Edges repeat. Mix 0 is the
 /// bit-exact identity.
 pub fn emboss(rgba: &mut [f32], w: u32, h: u32, p: &EmbossParams) {
+    emboss_matted(rgba, w, h, p, &[]);
+}
+
+/// [`emboss`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls **Relief toward 0** ([`matte_toward`] on the tap offset
+/// Relief is spent into) before the two taps are read, so the relief is
+/// genuinely shallower where the matte is grey.
+///
+/// Emphatically not the generic dissolve: Relief 0 is flat mid-grey, not the
+/// identity (see the module note), so a black matte gives the unlit sheet where
+/// a dissolve would give the picture back. An empty matte is the unmatted path
+/// to the byte (K-258).
+pub fn emboss_matted(rgba: &mut [f32], w: u32, h: u32, p: &EmbossParams, matte: &[f32]) {
     let src = rgba.to_vec();
     let luma_at = |sx: f32, sy: f32| {
         let t = bilinear_edge(&src, w, h, sx, sy, 1);
@@ -6702,11 +6768,16 @@ pub fn emboss(rgba: &mut [f32], w: u32, h: u32, p: &EmbossParams) {
         for x in 0..w {
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let a = luma_at(px - p.offset[0], py - p.offset[1]);
-            let b = luma_at(px + p.offset[0], py + p.offset[1]);
+            let d = (y as usize * w as usize + x as usize) * 4;
+            let k = matte_strength(matte, d);
+            let off = [
+                matte_toward(p.offset[0], 0.0, k),
+                matte_toward(p.offset[1], 0.0, k),
+            ];
+            let a = luma_at(px - off[0], py - off[1]);
+            let b = luma_at(px + off[0], py + off[1]);
             let g = (0.5 + (b - a) * p.contrast).max(0.0);
             let v = g * g;
-            let d = (y as usize * w as usize + x as usize) * 4;
             let alpha = rgba[d + 3];
             for c in 0..3 {
                 rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + v * alpha * p.mix;
@@ -6745,6 +6816,26 @@ pub struct TexturizeParams {
 /// are unpremultiplied, so a texture with a soft edge does not read as black
 /// there. Mix 0 is the bit-exact identity.
 pub fn texturize(rgba: &mut [f32], texture: &[f32], w: u32, h: u32, p: &TexturizeParams) {
+    texturize_matted(rgba, texture, w, h, p, &[]);
+}
+
+/// [`texturize`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls **Relief toward 0** ([`matte_toward`] on the light vector
+/// Relief is spent into) before the texture's two taps are read, so the surface
+/// is genuinely flatter where the matte is dark.
+///
+/// Not the generic dissolve, because the two taps land somewhere else: half the
+/// Relief reads a *different pair of texture pixels*, not a half-strength
+/// version of the same difference. An empty matte is the unmatted path to the
+/// byte (K-258).
+pub fn texturize_matted(
+    rgba: &mut [f32],
+    texture: &[f32],
+    w: u32,
+    h: u32,
+    p: &TexturizeParams,
+    matte: &[f32],
+) {
     let (fw, fh) = (w as f32, h as f32);
     let du = p.offset[0] * p.inv_scale / fw;
     let dv = p.offset[1] * p.inv_scale / fh;
@@ -6767,11 +6858,13 @@ pub fn texturize(rgba: &mut [f32], texture: &[f32], w: u32, h: u32, p: &Texturiz
         for x in 0..w {
             let u = ((x as f32 + 0.5) / fw - 0.5) * p.inv_scale + 0.5;
             let v = ((y as f32 + 0.5) / fh - 0.5) * p.inv_scale + 0.5;
+            let d = (y as usize * w as usize + x as usize) * 4;
+            let k = matte_strength(matte, d);
+            let (du, dv) = (matte_toward(du, 0.0, k), matte_toward(dv, 0.0, k));
             let r = match (tap(u + du, v + dv), tap(u - du, v - dv)) {
                 (Some(b), Some(a)) => (b - a) * p.contrast,
                 _ => 0.0,
             };
-            let d = (y as usize * w as usize + x as usize) * 4;
             for c in 0..3 {
                 let out = (rgba[d + c] * (1.0 + r)).max(0.0);
                 rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + out * p.mix;
@@ -7011,13 +7104,30 @@ pub fn lightning_sample(px: f32, py: f32, p: &LightningParams) -> (f32, f32) {
 /// Lightning (docs/08 §3.74) — the CPU reference and §1.6 oracle. Two weights a
 /// pixel become one premultiplied colour and one coverage.
 pub fn lightning(rgba: &mut [f32], w: u32, h: u32, p: &LightningParams) {
+    lightning_matted(rgba, w, h, p, &[]);
+}
+
+/// [`lightning`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls **the drawn bolt's opacity toward 0** ([`matte_toward`]) —
+/// the core's own coverage and the Glow opacity together — before the composite
+/// runs.
+///
+/// Not the generic dissolve: the glow only lights what the core has not taken,
+/// so fading the two together is quadratic in `k`; and with Composite on
+/// original off the picture that arrived is gone whatever the matte says, so a
+/// black matte leaves transparency where the dissolve would put the layer back.
+/// An empty matte is the unmatted path to the byte (K-258).
+pub fn lightning_matted(rgba: &mut [f32], w: u32, h: u32, p: &LightningParams, matte: &[f32]) {
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
             let (core, glow) = lightning_sample(x as f32 + 0.5, y as f32 + 0.5, p);
+            let k = matte_strength(matte, d);
+            let core = matte_toward(core, 0.0, k);
+            let glow_opacity = matte_toward(p.glow_opacity, 0.0, k);
             // The glow lights what the core has not already taken, so the two
             // add to a coverage that cannot exceed one.
-            let gw = glow * p.glow_opacity * (1.0 - core);
+            let gw = glow * glow_opacity * (1.0 - core);
             let cov = (core + gw).clamp(0.0, 1.0);
             let keep = if p.composite { 1.0 - cov } else { 0.0 };
             for i in 0..3 {
@@ -7120,10 +7230,24 @@ pub fn radio_waves_sample(px: f32, py: f32, p: &RadioWavesParams) -> f32 {
 
 /// Radio waves (docs/08 §3.75) — the CPU reference and §1.6 oracle.
 pub fn radio_waves(rgba: &mut [f32], w: u32, h: u32, p: &RadioWavesParams) {
+    radio_waves_matted(rgba, w, h, p, &[]);
+}
+
+/// [`radio_waves`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls the waves' **Opacity toward 0** ([`matte_toward`]) before
+/// the composite runs, so the rings fade out across the frame rather than the
+/// frame fading back to the picture underneath.
+///
+/// Not the generic dissolve: with Composite on original off the layer that
+/// arrived is gone whatever the matte says, so a black matte leaves the pixel
+/// transparent where the dissolve would hand the picture back. An empty matte is
+/// the unmatted path to the byte (K-258).
+pub fn radio_waves_matted(rgba: &mut [f32], w: u32, h: u32, p: &RadioWavesParams, matte: &[f32]) {
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let cov = radio_waves_sample(x as f32 + 0.5, y as f32 + 0.5, p) * p.opacity;
+            let opacity = matte_toward(p.opacity, 0.0, matte_strength(matte, d));
+            let cov = radio_waves_sample(x as f32 + 0.5, y as f32 + 0.5, p) * opacity;
             let keep = if p.composite { 1.0 - cov } else { 0.0 };
             for i in 0..3 {
                 let lit = rgba[d + i] * keep + p.colour[i] * cov;
@@ -7211,6 +7335,18 @@ pub const VEGAS_DERIV: [f32; 5] = [-1.0, -2.0, 0.0, 2.0, 1.0];
 /// Vegas (docs/08 §3.76) — the CPU reference and §1.6 oracle. One separable 5×5
 /// Sobel over the neighbourhood, clamped at the frame's edge, then the stroke.
 pub fn vegas(rgba: &mut [f32], w: u32, h: u32, p: &VegasParams) {
+    vegas_matted(rgba, w, h, p, &[]);
+}
+
+/// [`vegas`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls the stroke's **Opacity toward 0** ([`matte_toward`])
+/// before the composite runs, so the dashes fade out along the contour.
+///
+/// Not the generic dissolve: with Composite on original off the layer that
+/// arrived is gone whatever the matte says, so a black matte leaves the pixel
+/// transparent where the dissolve would hand the picture back. An empty matte is
+/// the unmatted path to the byte (K-258).
+pub fn vegas_matted(rgba: &mut [f32], w: u32, h: u32, p: &VegasParams, matte: &[f32]) {
     let src = rgba.to_vec();
     let at = |x: i32, y: i32| -> f32 {
         let cx = x.clamp(0, w as i32 - 1) as usize;
@@ -7243,7 +7379,7 @@ pub fn vegas(rgba: &mut [f32], w: u32, h: u32, p: &VegasParams) {
                 gx,
                 gy,
                 p,
-            ) * p.opacity;
+            ) * matte_toward(p.opacity, 0.0, matte_strength(matte, d));
             let keep = if p.composite { 1.0 - cov } else { 0.0 };
             for ch in 0..3 {
                 let lit = rgba[d + ch] * keep + p.colour[ch] * cov;
@@ -7290,9 +7426,22 @@ pub fn grain_at(qx: f32, qy: f32, lane: u32, p: &AddGrainParams) -> f32 {
 /// Add grain (docs/08 §3.77) — the CPU reference and §1.6 oracle. Unpremultiplied
 /// (§2.2); the wobble is added on the perceptual value and squared back.
 pub fn add_grain(rgba: &mut [f32], w: u32, h: u32, p: &AddGrainParams) {
+    add_grain_matted(rgba, w, h, p, &[]);
+}
+
+/// [`add_grain`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls its **Intensity toward 0** ([`matte_toward`], on the
+/// amplitude Intensity is spent into) before the grain is added.
+///
+/// Not the generic dissolve, because the wobble is added on the *perceptual*
+/// value and squared back: half the Intensity is a genuinely finer grain, not a
+/// half-fade of a coarse one. An empty matte is the unmatted path to the byte
+/// (K-258).
+pub fn add_grain_matted(rgba: &mut [f32], w: u32, h: u32, p: &AddGrainParams, matte: &[f32]) {
     // Intensity 0: the bit-exact identity, and it needs saying rather than
     // arriving — `perceptual(v)²` is not `v` in the last bit (the WGSL twin
-    // short-circuits identically).
+    // short-circuits identically). The matte can only shrink the amplitude, so
+    // this holds under one too.
     if p.amplitude[0] == 0.0 && p.amplitude[1] == 0.0 && p.amplitude[2] == 0.0 {
         return;
     }
@@ -7303,6 +7452,7 @@ pub fn add_grain(rgba: &mut [f32], w: u32, h: u32, p: &AddGrainParams) {
             let u = unpremult(&rgba[d..d + 4]);
             let qx = (x as f32 + 0.5) * p.inv_size;
             let qy = (y as f32 + 0.5) * p.inv_size;
+            let k = matte_strength(matte, d);
             for c in 0..3 {
                 let v = perceptual(u[c]);
                 // Three hats summing to one, so 100/100/100 is provably neutral.
@@ -7311,7 +7461,8 @@ pub fn add_grain(rgba: &mut [f32], w: u32, h: u32, p: &AddGrainParams) {
                 let weight = p.tonal[0] * h0 + p.tonal[1] * (1.0 - h0 - h2) + p.tonal[2] * h2;
                 let lane = if p.monochrome { 0 } else { c as u32 };
                 let g = grain_at(qx, qy, lane, p);
-                let out = (v + g * p.amplitude[c] * weight).max(0.0);
+                let amp = matte_toward(p.amplitude[c], 0.0, k);
+                let out = (v + g * amp * weight).max(0.0);
                 rgba[d + c] = rgba[d + c] * (1.0 - p.mix) + out * out * a * p.mix;
             }
         }
@@ -7566,10 +7717,30 @@ pub fn path_draw_sample(px: f32, py: f32, p: &PathDrawParams) -> f32 {
 /// §1.6 oracle for all three of its consumers. One coverage a pixel, then the
 /// paint style.
 pub fn path_draw(rgba: &mut [f32], w: u32, h: u32, p: &PathDrawParams) {
+    path_draw_matted(rgba, w, h, p, &[]);
+}
+
+/// [`path_draw`] driven by a matte (K-428, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls the drawing's **Opacity toward 0** ([`matte_toward`]), so
+/// the pen fades along its own line rather than the whole frame fading back.
+///
+/// Applied to [`path_draw_sample`]'s result, which *is* the coverage times
+/// Opacity and is the only thing Opacity enters through — so scaling it is
+/// scaling Opacity, and at `k = 1` it is the same number to the bit.
+///
+/// Not the generic dissolve: on Paint on transparent the picture that arrived is
+/// gone whatever the matte says, and on Reveal original the drawing is the hole,
+/// so a black matte leaves transparency where the dissolve would hand the
+/// picture back. An empty matte is the unmatted path to the byte (K-258).
+pub fn path_draw_matted(rgba: &mut [f32], w: u32, h: u32, p: &PathDrawParams, matte: &[f32]) {
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let cov = path_draw_sample(x as f32 + 0.5, y as f32 + 0.5, p);
+            let cov = matte_toward(
+                path_draw_sample(x as f32 + 0.5, y as f32 + 0.5, p),
+                0.0,
+                matte_strength(matte, d),
+            );
             if p.style == PAINT_REVEAL_ORIGINAL {
                 // The drawing is the matte: what it covers survives — colour and
                 // coverage alike, which is what premultiplied means — and the

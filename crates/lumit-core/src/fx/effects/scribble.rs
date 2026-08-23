@@ -37,6 +37,12 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
     seeded = true,
     enabled_when = SCRIBBLE_ENABLED_WHEN,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Opacity per pixel: white draws the scribble in full, grey          faintly, black nothing at all",
+    ),
 )]
 pub struct Scribble {
     /// Which of the layer's masks to fill (K-408). Unset is **First mask**,

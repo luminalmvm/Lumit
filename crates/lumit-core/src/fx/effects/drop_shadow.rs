@@ -28,6 +28,12 @@ use lumit_fx_macros::Effect;
     // `colour · opacity · k` IS "this colour at this coverage" (§3.34's
     // reasoning), and "source over shadow" is the premultiplied composite.
     premultiplied = true,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the shadow's Opacity per pixel, read where the shadow falls:          white casts it in full, black casts none",
+    ),
 )]
 pub struct DropShadow {
     /// The shadow's colour, scene-linear. Open above 1 so a coloured light's

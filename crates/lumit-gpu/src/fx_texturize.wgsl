@@ -23,7 +23,7 @@ struct Params {
     inv_scale: f32,     // 100 / Scale
     placement: u32,     // 0 Stretch, 1 Tile, 2 Centre
     mix_amt: f32,       // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,      // 1 = the matte scales Relief per pixel (K-428)
     _pad1: f32,
 };
 
@@ -33,6 +33,25 @@ struct Params {
 @group(0) @binding(1) var tex: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
 
@@ -93,8 +112,16 @@ fn texturize(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(src, xy, 0);
     let fw = f32(size.x);
     let fh = f32(size.y);
-    let du = p.offset.x * p.inv_scale / fw;
-    let dv = p.offset.y * p.inv_scale / fh;
+    var du = p.offset.x * p.inv_scale / fw;
+    var dv = p.offset.y * p.inv_scale / fh;
+    // The matte pulls Relief toward 0 per pixel, before the taps are read
+    // (K-428): the two taps land on a different pair of texture pixels, which
+    // is not a weaker version of the same difference.
+    if (p.matte_on != 0.0) {
+        let k = matte_k(xy);
+        du = matte_toward(du, 0.0, k);
+        dv = matte_toward(dv, 0.0, k);
+    }
     let u = ((f32(xy.x) + 0.5) / fw - 0.5) * p.inv_scale + 0.5;
     let v = ((f32(xy.y) + 0.5) / fh - 0.5) * p.inv_scale + 0.5;
     let hi = tap(u + du, v + dv, size);

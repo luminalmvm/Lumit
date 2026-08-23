@@ -7550,7 +7550,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the bolt's opacity per pixel: white draws the core and glow in          full, grey faintly, black nothing at all"
+      }
     },
     {
       "slug": "radio-waves",
@@ -7812,7 +7816,11 @@
           "cond": "bool_is",
           "value": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Opacity per pixel: white draws the waves in full, grey faintly,          black nothing at all"
+      }
     },
     {
       "slug": "vegas",
@@ -8026,7 +8034,11 @@
           "cond": "choice_is_not",
           "value": 2
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Opacity per pixel: white draws the stroke in full, grey faintly,          black nothing at all"
+      }
     },
     {
       "slug": "add-grain",
@@ -8224,7 +8236,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Intensity per pixel: white grains at the full Intensity, grey          more finely, black not at all"
+      }
     },
     {
       "slug": "scribble",
@@ -8446,7 +8462,11 @@
           "cond": "choice_is_not",
           "value": 0
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Opacity per pixel: white draws the scribble in full, grey          faintly, black nothing at all"
+      }
     },
     {
       "slug": "stroke",
@@ -8631,7 +8651,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all"
+      }
     },
     {
       "slug": "echo",
@@ -12710,7 +12734,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the shadow's Opacity per pixel, read where the shadow falls:          white casts it in full, black casts none"
+      }
     },
     {
       "slug": "roughen-edges",
@@ -12956,7 +12984,11 @@
           "cond": "bool_is",
           "value": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Border per pixel: white chews the outline at the full Border,          grey takes finer bites, black leaves it alone"
+      }
     },
     {
       "slug": "median",
@@ -13061,7 +13093,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Radius per pixel: white takes the middle of the full window,          grey of a smaller one, black leaves the pixel alone"
+      }
     },
     {
       "slug": "mosaic",
@@ -13386,7 +13422,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Relief per pixel: white raises the full relief, grey a shallower          one, black leaves the sheet flat"
+      }
     },
     {
       "slug": "texturize",
@@ -13558,7 +13598,11 @@
           "on": "texture",
           "cond": "layer_set"
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Relief per pixel: white lights the full relief, grey a shallower          one, black leaves the surface flat"
+      }
     },
     {
       "slug": "linear-wipe",

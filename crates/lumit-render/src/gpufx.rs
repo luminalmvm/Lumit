@@ -1612,7 +1612,7 @@ impl GpuEffect for RoughenEdges {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let r = effects::roughen_edges::RoughenEdges::read(p).packed();
         // Border 0 is the exact identity (docs/08 §3.57 decision 3): a
@@ -1626,6 +1626,7 @@ impl GpuEffect for RoughenEdges {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::RoughenEdgesOp {
                 seed: r.field.seed,
                 octaves: r.field.octaves,
@@ -2124,7 +2125,7 @@ impl GpuEffect for DropShadow {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let d = effects::drop_shadow::DropShadow::read(p).packed();
         fx.drop_shadow(
@@ -2132,6 +2133,7 @@ impl GpuEffect for DropShadow {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::DropShadowOp {
                 colour: d.colour,
                 opacity: d.opacity,
@@ -3018,7 +3020,7 @@ impl GpuEffect for Median {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let m = effects::median::Median::read(p).packed();
         // The network's run length, worked out here rather than in the kernel so
@@ -3030,6 +3032,7 @@ impl GpuEffect for Median {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::MedianOp {
                 radius: m.radius,
                 keep: (n + 1) / 2,
@@ -3103,7 +3106,7 @@ impl GpuEffect for Emboss {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let e = effects::emboss::Emboss::read(p).packed();
         fx.emboss(
@@ -3111,6 +3114,7 @@ impl GpuEffect for Emboss {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::EmbossOp {
                 offset: e.offset,
                 contrast: e.contrast,
@@ -3151,6 +3155,7 @@ impl GpuEffect for Texturize {
             w,
             h,
             aux.layer_input(),
+            aux.matte(),
             &lumit_gpu::fx::TexturizeOp {
                 offset: t.offset,
                 contrast: t.contrast,
@@ -3246,7 +3251,7 @@ impl GpuEffect for Lightning {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         // The bolt is built here, host-side, exactly once a frame (docs/08
         // §3.74's first decision) — the kernel is handed the segments.
@@ -3256,6 +3261,7 @@ impl GpuEffect for Lightning {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::LightningOp {
                 segments: l.segments,
                 fades: l.fades,
@@ -3285,7 +3291,7 @@ impl GpuEffect for RadioWaves {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let r = effects::radio_waves::RadioWaves::read(p).packed();
         fx.radio_waves(
@@ -3293,6 +3299,7 @@ impl GpuEffect for RadioWaves {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::RadioWavesOp {
                 centre: r.centre,
                 vertex: r.vertex,
@@ -3339,7 +3346,7 @@ impl GpuEffect for Vegas {
         // (K-408, docs/08 §3.76).
         if vegas.on_a_path() {
             let built = vegas.path_packed(&path_of(aux), effects::vegas::Vegas::px_scale_of(p));
-            return fx.path_draw(ctx, tex, w, h, &path_draw_op(&built));
+            return fx.path_draw(ctx, tex, w, h, aux.matte(), &path_draw_op(&built));
         }
         let v = vegas.packed();
         fx.vegas(
@@ -3347,6 +3354,7 @@ impl GpuEffect for Vegas {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::VegasOp {
                 from_alpha: v.from_alpha,
                 level: v.level,
@@ -3415,7 +3423,7 @@ impl GpuEffect for Scribble {
         use lumit_core::fx::effects::scribble::Scribble as S;
         let (px_scale, tick) = S::derived_of(p);
         let built = S::read(p).packed(&path_of(aux), px_scale, tick);
-        fx.path_draw(ctx, tex, w, h, &path_draw_op(&built))
+        fx.path_draw(ctx, tex, w, h, aux.matte(), &path_draw_op(&built))
     }
 }
 
@@ -3436,7 +3444,7 @@ impl GpuEffect for Stroke {
     ) -> Tex {
         use lumit_core::fx::effects::stroke::Stroke as S;
         let built = S::read(p).packed(&path_of(aux), S::px_scale_of(p));
-        fx.path_draw(ctx, tex, w, h, &path_draw_op(&built))
+        fx.path_draw(ctx, tex, w, h, aux.matte(), &path_draw_op(&built))
     }
 }
 
@@ -3453,7 +3461,7 @@ impl GpuEffect for AddGrain {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let g =
             effects::add_grain::AddGrain::read(p).packed(effects::add_grain::AddGrain::tick_of(p));
@@ -3462,6 +3470,7 @@ impl GpuEffect for AddGrain {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::AddGrainOp {
                 amplitude: g.amplitude,
                 inv_size: g.inv_size,

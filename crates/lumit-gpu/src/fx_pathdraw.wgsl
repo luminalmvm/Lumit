@@ -37,7 +37,7 @@ struct Params {
     seed: u32,
     count: u32,             // how many pieces are real
     style: u32,             // 0 on original, 1 on transparent, 2 reveal original
-    _pad0: u32,
+    matte_on: f32,          // 1 = the matte scales Opacity per pixel (K-428)
     _pad1: u32,
     // (ax, ay, bx, by) in raster pixels.
     segs: array<vec4<f32>, 512>,
@@ -49,6 +49,25 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // == lumit_core::fx::cpu::path_draw_warp. The scribble is not wobbled — the
 // paper is, which costs one lookup a pixel instead of eight times the geometry.
@@ -99,7 +118,12 @@ fn path_draw(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let cov = coverage(vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5));
+    // `coverage` is the drawing's coverage times Opacity, and Opacity enters
+    // nowhere else, so scaling its result IS scaling Opacity (K-428).
+    var cov = coverage(vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5));
+    if (p.matte_on != 0.0) {
+        cov = matte_toward(cov, 0.0, matte_k(xy));
+    }
     // Reveal original: the drawing is the matte, so colour and coverage alike
     // survive only where the brush went — which is what premultiplied means.
     if (p.style == 2u) {

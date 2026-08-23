@@ -68,6 +68,12 @@ pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
     // trip, and the shape is untouched.
     premultiplied = true,
     enabled_when = TEXTURIZE_ENABLED_WHEN,
+    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Relief per pixel: white lights the full relief, grey a shallower          one, black leaves the surface flat",
+    ),
 )]
 pub struct Texturize {
     /// The layer pressed into this one. Unset until the owner picks one — the

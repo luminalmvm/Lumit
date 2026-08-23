@@ -759,7 +759,9 @@ struct DropShadowParams {
     opacity: f32,
     mix_amt: f32,
     shadow_only: u32,
-    _pad: [u32; 3],
+    /// 1 = the matte scales the shadow's Opacity per pixel (K-428).
+    matte_on: f32,
+    _pad: [u32; 2],
 }
 
 impl FxEngine {
@@ -823,8 +825,11 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &DropShadowOp,
     ) -> wgpu::Texture {
+        // The blur takes no matte: it is where the SHAPE stands, and the claim
+        // is on the shadow's Opacity where the shadow FALLS (K-428).
         let soft = self.blur(
             ctx,
             src,
@@ -841,11 +846,12 @@ impl FxEngine {
             },
         );
         let out = work_texture(ctx, w, h, "fx-drop-shadow-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.drop_shadow,
             src,
             &soft,
+            matte,
             &out,
             w,
             h,
@@ -855,7 +861,8 @@ impl FxEngine {
                 opacity: op.opacity,
                 mix_amt: op.mix,
                 shadow_only: u32::from(op.shadow_only),
-                _pad: [0; 3],
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0; 2],
             }),
         );
         out

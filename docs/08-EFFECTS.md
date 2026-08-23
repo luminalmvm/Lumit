@@ -406,6 +406,34 @@ all, being a repeat, a reflection and a change of coordinates. Turbulent displac
 and Displacement map (K-402) had already claimed theirs, on this rule before it was written
 down.
 
+**And the matte scales the amount of every generator and stylise effect (K-428, the same
+rule again).** Where an effect *draws* something over the picture, its amount is the drawn
+thing's **opacity**, and the matte multiplies that — so the drawing fades along its own
+length and what lies underneath is untouched. Where an effect has a **size**, the matte
+scales the size. Eleven more effects claim their matte that way, each naming the control in
+its declaration (and so in the manual's Matte row): Add grain's Intensity, Lightning's
+bolt opacity (its core's coverage and its Glow opacity together), Radio waves' Opacity,
+Vegas' Opacity, Scribble's and Stroke's Opacity, Drop shadow's shadow Opacity, Roughen
+edges' Border, Median's Radius, and Emboss's and Texturize's Relief. Where scaling the
+amount is *mathematically* the dissolve the effect keeps the strength semantic, and in this
+pair of families that is four: **Noise, Flash, Sprite flare and Light wrap** each add a
+linear amount of something to the picture — grain, a colour, light, a screened spill — so
+`amount·k` and the dissolve are the same arithmetic. **Fill, Gradient, Fractal noise, Beam,
+Mosaic and Find edges** have no amount of their own to scale, replacing the picture rather
+than adding to it, and Glow (K-395) keeps its seed gate and the Lens flare its source
+detection.
+
+Two of the eleven are the rule at its most visible. **Median** at a half matte draws
+*exactly* the Radius 1 picture when set to Radius 2 — a genuinely smaller window, which is
+the difference between despeckling a sky and veiling a face. **Emboss** at a black matte is
+the flat mid-grey sheet, because Relief 0 is that sheet and not the identity (§3.67) — the
+one place in the batch where the matte's black is emphatically *not* "leave the picture
+alone", and honestly so, since the matte turns Relief down rather than turning Emboss off.
+
+`k` is read at the **destination** pixel for these too, which for Drop shadow means where
+the shadow *falls* rather than where the shape stands: paint the matte over the wall and it
+is the shadow on the wall that goes.
+
 The difference is worth stating once, because it is the whole reason the hook exists. The
 dissolve can only change *how much of a finished effect* survives; it cannot change what
 the effect did. A blur dissolved to a half still gathered from the full radius — a sharp
@@ -2855,6 +2883,11 @@ Four things are decision rather than derivation:
 Softness outside every edge of the layer's shape and there is no honest smaller bound
 without reading both sliders. Mix 0 is the bit-exact identity, and so is Opacity 0.
 
+**The Matte scales the shadow's Opacity (K-428, §2.6),** read where the shadow *falls*
+rather than where the shape stands — paint the matte over the wall and it is the shadow on
+the wall that goes. The blur is left unmatted: it is taken where the shape is, and a
+per-pixel softness there would be a softness of the wrong picture.
+
 **Not in v1:** AE's "Shadow Only" is here; its per-mask targeting is not, for §3.34's
 reason. Multiple shadows are multiple instances, which is what AE users do anyway.
 
@@ -3628,6 +3661,12 @@ Four things that are decision rather than derivation:
   for (it hardens a soft matte) and would be a lie to call "off".
 - **Scale is px@comp**, not AE's per cent — §3.37 decision 1, a fourth time.
 
+**The Matte scales Border (K-428, §2.6),** and it rides entirely on the gaussian: Border *is*
+that blur's radius, and the matte already scales a radius per pixel (§3.8), so a grey matte
+leaves a narrower ramp in the alpha and therefore a narrower band to chew. The outline is bitten
+coarsely where the matte is white and finely — down to untouched — where it is dark, which no
+dissolve can draw, since a dissolve only cross-fades one bite size over the whole shape.
+
 `moderate` cost (one gaussian plus up to ten octaves a pixel), `PaddedPctDiag(25)` ROI. Mix 0
 and Border 0 are both the bit-exact identity. Seeded (§2.4): the field is a function of Seed
 and Evolution and never of a clock, so the same frame roughens the same way in the preview and
@@ -3941,6 +3980,13 @@ Four things that are decision rather than derivation:
   despeckling its colour. With it on, alpha is medianed in the same sweep — a fourth lane
   of the same network, free.
 
+**The Matte scales Radius (K-428, §2.6):** each pixel's matte luma multiplies Radius before
+its window is swept, rounded with the same `floor(x + ½)` the control itself is, so a half
+matte on Radius 2 gives *exactly* the Radius 1 picture — a genuinely smaller window, not a
+half-fade of a bigger one. That is what lets one painted matte despeckle a noisy sky and leave
+a face alone. A pixel whose radius comes to 0 is left as it arrived, the same short-circuit the
+whole effect takes at Radius 0.
+
 Edges repeat (the border pixel is held outward), which is the only edge policy a median
 wants: a transparent surround would win the vote on a corner pixel and eat the frame's own
 border. Unpremultiplied (§2.2), `heavy` cost, `PaddedPctDiag(2)` ROI. Mix 0 is the
@@ -4058,6 +4104,12 @@ Three notes:
   The perceptual difference is §3.58's curve for the sixth time, and for Find edges'
   reason: a relief taken in light would be all highlight and no shadow.
 
+**The Matte scales Relief (K-428, §2.6):** each pixel's matte luma multiplies the tap offset
+before the two taps are read, so the relief is genuinely shallower where the matte is grey. A
+black matte therefore gives the **flat mid-grey sheet**, not the picture back — because Relief
+0 is that sheet and not the identity, and the matte turns the relief down rather than turning
+the effect off. Mix is still what turns the effect down.
+
 Alpha is untouched. Unpremultiplied (§2.2), edges repeat. `cheap` cost,
 `PaddedPctDiag(2)` ROI. Mix 0 is the bit-exact identity.
 
@@ -4107,6 +4159,11 @@ Four things worth stating:
   with the export.
 - **An unset Texture is the labelled no-op**, as every layer row is (docs/impl/
   layer-input.md), and so is a dangling or cyclic reference.
+
+**The Matte scales Relief (K-428, §2.6)** — the light vector Relief is spent into, before the
+texture's two taps are read, so a grey matte reads a *different pair* of texture pixels and not
+a weaker version of the same difference. The Texture row is unaffected: it is the effect's
+subject, the matte is how much of it presses in.
 
 Premultiplied (§2.2) — the relief is a multiply, and multiplying premultiplied colour by a
 scalar is the same operation as multiplying straight colour by it, so no round trip is
@@ -4492,6 +4549,13 @@ Five decisions:
   with Amplitude, Forking and Decay. All of it is reported by the import rather than
   approximated — §3.63's Auto Amounts a second time.
 
+**The Matte scales the bolt's opacity (K-428, §2.6):** the core's own coverage and the Glow
+opacity together, per pixel, before the composite — so the bolt fades along its length and
+what lies under it is untouched. Not the dissolve, and doubly so: the glow only lights what
+the core has not taken, so fading the two together is quadratic in the matte; and with
+Composite on original off there is no layer left to fade back to, so a black matte leaves
+transparency where a dissolve would hand the picture back.
+
 `moderate` cost — up to 192 capsule distances a pixel, which is the price of not rebuilding the
 bolt per pixel — `Exact` ROI. Premultiplied (§2.2). Mix 0 is the bit-exact identity, and so is
 Core radius 0 with Glow radius 0.
@@ -4567,6 +4631,11 @@ Five notes:
 - **The first wave leaves at Time 0.** Waves with a negative index are not drawn, so the effect
   starts empty and fills up — which is what an emitter does, and what makes Time 0 the
   bit-exact identity.
+
+**The Matte scales Opacity (K-428, §2.6),** per pixel and before the composite, so the rings
+fade out across the frame rather than the frame fading back to what was underneath. With
+Composite on original off a black matte leaves the pixel transparent, which is what "draw
+nothing here" means when the layer that arrived has already been discarded.
 
 `cheap` cost — one `atan2` and up to 32 cheap rings a pixel, §3.71's admission again — `Exact`
 ROI. Premultiplied (§2.2). AE's Wave Type of Image Contours and Mask are **not carried** (see
@@ -4654,6 +4723,11 @@ Five decisions:
   taken in scene-linear light sits wherever the highlights are, and Threshold would be a
   control that spends its first eighty per cent doing nothing.
 
+**The Matte scales Opacity (K-428, §2.6),** per pixel and before the composite, on **both**
+halves: the contour kernel and the shared path drawing claim it the same way, so a stroke
+marching round a level set and one marching round a mask fade identically. With Composite on
+original off a black matte leaves the pixel transparent.
+
 `cheap` cost, `PaddedPctDiag(1.0)` ROI (a 3×3 Sobel — declared for the contour half, and kept
 on the path half, where it is merely generous). Premultiplied (§2.2). Mix 0 is the bit-exact
 identity, and so are Width 0 and Opacity 0 — and on Mask/Path, so is an unset mask row, a
@@ -4718,6 +4792,11 @@ bit-exact identity.
 AE's Add Grain also carries a Blending Mode, a Viewing Mode, a Tonal Ranges group with movable
 boundaries, and Channel Balance in an expert group. The blending mode is the layer's own
 (docs/06), the viewing mode is a preview affordance rather than a look, the tonal boundaries
+**The Matte scales Intensity (K-428, §2.6),** per pixel and before the grain is added. Unlike
+§3.36's plain additive grain — whose Intensity·k *is* the dissolve, so it keeps the strength
+semantic — this one adds its wobble on the **perceptual** value and squares it back, so half
+the Intensity is a genuinely finer grain rather than a half-faded coarse one.
+
 are pinned at the hats above, and Channel Balance is Red, Green and Blue. **Remove Grain is not
 carried at all** and is not a gap: a denoiser is a programme, not an effect
 ([impl/ae-effect-parity.md](impl/ae-effect-parity.md)).
@@ -4798,6 +4877,10 @@ geometry rather than as a neighbourhood of the picture. Premultiplied (§2.2). *
 row, a deleted mask, or a layer with no masks all render the input unchanged** (§1.2's
 documented no-op), and so do Mix 0, Opacity 0 and Stroke width 0.
 
+**The Matte scales Opacity (K-428, §2.6),** per pixel — applied to the shared path drawing's
+coverage, which is where Opacity enters and nowhere else — so the pencil fades along its own
+line. On Paint on transparent a black matte leaves nothing at all, which a dissolve cannot do.
+
 AE's Scribble also carries a Fill Type with five modes, Edge Options, Curviness and the three
 Variation sliders, and a Blend Mode. Only the single-mask fill is shipped: the blend mode is the
 layer's own (docs/06), the variations are per-stroke randomness the waver already supplies in
@@ -4837,6 +4920,12 @@ out       = base·(1 − cov) + Colour·cov       # On original
           = base·cov                          # Reveal original — colour and alpha alike
 out       = src·(1 − mix) + out·mix
 ```
+
+**The Matte scales Opacity (K-428, §2.6),** per pixel — applied, as Scribble's and Vegas'
+Mask/Path half are, to the shared path drawing's `cov`, which is where Opacity enters and
+nowhere else. The brush therefore fades along the line it is walking. On Reveal original a
+black matte leaves nothing rather than handing the picture back, which is the honest reading:
+the drawing is the hole, and where nothing is drawn there is no hole.
 
 Three decisions:
 

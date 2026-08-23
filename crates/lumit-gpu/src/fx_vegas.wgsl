@@ -29,7 +29,7 @@ struct Params {
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     from_alpha: u32,     // 1 reads the alpha rather than the luma
     composite: u32,      // 1 keeps the layer under the stroke
-    _pad0: u32,
+    matte_on: f32,       // 1 = the matte scales Opacity per pixel (K-428)
     _pad1: u32,
 };
 
@@ -37,6 +37,25 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
@@ -99,7 +118,12 @@ fn vegas(@builtin(global_invocation_id) gid: vec3<u32>) {
     let soft = max(p.band * p.inv_segment, 1e-4);
     let along = clamp((p.duty - frac) / soft + 0.5, 0.0, 1.0);
 
-    let cov = across * along * p.opacity;
+    // The matte pulls Opacity toward 0 per pixel, before the composite (K-428).
+    var opacity = p.opacity;
+    if (p.matte_on != 0.0) {
+        opacity = matte_toward(opacity, 0.0, matte_k(xy));
+    }
+    let cov = across * along * opacity;
     let keep = (1.0 - cov) * f32(p.composite);
     let lit = vec4<f32>(o.rgb * keep + p.colour.rgb * cov, o.a * keep + cov);
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + lit * p.mix_amt);

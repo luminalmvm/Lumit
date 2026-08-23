@@ -389,7 +389,8 @@ struct LightningParams {
     mix_amt: f32,
     count: u32,
     composite: u32,
-    _pad0: u32,
+    /// 1 = the matte scales the bolt's opacity per pixel (K-428).
+    matte_on: f32,
     _pad1: u32,
     segs: [[f32; 4]; LIGHTNING_SEGMENTS],
     // Four fades to an element, which is what a uniform array's 16-byte stride
@@ -455,7 +456,8 @@ struct RadioWavesParams {
     newest: i32,
     count: i32,
     composite: u32,
-    _pad0: u32,
+    /// 1 = the matte scales Opacity per pixel (K-428).
+    matte_on: f32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -502,7 +504,8 @@ struct VegasParams {
     mix_amt: f32,
     from_alpha: u32,
     composite: u32,
-    _pad0: u32,
+    /// 1 = the matte scales Opacity per pixel (K-428).
+    matte_on: f32,
     _pad1: u32,
 }
 
@@ -569,7 +572,8 @@ struct PathDrawParams {
     seed: u32,
     count: u32,
     style: u32,
-    _pad0: u32,
+    /// 1 = the matte scales Opacity per pixel (K-428).
+    matte_on: f32,
     _pad1: u32,
     _pad2: u32,
     segs: [[f32; 4]; PATH_PRIMITIVES],
@@ -613,7 +617,8 @@ struct AddGrainParams {
     seed: u32,
     tick: i32,
     monochrome: u32,
-    _pad1: u32,
+    /// 1 = the matte scales Intensity per pixel (K-428).
+    matte_on: f32,
 }
 
 impl FxEngine {
@@ -667,6 +672,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &LightningOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-lightning-out");
@@ -674,11 +680,12 @@ impl FxEngine {
         for (i, f) in op.fades.iter().enumerate() {
             fades[i / 4][i % 4] = *f;
         }
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.lightning,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -691,7 +698,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 count: op.count,
                 composite: u32::from(op.composite),
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
                 segs: op.segments,
                 fades,
@@ -709,14 +716,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RadioWavesOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-radio-waves-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.radio_waves,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -731,7 +740,7 @@ impl FxEngine {
                 newest: op.newest,
                 count: op.count,
                 composite: u32::from(op.composite),
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
                 _pad2: 0,
             }),
@@ -748,14 +757,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &VegasOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-vegas-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.vegas,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -771,7 +782,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 from_alpha: u32::from(op.from_alpha),
                 composite: u32::from(op.composite),
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
             }),
         );
@@ -790,6 +801,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &PathDrawOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-path-draw-out");
@@ -797,11 +809,12 @@ impl FxEngine {
         for (i, a) in op.arcs.iter().enumerate() {
             arcs[i / 4][i % 4] = *a;
         }
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.path_draw,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -820,7 +833,7 @@ impl FxEngine {
                 seed: op.seed,
                 count: op.count,
                 style: op.style,
-                _pad0: 0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
                 _pad2: 0,
                 segs: op.segments,
@@ -840,14 +853,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &AddGrainOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-add-grain-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.add_grain,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -861,7 +876,7 @@ impl FxEngine {
                 seed: op.seed,
                 tick: op.tick,
                 monochrome: u32::from(op.monochrome),
-                _pad1: 0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
