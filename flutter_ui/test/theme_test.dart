@@ -1,6 +1,7 @@
 // Ports of the Rust theme tests (crates/lumit-ui/src/theme.rs) so the Dart
 // tables cannot silently drift from the Rust ones.
 
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -159,7 +160,7 @@ void main() {
   });
 
   test('body text is regular weight; emphasis is medium and rationed', () {
-    // docs/15-DESIGN §7.1 sets 11px Inter (regular) for body copy, menus and
+    // docs/15-DESIGN §7.1 sets 11px Hanken Grotesk (regular) for body copy, menus and
     // buttons, with Medium reserved for emphasis (tab labels, dialog
     // headings). Everything used to render Medium because only that face was
     // bundled — this pins the lighter default so it cannot regress.
@@ -181,5 +182,15 @@ void main() {
     expect(t.small.fontSize, 10);
     expect(t.caption.fontSize, 9);
     expect(t.heading.fontSize, 16);
+  });
+
+  test('both K-438 faces are named by the theme and bundled by pubspec', () {
+    // A family the theme asks for but pubspec never declares renders as the
+    // platform default and nothing complains, so pin the pair together.
+    expect(LumitTheme.fontFamily, 'Hanken Grotesk');
+    expect(LumitTheme.dark().mono.fontFamily, 'Geist Mono');
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, contains('family: Hanken Grotesk'));
+    expect(pubspec, contains('family: Geist Mono'));
   });
 }

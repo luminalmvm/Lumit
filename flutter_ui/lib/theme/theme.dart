@@ -730,7 +730,16 @@ class LumitTheme {
 
   // --- Type scale (docs/15-DESIGN §density: 11 px body, 10 px small) -------
 
-  static const String fontFamily = 'Inter';
+  static const String fontFamily = 'Hanken Grotesk';
+
+  /// The face every number, timecode and container label is set in
+  /// (docs/15-DESIGN.md §7.1, K-438). The fallbacks only matter if the bundled
+  /// asset is missing, and both platform names resolve to a monospaced face.
+  static const String monoFontFamily = 'Geist Mono';
+  static const List<String> monoFontFamilyFallback = [
+    'Consolas',
+    'monospace',
+  ];
 
   TextStyle get heading => TextStyle(
       fontFamily: fontFamily,
@@ -762,7 +771,8 @@ class LumitTheme {
   /// (docs/15-DESIGN.md §7.1).
   TextStyle get caption => small.copyWith(fontSize: 9);
   TextStyle get mono => TextStyle(
-      fontFamily: 'monospace',
+      fontFamily: monoFontFamily,
+      fontFamilyFallback: monoFontFamilyFallback,
       fontSize: 12,
       color: textSecondary,
       decoration: TextDecoration.none);
