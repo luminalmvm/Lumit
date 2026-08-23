@@ -5433,9 +5433,8 @@ forgetting, rather than something you have to remember.
 names every finished frame by a fingerprint of *what is in it* (that is what lets an undo
 find its frames still waiting). A frame drawn with the previous lens but named for the new
 one would be a permanent lie: nothing you did afterwards — no edit, no undo — would ever
-clear it, because nothing would know it was wrong. So while a lens is baking, frames are
-simply **not named at all**. They are drawn and shown and thrown away, exactly as frames
-are while footage is still being read. It costs a re-render; it cannot cost a wrong picture
+clear it, because nothing would know it was wrong. So such a frame is drawn and shown and
+then **thrown away** rather than kept. It costs a re-render; it cannot cost a wrong picture
 that never goes away.
 
 There is one more rule, and it is about not wasting the half-second. If you drag the
@@ -5443,6 +5442,51 @@ aperture slider, every position asks for a different bake. Only the last one is 
 computing, so the bake thread takes everything waiting, keeps the newest, and drops the
 rest before they start — the same "is my work still wanted" habit the rest of the engine
 has.
+
+### When the aperture is animated, not dragged (K-425)
+
+Dragging a slider stops. A **keyframe** does not. Put keyframes on the f-stop and the iris
+is slightly different on every single frame — so every single frame asks for a bake of its
+own, and one is always being made for as long as the comp plays.
+
+That turned the rule above into something much larger than it was meant to be. The old
+version of it was blunt: *while a lens is baking, do not name any frame at all*. Any frame,
+in any composition, whether or not it had a flare anywhere near it. With an animated
+aperture keeping a bake permanently in flight, that meant nothing in the whole project was
+ever named, so nothing was ever kept, and the background job that quietly fills the cache
+bar while you are not typing stood down and never started again. One keyframe on one dial
+switched off caching for the entire project.
+
+Two things fixed it.
+
+**Ask the precise question.** The engine now simply *counts* the frames where a flare
+actually drew the previous lens instead of the one it was asked for. A frame where that
+never happened is a frame that shows exactly what its name says, so it is named and kept —
+even if a bake for some later frame is being made at that very moment. Only the frames that
+really did fall back are dropped. Comps without a flare in them are never affected at all.
+
+**Let a run of frames share one bake.** The heavy part of the bake is genuinely a function
+of the iris: the starburst is a Fourier transform of the hole's shape, and the exposure is
+a small test render. Neither can be moved into the per-frame work — a Fourier transform
+every frame would spend the whole effect's budget on the starburst alone. So instead the
+bake **rounds** the iris dials before it looks at them: the f-number to a twentieth of a
+stop, the iris rotation to half a degree, roundness and softness to a 256th. A half-stop
+ramp then needs about ten bakes rather than one per frame, and the store of recent bakes
+holds all ten.
+
+Nothing you can see moving is rounded. The ghosts read the exact f-stop you set — they
+shrink and turn smoothly as the iris closes, frame by frame. What steps, by about 1.7% at a
+time, is the starburst's shape and the flare's overall brightness. That is a deliberate
+trade, and it is the honest one: without it an animated aperture is not a lens that caches
+badly, it is a lens that cannot be cached at all.
+
+**And one related hole, closed at the same time.** You can point the flare at your own
+`.lens` file instead of a bundled lens. The bake noticed when you edited that file, because
+it identifies a lens by the file's *contents* — but the frame's name only mentioned the
+file's *path*. So an edited prescription drew new optics under the old file's name: a
+cached frame that was wrong and that nothing could ever clear. A frame's name now includes
+the file's size and the time it was last changed, so editing it renames every frame that
+reads it. The same goes for a colour LUT file.
 
 ### The six and a half seconds nobody was using (K-351)
 

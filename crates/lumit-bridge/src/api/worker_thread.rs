@@ -3184,11 +3184,11 @@ fn trace_scope(
             let made = match key.and_then(crate::framecache::get) {
                 Some(hit) => Some(hit),
                 None => {
-                    // A flare bake queued *during* the render means the
-                    // picture is of the previous lens (K-350), so the name
-                    // taken before it no longer describes what was made.
-                    // Banked only when nothing moved.
-                    let bakes_before = state.renderer.flare_bake_generation();
+                    // A flare that fell back to the previous lens during the
+                    // render (K-350) made a picture the name taken before it
+                    // no longer describes. Banked only when no flare stood
+                    // anything in (K-425).
+                    let subs_before = state.renderer.flare_substitutions();
                     let made = state
                         .renderer
                         .render_preview(
@@ -3201,7 +3201,7 @@ fn trace_scope(
                         .ok()
                         .map(|(rgba, width, height)| (width, height, rgba));
                     if let (Some(key), Some((w, h, px))) = (key, made.as_ref()) {
-                        if state.renderer.flare_bake_generation() == bakes_before {
+                        if state.renderer.flare_substitutions() == subs_before {
                             crate::framecache::put_rendered(key, provenance, *w, *h, px);
                         }
                     }
@@ -3317,9 +3317,10 @@ fn sample_pixels(
                     // A frame that cannot be named yet (its footage is still
                     // being probed, or a flare bake is being made) is rendered
                     // and not banked: an entry under a name the renderer did
-                    // not keep is worse than no entry. The bake can also start
-                    // *during* the render, which only the render can report —
-                    // hence the check either side of it (K-350).
+                    // not keep is worse than no entry. A flare can also fall
+                    // back to the previous lens *during* the render, which
+                    // only the render can report — hence the count read
+                    // either side of it (K-350, K-425).
                     let provenance = lumit_render::FrameProvenance {
                         comp: req.comp.id,
                         frame: req.frame,
@@ -3329,7 +3330,7 @@ fn sample_pixels(
                     let made = match name.and_then(crate::framecache::get) {
                         Some(hit) => Some(hit),
                         None => {
-                            let bakes_before = state.renderer.flare_bake_generation();
+                            let subs_before = state.renderer.flare_substitutions();
                             let made = state
                                 .renderer
                                 .render_preview(
@@ -3342,7 +3343,7 @@ fn sample_pixels(
                                 .ok()
                                 .map(|(rgba, width, height)| (width, height, rgba));
                             if let (Some(key), Some((w, h, px))) = (name, made.as_ref()) {
-                                if state.renderer.flare_bake_generation() == bakes_before {
+                                if state.renderer.flare_substitutions() == subs_before {
                                     crate::framecache::put_rendered(key, provenance, *w, *h, px);
                                 }
                             }

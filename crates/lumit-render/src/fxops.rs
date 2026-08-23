@@ -438,12 +438,12 @@ pub fn run_ops(
 ) -> Tex {
     let mut tex = tex;
     // The name of each op's output (K-421), before anything runs: the input's
-    // name, the raster, the flare bake generation, then op after op — so the
-    // k-th name covers ops 0..=k. `None` from the first op that binds something
-    // the name cannot cover (another layer's picture, the neighbour frames, the
-    // flow field) onwards: an output that depends on a picture nobody named
-    // must not be filed under a name that omits it.
-    let bakes_before = fx.flare_bake_generation();
+    // name, the raster, the flare substitution count, then op after op — so
+    // the k-th name covers ops 0..=k. `None` from the first op that binds
+    // something the name cannot cover (another layer's picture, the neighbour
+    // frames, the flow field) onwards: an output that depends on a picture
+    // nobody named must not be filed under a name that omits it.
+    let subs_before = fx.flare_substitutions();
     let keys: Vec<Option<u128>> = cache.map_or_else(
         || vec![None; ops.len()],
         |(_, input_key)| {
@@ -451,7 +451,7 @@ pub fn run_ops(
                 input_key,
                 w,
                 h,
-                bakes_before,
+                subs_before,
                 ops,
                 luts,
                 layer_inputs,
@@ -639,7 +639,7 @@ pub fn run_ops(
     if let Some((store, _)) = cache {
         let mut store = store.borrow_mut();
         store.runs += ops.len().saturating_sub(start) as u64;
-        if store.keep && fx.flare_bake_generation() == bakes_before {
+        if store.keep && fx.flare_substitutions() == subs_before {
             for (key, out) in made {
                 store.lru.insert(key, CachedTex(out));
             }
@@ -649,11 +649,12 @@ pub fn run_ops(
 }
 
 /// The content name of each op's output (K-421): `keys[k]` covers the input,
-/// the raster, the bake generation and ops `0..=k`, with each op's parameters
-/// and the identity of whatever rides beside it. `None` from the first op that
-/// binds a picture nobody named — another layer (a plate or a matte texture),
-/// the neighbour frames, the flow field — through to the end: the v1 rule is
-/// that such an op breaks the chain rather than being named by a guess.
+/// the raster, the flare substitution count (K-425) and ops `0..=k`, with
+/// each op's parameters and the identity of whatever rides beside it. `None`
+/// from the first op that binds a picture nobody named — another layer (a
+/// plate or a matte texture), the neighbour frames, the flow field — through
+/// to the end: the v1 rule is that such an op breaks the chain rather than
+/// being named by a guess.
 /// [`LayerInput::ThisLayer`] and [`LayerInput::Absent`] are functions of the
 /// chain itself, so they do not break it.
 #[allow(clippy::too_many_arguments)]
@@ -661,7 +662,7 @@ fn op_keys(
     input_key: u128,
     w: u32,
     h_px: u32,
-    bake_generation: u64,
+    flare_substitutions: u64,
     ops: &lumit_core::fx::ResolvedStack,
     luts: &[Option<LoadedLut>],
     layer_inputs: &[LayerInput],
@@ -674,7 +675,7 @@ fn op_keys(
     h.update(&input_key.to_le_bytes());
     h.update(&w.to_le_bytes());
     h.update(&h_px.to_le_bytes());
-    h.update(&bake_generation.to_le_bytes());
+    h.update(&flare_substitutions.to_le_bytes());
     let (mut lut_i, mut dof_i, mut flare_i, mut matte_i, mut path_i) = (0, 0, 0, 0, 0);
     let mut broken = false;
     ops.iter()
@@ -1190,11 +1191,16 @@ mod tests {
         );
     }
 
-    /// A flare bake moves the generation, and the generation is in every name
-    /// (K-350): a walk made while the lens may have changed files nothing, and
-    /// the next walk sees none of its predecessors.
+    /// A bake merely being **made** renames nothing (K-425, superseding the
+    /// K-350 rule it replaces).
+    ///
+    /// Op outputs used to carry the flare bake *generation*, which moves the
+    /// moment any bake is queued — so with a keyframed aperture keeping one
+    /// queued, every walk of every stack in the project threw away its
+    /// predecessor's outputs and re-ran every op. What belongs in the name is
+    /// whether a flare actually stood other optics in, which is counted.
     #[test]
-    fn a_flare_bake_renames_everything() {
+    fn a_bake_in_flight_does_not_rename_every_op() {
         let Ok(ctx) = GpuContext::headless() else {
             lumit_gpu::no_adapter();
             return;
@@ -1231,8 +1237,13 @@ mod tests {
         run(&fx, &ctx, &ops, &cache, 7);
         assert_eq!(
             cache.borrow().counts(),
-            (4, 2),
-            "a moved bake generation is a different name for every op"
+            (2, 4),
+            "a bake in flight leaves every op's name — and so every held output — alone"
+        );
+        assert_eq!(
+            fx.flare_substitutions(),
+            0,
+            "and nothing was stood in for: this stack holds no flare"
         );
     }
 

@@ -48,7 +48,12 @@ pub mod schedule;
 ///   now covers the project's sample count, and turning the setting on by
 ///   default changes what every comp renders to. Every version-2 frame was made
 ///   without anti-aliasing, so none of them may be served again.
-pub const ALGO_VERSION: u32 = 4;
+/// * 5 — the Lens flare's aperture (K-425). The key now covers a file
+///   parameter's size and modification time, so an edited .lens or .cube
+///   renames the frames that read it; and the flare's bake snaps its
+///   continuous iris dials to a step, which moves the picture very slightly
+///   at every f-stop between two steps.
+pub const ALGO_VERSION: u32 = 5;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -343,17 +348,26 @@ fn feed_effect_stack(
                 EffectValue::File(f) => {
                     // Which file is live at this time (the hold-keyed index
                     // selects it); an unset param feeds a distinct 0 marker.
-                    // The path string is hashed (length-prefixed), not the
-                    // file's bytes — the same policy a footage source path
-                    // follows. Refreshing a file edited on disk is the LUT
-                    // loader's job (specified as path + mtime caching,
-                    // docs/impl/lut.md §4; the shipped caches key by path
-                    // only, so an on-disk edit shows after a restart).
+                    // The path string is hashed length-prefixed, and with it
+                    // the file's **size and last-modified time** (K-425) — so
+                    // editing a .lens or a .cube on disk renames every frame
+                    // that reads it.
+                    //
+                    // Path alone was a real hole rather than a theoretical
+                    // one: the Lens flare's bake keys on the file's CONTENT
+                    // (`lens_text_hash`), so an edited prescription rebaked
+                    // and drew different optics under the name the old file
+                    // had — a cached frame that could never be cleared. Not
+                    // the content itself, because a LUT is megabytes and this
+                    // runs for every frame key; a stat is microseconds, and a
+                    // file rewritten inside one filesystem tick at exactly
+                    // the same length is the recorded limit.
                     match f.path_at(lt) {
                         Some(p) => {
                             h.update(&[1]);
                             h.update(&(p.len() as u64).to_le_bytes());
                             h.update(p.as_bytes());
+                            feed_file_stamp(h, p);
                         }
                         None => {
                             h.update(&[0]);
@@ -1231,6 +1245,35 @@ fn feed_f64(h: &mut blake3::Hasher, v: f64) {
     // Canonicalise the one f64 equality wrinkle: 0.0 and -0.0 render alike.
     let v = if v == 0.0 { 0.0 } else { v };
     h.update(&v.to_bits().to_le_bytes());
+}
+
+/// A file's size and last-modified time, folded into a key so that editing
+/// the file on disk renames the frames that read it (K-425).
+///
+/// A path a frame key mentions is a path some loader is about to read, so the
+/// stat is warm and costs microseconds. A file the engine cannot stat — gone,
+/// on a disconnected share, permission-denied — feeds a distinct marker and
+/// nothing else: the loader will fail the same way, and a name that says
+/// "this file was unreadable" is as true as any other.
+fn feed_file_stamp(h: &mut blake3::Hasher, path: &str) {
+    let stamp = std::fs::metadata(path).ok().map(|m| {
+        let modified = m
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        (m.len(), modified)
+    });
+    match stamp {
+        Some((len, modified)) => {
+            h.update(&[1]);
+            h.update(&len.to_le_bytes());
+            h.update(&modified.to_le_bytes());
+        }
+        None => {
+            h.update(&[0]);
+        }
+    }
 }
 
 #[cfg(test)]

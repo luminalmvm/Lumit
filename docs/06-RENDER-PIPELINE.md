@@ -600,7 +600,10 @@ The decode width now comes from the same rounded scale the tag does (`Quality::k
 thus the width in the name is the width the pixels were decoded at.
 
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
-nowhere, so an entry can never be a promise the renderer did not keep.
+nowhere, so an entry can never be a promise the renderer did not keep. A **file parameter**
+(a `.cube` LUT, a `.lens` prescription) joins the key by path, size and last-modified time
+(K-425) — the loaders identify a file by more than its path, so a name that mentioned only
+the path could outlive an edit to the file itself.
 
 **A nested comp is named on its own (K-422).** The key used to fold a Precomp layer's comp
 into the parent's hasher inline, so the nested frame had no name of its own. It is now made
@@ -613,11 +616,14 @@ builder carries the name on the nested draw, the realiser files and serves the t
 under it, and the decode planner skips a held comp's decodes by it. `ALGO_VERSION` 4.
 
 **The per-effect names (K-421).** An intermediate is named exactly as the formula above says
-a node is, with the chain made explicit: `key_k = H(input, raster, bake generation,
+a node is, with the chain made explicit: `key_k = H(input, raster, flare substitutions,
 op_0 … op_k)`, where each op contributes its effect name and algorithm version, every
 resolved parameter value (post-expression, post-rescale — the numbers the kernel is handed),
 and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
-content hash, a mask path by its vertices. The input is the layer's source *by identity*,
+content hash, a mask path by its vertices. The flare term counts the frames a Lens flare
+drew other optics than its parameters name (K-425); it was the bake *generation*, which
+moves the moment any bake is queued, so a keyframed aperture renamed every op in the
+project on every frame. The input is the layer's source *by identity*,
 not by its bytes — the decode job's fields for footage, the colour and size for a solid —
 plus the masks and paint baked into it and the raster size; a nested comp's input is its own
 frame key (K-422). A text or shape layer and an adjustment layer's composite have no name

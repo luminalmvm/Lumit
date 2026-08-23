@@ -11317,3 +11317,58 @@ again` (bridge_call_budget_test.dart, where it also holds the budget: one reques
 change, not one per layout), `disabling the effect removes the cloud, with no frame change`
 and `a landed solve is read without the playhead moving` (camera_track_frb_test.dart). No
 new user-facing strings. This number was allocated on the lane3 branch.
+
+**K-425 · DECIDED · An animated aperture no longer stops the flare's frames from caching.**
+Supersedes the second invariant of K-350 ("a provisional frame is unnameable") and the
+K-421 op name that carried the bake generation. K-350 refused to name *any* frame while
+*any* lens flare bake was in flight, which was right for the case it was written for — a
+user picking a lens, one bake, half a second — and wrong for the case that followed. A
+keyframed f-stop (or blades, aperture rotation, softness, roundness, a per-element coating)
+asks for a slightly different iris on every frame, so a bake was in flight for as long as
+it played: every frame of every comp went unnameable, flare or no flare, nothing entered
+any tier, and the idle fill stood down and stayed down.
+
+Three changes, none of which weakens the rule K-350 was protecting — that a frame drawn
+with the previous lens must never be filed under the new lens's name (K-178).
+
+**(1) The question is counted, not guessed at.** `LensFlareFx` bumps a `substitutions`
+counter at the one place a frame draws optics its parameters do not name: the deferred
+fallback to the last drawn bake (or to no flare at all, with none drawn yet). Read either
+side of a render — `FxEngine::flare_substitutions`, `HeadlessRenderer::flare_substitutions`
+— it answers *may this frame be kept?* exactly, where `flare_bake_generation` could only
+answer *is something being baked somewhere?*. `frame_key` no longer refuses to name a
+frame, the frame caches and the effect cache bank on the count instead of the generation,
+and the op names of K-421 carry the count rather than the generation. The generation keeps
+its other job: telling the worker a bake has landed and the picture is worth making again.
+
+**(2) The bake sees a snapped aperture.** The bake precomputes two things from the iris —
+the starburst sprite (a Fourier transform of the hole, eight field slices) and the
+auto-exposure gain — and costs about two thirds of a second. Neither is separable into the
+per-frame pass at any acceptable cost: the sprite is an FFT, and the gain is a thumbnail
+render. So `bake_params` snaps the continuous iris dials before both `bake_key_with` and
+`bake_with` read them — the working f-number to a twentieth of a stop, aperture rotation to
+half a degree, Roundness and Iris softness to 1/256 — and a run of frames shares one bake.
+Nothing the *frame* computes is snapped: the ghost trace's own stop scale, the iris mask it
+draws each rim with and the K-260 wide-open blend all read the raw dial, so the ghosts
+still shrink and turn smoothly. What steps is the starburst's shape and the exposure, by
+about 1.7% a step. The trade is deliberate and stated: a slow f-stop ramp shows the
+exposure in steps rather than a continuous slide, which is the price of the bake being
+shareable at all.
+
+**(3) A file parameter's key covers the file, not just its path.** `lumit-eval` fed the
+path string alone into the frame key, while the flare's bake keys on the file's *content*
+(`lens_text_hash`) — so editing a `.lens` file on disk rebaked, drew different optics, and
+filed the result under the old file's name: a cached frame no edit or undo could clear. The
+key now folds the file's size and last-modified time too (a stat, not the bytes: a LUT is
+megabytes and this runs for every frame key). `ALGO_VERSION` goes to 5, so no frame made
+under the old rules is addressed again. Recorded limit: a file rewritten inside one
+filesystem tick at exactly the same length is not seen.
+
+Regression tests: `a_baking_flare_does_not_unname_other_frames`,
+`a_keyframed_aperture_names_every_frame`, `an_edited_lens_file_renames_frames` (headless.rs),
+`a_bake_in_flight_does_not_rename_every_op` (fxops.rs),
+`lens_flare_bakes_are_shared_across_one_step_of_aperture` (lumit-core fx/tests.rs — both
+halves of the cache's promise: two f-stops inside a step key the same *and* bake
+bit-identically), and the substitution counts added to
+`lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one` (lumit-gpu).
+No new user-facing strings. This number was allocated on the lane3 branch.

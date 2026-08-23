@@ -4434,6 +4434,11 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         "an exact bake is finished by the time the frame is"
     );
     let after_exact = fx.flare_bake_generation();
+    assert_eq!(
+        fx.flare_substitutions(),
+        0,
+        "an exact frame drew the lens it names"
+    );
 
     // Now defer, and ask for a lens nothing holds.
     fx.set_deferred_flare_bakes(true);
@@ -4453,6 +4458,13 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         fx.flare_bake_generation(),
         after_exact,
         "asking for a lens that is not held queues its bake, and says so"
+    );
+    // And says which frame it was (K-425): this one drew the first lens under
+    // the second one's name, so it is the one frame nobody may bank.
+    assert_eq!(
+        fx.flare_substitutions(),
+        1,
+        "one frame stood the previous lens in"
     );
 
     // The bake thread finishes and the next frame picks it up. Bounded, so a
@@ -4490,6 +4502,7 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     // And once it is held, the frame is nameable again: nothing more is
     // queued and the generation sits still.
     let settled = fx.flare_bake_generation();
+    let stood_in = fx.flare_substitutions();
     drop(fx.lens_flare(
         &ctx,
         &tex,
@@ -4504,6 +4517,11 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         fx.flare_bake_generation(),
         settled,
         "a held lens neither queues nor lands anything"
+    );
+    assert_eq!(
+        fx.flare_substitutions(),
+        stood_in,
+        "and stands nothing in, so the frame is one to keep (K-425)"
     );
 }
 

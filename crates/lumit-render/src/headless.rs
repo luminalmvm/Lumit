@@ -790,11 +790,10 @@ impl HeadlessRenderer {
     /// what keeps K-031's preview-equals-export identity true and an export
     /// bit-for-bit what it was. The Viewer's renderer turns it on.
     ///
-    /// While a bake is being made, frames are **unnameable** (see
-    /// [`Self::frame_key`]) — the same mechanism unprobed footage and a
-    /// non-neutral display view use, and for the same reason: a frame drawn
-    /// with the previous lens must not be filed under a name that says it was
-    /// drawn with this one.
+    /// A frame drawn with the previous lens must not be filed under a name
+    /// that says it was drawn with this one, so such a frame is made and not
+    /// kept — see [`Self::flare_substitutions`], which says exactly which
+    /// frames those were (K-425).
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx.set_deferred_flare_bakes(deferred);
@@ -813,8 +812,17 @@ impl HeadlessRenderer {
             .map_or(0, |parts| parts.fx.flare_bake_generation())
     }
 
-    /// Whether a flare bake is being made right now — while it is, frames are
-    /// unnameable.
+    /// How many times a frame has drawn a lens flare with other optics than
+    /// its parameters name (K-425). Read either side of a render: unmoved
+    /// means the frame may be banked under the name taken before it.
+    #[must_use]
+    pub fn flare_substitutions(&self) -> u64 {
+        self.parts
+            .as_ref()
+            .map_or(0, |parts| parts.fx.flare_substitutions())
+    }
+
+    /// Whether a flare bake is being made right now.
     #[must_use]
     pub fn flare_bake_pending(&self) -> bool {
         self.parts
@@ -838,13 +846,14 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Option<u128> {
-        // A flare bake in flight means any frame made now may be drawing the
-        // lens before it (K-350). Unnameable rather than misnamed: the tiers
-        // are keyed by what is *in* a frame (K-178), so an entry that lies
-        // about that outlives every edit and undo that could have fixed it.
-        if self.flare_bake_pending() {
-            return None;
-        }
+        // A flare bake in flight used to make this answer `None` (K-350) —
+        // for every comp, whether or not it held a flare. A keyframed
+        // aperture keeps a bake in flight for as long as it plays, so that
+        // rule stopped the whole project caching (K-425). The name is taken
+        // here and the frame is *checked* afterwards instead: see
+        // [`Self::flare_substitutions`], which counts the frames that
+        // actually drew other optics than they name, and those alone are the
+        // frames nobody banks.
         let comp = doc.comp(comp_id)?;
         self.sync_items(doc, comp);
         crate::cache::frame_key(
@@ -1430,15 +1439,16 @@ impl HeadlessRenderer {
             }
         }
         let started = std::time::Instant::now();
-        // A flare bake queued *during* this composite means the picture just
-        // made may be of the previous lens (K-350). The name was taken before
-        // the render, so it has to be dropped afterwards — the alternative is
-        // an entry that lies about its own content, which no later edit or
-        // undo can clear (K-178).
-        let bakes_before = self.flare_bake_generation();
+        // A flare that fell back to the previous lens during this composite
+        // (K-350) made a picture of a lens its name does not describe. The
+        // name was taken before the render, so it has to be dropped
+        // afterwards — the alternative is an entry that lies about its own
+        // content, which no later edit or undo can clear (K-178). Counted, so
+        // only the frames it actually happened to are dropped (K-425).
+        let subs_before = self.flare_substitutions();
         let (texture, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, bgra)?;
-        let key = key.filter(|_| self.flare_bake_generation() == bakes_before);
+        let key = key.filter(|_| self.flare_substitutions() == subs_before);
         let texture = std::sync::Arc::new(texture);
         if let Some(key) = key {
             // What it actually cost, so the store's cost-aware eviction has
@@ -2502,6 +2512,46 @@ mod tests {
         (DocumentStore::new(doc), comp_id)
     }
 
+    /// A stand-in bake: the smallest thing `warm_flare_bake` will accept, so a
+    /// test of the *naming rules* costs a channel send rather than half a
+    /// second of real optics.
+    fn stub_bake() -> lumit_gpu::fx::FlareBake {
+        std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
+            surfaces: Vec::new(),
+            ghosts: Vec::new(),
+            spreads: Vec::new(),
+            sensor_z_mm: 0.0,
+            focal_mm: 1.0,
+            native_fstop: 1.0,
+            pupil_mm: 1.0,
+            start_z_mm: 0.0,
+            energy_gain: 1.0,
+            reflectance: Vec::new(),
+            starburst: Vec::new(),
+            sb_res: 1,
+            sb_fields: 1,
+        }) as lumit_gpu::fx::FlareBake
+    }
+
+    /// [`doc_with_solid`] with a Lens flare on the layer, `edit` given the
+    /// fresh instance to set whichever rows the test is about.
+    fn doc_with_flare(
+        edit: impl FnOnce(&mut lumit_core::model::EffectInstance),
+    ) -> (DocumentStore, Uuid) {
+        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 32, 32);
+        let mut doc = (*store.snapshot()).clone();
+        let mut flare = lumit_core::fx::instantiate("lens_flare").expect("the flare is a builtin");
+        edit(&mut flare);
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == comp_id {
+                    c.layers[0].effects.push(flare.clone());
+                }
+            }
+        }
+        (DocumentStore::new(doc), comp_id)
+    }
+
     /// A footage item in the Project panel, on no layer anywhere. Returns its
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
@@ -3135,12 +3185,17 @@ mod tests {
         );
     }
 
-    /// A frame made while a lens is baking is **unnameable**, so nothing files
-    /// it under a name that says it was drawn with a lens it was not (K-350,
-    /// K-178). The same mechanism unprobed footage and a non-neutral display
-    /// view already use.
+    /// A lens baking somewhere **does not stop the rest of the project being
+    /// named** (K-425, superseding the K-350 rule it replaces).
+    ///
+    /// The regression: `frame_key` used to answer `None` for every comp while
+    /// any bake was in flight. A keyframed f-stop asks for a slightly
+    /// different iris on every frame, so a bake was in flight for as long as
+    /// it played — and nothing anywhere in the project could be named, banked
+    /// or filled in the background. What matters is whether a frame *drew*
+    /// other optics than it names, which is counted rather than guessed at.
     #[test]
-    fn a_baking_flare_makes_frames_unnameable() {
+    fn a_baking_flare_does_not_unname_other_frames() {
         let mut r = match HeadlessRenderer::new() {
             Ok(r) => r,
             Err(_) => {
@@ -3150,10 +3205,8 @@ mod tests {
         };
         let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 8, 8);
         let doc = store.snapshot();
-        assert!(
-            r.frame_key(&doc, comp_id, 0, Quality::default()).is_some(),
-            "an ordinary frame of a solid names itself"
-        );
+        let named = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(named.is_some(), "an ordinary frame of a solid names itself");
 
         // Queue a bake by hand: the effect engine is the authority the name
         // asks, and driving it directly keeps this a test of the *rule*
@@ -3163,29 +3216,122 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-                surfaces: Vec::new(),
-                ghosts: Vec::new(),
-                spreads: Vec::new(),
-                sensor_z_mm: 0.0,
-                focal_mm: 1.0,
-                native_fstop: 1.0,
-                pupil_mm: 1.0,
-                start_z_mm: 0.0,
-                energy_gain: 1.0,
-                reflectance: Vec::new(),
-                starburst: Vec::new(),
-                sb_res: 1,
-                sb_fields: 1,
-            }) as lumit_gpu::fx::FlareBake;
-            parts.fx.warm_flare_bake(0xfeed_face, &bake)
+            parts.fx.warm_flare_bake(0xfeed_face, &stub_bake())
         };
         if !queued {
             return; // no bake thread on this machine
         }
+        assert_eq!(
+            r.frame_key(&doc, comp_id, 0, Quality::default()),
+            named,
+            "a bake in flight elsewhere leaves this frame's name exactly as it was"
+        );
+        assert_eq!(
+            r.flare_substitutions(),
+            0,
+            "and nothing was stood in for, so the frame is one to keep"
+        );
+    }
+
+    /// **A keyframed aperture names, and keeps, every frame it draws**
+    /// (K-425). Ten frames of an animated f-stop, with a bake in flight the
+    /// whole time: each frame takes its own name, and no two frames share one
+    /// — the aperture is part of the picture, so it is part of the name.
+    #[test]
+    fn a_keyframed_aperture_names_every_frame() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_flare(|flare| {
+            for param in &mut flare.params {
+                if param.id == "fstop" {
+                    param.value = lumit_core::model::EffectValue::Float(ramp(2.0, 8.0, 1));
+                }
+            }
+        });
+        let doc = store.snapshot();
+        r.set_deferred_flare_bakes(true);
+        let queued = {
+            let Some(parts) = r.parts.as_ref() else {
+                return;
+            };
+            parts.fx.warm_flare_bake(0x0f57_09ba, &stub_bake())
+        };
+        if !queued {
+            return; // no bake thread on this machine
+        }
+        let names: Vec<Option<u128>> = (0..10)
+            .map(|f| r.frame_key(&doc, comp_id, f, Quality::default()))
+            .collect();
         assert!(
-            r.frame_key(&doc, comp_id, 0, Quality::default()).is_none(),
-            "while a lens is baking, no frame may be named"
+            names.iter().all(Option::is_some),
+            "every frame of an animated aperture names itself: {names:?}"
+        );
+        let mut distinct: Vec<u128> = names.into_iter().flatten().collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(
+            distinct.len(),
+            10,
+            "and each f-stop is a different picture under a different name"
+        );
+    }
+
+    /// **Editing a .lens file on disk renames the frames that read it**
+    /// (K-425). The bake keys on the file's CONTENT, so before this the edited
+    /// prescription rebaked and drew different optics under the old file's
+    /// name — a cached frame no edit or undo could ever clear.
+    #[test]
+    fn an_edited_lens_file_renames_frames() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let path = dir.path().join("mine.lens");
+        std::fs::write(
+            &path,
+            "name: one
+focal_length: 50
+",
+        )
+        .expect("write");
+        let text = path.to_string_lossy().into_owned();
+        let (store, comp_id) = doc_with_flare(|flare| {
+            for param in &mut flare.params {
+                if param.id == "lens_file" {
+                    param.value = lumit_core::model::EffectValue::File(
+                        lumit_core::model::FileParam::single(text.clone()),
+                    );
+                }
+            }
+        });
+        let doc = store.snapshot();
+        let before = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(before.is_some(), "a flare reading a real file names itself");
+
+        // A different prescription at the same path — a longer one, so the
+        // name moves whatever the filesystem's clock granularity is.
+        std::fs::write(
+            &path,
+            "name: two
+focal_length: 85
+surfaces:
+",
+        )
+        .expect("rewrite");
+        let after = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(after.is_some(), "and still names itself afterwards");
+        assert_ne!(
+            before, after,
+            "an edited prescription is a different picture and takes a different name"
         );
     }
 
@@ -3213,22 +3359,7 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-                surfaces: Vec::new(),
-                ghosts: Vec::new(),
-                spreads: Vec::new(),
-                sensor_z_mm: 0.0,
-                focal_mm: 1.0,
-                native_fstop: 1.0,
-                pupil_mm: 1.0,
-                start_z_mm: 0.0,
-                energy_gain: 1.0,
-                reflectance: Vec::new(),
-                starburst: Vec::new(),
-                sb_res: 1,
-                sb_fields: 1,
-            }) as lumit_gpu::fx::FlareBake;
-            parts.fx.warm_flare_bake(0xdead_beef, &bake)
+            parts.fx.warm_flare_bake(0xdead_beef, &stub_bake())
         };
         if !queued {
             return; // no bake thread on this machine

@@ -351,6 +351,29 @@ impl FxEngine {
         })
     }
 
+    /// How many times a frame has drawn a lens flare with **other** optics
+    /// than its parameters name (K-425) — the deferred fallback to the lens
+    /// the last frame drew, or no flare at all with none drawn yet.
+    ///
+    /// Read either side of a render, this is the exact answer to *may this
+    /// frame be filed under the name taken before it?* If the number did not
+    /// move, every flare in the frame drew the bake its parameters name and
+    /// the name describes the pixels; if it moved, it does not, and the frame
+    /// is made but not kept (the tiers are keyed by what is *in* a frame,
+    /// K-178).
+    ///
+    /// It replaces [`Self::flare_bake_generation`] for that job. The
+    /// generation moves whenever any bake is *queued* — a keyframed aperture
+    /// keeps one queued permanently, which made every frame of every comp
+    /// unbankable, flare or no flare. It stays for the other job it does:
+    /// noticing that a bake has landed and the picture is worth making again.
+    #[must_use]
+    pub fn flare_substitutions(&self) -> u64 {
+        self.lens_flare.ready().map_or(0, |lf| {
+            lf.substitutions.load(std::sync::atomic::Ordering::Relaxed)
+        })
+    }
+
     /// Start making a lens's bake now, before any frame asks to draw it.
     ///
     /// The same queue a deferred miss uses, offered by name so a caller that

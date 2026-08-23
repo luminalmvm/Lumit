@@ -5329,6 +5329,89 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
+/// **An animated aperture reuses its bakes** (K-425): two f-stops inside one
+/// step key the same *and* bake bit-identically, while a step apart they key
+/// differently — and the frame's own stop scale stays continuous, so the
+/// ghosts still shrink smoothly as the iris closes.
+///
+/// The equality is not a nicety: the bake cache hands a stored bake to
+/// anything whose key matches, so two f-stops that share a key and would bake
+/// differently would draw each other's optics. Keeping both sides of that
+/// promise in one test is the point.
+#[test]
+fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
+    use crate::fx::lens_flare::*;
+    let seed = default_flare_params();
+    // The middle of a step, so a nudge either way stays inside it.
+    let base = bake_params(&LensFlareParams { fstop: 2.8, ..seed }).fstop;
+    // A quarter of a step away — the same bake by construction.
+    let nudged = base * (FSTOP_BAKE_STEP_STOPS * 0.25 * 0.5).exp2();
+    let a = LensFlareParams {
+        fstop: base,
+        ..seed
+    };
+    let b = LensFlareParams { fstop: nudged, ..a };
+    assert_ne!(a.fstop, b.fstop, "the two frames hold different f-stops");
+    assert_eq!(
+        bake_key(&a),
+        bake_key(&b),
+        "and ask the cache for the same optics"
+    );
+    let (ba, bb) = (bake(&a), bake(&b));
+    assert_eq!(ba.starburst, bb.starburst, "which must be the same sprite");
+    assert_eq!(ba.energy_gain, bb.energy_gain, "and the same exposure");
+    assert_eq!(ba.pairs, bb.pairs);
+
+    // A whole step is a different bake, so the aperture is still followed —
+    // in steps of about 1.7%, not in leaps.
+    let stepped = LensFlareParams {
+        fstop: base * (FSTOP_BAKE_STEP_STOPS * 0.5).exp2(),
+        ..a
+    };
+    assert_ne!(
+        bake_key(&a),
+        bake_key(&stepped),
+        "a step apart is a different iris"
+    );
+
+    // What the frame itself computes is untouched: the ghost trace's stop
+    // scale reads the raw dial, so a slow ramp moves the ghosts every frame
+    // rather than every step.
+    assert_ne!(
+        fstop_scale(ba.native_fstop, a.fstop),
+        fstop_scale(bb.native_fstop, b.fstop),
+        "the per-frame stop scale is not quantised"
+    );
+
+    // The other three continuous iris dials snap the same way.
+    let rotated = LensFlareParams {
+        aperture_rotation_deg: a.aperture_rotation_deg + APERTURE_ROTATION_BAKE_STEP_DEG * 0.25,
+        ..a
+    };
+    assert_eq!(bake_key(&a), bake_key(&rotated));
+    let rounder = LensFlareParams {
+        roundness: 0.5,
+        ..a
+    };
+    let rounder_nudged = LensFlareParams {
+        roundness: 0.5 + APERTURE_BAKE_STEP * 0.25,
+        ..a
+    };
+    assert_eq!(bake_key(&rounder), bake_key(&rounder_nudged));
+    let softer = LensFlareParams {
+        aperture_softness: 0.25 + APERTURE_BAKE_STEP * 0.25,
+        ..a
+    };
+    assert_ne!(
+        bake_key(&softer),
+        bake_key(&LensFlareParams {
+            aperture_softness: 0.25 + APERTURE_BAKE_STEP * 1.25,
+            ..a
+        }),
+        "a step of softness is still a different iris"
+    );
+}
+
 /// One splat through the full K-380 deposit — pyramid, then resolve — into a
 /// flat `w × h × 3` buffer, which is the shape every kernel test below reads.
 /// Splats small enough for level 0 land bit-exactly as they always did (the
