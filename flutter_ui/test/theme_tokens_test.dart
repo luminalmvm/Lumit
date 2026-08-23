@@ -1,9 +1,12 @@
 // The token list, custom themes, and the two Timeline colours (K-202).
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/custom_theme.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/theme/theme_file.dart';
 import 'package:lumit_flutter/theme/theme_tokens.dart';
 
 void main() {
@@ -20,7 +23,8 @@ void main() {
         'surface0', 'surface1', 'surface2', 'surface3', 'surface4',
         'textPrimary', 'textSecondary', 'textMuted', 'textDisabled',
         'hairline', 'hairlineStrong',
-        'accent', 'accentHover', 'success', 'warning', 'error', 'cacheDisk',
+        'accent', 'accentHover', 'animated', 'success', 'warning', 'error',
+        'cacheDisk',
         'marker',
         'timelineOutOfRange', 'selectionFill',
         'curve0', 'curve1', 'curve2', 'curve3',
@@ -33,7 +37,8 @@ void main() {
       };
       final listed = themeTokens.map((t) => t.key).toSet();
       expect(listed, onTheStruct);
-      expect(t.viewerSurround, isNotNull, reason: 'still there, just not offered');
+      expect(t.viewerSurround, isNotNull,
+          reason: 'still there, just not offered');
     });
 
     test('every token reads and writes its own field', () {
@@ -80,7 +85,8 @@ void main() {
         'a.token.from.the.future': const Color(0xff000000),
       });
       expect(applied.accent, const Color(0xffabcdef));
-      expect(applied.surface0, base.surface0, reason: 'untouched keeps its own');
+      expect(applied.surface0, base.surface0,
+          reason: 'untouched keeps its own');
     });
   });
 
@@ -140,6 +146,7 @@ void main() {
         hairlineStrong: const Color(0xff333333),
         accent: const Color(0xffff0000),
         accentHover: const Color(0xffff3333),
+        animated: const Color(0xffffaa00),
         success: const Color(0xff00ff00),
         warning: const Color(0xffffff00),
         error: const Color(0xffff00ff),
@@ -210,6 +217,67 @@ void main() {
       expect(theme.mode, ThemeMode2.light);
       expect(theme.surface0, LumitTheme.light().surface0,
           reason: 'what it does not carry comes from the light ramp');
+    });
+  });
+
+  /// The token that says "this is animated or in hand" (K-439, 15-DESIGN
+  /// §3.1). Every scheme has to carry one — a keyframe diamond nobody can see
+  /// is worse than no colour at all — and it has to hold against the panel it
+  /// is drawn on, which on a light scheme means a much darker amber than the
+  /// dark ramp's.
+  group('the animated token', () {
+    /// WCAG relative luminance, so "3:1" here means what it means everywhere
+    /// else in the spec rather than a plain average.
+    double luminance(Color c) {
+      double channel(double v) => v <= 0.03928
+          ? v / 12.92
+          : math.pow((v + 0.055) / 1.055, 2.4) as double;
+      return 0.2126 * channel(c.r) +
+          0.7152 * channel(c.g) +
+          0.0722 * channel(c.b);
+    }
+
+    double contrast(Color a, Color b) {
+      final la = luminance(a), lb = luminance(b);
+      return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+    }
+
+    test('every scheme carries one that reads on its own panel', () {
+      for (final scheme in LumitColorScheme.values) {
+        final t = scheme.build();
+        expect(contrast(t.animated, t.surface1), greaterThanOrEqualTo(3.0),
+            reason: '${scheme.name} draws keyframes it cannot show');
+        expect(t.animated, isNot(t.accent),
+            reason: '${scheme.name} would say "keyed" and "in hand" alike');
+      }
+      expect(LumitTheme.dark().animated, const Color(0xffd8a24a));
+    });
+
+    test('the editor can edit it', () {
+      expect(themeTokens.map((t) => t.key), contains('animated'));
+    });
+
+    /// A theme file written before the token existed carries no `animated`
+    /// key. It must still load, taking the colour from its base — the whole
+    /// reason a theme is stored over a base rather than as a copy.
+    test('a theme file saved without it still loads', () {
+      final made = CustomTheme.from('Mine', LumitTheme.dark());
+      final older = CustomTheme(
+        name: made.name,
+        mode: made.mode,
+        colours: {...made.colours}..remove('animated'),
+      );
+      final read = readThemeFile(encodeThemeFile(older));
+      expect(read.refusal, isNull);
+      expect(read.theme!.build(ThemeShape.sharp).animated,
+          LumitTheme.dark().animated);
+    });
+
+    test('and one that carries it keeps it', () {
+      final made = CustomTheme.from('Mine', LumitTheme.gruvboxLight());
+      final read = readThemeFile(encodeThemeFile(made));
+      expect(
+          read.theme!.colours['animated'], LumitTheme.gruvboxLight().animated);
     });
   });
 }

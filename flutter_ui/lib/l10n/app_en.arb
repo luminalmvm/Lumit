@@ -5390,6 +5390,14 @@
   "@tokenLayertextHelp": {
     "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
+  "tokenAnimated": "Animated",
+  "@tokenAnimated": {
+    "description": "Theme editor: the name of one editable colour."
+  },
+  "tokenAnimatedHelp": "Keyframes, the stopwatch when it is on, a handle or value field in hand, and the work-area band.",
+  "@tokenAnimatedHelp": {
+    "description": "Theme editor: the sentence under the \"Animated\" colour, saying where it is used."
+  },
   "tokenMarker": "Marker",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."

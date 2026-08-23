@@ -238,6 +238,14 @@ class LumitTheme {
 
   // Roles — the accent is THE single accent per view.
   final Color accent, accentHover;
+
+  /// "This is animated or in hand" (K-439): keyframe diamonds, stopwatch-on,
+  /// selected keyframes, selected gizmo handles, the focused value field and
+  /// the work-area band — and nothing else. The job list is closed, so a third
+  /// kind of use is a mistake rather than a new job. A desaturated warm amber,
+  /// deliberately quieter than `accent`: "keyed" is a state a composition is
+  /// full of, while the accent marks the one thing in hand.
+  final Color animated;
   final Color success, warning, error, cacheDisk;
 
   /// Graph-editor curve strokes.
@@ -302,6 +310,7 @@ class LumitTheme {
     required this.hairlineStrong,
     required this.accent,
     required this.accentHover,
+    required this.animated,
     required this.success,
     required this.warning,
     required this.error,
@@ -452,6 +461,7 @@ class LumitTheme {
         hairlineStrong: hairlineStrong,
         accent: accent ?? this.accent,
         accentHover: accentHover ?? this.accentHover,
+        animated: animated,
         success: success,
         warning: warning,
         error: error,
@@ -494,6 +504,7 @@ class LumitTheme {
         hairlineStrong: _rgb(0x3c, 0x41, 0x45),
         accent: _rgb(0xe0, 0x5a, 0x72),
         accentHover: _rgb(0xea, 0x72, 0x88),
+        animated: _rgb(0xd8, 0xa2, 0x4a),
         success: _rgb(0x5f, 0xcf, 0xae),
         warning: _rgb(0xdd, 0x9a, 0x82),
         error: _rgb(0xd1, 0x72, 0x9c),
@@ -534,6 +545,7 @@ class LumitTheme {
       hairlineStrong: _rgb(0x3d, 0x40, 0x42),
       accent: base.accent,
       accentHover: base.accentHover,
+      animated: base.animated,
       success: base.success,
       warning: base.warning,
       error: base.error,
@@ -560,6 +572,9 @@ class LumitTheme {
         hairlineStrong: _rgb(0xc4, 0xc1, 0xbc),
         accent: _rgb(0xc2, 0x3f, 0x58),
         accentHover: _rgb(0xa8, 0x30, 0x48),
+        // Provisional pending the light-mode pass: the dark scheme's amber
+        // taken down until it holds against white.
+        animated: _rgb(0x9a, 0x6a, 0x1c),
         success: _rgb(0x2f, 0x8f, 0x71),
         warning: _rgb(0xb5, 0x5f, 0x46),
         error: _rgb(0x9c, 0x3f, 0x66),
@@ -597,6 +612,7 @@ class LumitTheme {
         hairlineStrong: _rgb(0xa8, 0x99, 0x84),
         accent: _rgb(0xfe, 0x80, 0x19),
         accentHover: _rgb(0xfd, 0x94, 0x38),
+        animated: _rgb(0xd7, 0x99, 0x21),
         success: _rgb(0xb8, 0xbb, 0x26),
         warning: _rgb(0xfa, 0xbd, 0x2f),
         error: _rgb(0xcc, 0x24, 0x1d),
@@ -634,6 +650,8 @@ class LumitTheme {
         hairlineStrong: _rgb(0xbd, 0xae, 0x93),
         accent: _rgb(0xaf, 0x3a, 0x03),
         accentHover: _rgb(0x86, 0x35, 0x0e),
+        // Provisional pending the light-mode pass.
+        animated: _rgb(0x8f, 0x64, 0x14),
         success: _rgb(0x79, 0x74, 0x0e),
         warning: _rgb(0xb5, 0x76, 0x14),
         error: _rgb(0x9d, 0x00, 0x06),
@@ -671,6 +689,7 @@ class LumitTheme {
         hairlineStrong: _rgb(0x4f, 0x52, 0x66),
         accent: _rgb(0xcb, 0xa6, 0xf7),
         accentHover: _rgb(0xcc, 0xb2, 0xf6),
+        animated: _rgb(0xfa, 0xb3, 0x87),
         success: _rgb(0xa6, 0xe3, 0xa1),
         warning: _rgb(0xf9, 0xe2, 0xaf),
         error: _rgb(0xf3, 0x8b, 0xa8),
@@ -708,6 +727,8 @@ class LumitTheme {
         hairlineStrong: _rgb(0xbc, 0xc0, 0xcc),
         accent: _rgb(0x88, 0x39, 0xef),
         accentHover: _rgb(0x6a, 0x2c, 0xba),
+        // Provisional pending the light-mode pass.
+        animated: _rgb(0x9c, 0x61, 0x14),
         success: _rgb(0x40, 0xa0, 0x2b),
         warning: _rgb(0xdf, 0x8e, 0x1d),
         error: _rgb(0xd2, 0x0f, 0x39),
