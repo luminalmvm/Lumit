@@ -11755,3 +11755,45 @@ and `fx-reference.json` does not export ROI, so it is not regenerated.
 Regression tests: `the_roi_padding_follows_the_raster_like_a_px_radius` and
 `the_roi_padding_covers_the_hard_max_radius_at_1080p` (lumit-core `fx/tests.rs`) — the
 second fails against the old 25 % figure. No new user-facing strings.
+
+## K-434 — Render workers take turns building their renderers, and skip it for a project that has gone
+
+**DECIDED 2026-08-23.** A render worker builds its `HeadlessRenderer` — a GPU device plus
+every pipeline the compositor needs — before it serves its first request. That build is now
+**serialised process-wide** by one mutex held across `HeadlessRenderer::new()` and nothing
+else, and once a worker's turn comes it **checks its project is still open** and stops
+without building if it is not (`worth_building_for`, `crates/lumit-bridge/src/api/
+worker_thread.rs`).
+
+**Why.** Building one takes seconds where the driver has no warm shader cache — measured on
+a Windows development machine at 3.3–5.0 s against a first render of about 30 ms — and it
+cannot be interrupted once begun. A process that opens projects faster than that had every
+build in flight at once: the `viewer_panel_frb` suite makes a project per test and draws in
+most of them, so ninety devices were requested inside a few seconds and the card ran out
+part way through. From there `HeadlessRenderer::new()` failed with "Not enough memory left"
+for projects that were perfectly healthy, their workers stopped, and their Viewers showed
+nothing — which read as a broken transport rather than an exhausted card.
+
+Both halves are needed and neither works alone. Serialising bounds the peak at one device
+under construction; the liveness check is what keeps the queue from then building a device
+for each of the projects that opened and closed while it waited. Twenty at once was never
+faster than twenty in turn — the driver serialises device creation regardless — so nothing
+is given up.
+
+**The editor never notices.** It has one project open and therefore one worker, so the lock
+is never contended and the check always passes. This is entirely about processes that hold
+many project sessions in a row.
+
+**A recorded deviation from docs/14.** The engineering rules say a lock must not be held
+across an FFI call, and this one is held across exactly that. The rule exists so a slow call
+cannot stall a thread that is waiting for *data*; `BUILDING_RENDERER` guards no data, and
+the slow call is the thing it exists to order — it is a queue, written as a mutex because a
+queue of one is a mutex. The cost accepted with it: a build that hung would now hold every
+other worker behind it rather than failing on its own. `HeadlessRenderer::new()` either
+returns a device or an error today, and a worker that cannot build one stops; if that ever
+becomes a hang, this wants a timeout rather than a wider lock.
+
+Regression test: `a_closed_project_is_not_worth_a_renderer` (lumit-bridge
+`api/worker_thread.rs`). The suite-level evidence is `viewer_panel_frb_test.dart`, which
+went from seven failures and ten failed device requests to green with none. No new
+user-facing strings.

@@ -173,6 +173,32 @@ struct LayerSample {
     rgba: Vec<u8>,
 }
 
+/// Whose turn it is to build a renderer (K-434). Held only across
+/// [`HeadlessRenderer::new`] — never across a render, a lock on document state,
+/// or anything that can await — so it orders GPU device creation and nothing
+/// else. See the note at its one use in [`worker_loop`] for why the order
+/// matters.
+///
+/// This is the one lock in the engine deliberately held across driver work,
+/// against docs/14 §"A lock MUST NOT be held across … an FFI call". The rule
+/// exists so a slow call cannot stall a thread waiting for *data*; this guards
+/// no data, and the slow call is the very thing being ordered — a queue for it,
+/// written as a mutex because that is what a queue of one is. K-434 records the
+/// deviation and what it buys.
+static BUILDING_RENDERER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Whether a renderer is still worth building for this project (K-434).
+///
+/// Asked once, after the worker's turn to build has come round: a project
+/// closed while it waited has nothing left to draw and no one left to ask, so
+/// the device would be built only to be dropped. `state` is the liveness test —
+/// [`crate::api::project::ProjectReference::close`] forgets the project, and
+/// every call through the reference answers `InvalidProject` from then on.
+#[frb(ignore)]
+fn worth_building_for(project: &ProjectReference) -> bool {
+    project.state().is_ok()
+}
+
 /// How often the cache bar's strip may be recomputed. Building it names every
 /// frame of the composition, which is a hash apiece — cheap per frame, worth
 /// bounding across a long one. A tenth of a second is far finer than the eye
@@ -2072,6 +2098,34 @@ fn worker_loop(
     let mut stream = stream;
     raise_timer_resolution();
 
+    // **One renderer is built at a time, and none at all for a project that
+    // has already gone** (K-434). Building one means a GPU device and every
+    // pipeline the compositor needs — seconds of driver work where there is no
+    // warm shader cache — and it cannot be interrupted once started. The
+    // editor never notices this lock, because it has one project open and so
+    // one worker; a process that opens projects faster than they build does,
+    // and it is the reason for both halves:
+    //
+    // * Serialised, the peak is one device under construction rather than one
+    //   per project opened in the meantime. Twenty at once is not faster than
+    //   twenty in turn — the driver serialises them anyway — and it exhausted
+    //   the card, at which point every later device request failed and the
+    //   Viewer went blank for projects that were perfectly healthy.
+    // * Once the lock is ours, the project may have been closed while we
+    //   waited. `state()` answers `InvalidProject` the moment it is, and a
+    //   renderer for a project nobody can ask anything of is a device built to
+    //   be dropped — so the queue drains at once instead of building each one.
+    //
+    // The frb test suite is where this shows: it makes a project per test and
+    // draws in most of them, so a file of ninety tests asked for ninety
+    // devices inside a few seconds. Poisoning is nothing to fail over: the
+    // lock guards no data, only the turn-taking.
+    let building = BUILDING_RENDERER.lock().unwrap_or_else(|e| e.into_inner());
+    if !worth_building_for(&project) {
+        // Quietly: a project closing while its worker waited its turn is the
+        // ordinary end of a session, not a fault.
+        return;
+    }
     // No renderer means no Viewer, but the editor itself stays usable — the
     // worker just stops instead of taking the process down with it.
     let mut renderer = match HeadlessRenderer::new() {
@@ -2081,6 +2135,7 @@ fn worker_loop(
             return;
         }
     };
+    drop(building);
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it (K-350): picking a lens shows the lens
     // before it and swaps the new one in when the optics are done, instead of
@@ -3693,7 +3748,9 @@ fn publish_zero_copy(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{drain_to_newest, playback_quality, still_quality, DrainClass, Playback};
+    use super::{
+        drain_to_newest, playback_quality, still_quality, worth_building_for, DrainClass, Playback,
+    };
     use crate::api::composition::{BridgePlaybackMode, CompositionReference};
     use std::sync::mpsc::channel;
     use uuid::Uuid;
@@ -3747,6 +3804,33 @@ mod tests {
                 "every-frame playback ignores the tier"
             );
         }
+    }
+
+    /// **A worker builds no renderer for a project that has already gone**
+    /// (K-434).
+    ///
+    /// Building one is a GPU device and every pipeline the compositor needs,
+    /// and it cannot be interrupted once begun — so a process that opens
+    /// projects faster than they build piled the devices up and exhausted the
+    /// card, at which point healthy projects got no picture at all. The frb
+    /// suite is that process: a project per test, most of them drawing, and
+    /// each one closed a moment after it opened. Serialising the builds is the
+    /// other half; this is what lets the queue drain rather than build every
+    /// project that has been and gone.
+    #[test]
+    fn a_closed_project_is_not_worth_a_renderer() {
+        let project =
+            crate::api::state::LumitBridgeState::new_project(None).expect("a new project");
+        assert!(
+            worth_building_for(&project),
+            "an open project is exactly what a renderer is for"
+        );
+
+        project.close().expect("closing an open project");
+        assert!(
+            !worth_building_for(&project),
+            "a closed project has nothing to draw and no one to ask"
+        );
     }
 
     /// A worker's state around a real renderer, built as `worker_loop` builds

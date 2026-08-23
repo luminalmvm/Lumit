@@ -6,14 +6,19 @@
 // magnification and channel pickers, the grid, and the move gizmo, all of which
 // are the parts a user actually operates.
 //
-// Six of them do still need a frame to *arrive*, because that arrival is what
+// Seven of them do still need a frame to *arrive*, because that arrival is what
 // moves the playhead and bumps `frameArrived` — the engine drives playback
 // (K-181), so a Viewer that is told nothing shows nothing and counts nothing.
 // Those carry `skip: zeroCopyViewerUnavailable`, which is true only on a machine
 // with no working zero-copy transport (see `frb_test_support.dart`). Today that
-// means the Linux CI runner and its software Vulkan, so on CI these six do not
+// means the Linux CI runner and its software Vulkan, so on CI these seven do not
 // run at all. They are among the tests most worth having; the skip is a
 // statement about the runner, not about them.
+//
+// Everywhere they wait for a first picture they wait with `coldWorkerRounds`,
+// because a fresh project's worker builds its renderer before it reads a
+// request and that is seconds on a machine with no warm shader cache. The
+// waiting is what grew; every assertion is the one it always was.
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -249,7 +254,7 @@ void main() {
       expect(p.uiState.playing.value, isTrue);
       await settleFrb(tester,
           minRounds: 6,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.playheadFrame.value > 0);
       expect(p.uiState.playheadFrame.value, greaterThan(0),
           reason: 'the engine chose frames and the playhead followed them');
@@ -286,7 +291,7 @@ void main() {
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.playheadFrame.value > 0);
 
       await pressBar(tester, 'viewer-play');
@@ -2651,7 +2656,7 @@ void main() {
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.playheadFrame.value > 0);
 
       expect(p.uiState.playheadFrame.value, greaterThan(0),
@@ -2675,7 +2680,7 @@ void main() {
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.playheadFrame.value > 0);
       expect(p.uiState.playheadFrame.value, greaterThan(0),
           reason: 'space started playback');
@@ -2727,7 +2732,7 @@ void main() {
         tester,
         until: () => p.uiState.frameArrived.value > before,
         minRounds: 10,
-        maxRounds: 120,
+        maxRounds: coldWorkerRounds,
       );
       expect(p.uiState.frameArrived.value, greaterThan(before),
           reason: 'a frame was rendered for the moved playhead');
@@ -2778,17 +2783,32 @@ void main() {
 
       var frames = 0;
       final sub = p.state.onWorkerResponse.listen((msg) {
-        // The idle cache fill is SUPPOSED to work while the playhead is still
-        // (K-187) and announces each banked frame; what must go quiet is the
-        // PICTURE being re-rendered and re-published.
-        if (msg is! WorkerResponse_CacheFilled) frames++;
+        // **A published picture, and nothing else.** The idle cache fill is
+        // SUPPOSED to work while the playhead is still (K-187) and announces
+        // each banked frame; what must go quiet is the PICTURE being
+        // re-rendered and re-published.
+        //
+        // This used to count every message that was not a `CacheFilled`, which
+        // has not meant "a render" for some time: one render also reports its
+        // progress (docs/13 §7.1) and, since K-420, is measured an idle turn
+        // AFTER it was served. Those arrive around the picture rather than with
+        // it, so whether a trailing one landed before or after the count was
+        // taken decided the test — and the count it was compared against was
+        // taken the moment `frameArrived` bumped, which is the middle of that
+        // spread. Counting the publish itself is both stabler and stricter: a
+        // second picture is exactly the regression, and now nothing else can
+        // stand in for one.
+        if (msg is WorkerResponse_RenderedSharedTexture ||
+            msg is WorkerResponse_RenderedDMABuf) {
+          frames++;
+        }
       });
       addTearDown(sub.cancel);
 
       // Let the mount render land, then count what follows it.
       await settleFrb(tester,
           minRounds: 10,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.frameArrived.value > 0);
       final settled = frames;
 
@@ -2807,8 +2827,11 @@ void main() {
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
+      // The mount's own picture, which is a cold worker's first frame.
       await settleFrb(tester,
-          minRounds: 10, until: () => p.uiState.frameArrived.value > 0);
+          minRounds: 10,
+          maxRounds: coldWorkerRounds,
+          until: () => p.uiState.frameArrived.value > 0);
       final before = p.uiState.frameArrived.value;
       final playhead = p.uiState.playheadFrame.value;
 
@@ -2840,7 +2863,7 @@ void main() {
       await tester.pump();
       await settleFrb(tester,
           minRounds: 6,
-          maxRounds: 120,
+          maxRounds: coldWorkerRounds,
           until: () => p.uiState.playheadFrame.value < last);
 
       expect(p.uiState.playheadFrame.value, lessThan(100),

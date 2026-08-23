@@ -109,6 +109,7 @@ Widget hostPanel({
   required LumitState state,
   required LumitUiState uiState,
   Size size = const Size(480, 760),
+
   /// How much motion the panel under test is allowed. None by default, so a
   /// test asserts a finished state rather than racing an animation; a test
   /// that is *about* the motion (the Viewer's zoom flight, K-218) asks for it.
@@ -277,6 +278,27 @@ Future<void> settleFrb(
     if (round + 1 >= minRounds && (until == null || until())) return;
   }
 }
+
+/// The [settleFrb] ceiling to allow the **first** picture of a worker session.
+///
+/// A worker builds its renderer before it reads its first request — a GPU
+/// device, then every pipeline the compositor needs — and it does that once per
+/// project, so every frb test that mounts a fresh project pays it again. Where
+/// the driver has no warm shader cache it is seconds rather than milliseconds:
+/// measured on a Windows development machine at 3.3–5.0 s, against a first
+/// render of about 30 ms once the renderer stands. A ceiling in the low
+/// hundreds of milliseconds therefore cannot be met however healthy the engine
+/// is, and the tests that wait for a picture fail on the machine rather than on
+/// the code — which is exactly how they read. The build may also queue behind
+/// one other worker's (K-434), which is what stops a file of them exhausting
+/// the card — so the ceiling covers a turn as well as a build.
+///
+/// Ten seconds of ceiling costs nothing where the frame is quick: [settleFrb]
+/// returns the moment its `until` is true, so a warm machine still finishes in
+/// a few rounds. Only use it for a wait that includes a cold worker's first
+/// frame; a wait for a *second* frame is a real render and wants a real
+/// ceiling, so that a stall in one still fails.
+const int coldWorkerRounds = 500;
 
 /// A second tap, far enough after the first to read as two singles rather than a
 /// double-tap — the click-then-click-again rename gesture.

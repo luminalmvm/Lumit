@@ -5528,6 +5528,35 @@ document rather than about pixels — the same question the background probe wor
 above would need to ask if it ever wanted to warm the files for the comp you are
 about to open, rather than every file you import.
 
+### Only one renderer is built at a time
+
+Every open project gets a **render worker**: a background thread that makes the
+pictures the Viewer shows. The first thing a worker does is build its
+*renderer*, and that is not a small thing — it asks the graphics card for a
+device, then compiles every shader the compositor might need. On a machine whose
+driver has not seen those shaders before it takes **three to five seconds**,
+against a first picture of about thirty milliseconds once it stands. Nothing can
+interrupt it half way; once it has started it runs to the end.
+
+That is invisible while you are editing, because you have one project open and
+therefore one worker, and the wait happens while the window is still arranging
+itself. It is very visible in a *test process*, which opens a project, draws in
+it, closes it, and does the whole thing again eighty-eight times in under a
+minute. Each of those projects asked for a graphics device, and because none of
+the builds could be interrupted, twenty of them were in flight at once. The card
+ran out of memory part way through the file, and from then on projects that were
+perfectly healthy got no device, no worker and no picture — which looks exactly
+like a broken transport.
+
+So the workers queue (K-434). One builds; the rest wait their turn. This costs
+nothing, because the graphics driver was going to serialise them anyway — twenty
+at once was never faster than twenty in order, only more expensive. And when a
+worker's turn finally comes round it asks one question first: **is my project
+still open?** In a test process it usually is not — the test finished seconds
+ago — so the worker stops there and builds nothing, which is what lets a queue
+of eighty drain in an instant rather than building eighty devices for projects
+that have been and gone.
+
 ### Finding the beat, without stopping everything else
 
 Beat detection is the same story one size up. Asking a composition where its
