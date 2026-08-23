@@ -379,6 +379,46 @@ it fills unevenly; feeding the profiler's measured costs back as the weights is 
 fix. Also unbuilt: an **export**'s progress still has its own path
 ([07-UI-SPEC.md](07-UI-SPEC.md) §14) rather than sharing this one.
 
+## Now - the redesign programme (K-438..K-446)
+
+The 2026-08-23 redesign lands in five phases, in this order; 15-DESIGN §12A and the
+approved mockups govern the layouts. Phase 1 is Now; each later phase becomes Now when
+the one before it lands. Delete each phase here when it lands, as with everything else.
+
+- **Phase 1 - the Flutter multi-window upgrade** (K-444). The windowing foundation
+    lands first, on the current look, so dialogs and pop-ups become real OS windows
+    before any of them is redrawn - upgrade regressions stay separable from redesign
+    regressions. This subsumes the old pop-out-panel-windows rebuild item under
+    *Shell and onboarding* above.
+- **Phase 2 - theme groundwork** (K-438, K-439, K-440): the `animated` token and the
+    three-greys-at-rest audit; Hanken Grotesk and Geist Mono bundled (replacing the
+    old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
+    on its 16 px grammar and embedded as Flutter icons; the three-way Chrome labels
+    setting with its word-carrying tooltips.
+- **Phase 3 - panels and windows** (K-441, K-442, K-443, K-444): the effect controls
+    (fixed columns, square stopwatch, reserved keyframe-nav slot, linked vector
+    wells, the crosshair point picker, Mix row with blend mode and matte channel,
+    Matte row with invert), the Timeline (Layers/Graph modes, the Animated filter,
+    full-width composition tabs, the double-height ruler with its end padding, the
+    tier-coloured cache bar, the work-area band, trimmed-extent outlines) and Graph
+    mode's surface (the filtered colour-ticked outline, edge-to-edge curves, the
+    fixed value gutter, the Value/Speed strip), the Project panel, the Viewer bar,
+    Settings, the welcome screen, and **the export window plus the export queue
+    window** on the K-444 dialog pattern. This phase owns, rather than tracking
+    separately: the export dialog and queue rework, the easing and graph-surface
+    rework, the switch-column-at-minimum-width polish, the editable-value colour
+    treatment (decided by K-439, built here), and the rest of the redesign's visual
+    polish list.
+- **Phase 4 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
+    second view of the effect stack that can also wire effects together, auto-wire
+    and heal toggles, type-coloured wires from `viz_*`-family tokens, and the Nodes
+    workspace with the small viewer and short timeline. The document-model question
+    stays open until this phase's design step answers it. Particulate (K-446) is
+    designed against the points stream this phase's types introduce.
+- **Phase 5 - the website**: lumitlab.com ported into the new styling - current
+    content kept, wordmark top-left, the animation in a half-height hero, platform's
+    own download button, screenshot sections and hover-play feature videos.
+
 ## Next - engine/bridge follow-ups
 
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
@@ -1047,10 +1087,11 @@ list, not a re-statement of the roadmap.
 - **File format ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)).** Embedded `thumbs/`
     previews in the `.lum`; the per-project sidecar `proxies/`, `peaks/` and
     `flow/` directories (only `frames/` and the global media index exist).
-- **Design ([15-DESIGN.md](15-DESIGN.md)).** Bundle JetBrains Mono, Schibsted
-    Grotesk and Source Serif 4 (only Inter is wired); add the 13/14/20 px
-    type-scale steps to the theme; identity colour tokens for Shape and Null
-    layers (§6.1 reserves the values; both kinds borrow today).
+- **Design ([15-DESIGN.md](15-DESIGN.md)).** The font bundling item moved into the
+    redesign programme's phase 2 above (Hanken Grotesk and Geist Mono, K-438 - the
+    household faces are no longer wanted); still here: the missing type-scale steps
+    in the theme struct, and identity colour tokens for Shape and Null layers
+    (§6.1 reserves the values; both kinds borrow today).
 - **Platform.** The macOS pass - native menu bar, VideoToolbox, ProRes
     (K-033); it also owes `application:openFile:` (a double-clicked
     `.lum` opening, K-252). The document `.icns` files now ship inside the

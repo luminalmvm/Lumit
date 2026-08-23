@@ -8134,3 +8134,56 @@ script in `astro.config.mjs` point a CSS clip at the input's value. With the scr
 switched off the figure is still an honest half-and-half split, because the
 starting position is written into the markup rather than applied afterwards.
 
+## 14. The redesign, in plain terms
+
+In August 2026 Lumit's look got a proper overhaul — not new features, but a stricter set
+of rules about how the existing ones are drawn. If you have used a well-finished editor
+and wondered why it feels calmer than a busy one showing the same information, the answer
+is usually discipline: fewer shades, fewer colours, fewer sizes, each with exactly one
+meaning. That is what changed here.
+
+**Three greys.** A panel that nobody is touching now uses at most three background shades:
+the dark canvas behind everything, the panel's own body, and a slightly lighter strip for
+its header. The two brighter shades still exist, but they are reserved for things that are
+happening — a row under the mouse, a menu floating open. Boxes you can type a value into
+go the other way: they are slightly *darker* than the panel, like a recess the number sits
+in, which is what quietly tells you "this is editable" without any colour at all.
+
+**Two colours, two meanings.** The pink-red accent used to mean five different things.
+Now it means three: the one filled button on a surface, the playhead, and the tick under
+the active tab. A second colour — a muted amber called "animated" — means exactly one
+thing: this is keyframed, or this is the handle you have selected. Keyframe diamonds, the
+lit stopwatch, the work-area band, the value field you are about to change — those are
+amber, and nothing else is allowed to be. If a third use of amber ever appears, it is a
+bug by definition. A value you can edit is plain text in its recess at rest, turns amber
+once it has keyframes, and turns accent only while you are actually dragging it.
+
+**Small capital labels.** Everything the *application* names — panel titles, section
+headers in the effect controls, column headers, tab labels, dialog titles — is now set in
+small, spaced-out capitals in the numbers font. Everything *you* name — layers, files,
+values — stays in ordinary sentence case. Once you notice it, you can tell at a glance
+which words are furniture and which words are your project. The fonts themselves changed
+too: Hanken Grotesk for ordinary text and Geist Mono for every number, both free to
+bundle, replacing the previous mix of four typefaces.
+
+**Words or icons.** A new setting lets chrome speak in words (the default), in icons
+(buttons and tabs become glyphs, panel titles stay text), or entirely in icons. Lumit is
+getting its own icon set for this — one glyph per word, all drawn to the same grid and
+stroke so they look like one family. Whatever the setting, hovering always shows the word,
+in one or two words, never a paragraph.
+
+**How it lands.** The overhaul runs in phases, in this order: first the windowing upgrade,
+so dialogs and pop-ups can become real windows of their own rather than overlays inside
+the main one; then the theme groundwork — the new colour tokens, the bundled fonts, the
+icon set; then the panels and windows one by one (effect controls, timeline, project,
+viewer, settings, the welcome screen, and the export window with its queue); then the
+node graph and its workspace; and finally the website, restyled to match. Doing the
+windowing first means any breakage it causes shows up on the old look, where it is easy
+to tell apart from the redesign's own changes.
+
+**The mockups are the reference.** Each panel was designed as a full-size picture first
+and approved by the owner before any code moves. When a question comes up about where
+something sits or how big it is, the answer is read off the approved mockup, not
+re-argued in code review. The written rules live in `docs/15-DESIGN.md`; the decisions
+and their reasons are logged as K-438 to K-446 in `docs/02-DECISIONS.md`.
+

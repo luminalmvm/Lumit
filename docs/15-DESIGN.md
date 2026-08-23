@@ -1,8 +1,8 @@
 # Lumit design language
 
-**Status: canonical.** This is Lumit's `docs/DESIGN.md` in the household sense: the app-specific
-design spec that stacks on top of the shared Aizome design language
-(`learningLanguageMachine/docs/HOUSEHOLD-DESIGN.md`). Panel inventory, docking behaviour, and
+**Status: canonical.** Lumit's design language began as the app-specific layer over the shared
+household Aizome system; since the 2026-08-23 redesign (K-438) it **stands on its own** — the
+household system is lineage, not a constraint. Panel inventory, docking behaviour, and
 interaction flows live in [07-UI-SPEC.md](07-UI-SPEC.md); this document owns colour, type,
 density, motion, and voice. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly.
 
@@ -12,61 +12,66 @@ RFC-2119 keywords (MUST, SHOULD, MAY) are used with their usual force.
 
 ## 1. Relationship to the household system
 
-Lumit inherits the Aizome design language wholesale, with two recorded deviations (§1.2) - even
-though it is a dense professional tool rather than a web app.
+Lumit's design descends from the Aizome design language, and the values that made it a good
+starting point are deliberately retained. But as of K-438 **Lumit's type and palette decisions
+stand on their own**: no household file is an upstream for Lumit's fonts or colours, and a
+change to the household system implies nothing here.
 
-### 1.1 Inherited unchanged
+### 1.1 Deliberately retained
 
 - **Semantic tokens only.** Every colour in the application comes from a named theme token.
-  The token layer is a struct (§4) rather than `theme.css`, but the rule is identical: a hex literal in widget code is a lint failure. The sole sanctioned
-  exception, per the household rule, is the application icon / favicon set.
-- **Type stack.** Schibsted Grotesk for display (wordmark, workspace titles, dialog headings);
-  Source Serif 4 for rare accent lines (about box, empty states); Inter for body and panel
-  copy; **JetBrains Mono for all numbers** — timecode, frame numbers, speed percentages,
-  property values, layer indices, labels, attribution. No exceptions to the mono-for-numbers
-  rule anywhere in the UI. *(Embedding status: only Inter is wired today; Schibsted Grotesk,
-  Source Serif 4 and JetBrains Mono are not yet bundled, and the 13/14/20 px type-scale steps
-  are not in the theme struct - [TODO.md](TODO.md).)*
+  The token layer is a struct (§4): a hex literal in widget code is a lint failure. The sole
+  sanctioned exception is the application icon / favicon set.
+- **Dark-first** (K-004's half that stands): dark is the native, first-built, first-polished
+  theme, because a neutral dark surround preserves colour judgement against the Viewer.
+- **Viewer-surround neutrality** (§2.1, §3.2): the surround of the Viewer image area is
+  strictly neutral grey, whatever else the theme does.
+- **Type discipline.** The faces changed (§7.1 — Hanken Grotesk and Geist Mono, K-438), but
+  the rule did not: **mono for all numbers** — timecode, frame numbers, speed percentages,
+  property values, layer indices, labels, attribution — with no exceptions anywhere in the UI.
 - **Radii**: 4px (dense elements — clips, keyframe flags, thumbnails), 8px (buttons, inputs,
   chips), 16px (floating cards, dialogs), full (pills, playhead grab handle). No other radii.
 - **Hairline elevation.** Panels and cards are flat fills separated by 1px hairline borders.
   Shadows are reserved for things that genuinely float: undocked panels being dragged, modal
   dialogs, drop-down menus, drag ghosts. No glassmorphism, no gradients-as-chrome.
-- **One accent.** `clay` (Aizome crimson) is the single saturated accent: primary buttons,
-  selection, the playhead, active states. Nothing else competes for that role.
+- **Accent discipline.** `accent` (clay) stays the one saturated accent in chrome, now with a
+  deliberately short job list (§3.1); the only other stateful colour is `animated` (§3.1),
+  whose job list is shorter still.
 - **No punishment UI.** Errors and warnings render in `fig` and `kraft`, never a red-alert.
   A dropped frame counter is information, not an alarm. Uncached timeline regions are neutral,
   not threatening (§6.3).
-- **Sentence case everywhere.** ALL-CAPS exists only as the household kicker pattern:
-  JetBrains Mono, 11px, +0.08em tracking, muted colour (e.g. `SOURCE TIME`, `WORK AREA`,
-  `EXPORT QUEUE`).
+- **Sentence case everywhere.** ALL-CAPS exists only as the kicker pattern (§7.1): Geist Mono,
+  9–11px, +0.08–0.12em tracking, muted colour (e.g. `SOURCE TIME`, `WORK AREA`,
+  `EXPORT QUEUE`) — and the redesign spends kickers on every container label (§7.1).
 - **Voice**: British English, calm, no exclamation marks, no emoji-as-excitement, one rationed
   running joke (§10).
 - **Motion philosophy**: the user controls tempo; nothing auto-advances; a complete
   reduced-motion path exists (§8).
 
-### 1.2 Recorded deviations
+### 1.2 Recorded deviations (historical)
 
-- **KD-1 · Dark-first (= decision K-004, DECIDED).** The household default is paper-light with
-  a `.dark` night-print variant. Lumit inverts this: dark is the native, first-built,
-  first-polished theme, because a neutral dark surround preserves colour judgement against the
-  Viewer — the industry-standard reasoning behind every grading suite. Light mode is a
-  documented later option (§11), not a launch requirement.
+These were recorded when the household system was still the upstream; both remain true, and
+KD-1's substance is now simply Lumit's own rule.
+
+- **KD-1 · Dark-first (= decision K-004, DECIDED).** The household default was paper-light;
+  Lumit inverted this from the start for the Viewer-neutrality reason above. Light mode is a
+  shipped token swap (§11), not a second design.
 - **KD-2 · Hit-target compensation (= decision K-116, DECIDED).** The household accessibility
   gate demands ≥44px touch targets. In a timeline where twenty layers must be visible at once,
   44px rows are impossible. Lumit's recorded compensation: dense-surface controls (timeline
   rows, keyframes, property lanes, graph editor handles) MUST be ≥24px in visual extent on their
   smaller axis **and** MUST carry ≥32px of interactive hit-slop; toolbar, transport, and dialog
-  controls keep the full household ≥44px. See §7.2.
+  controls keep the full ≥44px. See §7.2.
 
 ### 1.3 What does not apply
 
 Lumit is a native desktop application, so the household web skeleton (React/Vite/Tailwind,
-`sync-theme. sh`, FastAPI monorepo, mobile bottom tab bar, PWA icon rules) does not apply.
-The Aizome *values* still derive from the canonical `theme.css`; when that file is repainted,
-Lumit's theme struct SHOULD be re-derived in the same change wave. Person-identity colours
-(person 1 = `clay`, person 2 = `sky`) have no meaning in a single-user pro tool, but `sky`
-remains reserved fleet-wide and MUST NOT be repurposed as a second accent.
+`sync-theme.sh`, FastAPI monorepo, mobile bottom tab bar, PWA icon rules) never applied. Since
+K-438 the household `theme.css` is no longer an upstream either: Lumit's palette is re-derived
+from nothing, and a household repaint implies no change wave here. Person-identity colours have
+no meaning in a single-user pro tool; `sky` survives only as a curve colour (`curve[0]`), and
+nothing becomes a second accent — the second stateful colour that exists, `animated`, is not an
+accent and has a closed job list (§3.1).
 
 ## 2. The dark ramp
 
@@ -91,15 +96,21 @@ implementation, but the ordering, the near-neutrality, and the strict neutrality
 
 | Token | Value | Role |
 |---|---|---|
-| `surface_0` | `#0b0c0e` | The canvas: application background, timeline well, graph paper |
+| `surface_0` | `#0b0c0e` | The canvas: application background, timeline well, graph paper — and **input wells**, which are inset, never raised |
 | `surface_1` | `#131517` | Panel bodies — the default fill, and the active dock tab |
 | `surface_2` | `#1a1d20` | Faint surfaces: tab bars, bottom bars, panel headers, layer rows |
-| `surface_3` | `#212528` | Floating surfaces: menus, popovers, input wells; idle widget fills |
-| `surface_4` | `#2b3034` | Hover fills, raised chips, slider tracks, scrollbar thumbs |
+| `surface_3` | `#212528` | Hover and floating only: menus, popovers, hovered rows |
+| `surface_4` | `#2b3034` | Hover fills on `surface_3` ground, raised chips, scrollbar thumbs |
 | `viewer_surround` | `#121212` | The Viewer's pasteboard — **exactly neutral, R = G = B** |
 
 Rules:
 
+- **Three greys at rest (K-439).** A panel in its resting state shows at most three surface
+  values: `surface_0` (canvas), `surface_1` (body), `surface_2` (header strip). `surface_3`
+  and `surface_4` exist for hover states and floating chrome only — a panel nobody is
+  pointing at never paints them. **Input wells are inset on `surface_0`** — darker than the
+  panel they sit in, never a raised fill — so an editable value reads as a recess the number
+  sits in, and the resting panel stays three values however many fields it carries.
 - No surface is pure black; no text is pure white (household rule, kept).
 - **The surround of the Viewer image area MUST be `viewer_surround` — strictly neutral grey,
   never tinted.** This includes the pasteboard around the rendered frame, the transparency
@@ -135,7 +146,10 @@ ramp while keeping the same roles.
 
 Hairlines are the *only* default elevation between panels **under the Sharp shape**.
 Interactive widgets are **borderless** (K-084, the rerun grammar): idle, hovered and pressed
-are *fill* steps (`surface_3` → `surface_4` → `hairline_strong`), never stroke changes.
+are *fill* steps, never stroke changes. Under the three-greys rule (§2.1, K-439) the idle
+step is quiet — a widget at rest sits on its panel's own surface (or `surface_2` where a
+strip already earns it), and `surface_3` → `hairline_strong` are the hover → pressed steps;
+input wells are the §2.1 inset, not a raised fill.
 `shadow_float` (black @ 50%, offset 0/15, blur 50 — rerun's float shadow) is permitted solely
 on: modal dialogs, menus/popovers, panels while being drag-undocked, and drag ghosts (clips or
 assets in flight) — **under Sharp**. The Round shape (K-092, §7.3) is a deliberate exception:
@@ -149,8 +163,9 @@ implies "no shadow" once Round is picked.
 
 | Token | Value | Role in Lumit |
 |---|---|---|
-| `accent` (clay) | `#e05a72` | THE accent: primary buttons, selection, playhead, active tab, focused keyframes |
-| `accent_hover` (clay-deep) | `#ea7288` | Hover/active shift of the accent (lighter in dark, per household) |
+| `accent` (clay) | `#e05a72` | THE accent, with a deliberately short job list (K-439): **the single filled button per surface, the playhead, and the active tab tick**. The selection tokens (§6.5) derive from it. Everything else in chrome is grey |
+| `animated` | `#d8a24a` (placeholder, tunable) | "This is animated or in hand": **keyframe diamonds, stopwatch-on, selected keyframes, selected gizmo handles, the focused value field, and the work-area band** — a desaturated warm amber, quieter than `accent`. That list is closed: **if a third kind of use appears, it is wrong** |
+| `accent_hover` (clay-deep) | `#ea7288` | Hover/active shift of the accent (lighter in dark) |
 | `success` (olive) | `#5fcfae` | Success, completed exports, cache-bar family root (§6.3) |
 | `warning` (kraft) | `#dd9a82` | Warnings, overrun hatching, missing-footage placeholders, "close" feedback |
 | `error` (fig) | `#d1729c` | Errors — decode failures, export failures, invalid expressions. Never a harsh red |
@@ -162,6 +177,14 @@ The household identities — indigo (aizome), crimson (clay), mint — MAY appea
 the wordmark and about box (crimson accent syllable), chart/curve strokes (`viz_*`), and the
 muted layer-type family (§6.1). They MUST NOT appear as large fields of saturated colour in
 panel chrome.
+
+**Editable values (K-439).** An editable value is **mono text in an inset well** (§2.1) at
+rest — the well is what says "editable", not a colour. The text turns `animated` when the
+property is keyframed, and `accent` while the value is actually being dragged. This resolves
+the old open question on editable-value colour: colour alone (the After Effects way) would
+break the Viewer neutrality zone, and the well does the job on every surface. The focused
+value field draws its focus in `animated` rather than the general focus ring — it is the one
+focus that means "you are about to change a value".
 
 ### 3.2 The Viewer neutrality zone
 
@@ -211,6 +234,7 @@ pub struct Theme {
     // roles (§3.1)
     pub accent: Color32,
     pub accent_hover: Color32,
+    pub animated: Color32,          // keyframe state and selected handles only (K-439)
     pub success: Color32,
     pub warning: Color32,
     pub error: Color32,
@@ -276,10 +300,12 @@ Binding rules:
 - The toolkit's own default styling is populated *from* `Theme` in one place, so stock
   widgets agree with custom ones.
 
-### 4.2 Household → Rust mapping
+### 4.2 Household → Rust mapping (lineage, no longer binding)
 
-Token *names* are frozen fleet-wide as CSS custom properties; in Rust they map 1:1 to
-identifiers. This table is the contract:
+This table recorded where each token name came from while the household system was the
+upstream. Since K-438 it is kept as history — the names still hold, but no household file
+constrains their values, and new tokens (`animated`, everything in §6) need no household
+counterpart:
 
 | Household token | Rust identifier | Notes |
 |---|---|---|
@@ -303,29 +329,49 @@ identifiers. This table is the contract:
 | `viz-1..4` | `curve[0..3]` | graph editor + scopes chrome accents |
 | `shadow-float` | `shadow_float` | floating chrome only |
 
-New Lumit-only tokens (everything in §6) follow the household "Kakeibo rule": they live in
-Lumit's theme alone and are promoted to the shared palette only if a second app ever wants
-them.
+New Lumit-only tokens (everything in §6, and `animated`) live in Lumit's theme alone; there
+is no shared palette to promote them to any more.
 
 ## 5. Iconography
 
-The **Iconoir** set (MIT), embedded via the `iconoir_flutter` package (K-085 picked the set,
-reversing this section's earlier hand-drawn-only rule; the icon-font `iconflow` crate went
-with the egui shell in K-182): one consistent, professionally drawn
-family, every icon taking the theme colour exactly like text —
-`text_secondary` at rest, `text_primary` on hover, `accent` when active — at 16px for panel
-toolbars, 20px for the transport. **16 is a floor, not a preference** (K-209): an Iconoir
-glyph carries a 1.5-unit stroke on a 24-unit grid, so 16px is the size at which that stroke
-comes to exactly one pixel at 100% display scaling. Below it the stroke is narrower than a
-pixel and gets spread across two at partial strength, which is what "crunchy icons" are —
-anti-aliasing is not the missing cure, it is the mechanism. Icons are also offset half a
-pixel when their stroke is an odd number of device pixels wide, so it lands on a pixel
-centre rather than straddling a boundary. Layer-type glyphs in the Timeline are tinted with the
-layer-type family (§6.1). Rules that stand: monochrome only, no filled multi-colour icons,
-and **no emoji or bare symbol characters in UI ever** — a glyph is either from the icon set
-or deliberately painter-drawn (keyframe diamonds on tracks); never a Unicode character we
-hope the user's fonts happen to carry. Every icon name used must resolve in the embedded
-pack (CI-tested).
+**Lumit draws its own icon set** (K-440, superseding K-085's Iconoir pick — Iconoir stays in
+place until the redesign's own glyphs land). The set's grammar is fixed:
+
+- **16px grid, 1.5px stroke, round caps, one weight.** Every glyph is drawn on the same
+  16-unit grid with the same stroke; there are no filled and outlined variants of one idea,
+  and no second weight.
+- **Monochrome via `currentColor`**: a glyph takes the text colour of wherever it sits —
+  `text_secondary` at rest, `text_primary` on hover, `accent` when active — exactly like a
+  word would. **The one glyph with real colour of its own is the Viewer's Channels
+  indicator**, whose circles fill per viewed channel (all three plus a white centre for RGB;
+  a single circle for R, G or B). Nothing else in the set carries colour.
+- **One icon per chrome word.** The set covers the tools, layer switches, transport,
+  timeline and graph controls, keyframes, effects, the Viewer bar, the Project panel, the
+  graph panel and the application chrome — so the Icons setting (§5.1) has a glyph for
+  every word it replaces.
+- **A bypassed effect draws as a dashed outline**, not a dimmed row — state shown by the
+  glyph's own border, so the label stays readable.
+- Layer-type glyphs in the Timeline are tinted with the layer-type family (§6.1).
+- Pixel honesty carries over from K-209: a 1.5px stroke is offset so it lands on pixel
+  centres rather than straddling boundaries at 100% scaling, and 16px is a floor, not a
+  preference.
+- Rules that stand from the beginning: monochrome only (bar the Channels indicator above),
+  no filled multi-colour icons, and **no emoji or bare symbol characters in UI ever** — a
+  glyph is either from the icon set or deliberately painter-drawn (keyframe diamonds on
+  lanes); never a Unicode character we hope the user's fonts happen to carry. Every icon
+  name used must resolve in the embedded set (CI-tested).
+
+### 5.1 Chrome labels: Words / Icons / Icons everywhere (K-440)
+
+A three-way setting decides whether chrome speaks in words or glyphs:
+
+- **Words** (the default): buttons, tabs and toggles carry their text labels.
+- **Icons**: buttons, tabs and toggles become glyphs; **panel titles stay text**.
+- **Icons everywhere**: panel titles become glyphs too.
+
+**Tooltips always carry the word**, whichever mode is set — the glyph never strands its
+meaning. And a tooltip is **one or two words, never more** (§10); content the user typed
+(layer names, values, file names) is never iconified in any mode.
 
 ## 6. Editor-specific semantic tokens
 
@@ -338,7 +384,7 @@ family, brightness orderings, redundant non-colour encodings) are binding.
 Every layer type has an identity colour used as: a 3px tab on the left edge of the layer's
 bar in the Timeline (owner amendment: the tab rides the bar, not the outline row — the
 outline stays glyph-free), a ~12% tonal tint over the bar's fill, and the tint of its type
-glyph where one appears. Labels on the bars are always JetBrains Mono 11px. The family MUST
+glyph where one appears. Labels on the bars are always Geist Mono 11px. The family MUST
 read as *muted siblings* — desaturated, mid-lightness, clearly quieter than `accent` — so a
 full Timeline looks organised, not carnival. Selection (accent) must visibly beat every one
 of them.
@@ -383,11 +429,11 @@ Sequence layer show thumbnails/waveforms.
 - The value graph and the speed graph of a Retime use the same stroke colour — they are views
   of the same data and must look like it.
 - Keyframe markers at rest: `text_secondary` fills with `surface_1` outline. Selected:
-  `accent` fill. Hovered: `accent` @ 40% halo. Interpolation is encoded by *shape* (diamond
-  linear, square hold, circle bezier), never by colour alone.
-- Bezier handles: `text_muted` stems, `accent` when grabbed.
+  `animated` fill (K-439). Hovered: `animated` @ 40% halo. Interpolation is encoded by
+  *shape* (diamond linear, square hold, circle bezier), never by colour alone.
+- Bezier handles: `text_muted` stems, `animated` when selected, `accent` while grabbed.
 - Graph paper: `surface_0` ground, `hairline` minor gridlines, `hairline_strong` at zero/100%
-  lines. Axis numbers: JetBrains Mono 11px `text_muted`.
+  lines. Axis numbers: Geist Mono 11px `text_muted`.
 
 ### 6.3 Cache bar
 
@@ -412,9 +458,15 @@ upload from the screen. Which of the two holds it is the status line's cache met
 where each tier has its own bar. The fuller design — tiers differing in *both* brightness and
 fill height, so the bar reads without colour vision — lands with a dedicated tonal ramp; until
 then the mint/blue hue split plus the dimming carries the distinction.
-Per the household no-punishment rule, **uncached is neutral, never alarming** — no amber, no
+Per the no-punishment rule, **uncached is neutral, never alarming** — no amber, no
 red, no pulsing. An uncached timeline is the normal starting state of every project, not a
 failure.
+
+Under the redesign (K-441) the bar's hue carries the **resolution tier** — full resolution
+in the `success` family, half and quarter in progressively cooler/warmer steps of their own —
+so a glance says not just "cached" but "cached at what size", and the Viewer's quality
+control wears the same colours. The storage split above (memory vs disk) folds into the
+status line's cache meter, where each tier already has its own bar.
 
 ### 6.4 Overrun, markers, waveforms
 
@@ -474,24 +526,33 @@ failure.
 
 ### 7.1 Scale
 
-Lumit is a pro tool; the household 16px body default gives way to a 10–13px UI scale
-(tightened from 11–13px by K-317, after the owner found the interface a step large and
-soft beside the editors it sits among):
+**Two faces, both SIL OFL, both bundled (K-438): Hanken Grotesk** for UI text and
+**Geist Mono** for every number, timecode and container label. There is no third face in
+chrome — no display face, no serif accent. This supersedes the household stack (Schibsted
+Grotesk / Source Serif 4 / Inter / JetBrains Mono) outright.
+
+Lumit is a pro tool; the scale is tight (K-317's 10–13px band stands) and **nothing in
+chrome sits above 13px except dialog body emphasis**:
 
 | Size | Face | Use |
 |---|---|---|
-| 9px | Inter | Field captions only — the note under a control saying what format it takes. Never for anything the user has to act on |
-| 10px | Inter | Secondary notes and hints (`small`) |
-| 11px | JetBrains Mono, +0.08em, caps | Kickers, layer bar labels, axis numbers, attribution |
-| 11px | Inter | Panel body copy, property names, menus, buttons |
-| 13px | JetBrains Mono | Property values, timecode fields, frame numbers, speed percentages |
-| 14px | Inter Medium | Dialog body emphasis, panel tab labels |
-| 16px | Schibsted Grotesk | Dialog titles, workspace names |
-| 20px | JetBrains Mono | The transport's main timecode readout |
-| 24px+ | Schibsted Grotesk / Source Serif 4 | About box, onboarding, empty states only |
+| 9–11px | Geist Mono, caps, +0.08–0.12em, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution |
+| 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on |
+| 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
+| 11px | Geist Mono | Layer bar labels, axis numbers, units |
+| 13px | Geist Mono | Property values, timecode fields, frame numbers, speed percentages |
+| 13–14px | Hanken Grotesk Medium | Dialog body emphasis — the one thing in chrome above 13px |
+| 24px+ | Hanken Grotesk | About box, onboarding, empty states only — outside chrome |
+
+**Containers are kickers; content is sentence case.** Everything the *application* names —
+panel titles, properties section headers, column headers, tab labels, dialog titles — is a
+kicker: 9–11px Geist Mono caps, +0.08–0.12em tracking, muted. Everything the *user* names or
+edits — layer names, values, file names — is sentence-case Hanken Grotesk or mono per the
+rule below. **Units are plain mono, never caps** — `px`, `%`, `s` sit beside their value in
+Geist Mono lowercase, not in the kicker style.
 
 **The mono-for-numbers rule is absolute**: timecode, frame numbers, speed percentages,
-parameter values, durations, and counts are ALWAYS JetBrains Mono with tabular figures
+parameter values, durations, and counts are ALWAYS Geist Mono with tabular figures
 (`tnum`), so scrubbing a value never causes horizontal jitter. Editable numeric fields keep
 mono while focused.
 
@@ -573,9 +634,11 @@ section's 4/8/12/16px scale) does not vary by shape; only radius, gap, inset and
 - British English, sentence case, calm, no exclamation marks, no emoji. UI strings go through
   the i18n table (K-005) — `flutter_ui/lib/l10n/app_en.arb`, translated on Crowdin (K-303).
   British English is the source and stays the source; there is no en-US.
-- **A tooltip is a name, not a lesson**: under five words, two where two will do
-  ([07-UI-SPEC.md](07-UI-SPEC.md) §13.2, K-303). Explanation belongs in the settings row's
-  own sentence, in an empty state, or nowhere.
+- **A tooltip is a name, not a lesson**: **one or two words, never more** (K-440,
+  tightening [07-UI-SPEC.md](07-UI-SPEC.md) §13.2's "under five"). Under the Icons chrome
+  setting (§5.1) the tooltip is where the word lives, which is exactly why it must stay a
+  word. Explanation belongs in the settings row's own sentence, in an empty state, or
+  nowhere.
 - The app is **"Lumit"** — never abbreviated in UI. Features use glossary names exactly:
   Retime (not time remap), speed (not velocity), clip (not event), layer (not track), export
   (not render), playhead (not CTI). [01-GLOSSARY.md](01-GLOSSARY.md) §9 is binding for copy.
@@ -647,6 +710,10 @@ each palette rather than reusing `accent`, `success`, `warning` or `error` again
 
 ## 12. The Round shape (K-092)
 
+**Sharp is the redesign's reference shape** (K-441): the 2026-08-23 redesign is designed,
+mocked up and landed under Sharp, and Round is revisited against the finished Sharp shell
+afterwards rather than co-designed with it.
+
 The Figma-UI3-inspired alternative to this document's default Sharp system: panels float as
 rounded, softly-shadowed cards with a real gap between them and from the window edge, rather
 than butting edge-to-edge behind a hairline (§7.3, §2.3). Explicitly not glassmorphism or
@@ -697,10 +764,94 @@ and shape-conditional widget geometry; colours, strings and Sharp are untouched.
   reference's quiet live-mark. Decorative, never a status light; it does not blink,
   fill or change colour.
 
-Rejected cues, with the reasons (K-394): uppercase panel titles (voice is sentence case,
-K-005) and the reference's light shell around dark cards (the dark-first surround rules
-of §2 and the neutral Viewer pasteboard, K-203, are binding — an inverted shell is a
-different theme, not a shape).
+Rejected cues, with the reasons (K-394): uppercase panel titles *as display text* (since
+K-438 panel titles are mono-caps kickers, §7.1 — a typographic pattern, not the reference's
+shouted sans headers) and the reference's light shell around dark cards (the dark-first
+surround rules of §2 and the neutral Viewer pasteboard, K-203, are binding — an inverted
+shell is a different theme, not a shape).
+
+## 12A. The redesigned resting state: timeline, graph, properties, dialogs
+
+The 2026-08-23 redesign (K-441–K-444) fixed the resting layout of the main surfaces. A set of
+approved mockups governs the exact panel layouts; the rules below are the ones binding enough
+to write down. **Sharp is the redesign's reference shape**: every rule here is designed and
+judged under Sharp first, and Round (§12) is revisited once the Sharp redesign has landed.
+
+### 12A.1 Timeline (K-441)
+
+- **Modes are Layers and Graph** — there is no Keys mode. Layers mode carries an **Animated
+  filter** (`U`): on, the outline shows only keyframed properties across all layers; All
+  restores the full twirl-down lists. Block selection, end-handle stretch and the Ease
+  popover are Layers behaviours, not a mode of their own.
+- **Composition tabs run the full width of the panel header.** The row above the outline
+  puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
+  far right.
+- **The ruler is double height**: times and the playhead head in the upper half; markers and
+  the work area in the lower. A marker is an upward triangle sitting on the cache bar, half
+  inside its backdrop pill and half outside to its left; the pill starts at the triangle's
+  point. Minor ticks subdivide as zoom grows until one tick is one frame.
+- **The cache bar sits beneath the ruler, coloured by resolution tier** (§6.3).
+- **A few pixels of padding sit either side of the ruler** in every timeline mode, so a
+  keyframe or work-area handle on the first or last frame stays visible and grabbable.
+- **The work area is one band** in `animated`, from the ruler's handles down through the
+  lanes, drawn behind the cache bar.
+- **Trimmed layers keep a faint outline of the full source extent**, showing how far each
+  end can still be extended; clips inside a Sequence layer get the same per clip.
+- **Layer bars (and the clips inside a Sequence layer) fill desaturated with a solid
+  leading edge**, so a lane full of layers reads organised rather than carnival, and each
+  bar's start still lands with a snap.
+- **Keyframe diamonds on layer rows draw at half the row scale.**
+
+### 12A.2 Graph mode (K-442)
+
+- Graph mode keeps the **same double-height ruler, work area, cache bar and playhead** as
+  Layers mode, so the two modes scroll the same range and nothing jumps on switch.
+- The outline is the **filtered animated list** (Animated, the default, or All — there is no
+  Selected), each row carrying a **tick in its curve's colour**. A setting restores an
+  outline identical to Layers mode for those who want one shape everywhere.
+- **Curves run flat to both edges of the visible area**; value labels live in a **fixed
+  right-hand gutter**, never on the curve.
+- The **thin horizontal scrollbar and the Value / Speed tool strip** (tangent mode, ease
+  presets, Fit, zoom) run along the bottom of the **graph side only** — neither ever appears
+  in the outline.
+- Bezier, linear and hold segments are drawn distinctly (§6.2's shape rule, extended to the
+  stroke).
+
+### 12A.3 Properties and effect controls (K-443)
+
+- **Fixed column edges.** Every row lays out on the same x positions: the stopwatch first;
+  then a **reserved keyframe-navigation slot that stays empty until the property is
+  animated** (so the label never moves when animation begins); then the label; then the
+  control column at a fixed x. Rows that cannot be keyed simply omit the stopwatch — a
+  ragged stopwatch column, a dead-straight label edge.
+- The stopwatch is **square under Sharp**.
+- **Vector pairs are two equal wells with a link glyph between them**; unlinking splits them
+  into two rows.
+- **Units are plain mono, never caps** (§7.1).
+- **Position-type parameters get a crosshair point picker** — pick the point on the Viewer —
+  exactly as colour parameters have an eyedropper.
+- The per-effect **Mix row** carries blend mode and matte channel; the **Matte row** carries
+  an invert.
+
+### 12A.4 Dialogs (K-444)
+
+Every popup is — once the multi-window foundation lands — a **real OS window**, not an
+in-window overlay, and they all share one pattern:
+
+- a kicker title strip;
+- an optional page-tab row under it (Export: General / Encoder / Colour / Metadata);
+- label-left / control-right rows, labels in a fixed 110px column;
+- hairline-separated, kicker-titled groups;
+- a footer strip carrying a summary line (mono, factual: `600 frames · 10.0 s · 1920×1080 ·
+  60 fps`) and **the single filled action**.
+
+### 12A.5 Feedback is transient and local (K-439)
+
+Feedback appears under the cursor, lasts as long as the gesture, and leaves no trace: the
+drag-scrub modifier ladder shows only while dragging; drop-target highlights appear only
+over the target; things attached to what is being dragged move with the drag. **Nothing
+changes the resting state** — a panel nobody is touching looks exactly as §2.1's three-greys
+rule says it does.
 
 ## 13. New-panel checklist
 
@@ -708,13 +859,16 @@ The Lumit equivalent of the household §9 checklist. Every new panel or feature 
 
 1. All colours from `&Theme`; zero hex literals (CI enforces); any genuinely new semantic gets
    a named token in the theme module first.
-2. All numbers in JetBrains Mono tabular figures; kickers 11px mono caps; body 12px Inter.
+2. All numbers in Geist Mono tabular figures; every container label a 9–11px mono-caps
+   kicker; body 11px Hanken Grotesk; nothing in chrome above 13px except dialog body
+   emphasis (§7.1); at rest, at most three surface values (§2.1).
 3. Terminology audited against [01-GLOSSARY.md](01-GLOSSARY.md); no banned terms in strings,
    identifiers, or docs.
 4. Flat `surface_1` panel, `hairline` separation, radii from {4, 8, 16, full}; shadow only if
    the thing genuinely floats.
-5. `accent` is the only saturated state colour; success/warn/error via
-   `success`/`warning`/`error`; nothing within 48px of the Viewer image breaks neutrality.
+5. `accent` and `animated` are the only saturated state colours, each on its closed job
+   list (§3.1); success/warn/error via `success`/`warning`/`error`; nothing within 48px of
+   the Viewer image breaks neutrality.
 6. Hit targets: ≥44px chrome controls, ≥24px visual + ≥32px slop dense controls (KD-2).
 7. Keyboard path for every interaction, AccessKit roles/names, visible focus ring, contrast
    floors met (§9); any colour encoding paired with a non-colour one.
@@ -750,8 +904,10 @@ The SVG sources carry the mark's own palette and are the only permitted hex valu
 outside the theme module: keys `#86e2ff→#2f6fe0` (blue) and `#8a70ff→#ff4f9e`
 (violet-magenta), core white/`#eaf4ff`, rim `#0c0e14`, tile `#16181d→#0d0f13`, bloom
 `#b7c6e2`, document chassis `#181b21→#101217`, fold `#272b34`, kicker `#aab6c6`. The
-wordmark is the word "Lumit" set in Schibsted Grotesk beside or beneath the mark; no
-custom lettering.
+wordmark is the word "Lumit" set beside or beneath the mark; no custom lettering. It was
+drawn in Schibsted Grotesk and rides outlined in the SVG assets — the face is a brand
+artefact, not part of the UI bundle (§7.1); whether the wordmark is redrawn in Hanken
+Grotesk is a brand decision taken when the mark is next touched.
 
 **The macOS layers carry no lighting of their own** (K-309). The layer SVGs inside
 `lumit-icon.icon` are the flat icon's own geometry with three things deliberately
@@ -776,7 +932,7 @@ slot without changing the splash's structure.
 shown while the application boots:
 
 - Contents: the mark (≈96 px), the wordmark, version in 10 px mono, and the **boot log** —
-  a JetBrains Mono list that shows each module and effect as it initialises ("Workspace:
+  a Geist Mono list that shows each module and effect as it initialises ("Workspace:
   restored", "GPU: <adapter> via <backend>", "Effects: 24 built-in", "OFX: scanning
   <vendor>…"). This is real plumbing, not theatre: modules and the effect/OFX registries
   append to the boot log as they come up, so slow items (plugin scans, font loads) are

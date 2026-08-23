@@ -11918,3 +11918,168 @@ from the floor given both rows rises through both" and "with no height given, th
 inside its own box" (`waveform_test.dart` — the last is what keeps a Sequence clip's wave
 inside its clip box, which has no empty row to borrow), and "the waveform lane is drawn across
 both rows" (`timeline_panel_frb_test.dart`).
+
+## K-438 — Lumit's type and palette stand on their own: Hanken Grotesk and Geist Mono
+
+**DECIDED 2026-08-23.** Two decisions taken together, because the second is what makes the
+first possible.
+
+**Lumit's design language is decoupled from the household Aizome system.** K-004 bound Lumit
+to a dark-first adaptation of the household design; the dark-first half of that decision
+stands — it was made for the Viewer's sake, not the household's — and so do the values worth
+keeping on their own merits (token-only colour, hairline elevation, no punishment UI,
+sentence case, the voice rules, viewer-surround neutrality). What ends is the upstream: no
+household file constrains Lumit's fonts or colours any more, household repaints imply no
+change wave here, and 15-DESIGN §4.2's mapping table becomes lineage rather than contract.
+This partially supersedes **K-004** (the household binding; dark-first survives) and retires
+the household type stack recorded in 15-DESIGN §1.1.
+
+**The type is Hanken Grotesk for UI text and Geist Mono for every number, timecode and
+container label.** Both are SIL OFL and both are bundled. There is no third face in chrome —
+no display face, no serif accent line. The mono-for-numbers rule is unchanged in substance
+and changes only its face: JetBrains Mono's jobs pass to Geist Mono wholesale. Kickers —
+9–11px mono caps, +0.08–0.12em tracking, muted — become the style of **every container
+label**: panel titles, properties section headers, column headers, tab labels, dialog
+titles. Nothing in chrome sits above 13px except dialog body emphasis. 15-DESIGN §7.1
+carries the new scale.
+
+Rationale: the redesign study found that what makes the reference tools look disciplined is
+not a different palette but fewer, harder rules — and a four-face stack with a serif in it
+was the wrong shape for a dense dark tool. Hanken Grotesk was picked from a visual
+comparison board; it has no mono of its own, and Geist Mono pairs with it.
+
+## K-439 — Three greys at rest, and the accent's jobs split with a second colour: `animated`
+
+**DECIDED 2026-08-23.** Three rules, one discipline.
+
+**Three greys at rest.** A panel in its resting state shows at most three surface values:
+`surface_0` (canvas), `surface_1` (body), `surface_2` (header strip). `surface_3` and
+`surface_4` are hover and floating only. **Input wells are inset on `surface_0`** — darker
+than the panel, never a raised fill. The five-level ramp of K-084 keeps all five values;
+what changes is how many a resting panel is allowed to spend.
+
+**The accent's five jobs become two short lists.** `accent` (clay) keeps **the single
+filled button per surface, the playhead, and the active tab tick** (the selection tokens
+keep deriving from it). A new token **`animated`** — a desaturated warm amber, placeholder
+value `#d8a24a`, tunable — takes "this is animated or in hand": **keyframe diamonds,
+stopwatch-on, selected keyframes, selected gizmo handles, the focused value field, and the
+work-area band**. That list is closed by construction: **if a third kind of use appears, it
+is wrong.**
+
+**Editable values** are mono text in an inset well at rest, `animated` when keyframed,
+`accent` while being dragged — the well says "editable", the colour says "keyed", the
+accent says "in your hand right now". This resolves the long-standing editable-value-colour
+question: colour alone (the After Effects way) would break the Viewer neutrality zone; the
+well works everywhere.
+
+Feedback follows the same discipline: transient and local — the drag-scrub modifier ladder
+shows only while dragging, drop highlights only over the target, attached things move
+during the drag — and **nothing changes the resting state**. 15-DESIGN §2.1, §3.1 and §12A
+carry the rules.
+
+## K-440 — Chrome speaks Words by default, Icons by setting, and the icon set is Lumit's own
+
+**DECIDED 2026-08-23.** Supersedes **K-085** (Iconoir): Lumit draws its own icon set, one
+glyph per chrome word, on a fixed grammar — **16px grid, 1.5px stroke, round caps, one
+weight, monochrome via `currentColor`**. The one glyph with real colour is the Viewer's
+Channels indicator, whose circles fill per viewed channel (all three plus a white centre
+for RGB; a single circle for R, G or B). A bypassed effect draws as a **dashed outline**
+rather than a dimmed row. Iconoir remains in place until the set lands; K-085's standing
+rules (monochrome, the emoji ban, CI resolving every icon name) carry over unchanged.
+
+**A three-way Chrome labels setting** decides what chrome speaks: **Words** (default);
+**Icons** (buttons, tabs and toggles become glyphs, panel titles stay text); **Icons
+everywhere** (panel titles too). **Tooltips always carry the word**, in every mode — and a
+tooltip is now **one or two words, never more**, tightening docs/07 §13.2's "under five".
+Content the user typed is never iconified. 15-DESIGN §5 and §5.1 carry the grammar.
+
+## K-441 — The Timeline's resting shape: Layers and Graph, the Animated filter, the double-height ruler
+
+**DECIDED 2026-08-23.** The redesign's timeline rules, and the record that **Sharp is the
+redesign's reference shape** — everything is designed and judged under Sharp first, and
+Round (K-092) is revisited against the finished shell afterwards.
+
+- **Modes are Layers and Graph. There is no Keys mode.** A dope-sheet mode was designed and
+  then withdrawn: Layers mode already carries the twirl-down editing, so Keys collapsed
+  into an **Animated filter** (`U`) on Layers — show only keyframed properties across all
+  layers; All restores the full lists. Block selection, end-handle stretch and the Ease
+  popover are Layers behaviours.
+- **Composition tabs run the full panel header.** The row above the outline carries the
+  timecode and frame count at its far left and the mode tabs at its far right.
+- **The ruler is double height**: times and the playhead head above; markers and the work
+  area below; the **cache bar beneath, coloured by resolution tier** (which also reframes
+  K-214's bar: the storage split folds into the status line's cache meter). A marker is the
+  upward triangle sitting on the cache bar, half inside its backdrop pill and half outside
+  to its left; minor ticks subdivide with zoom until one tick is one frame.
+- **A few pixels of padding either side of the ruler** in every mode, so a first- or
+  last-frame handle stays visible and draggable.
+- **The work area is one band** in `animated`, from the ruler handles down through the
+  lanes, drawn behind the cache bar.
+- **Trimmed layers keep a faint outline of the full source extent** (carried over from
+  today's behaviour); Sequence clips get the same per clip. **Layer bars, and the clips
+  inside a Sequence layer, fill desaturated with a solid leading edge.** **Keyframe
+  diamonds on layer rows draw at half row scale.**
+
+15-DESIGN §12A.1 is the spec; the approved mockups govern the exact layout.
+
+## K-442 — Graph mode is the filtered animated list beside curves that run edge to edge
+
+**DECIDED 2026-08-23.** Graph mode keeps the same double-height ruler, work area, cache bar
+and playhead as Layers mode, so both modes scroll the same range. Its outline is the
+filtered animated list — Animated (default) or All, no Selected — with a **tick in each
+curve's colour** per row; a setting restores an outline identical to Layers mode. **Curves
+run flat to both edges of the visible area; value labels live in a fixed right-hand
+gutter.** The thin horizontal scrollbar and the Value / Speed tool strip (tangent mode,
+ease presets, Fit, zoom) exist only along the bottom of the graph side, never in the
+outline. Bezier, linear and hold are drawn distinctly. 15-DESIGN §12A.2 carries it.
+
+## K-443 — Properties rows lay out on fixed column edges, behind a square stopwatch
+
+**DECIDED 2026-08-23.** Every properties and effect-controls row shares the same x
+positions: **stopwatch** (square under Sharp), then a **reserved keyframe-navigation slot
+that stays empty until the property is animated** — so the label never moves when animation
+begins — then the label, then the control column at a fixed x. Rows that cannot be keyed
+omit the stopwatch: a ragged stopwatch column and a dead-straight label edge. **Vector
+pairs are two equal wells with a link glyph between them**; unlinking splits them into two
+rows. **Units are plain mono, never caps.** **Position-type parameters get a crosshair
+point picker** (pick the point on the Viewer) exactly as colour parameters have an
+eyedropper. The per-effect **Mix row gains blend mode and matte channel**, and the **Matte
+row carries an invert**. 15-DESIGN §12A.3 carries it.
+
+## K-444 — Every dialog is one pattern, and (post multi-window) a real OS window
+
+**DECIDED 2026-08-23.** Two halves:
+
+**The pattern.** Every dialog shares one shape: a kicker title strip; an optional page-tab
+row (Export: General / Encoder / Colour / Metadata); label-left / control-right rows with
+labels in a fixed 110px column; hairline-separated, kicker-titled groups; and a footer
+strip carrying a factual mono summary line and **the single filled action**. 15-DESIGN
+§12A.4 carries it.
+
+**The ordering.** The Flutter multi-window upgrade lands **first, as its own phase**,
+before the redesigned shell — so dialogs are rebuilt once, as real OS windows on the new
+foundation, and upgrade regressions stay separable from redesign regressions. Until that
+phase lands the pattern applies inside the window; after it, a popup is a window.
+
+## K-445 — The node graph is a second view of the effect stack that can also wire effects together
+
+**DECIDED 2026-08-23.** Lumit gets a node graph — as **both** a second view of a layer's
+effect stack **and** a way to wire effects into each other, not as a replacement document
+model. The linear stack stays the default and serialises as today; graph extras (extra
+wires, helper nodes) are additive. **Whether the wiring ultimately needs a new document
+model is deliberately open** — the graph design step decides, and a lot of work is expected
+to make graph mode good; it is budgeted as its own redesign phase, after the panels. The
+surface: a Graph panel following the selected layer, and a **Nodes workspace** that makes
+the graph the main surface with a small viewer alongside and a short timeline beneath.
+Auto-wire (connect a new node as it lands) and Heal (reconnect neighbours on delete) are
+toggles. Wire and socket colour is the data type, from `viz_*`-family tokens under the
+no-hex rule — colour as the legend.
+
+## K-446 — Particulate, renamed from Particle, emits a points stream
+
+**DECIDED 2026-08-23.** The particle system is named **Particulate** and stays a separate
+effect — but its output is a **points stream**, a first-class data type rather than pixels
+straight to the composite. The same type is what a later grid / scatter / clone-to-points /
+connect-points family will share, so Particulate is the first consumer of a points pipeline
+rather than a dead end: separate effect, shared type. Nothing about its feature set is
+decided here beyond the output's shape.
