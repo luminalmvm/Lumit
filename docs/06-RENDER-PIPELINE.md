@@ -460,7 +460,15 @@ on the card and in memory, and it is offered again later.
 outlives the session. The rungs between them are built both ways: a frame evicted from VRAM
 is read back off the card and lands in RAM and on disk, and a frame held below is uploaded
 straight back into a texture rather than composited again. What the tiers hold is
-**final comp frames only** — node-output caching is the evaluator's, and is not built.
+**final comp frames only**, plus one further store that is not a tier of the ladder: the
+**per-effect intermediate cache** (K-421). It lives in the realiser, VRAM only, and holds
+every effect's output under a content name (§5.2). It never demotes and nothing is promoted
+into it; its purpose is the seconds between two edits of one stack, so that editing the last
+effect of a layer re-runs that effect and no other. It is bounded (256 MB by default, a
+setter beside the frame budget), empties with Clear cache, and is written only by committed,
+non-playback renders — a drag and a playback run read it and leave it alone. The general
+node-output cache the K-178 evaluator will own is still not built; this is the effect-stack
+slice of it, ahead of the evaluator, built where the stacks actually run.
 
 **"Ahead of the playhead" applies to BOTH lower rungs, and neither used to.** The ring renders
 ahead of the clock, so a frame is composited before it is shown — but the trip *up* the ladder
@@ -570,6 +578,21 @@ thus the width in the name is the width the pixels were decoded at.
 
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
 nowhere, so an entry can never be a promise the renderer did not keep.
+
+**The per-effect names (K-421).** An intermediate is named exactly as the formula above says
+a node is, with the chain made explicit: `key_k = H(input, raster, bake generation,
+op_0 … op_k)`, where each op contributes its effect name and algorithm version, every
+resolved parameter value (post-expression, post-rescale — the numbers the kernel is handed),
+and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
+content hash, a mask path by its vertices. The input is the layer's source *by identity*,
+not by its bytes — the decode job's fields for footage, the colour and size for a solid —
+plus the masks and paint baked into it and the raster size. In v1 only pictures made from
+bytes have a name: a nested comp, a text or shape layer and an adjustment layer's composite
+run their stacks uncached. And an op that binds a picture nobody named — another layer's
+texture as a plate or a matte, the neighbour frames, the flow field — **breaks the chain**:
+it and everything after it have no name, because a name that omitted an input would be a
+wrong picture filed under a true-looking label. `ThisLayer` and an unset reference are
+functions of the chain itself and do not break it.
 
 **A render probes what its composition can show, and nothing else** — the footage its layers
 name, the footage its Sequence layers' clips name, and the same again through every composition

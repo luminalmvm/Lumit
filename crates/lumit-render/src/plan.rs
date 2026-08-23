@@ -435,6 +435,41 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
         })
 }
 
+impl CompJob {
+    /// The content name of the pixels this job decodes (K-421): a hash of
+    /// exactly the fields [`same_decode`] compares, so two jobs that would
+    /// decode the same pixels have the same name. The layer id is left out on
+    /// purpose — a name is about content, never about which row asked — and
+    /// the flow settings go in as their serialised form, which is stable across
+    /// runs where a struct's bytes would not be.
+    #[must_use]
+    pub fn source_key(&self) -> u128 {
+        let mut h = blake3::Hasher::new();
+        h.update(b"decode/1/");
+        h.update(self.item.as_bytes());
+        h.update(self.path.to_string_lossy().as_bytes());
+        h.update(&self.source_frame.to_le_bytes());
+        h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());
+        h.update(&[u8::from(self.slate)]);
+        if let Some((ceil, weight)) = self.blend {
+            h.update(&ceil.to_le_bytes());
+            h.update(&weight.to_le_bytes());
+        }
+        if let Some(flow) = &self.flow {
+            h.update(b"flow/");
+            h.update(&bincode::serialize(flow).unwrap_or_default());
+        }
+        for (offset, frame) in &self.temporal {
+            h.update(&offset.to_le_bytes());
+            h.update(&frame.to_le_bytes());
+        }
+        h.update(&self.flow_neighbour.unwrap_or(i32::MIN).to_le_bytes());
+        let mut k = [0u8; 16];
+        k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+        u128::from_le_bytes(k)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

@@ -3502,7 +3502,17 @@ fn publish_frame(
         all(target_os = "linux", feature = "shared-texture-linux"),
         all(target_os = "macos", feature = "shared-texture-macos")
     ))]
-    publish_zero_copy(state, comp, frame, scale, document, stream, mode, cacheable);
+    {
+        // Everything that reaches here is a scrub, an edit's render or a drag
+        // — never playback or the idle fill, which call `prepare_frame`
+        // directly. Of those, only a committed document's render may add to
+        // the per-effect cache (K-421); a drag's provisional pictures read
+        // from it and leave it alone. Off again afterwards, so the flag can
+        // never leak into a playback run.
+        state.renderer.keep_effect_outputs(cacheable);
+        publish_zero_copy(state, comp, frame, scale, document, stream, mode, cacheable);
+        state.renderer.keep_effect_outputs(false);
+    }
 
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),

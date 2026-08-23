@@ -1038,6 +1038,9 @@ pub fn build_comp_draws_at(
                     // The adjust stack resolves at comp scale but runs on
                     // the render target (K-266) — realise rescales.
                     fx_ref_width: Some(comp.width as f32),
+                    // The composite below has no name of its own in v1
+                    // (K-421): an adjustment's stack runs uncached.
+                    fx_input_key: None,
                     // An adjustment layer is a staging point, not a picture —
                     // motion blur has no image of its own to smear (docs/06 §4).
                     mb: Vec::new(),
@@ -1197,6 +1200,14 @@ pub fn build_comp_draws_at(
             DrawSource::Nested { width, .. } => Some(*width as f32),
             DrawSource::Pixels { .. } | DrawSource::Adjust => None,
         };
+        // The name the per-effect cache files this stack's outputs under
+        // (K-421): only a picture made from bytes has one in v1.
+        let fx_input_key = match &source {
+            DrawSource::Pixels { tex_w, tex_h, .. } => {
+                fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
+            }
+            DrawSource::Nested { .. } | DrawSource::Adjust => None,
+        };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack.
         let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
@@ -1276,6 +1287,7 @@ pub fn build_comp_draws_at(
             mask_paths: mask_paths_for(layer, lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
+            fx_input_key,
             // Per-layer motion blur (docs/06 §4, K-120): the layer's own
             // transform sampled across the open shutter, empty unless it blurs.
             // Built the same way export does, so the two smear identically.
@@ -1289,6 +1301,54 @@ pub fn build_comp_draws_at(
         });
     }
     draws
+}
+
+/// The content name of the picture a layer's effect stack runs on (K-421,
+/// [`CompLayerDraw::fx_input_key`]): what the source is, then everything
+/// `pixels_for` bakes into it before the stack sees it — the paint strokes,
+/// the masks at this layer time — and the raster it was made at. Footage and
+/// Sequence layers name their source by the decode job's identity
+/// ([`CompLayerPixels::source_key`]); a solid by its colour and size. `None`
+/// for the kinds nothing names yet (text, shapes), which run uncached.
+///
+/// The masks and paint go in serialised, as the file format writes them: a
+/// keyframed mask is named by its whole animation plus the time it is read
+/// at, which is coarser than the evaluated shape but never wrong.
+fn fx_input_key(
+    doc: &lumit_core::model::Document,
+    layer: &lumit_core::model::Layer,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    lt: f64,
+    tex_w: u32,
+    tex_h: u32,
+) -> Option<u128> {
+    use lumit_core::model::LayerKind;
+    let mut h = blake3::Hasher::new();
+    h.update(b"fxinput/1/");
+    match &layer.kind {
+        LayerKind::Footage { .. } | LayerKind::Sequence { .. } => {
+            h.update(b"footage/");
+            h.update(&pixels_by_layer.get(&layer.id)?.source_key.to_le_bytes());
+        }
+        LayerKind::Solid { def } => {
+            let sd = doc.solid(*def)?;
+            h.update(b"solid/");
+            for ch in sd.colour.0 {
+                h.update(&ch.to_le_bytes());
+            }
+            h.update(&sd.width.to_le_bytes());
+            h.update(&sd.height.to_le_bytes());
+        }
+        _ => return None,
+    }
+    h.update(&bincode::serialize(&layer.masks).ok()?);
+    h.update(&bincode::serialize(&layer.paint).ok()?);
+    h.update(&lt.to_le_bytes());
+    h.update(&tex_w.to_le_bytes());
+    h.update(&tex_h.to_le_bytes());
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    Some(u128::from_le_bytes(k))
 }
 
 /// The ordered file paths of a layer's enabled built-in `lut` effects
@@ -1800,12 +1860,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -1899,12 +1961,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -2007,12 +2071,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -2368,12 +2434,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -2542,12 +2610,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,

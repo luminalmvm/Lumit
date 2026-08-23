@@ -282,6 +282,14 @@ pub struct CompLayerDraw {
     /// (`ResolvedStack::rescale_spatial`) so px@comp parameters land where
     /// the user put them at every preview resolution.
     pub fx_ref_width: Option<f32>,
+    /// The content name of the picture `fx` runs on (K-421): what the source
+    /// is (the decode job's identity for footage, the colour and size for a
+    /// solid), plus the masks and paint baked into it and its raster size. The
+    /// per-effect cache names each op's output from this; `None` — a nested
+    /// comp, a text or shape layer, an adjustment's composite — runs the stack
+    /// uncached in v1. Never the pixels themselves: naming by identity is what
+    /// keeps a build free of hashing a frame's worth of bytes.
+    pub fx_input_key: Option<u128>,
     /// Per-layer motion-blur sub-frame placements (docs/06 §4, K-120): the
     /// layer's own transform re-evaluated across the open shutter. Empty unless
     /// the comp master and the layer switch are both on (and samples ≥ 2), in

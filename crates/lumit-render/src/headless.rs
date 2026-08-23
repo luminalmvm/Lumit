@@ -48,6 +48,10 @@ struct Parts {
     compositor: lumit_gpu::Compositor,
     fx: lumit_gpu::fx::FxEngine,
     lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
+    /// The per-effect intermediate cache (K-421), VRAM only. Lives here
+    /// rather than beside `frame_textures` because its entries are textures
+    /// the effect engine made, and they go with it.
+    fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
 }
 
 /// One footage item's probe result, cached so a scrub does not re-probe. Slate
@@ -505,6 +509,7 @@ impl HeadlessRenderer {
             compositor: lumit_gpu::Compositor::new(&gpu),
             fx: lumit_gpu::fx::FxEngine::new(&gpu),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
+            fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
         };
         let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         // Flow runs on this same device rather than opening one of its own
@@ -572,6 +577,33 @@ impl HeadlessRenderer {
     /// numbers, and never during playback.
     pub fn measure_frames(&mut self, measuring: bool) {
         self.measuring = measuring;
+    }
+
+    /// Whether the renders from here on may add to the per-effect cache
+    /// (K-421). On for a committed document's scrub and edit renders; off for
+    /// a drag's provisional values and for playback, which would only churn
+    /// the budget. Lookups happen either way.
+    pub fn keep_effect_outputs(&mut self, keep: bool) {
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().keep_outputs(keep);
+        }
+    }
+
+    /// Resize the per-effect cache (K-421), evicting down to the new budget.
+    pub fn set_effect_cache_budget(&mut self, bytes: usize) {
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().set_budget(bytes);
+        }
+    }
+
+    /// `(used_bytes, budget_bytes, entries)` of the per-effect cache, and
+    /// `(kernels run, ops served held)` since the renderer was made.
+    #[must_use]
+    pub fn effect_cache_stats(&self) -> ((usize, usize, usize), (u64, u64)) {
+        self.parts.as_ref().map_or(((0, 0, 0), (0, 0)), |parts| {
+            let c = parts.fx_cache.borrow();
+            (c.stats(), c.counts())
+        })
     }
 
     /// Whether the frames from here on are being measured **and** there is
@@ -941,6 +973,7 @@ impl HeadlessRenderer {
                 compositor: &parts.compositor,
                 fx: &parts.fx,
                 lut_cache: &parts.lut_cache,
+                fx_cache: &parts.fx_cache,
                 render_scale: composite_scale(quality),
                 // The project's setting, resolved against what this adapter
                 // will actually give (K-274). Preview and export both read the
@@ -1660,6 +1693,11 @@ impl HeadlessRenderer {
     /// and these are keyed by position, or the user asked (Clear cache).
     pub fn clear_frame_textures(&mut self) {
         self.frame_textures.clear();
+        // The per-effect intermediates go with the frames (K-421): a user
+        // who asked for an empty cache meant all of it.
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().clear();
+        }
         // Give the memory on the card back as well: the pool exists to make
         // promotions cheap, and after a clear there is nothing to promote.
         self.upload_pool.clear();
@@ -4585,6 +4623,80 @@ mod tests {
             reports.last().map(|p| p.stage),
             Some(crate::profile::RenderStage::Presenting)
         ));
+    }
+
+    /// **Editing the last effect of a layer re-runs only that effect, and the
+    /// picture is byte-for-byte the cold one** (K-421, K-031).
+    ///
+    /// End to end through the draw builder: a solid's stack is named from its
+    /// colour, size and masks, so after a committed render the blur's output
+    /// is held, and a render with the exposure changed runs one kernel. The
+    /// warm picture must equal what a renderer that has never seen the comp
+    /// makes of the same document — the export path is that cold renderer.
+    #[test]
+    fn editing_the_last_effect_serves_the_held_prefix_and_matches_a_cold_render() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_solid(LinearColour([0.8, 0.3, 0.1, 1.0]), 16, 16);
+        let layer_id = store.snapshot().comp(comp_id).expect("comp").layers[0].id;
+        let blur = lumit_core::fx::instantiate("blur").expect("blur exists");
+        let exposure = |stops: f64| {
+            let mut e = lumit_core::fx::instantiate("exposure").expect("exposure exists");
+            for p in &mut e.params {
+                if p.id == "stops" {
+                    p.value = lumit_core::model::EffectValue::Float(
+                        lumit_core::anim::Property::fixed(stops),
+                    );
+                }
+            }
+            e
+        };
+        store
+            .commit(lumit_core::Op::SetLayerEffects {
+                comp: comp_id,
+                layer: layer_id,
+                effects: vec![blur.clone(), exposure(0.0)],
+            })
+            .expect("effects on");
+
+        r.keep_effect_outputs(true);
+        let _ = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        let (_, (runs, hits)) = r.effect_cache_stats();
+        assert_eq!((runs, hits), (2, 0), "a cold frame runs the whole stack");
+
+        store
+            .commit(lumit_core::Op::SetLayerEffects {
+                comp: comp_id,
+                layer: layer_id,
+                effects: vec![blur, exposure(1.0)],
+            })
+            .expect("the last effect edited");
+        let doc = store.snapshot();
+        let warm = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        let (_, (runs, hits)) = r.effect_cache_stats();
+        assert_eq!(
+            (runs, hits),
+            (3, 1),
+            "the blur's output was held; only the exposure ran"
+        );
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let cold = cold.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(warm, cold, "a warm preview is the picture an export makes");
+
+        r.clear_frame_textures();
+        assert_eq!(
+            r.effect_cache_stats().0 .2,
+            0,
+            "Clear cache empties the intermediates with the frames"
+        );
     }
 
     /// A measured frame lands its milliseconds on the right rows: the layer

@@ -11231,3 +11231,19 @@ the bar and the scrub name a frame alike (about one scale in twenty landed on
 different 1% steps before); and the Scopes read a frame held on the card back rather
 than compositing it again, and no longer re-request the frame they already show. This
 number was allocated on the lane3 branch.
+
+**K-421 · DECIDED · Each effect's output is kept, so editing the last one re-runs only
+that one.** The only cache the render path had was the finished comp frame (K-178,
+K-214), so an Exposure after a Lens flare re-ran the flare on every nudge. A per-effect
+intermediate cache now sits in the realiser — VRAM only, 256 MB by default, beside the LUT
+cache — and `run_ops` names each op's output by content (docs/06 §5.2: the input's
+identity, the raster, the flare bake generation, and every op up to that one with its
+resolved values and side inputs), looks for the longest held prefix from the last op
+backwards, and runs only what follows. Only committed, non-playback renders add to it;
+drags and playback read it. v1 boundaries, all recorded in §5.2: only sources made from
+bytes (footage, sequences, solids) are named; an op binding another layer's texture, the
+neighbour frames or the flow field breaks the chain. This is the effect-stack slice of the
+node-output cache the K-178 evaluator will own, built ahead of it where the stacks run,
+and it does not change the evaluator plan. Preview and export remain byte-identical
+(K-031): a held prefix is the same texture a cold walk makes. This number was allocated
+on the lane3 branch.

@@ -5646,6 +5646,28 @@ Three things made that split *feel* broken, and all three are fixed:
   was done. So the picture sat one lens behind until you moved the playhead. The check no
   longer needs a frame, and the picture replaces itself the moment the optics are ready.
 
+### Why changing the last effect is cheap now (K-421)
+
+Put a Lens flare on a layer and an Exposure after it, then nudge the exposure. Until now
+the engine ran the whole stack again — the flare included — because the only thing it ever
+kept was the *finished* frame, and a finished frame is no use once any part of it changes.
+
+Now every effect's output is kept for a while, on the graphics card, under a name made from
+everything that went into it: which source, at what size, and every effect up to and
+including this one with all its values. Before a stack runs, the engine asks, starting from
+the *end*: "is the picture after effect N already here? After N−1?" It starts from the first
+one it finds. Change the exposure and the picture after the flare is still there under its
+old name, so only the exposure runs. Change the flare and every name after it changes too,
+so everything from the flare on runs again — which is exactly right.
+
+Three things to know. It is **not** a cache you manage: there is no invalidation, only
+names, so nothing can be stale, and Clear cache empties it along with the frames. It only
+**fills** from committed renders — a drag reads from it (that is the point) but does not
+write, and neither does playback, so a long run cannot push your working stack out. And a
+few things do not take part yet: an effect that reads another layer's picture (a matte, a
+plate, a depth pass), a temporal effect reading neighbouring frames, and stacks on precomps,
+text, shapes and adjustment layers. Those run as they always did, and are the follow-up.
+
 ### The region of interest — working on one corner (K-362)
 
 On a heavy shot every preview frame costs the whole frame, even when you are

@@ -33,6 +33,11 @@ pub struct Realiser<'a> {
     pub compositor: &'a lumit_gpu::Compositor,
     pub fx: &'a lumit_gpu::fx::FxEngine,
     pub lut_cache: &'a std::cell::RefCell<crate::fxops::LutCache>,
+    /// The per-effect intermediate cache (K-421), held by the same owner as
+    /// the LUT cache and for the same reason: it outlives a frame. Every
+    /// layer's stack reads from it; only committed renders add to it (see
+    /// [`crate::fxops::FxCache::keep_outputs`]).
+    pub fx_cache: &'a std::cell::RefCell<crate::fxops::FxCache>,
     /// The preview render scale (the K-185 follow-up): every composite this
     /// walk performs allocates its target at [`lumit_gpu::scaled_size`] of the
     /// comp dims while all geometry stays in logical comp pixels. A field
@@ -220,6 +225,9 @@ impl Realiser<'_> {
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
                         None,
+                        // Nothing names a referenced layer's picture in v1
+                        // (K-421), so its stack runs uncached.
+                        None,
                     )
                 };
                 LayerInput::Texture(crate::fxops::render_layer_input(
@@ -388,6 +396,8 @@ impl Realiser<'_> {
                 &mattes,
                 &l.mask_paths,
                 fx_ms.as_mut(),
+                // The composite below carries no name in v1 (K-421).
+                None,
             );
             let coverage = self.coverage_texture(camera, width, height, l);
             acc = Some(self.fx.adjust_blend(
@@ -618,6 +628,9 @@ impl Realiser<'_> {
                     &mattes,
                     &l.mask_paths,
                     fx_ms.as_mut(),
+                    // The per-effect cache (K-421), for a source the builder
+                    // could name; a nested comp, text or shape runs as before.
+                    l.fx_input_key.map(|key| (self.fx_cache, key)),
                 )
             };
             // The lighting pass (docs/06, K-361): shade the finished layer
@@ -716,6 +729,8 @@ impl Realiser<'_> {
                             &[],
                             // A matte's own stack is part of the layer it
                             // gates, not a row of its own.
+                            None,
+                            // As above: unnamed in v1 (K-421), so uncached.
                             None,
                         )
                     };

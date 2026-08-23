@@ -3539,6 +3539,7 @@ mod tests {
             &[],
             &[],
             None,
+            None,
         );
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
@@ -3627,6 +3628,7 @@ mod tests {
                 &[],
                 &[],
                 None,
+                None,
             );
             let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
             let mut cpu = source.clone();
@@ -3691,6 +3693,8 @@ mod tests {
         let kill_green = crate::fxops::LoadedLut {
             texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
             size: 2,
+            path: String::new(),
+            mtime: None,
             domain_min: [0.0; 3],
             domain_max: [1.0; 3],
         };
@@ -3722,6 +3726,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -3824,6 +3829,7 @@ mod tests {
             ],
             &[],
             None,
+            None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
@@ -3893,6 +3899,7 @@ mod tests {
             &[],
             &[],
             &[],
+            None,
             None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -3989,6 +3996,7 @@ mod tests {
                 mattes,
                 &[],
                 None,
+                None,
             );
             lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
         };
@@ -4082,6 +4090,7 @@ mod tests {
                 &[],
                 &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
                 &[],
+                None,
                 None,
             );
             lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
@@ -4183,6 +4192,7 @@ mod tests {
             // (the second is switched off).
             &[crate::fxops::LayerInput::Absent, off],
             &[],
+            None,
             None,
         );
         let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
