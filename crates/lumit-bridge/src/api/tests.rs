@@ -1592,6 +1592,48 @@ fn volume_round_trips_and_a_solid_reports_no_audio() {
     );
 }
 
+/// **The Audio layer (K-435).** The sound of a clip, added as its own layer:
+/// the same footage source, no picture, one undo step.
+///
+/// The layer reads as its own kind across the seam so the Timeline can draw it
+/// as one, and `has_picture` answers false whatever the file holds — that is
+/// what the flag means, and it is what the outline reads to decide the layer
+/// has no visibility switch to offer.
+#[test]
+fn the_sound_of_a_clip_can_be_its_own_layer() {
+    use crate::api::layer::BridgeLayerKind;
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+
+    comp.add_audio_layer(&footage).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+
+    assert_eq!(
+        layer.get_kind().expect("kind"),
+        BridgeLayerKind::Audio,
+        "a footage source placed for its sound reads as an Audio layer"
+    );
+    assert!(
+        !layer.has_picture().expect("asked"),
+        "an Audio layer has no picture, so no visibility switch is offered"
+    );
+
+    // One op: one undo takes the layer away again.
+    project.undo().expect("undo");
+    assert!(comp.get_layers().expect("layers").is_empty());
+
+    // The ordinary placement of the same clip is unchanged — a Footage layer
+    // that draws. Without a decoder nothing can be probed, so the picture is
+    // assumed present rather than assumed away.
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let drawn = comp.get_layers().expect("layers").remove(0);
+    assert_eq!(drawn.get_kind().expect("kind"), BridgeLayerKind::Footage);
+}
+
 /// A reference that outlives its layer is a calm error, never a panic — the
 /// same contract every other reference method keeps.
 #[test]

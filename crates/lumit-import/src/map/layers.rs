@@ -134,6 +134,7 @@ pub(crate) fn map_layer(
         label: u8::try_from(ae.label.unwrap_or(0)).unwrap_or(0),
         markers: markers(conv, &ae.markers),
         volume_db: LumProperty::zero(),
+        audio_only: false,
         retime,
         interpolation,
         parked_flow: None,

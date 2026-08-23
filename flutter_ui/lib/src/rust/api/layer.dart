@@ -17,7 +17,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -354,6 +354,12 @@ enum BridgeLayerKind {
   /// A Light layer (K-360): a source of light other layers see. Draws no
   /// pixels of its own, like a Camera.
   light,
+
+  /// An Audio layer (K-435): a footage source contributing sound only. Not a
+  /// [`lumit_core::model::LayerKind`] of its own — it is a Footage layer with
+  /// `audio_only` set — but the frontend draws it as its own kind (its own
+  /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
+  audio,
   ;
 }
 
@@ -1483,8 +1489,9 @@ class LayerReference {
   /// Every synthetic kind draws except the two that carry no pixels at all: a
   /// Camera (it *is* a viewpoint) and a Null (a transform and nothing else).
   /// Footage draws only when its container carries a video stream, so an
-  /// audio-only clip answers false. Probing costs an FFmpeg open, so callers
-  /// ask when a menu opens, never while drawing a row.
+  /// audio-only clip answers false. An Audio layer (K-435) answers false
+  /// whatever its file holds — that is what the flag means. Probing costs an
+  /// FFmpeg open, so callers ask when a menu opens, never while drawing a row.
   bool hasPicture() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceHasPicture(
         that: this,

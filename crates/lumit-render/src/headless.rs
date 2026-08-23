@@ -2485,6 +2485,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2588,6 +2589,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2948,6 +2950,34 @@ mod tests {
         );
         // The audio-only item stays omitted across the second sync_items call.
         assert!(!r.items.contains_key(&audio_id));
+
+        // K-435: a file that HAS a picture, placed as an Audio layer, is not
+        // probed or indexed for the picture either. Without the `audio_only`
+        // skip in `comp_footage_items` the renderer would open and frame-index
+        // a video the user placed for its sound alone.
+        let video_id = push_footage_item(&mut doc, "music-video.mp4");
+        push_layer(&mut doc, sized, LayerKind::Footage { item: video_id });
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(sized) {
+            c.layers
+                .last_mut()
+                .expect("the layer just pushed")
+                .audio_only = true;
+        }
+        r.probe_cache.insert(
+            video_id,
+            Probe::Ok {
+                fps: 25.0,
+                frames: 125,
+                width: 64,
+                height: 64,
+            },
+        );
+        let comp = doc.comp(sized).expect("sized comp").clone();
+        r.sync_items(&doc, &comp);
+        assert!(
+            !r.items.contains_key(&video_id),
+            "a video placed for its sound alone contributes no picture"
+        );
     }
 
     /// **A render probes only what its comp can show.** Probing is opening a
@@ -3134,6 +3164,7 @@ mod tests {
                 parent: None,
                 label: 0,
                 volume_db: Property::zero(),
+                audio_only: false,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
@@ -4123,6 +4154,7 @@ surfaces:
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

@@ -244,6 +244,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         label: 0,
         markers: Vec::new(),
         volume_db: Property::zero(),
+        audio_only: false,
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,

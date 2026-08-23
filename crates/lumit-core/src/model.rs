@@ -795,6 +795,19 @@ pub fn any_solo(comp: &Composition) -> bool {
     comp.layers.iter().any(|l| l.switches.solo)
 }
 
+/// Whether any layer that **draws** is soloed (K-435) — the question the
+/// picture asks, where [`any_solo`] is the one the mixer asks.
+///
+/// **In plain terms.** Solo means "just this one". Soloing a music track means
+/// just that sound; it cannot sensibly mean an empty picture, because the track
+/// has no picture to show. So the two halves count solos separately: the mixer
+/// counts every soloed layer, and the compositor counts only the layers that
+/// could have been on screen. Solo an Audio layer and the picture does not
+/// notice — which is also what keeps its switches out of the frame key.
+pub fn any_picture_solo(comp: &Composition) -> bool {
+    comp.layers.iter().any(|l| l.switches.solo && !l.audio_only)
+}
+
 impl Default for Switches {
     fn default() -> Self {
         Self {
@@ -1409,6 +1422,26 @@ pub struct Layer {
     /// the frame cache key (sound, not pixels).
     #[serde(default = "Property::zero")]
     pub volume_db: Property,
+    /// This layer is **sound and nothing else** — an Audio layer
+    /// ([01-GLOSSARY.md] "Audio layer", docs/09-AUDIO.md §6, K-435).
+    ///
+    /// **In plain terms.** A music file has no picture, so a layer holding one
+    /// only ever makes sound. A video file has both — and sometimes you want
+    /// just its sound on its own row, to fade it or cut to it without the
+    /// picture coming along. This flag is that choice: the layer keeps its
+    /// footage source and its Volume, and the drawing half is simply not asked
+    /// for. Set when an audio-only file is placed (there is no picture to
+    /// draw), and by *Add audio only* on a footage item that has both.
+    ///
+    /// It is a flag on the layer rather than a [`LayerKind`] of its own
+    /// (K-435): the source is still a footage item, so retiming, waveforms,
+    /// mixing and the project file all keep working unchanged, and the only
+    /// thing that differs is that nothing draws. That is why every picture
+    /// path — the frame key in `lumit-eval`, the decode plan and the draw
+    /// builder in `lumit-render` — skips a layer with this set, exactly as it
+    /// skips a hidden one, and why the audio path does not look at it at all.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub audio_only: bool,
     /// Retime (K-197): layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -1606,6 +1639,12 @@ fn collect_comp_footage(
     walked: &mut Vec<Uuid>,
 ) {
     for layer in &comp.layers {
+        // An Audio layer's file is opened by the mixer, never by the picture
+        // (K-435): naming it here would have the renderer probe and index the
+        // video stream of a clip placed for its sound alone.
+        if layer.audio_only {
+            continue;
+        }
         match &layer.kind {
             LayerKind::Footage { item } => {
                 if !found.contains(item) {
@@ -2342,6 +2381,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2674,6 +2714,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

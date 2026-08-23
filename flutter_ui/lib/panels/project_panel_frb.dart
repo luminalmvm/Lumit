@@ -1253,6 +1253,7 @@ enum _ProjectMenuAction {
   rename,
   relink,
   findMissing,
+  addAudioOnly,
   moveToRoot,
   delete
 }
@@ -1273,6 +1274,10 @@ Future<void> showProjectMenuFrb({
 }) async {
   final isFootage = item is ItemReference_Footage;
   final isComp = item is ItemReference_Composition;
+  // The comp the sound would land in (K-435). Read once, here, rather than in
+  // the row's build: the menu is a gesture, not a rebuild path.
+  final openComp =
+      Provider.of<LumitUiState>(context, listen: false).selectedComp;
   final action = await showLumitPopup<_ProjectMenuAction>(
     context: context,
     position: position,
@@ -1305,6 +1310,14 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.findMissing),
               child: Text(l10n.findMissingFootage),
             ),
+          // The sound of this clip, on its own row (K-435). Offered only with a
+          // comp open to put it in — placing a layer nowhere is not an action.
+          if (isFootage && openComp != null)
+            MenuRow(
+              key: const ValueKey('project-menu-add-audio-only'),
+              onPressed: () => close(_ProjectMenuAction.addAudioOnly),
+              child: Text(l10n.addAudioOnly),
+            ),
           MenuRow(
             onPressed: () => close(_ProjectMenuAction.moveToRoot),
             child: Text(l10n.moveToRoot),
@@ -1335,6 +1348,11 @@ Future<void> showProjectMenuFrb({
       await onRelink?.call();
     case _ProjectMenuAction.findMissing:
       onFindMissing();
+    case _ProjectMenuAction.addAudioOnly:
+      if (item case ItemReference_Footage(:final field0)) {
+        openComp?.addAudioLayer(footage: field0);
+        onLocalEdit();
+      }
     case _ProjectMenuAction.moveToRoot:
       item.moveToRoot();
       onLocalEdit();

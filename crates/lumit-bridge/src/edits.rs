@@ -78,6 +78,7 @@ pub(crate) fn base_layer(
         parent: None,
         label,
         volume_db: lumit_core::anim::Property::zero(),
+        audio_only: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,

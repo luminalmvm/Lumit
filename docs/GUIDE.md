@@ -5587,6 +5587,73 @@ a marker list can never be compared with a marker list. Times and confidences
 can — and "the same audio at the same sensitivity finds the same beats" is
 exactly the promise that moving work between threads must not break.
 
+### A layer that is only a sound (K-435)
+
+Some layers make no picture. A camera is a viewpoint, a null is a handle to drag
+things by, and now a music track is a sound. Lumit calls that last one an
+**Audio layer**.
+
+The surprising part is how little had to be built for it. Drop an MP3 into a
+composition and it has played for a long time: it became an ordinary footage
+layer, and the part of the engine that mixes sound found it by asking "is this a
+footage layer, and does its file have an audio stream?" Both answers were yes,
+so it played. Two things were missing. You could not take the *sound* of a video
+file without its picture coming along. And the drawing half of the engine still
+went through the motions for a layer that had nothing to draw.
+
+So an Audio layer is not a new kind of layer at all — it is an ordinary footage
+layer with one bit set on it, `audio_only`, meaning *sound, no picture*. That
+choice is worth a moment, because the alternative looks tidier and is worse. Had
+it been a new kind, every part of the engine that recognises a footage source by
+its kind — the mixer, the waveform drawing, retiming, the project file, the
+After Effects importer — would have needed teaching about a second kind that is
+footage in all but name. Each of those is a place to forget. One bit on the
+layer means they all carry on working and never learn anything, and the only
+code that changed is the code that draws.
+
+**What "the code that draws" means here** is three separate places, and they
+have to agree. One plans which video files to decode. One builds the actual
+drawing instructions. And one works out the *name* of each finished frame, so
+that a frame already rendered can be recognised and reused instead of being
+drawn again. All three now step over an Audio layer.
+
+That third one is where the real prize is, and it is worth explaining, because
+it is the difference between a smooth session and an infuriating one.
+
+Every rendered frame is filed under a name made by hashing everything that could
+change what the frame looks like: the layers, their positions, their effects,
+which of them are switched on. Change any of it and the name changes, the old
+frame no longer matches, and the picture is rendered afresh. That is exactly
+what you want when you move a layer. It is exactly what you do not want when you
+mute the music: the picture has not changed by a single pixel, but if the muted
+layer was part of the name, every rendered frame in the composition has just
+been thrown away, and the comp stops playing smoothly while it all comes back.
+
+The fix is a matter of *order*. The frame-naming code walks the layer stack and,
+for each layer, first asks whether it is switched on — a hidden layer is not in
+the picture, so it is not in the name. An Audio layer is now skipped **before**
+that question is reached rather than after it. Ask "is it visible?" first and
+the answer itself becomes part of the name, so toggling it renames every frame.
+Skip the layer before anything about it is examined and none of its switches can
+reach the name at all. Mute it, hide it, solo it, drag its volume to silence —
+the picture keeps every frame it had. There is a test that toggles each switch
+in turn and insists the name never moves.
+
+Solo needed splitting in half for the same reason. Solo means "just this one",
+and it used to be a single question: is anything soloed? If so, show only what
+is soloed. But soloing a music track cannot sensibly mean an empty picture — the
+track has no picture to show. So there are now two questions. The mixer asks "is
+any layer soloed?" and silences the rest. The compositor asks "is any layer that
+*draws* soloed?" and, for a soloed music track, the answer is no — so the
+picture carries on exactly as it was.
+
+The last piece is the switches themselves. A layer's row shows an eye and a
+speaker, and both used to appear on every row regardless of whether they could
+do anything — a speaker on a solid colour that has never made a sound, an eye on
+a music track that has never shown anything. Each row now shows only the
+switches its layer can actually use. A control that does nothing when you click
+it is worse than no control, because you have to click it to find out.
+
 ### The half-second the lens picker used to cost
 
 The Lens flare effect simulates a real camera lens: the ghosts are traced through an actual

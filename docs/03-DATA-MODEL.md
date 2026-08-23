@@ -174,6 +174,7 @@ struct Layer {
     paint: Vec<PaintStroke>,           // §7.1, stamped before masks
     effects: Vec<EffectInstance>,      // §8, ordered top-to-bottom
     volume_db: Property,               // K-172: animatable Volume (docs/09 §6); 0 dB unity, −100 = −∞
+    audio_only: bool,                  // K-435: sound, no picture — an Audio layer (§5.7). Default false.
     retime: Option<Property>,          // K-197: Retime as an ordinary keyframable property —
                                        // layer-local time → source time, in seconds. None = not
                                        // retimed (no row, no map). Ctrl+Alt+T installs the identity.
@@ -238,8 +239,11 @@ Invariants:
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
 | `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list; nested groups and modifiers are future (§9.2). |
-| `Audio { item: Uuid }` | future | An audio item | v1 audio is only a footage layer's own stream (§5.2, docs/09). |
-| `Light { light: LightProps }` | future | §9.3 | Paired with Camera; 3D only, not in v1. |
+| `Light { light: Box<LightDef> }` | yes | §5.5 | A source of light other layers see (K-360). Draws no pixels of its own, like a Camera; its placement is the ordinary layer transform. |
+
+**There is no `Audio` kind (K-435).** An Audio layer — a layer whose source is an audio item,
+or the audio channel of footage — is a `Footage` layer with `audio_only` set on the layer
+(§5.1). See §5.7.
 
 ### 5.3 Clips (Sequence layers only)
 
@@ -367,6 +371,40 @@ turning a solve's world-to-camera rotations and source-pixel focal into those is
 of work that belongs beside the solve, not in the model ([impl/tracking.md](impl/tracking.md)
 §5b).
 
+### 5.7 Audio layers (K-435)
+
+**In plain terms.** An Audio layer is a layer that makes a sound and shows nothing.
+
+`Layer::audio_only` is the whole of it. There is no `LayerKind::Audio`: the layer keeps its
+footage source, its Volume, its waveform, its markers and its span, and the one thing that
+differs is that no picture is asked for. `#[serde(default)]`, and not written out when false,
+so every project saved before it existed reads unchanged.
+
+- **Set on placement** when the media has no picture at all — a music file can only ever be
+  an Audio layer, so it becomes one whichever route placed it. Media that will not probe is
+  assumed to *have* a picture: a wrongly-flagged Audio layer would silently drop a picture
+  the user placed, where a footage layer that turns out silent merely shows nothing.
+- **Set deliberately** by *Add audio only* on a footage item, which is the case the flag
+  exists for: the sound of a clip that does have a picture, on its own row, so it can be cut,
+  faded and keyframed by itself. One `AddLayer` op, so one undo step.
+- **Every picture path skips it**: the frame key (`feed_comp`, lumit-eval), the decode plan
+  and the draw builder (lumit-render), the occlusion cull, and `comp_footage_items` — so a
+  video placed for its sound alone is never probed or frame-indexed for a picture it will not
+  show. The audio path (`AudioJobsBuilder::audio_jobs`) does not consult the flag at all.
+- **The frame key skips it before the switch gate, not after.** A layer tested for `visible`
+  first would change the picture's name by being hidden or shown; skipped ahead of the gate,
+  none of an Audio layer's switches can reach the key. Muting, hiding, soloing or shying an
+  Audio layer retires no rendered frame.
+- **Solo is two questions.** `any_solo` — every soloed layer — is the mixer's; `any_picture_
+  solo` — soloed layers that draw — is the compositor's, the cull's and the key's. Soloing a
+  music track means "just this sound", never an empty picture.
+- **Across the bridge** it reads as its own kind, `BridgeLayerKind::Audio`, so the Timeline
+  draws it with its own glyph and no thumbnail; `has_picture` answers false whatever the file
+  holds, which is what the outline reads to know the layer has no visibility switch to offer.
+
+**Not built:** *Detach audio* — a linked Audio layer sharing a Footage layer's source, kept
+in step with it (docs/09 §6). *Add audio only* makes an independent layer from the item, not
+a link to an existing layer.
 
 ---
 

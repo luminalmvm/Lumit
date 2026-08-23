@@ -1262,6 +1262,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

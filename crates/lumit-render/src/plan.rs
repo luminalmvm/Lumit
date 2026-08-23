@@ -194,6 +194,10 @@ pub fn collect_comp_jobs(
         if occluder.is_some_and(|o| idx > o) {
             continue;
         }
+        // An Audio layer decodes for the mixer, never for the picture (K-435).
+        if l.audio_only {
+            continue;
+        }
         if l.switches.visible && in_span(l) {
             wanted.push(l.id);
             if let Some(m) = &l.matte {
@@ -765,6 +769,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -908,6 +913,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1018,6 +1024,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,

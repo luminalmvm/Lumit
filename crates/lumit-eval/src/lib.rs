@@ -251,8 +251,17 @@ fn feed_comp(
     // nothing — presence is gated, never hashed, so trimming a bar without
     // crossing `t` changes no key, and soloing the only contributing layer
     // (same picture) keeps its cached frames valid.
-    let any_solo = lumit_core::model::any_solo(comp);
+    let any_solo = lumit_core::model::any_picture_solo(comp);
     for layer in &comp.layers {
+        // An Audio layer (K-435) is sound and nothing else, so it is skipped
+        // BEFORE the switch gate above rather than after it. That order is the
+        // whole point: a layer tested for `visible` first would change this key
+        // by being hidden or shown, and muting a music track would retire every
+        // rendered frame of the comp. Skipped ahead of the gate, none of its
+        // switches can reach the picture's name at all.
+        if layer.audio_only {
+            continue;
+        }
         let in_span = t >= layer.in_point.0.to_f64() && t < layer.out_point.0.to_f64();
         if !layer.switches.visible || !in_span || (any_solo && !layer.switches.solo) {
             continue;
@@ -1348,6 +1357,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2395,6 +2405,96 @@ mod tests {
         assert_eq!(
             key(&doc, &with_expression("one"), 1.0),
             key(&doc, &with_expression("another"), 1.0)
+        );
+    }
+
+    /// An Audio layer (K-435) is sound, so it is not in the picture's name at
+    /// all — and **none of its switches can change that name**. This is the
+    /// promise docs/TODO 2.5 asks for: muting a music track, hiding it, soloing
+    /// it or shying it must not retire a single rendered frame.
+    ///
+    /// Fails without the `audio_only` skip in `feed_comp`: the visible switch
+    /// alone would decide whether the layer is hashed, so toggling it would
+    /// rename every frame of the comp.
+    #[test]
+    fn an_audio_layers_switches_never_change_the_picture() {
+        let doc = Document::new();
+        let item = Uuid::now_v7();
+        // A comp that draws something, plus a music track over it.
+        let picture = text_layer("hello", 0.0, 10.0, 0.0);
+        let audio = |edit: &dyn Fn(&mut Layer)| {
+            let mut l = text_layer("", 0.0, 10.0, 0.0);
+            l.kind = LayerKind::Footage { item };
+            l.audio_only = true;
+            edit(&mut l);
+            comp_with(vec![picture.clone(), l])
+        };
+
+        let plain = audio(&|_| {});
+        let baseline = key(&doc, &plain, 1.0);
+
+        for (what, edit) in [
+            (
+                "hidden",
+                Box::new(|l: &mut Layer| l.switches.visible = false) as Box<dyn Fn(&mut Layer)>,
+            ),
+            (
+                "muted",
+                Box::new(|l: &mut Layer| l.switches.audible = false),
+            ),
+            ("soloed", Box::new(|l: &mut Layer| l.switches.solo = true)),
+            ("shy", Box::new(|l: &mut Layer| l.switches.shy = true)),
+            ("locked", Box::new(|l: &mut Layer| l.switches.locked = true)),
+            (
+                "volume pulled to silence",
+                Box::new(|l: &mut Layer| l.volume_db = Property::fixed(-100.0)),
+            ),
+            (
+                "moved",
+                Box::new(|l: &mut Layer| l.transform.position_x = Property::fixed(500.0)),
+            ),
+        ] {
+            assert_eq!(
+                key(&doc, &audio(&edit), 1.0),
+                baseline,
+                "an Audio layer {what} must not rename the picture's frame"
+            );
+        }
+
+        // And the guard on the guard: the same edits on a layer that DOES draw
+        // still change the key, so this test cannot pass by hashing nothing.
+        let mut drawn = plain.clone();
+        drawn.layers[1].audio_only = false;
+        let drawn_key = key(&doc, &drawn, 1.0);
+        let mut hidden = drawn.clone();
+        hidden.layers[1].switches.visible = false;
+        assert_ne!(
+            key(&doc, &hidden, 1.0),
+            drawn_key,
+            "hiding a drawing layer still renames the frame"
+        );
+    }
+
+    /// Soloing an Audio layer is a mixer instruction, not a picture one
+    /// (K-435): the layers that draw carry on drawing.
+    #[test]
+    fn soloing_an_audio_layer_does_not_blank_the_picture() {
+        let doc = Document::new();
+        let mut audio = text_layer("", 0.0, 10.0, 0.0);
+        audio.kind = LayerKind::Footage {
+            item: Uuid::now_v7(),
+        };
+        audio.audio_only = true;
+        let picture = text_layer("hello", 0.0, 10.0, 0.0);
+
+        let quiet = comp_with(vec![picture.clone(), audio.clone()]);
+        audio.switches.solo = true;
+        let soloed = comp_with(vec![picture, audio]);
+
+        assert_eq!(
+            key(&doc, &soloed, 1.0),
+            key(&doc, &quiet, 1.0),
+            "the picture is the same picture, so it keeps its name"
         );
     }
 

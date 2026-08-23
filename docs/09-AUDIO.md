@@ -182,9 +182,20 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Mute / solo** via the audible and solo switches ([01-GLOSSARY.md](01-GLOSSARY.md) §2).
   Solo on any layer silences non-soloed audio, matching video solo semantics.
 - **Audio from video footage**: a Footage layer with audio exposes its audio as part of
-  the same layer (audible switch, volume property, waveform lane). "Detach audio" (creating
-  a linked Audio layer sharing the source, so music-video workflows can keyframe them
-  independently) is **not yet built** ([TODO.md](TODO.md)).
+  the same layer (audible switch, volume property, waveform lane). **Shipped (K-435):**
+  *Add audio only* on a footage item places that item's sound as its own **Audio layer** —
+  a Footage layer with `audio_only` set (docs/03 §5.7), which never draws. Media with no
+  picture becomes one on placement whichever route placed it. "Detach audio" — a *linked*
+  Audio layer kept in step with an existing Footage layer's source — is **not yet built**
+  ([TODO.md](TODO.md)); *Add audio only* makes an independent layer from the item.
+- **Switches show only what a layer can do** (K-435): an Audio layer is offered no
+  visibility switch, and a layer that can never be heard — a solid, a title, a shape,
+  image-only footage — is offered no audible switch. The same reasoning that decides
+  whether the Audio group appears under a layer at all (§4.3 of
+  [07-UI-SPEC.md](07-UI-SPEC.md)).
+- **An Audio layer is never in the picture's frame key**, so muting, hiding, soloing or
+  shying one retires no rendered frame; soloing it silences other audio without blanking
+  the picture (docs/03 §5.7).
 - Stereo is the v1 channel model; mono sources upmix centred. Pan is not in v1 (see §7).
 
 ## 7. Out of scope for v1

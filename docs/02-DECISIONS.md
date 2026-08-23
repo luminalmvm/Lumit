@@ -11797,3 +11797,64 @@ Regression test: `a_closed_project_is_not_worth_a_renderer` (lumit-bridge
 `api/worker_thread.rs`). The suite-level evidence is `viewer_panel_frb_test.dart`, which
 went from seven failures and ten failed device requests to green with none. No new
 user-facing strings.
+
+## K-435 — The Audio layer is a flag on the layer, not a layer kind of its own
+
+**DECIDED 2026-08-23.** An **Audio layer** ([01-GLOSSARY.md](01-GLOSSARY.md): "a layer whose
+source is an audio item, or the audio channel of footage") is a Footage layer carrying
+`Layer::audio_only = true`. There is no `LayerKind::Audio`. The flag says one thing — *this
+layer contributes sound and no picture* — and everything else about the layer is unchanged.
+
+**Why a flag.** Audio-only media already worked end to end before this entry: a placed music
+file became `LayerKind::Footage`, `AudioJobsBuilder::audio_jobs` found it by that kind and
+probed it for an audio stream, and it mixed and played. The only things missing were a way
+to take a *video* file's sound without its picture, and the picture paths knowing not to ask
+for pixels. A new layer kind would have thrown away the working half: `audio_jobs`, the
+waveform peaks, Retime, the matte and layer-parameter menus, the project file and the AE
+import all resolve a footage source by matching `LayerKind::Footage`, and each would have
+needed a second, footage-shaped arm to learn. The flag keeps every one of them working
+untouched, and the cost is one `bool` that a non-footage layer ignores.
+
+It sits on `Layer` rather than inside the `Footage` variant for the same reason `volume_db`
+does: it is how the layer *uses* its source, it defaults cleanly for every project written
+before it existed (`#[serde(default)]`, and it is not written out when false), and putting it
+in the variant would have rewritten sixty construction and match sites for one bit.
+
+**What it changes.** Three picture paths skip a layer with the flag — the frame key
+(`feed_comp`, lumit-eval), the decode plan (`collect_comp_jobs`, lumit-render) and the draw
+builder (`build.rs`) — and `comp_footage_items` leaves its file out of the renderer's item
+map, so a video placed for its sound alone is never probed or frame-indexed for a picture it
+will not show. The audio path looks at the flag nowhere at all, which is the point.
+
+**Solo splits in two.** `any_solo` (every soloed layer) is what the mixer asks;
+`any_picture_solo` (soloed layers that draw) is what the compositor, the occlusion cull and
+the frame key ask. Soloing a music track means "just this sound"; it cannot sensibly mean an
+empty picture, because the track has no picture to show.
+
+**The frame key skips before the switch gate, not after.** This is the ordering that makes
+docs/TODO 2.5 true: a layer tested for `visible` first would change the picture's name by
+being hidden or shown, so muting a music track would retire every rendered frame of the
+comp. Skipped ahead of the gate, none of an Audio layer's switches can reach the key at all.
+
+**The switches column shows only what a layer can do.** An Audio layer is offered no
+visibility switch and a layer with no sound — a solid, a title, a shape, image-only footage —
+is offered no audible switch. A control that cannot do anything is worse than no control, and
+it is the same reasoning that already decides whether the Audio group appears under a layer.
+
+**Placement.** Media with no picture becomes an Audio layer by whichever route placed it, so
+the caller does not have to know what the file turned out to hold; media that will not probe
+is assumed to have a picture, because a wrongly-flagged Audio layer would silently drop a
+picture the user placed. *Add audio only* on a footage item's Project-panel menu is the
+deliberate case: the sound of a clip that does have a picture. One `AddLayer` op, one undo.
+
+**A known limit.** A project saved before this entry keeps `audio_only = false` on its
+audio-only footage layers, so they still enter the frame key as they always did (with the
+stable `audio#` stamp — correct, just not skipped) until the layer is placed again. Nothing
+can migrate it: deciding it means probing the media, and the project loader has no decoder.
+
+Regression tests: `an_audio_layers_switches_never_change_the_picture` and
+`soloing_an_audio_layer_does_not_blank_the_picture` (lumit-eval),
+`audio_only_media_is_omitted_not_slated` (lumit-render `headless.rs`),
+`the_sound_of_a_clip_can_be_its_own_layer` (lumit-bridge `api/tests.rs`), and
+`an_audio_row_has_no_visibility_switch_and_an_image_row_has_no_audio_switch`
+(`timeline_switches_frb_test.dart`). New user-facing string: `addAudioOnly`.

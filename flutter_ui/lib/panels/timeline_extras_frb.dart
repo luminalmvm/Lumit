@@ -809,6 +809,9 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // and an iris is at least the right family — something about how light
       // reaches the sensor rather than about the picture.
       BridgeLayerKind.light => LumitIcon.aperture,
+      // An Audio layer (K-435) wears the speaker the audible switch wears, so
+      // a row that only makes sound says so in the same glyph twice.
+      BridgeLayerKind.audio => LumitIcon.audio,
       // An adjustment layer is a comp-sized effect container, drawn as a solid —
       // the same choice layer_style.dart and the egui frontend make.
       BridgeLayerKind.solid || BridgeLayerKind.adjustment => LumitIcon.solid,

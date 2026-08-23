@@ -9,6 +9,10 @@
   "@addAtPlayhead": {
     "description": "Button that puts a marker where the playhead is."
   },
+  "addAudioOnly": "Add audio only",
+  "@addAudioOnly": {
+    "description": "Project panel context-menu item on a footage clip: put the clip's sound into the open composition as its own layer, without its picture."
+  },
   "addEffect": "Add effect",
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."

@@ -1267,6 +1267,31 @@ impl CompositionReference {
         footage: &FootageReference,
         as_sequence: bool,
     ) -> Result<(), BridgeError> {
+        self.place_footage(footage, as_sequence, false)
+    }
+
+    /// Add **the sound of** this footage item as its own layer (K-435): an
+    /// Audio layer.
+    ///
+    /// The layer keeps the footage item as its source — its waveform, its
+    /// Volume and its mixing are the ones a Footage layer already has — and
+    /// simply never draws. For a music file that is the only sensible shape,
+    /// and [`Self::add_footage_layer`] reaches it on its own. This call is for
+    /// the other case: a video file whose picture is not wanted on this row, so
+    /// its sound can be cut, faded and keyframed by itself.
+    ///
+    /// One `AddLayer` op, so it is one undo step like every other placement.
+    pub fn add_audio_layer(&self, footage: &FootageReference) -> Result<(), BridgeError> {
+        self.place_footage(footage, false, true)
+    }
+
+    #[frb(ignore)]
+    fn place_footage(
+        &self,
+        footage: &FootageReference,
+        as_sequence: bool,
+        audio_only: bool,
+    ) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let comp = self.composition()?;
 
@@ -1280,7 +1305,12 @@ impl CompositionReference {
             };
 
             let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
-            let sequenced = as_sequence && Self::runs_as_video(&p, f);
+            // Media with no picture at all can only ever be an Audio layer
+            // (K-435), so it becomes one whichever route placed it — the caller
+            // does not have to know what the file turned out to hold. A
+            // deliberate "sound only" placement says so instead.
+            let audio_only = audio_only || !Self::has_picture(&p, f);
+            let sequenced = as_sequence && !audio_only && Self::runs_as_video(&p, f);
 
             let kind = if sequenced {
                 lumit_core::model::LayerKind::Sequence {
@@ -1296,12 +1326,14 @@ impl CompositionReference {
                 lumit_core::model::LayerKind::Footage { item }
             };
 
-            crate::edits::base_layer(
+            let mut layer = crate::edits::base_layer(
                 f.name.clone(),
                 kind,
                 out,
                 crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
-            )
+            );
+            layer.audio_only = audio_only;
+            layer
         };
 
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -1327,6 +1359,35 @@ impl CompositionReference {
     /// Image sequences will qualify by this same rule once they are a footage
     /// kind at all (docs/TODO.md) — they run, so they answer true with no
     /// change here.
+    /// Whether this media carries a picture at all — a video stream, still
+    /// image or otherwise (K-435). A music file answers false and is placed as
+    /// an Audio layer.
+    ///
+    /// Media that will not probe answers **true**: guessing towards a picture
+    /// is the cheaper mistake, because a footage layer that turns out to be
+    /// silent simply shows nothing, where a wrongly-flagged Audio layer would
+    /// have quietly dropped a picture the user placed and could not get back
+    /// without deleting the layer.
+    #[frb(ignore)]
+    fn has_picture(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
+        #[cfg(feature = "media")]
+        {
+            let Some(path) = FootageReference::resolve_path(state, footage) else {
+                return true;
+            };
+            let Some(info) = crate::probe::ensure_probed(&path) else {
+                return true;
+            };
+            info.video.is_some()
+        }
+
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (state, footage);
+            true
+        }
+    }
+
     #[frb(ignore)]
     fn runs_as_video(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
         #[cfg(feature = "media")]

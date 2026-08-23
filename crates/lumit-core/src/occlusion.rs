@@ -37,9 +37,12 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     if comp.active_camera(t).is_some() {
         return None;
     }
-    let any_solo = crate::model::any_solo(comp);
+    let any_solo = crate::model::any_picture_solo(comp);
     let drawn = |l: &Layer| {
-        l.switches.visible
+        // An Audio layer never draws (K-435), so it is never an occluder and
+        // never one of the layers above one that could spoil the cull.
+        !l.audio_only
+            && l.switches.visible
             && t >= l.in_point.0.to_f64()
             && t < l.out_point.0.to_f64()
             && (!any_solo || l.switches.solo)
@@ -213,6 +216,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

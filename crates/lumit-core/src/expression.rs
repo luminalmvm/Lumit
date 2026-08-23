@@ -438,6 +438,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             blend: Default::default(),
             masks: Vec::new(),

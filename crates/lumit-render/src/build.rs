@@ -810,7 +810,7 @@ pub fn build_comp_draws_at(
 
     // Solo / isolate (K-105): while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
-    let any_solo = lumit_core::model::any_solo(comp);
+    let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
         let context = Arc::new(ExpressionContext {
@@ -821,6 +821,11 @@ pub fn build_comp_draws_at(
             current_depth: 0,
         });
 
+        // An Audio layer draws nothing at all (K-435) — no source, no solid, no
+        // effects on an empty canvas. The mixer has already taken what it needs.
+        if layer.audio_only {
+            continue;
+        }
         if !layer.switches.visible || !in_span(layer) || (any_solo && !layer.switches.solo) {
             continue;
         }
@@ -1709,6 +1714,7 @@ mod parent_placement_tests {
             parent,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -1867,6 +1873,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2286,6 +2293,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2603,6 +2611,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

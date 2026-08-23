@@ -14,7 +14,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `project`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -289,6 +289,22 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddAdjustmentLayer(
         that: this,
       );
+
+  /// Add **the sound of** this footage item as its own layer (K-435): an
+  /// Audio layer.
+  ///
+  /// The layer keeps the footage item as its source — its waveform, its
+  /// Volume and its mixing are the ones a Footage layer already has — and
+  /// simply never draws. For a music file that is the only sensible shape,
+  /// and [`Self::add_footage_layer`] reaches it on its own. This call is for
+  /// the other case: a video file whose picture is not wanted on this row, so
+  /// its sound can be cut, faded and keyframed by itself.
+  ///
+  /// One `AddLayer` op, so it is one undo step like every other placement.
+  Future<void> addAudioLayer({required FootageReference footage}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddAudioLayer(
+              that: this, footage: footage);
 
   /// Add a Camera layer at the comp centre. The default zoom is the After
   /// Effects 50 mm model, `comp width × 50/36`.

@@ -540,6 +540,36 @@ pub enum BridgeLayerKind {
     /// A Light layer (K-360): a source of light other layers see. Draws no
     /// pixels of its own, like a Camera.
     Light,
+    /// An Audio layer (K-435): a footage source contributing sound only. Not a
+    /// [`lumit_core::model::LayerKind`] of its own — it is a Footage layer with
+    /// `audio_only` set — but the frontend draws it as its own kind (its own
+    /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
+    Audio,
+}
+
+/// How the frontend should draw this layer (K-435): the model's kind, except
+/// that a footage layer carrying only sound reads as [`BridgeLayerKind::Audio`].
+///
+/// One function rather than a `match` at each call site, so the read model and
+/// `get_kind` can never disagree about what a layer is.
+#[frb(ignore)]
+pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
+    use lumit_core::model::LayerKind as K;
+    if layer.audio_only {
+        return BridgeLayerKind::Audio;
+    }
+    match &layer.kind {
+        K::Footage { .. } => BridgeLayerKind::Footage,
+        K::Solid { .. } => BridgeLayerKind::Solid,
+        K::Precomp { .. } => BridgeLayerKind::Precomp,
+        K::Text { .. } => BridgeLayerKind::Text,
+        K::Camera { .. } => BridgeLayerKind::Camera,
+        K::Sequence { .. } => BridgeLayerKind::Sequence,
+        K::Adjustment => BridgeLayerKind::Adjustment,
+        K::Shape { .. } => BridgeLayerKind::Shape,
+        K::Null => BridgeLayerKind::NullLayer,
+        K::Light { .. } => BridgeLayerKind::Light,
+    }
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -722,18 +752,7 @@ pub(crate) fn read_layer_info(
     let s = layer.switches;
     BridgeLayerInfo {
         name: layer.name.clone(),
-        kind: match &layer.kind {
-            K::Footage { .. } => BridgeLayerKind::Footage,
-            K::Solid { .. } => BridgeLayerKind::Solid,
-            K::Precomp { .. } => BridgeLayerKind::Precomp,
-            K::Text { .. } => BridgeLayerKind::Text,
-            K::Camera { .. } => BridgeLayerKind::Camera,
-            K::Sequence { .. } => BridgeLayerKind::Sequence,
-            K::Adjustment => BridgeLayerKind::Adjustment,
-            K::Shape { .. } => BridgeLayerKind::Shape,
-            K::Null => BridgeLayerKind::NullLayer,
-            K::Light { .. } => BridgeLayerKind::Light,
-        },
+        kind: bridge_kind(layer),
         switches: BridgeLayerSwitches {
             visible: s.visible,
             audible: s.audible,
@@ -2497,19 +2516,7 @@ impl LayerReference {
     /// What kind of source this layer has.
     #[frb(sync)]
     pub fn get_kind(&self) -> Result<BridgeLayerKind, BridgeError> {
-        use lumit_core::model::LayerKind as K;
-        Ok(match self.item()?.kind {
-            K::Footage { .. } => BridgeLayerKind::Footage,
-            K::Solid { .. } => BridgeLayerKind::Solid,
-            K::Precomp { .. } => BridgeLayerKind::Precomp,
-            K::Text { .. } => BridgeLayerKind::Text,
-            K::Camera { .. } => BridgeLayerKind::Camera,
-            K::Sequence { .. } => BridgeLayerKind::Sequence,
-            K::Adjustment => BridgeLayerKind::Adjustment,
-            K::Shape { .. } => BridgeLayerKind::Shape,
-            K::Null => BridgeLayerKind::NullLayer,
-            K::Light { .. } => BridgeLayerKind::Light,
-        })
+        Ok(bridge_kind(&self.item()?))
     }
 
     /// All eight switches at once.
@@ -2995,12 +3002,16 @@ impl LayerReference {
     /// Every synthetic kind draws except the two that carry no pixels at all: a
     /// Camera (it *is* a viewpoint) and a Null (a transform and nothing else).
     /// Footage draws only when its container carries a video stream, so an
-    /// audio-only clip answers false. Probing costs an FFmpeg open, so callers
-    /// ask when a menu opens, never while drawing a row.
+    /// audio-only clip answers false. An Audio layer (K-435) answers false
+    /// whatever its file holds — that is what the flag means. Probing costs an
+    /// FFmpeg open, so callers ask when a menu opens, never while drawing a row.
     #[frb(sync)]
     pub fn has_picture(&self) -> Result<bool, BridgeError> {
         use lumit_core::model::LayerKind as K;
         let layer = self.item()?;
+        if layer.audio_only {
+            return Ok(false);
+        }
         let item = match layer.kind {
             K::Camera { .. } | K::Null => return Ok(false),
             K::Footage { item, .. } => item,
