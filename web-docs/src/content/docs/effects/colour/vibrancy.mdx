@@ -25,12 +25,14 @@ A saturation lift that raises the saturation of greyer pixels more than vivid on
 | --- | --- | --- | --- | --- |
 | **Amount** | Slider | 0 to 200; higher | 0 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales Amount per pixel: white applies the full Amount, grey a fraction of it, black none. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -27,12 +27,14 @@ Lays a run of the layer's own earlier frames over or behind the present one.
 | **Decay** | Slider | 0 to 1 | 0.6 | - |
 | **Mode** | Dropdown | Behind · In front · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Screen | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales Decay per pixel: the trail dies away sooner where the matte is dark and reaches its full length where it is white, so the ghosts are genuinely shorter rather than faded back. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

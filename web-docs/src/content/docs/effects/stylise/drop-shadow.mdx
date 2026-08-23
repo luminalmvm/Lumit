@@ -30,12 +30,14 @@ creates a copy of the layer's shape and composites it behind the original layer.
 | **Softness** | Slider | 0 to 250; higher | 8 | Pixels at composition size |
 | **Shadow only** | Checkbox | On or off | Off | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales the shadow's Opacity per pixel, read where the shadow falls:          white casts it in full, black casts none. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

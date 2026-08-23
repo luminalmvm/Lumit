@@ -30,8 +30,10 @@ Uses another layer as a texture to look as if the source layer has been printed 
 | **Placement** | Dropdown | Stretch · Tile · Centre | Stretch | - |
 | **Scale** | Slider | 10 to 400; down to 1 and higher | 100 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
@@ -40,7 +42,7 @@ In the Effect Controls panel:
 - **Texture contrast** is editable while **Texture** names a layer.
 - **Placement** is editable while **Texture** names a layer.
 - **Scale** is editable while **Texture** names a layer.
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales Relief per pixel: white lights the full relief, grey a shallower          one, black leaves the surface flat. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -26,12 +26,14 @@ around mid-grey and leaves white and blacks untouched.
 | --- | --- | --- | --- | --- |
 | **Gamma** | Slider | 0.1 to 4; down to 0.01 and higher | 1 | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** pulls Gamma toward 1 per pixel: white applies the full Gamma, grey a gentler curve, black none. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

@@ -37,14 +37,16 @@ Wobbles the layer as though the camera were handheld.
 | **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
 - **Per-axis wobble** groups **X amount**, **X frequency**, **Y amount**, **Y frequency**, **Z amount**, **Z frequency**, and starts closed.
 - **Motion blur** groups **Motion blur**, **Shutter**, and starts closed.
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

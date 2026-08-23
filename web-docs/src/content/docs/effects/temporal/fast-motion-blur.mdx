@@ -35,14 +35,19 @@ you need both.
 | **Shutter angle** | Slider | 0 to 720 | 180 | - |
 | **Samples** | Slider | 8 to 32; down to 2 and up to 64 | 16 | - |
 | **Quality** | Dropdown | Normal · High | Normal | - |
+| **Motion vectors** | Layer | Any layer in the composition | None | - |
+| **Vector scale** | Slider | 0 to 200; up to 4000 | 32 | Pixels at composition size |
 | **View** | Dropdown | Rendered · Motion vectors · Confidence · Dominant motion | Rendered | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Vector scale** is editable while **Motion vectors** names a layer.
+- **Matte** scales Shutter angle per pixel: the streak is genuinely shorter where the matte is dark, gathering from nearer along the motion, rather than a long streak faded back over a sharp picture. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 

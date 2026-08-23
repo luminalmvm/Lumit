@@ -26,12 +26,14 @@ Slide the input, and wraps around to the other side.
 | **Shift x** | Slider | -3840 to 3840; any value by typing | 0 | Pixels at composition size |
 | **Shift y** | Slider | -2160 to 2160; any value by typing | 0 | Pixels at composition size |
 | **Mix** | Slider | 0 to 100 | 100 | - |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 
 In the Effect Controls panel:
 
-- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+- **Matte** scales the shift per pixel, read where the pixel lands: white slides the full distance, grey less, black not at all. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 
