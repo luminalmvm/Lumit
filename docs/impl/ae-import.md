@@ -365,7 +365,7 @@ comp, none of them a layer.
 | `ldta` (164) | 0 (u32) | layer id — what `parent_id` and the matte reference point at |
 | | 4 (u16) | quality: 0 wireframe, 1 draft, 2 best |
 | | 8 (s32) with 108 (u32) | stretch as dividend/divisor; the capture's percentage is ×100 |
-| | 12/16, 20/24, 28/32 | start time, in point, out point (rationals, **unstretched**) |
+| | 12/16, 20/24, 28/32 | start time (comp clock), in point, out point (rationals, **on the layer's own clock and unstretched**) |
 | | 37 (u8) | bit 4 chars-toward-camera, 3 per-character 3D, 2 frame-blend *kind* (1 = pixel motion), 1 guide layer, 0 name-was-set |
 | | 38 (u8) | bit 7 null, 6 point-of-interest auto-orient (camera/light), 5 camera auto-orient, 3 solo, 2 3D, 1 adjustment, 0 auto-orient along path |
 | | 39 (u8) | bit 7 collapse, 6 shy, 5 locked, 4 frame blending on, 3 motion blur, 2 effects active, 1 audio, 0 enabled |
@@ -390,9 +390,13 @@ project that opens and is wrong:
   the fixture's layers have an empty name chunk.
 - **A null and an adjustment layer are backed by a solid item** (§5 again): the
   layer's own bits at `ldta`+38 decide, never the source.
-- **In and out points are stored unstretched.** Scripting reports
-  `start + (raw − start) × stretch`. At a negative stretch the two ends come
-  back the other way round — a swap, not a repair.
+- **In and out points are counted from the layer's own start, unstretched.**
+  The same convention the keyframe times use (§7.2's `time_of`), so scripting
+  reports `start + raw × stretch` — the start is *added*, not pivoted about.
+  Reading them as comp times instead drags every moved layer's bar back to the
+  origin, which is an assembling comp that is transparent at almost every
+  frame. At a negative stretch the two ends come back the other way round — a
+  swap, not a repair.
 - **Camera and light layers have no blend mode, transparency flag, matte block
   or `timeRemapEnabled`**, and only five of the thirteen switches, because the
   scripting DOM does not offer the rest on a rig. The capture must be absent

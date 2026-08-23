@@ -597,10 +597,12 @@ fn read_layer(
         .or_else(|| source.and_then(|item| item.name.clone()));
 
     // Stretch is stored as the ratio it is, not as the percentage scripting
-    // reports. The in and out points are stored *unstretched*: After Effects
-    // applies the stretch when it reports them, and at a negative stretch the
-    // two ends come back the other way round — which is a swap, not a repair
-    // (docs/impl/ae-import.md §5).
+    // reports. The in and out points are stored **on the layer's own clock and
+    // unstretched** — the same convention the keyframe times use ([`props`]'s
+    // `time_of`) — while scripting reports them on the comp's, so the layer's
+    // start is added rather than pivoted about: `start + raw × stretch`. At a
+    // negative stretch the two ends come back the other way round, which is a
+    // swap, not a repair (docs/impl/ae-import.md §7.1).
     let stretch_top = i32_at(d, 8).unwrap_or(1);
     let stretch_bottom = u32_at(d, 108).unwrap_or(1);
     let stretch = if stretch_bottom == 0 {
@@ -610,7 +612,7 @@ fn read_layer(
     };
     let start_time = rational_at(d, 12, 16).unwrap_or_default();
     let stretched = |dividend: usize, divisor: usize| {
-        rational_at(d, dividend, divisor).map(|raw| start_time + (raw - start_time) * stretch)
+        rational_at(d, dividend, divisor).map(|raw| start_time + raw * stretch)
     };
 
     let matte = if is_rig {
@@ -801,6 +803,78 @@ mod tests {
         body.splice(0..2, kind.to_be_bytes());
         body.splice(16..20, id.to_be_bytes());
         chunk(b"idta", &body)
+    }
+
+    /// A layer descriptor: stretch 1, and the three rationals the timing is
+    /// read from, each given as dividend over `divisor`.
+    fn ldta(divisor: u32, start: i32, in_point: i32, out_point: i32) -> Vec<u8> {
+        let mut body = vec![0_u8; 164];
+        let mut put = |at: usize, value: i32| {
+            body.splice(at..at + 4, value.to_be_bytes());
+        };
+        put(8, 1); // stretch dividend
+        put(12, start);
+        put(16, divisor as i32);
+        put(20, in_point);
+        put(24, divisor as i32);
+        put(28, out_point);
+        put(32, divisor as i32);
+        put(108, 1); // stretch divisor
+        chunk(b"ldta", &body)
+    }
+
+    /// One comp holding the given layer records, with settings enough to read.
+    fn comp_with(id: u32, name: &[u8], layers: &[Vec<u8>]) -> Vec<u8> {
+        let mut comp = idta(ITEM_COMP_KIND, id);
+        comp.extend(chunk(b"Utf8", name));
+        comp.extend(chunk(b"cdta", &[0; 204]));
+        for layer in layers {
+            comp.extend(list(b"Layr", layer));
+        }
+        file(&list(b"Fold", &list(b"Item", &comp)))
+    }
+
+    /// **A layer dragged along the timeline keeps its place.**
+    ///
+    /// The file counts a layer's in and out points on the layer's *own* clock,
+    /// the same way it counts keyframe times, so the layer's start is what
+    /// puts them back on the comp's. Reading them as comp times instead puts
+    /// every dragged layer's bar at the origin — which is a project that opens
+    /// with its assembling comps transparent at almost every frame, because
+    /// each clip sits at 0 rather than where it was cut.
+    #[test]
+    fn a_layers_in_and_out_are_counted_from_its_own_start() {
+        // Start 2.4 s, a bar 2.48 s long on the layer's clock.
+        let bytes = comp_with(3, b"Clips", &[ldta(1000, 2400, 0, 2480)]);
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        let layer = &parsed.capture.comps[0].layers[0];
+        assert_eq!(layer.start_time, Some(2.4));
+        assert_eq!(layer.in_point, Some(2.4), "the bar begins where it was cut");
+        assert_eq!(layer.out_point, Some(4.88));
+    }
+
+    /// **And the stretch multiplies the layer-local time, not a pivot about
+    /// the start.**
+    ///
+    /// A layer stretched to 50 % is half as long on the comp's clock; its
+    /// start does not move, because the start *is* where its own clock begins.
+    #[test]
+    fn a_stretched_layer_is_stretched_from_its_start() {
+        let mut record = ldta(1000, 4000, 0, 10_000);
+        // Stretch 1/2: dividend at 8, divisor at 108, inside the `ldta` body,
+        // which the chunk header offsets by eight.
+        record.splice(8 + 8..8 + 12, 1_i32.to_be_bytes());
+        record.splice(8 + 108..8 + 112, 2_u32.to_be_bytes());
+        let bytes = comp_with(3, b"Clips", &[record]);
+
+        let layer = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .comps[0]
+            .layers[0];
+        assert_eq!(layer.stretch, Some(50.0));
+        assert_eq!(layer.in_point, Some(4.0));
+        assert_eq!(layer.out_point, Some(9.0));
     }
 
     /// **A project with no item tree is refused, not half-imported.**
