@@ -100,8 +100,12 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("gamma", colour([0.94, 1.0, 1.10, 1.0])),
             ("gain", colour([1.18, 1.0, 0.82, 1.0])),
         ],
-        // The classic S: shadows down, highlights up, the middle left alone.
-        "curves" => vec![("master_shadows", f(0.08)), ("master_highlights", f(0.94))],
+        // The classic S: shadows down, highlights up, the middle left alone. The
+        // master curve is a drawn curve now (K-412), so the S is four points.
+        "curves" => vec![(
+            "master",
+            EffectValue::Curve(vec![[0.0, 0.0], [0.25, 0.17], [0.75, 0.86], [1.0, 1.0]]),
+        )],
         "levels" => vec![
             ("master_in_black", f(0.05)),
             ("master_in_white", f(0.72)),
@@ -448,6 +452,10 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
     match match_name {
         "posterize_time" => Some("holds frames, which only shows in motion"),
         "matte_key" => Some("the example frame has no screen in it to key"),
+        // Camera track holds a job and the Controls hold values for expressions
+        // to read; none of them draws, so a picture would be the plate twice.
+        "camera_track" | "slider_control" | "angle_control" | "checkbox_control"
+        | "colour_control" | "point_control" => Some("draws nothing by design"),
         _ => None,
     }
 }
