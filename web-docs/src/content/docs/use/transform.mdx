@@ -7,42 +7,43 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Every layer carries a transform. Twirl the layer open in the timeline to reach it, or
-use the gizmo in the Viewer.
+Each layer has transform properties. Twirl the layer open in the timeline to access it, or use
+the tools, for instance the Selection or Rotation options, in the Viewer. Additionally with
+wireframes enabled a selected layer has a gizmo around it allowing you to perform a lot of these
+actions within the viewer directly.
 
-<Shot file="transform.png" caption="A layer's transform properties in the Timeline." />
+<Shot file="transform.png" caption="A layer's transform properties in the Timeline." eager/>
 
 ## The properties
 
 | Property | What it does |
 | --- | --- |
 | **Anchor point** | The point the layer scales and rotates around. |
-| **Position** | Where the anchor point sits in the composition. |
+| **Position** | Where the anchor point sits withinin the composition. |
 | **Scale** | Size, as a percentage. |
 | **Rotation** | Angle, in degrees. |
-| **Opacity** | How much of the layer reaches the composite. |
+| **Opacity** | How opaque a layer is, as a percentage. |
 
-Every one can be animated. See [Keyframes](/use/keyframes/).
+Every property can be animated. See [Keyframes](/use/keyframes/).
 
 ## Move the anchor point
 
-The anchor point decides what a rotation looks like. Move it before you animate, not
-after, because moving it later shifts the layer.
-
-Use the anchor point tool in the Viewer to move it without moving the layer.
+The anchor point decides the point a rotation revolves around. 
+Use the anchor point tool in the Viewer to move it without moving the layer, you can also
+drag the anchor point directly in the viewer with the selection tool.
 
 ## The gizmo
 
-Select a layer and the Viewer draws its wireframe and a transform gizmo. Drag the
-handles to move, scale, and rotate.
+Select a layer and the Viewer draws its wireframe and a transform gizmo. Drag the handles
+to move, scale, and rotate.
 
 ## Parenting
 
-Parent a layer to another and it follows the parent's transform. Its own values then
-read as offsets from the parent.
+Parent a layer to another and it follows the parent's transform. Its own values then read
+as offsets from the parent.
 
-Use a **null layer** as the parent when you want a rig that never draws. One null can
-drive many layers at once.
+Use a **null layer** as the parent when you want a rig that never draws. One layer can
+parent many layers at once.
 
 ## Related
 

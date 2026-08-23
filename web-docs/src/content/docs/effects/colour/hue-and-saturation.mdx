@@ -1,39 +1,33 @@
 ---
 title: Hue and saturation
-description: "Turn, saturate or lighten the whole picture — or just its greens."
+description: "Adjust hues, saturation, or lightness."
 ---
 
 Hue and saturation is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Turns the colour wheel, changes how colourful the picture is, and raises or
-lowers how bright it is — either everywhere, or only for one family of colours.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Hue and saturation is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/hue-and-saturation.webp"
+      alt="The same frame with Hue and saturation applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Hue and saturation</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Hue and saturation. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Hue and saturation is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-The Master group does it to everything. The six range groups do it to the reds,
-yellows, greens, cyans, blues or magentas alone, which is the move this effect
-exists for: grass pulled toward teal without touching skin, a red jersey
-desaturated without flattening the rest of the frame, a sky lifted while the
-ground stays put.
+{/* END GENERATED */}
 
-The ranges have no edges to tune, and no edge to catch you out. Each is widest at
-its own colour and fades to nothing at its neighbours, so a colour sitting
-between two ranges takes a share of each and never more than one range's worth
-in total — a gradient crossing from green to cyan changes smoothly rather than
-stepping as it passes a boundary.
+## What it does
 
-Greys take the Master adjustment only. A grey has no colour to belong to a range,
-so lifting the reds cannot quietly darken every neutral in the frame — which it
-would if the effect took a grey's technically-zero hue at face value.
-
-Lightness is a gain, not a fade toward white: there is no white to fade toward in
-a scene-linear picture, where a highlight can be many times brighter than paper.
-Full negative takes a colour to black, full positive doubles it, and nothing
-clips on the way.
-
-[Hue shift](/effects/colour/hue-shift/) is still the effect to reach for when all
-you want is one dial: it holds perceived brightness as the hue turns, which this
-one does not.
+Allows you to adjust hue, brightness values, or saturation. This can be done
+across the entire input, or adjusted on the colour of a pixel.
 
 ## Parameters
 
@@ -81,18 +75,13 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Hue** — degrees round the colour wheel. Wraps, and winds through whole turns
-  when animated rather than stopping at 360.
-- **Saturation** — how colourful. Zero passes the picture through, −100 takes the
-  group to grey, +100 doubles it, and there is no ceiling above.
-- **Lightness** — a gain on brightness. −100 takes the group to black, +100
-  doubles it.
+- **Hue** counts degrees around the colour wheel.
+- **Saturation** adjusts saturation, -100 is greyscale, and +100 doubles the saturation.
+- **Lightness** adjusts brightness.
 - **Master** applies to every pixel. **Reds**, **Yellows**, **Greens**,
-  **Cyans**, **Blues** and **Magentas** apply by how close a pixel's colour is to
-  that range, and by how colourful the pixel already is.
-- **Mix** — how much of the graded picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's
-  brightness; see [Effects](/use/effects/).
+  **Cyans**, **Blues** and **Magentas** apply to that range, and by how saturated the pixel already is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

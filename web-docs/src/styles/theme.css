@@ -36,3 +36,116 @@
   border-bottom: 1px solid var(--sl-color-hairline);
   backdrop-filter: blur(12px);
 }
+
+/* An effect page's example picture. Rendered by the engine, encoded by
+   scripts/gen-effect-shots.mjs, served from public/effects/. */
+figure.example {
+  margin: 1.5rem 0;
+}
+figure.example img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+figure.example figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sl-color-gray-3);
+}
+
+/* The before-and-after wipe. The untouched frame sits underneath; the effect is
+   laid over it and clipped at --split, which the range input drives. Without
+   JavaScript the inline 50% stands and the figure is an honest half-and-half. */
+.compare {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--sl-color-hairline);
+  background: var(--sl-color-bg-inline-code);
+  line-height: 0;
+  touch-action: pan-y;
+}
+/* Starlight gives consecutive elements in prose a top margin. On the overlaid
+   picture that margin is added to its `top`, which drops it a line below the one
+   underneath and puts the two out of register. */
+figure.example .compare > * {
+  margin: 0;
+}
+.compare__after {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 var(--split));
+}
+.compare__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split);
+  width: 2px;
+  margin-left: -1px;
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: 0 0 6px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+.compare__handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2.25rem;
+  height: 2.25rem;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  background: rgb(0 0 0 / 0.35);
+  box-shadow: 0 0 8px rgb(0 0 0 / 0.45);
+}
+.compare:focus-within .compare__handle::after {
+  border-color: var(--sl-color-text-accent);
+  box-shadow: 0 0 0 3px var(--sl-color-accent-low);
+}
+.compare__label {
+  position: absolute;
+  top: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: rgb(255 255 255 / 0.92);
+  background: rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+.compare__label--a {
+  left: 0.5rem;
+}
+.compare__label--b {
+  right: 0.5rem;
+}
+/* Invisible, and the whole picture. Browsers move a range thumb to wherever the
+   pointer went down, so the drag lands where the reader expects, and the arrow
+   keys work for anyone not using a pointer at all. */
+.compare__range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+.compare__range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 2.25rem;
+  height: 100%;
+}
+.compare__range::-moz-range-thumb {
+  width: 2.25rem;
+  height: 100%;
+  border: 0;
+}

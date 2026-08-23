@@ -1,23 +1,32 @@
 ---
 title: Radial wipe
-description: "Sweeps a wedge around a centre, like a hand going round a clock."
+description: "Sweeps a wedge around a centre."
 ---
 
 Radial wipe is a **Transition** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Taking the layer away around a circle. A wedge opens from **Start angle** and
-sweeps until it has swallowed the frame — the clock-hand wipe, and the one every
-countdown timer, loading dial and radial progress bar is made of.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Radial wipe is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/transition/radial-wipe.webp"
+      alt="The same frame with Radial wipe applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Radial wipe</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Radial wipe. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Radial wipe is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-As a transition it is the obvious use: keyframe **Completion** from 0 to 100 and
-the shot spins away. But it earns its place at fixed values just as often, on
-top of a shape layer, as a dial: put it on a ring and Completion *is* the
-percentage.
+{/* END GENERATED */}
 
-**Both** turns it into a pair of curtains opening from the start ray, which is a
-different move again — good for revealing something in the centre of frame.
+## What it does
+
+Wipes the frame around a centre point, like a clock.
 
 ## Parameters
 
@@ -43,38 +52,13 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Wipe centre x** and **Wipe centre y** — where the hand pivots. Off-centre
-  wipes read as light sweeping past rather than as a clock, and are worth trying
-  when the shot has an obvious source of light in it.
-- **Completion** — how far round the sweep has got, 0 to 100. At 0 the frame is
-  untouched exactly; at 100 it is gone. It starts at 50 so the effect shows you
-  what it does the moment you add it.
-- **Start angle** — where the sweep begins, measured from straight up and
-  turning clockwise. 0° starts at twelve o'clock, which is what a dial wants.
-- **Wipe** — which way the wedge opens. **Clockwise** and **Anticlockwise** open
-  one way from the start ray; **Both** opens symmetrically either side of it, so
-  the removed area is a wedge centred on Start angle. All three remove the same
-  amount of the circle at the same Completion.
-- **Feather** — how soft the sweeping edge is, in pixels measured across the
-  arc. Because it is measured at the arc rather than as an angle, the soft edge
-  stays the same thickness as it sweeps outward instead of fanning open.
-- **Mix** — how much of the wipe takes effect, as distinct from how far it has
-  swept. See [Linear wipe](/effects/transition/linear-wipe/).
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The middle of a heavily feathered wipe is mush.** A feather is a fixed width
-measured across the arc, and near the centre an arc of any fixed width wraps the
-whole circle — so the soft edge has nowhere to go and the few pixels at the
-pivot smear. That is geometry rather than a fault, and it is true of every
-radial wipe in every application. If it shows, move the centre off frame or drop
-the feather.
-
-**For a progress dial, put it on a shape.** A Radial wipe on a footage layer is
-a transition; on a ring or an arc drawn as a shape layer it is a readout, and
-Completion can be driven straight from an expression.
+- **Wipe centre x** and **Wipe centre y** positions the wipe's centre.
+- **Completion** is how far the sweep is as a precentage.
+- **Start angle** is the direction  the sweep begins from.
+- **Wipe** chooses which way the wedge opens.
+- **Feather** softens the sweeping edge.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

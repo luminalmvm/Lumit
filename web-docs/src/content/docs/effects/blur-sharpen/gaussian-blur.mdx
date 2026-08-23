@@ -1,25 +1,32 @@
 ---
 title: "Gaussian blur"
-description: "The plain, even softening, and what its two controls mean."
+description: "Basic, simple blur."
 ---
 
 Gaussian blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The even softening: every pixel's light is spread the same distance in every
-direction. This is the blur to reach for when you have no reason to reach for
-another one.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Gaussian blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/gaussian-blur.webp"
+      alt="The same frame with Gaussian blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Gaussian blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Gaussian blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Gaussian blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Typical work: pushing a background back so a foreground subject reads against
-it, taking the hard digital edge off a graphic or a title, softening a plate
-before a grade so compression blocks stop showing, and animating a layer out of
-focus over a few frames as a transition.
+{/* END GENERATED */}
 
-It blurs the picture and its transparency together, so a blurred logo or a keyed
-subject softens at its outline rather than growing a bright or dark fringe
-there. Along the frame's own borders it holds the edge pixel, so a full-frame
-blur does not darken toward the sides.
+## What it does
+
+Applies an even blur across the whole image.
 
 ## Parameters
 
@@ -40,15 +47,10 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Radius** — how far each pixel's light is spread. It is measured as a share of
-  the composition diagonal rather than in pixels, which is what lets the same
-  setting look the same after you resize the composition, and lets a Quarter
-  preview read as the export does. Low values soften; high ones dissolve the
-  picture into fields of colour. Cost barely rises with the number, so a very
-  wide blur is a reasonable thing to ask for.
-- **Mix** — how much of the blurred picture replaces the original. It is the way
-  to ease an effect back without disturbing the setting above it, and it
-  animates, so a layer can come into focus over time from Mix alone.
+- **Radius** adjusts the size of the blur.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the blur amount from another layer's brightness, 
+  scaled by the blur amounts you set; see [Effects](/use/effects/).
 
 ## Related
 

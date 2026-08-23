@@ -7,9 +7,9 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **Text layer** holds editable styled text.
+A **Text layer** holds editable text.
 
-<Shot file="text-layer.png" caption="A text layer being edited in the Viewer." />
+<Shot file="text-layer.png" caption="A text layer being edited in the Viewer." eager/>
 
 ## Add text
 
@@ -19,18 +19,15 @@ A **Text layer** holds editable styled text.
 
 ## Style it
 
-Set the font, size, letter-spacing, fill, and stroke. Every value can be animated. See
-[Keyframes](/use/keyframes/).
+Set the font, size, letter-spacing, fill colour, and stroke.
 
-Because a text layer is a layer, it also takes [effects](/use/effects/),
+A text layer is a layer, so it also takes [effects](/use/effects/),
 [masks](/use/masks/), and a [transform](/use/transform/) like any other.
 
-## Current limit
-
-A text layer holds **one run** in this version. One set of styling applies to the whole
-layer. Mixed styling within a single layer is not built.
-
-Use one layer per style until it lands.
+:::note[Limitation]
+A text layer styling currently cannot be applied on a per character basis. 
+Mixed styling within a single layer is planned.
+:::
 
 ## Related
 

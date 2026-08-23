@@ -7,18 +7,17 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **Sequence layer** holds an ordered run of **clips** cut back-to-back on one row. It
-is Lumit's editing surface, and it behaves the way Vegas does.
+A **Sequence layer** holds a run of **clips** cut back-to-back on one row.
 
-<Shot file="sequence-layer.png" caption="A Sequence layer: clips cut back-to-back on one row." />
+<Shot file="sequence-layer.png" caption="A Sequence layer: clips cut back-to-back on one row." eager/>
 
-The word **clip** only means something inside a Sequence layer. Everywhere else, the
-word is [layer](/use/layers/).
+**clip** is only used in reference to an item within a Sequence layer. Everywhere else, the word
+is [layer](/use/layers/).
 
 ## Why use one
 
-Use a Sequence layer when you are cutting rather than compositing. One row holds a whole
-run of shots, so the timeline stays short.
+A Sequence layer suits cutting more than compositing. One row holds a whole run of shots,
+so the timeline remains clean.
 
 ## Each clip carries its own
 
@@ -28,21 +27,23 @@ run of shots, so the timeline stays short.
 
 ## Edit clips
 
+To edit a sequence layers clips or retime, double click the sequence layer in the timeline.
+
 - Drag a clip's edge to trim it.
 - Drag a clip along the row to move it.
 - Use the razor to split a clip at the playhead. A cut between two clips is an
   **edit point**.
 
-Editing a clip's retime never moves an edit point.
+Editing a clip's retime never alters it's starting point.
 
-:::note[Known limit]
+:::note[Known issue]
 The razor refuses to cut through a clip's eased speed ramp. Cut first, then ramp.
 :::
 
 ## What applies to the whole layer
 
 Effects, masks, transforms, and switches on a Sequence layer apply to its **whole
-output**, after the clips have been retimed. They are not per-clip.
+output**, once the clips have been retimed. They are not per-clip.
 
 Apply something to one shot only by splitting it out, or by using a separate layer.
 

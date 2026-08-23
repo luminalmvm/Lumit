@@ -7,55 +7,52 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Lumit's panels dock, split, and float. An arrangement of panels is a **workspace**.
+Lumit's **panels** can dock, split, and float. An arrangement of panels is a **workspace**.
 
-<Shot file="workspace.png" caption="A workspace: Viewer, Timeline, and Project docked together." />
+<Shot file="workspace.png" caption="A workspace: Viewer, Timeline, and Project docked together." eager/>
 
 ## The panels
 
 | Panel | What it is for |
 | --- | --- |
-| **Viewer** | The picture, and the tools that act on it. |
+| **Viewer** | The preview, and tools that can alter items within it. |
 | **Project** | Assets and folders. |
-| **Timeline** | Layers, time, and keyframes. |
-| **Graph editor** | Curves. |
+| **Timeline** | Time, layers, Graph editor, and keyframes. |
 | **Effect Controls** | The selected layer's effect parameters. |
-| **Effects & Presets** | The roster you drag from. |
+| **Effects & Presets** | Panel listing all presets and effects you have available |
 | **Scopes** | Waveform and vectorscope readouts. |
 | **Hierarchy** | The open comp's layers as a tree, precomps expandable. |
 
 ## Rearrange
 
-Drag a panel's tab to move it. Drop it onto an edge to split, or onto another tab
-group to join it. Drag it out of the window to float it.
+Drag a panel's tab to move it. Drop it near an edge to split, or onto another tab group to
+join it. Drag it out of the window to float it.
 
 ## Show and hide
 
-The **Window** menu lists every panel with a tick showing whether it is in the
-arrangement. Toggle one to add or drop it. The last remaining panel cannot be hidden.
+The **Window** menu lists every panel with a tick showing whether it is currently visible. 
+Toggle to add or drop a panel.
 
 ## Workspaces
 
-Lumit ships with workspace presets - Edit, Effects, Colour, Audio - and your current
-arrangement persists between sessions. It belongs to you, not to the project.
+There are several built-in presets (Edit, Effects, Colour, Audio). Your current
+workspace persists between sessions.
 
-Saving your own named workspaces is not built yet.
+:::note[Not yet built]
+Custom workspaces can not currently be saved, but will persist across sessions unless you switch
+workspace. These are planned.
+:::
 
 ## The command palette
 
-`Ctrl+Shift+P` opens the command palette: type a few letters of any command and run
-it. Where a command has a shortcut, the palette shows it, so the palette also teaches
-the keyboard.
+`Ctrl+Shift+P` opens the command palette: search for any command and run it.
 
 ## The menu bar
 
-Nine menus, arranged the way After Effects arranges them: **File, Edit, Composition,
+Nine menus: **File, Edit, Composition,
 Layer, Effect, Animation, View, Window, Help**.
 
-Every command the finished application will carry is listed, even the unbuilt ones. An
-unbuilt command reads *(Not implemented)* and is disabled, so the menu tells you what
-is coming. A command that needs something you have not selected greys out rather than
-failing.
+A menu item that requires something you have not selected appears disabled.
 
 ## Related
 

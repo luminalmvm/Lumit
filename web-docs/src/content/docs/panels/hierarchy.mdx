@@ -7,16 +7,15 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The **Hierarchy** panel shows the active composition as an indented tree: its layers,
-top to bottom. It answers "what is inside this comp" without opening anything.
+The **Hierarchy** panel draws the active composition as an indented tree of its layers,
+top to bottom. Use it to see what a comp contains without opening anything.
 
-<Shot file="hierarchy.png" caption="The Hierarchy panel, with a precomp twirled open." />
+<Shot file="hierarchy.png" caption="The Hierarchy panel, with a precomp twirled open." eager/>
 
 ## Precomps expand
 
-A [Precomp layer](/use/compositions/) has a twirl arrow. Open it and the tree shows the
-layers of the composition it nests, indented one level. Nesting goes as deep as your
-project does.
+A [Precomp layer](/use/compositions/) can be opened to view the layers of the composition
+nested within.
 
 ## What clicking does
 
@@ -26,13 +25,12 @@ project does.
 | `Ctrl`+click | Add or remove it from the selection. |
 | Double-click a precomp row | Open that composition in the Viewer and Timeline. |
 
-Selection is shared with the Timeline: a layer chosen in one panel reads as chosen in
-the other.
+Selection is shared with the Timeline, so a layer selected in the heirarchy panel is selected in 
+the timeline.
 
 ## Read-only
 
-The panel navigates; it does not edit. Rename, reorder, and delete stay in the
-[Timeline](/panels/timeline/).
+The panel is for navigation. Renaming, reordering and deleting stay in the [Timeline](/panels/timeline/).
 
 ## Related
 

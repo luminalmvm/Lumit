@@ -1,3 +1,11 @@
 node_modules/
 dist/
 .astro/
+
+# Local, high-fidelity inputs for the effect example pictures. The committed
+# stills beside them are the fallback everyone else renders from; these are the
+# owner's own source, and one of them is a third-party LUT that is not ours to
+# redistribute. See scripts/gen-effect-shots.mjs.
+src/assets/effect-plate.mp4
+src/assets/effect-depth.mp4
+src/assets/effect-lut.cube

@@ -1,23 +1,33 @@
 ---
 title: Spherize
-description: "Magnifies a circle of the picture as if a glass ball were held over it — or pinches it inward."
+description: "Magnifies a circle of the picture."
 ---
 
 Spherize is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Holding a marble over the picture. Inside a circle the image swells outward, and
-everything the middle pushed aside is squeezed into the last few pixels before the
-rim — which is exactly what a real glass ball does, and why the effect reads as
-glass rather than as a zoom.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Spherize is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/spherize.webp"
+      alt="The same frame with Spherize applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Spherize</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Spherize. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Spherize is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Turn **Bulge** negative and it does the opposite, pinching the picture inward
-toward the centre.
+{/* END GENERATED */}
 
-The everyday uses are a fisheye peephole, a water droplet on a lens, a magnifying
-glass travelling across a map or a page, and — animated from 0 up and back — a
-soft pulse or impact ripple on a title.
+## What it does
+
+Warps the layer as if a magnifying glass was warping the contents. Inverted this
+acts like a fisheye lens.
 
 ## Parameters
 
@@ -41,43 +51,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Radius** — how big the ball is, as a percentage of the composition diagonal.
-  Being a percentage rather than a pixel count, it covers the same part of the
-  picture whatever size the composition is, and a half-resolution preview matches
-  the export.
-- **Bulge** — which way the glass bends and how much of it there is. **100** is a
-  full sphere; **0** is no effect at all; **−100** is the exact opposite, a pinch.
-  The values in between read as a shallower lens rather than a smaller one, which
-  is what makes Bulge the control to animate.
-- **Centre X** and **Centre Y** — where the ball sits, in pixels at composition
-  size. A fresh Spherize starts in the middle of the frame. Animate these to slide
-  a magnifying glass across the picture.
-- **Mix** — how much of the bulged picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**A bulge and a pinch cancel exactly.** Stack a Spherize at +100 and another at
-−100 with the same Radius and Centre and you get the picture back (give or take
-the softening of two resamples). They are genuinely opposite transforms rather
-than a sign flipped on a number, which is what makes the negative half of the
-slider trustworthy.
-
-**The rim is meant to be crowded.** Detail piles up in the last few pixels before
-the edge of the ball, because that is where a sphere puts everything it magnified
-away from the middle. If it reads as too harsh, lower Bulge rather than Radius —
-lowering Radius just makes a smaller ball with the same crowded rim.
-
-**Nothing outside the radius moves.** As with [Twirl](/effects/distortion/twirl/),
-the effect is exactly bounded by its own circle, so it is safe to drop on a full
-frame. If the circle hangs off the edge of the frame, the part with nothing to
-read comes back transparent.
-
-**For a real lens, reach for something else.** Spherize is a local bulge, not an
-optical model. To correct or add the barrel distortion of an actual lens across
-the whole frame, use [Lens distort](/effects/distortion/lens-distort/), which is
-described in field of view rather than in radius.
+- **Radius**: adjust the area to warp.
+- **Bulge**: which direction the image distorts in.
+- **Centre X** and **Centre Y**: the centre point of the warp area.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

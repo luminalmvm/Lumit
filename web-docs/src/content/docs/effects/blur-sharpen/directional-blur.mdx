@@ -5,23 +5,31 @@ description: "A streak along one angle, for impact frames and speed."
 
 Directional blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-A blur along a single line. Instead of spreading light in every direction it
-smears it along one angle, which reads as motion rather than as softness.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Directional blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/directional-blur.webp"
+      alt="The same frame with Directional blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Directional blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Directional blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Directional blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the impact-frame staple: a few frames of a long streak on a hit, easing
-back to nothing, sells a punch that the footage itself never had. It is also how
-speed lines and whip transitions are built, and it is a quick way to make a
-still graphic feel like it arrived at speed.
+{/* END GENERATED */}
 
-The streak is centred on each pixel and runs equally in both directions along
-the angle, so it does not shift the picture — and so an angle and that angle
-plus half a turn produce the same result.
+## What it does
 
-For a smear that follows the motion already in the footage, rather than one
-angle you choose, use [Fast motion blur](/effects/temporal/fast-motion-blur/)
-instead.
+A blur along a single line. 
+
+For a smear that follows visual motion in the footage, use
+[Fast motion blur](/effects/temporal/fast-motion-blur/).
 
 ## Parameters
 
@@ -43,17 +51,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Length** — the full length of the streak, measured across the composition
-  diagonal so it survives a resize. There is no ceiling worth speaking of: this
-  is its own effect rather than one mode of a shared blur, so a streak may run
-  past the whole diagonal if that is the look. The sampling cost stops climbing
-  well before that, so a long streak stays affordable.
-- **Angle** — which way the streak runs. Zero is horizontal, and the angle winds
-  freely past a full turn so an animated value can keep spinning rather than
-  snapping back at the wrap.
-- **Mix** — how much of the streaked picture replaces the original. Animating
-  Mix rather than Length is the cheaper way to pulse the effect on a beat, since
-  the streak itself never has to be re-measured.
+- **Length** is the length of the blur.
+- **Angle** adjusts the angle of the blur.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the blur amount from another layer's brightness, 
+  scaled by the blur amounts you set; see [Effects](/use/effects/).
 
 ## Related
 

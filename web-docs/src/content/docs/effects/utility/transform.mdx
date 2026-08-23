@@ -1,31 +1,33 @@
 ---
 title: "Transform"
-description: "The transform properties as a stack entry, for adjustment layers."
+description: "The transform properties as an effect."
 ---
 
 Transform is a [Utility](/effects/utility/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The layer transform group — anchor, position, scale, rotation and opacity — as an
-effect in the stack. The parameters mirror the real ones exactly, in the same
-units, animatable in the same way.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Transform is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/utility/transform.webp"
+      alt="The same frame with Transform applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Transform</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Transform. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Transform is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Its point is **adjustment layers**. Every layer already has a transform, so an
-effect that repeats it would be pointless were it not for the one place a layer
-transform cannot reach: the composite of everything below. Put this on an
-adjustment layer and it moves, scales and rotates the whole picture beneath it as
-one, which is the montage punch-in and the whip transition, done in a single
-place rather than by keyframing every layer.
+{/* END GENERATED */}
 
-It is also useful on an ordinary layer when you need a transform to happen at a
-particular *point in the stack* — before or after a given effect — rather than
-after the whole stack, which is where the layer's own transform always applies.
-Scaling a layer up before a blur and back down after it is not the same picture
-as doing either alone.
+## What it does
 
-For the layer's own transform properties, see
-[Transform](/use/transform/).
+The layer transform group (anchor, position, scale, rotation and opacity) as an
+effect. 
 
 ## Parameters
 
@@ -53,25 +55,18 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Anchor x** and **Anchor y** — the point everything else happens around, in
-  pixels. Scale grows away from it and rotation turns about it, so moving the
-  anchor is how you decide whether a punch-in comes toward the middle of frame or
-  toward a subject standing off to one side.
-- **Position x** and **Position y** — where that anchor point lands, in pixels.
-  Since the two default to the same place, a fresh instance changes nothing until
-  you move one.
-- **Scale x %** and **Scale y %** — size as a percentage, so full size is a
-  hundred. The two axes are separate, so a picture can be stretched as well as
-  scaled. Negative values flip, which is the quickest way to mirror the composite
-  beneath an adjustment layer.
-- **Rotation** — degrees, on a dial. It is unbounded and winds through whole
-  turns, because a whip transition spins several times and a control that stopped
-  at one turn could not express it.
-- **Opacity %** — how much of the transformed picture is there at all.
-- **Mix** — how much of the transformed result replaces the original. It is a
-  different question from opacity: this blends the moved picture against the
-  unmoved one, which at partial values gives you a double exposure rather than a
-  fade.
+- **Anchor x** and **Anchor y**: the point everything else happens around.
+- **Position x** and **Position y**: slides the frame left/right and up/down.
+- **Scale x %** and **Scale y %**: scale size as a percentage.
+- **Rotation**: turn a set number of degrees.
+- **Opacity %**: how much of the transformed picture there is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+For the layer's own transform properties, see
+[Transform](/use/transform/).
 
 ## Related
 

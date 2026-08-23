@@ -7,8 +7,10 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The toolbar arms one tool at a time. Tools with several members open a flyout, and
+The toolbar displays all available tools. Tools with several options open a flyout, and
 pressing the shortcut again steps through them.
+
+<Shot file="toolbar.png" caption="The toolbar. One tool is active at a time; groups open a flyout." eager/>
 
 Shortcuts below are the defaults, rebindable in **Settings ▸ Keymap**.
 
@@ -19,36 +21,29 @@ Shortcuts below are the defaults, rebindable in **Settings ▸ Keymap**.
 | **Zoom** | `Z` | Zoom the Viewer. |
 | **Rotation** | `W` | Rotate the selected layer. |
 | **Anchor point** | `Y` | Move the anchor point without moving the layer. |
-| **Razor** | `C` | Split a clip in a [Sequence layer](/use/sequence-layers/). |
-| **Shape** | `Q` | Rectangle, Rounded rectangle, Ellipse, Polygon, Star. |
-| **Pen** | `G` | Draw a bezier path. |
+| **Razor** | `C` | Split a layer or a clip within a [Sequence layer](/use/sequence-layers/). |
+| **Shape** | `Q` | Rectangle, Rounded rectangle, Ellipse, Polygon, Star. Creates a mask or shape layer |
+| **Pen** | `G` | Draw a bezier path. Creates a mask or shape layer |
 | **Type** | `Ctrl+T` | Add [text](/use/text/). |
 | **Paint** | `Ctrl+B` | Brush, Clone stamp, Eraser. |
 | **Camera** | `Shift+C` | Orbit, Pan, Dolly the [camera](/use/camera/). |
-
-
-<Shot file="toolbar.png" caption="The toolbar. One tool is armed at a time; groups open a flyout." />
 
 ## Shape and Pen: layer or mask?
 
 <Shot file="toolbar-flyout.png" caption="A shape group's flyout, with the five shape tools." />
 
-With **a layer selected**, these draw a [mask](/use/masks/) on it. With **nothing
-selected**, they make a new [shape layer](/use/shapes/).
+With a **layer selected**, these draw a [mask](/use/masks/) on the layer. With **nothing
+selected**, they create a [shape layer](/use/shapes/) at the top of the composition.
 
-## Not built yet
-
-These appear in the strip but cannot be armed. They are shown rather than hidden, so
-the toolbar teaches the right shape of the application:
-
-- Vertical type
-- The Pen's editing siblings: Add vertex, Delete vertex, Convert vertex, Mask feather
-- Roto brush and Refine edge
-- The four Puppet pins
-
-A tool's tooltip names it, gives its current chord, and says if it is unbuilt.
+:::note[Not yet built]
+These appear in the toolbar, but currently haven't been implemented:
+- Vertical text
+- The Pen's alternative options: Add vertex, Delete vertex, Convert vertex, Mask feather
+- Rotoscope brush and Refine edge
+- The Puppet tool
+:::
 
 ## Tool options
 
-The right-hand end of the strip carries options for the armed tool - fill and stroke
-for the shape tools, brush settings for paint, and so on.
+If a tool has additional customisation, such as fill color or stroke width, then these options appear to the 
+right-hand side of the tools when available.

@@ -5,21 +5,20 @@ sidebar:
   order: 18
 ---
 
-**Export** writes a deliverable file. Lumit says *export* for what you produce, and
-*render* only for what the engine does internally.
+**Export** renders your work and provides you with an output file(s).
 
 ## Export a composition
 
 1. Select the composition.
 2. Choose **File ▸ Export**, or press `Ctrl+Alt+M`.
-3. Set the format, preset, range, and destination.
+3. Set the format, preset, range and destination.
 4. Start it.
 
-One composition is exported at a time, from the dialogue.
+The dialogue exports one composition at a time.
 
-## Export does not block you
+## Export doesn't block
 
-Export runs away from the interface. You can keep editing while it writes.
+Export runs apart from the interface. You can carry on editing while it writes.
 
 ## Presets
 
@@ -32,23 +31,23 @@ Export runs away from the interface. You can keep editing while it writes.
 
 ## Codecs and encoders
 
-Video exports as **H.264** or **HEVC**. Lumit probes for a hardware encoder - NVENC,
-AMF, or QSV - and picks one automatically, with a software fallback that is always
-available. Audio is AAC. A PNG sequence carries no audio and no bitrate; it is
-lossless.
+Video exports as **H.264** or **HEVC**. Lumit probes for a hardware encoder (NVENC, AMF
+or QSV) and picks one automatically. A software fallback is always available. Audio is
+AAC. A PNG sequence is lossless, and it carries no audio and no bitrate.
 
 ## Export is always full quality
 
-[Adaptive degradation](/use/preview/) and preview resolution affect preview only. An
-export always renders at full quality.
+[Adaptive degradation](/use/preview/) and preview resolution touch the preview alone. An
+export always runs at full quality.
 
-Export may **bake** internally - flattening retimes, rasterising, pre-compositing - to
-go faster. Baking happens inside the export pipeline and never alters your project.
+To go faster, an export may **bake** internally, flattening retimes, rasterising and
+pre-compositing. Baking happens inside the export pipeline, and your project is never
+altered by it.
 
 :::note[Not built yet]
-An export queue - several items queued up, each with its own range, preset and
-filename - is planned but not built. So are ProRes and DNxHR intermediate codecs,
-free width and height (sizes are preset-driven today), and an export priority control.
+An export queue, where several items are lined up with their own range, preset and
+filename, is planned but not built. So are ProRes and DNxHR intermediate codecs, free
+width and height (sizes are preset-driven today), and an export priority control.
 :::
 
 ## Related

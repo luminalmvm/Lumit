@@ -7,102 +7,83 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-An **effect** is one operation in a layer's **effect stack**. The stack runs
-top-to-bottom.
+An **effect** is one stage in a layer's **effect stack**. The stack composites top-to-bottom
+applying in that order.
 
-<Shot file="effect-menu.png" caption="The Effect menu, category by category." />
+<Shot file="effect-menu.png" caption="The Effect menu." eager/>
 
 ## Apply an effect
 
-1. Select one or more layers.
+1. Select a layer.
 2. Choose **Effect**, then a category, then the effect.
 
-The **Effect** menu applies to every selected layer at once. With nothing selected, the
-whole menu is disabled.
-
-You can also drag an effect from the Effects & Presets panel onto a layer.
+You can also choose effects via the [Effects console](/use/fx-console/), or dragged onto 
+a layer from the Effects & Presets panel. With nothing selected, the whole menu is disabled.
 
 ## Edit the parameters
 
-Select the layer and open the **Effect Controls** panel. Every parameter can be
-animated. Turn on a stopwatch to start. See [Keyframes](/use/keyframes/).
+Select the layer and open the **Effect Controls** panel. Every parameter there can be
+animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
 
 ## Order matters
 
-Effects run in stack order. A blur before a glow does not look like a glow before a
-blur. Drag an effect up or down the stack to reorder it.
+Effects run in stack order. A exposure ahead of a glow does not look like a glow ahead of a
+exposure. Drag an effect up or down the stack to reorder it.
 
 ## Apply one effect to many layers
 
-Put the effect on an **adjustment layer**. It then applies to the composite of
-everything below it. See [Layers](/use/layers/).
+Effects on **adjustment layers** apply to the composite of everything
+below them. See [Layers](/use/layers/).
 
 ## Every effect has a Matte
 
-At the bottom of every effect's controls sits one row in the same place on all of
-them: a layer picker labelled **Matte**, with an **Invert** checkbox beside it.
-Point it at a layer and that layer's brightness decides how much of the effect
-each pixel gets - white in full, black not at all, grey part way. Invert reads it
-the other way round. Leave it unset, which is the default, and nothing extra
-happens or costs anything.
+Every effect's controls has the following: a layer picker labelled **Matte**, with 
+an **Invert** checkbox beside it. Select a layer and that layer's brightness 
+decides how much of the effect each pixel gets. White applies the effect in full and 
+black gets none. Invert reads the same picture the other way round. The row is not set 
+by default, and most effects work fine without it.
 
-This is not the same as masking the effect. A mask hides what an effect did; a
-matte drives the effect itself, and a handful of effects mean something deeper by
-it than strength. Their own pages say so in the parameter table:
+A matte is different from a mask on the effect. A mask can hide what an effect does, 
+whereas a matte drives the effect itself. For a handful of effects it applies more than
+just strength, and their own effect pages explain this in the parameter table:
 
-- **Gaussian blur** narrows its radius, so grey is genuinely less soft rather
-  than a wide blur faded back.
-- **Turbulent displace** scales its push, so grey is warped a little rather than
-  fully warped and shown faintly.
-- **Glow** gates which pixels may seed the halo, so light still spills outward
-  from them.
-- **Depth of field** reads it as a depth pass, so mid-grey can be perfectly sharp.
+- **Gaussian blur** narrows its radius.
+- **Turbulent displace** scales its turbulence.
+- **Glow** gates pixels used to find area's of glow.
+- **Depth of field** reads it as a depth pass.
 - **Lens flare** reads it as where to find its light sources.
 - **Set matte** reads it as the alpha itself, which is the whole effect.
 
-The matte layer is rendered on its own at this composition's size, so nothing
-needs aligning, and the **Layer source** dropdown beside the picker decides
-whether you read that layer raw, with its masks, or with its own effects applied.
-Point the row at the layer the effect is *on* and it reads that layer's own
-picture at that point in the stack.
+Lumit renders the matte layer on its own at the composition's size. Beside the picker, 
+the **Layer source** dropdown has the option to read that layer raw, with its masks, 
+or with its effects applied. If the same layer the effect is *on*, it reads that layer's 
+own picture at that point in the stack.
 
 ## The built-in roster
 
-Fifty-three effects ship today. Each has its own page under
-[Effects](/effects/), with a full parameter table.
+Each effect has its own page under [Effects](/effects/), with an example of what it does 
+and a table with every parameter and its range, default and units. 
 
-**Blur and sharpen** - Channel blur, Depth of field, Directional blur, Gaussian
-blur, Radial blur, Sharpen, Unsharp mask.
-
-**Colour** - Brightness, Colour balance, Contrast, Curves, Exposure, Gamma, Hue
-and saturation, Hue shift, Invert, Levels, LUT, Saturation, Temperature, Tint,
-Vibrancy, Vignette.
-
-**Distortion** - Block glitch, Chromatic aberration, Datamosh, Lens distort,
-Mirror, Offset, RGB split, Scanlines, Shake, Tile, Turbulent displace.
-
-**Generate** - Fill, Fractal noise, Gradient, Noise.
-
-**Stylise** - Drop shadow, Flash, Glow, Lens flare, Light wrap, Sprite flare.
-
-**Temporal** - Echo, Fast motion blur, Motion blur, Posterize time.
-
-**Transition** - Linear wipe, Radial wipe.
-
-**Utility** - Matte key, Set matte, Transform.
-
-**Matte key** is Lumit's keyer: pull a greenscreen or a chosen colour to
-transparency, with threshold and softness controls.
+| Category | What the family is for |
+| --- | --- |
+| [Blur & sharpen](/effects/blur-sharpen/) | Softening and detail lift. |
+| [Colour](/effects/colour/) | Grading: exposure, balance, contrast, and colour altering. |
+| [Distortion](/effects/distortion/) | Warp pixels. |
+| [Generate](/effects/generate/) | Effects that make a picture instead of changing one. |
+| [Stylise](/effects/stylise/) | Glow, flare, relief and blocks. |
+| [Temporal](/effects/temporal/) | Effects that read frames at other times, or change which frame is drawn. |
+| [Transition](/effects/transition/) | Wipes, driven by a completion parameter you keyframe. |
+| [Utility](/effects/utility/) | Keying, mattes, transform, and other useful effects. |
 
 ### The three kinds of motion blur
 
-They are easy to confuse:
+These are easy to confuse:
 
 | What | Where | Does |
 | --- | --- | --- |
-| Motion blur **switch** | A layer switch | Smears one layer along its own transform. |
-| **Motion blur** effect | The effect stack | Re-renders the scene below at sub-frame times and averages. |
-| **Fast motion blur** effect | The effect stack | Smears motion already inside the footage, in one pass. |
+| Motion blur **switch** | A layer switch | Smears one layer based on its transforms. |
+| **Fast motion blur** effect | An effect | Calculates estimated motion vectors for what it's applied on, and generates motion blur based on that. |
+| **Motion blur** effect | An effect | Re-renders the scene below at sub-frame times and averages out to calculate almost true to life motion blur. |
 
 ## Plugins
 

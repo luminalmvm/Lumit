@@ -1,30 +1,33 @@
 ---
 title: "Tint"
-description: "Map the picture's brightness onto two colours of your choosing."
+description: "Map brightness onto two colours."
 ---
 
 Tint is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Replaces the picture's colour with a gradient between two you pick. Every
-pixel's brightness decides where it lands on that gradient: the darkest pixels
-take the first colour, the brightest take the second, and everything between is
-mixed accordingly.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Tint is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/tint.webp"
+      alt="The same frame with Tint applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Tint</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Tint. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Tint is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the duotone look — the poster-style two-colour treatment — and it is
-also the most direct way to force a section of a montage into one palette
-regardless of what was shot. Because the picture's brightness structure is kept
-and only its colour is replaced, the result still reads as the original footage
-rather than as a flat wash.
+{/* END GENERATED */}
 
-Left at black and white it maps every pixel to its own brightness, which is a
-clean greyscale. That is a useful thing in itself, and it is the reason the
-effect does something visible the moment you add it rather than sitting inert.
+## What it does
 
-For a treatment that shifts existing colours rather than replacing them, use
-[Hue shift](/effects/colour/hue-shift/) or
-[Colour balance](/effects/colour/colour-balance/).
+Uses a pixels brightness to map it's colour between two colour values you pick.
+By default the white point is set to white, and black point set to black.
 
 ## Parameters
 
@@ -46,18 +49,16 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Map black to** — the colour the darkest pixels become. Lifting it off black
-  is what stops the result feeling harsh, and tinting it is where most of the
-  character of a duotone comes from.
-- **Map white to** — the colour the brightest pixels become. Pulling it below
-  white flattens the picture; pushing it past white keeps highlights hot enough
-  for a [Glow](/effects/stylise/glow/) downstream to still find them.
-- **Mix** — how much of the mapped picture replaces the original. Partial values
-  are genuinely useful here: a light blend of a duotone over the real footage
-  reads as a grade rather than as a filter.
+- **Map black to** — the colour black pixels become.
+- **Map white to** — the colour white pixels become.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
-Both colours open the picker with its screen dropper, so a palette can be
-sampled from a reference image.
+## Notes
+
+When the existing colours should be shifted and kept, use
+[Hue shift](/effects/colour/hue-shift/) or
+[Colour balance](/effects/colour/colour-balance/).
 
 ## Related
 

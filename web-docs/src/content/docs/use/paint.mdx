@@ -7,40 +7,38 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-**Paint** puts strokes straight onto a layer's pixels. Three tools sit on the toolbar:
+**Paint** puts strokes straight onto a layer. There are three tools in the toolbar for this:
 
-<Shot file="paint.png" caption="Brush strokes on a layer, with the Paint heading open in the Timeline." />
+<Shot file="paint.png" caption="Brush strokes on a layer, with the Paint heading open in the Timeline." eager/>
 
 | Tool | Does |
 | --- | --- |
 | **Brush** | Paints the fill colour. |
-| **Clone stamp** | Copies pixels from elsewhere on the same layer. `Alt`-click sets the point it copies from, then paint. |
-| **Eraser** | Rubs the layer through to transparent. |
+| **Clone stamp** | Copies pixels from elsewhere on the same layer. `Alt`-click sets the origin point it copies from, then paint. |
+| **Eraser** | Similar to Brush, but instead makes the area of the layer the stroke covers transparent. |
 
-Brush **size**, **hardness**, and **opacity** sit in the tool options while a paint tool
-is armed.
+Brush **size**, **hardness**, and **opacity** appear in the tool options while using a paint tool.
 
-## Strokes are gestures, not pixels
+## Strokes are paths
 
-Lumit stores the drag itself - the path, colour, size, hardness, opacity - and stamps it
-into the layer every time the frame renders. So painting at a quarter-resolution
-preview still exports at full quality, and changing a stroke's colour later is an edit,
-not a repaint.
+What Lumit stores is the drag infomation (the path, colour, size, hardness, opacity), 
+which is composited into the layer each time the frame renders. This means painting at
+quarter-resolution preview will still export at full quality.
 
-Strokes are stamped **before masks and effects**: a mask gates the painted picture, and
-effects see it.
+Strokes are composited **before masks and effects**: a mask gates the painted picture, and
+effects will operate upon strokes as if they were part of the original layers source.
 
 ## Editing strokes
 
-- Each layer's strokes are listed under a **Paint** heading in the Timeline when the
+- A layer's strokes are listed under a **Paint** heading in the Timeline when the
   layer is twirled open.
-- Each stroke is one undo step.
-- An erase can be weakened later by lowering that stroke's opacity - the pixels
-  underneath were never destroyed.
+- Each stroke is a single undo.
+- An brush/clone/erase's strength can be reduced later by lowering it's opacity.
 
 :::note[Not built yet]
-Tablet pressure and tilt, brush shapes other than round, write-on animation (a stroke's
-own start and end times), per-stroke blend modes, and painting on a Precomp layer.
+There is currently no support for drawing via tablet, so pressure and tilt are missing.
+Currently brush shapes other than round aren't implemented. Keyframing a stroke's start 
+and end time is not built either, nor are per-stroke blend modes or painting on Precomps.
 :::
 
 ## Related

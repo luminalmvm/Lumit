@@ -1,41 +1,19 @@
 ---
 title: "Posterize time"
-description: "Hold time on a coarser grid — the stop-motion, on-twos look."
+description: "Hold time on a coarser time grid."
 ---
 
 Posterize time is a [Temporal](/effects/temporal/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Makes time step instead of flowing. It snaps the current moment down to a coarser
-grid, so the picture only updates so many times a second no matter what rate the
-composition runs at.
 
-This is the stop-motion look, and the on-twos look that hand-drawn animation
-uses. Applied to a whole montage it is an instantly recognisable stylistic
-choice; applied to one layer among smooth ones it makes that layer read as a
-different medium, which is a useful way to separate an element from its
-background.
 
-It does not filter the picture — it changes *what time* the covered content is
-drawn at. Everything re-resolves at the held moment: transforms, effect
-animation, the camera, and which frame of footage is decoded. So a shot that is
-nothing but footage playing back visibly steps to the coarser rate, rather than
-only the animation stepping.
+{/* END GENERATED */}
 
-**What it covers depends on the layer carrying it**, and there is no control for
-this because none is needed. On an **adjustment layer** it holds the whole
-composite beneath it, which is the global "posterise everything" pass. On any
-**other layer** it holds that layer's own effect stack and footage playback,
-while the layer's transform stays live — so the layer glides smoothly across
-frame while its own content steps.
+## What it does
 
-There is no Mix here. Time is either held or it is not; there is no meaningful
-half-way between one moment and another.
-
-For blur *between* the held frames rather than a quantised grid, that is
-[Motion blur](/effects/temporal/motion-blur/) — a different effect and a
-different question.
+Makes time step, in practice acting as a way to reduce a layers framerate.
 
 ## Parameters
 
@@ -56,13 +34,9 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Frame rate** — how many times a second the picture updates. Half the
-  composition's own rate is the classic on-twos look; a third is on threes. Well
-  below that it becomes a deliberate slideshow, and near the composition's rate
-  it stops being visible at all.
-- **Phase** — shifts where the steps land, in seconds. Use it to line the holds up
-  with a beat, so the picture changes on the music rather than a fraction before
-  or after it.
+- **Frame rate** sets how many times a second the picture updates.
+- **Phase** shifts where the steps land.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

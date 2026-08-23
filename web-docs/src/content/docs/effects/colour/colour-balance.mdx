@@ -1,30 +1,36 @@
 ---
 title: "Colour balance"
-description: "Lift, gamma and gain — shadows, mid-tones and highlights, per channel."
+description: "Lift, gamma, and gain, for shadows, mid-tones and highlights."
 ---
 
 Colour balance is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The full grade in one effect: three colours, each steering a different part of
-the brightness range. **Lift** moves the shadows, **Gamma** the mid-tones and
-**Gain** the highlights, and because each is a colour rather than a number, each
-can push its part of the picture toward any hue.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Colour balance is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/colour-balance.webp"
+      alt="The same frame with Colour balance applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Colour balance</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Colour balance. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Colour balance is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the effect to reach for when a single-knob control cannot express what
-is wrong. A cast that only affects the shadows, a highlight that has gone green,
-the teal-and-orange split where shadows go cool and skin stays warm — all of
-those need the ranges separated, and this is where they are.
+{/* END GENERATED */}
 
-It is also the slowest to learn, which is why the one-knob effects exist beside
-it. If the problem is simply that everything is too warm, use
-[Temperature](/effects/colour/temperature/). Come here when the problem is that
-only part of the picture is.
+## What it does
 
-The three ranges overlap rather than being cut apart from one another, so a
-change to lift still influences the mid-tones a little. That is the point:
-grading by hard bands leaves visible boundaries where they meet.
+**Lift** adjusts shadows.
+
+**Gamma** adjusts mid-tones.
+
+**Gain** adjusts highlights.
 
 ## Parameters
 
@@ -47,18 +53,15 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Lift** — the shadows. Pushing it toward a colour tints the dark end of the
-  picture, and lifting it overall raises the black point, which is the flat,
-  filmic look where nothing is fully black.
-- **Gamma** — the mid-tones. This is where most of a picture lives, and where a
-  cast is most visible, so it is usually the first of the three to touch.
-- **Gain** — the highlights. It scales the bright end, so a tint here colours the
-  sky, the practicals and the specular hits while leaving shadows alone.
-- **Mix** — how much of the graded picture replaces the original.
+- **Lift** adjusts the tint and brightness of shadows.
+- **Gamma** adjusts the tint and brightness of mid-tones.
+- **Gain** adjusts the tint and brightness of highlights.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
-Each of the three opens the colour picker, which carries a screen dropper — so
-you can sample a cast directly off the picture rather than guessing at it. See
-[Effect Controls](/panels/effect-controls/).
+Each of the three opens the colour picker, and the picker carries a screen
+dropper, so a cast can be sampled straight off the picture with no guesswork.
+See [Effect Controls](/panels/effect-controls/).
 
 ## Related
 

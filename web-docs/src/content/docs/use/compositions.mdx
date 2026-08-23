@@ -7,27 +7,30 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **composition** is a timeline with a fixed resolution, frame rate, duration, and
-background colour. It holds an ordered stack of [layers](/use/layers/).
+A **composition** is a timeline with a fixed resolution, frame rate, and duration. 
+It holds an ordered stack of [layers](/use/layers/).
 
-<Shot file="new-composition.png" caption="The new composition dialogue." />
+<Shot file="new-composition.png" caption="The new composition dialogue." eager/>
 
-A project can hold many compositions. Compositions are assets, so they sit in the
-Project panel beside your footage.
+One project can have multiple compositions. A composition is an asset, so it sits in 
+the Project panel.
 
 ## Make a composition
 
 1. Choose **Composition ▸ New composition**.
-2. Set the resolution, frame rate, duration, and background colour.
+2. Set the resolution, frame rate, and duration.
 3. Confirm.
 
 ## Change the settings
 
-Choose **Composition ▸ Composition settings**. You can change any of the settings at
-any time.
+Choose **Composition ▸ Composition settings**. Any of these settings can be changed at
+any time. Additionally right clicking a composition in the Timeline, or Project panel
+brings up a popup menu with the composition settings as an option.
 
-Changing the frame rate does not move your keyframes. A keyframe holds a time, not a
-frame number.
+Changing the frame rate does not move your layers or keyframes. However if you change to
+a value which would make these offset from always lining up with composition frames, and
+snapping is still enabled, the next time you move them, they will move to align with the
+new framerate.
 
 ## Nest one composition in another
 
@@ -38,14 +41,14 @@ Precompose when you want to:
 
 - Treat a group of layers as one object.
 - Apply one effect to several layers at once.
-- Retime a whole group together.
+- Retime a whole group of layers together.
 
-Select the layers and choose **Layer ▸ Precompose**.
+Select the layers and choose **Layer ▸ Precompose**. The shortcut by default is **ctrl+shift+c**.
 
-A Precomp layer supports [Retime](/use/retime/), so you can ramp the speed of a whole
-nested composition.
+A Precomp layer supports [Retime](/use/retime/), so the speed of a nested
+composition can be ramped.
 
-Lumit refuses to place a composition inside itself.
+Lumit refuses to place a composition inside itself to prevent circular references.
 
 ## Related
 

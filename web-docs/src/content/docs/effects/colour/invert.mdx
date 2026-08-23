@@ -1,27 +1,32 @@
 ---
 title: "Invert"
-description: "The colour inverse, with nothing to configure."
+description: "Invert an input."
 ---
 
 Invert is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Flips the picture's colour: light becomes dark, and each colour becomes its
-opposite. There is nothing to set — it either inverts or, through Mix, inverts
-part of the way.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Invert is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/invert.webp"
+      alt="The same frame with Invert applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Invert</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Invert. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Invert is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Most of its use is not as a look. Inverting a layer that is being used as a
-matte swaps what is kept for what is removed, which is often quicker than
-rebuilding the matte the other way round. Inverting for a few frames is a
-classic impact flash. And inverting a duplicate layer under a blend mode is the
-basis of several difference-based tricks.
+{/* END GENERATED */}
 
-The inverse is taken in scene-linear light exactly as it is stored, which is the
-deliberately simple choice. Values above white invert to honest negatives rather
-than being clipped first, so an inverted highlight carries real information
-rather than a flat patch. Transparency is left alone, so a keyed subject inverts
-without its edges fringing.
+## What it does
+
+Inverts every colour channel of a layer.
 
 ## Parameters
 
@@ -41,10 +46,8 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Mix** — how much of the inverted picture replaces the original. It is the
-  only control, and it is the interesting one: partway between the two is a
-  washed, flattened picture, and animating it is how the invert flash is timed
-  to a beat.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

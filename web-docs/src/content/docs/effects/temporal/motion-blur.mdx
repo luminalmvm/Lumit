@@ -5,35 +5,30 @@ description: "Re-render the scene below at sub-frame moments and average them."
 
 Motion blur is a [Temporal](/effects/temporal/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The correct motion blur, and the expensive one. Rather than smearing a finished
-frame, it renders the whole scene beneath it several times at moments *inside*
-one frame and averages the results.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Motion blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/temporal/motion-blur.webp"
+      alt="The same frame with Motion blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Motion blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Motion blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Motion blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Because every sample is a real render, everything moves in it: footage motion,
-animated layer transforms, animated effect parameters, the camera. There are no
-artefacts from blurring something that should not have been blurred, and no
-guessing about where a pixel came from.
+{/* END GENERATED */}
 
-Its natural home is an adjustment layer over a whole montage. There, the scene
-below is what re-renders, and every moving thing in it blurs together as one
-picture.
+## What it does
 
-The cost is roughly the sample count times a full render of everything
-underneath, which makes it the heaviest thing in the application. Work with a low
-sample count and raise it before you export.
-
-For the cheap kind that smears a finished frame instead, use
-[Fast motion blur](/effects/temporal/fast-motion-blur/). For one layer's own
-transform only, the layer's motion blur switch is free — see
-[Layers](/use/layers/).
-
-Temporal effects inside the scene being sampled — an
-[Echo](/effects/temporal/echo/), a
-[Datamosh](/effects/distortion/datamosh/), a Fast motion blur — hold still across
-the samples rather than being sampled through. That is a documented boundary, not
-a fault.
+The expensive, physically correct motion blur. It renders the composition beneath 
+it multiple times *within* a frame, then averages the
+results to generate the motion blur.
 
 ## Parameters
 
@@ -57,25 +52,18 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Samples** — how many times the scene below is rendered inside one frame. This
-  is the quality-against-cost dial, and it is the whole expense of the effect. Too
-  few and fast movement shows as separate stepped copies rather than a smooth
-  smear; the faster the motion, the more you need.
-- **Shutter angle** — how much of the frame the imaginary shutter is open for, as
-  a fraction of a full turn. The film-standard half-turn covers half the frame's
-  movement, which is the natural-looking setting; larger values smear further and
-  smaller ones sharpen toward no blur at all.
-- **Shutter phase** — where that open window sits relative to the frame's own
-  moment. The default centres the blur on the frame, so a moving object is
-  smeared equally either side of where it nominally is rather than trailing
-  behind or running ahead of itself.
-- **Force on all layers** — turns on every layer's own transform motion blur for
+- **Samples** is how many times the scene below is rendered per frame at equal offsets.
+- **Shutter angle** says how much of the frame the shutter is open
+  for.
+- **Shutter phase** places the open window relative to the frame's own moment.
+  The default centres the blur on the frame, so a moving object is smeared
+  equally based on either side of the frame.
+- **Force on all layers** enables every layer's own transform motion blur for
   the duration of each sample render, using this effect's shutter settings. It
-  saves toggling the switch on every layer individually, and because each sample
-  is itself smeared the result stays smooth at lower sample counts. The document
-  itself is not changed; the switches only apply inside the sampling.
-- **Mix** — blends the averaged, blurred result against the ordinary frame, which
-  is a way to ease the blur back without changing the shutter.
+  saves toggling the switch on every layer individually. The switches only 
+  apply inside the sampling and will not affect previewing any other layer or precomp.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

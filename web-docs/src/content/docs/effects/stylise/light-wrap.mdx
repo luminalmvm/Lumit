@@ -5,32 +5,28 @@ description: "Spill the background's light around a keyed subject's edge."
 
 Light wrap is a [Stylise](/effects/stylise/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The oldest trick in compositing, and the cheapest way to make a keyed subject
-stop looking pasted on.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Light wrap is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/light-wrap.webp"
+      alt="The same frame with Light wrap applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Light wrap</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Light wrap. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Light wrap is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-In a real camera the light behind a subject spills round its edges — off the
-hair, along the shoulders, anywhere the outline is thin. A matte cut in software
-has none of that, and its absence is most of what makes a composite read as fake,
-even when the key itself is clean.
+{/* END GENERATED */}
 
-This effect takes the layer you name as the **Background**, softens it, and
-paints that softened light into a narrow band just inside the foreground's own
-edge. Put it after your key — after
-[Matte key](/effects/utility/matte-key/) — and point it at the plate the subject
-is being composited onto.
+## What it does
 
-It needs no mask of its own. The foreground's own transparency is the edge, so
-the band is found automatically and follows the subject as it moves. It also
-never paints outside the matte, which is the classic way to get this effect
-wrong: a halo drawn around a subject looks worse than no wrap at all.
-
-The light is screened on rather than added, so a bright background brightens the
-edge *toward* itself rather than past white and into a rim of blown highlight.
-
-Nothing happens until you choose a background, and with none chosen the picture
-passes through untouched.
+This effect takes a layer, softens it, and paints the softened edge around the layer the effect is on.
 
 ## Parameters
 
@@ -53,20 +49,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Background** — the layer whose light spills. Normally this is the plate the
-  subject was keyed onto. It should not be the layer the effect is on, which is
-  why it does not start pointed there: a layer is never its own background, and
-  wrapping a picture in its own light gives you nothing.
-- **Width** — how far the wrap reaches inside the edge, in pixels, and also the
-  distance the background is softened by. They are deliberately the same number:
-  light that spills a long way round an edge is also light that has been
-  scattered, so a wide wrap should be a soft one. At zero there is no wrap at
-  all. Keep it small — a wrap wide enough to notice as a band is a wrap that has
-  gone too far.
-- **Intensity** — how strong the spill is. There is no ceiling, so a deliberately
-  hot rim against a bright plate is available, but the convincing settings are
-  low.
-- **Mix** — how much of the wrapped picture replaces the original.
+- **Background**: the layer whose light spills.
+- **Width**: how far the wrap reaches inside the edge.
+- **Intensity**: how strong the spill is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

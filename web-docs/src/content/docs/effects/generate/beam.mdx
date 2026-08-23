@@ -1,30 +1,32 @@
 ---
 title: Beam
-description: "Draws a tapered shaft of light between two points, with a core colour and a rim."
+description: "Draws a tapered shaft of light between two points."
 ---
 
 Beam is a **Generate** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Drawing a shaft of light across the frame: a laser, a sabre, a searchlight, a
-tracer round, the line a satellite draws on a map.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Beam is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/generate/beam.webp"
+      alt="The same frame with Beam applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Beam</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Beam. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Beam is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is two points and a taper. The beam runs from **Start** to **End**, fat at
-one end and thin at the other, with the **Inside colour** down its core and the
-**Outside colour** around its rim. That taper is what stops it reading as a
-drawn line: real light falls off, and a shaft that is the same width all the way
-looks like a rectangle.
+{/* END GENERATED */}
 
-The other half of the effect is that it can be **fired**. **Time** says how far
-the beam's head has travelled and **Length** how far its tail trails behind, so
-a short beam with Time keyframed from 0 to 100 shoots across the frame and off
-the far side. Both are ordinary controls the timeline animates, which means the
-shot you preview is the shot you export.
+## What it does
 
-Put it on a solid or an adjustment layer with **Composite on original** off and
-the beam becomes an element in its own right — one you can blur, glow and blend
-like any other layer.
+Drawing a shaft of light across the frame, created between two points and has a taper.
 
 ## Parameters
 
@@ -56,50 +58,18 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Start x** and **Start y** — where the beam begins, in pixels at composition
-  size. The panel draws the pair as one row with a crosshair you can click into
-  the viewer.
-- **End x** and **End y** — where it is aimed. At the default Length and Time
-  the beam runs the whole way between the two.
-- **Length** — how much of that run the beam occupies, as a percentage. 100 is a
-  shaft from one point to the other; 15 is a short bolt travelling along the
-  same line.
-- **Time** — where the beam's **head** has got to along the run. Keyframe it from
-  0 to 100 and the beam fires. At 0 nothing is drawn at all, and the layer comes
-  through exactly as it arrived.
-- **Start thickness** — how wide the beam is at its tail, in pixels at
-  composition size.
-- **End thickness** — how wide it is at its head. Making the head the thinner of
-  the two gives the classic comet; swapping them gives something that reads as
-  coming towards you.
-- **Softness** — how much of the beam's half-width the two colours cross over
-  in. At 0 the shaft is a flat slab of the inside colour and the outside colour
-  has nothing to colour, which is what After Effects does at the same setting. At
-  30 or so both are clearly visible, which is why that is the default.
-- **Inside colour** — the core. Values above 1 are allowed and are what make it
-  bloom under a [Glow](/effects/stylise/glow/).
-- **Outside colour** — the rim. Setting it to a saturated version of the inside
-  colour is the usual way to make a beam read as hot.
-- **Composite on original** — on, the layer that arrived stays under the beam.
-  Off, the beam is all there is, which is what you want on its own solid.
-- **Mix** — how much of the effect takes hold, as distinct from how far the beam
-  has travelled.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The taper runs along the drawn beam**, not along the whole Start-to-End run, so
-a short beam is a comet wherever it is rather than only at the end of its travel.
-At the default Length of 100 the two are the same thing.
-
-**There is no 3D perspective.** After Effects offers one, which foreshortens the
-beam from a camera of its own; Lumit keeps cameras on the composition, so an
-imported beam gets the flat version and the difference is reported rather than
-guessed at.
-
-**Everything is measured at composition size**, so a Half-resolution preview
-shows the same beam as the export rather than one half as thick.
+- **Start x** and **Start y**: the start position of the beam.
+- **End x** and **End y**: the end position of the beam.
+- **Length**: how much of the length the beam occupies, as a percentage.
+- **Time**: where the beam's **head** has reached along the length.
+- **Start thickness**: how wide the beam is at its base.
+- **End thickness**: how wide it is at the head.
+- **Softness**: how much of the beam's half-width the core and rim colours blend.
+- **Inside colour**: the core colour.
+- **Outside colour**: the rim colour.
+- **Composite on original**: When enabled the layer that beam is applied to appears underneath.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,29 +1,33 @@
 ---
 title: Channel blur
-description: "Blurs each colour channel, and the alpha, by its own amount."
+description: "Blurs red, green, blue and the alpha by separate amounts."
 ---
 
 Channel blur is a **Blur & sharpen** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Softening one part of the picture's colour while leaving the rest sharp. It is
-the ordinary [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) run four
-times over, with a separate radius for red, green, blue and the alpha.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Channel blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/channel-blur.webp"
+      alt="The same frame with Channel blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Channel blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Channel blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Channel blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Two jobs come up constantly. The first is making a picture look like a **lens**
-recorded it rather than a computer drew it: no real sensor resolves the three
-colours equally, and blue is always the worst, so a small blue-only blur reads
-as optics where an overall blur just reads as blur. That is why Blue is the one
-channel switched on by default.
+{/* END GENERATED */}
 
-The second is **feathering a cut-out** without touching what is inside it. Turn
-Alpha up and leave the colours at zero and the edge softens while the picture
-stays crisp — the standard fix for a mask or a key that is a shade too hard.
+## What it does
 
-Beyond that it is a colour-fringing tool: pull red wide and blue narrow and you
-get a warm halo that no chromatic aberration effect will give you, because this
-one does not displace anything, it spreads.
+Applies [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) on a per channel basis.
+This allows you to alter red, green, blue, and alpha channels blur separately.
 
 ## Parameters
 
@@ -48,35 +52,21 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Red blur**, **Green blur**, **Blue blur** — how far each colour channel is
-  spread, as a percentage of the composition diagonal. Being a percentage rather
-  than a pixel count is what makes a half-resolution preview look like the
-  export, only softer. A channel left at 0 is passed through completely
-  untouched, so the common one-channel case costs almost nothing.
-- **Alpha blur** — the same for transparency. On a layer with a hard edge this
-  is a feather; on a layer that is opaque everywhere it does nothing, since
-  there is no edge to soften.
-- **Repeat edge pixels** — what happens where the blur reaches past the frame.
-  On (the default) holds the border pixel outward, so a bright edge stays
-  bright. Off lets the frame fall away into transparency, which is what you want
-  when the layer is meant to fade out at the border.
-- **Mix** — how much of the blurred result replaces the original, 0 to 100.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Red blur**, **Green blur** and **Blue blur** set how far each colour channel
+  is spread. A channel value of 0  affects nothing.
+- **Alpha blur** does the same for transparency. On a layer that is opaque across
+  the entire layer it does nothing if repeat edge pixels is on.
+- **Repeat edge pixels**. On holds the border pixel outward. Off will blur edges 
+  with a colour/alpha value of 0.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the blur amount from another layer's brightness, 
+  scaled by the blur amounts you set; see [Effects](/use/effects/).
 
 ## Notes
 
-**It spreads, it does not shift.** If what you actually want is the three
-channels pulled *apart* — a colour fringe that grows towards the corners — that
-is [Chromatic aberration](/effects/distortion/chromatic-aberration/) or
-[RGB split](/effects/distortion/rgb-split/). This effect leaves every channel
-where it is and only softens it.
-
-**Blurring the alpha alone changes the shape, not the picture.** A large Alpha
-blur on a hard-edged layer eats into the shape as well as softening it, because
-a gaussian spreads in both directions. If you want a feather that only grows
-outward, blur the alpha and then lift it with a [Levels](/effects/colour/levels/)
-input white.
+If what you actually want is the three channels pulled *apart*, look to use
+[Chromatic aberration](/effects/distortion/chromatic-aberration/) or
+[RGB split](/effects/distortion/rgb-split/).
 
 ## Related
 

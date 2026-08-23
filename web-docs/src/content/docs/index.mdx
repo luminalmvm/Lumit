@@ -6,9 +6,9 @@ template: splash
 # site title are the same string, and Starlight joins them.
 head:
   - tag: title
-    content: Lumit docs - motion graphics and compositing
+    content: Lumit documentaion
 hero:
-  tagline: A native motion-graphics and compositing editor. GPU-first, open source, GPLv3.
+  tagline: Find out more about how Lumit works here.
   image:
     file: ../../assets/lumit-mark.svg
   actions:
@@ -24,38 +24,30 @@ hero:
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
 <CardGrid stagger>
-  <Card title="Start here" icon="rocket">
-    Install Lumit, then build a composition end to end - import, animate, export.
+  <Card title="Get started" icon="rocket">
+    Install Lumit, then follow this guide to go from a blank composition to an exported render.
 
-    [Your first composition →](/start/first-composition/)
+    [Your first composition ▸](/start/first-composition/)
   </Card>
   <Card title="Using Lumit" icon="laptop">
-    Every part of the application: layers, keyframes, retiming, effects, masks,
-    text, and export.
+    Find out more about each part of Lumit. Detailed infomation about each part of the application.
 
-    [Compositions →](/use/compositions/) · [Layers →](/use/layers/) ·
-    [Keyframes →](/use/keyframes/) · [Retiming →](/use/retime/)
+    [Compositions ▸](/use/compositions/) · [Layers ▸](/use/layers/) ·
+    [Keyframes ▸](/use/keyframes/) · [Retiming ▸](/use/retime/)
+  </Card>
+  <Card title="Understanding effects" icon="star">
+    Information on every effect built into Lumit. With examples and tables listing parameter values.
+
+    [Find effects ▸](/effects/)
   </Card>
   <Card title="How Lumit works" icon="setting">
-    Background reading. Why the engine is separate, why time is stored as exact
-    fractions, and how the cache survives your edits.
+    Explanations on the technical background of Lumit. Useful if you'd like to contribute to the open-source project.
 
-    [How Lumit is built →](/engine/overview/)
+    [How Lumit is built ▸](/engine/overview/)
   </Card>
   <Card title="Contribute" icon="github">
-    Lumit is GPLv3 and developed in the open. Issues and pull requests are welcome.
+    If there's a feature you'd like, feel welcome to make it yourself and contribute. Issues and pull requests welcome.
 
-    [On GitHub →](https://github.com/luminalmvm/Lumit)
+    [On GitHub ▸](https://github.com/luminalmvm/Lumit)
   </Card>
 </CardGrid>
-
-## Not built yet
-
-Lumit is in public beta, and these pages say so where it matters rather than
-describing features that do not exist:
-
-- [Audio](/use/audio/) - waveforms and beat markers work; audio layers and mixing do not.
-- [Expressions](/use/expressions/) - specified, partly built, not usable.
-- [Cameras and 3D](/use/camera/) - cameras work; light layers do not.
-- [Retiming](/use/retime/) - flow interpolation is unfinished; nearest and blend work.
-- [Effects](/use/effects/) - 33 built-in effects; plugin hosting is not built.

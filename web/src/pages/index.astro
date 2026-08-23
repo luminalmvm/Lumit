@@ -27,8 +27,16 @@ const features = [
   },
   {
     h: "The effects you actually use",
-    p: "Glow, flow motion blur, camera shake, RGB split, smooth zoom, grades with a LUT loader - built in and GPU-rendered. OFX hosting and After Effects import are on the roadmap.",
+    p: "Eighty-five of them ship, built in and GPU-rendered: glow, motion blur, camera shake, RGB split, smooth zoom, and a grading suite with a LUT loader. Every one has a page in the manual showing what it does. OFX hosting is on the roadmap.",
     clip: "/clips/effects.webm",
+  },
+  {
+    h: "Bring your After Effects projects",
+    p: "A free panel runs inside After Effects and writes a bundle Lumit opens. Keyframes carry across value for value, and an import report says what was adjusted on the way and what could not come at all.",
+  },
+  {
+    h: "Your work survives the crash",
+    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and it offers the recovered project on the next launch.",
   },
   {
     h: "Open source, GPLv3",
@@ -42,22 +50,20 @@ const roadmap = [
   {
     label: "Currently in-progress",
     items: [
+      "After Effects import",
       "Expressions",
       "Optical-flow retiming",
       "Beat detection and snapping",
-      "Mask modes and feather",
       "Motion paths in the Viewer",
       "Shape modifiers and path editing",
-      "Smooth zooming everywhere",
       "The macOS pass",
     ],
   },
   {
     label: "Before 1.0",
     items: [
-      "Preset save and sharing",
-      "Per-layer motion blur",
-      "Beat-triggered camera shake",
+      "Export queue",
+      "Tone mapping",
       "GPU scopes",
       "Proxy generation",
       "First-run setup",
@@ -69,11 +75,10 @@ const roadmap = [
     dashed: true,
     items: [
       "OFX plugin hosting",
-      "After Effects import",
-      "3D cameras and lights",
+      "3D lights and camera depth of field",
       "Tracker and stabiliser",
       "Rotoscoping",
-      "Keying",
+      "Variable-width mask feather",
       "Particles",
       "Text animators",
       "Audio panel and level meters",

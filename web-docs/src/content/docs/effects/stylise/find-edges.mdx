@@ -1,19 +1,32 @@
 ---
 title: Find edges
-description: "Draws the picture as a line drawing of its own edges — dark lines on white, or glowing lines on black."
+description: "Draws the picture as a line drawing of its edges."
 ---
 
 Find edges is a **Stylise** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Everywhere the picture changes quickly — an outline, a rim, a hard shadow — a
-line is drawn. Everywhere it is flat, nothing is. What comes back looks like a
-pencil drawing of the shot: a white page with the edges inked on it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Find edges is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/find-edges.webp"
+      alt="The same frame with Find edges applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Find edges</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Find edges. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Find edges is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Turn **Invert edges** on and it flips: black page, glowing coloured lines. That
-is where the neon and the blueprint looks start, and it is what you screen or add
-back over the original frame for a rimlit, electrified version of it.
+{/* END GENERATED */}
+
+## What it does
+
+Wherever there's local constrast, a line is drawn. 
 
 ## Parameters
 
@@ -34,40 +47,9 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Invert edges** — off (the default, and After Effects') the frame is white
-  with dark lines on it; on, black with bright ones.
-- **Mix** — how much of the drawing replaces the original. Halfway is a sketched
-  overlay on the real picture.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/). Note that the Matte row's **Invert** and the
-  effect's own **Invert edges** are two different switches.
-
-## Notes
-
-**It has no threshold and no radius, on purpose.** Find edges draws every edge it
-can see, at full strength. If the result is too busy, the fix is upstream: put a
-[Median](/effects/stylise/median/) or a [Blur](/effects/blur-sharpen/blur/)
-before it to take the fine detail out, and the lines that survive are the ones
-that matter. That reads better than any threshold this effect could offer,
-because you can see what you are removing.
-
-**Each colour channel gets its own lines.** An edge between two colours of the
-same brightness — red against green, say — still draws, and it draws in the
-colour of the difference. That is why the inverted version comes back with
-coloured lines rather than white ones.
-
-**The lines land where a person would draw them.** Lumit works in scene-linear
-light, where the step from a bright sky to a brighter one is a bigger number than
-the step from a shadow to a slightly-lit shadow, though the eye sees the second
-and not the first. The differences are therefore measured on a perceptual scale,
-which is what stops the effect drawing a map of the highlights and nothing else.
-
-**Transparency is untouched.** A drawing of a title comes back as a drawing of a
-title, not as a full white frame.
-
-**For a cartoon look**, stack it: [Posterize](/effects/colour/posterize/) for the
-flat areas, Find edges inverted for the outlines, and combine the two with a
-[blend mode](/use/blend-modes/).
+- **Invert edges**: off, the frame is white with dark lines on it; on, black with bright lines.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

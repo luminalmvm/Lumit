@@ -7,25 +7,25 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **preset** is a saved configuration of effects and their parameters - a whole effect
-stack in one shareable file. Keyframes ride along when the preset is saved as animated.
+A **preset** is a saved configuration of one or more effects and their parameters. 
+Keyframes will also saved along with the rest of the effect.
 
-<Shot file="presets.png" caption="Saved presets at the top of the Effects and presets panel." />
+<Shot file="presets.png" caption="Saved presets at the top of the Effects and presets panel." eager/>
 
 ## The .lumfx file
 
-A preset is a single `.lumfx` file: plain JSON, machine-independent, safe to share. The
-Windows installer registers the extension, so double-clicking one opens Lumit.
+A preset is saved as a `.lumfx` file. The Windows and macOS installers register the extension, 
+so double-clicking one opens Lumit.
 
-A preset that uses effects your Lumit does not know still loads: the unknown effects
-come in as inert placeholders with their parameters preserved.
+A preset that uses effects your copy Lumit doesn't have will still load. Unknown effects come
+in as placeholders with their parameters preserved, so if you later install the effect, it will
+begin to work.
 
 ## Save a preset
 
-1. Select the layer whose effect stack you want to keep.
+1. Select the layer whose effect(s) you want to keep.
 2. In the Effects and presets panel, choose **Save preset…**.
-3. Name the file. The save dialogue starts in the preset library folder, so a plain
-   save lands where the library will list it.
+3. Name the file. The save dialogue defaults to the preset library folder.
 
 ## Apply a preset
 
@@ -33,9 +33,9 @@ come in as inert placeholders with their parameters preserved.
   panel. Its whole stack is applied to the selected layer.
 - Or choose **Load preset…** to apply a `.lumfx` file from anywhere on disk.
 
-:::note[Not built yet]
-Loading a file from outside the library folder applies it but does not add it to the
-library. To keep it, copy the file into the presets folder yourself.
+:::note[]
+Files saved outside the default preset library folder don't appear within the Effects and
+presets panel.
 :::
 
 ## Related

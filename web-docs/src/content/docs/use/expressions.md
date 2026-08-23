@@ -6,21 +6,20 @@ sidebar:
 ---
 
 :::caution[Not implemented yet]
-Expressions are specified and partly built, but they are not ready to use.
+Expressions are specified and partly built. They are not ready to use.
 
-The menu commands for it are listed and disabled, marked *(Not implemented)*, so you can see what is coming. Progress is tracked on [GitHub](https://github.com/luminalmvm/Lumit/issues).
+The menu commands for them are listed and disabled, marked *(Not implemented)*, so you can see what is coming. Progress is tracked on [GitHub](https://github.com/luminalmvm/Lumit/issues).
 :::
 
 ## What is planned
 
-An **expression** is a small script on a property. It computes the property's value each
-frame, and it can read other properties.
+An **expression** is a script on a property. It computes that property's value each
+frame, and it can read other properties while it does so. It acts similarly to a 
+keyframe in that it animates a property, but unlike keyframes you do not explicitly
+set the value on specific frames.
 
-Expressions are for relationships a keyframe cannot express: a value that follows
-another, wobbles, repeats, or reacts.
-
-Until they land, use [parenting](/use/transform/) for one layer following another, and
-[keyframes](/use/keyframes/) for everything else.
+Until they arrive, use [parenting](/use/transform/) where one layer should follow
+another, and [keyframes](/use/keyframes/).
 
 ## Related
 

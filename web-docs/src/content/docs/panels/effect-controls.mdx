@@ -7,31 +7,23 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Effect Controls shows every effect on the selected layer, in stack order, with its
-parameters.
+Effect Controls lists every effect on the selected layer in the order they are composited.
 
-| Thing | Does |
+<Shot file="effect-controls.png" caption="Effect Controls, with two effects on one layer." eager/>
+
+| Item | What it does |
 | --- | --- |
 | **Parameter widgets** | Sliders, dials, colour pickers, dropdowns, point controls. |
-| **Stopwatch** | Start animating that parameter. |
+| **Stopwatch** | Start animating and keyframing a parameter. |
 | **Drag to reorder** | Move an effect up or down the stack. |
-| **Preset save/load** | Store a configured effect and apply it again later. |
+| **Preset save/load** | Store a configured effect(s) and apply it again later. |
 
 Order matters: the stack runs top to bottom. See [Effects](/use/effects/).
 
-
-<Shot file="effect-controls.png" caption="Effect Controls, with two effects on one layer." />
-
 ## Render times
 
-While the Timeline's render-time stopwatch is on, each effect's title row shows what
-that effect cost in milliseconds on the last measured frame. See
-[the Timeline](/panels/timeline/).
-
-## The colour picker
-
-Colour parameters open a picker with a screen dropper, so you can sample a colour from
-anywhere in the application.
+Switch the Timeline's render-time stopwatch on and the effect render times will appear in
+the effect's name row, similar to how they appear in the timeline per effect. See [the Timeline](/panels/timeline/).
 
 ## Related
 

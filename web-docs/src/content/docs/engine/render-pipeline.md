@@ -1,41 +1,48 @@
 ---
 title: The render pipeline
-description: How a layer stack becomes a frame.
+description: How a composition becomes a frame.
 sidebar:
   order: 2
 ---
 
-## From stack to frame
+## From composition to frame
 
-Your layer stack is a document. To draw it, Lumit compiles it into an **evaluation
-graph**: a graph of the work needed for one frame.
+A composition can be viewed as a document, with each layer explaining how 
+to render something specific. Before rendering, Lumit compiles it into an
+**DAG**, or **evaluation graph**, which calculates everything required to 
+render that particular frame.
 
-Compiling does three useful things:
+For instance, indentical layers or duplicates (such as duplicating a 
+precomp) only need to be rendered once, and the output is reused. This 
+helps reduce the work required when rendering expensive frames.
 
-1. It folds identical work together, so two layers using one source decode it once.
-2. It gives every piece of work a name derived from its content.
-3. It makes the work cancellable, so a change part-way through abandons cleanly.
-
-You never see this graph. It is an internal step.
+The DAG is completely internal. As a user you never interact or see it.
 
 ## Content hashing
 
-Each piece of work is named by a hash of everything that affects its result: the
-source, the parameters, the time, the effects above it.
+Each item of work is hashed, which is altered by anything that affects the
+rendered result: the source layer, transform property changes, effects.
 
-Two things that hash the same *are* the same, so the answer can be reused. Change a
-parameter and only what depended on it is recomputed.
+If two items hash as the same value, then they will be visually identical,
+which allows us to reuse the [cached](/engine/cache/) rendered texture.
 
-This is why the [cache](/engine/cache/) survives edits that would invalidate a
-position-keyed cache.
+## Order of operation
 
-## Order of operations
+Within a composition, it renders from the bottom layer to the top. If a
+layer references another layer that is above it in the composition, or 
+that wouldn't be otherwise rendered (e.g. invisible), then it will stop
+rendering the current layer until the referenced layer is rendered, then
+continue.
 
-For each layer, bottom to top: source, then Retime, then masks, then effects, then
-transform, then blend into the composite below.
+For each layer, it renders in the following order: decodes source frame, 
+retime, flow, masks, effects, transform, and then uses the blend mode to 
+composite into the existing frame.
 
-Getting this order right is why a blur before a glow looks different from a glow before
-a blur.
+The effects and masks are composited from the top item to the bottom as 
+they appear in the effects column or in the mask layer row. For instance
+if you apply a glow effect above (meaning before) an exposure effect, it
+will have a very different affect on the output, than if you reverse the
+order.
 
 ## Related
 

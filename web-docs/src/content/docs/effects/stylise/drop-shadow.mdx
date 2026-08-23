@@ -1,30 +1,32 @@
 ---
 title: Drop shadow
-description: "Casts a soft, coloured copy of the layer's own shape behind it."
+description: "Casts a copy of the layer's own shape behind it."
 ---
 
 Drop shadow is a **Stylise** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Lifting a layer off whatever is behind it. The layer already carries its shape in
-its transparency — the solid parts, the soft edge, every scrap of antialiasing —
-and this blurs that shape, tints it, slides it in the direction the light comes
-from, and draws it **underneath** the layer.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Drop shadow is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/drop-shadow.webp"
+      alt="The same frame with Drop shadow applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Drop shadow</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Drop shadow. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Drop shadow is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-That "underneath" is the whole reason it is an effect rather than a duplicated
-layer: one instance gives you the shadow and the thing casting it, correctly
-stacked, in the right place, animated together.
+{/* END GENERATED */}
 
-It is the most-reached-for effect in motion graphics for a reason. Titles,
-lower thirds, logos, UI panels, cut-out photographs — anything with a shape
-reads better with one, and a shadow is usually the difference between a caption
-that sits *on* the picture and one that sits *in front of* it.
+## What it does
 
-**It needs a shape to work with.** A layer that fills the frame edge to edge has
-no silhouette, so there is nothing to cast and you will see nothing. Put it on a
-title, a shape layer, a keyed subject, or a footage layer that has been masked
-or scaled down.
+creates a copy of the layer's shape and composites it behind the original layer.
 
 ## Parameters
 
@@ -50,42 +52,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Shadow colour** — what the shadow is made of. Black is the default and
-  usually right, but a shadow is really *the absence of a light*, so tinting it
-  towards the colour opposite your key light is what makes it look considered
-  rather than stuck on. The range runs past white so a bright "shadow" is
-  typable, which is how a glow-behind is faked in one instance.
-- **Opacity** — how much of that colour lands. 50 is the default because a
-  shadow at full strength reads as a hole rather than as a shadow.
-- **Direction** — where the light is, in degrees. **Measured from straight up,
-  turning clockwise**: 0° puts the shadow directly above the layer, 90° to the
-  right, 135° (the default) down and to the right, which is where almost every
-  interface in the world puts it.
-- **Distance** — how far the shadow slides. Small distances read as "resting
-  just above the background", large ones as "floating well in front of it".
-- **Softness** — how blurred the shadow is. It is independent of Distance on
-  purpose, so you can move a shadow without changing how sharp it is. In real
-  life the two travel together — a light further away casts a sharper shadow
-  further off — so animating both is what sells a lift.
-- **Shadow only** — keeps the shadow and throws the layer away. This is how you
-  put a shadow on a *different* layer from the thing casting it: duplicate the
-  layer, put Shadow only on the copy, and move the copy anywhere in the stack.
-- **Mix** — how much of the whole result replaces the original. Below 100 the
-  shadow fades; at 0 nothing happens at all, which is where a fade-in starts.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The shadow can leave the frame, and that is correct.** A shape touching the
-frame border casts a shadow that goes off the edge; those pixels are simply not
-there. Holding the border pixel outward instead would smear it into a fan, which
-reads as a fault.
-
-**Several shadows are several instances.** Two Drop shadows at different
-distances and opacities is the standard recipe for a soft ambient shadow plus a
-tight contact one, and it stacks in the order you would expect: the lower one in
-the list is drawn further back.
+- **Shadow colour**: the colour of the drop shadow.
+- **Opacity**: How intense the shadow is.
+- **Direction**: direction the shadow applies in.
+- **Distance**: how far from the original layer position the shadow moves.
+- **Softness**: how blurred the shadow is. 
+- **Shadow only**: keeps the shadow and throws the layer away.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

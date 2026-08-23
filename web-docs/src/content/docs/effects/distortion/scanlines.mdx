@@ -1,28 +1,32 @@
 ---
 title: "Scanlines"
-description: "The CRT line pattern, optionally rolling or interlaced."
+description: "CRT line pattern."
 ---
 
 Scanlines is a [Distortion](/effects/distortion/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Darkens every other band of the picture, the way a cathode-ray display drew it.
-It is the cheapest and most recognisable way to say "this is on a screen" —
-useful on a monitor inside a shot, on a whole sequence for a retro treatment, and
-in short bursts as part of a glitch.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Scanlines is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/scanlines.webp"
+      alt="The same frame with Scanlines applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Scanlines</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Scanlines. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Scanlines is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It reads each pixel and darkens it where it falls, without looking at its
-neighbours, so it is the least expensive effect in this family and it never
-softens the picture.
+{/* END GENERATED */}
 
-The lines can roll, which is what an unsynchronised analogue signal does, and
-they can alternate between fields for the true interlaced look. Both are worth
-trying before reaching for anything more elaborate: a slow roll under an
-otherwise clean picture is remarkably convincing.
+## What it does
 
-Stack it after [Block glitch](/effects/distortion/block-glitch/) so the lines lie
-over the torn picture rather than being torn up themselves.
+Darkens every other band of the picture, the way a cathode-ray display would.
 
 ## Parameters
 
@@ -46,21 +50,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Intensity** — how dark the dark lines get. At zero the picture passes through
-  untouched; at full the darkened lines go to black. Only the dark half is
-  affected — the bright lines are left exactly as they were — so this is a single
-  honest darkening dial rather than a contrast between two bands.
-- **Line period** — the height of one light-and-dark pair, in pixels. Small values
-  give the fine texture of a high-resolution display; larger ones give the
-  chunky banding of an old one. It is authored in real pixels, and scaled with the
-  preview resolution so a draft looks like the export.
-- **Roll speed** — how fast the pattern travels up or down the frame, in lines per
-  second. Zero holds it still. Either sign works, and a slow drift is far more
-  convincing than a fast one.
-- **Interlace offset** — alternates which half of each period is darkened from one
-  period to the next, the classic interlaced-field look. It changes the character
-  of the pattern rather than its strength.
-- **Mix** — how much of the lined picture replaces the original.
+- **Intensity**: how dark the scanlines get.
+- **Line period**: the height of one light-and-dark pair.
+- **Roll speed**: how fast the pattern travels up or down the frame.
+- **Interlace offset**: alternates which half of each period is darkened.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

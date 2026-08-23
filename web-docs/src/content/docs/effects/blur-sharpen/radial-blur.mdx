@@ -1,26 +1,33 @@
 ---
 title: "Radial blur"
-description: "A spin or a zoom about a chosen centre."
+description: "A spin or a zoom about a centre point."
 ---
 
 Radial blur is a [Blur & sharpen](/effects/blur-sharpen/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-A blur that runs around a centre, or away from it. Spin smears each pixel along
-the arc it would travel if the frame were rotating; Zoom smears it along the ray
-from the centre outward, which reads as the camera rushing in.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Radial blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/radial-blur.webp"
+      alt="The same frame with Radial blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Radial blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Radial blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Radial blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Zoom on a punch-in is the montage move: put the centre on whatever the cut is
-about, animate the amount up for two or three frames and back down, and the
-frame appears to slam toward the subject. Spin does the same job for a rotation,
-and at a low amount it is a convincing way to suggest a lens that cannot quite
-keep up.
+{/* END GENERATED */}
 
-The spread is not uniform across the frame. It is smallest at the centre — where
-it is nothing at all — and reaches its full size at whichever corner is furthest
-away. That is why moving the centre changes the character of the effect and not
-just its position: it decides which part of the picture stays readable.
+## What it does
+
+A blur that extends around a centre point, or blurs directed outwards from the 
+centre point.
 
 ## Parameters
 
@@ -45,21 +52,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amount** — the peak spread, reached at the frame's furthest corner from the
-  centre. Pixels nearer the centre get proportionally less, and the pixel under
-  the centre gets none. It may be pushed past the diagonal for a full dissolve.
-- **Centre X** and **Centre Y** — where the spin or zoom originates, as a
-  percentage of the composition's width and height, so the middle of the frame
-  is fifty and fifty. Animate the pair to follow a moving subject and the punch
-  stays anchored to it.
-- **Type** — Spin sweeps along arcs about the centre, the rotating look; Zoom
-  runs along rays out of it, the rushing look.
-- **Edges** — what the sweep finds when it reaches past the frame. Transparent
-  leaves the border clear, which is right over a plate that will be composited;
-  Repeat holds the outermost pixel, which keeps a full-frame shot from darkening
-  at the sides; Mirror reflects the picture back in, which hides the seam best
-  on textured footage.
-- **Mix** — how much of the swept picture replaces the original.
+- **Amount** is the peak blur. Pixels nearer the centre get proportionally less.
+- **Centre X** and **Centre Y** place where the spin or zoom originates.
+- **Type**: Spin revolves the centre. Zoom extends out from the centre point.
+- **Edges**. Similar to Repeat edge pixels from other effects with one more option.
+  Mirror reflects the picture at the edges to blur with.
+- **Mix**: how much of the result replaces the original.
 
 ## Related
 

@@ -1,35 +1,32 @@
 ---
 title: "Glow"
-description: "Bloom the picture's bright areas outward, in real light."
+description: "Bloom the picture's bright areas."
 ---
 
 Glow is a [Stylise](/effects/stylise/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Finds the bright parts of the picture and blooms them outward, the way light
-scatters inside a real lens. Highlights bleed into their surroundings; everything
-below the threshold is left alone.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Glow is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/glow.webp"
+      alt="The same frame with Glow applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Glow</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Glow. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Glow is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the single most useful effect in the family. It is what makes neon read
-as neon, what gives a muzzle flash weight, and what turns a flat capture into
-something that looks lit. On a montage it usually lives on an adjustment layer,
-so every layer beneath it blooms together as one picture rather than each
-glowing separately.
+{/* END GENERATED */}
 
-The reason it looks like light rather than like a blurred grey copy is that it
-works in scene-linear light: a pixel blooms in proportion to how far *above* the
-threshold it sits, so a highlight at several times white blooms far harder than
-one that has only just crossed. Stock glows that work on display-referred pixels
-cannot do that, which is why theirs come out grey.
+## What it does
 
-Because it uses a chain of progressively smaller copies rather than one wide
-blur, a large radius costs close to what a small one does. There is no reason to
-be shy with it.
-
-It blooms transparency along with colour, so a glow spreads over transparent
-areas the way real light does — a bright logo on an empty layer will glow into
-the space around it rather than being cut off at its own edge.
+Parts of the image brighter than the threshold emit a glow.
 
 ## Parameters
 
@@ -54,25 +51,13 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Threshold** — how bright a pixel must be before it blooms. This is the control
-  that decides *what* glows, and it is where to start. Low values bloom most of
-  the picture into a haze; high values pick out only genuine highlights. Values
-  above white are allowed, and useful, when only the truly over-range parts
-  should glow.
-- **Softness** — how abruptly a pixel starts to bloom as it crosses the threshold.
-  A narrow value gives a hard boundary between glowing and not, which can pop as
-  a moving highlight crosses it; widening it eases the transition so brightening
-  areas fade into the bloom.
-- **Radius** — how far the bloom spreads, in pixels. It is authored in real pixels
-  and scaled with the preview resolution, so a draft matches the export. There is
-  no ceiling: a very wide atmospheric bloom is a matter of typing a larger number.
-- **Intensity** — how strong the bloom is when it is added back. At zero the
-  picture passes through untouched, which makes it the control to keyframe for a
-  bloom that swells on a beat.
-- **Tint** — the colour of the bloom. Neutral keeps each highlight's own colour;
-  tinting is how you get a warm haze off a cool picture, or a single-colour bloom
-  regardless of what is glowing.
-- **Mix** — how much of the bloomed picture replaces the original.
+- **Threshold**: how bright a pixel must be before it blooms.
+- **Softness**: how abruptly a pixel starts to bloom as it crosses the threshold.
+- **Radius**: how far the bloom spreads.
+- **Intensity**: how intense the bloom is.
+- **Tint**: the colour of the bloom. Neutral keeps each highlight's own colour.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,30 +1,35 @@
 ---
 title: Turbulent displace
-description: "The fractal warp — swirls the picture with the same noise the Fractal noise effect draws."
+description: "Fractal warping."
 ---
 
 Turbulent displace is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Pushing the picture around with a pattern of invisible swirls. Every pixel asks
-the pattern "which way, and how far?", then fetches its colour from there instead
-of from where it sits — so the picture bends and churns without anything being
-added to it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Turbulent displace is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/turbulent-displace.webp"
+      alt="The same frame with Turbulent displace applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Turbulent displace</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Turbulent displace. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Turbulent displace is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-That one idea covers a surprising amount of work: heat haze over a road, water
-and reflections, flags and fabric, smoke curling, wobbly hand-drawn edges on text
-and shapes, and the loose organic distortion that makes a clean composite look
-photographed rather than assembled.
+{/* END GENERATED */}
+
+## What it does
+
+Warps the picture with a pattern of swirls.
 
 The pattern is the same one [Fractal noise](/effects/generate/fractal-noise/)
-draws, so the two work together: give both the same **Seed**, **Size**,
-**Complexity** and **Evolution** and the swirls in the warp line up with the
-blobs in the noise.
-
-Three controls do nearly all the work. **Size** is how big a swirl is. **Amount**
-is how far it can pull. **Complexity** is how much fine detail rides on the big
-swirls — one is a gentle swell, three is turbulence, ten is froth.
+draws.
 
 ## Parameters
 
@@ -57,60 +62,20 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Displacement** — **Turbulent** pushes pixels in both directions at once,
-  which swirls. **Horizontal** and **Vertical** keep only one direction, which
-  shears the picture into ripples running the other way — the look for a
-  television interference band, or for water seen edge on.
-- **Amount** — how far a pixel can be pulled, in pixels at composition size. Small
-  numbers wobble an edge; large ones dissolve the picture into smears. Negative
-  simply reads the pattern the other way round, which is a quick way to get a
-  second, different-looking warp out of the same settings.
-- **Size** — how big one swirl is. This is the control that decides what the
-  effect *reads as*: a size near the width of the frame is a slow drifting bend,
-  a size of thirty pixels is a shimmer. Set Size first, then Amount.
-- **Complexity** — how many layers of finer swirl ride on the big ones. 1 is a
-  smooth swell, 3 is turbulence, 10 is froth. Each extra layer costs time.
-- **Offset x** and **Offset y** — where the pattern sits under the frame. Animate
-  them to make the whole warp travel — heat haze drifting along a road — which
-  looks quite different from the churning that Evolution gives.
-- **Evolution** — the depth dial. Keyframe it to animate the warp. One full turn
-  moves one step through the pattern, so a slow simmer is a few turns across a
-  shot and a hard boil is many.
-- **Cycle evolution** and **Cycle** — make Evolution loop. With Cycle at 3, the
-  warp at 0 turns and the warp at 3 turns are identical, so animating Evolution
-  from 0 to 1080° gives a clip that tiles end to end with no seam. Useful for a
-  looping background.
-- **Pinning** — which edges are held still. A warp that pulls the frame's border
-  around drags transparency in from outside, which shows as a soft ragged edge —
-  pinning stops that by fading the warp to nothing near the edges it names.
-  **All edges** is the default and is almost always what you want; **Left and
-  right** or **Top and bottom** hold one pair only, for a full-frame element that
-  is going to be tiled or cropped in one direction.
-- **Seed** — which pattern this instance uses. Two Turbulent displaces with the
-  same settings and different seeds warp differently, which is how you stop a
-  row of elements moving in unison.
-- **Mix** — how much of the warped picture replaces the original. Note that this
-  *blends* the two, so a mid Mix shows both — a ghost. To warp *less*, turn
-  Amount down; to warp less **in places**, use a Matte.
-- **Matte** and **Invert** — see below.
-
-## Notes
-
-**What the Matte does here is special.** On most effects a Matte fades the
-finished result in and out. Here it scales the *push* itself, so a grey area of
-the matte is genuinely warped less rather than being a full warp faded back.
-The difference is easy to see: a faded warp shows two overlapping copies of every
-edge, and a scaled one shows a single edge in a place between the two. This is
-what makes "wobble only this part of the shot" possible.
-
-The classic pairing is a [Fractal noise](/effects/generate/fractal-noise/) on a
-solid used as the Matte, which gives a warp that comes and goes across the frame
-in patches — heat haze that is stronger over the bonnet than over the sky.
-
-**Pinning and Amount are linked.** The pinned edges fade the warp out over a band
-as wide as Amount, so a large Amount pins a wide border and a small one pins only
-a thin strip. That is deliberate: the band is exactly as wide as it has to be to
-guarantee nothing is dragged in from outside.
+- **Displacement**: **Turbulent** warps in both directions. **Horizontal** and 
+  **Vertical** warp in a single direction.
+- **Amount**: the amount a pixel can be displaced.
+- **Size**: The scaling of the fracal noise driving the warp.
+- **Complexity**: how many layers of finer fractal noise are added to the base.
+- **Offset x** and **Offset y**: moves the underlying fractal noises position.
+- **Evolution**: changes the phase of the fractal noise.
+- **Cycle evolution** and **Cycle**: makes Evolution loop. With Cycle at 3, the
+  Evolution at 0 and 3 full rotations are identical, so animating can loop with 
+  no seam.
+- **Pinning**: which edges are held still.
+- **Seed**: which randomly generated fractal noise pattern to use.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

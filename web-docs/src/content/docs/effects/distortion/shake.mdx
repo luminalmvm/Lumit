@@ -1,31 +1,32 @@
 ---
 title: "Shake"
-description: "Seeded camera wobble, with per-axis control and its own motion blur."
+description: "Seeded camera wobble."
 ---
 
 Shake is a [Distortion](/effects/distortion/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Wobbles the layer as though the camera were handheld, or struck. The movement
-comes from seeded noise rather than from keyframes, so it never repeats
-mechanically and you never have to draw it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Shake is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/shake.webp"
+      alt="The same frame with Shake applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Shake</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Shake. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Shake is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the beat-shake workhorse. A short burst on a drop, a constant low-level
-drift under a whole sequence to stop it feeling locked off, a violent hit on an
-impact frame — all of it comes from the two master controls and a keyframe or
-two on **Amplitude**.
+{/* END GENERATED */}
 
-It is a transform effect, not a pixel effect: it moves a virtual camera and
-resamples the layer once, so the picture stays as sharp as it was rather than
-being smeared by repeated sampling. That also means it reveals whatever lies
-beyond the layer's edge as it moves, which is what **Edges** is for.
+## What it does
 
-Put it on an adjustment layer to shake a whole montage at once, including
-everything composited beneath it. See [Layers](/use/layers/).
-
-The movement is a pure function of time and the seed, so it is identical every
-time you play it and identical between a preview and an export.
+Wobbles the layer as though the camera were handheld.
 
 ## Parameters
 
@@ -60,48 +61,26 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amplitude** — how far the layer travels, across the composition diagonal.
-  This is the control to keyframe: a spike on the beat easing back to a low
-  constant is most of what this effect is used for.
-- **Frequency** — how fast the wobble happens, in cycles per second. Low is a
-  slow drift, high is a rattle. It is independent of Amplitude, so a large slow
-  sway and a tiny fast buzz are both a few seconds' work.
-- **Rotation amount** — how much the frame rolls as it moves. A little of this is
-  what separates a camera shake from a picture sliding around; too much reads as
-  a spin.
-- **Edges** — what fills the border the movement reveals. Mirror reflects the
-  picture back in and hides the seam best on textured footage, which is why it is
-  the usual choice; Repeat holds the edge pixel; Transparent leaves it clear,
-  which is what you want when something will be composited behind.
-- **Seed** — which random wobble you get. Two layers with the same seed shake in
-  perfect unison; give them different seeds and they move independently. Change
-  it when a shake happens to land badly rather than trying to fight it with the
-  other controls.
-- **Mix** — how much of the shaken picture replaces the original.
+- **Amplitude**: the overall scaler for the intensity of the shake.
+- **Frequency**: how fast wobbles happen, in cycles per second.
+- **Rotation amount**: how much the frame rotates as it moves.
+- **Edges**: what fills the border. Mirror reflects the
+  picture back. Repeat holds the edge pixel. Transparent leaves it clear.
+- **Seed**: generates which random shake occurs.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 The **Per-axis wobble** group biases the movement rather than adding to it:
 
-- **X amount** / **Y amount** — multipliers on the master amplitude for each axis.
-  Leaving both at one reproduces the plain uniform shake; dropping Y to zero
-  gives a purely horizontal judder, which suits a wide frame.
-- **X frequency** / **Y frequency** — multipliers on the master frequency per
-  axis. Setting the two axes to different rates is what stops a shake looking
-  like it is travelling along a diagonal line.
-- **Z amount** and **Z frequency** — the depth shake: a pump in and out of the
-  frame rather than across it. A little of this on an impact reads as the camera
-  being knocked backwards.
+- **X amount** / **Y amount**: multipliers on the amplitude for each axis.
+- **X frequency** / **Y frequency**: multipliers on the frequency per axis.
+- **Z amount** and **Z frequency**: depth shake.
 
 The **Motion blur** group adds the shake's own smear:
 
-- **Motion blur** — samples the wobble several times across the shutter and
-  averages the results, so a fast shake streaks rather than stepping. This is
-  only the shake's own movement; it is unrelated to the layer's motion blur
-  switch or to the [Motion blur](/effects/temporal/motion-blur/) effect.
-- **Shutter** — how far across the shutter window those samples spread, and so how
-  long the streak is. At zero the smear is off and the result is the plain single
-  resample. It is a fraction of the frame's own shutter window rather than a
-  length in seconds, so the streak keeps its character whatever rate the
-  composition runs at.
+- **Motion blur**: samples the wobble several times across the shutter and
+  averages the results.
+- **Shutter**: how far across the shutter window those samples spread.
 
 ## Related
 

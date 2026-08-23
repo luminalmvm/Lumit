@@ -5,41 +5,21 @@ description: "Pull a green or blue screen to transparency, with despill."
 
 Matte key is a [Utility](/effects/utility/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Lumit's keyer. It drives transparency down wherever a pixel matches a chosen
-**screen colour**, so a subject shot against green or blue can be composited over
-something else.
 
-It is a colour-difference keyer, which is the kind professional keyers use: it
-judges each pixel by how far its screen channel stands above the other two,
-rather than by simple distance from a colour. That is what lets it hold fine
-detail — hair, motion blur, the semi-transparent edge of a fast-moving arm — that
-a cruder key turns into a hard cut-out.
 
-The default settings key a typical green screen the moment you add the effect.
-Blue screens work too, without changing anything but the screen colour: whichever
-channel is largest in the colour you pick becomes the one being keyed.
+{/* END GENERATED */}
 
-**Use the View control.** Judging a key by looking at the composite is the single
-most common way to end up with a bad one. Screen matte shows the transparency
-itself as black and white, where every hole and every soft patch is obvious, and
-Status tints the uncertain middle so at-risk areas stand out.
+## What it does
 
-The usual order of work: set the screen colour with the dropper, raise the gain
-until the screen goes properly black on the Screen matte view, check the
-foreground is still solid white, then use the clips to clean up what remains, and
-finally set despill so no green light is left on the subject.
+Lumit's keyer. It changes a pixel's transparency where a pixel matches a chosen
+**screen colour**, so a subject shot against green or blue can be composited
+over something else.
 
-Follow it with [Light wrap](/effects/stylise/light-wrap/), which spills the new
-background's light back around the subject's edges and does more for the
-believability of a composite than any amount of further keying.
-
-:::note[The spatial controls are not here yet]
+:::note[Spatial controls are not here yet]
 Screen pre-blur, shrink and grow, screen softness and despot removal are
-specified but not yet built, as are the inside and outside garbage masks. Until
-they arrive, use [masks](/use/masks/) on the layer to hold out areas the key
-should not touch.
+specified but not yet built, as are the inside and outside garbage masks.
 :::
 
 ## Parameters
@@ -73,49 +53,26 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **View** — what the Viewer shows. Final result is the keyed picture; Screen
-  matte shows the transparency as greyscale, white where the picture is kept and
-  black where it is removed; Status shows the same thing as a heat map with the
-  uncertain mid-tones tinted, so edges and holes at risk of tearing stand out.
-  Set this back to Final result before you export.
-- **Screen colour** — the colour being removed. Sample it off the screen itself
-  with the dropper, from a mid-brightness area rather than a bright or shadowed
-  corner. Its largest channel decides which primary is treated as the screen, so
-  a blue screen needs nothing else changed.
-- **Screen gain** — how aggressively the matte falls off. Raise it until the
-  screen is genuinely black on the Screen matte view; too far and it starts
-  eating into the foreground's edges.
-- **Screen balance** — how the two non-screen channels are weighted against each
-  other when judging a pixel. This is the control that fixes a key which is
-  almost right but holds on to a particular colour of clothing or skin. Its ends
-  take the lower and the higher of the two; the middle takes their average.
-- **Despill bias** — shifts the colour the despill pulls the screen channel down
-  to. Neutral does nothing; tinting it is how you stop despilled skin going grey
-  or magenta.
-- **Alpha bias** — shifts what counts as neutral when judging the matte itself.
-  Neutral does nothing. Reach for it when the whole plate carries a cast that is
-  confusing the key.
-- **Despill amount** — how much screen colour is drained out of the subject. Green
-  light bouncing off a screen lands on everything in front of it, and leaving it
-  there is the loudest tell of a bad composite.
-- **Mix** — how much of the keyed result replaces the original.
+- **View**: what the Viewer shows. Final result is the keyed picture. 
+- **Screen colour**: the colour being removed. 
+- **Screen gain**: how aggressively the matte falls off. 
+- **Screen balance**: how the two non-screen channels are weighted against each
+  other when judging a pixel.
+- **Despill bias**: shifts the colour the despill pulls the screen channel down
+  to.
+- **Alpha bias**: shifts what is neutral when judging the matte itself.
+- **Despill amount**: how much screen colour is drained out of the subject.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 The **Screen matte** group cleans up what the key leaves:
 
-- **Clip black** — the matte level at or below which a pixel becomes fully
-  transparent. Raise it to close translucent patches left in the screen area.
-- **Clip white** — the level at or above which a pixel becomes fully opaque. Lower
-  it to make a foreground that has gone slightly transparent solid again.
-- **Clip rollback** — eases both clips back toward the unclipped matte. Clipping is
-  blunt and takes fine edge detail with it; this is how you recover some of the
-  hair the clips just removed.
-- **Replace method** — what colour is put where spill was removed. Source keeps the
-  original colour, Hard colour and Soft colour blend in the replace colour below —
-  Soft in proportion to the pixel's brightness, which is the gentler of the two —
-  and None simply leaves the despilled colour as it fell.
-- **Replace colour** — the colour those two methods blend in. Setting it to
-  something sampled from the new background is a quick way to make edges agree
-  with the plate they are being composited onto.
+- **Clip black**: the matte level at or below which a pixel becomes fully
+  transparent.
+- **Clip white**: the level at or above which a pixel becomes fully opaque.
+- **Clip rollback**: eases both clips back toward the unclipped matte.
+- **Replace method**: what colour is put where spill was removed.
+- **Replace colour**: the colour those two methods blend in.
 
 ## Related
 

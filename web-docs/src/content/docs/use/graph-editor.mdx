@@ -7,10 +7,9 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The graph editor shows a property as a curve rather than as keyframes. Use it when the
-timing matters more than the values.
+The graph editor draws a property as a line of value, or rate of change, against time.
 
-<Shot file="graph-editor.png" caption="The graph editor, showing the value graph." />
+<Shot file="graph-editor.png" caption="The graph editor, showing the value graph." eager/>
 
 ## The two views
 
@@ -19,11 +18,7 @@ timing matters more than the values.
 | **Value graph** | The value against time. |
 | **Speed graph** | The rate of change against time. |
 
-Both views show the same data. Editing one changes the other. Neither is a separate
-copy.
-
-Use the value graph to ask *where is it?* Use the speed graph to ask *how fast is it
-going?*
+Both views show the same underlying data. Editing either affects the other.
 
 ## Edit a curve
 
@@ -31,16 +26,22 @@ going?*
 - Drag a handle to change the curve's shape.
 - Select several keyframes to move them together.
 
-Ease a move in and out by pulling the handles flat at each end. The speed graph makes
-this easier to judge, because a flat line means a constant rate.
+To change a keyframe between linear, bezier, or hold, press the relevant button at the 
+bottom of the graph editor. The default shortcut to switch to bezier is `F9`.
 
 ## Retime in the graph editor
 
-A retimed layer shows its Retime as a graph channel with two lenses. The value lens is
-labelled **Time** (which moment of the source is showing), and the derivative lens is
-labelled **Speed** (how fast the source plays, in per cent).
+Retime keyframes can be displayed differently depending on your preference.
 
-See [Retiming and speed](/use/retime/).
+If you are familiar with After Effects' time remapping then using the default setting is
+likely the best, it displays the layers exact time value which you can then alter as normal.
+
+If you are more comfortable with Vegas' velocity, then you can toggle **Edit ▸ Settings ▸ 
+Interface ▸ Retime opens in Speed**. This alters the retime graph to open and displays with 
+speed as the y axis, as a percent. By default this will be is 100% for a layer, but you can 
+edit this as you want, and even make the retime speed negative.
+
+For more infomation, see [Retiming and speed](/use/retime/).
 
 ## Related
 

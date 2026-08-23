@@ -1,46 +1,50 @@
 ---
 title: Viewer
-description: The picture, and the controls around it.
+description: The picture, and controls around it.
 sidebar:
   order: 2
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-The Viewer shows the composition at the playhead. Its bar carries the controls that
-change how you see it, never what you export.
+The Viewer displays the composition preview at the playhead. Its bar carries controls that
+can alter how the picture is displayed in the preview. None of these alter exports.
 
-
-<Shot file="viewer.png" caption="The Viewer, with a layer selected and its transform gizmo showing." />
+<Shot file="viewer.png" caption="The Viewer, with a layer selected and its transform gizmo showing." eager/>
 
 ## The Viewer bar
 
-<Shot file="viewer-bar.png" caption="The Viewer bar." />
+<Shot file="viewer-bar.png" caption="The Viewer bar." eager/>
 
 | Control | Does |
 | --- | --- |
 | **Magnification** | Zoom level. Zooming is anchored on the pointer. |
-| **Preview resolution** | Full, half, third, quarter, or auto. Real downsampling. |
-| **Channel view** | Show RGB, one channel, or alpha. |
-| **Transparency grid** | Draw a chequerboard instead of black behind alpha. |
-| **Current time** | The playhead's time. Read-only for now. |
-| **Degradation indicator** | Lights when the engine has lowered quality to keep up. |
+| **Preview resolution** | Full, half, third, quarter, or auto. |
+| **Region of interest** | Tool to isolate a specific area of the frame to increase preview speed. |
+| **Transparency grid** | Draws a chequerboard behind alpha to help visualise transparency. |
+| **Grid and guides** | Overlays a line grid or safe zones in your composition. |
+| **Hide layer controls** | If enabled, will hide the wireframes that appear on layers. |
+| **Composition background** | Changes the displayed background color when the background is visible. |
+| **Channel view** | Show RGB, individual channels, or alpha. |
+| **Exposure** | Changes the exposure within the preview. |
+| **Take snapshot** | Saves a copy of the current preview image and enables the Preview snapshot option. |
+| **Preview snapshot** | While holding, displays the recorded snapshot, to help compare changes. |
+| **Current time** | The playhead's time. |
+| **Playback type** | Select between **Every frame** or **Adaptive res** options. |
+| **Playback controls** | Go to first/previous/next/last frame, or start/pause playback. |
+| **Display transform** | Displays the color conversion. |
+| **Degradation indicator** | Appears when the engine has lowered quality to maintain realtime plack in Adaptive res. |
 
-Preview resolution and degradation affect preview only. See
-[Preview and playback](/use/preview/).
+Viewer bar options do not affect exports in any way, they only alter the preview image. See [Preview and playback](/use/preview/).
 
-:::note[Not built yet]
-The guides menu, the wireframe and overlay menu, region of interest, the
-background-colour swatch, and the colour-management indicator are specified for this
-bar but not built.
+## In the preview
+
+Select a layer and the Viewer displays its wireframe with a transform gizmo by default. The
+handles move, scale and rotate the layer. See [Transforming layers](/use/transform/).
+
+:::note[Not yet built]
+Motion paths, where a keyed position draws its path over the picture, are not built yet.
 :::
-
-## On the picture
-
-Select a layer and the Viewer draws its wireframe and a transform gizmo. Drag the
-handles to move, scale, and rotate. See [Transforming layers](/use/transform/).
-
-Motion paths - a keyed position drawing its path on the picture - are not built yet.
 
 ## Related
 

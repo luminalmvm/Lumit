@@ -7,33 +7,31 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **matte** uses another layer to gate this layer. Choose the matte layer from a
+A layers **matte** uses another layer to gate it. Choose the matte layer from a
 dropdown on the layer that should be gated.
 
-<Shot file="matte.png" caption="A layer matted by the alpha of another." />
-
-Lumit says *matte*. After Effects calls the same idea a track matte.
+<Shot file="matte.png" caption="A layer matted by the alpha of another." eager/>
 
 ## Alpha or luma
 
 | Kind | Gates by |
 | --- | --- |
 | **Alpha matte** | The matte layer's transparency. |
-| **Luma matte** | The matte layer's brightness. |
+| **Luma matte** | The matte layer's luminence. |
 
 Both can be inverted.
 
-## Any layer, and one to many
+## Pick any layer
 
 Any layer can be chosen as a matte. It does not have to sit directly above the layer it
-gates.
-
-One matte layer can serve many layers at once.
+gates. You can also use a single layer as a matte for as many layers as you need.
 
 ## Matte or mask?
 
-- Use a [mask](/use/masks/) when you can draw the shape.
-- Use a matte when the shape comes from an image, some text, or a render.
+- Use a [mask](/use/masks/) when you can draw the shape, normally best when trying to 
+  isolate a subject from the background it's on.
+- Use a matte when the shape comes from an image, text, or shape than can change or needs
+  applying to multiple layers.
 
 ## Related
 

@@ -1,22 +1,32 @@
 ---
 title: Tile
-description: "Cuts a rectangle out of the picture and stamps it across the frame, with mirrored and offset rows."
+description: "Cuts a rectangle and stamps it across the frame."
 ---
 
 Tile is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Making one picture fill a frame many times over. Tile cuts a rectangle out of
-the layer and stamps it side by side until the frame is full — the fastest route
-to a repeating pattern, a video wall, a kaleidoscope base, or the classic
-"multiply the shot and offset the rows" music-video look.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Tile is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/tile.webp"
+      alt="The same frame with Tile applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Tile</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Tile. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Tile is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is also the quiet workhorse behind seamless textures: with **Mirror edges**
-on, alternate stamps are flipped, so the copies meet edge to edge with nothing
-visible at the join even when the source is not seamless at all.
+{/* END GENERATED */}
 
-A fresh Tile is a 2×2 repeat, so you can see what it does the moment you add it.
+## What it does
+
+Tile cuts a rectangle out of the layer and repeatedly stamps it side by side until the frame is filled.
 
 ## Parameters
 
@@ -45,41 +55,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Tile centre x** and **Tile centre y** — where in the picture the rectangle is
-  cut from. Move it to choose *which part* of the shot gets repeated; by default
-  it is the middle.
-- **Tile width** and **Tile height** — how big the rectangle is, as a percentage
-  of the frame. 50 gives a 2×2 grid, 25 a 4×4, and the two can differ, which
-  gives tall or wide tiles. Above 100 the rectangle is larger than the frame, so
-  the source reaches beyond the picture and the outermost row of pixels is held
-  outward to fill it.
-- **Output width** and **Output height** — how much of the frame gets stamped, as
-  a percentage, measured out from the centre. Below 100 the tiling sits in a
-  window with transparency around it, which is how a tiled panel is placed
-  inside a larger composition. Above 100 makes no visible difference: the frame
-  is all there is to cover.
-- **Mirror edges** — flips alternate stamps instead of butting copies together.
-  Turn this on whenever the joins are showing. It halves the apparent repetition
-  as well, because neighbouring tiles are no longer identical.
-- **Phase** — slides every row of tiles sideways by a fraction of a tile, which
-  is what stops the result reading as a grid. 180° is the brickwork offset;
-  smaller angles give a gentle stagger.
-- **Horizontal phase shift** — makes Phase slide the *columns* vertically instead
-  of the rows horizontally. Same idea, turned ninety degrees.
-- **Mix** — how much of the tiled picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**Tile does not change the layer's size.** Everything happens inside the frame
-the layer already renders at, so Output width above 100 has nothing extra to
-cover. If you want tiles that spill beyond the composition, scale the layer down
-first and let Tile fill what is left.
-
-**The tile is cut from the picture as it arrives**, which means effects above
-Tile in the stack are inside the tile and effects below it are applied to the
-whole tiled result. Ordering it deliberately is most of the craft here.
+- **Tile centre x** and **Tile centre y**: the centre point to begin repeating from.
+- **Tile width** and **Tile height**: how large the tile rectangle is.
+- **Output width** and **Output height**: how much of the frame gets stamped.
+- **Mirror edges**: flips alternate stamps.
+- **Phase**: slides every row of tiles sideways by a fraction of a tile.
+- **Horizontal phase shift**: decides if Phase slides vertically or horizontally.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,28 +1,33 @@
 ---
 title: "Flash"
-description: "A hit of colour on a beat, a keyframe, or a strobe grid."
+description: "A strobe on a beat."
 ---
 
 Flash is a [Stylise](/effects/stylise/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Puts a burst of colour over the picture and takes it away again. The white flash
-on a kick drum is half the genre, and this is the effect that does it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Flash is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/flash.webp"
+      alt="The same frame with Flash applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Flash</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Flash. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Flash is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It works three ways, chosen by **Mode**. **Manual** is keyframed: you place hits
-yourself on the Trigger control and each one decays away. **Trigger** takes its
-hits from the composition's beat markers, so a whole sequence flashes in time
-with the music without a single keyframe. **Strobe** does the same but fires only
-every so many beats, for a slower pulse over a fast tempo.
+{/* END GENERATED */}
 
-The beat modes need beat markers to exist. Detect them from the audio first — see
-[Markers](/use/markers/) — and with none present the effect simply stays dark
-rather than complaining.
+## What it does
 
-The flash is added in linear light, so a bright flash genuinely blows the
-picture out rather than washing it toward grey, and anything downstream that
-reads highlights — a [Glow](/effects/stylise/glow/), for instance — will see it.
+Puts a burst of colour over the picture and clears it again. Can be automated based
+on beat markers.
 
 ## Parameters
 
@@ -51,31 +56,18 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Mode** — Manual for keyframed hits, Trigger for one flash per beat marker,
+- **Mode**: Manual for keyframed hits, Trigger for one flash per beat marker,
   Strobe for one every so many beats.
-- **Trigger** — Manual mode's hits. Each keyframe on it is a hit at that
-  strength, and the flash falls away from there. This control does nothing in the
-  two beat-driven modes.
-- **Duration** — how long a beat-driven flash lasts, in frames. Short is a snap;
-  long enough and the flashes start to overlap into a constant wash.
-- **Shape** — Hard holds the flash at full strength for its whole duration and
-  then cuts, which is the aggressive, strobing option. Fade ramps it down across
-  the same span, which reads as a bloom of light rather than as a switch.
-- **Every Nth beat** — in Strobe mode, how many beats to skip between flashes. Two
-  halves the rate, four quarters it. It has no effect in the other modes.
-- **Phase offset** — shifts beat-driven flashes earlier or later, in frames.
-  Use it when the detected beat sits fractionally off where the hit actually
-  feels, which is common where the snare sits lazily behind the beat.
-- **Intensity** — a scale on the whole envelope, whichever mode produced it. This
-  is the master strength control, and it can be pushed past full for a flash that
-  blows well past white.
-- **Colour** — what colour the flash is. White is the default hit; a colour is how
-  you tie a flash to a palette, and since it is scene-linear it can be set
-  brighter than white.
-- **Decay** — how quickly a Manual hit falls away, in milliseconds. Short is a
-  snap, long is a lingering pulse. It applies to Manual mode only; the beat modes
-  use Duration and Shape instead.
-- **Mix** — how much of the flashed picture replaces the original.
+- **Trigger**: Manual mode's hits. 
+- **Duration**: how long a beat-driven flash lasts.
+- **Shape**: change how the flash should or shouldn't fade.
+- **Every Nth beat**: in Strobe mode, how many beats to skip between flashes.
+- **Phase offset**: shifts beat-driven flashes earlier or later.
+- **Intensity**: scales the intensity of the flash.
+- **Colour**: what colour the flash is. 
+- **Decay**: how quickly a Manual hit fades.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

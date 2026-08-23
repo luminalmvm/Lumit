@@ -1,20 +1,33 @@
 ---
 title: Emboss
-description: "Treats the picture as a surface with height and lights it from one side, giving the stamped-metal grey relief."
+description: "Treats the picture as a surface with height, and lights from one side."
 ---
 
 Emboss is a **Stylise** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The picture is treated as a surface with height, lit from one direction, and what
-comes back is the stamped-metal look: a flat grey sheet with the frame's edges
-raised out of it, bright on the side facing the light and dark on the other.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Emboss is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/emboss.webp"
+      alt="The same frame with Emboss applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Emboss</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Emboss. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Emboss is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is grey on purpose — After Effects' Emboss suppresses colour and so does this.
-The everyday uses are a pressed-metal or letterpress title, a fake bump map to
-combine with the original picture through a [blend mode](/use/blend-modes/), and
-a quick way to see the shape of detail that is hiding in the shadows.
+{/* END GENERATED */}
+
+## What it does
+
+The picture is treated as a surface with height and lit from one direction.
+Resulting in a stamped-metal look.
 
 ## Parameters
 
@@ -37,43 +50,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Direction** — where the light is, measured from straight up and going
-  clockwise, the same convention [Drop shadow](/effects/stylise/drop-shadow/)
-  uses. The slope facing it is the bright one. Turning it 180° swaps every
-  highlight for a shadow, which reads as the relief being pressed in rather than
-  raised out.
-- **Relief** — how far apart the two points being compared are, in pixels at
-  composition size, which is how thick the relief reads. Small values give a fine
-  etched edge; large ones give a soft, deep, almost three-dimensional swell.
-- **Contrast** — the gain on the relief. 0 is a flat grey card; 100 is the
-  shipped look; above 150 the highlights and shadows run to white and black and
-  the picture reads as a hard stamp.
-- **Mix** — how much of the relief replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**Relief 0 is flat grey, not "off".** With no separation between the two points
-being compared there is no relief to see, and the honest answer is the surface
-with no light on it. Use **Mix** to turn the effect down.
-
-**To get the colour back, blend it.** Emboss on a duplicate of the layer, set
-that copy's blend mode to Overlay or Soft light, and the colour underneath comes
-through with the relief on top. That is the standard recipe and it looks far
-better than any "keep colour" switch would.
-
-**For a coloured relief**, put a [Tint](/effects/colour/tint/) or a
-[Tritone](/effects/colour/tritone/) after it — the grey is a perfect input for
-both.
-
-**Direction and Relief are the same two dials as a bevel.** Animating Direction
-slowly makes the light travel across the frame, which is the "light sweep across
-a metal logo" move; keep Relief still while you do it, or the metal appears to
-change thickness.
-
-**Transparency is untouched**, so an embossed title stays a title rather than
-becoming a grey rectangle.
+- **Direction**: Direction light applied from.
+- **Relief**: distance between neighbours pixels compare again.
+- **Contrast**: the gain on the relief.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

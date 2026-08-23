@@ -9,19 +9,20 @@ import Shot from "../../../components/Shot.astro";
 
 A **keyframe** anchors a value to a time. Lumit works out the values in between.
 
-<Shot file="keyframes-lane.png" caption="Keyframes on a property lane." />
+<Shot file="keyframes-lane.png" caption="Keyframes on a property lane." eager/>
 
 ## Animate a property
 
 1. Move the playhead to where the animation starts.
 2. Turn on the stopwatch beside the property.
-3. Move the playhead to where it ends.
+3. Move the playhead to where you'd like a new keyframe.
 4. Change the value.
 
-Lumit writes the second keyframe for you. Every later change at a new time adds
-another.
+Whenever a keyframed propert's value is altered by you, it creates a new keyframe
+at the current playhead position. When editing a frame that currently has a keyframe
+it will update that keyframes value instead.
 
-Turn the stopwatch off to remove every keyframe on that property and hold one value.
+Turn the stopwatch off to remove every keyframe on that property.
 
 ## Move and delete
 
@@ -37,18 +38,12 @@ Each side of a keyframe has its own interpolation:
 | --- | --- |
 | **Hold** | The value does not change until the next keyframe. |
 | **Linear** | A straight line to the next value. |
-| **Bezier** | A curve you shape by hand. |
+| **Bezier** | A curve you can alter. |
 
 A bezier keyframe carries **speed** and **influence**. Speed is the rate of change in
 units per second. Influence is how far the handle reaches, as a percentage.
 
-Lumit matches After Effects' keyframe maths, so imported animation keeps its shape.
-
-## Markers
-
-A **marker** is a labelled point on a composition, a layer, or an asset. Use markers to
-note where something should happen. **Beat markers** are markers generated from audio
-onset detection - see [Markers](/use/markers/).
+Lumit matches After Effects' keyframe maths, so imported animations keep their shape.
 
 ## Related
 

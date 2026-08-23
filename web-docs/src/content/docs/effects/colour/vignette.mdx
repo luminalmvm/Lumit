@@ -1,27 +1,32 @@
 ---
 title: "Vignette"
-description: "Darken toward the edges, to hold the eye in the middle."
+description: "Darken toward the edges."
 ---
 
 Vignette is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Darkens the frame away from its centre. It is the oldest attention trick there
-is: the eye goes to the brightest part of the picture, so pulling the corners
-down keeps it on the subject.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Vignette is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/vignette.webp"
+      alt="The same frame with Vignette applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Vignette</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Vignette. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Vignette is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-A light one is invisible and does its work anyway — most graded footage carries
-one. A heavy one is a look in its own right, and pushed far enough it becomes a
-soft round mask through which the shot is seen, which is a serviceable
-lens-scope or spyglass effect.
+{/* END GENERATED */}
 
-It darkens the picture and its transparency together as a single multiply, so it
-sits happily on a layer that will be composited rather than on a full-frame
-plate only.
+## What it does
 
-The shape is described in a distance measured from the centre and normalised to
-the frame, so it survives a composition resize without being re-set.
+Darkens the frame away from the centre.
 
 ## Parameters
 
@@ -46,25 +51,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amount** — how dark the darkened region gets. At zero the picture passes
-  through untouched. This is the control to animate if you want the vignette to
-  breathe with the music.
-- **Radius** — how far the clear middle reaches before darkening starts. Small
-  values close the vignette in toward the centre; large ones push it out to the
-  corners so only the very edges are touched.
-- **Softness** — the width of the fade between clear and dark. Narrow is a hard
-  circular edge, which reads as a mask; wide is the gradual falloff that reads as
-  a lens. It can be pushed past the frame's own corner distance for a very
-  gradual wash, which is why it has no ceiling.
-- **Roundness** — whether the shape is a true circle or follows the frame's own
-  proportions. Fully round is a circle, which on a wide frame leaves the left and
-  right edges darker than the top and bottom; at zero it becomes an ellipse that
-  reaches every edge equally.
-- **Ramp** — the shape of the falloff curve, as distinct from its width. At the
-  neutral point it is the plain smooth fade. Above it, the darkening arrives
-  later and then more suddenly; below it, earlier and more gently. Reach for this
-  when the width is right but the vignette is drawing attention to itself.
-- **Mix** — how much of the darkened picture replaces the original.
+- **Amount** — how intense the vignette is.
+- **Radius** — how far from the middle the darkening begins.
+- **Softness** — the width of the fade between transparent and full black.
+- **Roundness** — At zero it's an ellipse that reaches every edge equally. 
+  One is a circle.
+- **Ramp** — the shape of the falloff curve.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

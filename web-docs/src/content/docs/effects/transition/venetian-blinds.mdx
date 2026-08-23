@@ -1,26 +1,32 @@
 ---
 title: Venetian blinds
-description: "Closes the frame with a rank of slats, like a window blind."
+description: "Closes the frame with slats."
 ---
 
 Venetian blinds is a **Transition** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Taking the layer away in stripes. The frame is cut into slats of equal width and
-every slat opens from its own middle at the same moment, so the picture closes
-the way a window blind does.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Venetian blinds is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/transition/venetian-blinds.webp"
+      alt="The same frame with Venetian blinds applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Venetian blinds</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Venetian blinds. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Venetian blinds is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-As a transition it wants **Completion** keyframed from 0 to 100 and it is done —
-one of the two or three moves that reads instantly as a change of scene without
-anybody having to think about it. At a fixed value it is something else
-entirely: a rank of hard stripes over a title, a shutter, a set of louvres to
-put a light behind.
+{/* END GENERATED */}
 
-It is [Linear wipe](/effects/transition/linear-wipe/) repeated. Everything that
-wipe does — the direction convention, the clean start and finish, the feather —
-works here in exactly the same way; the only difference is that there are many
-edges instead of one.
+## What it does
+
+The frame is cut into slats of equal width and every slat begins wiping at the same moment.
 
 ## Parameters
 
@@ -44,35 +50,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Completion** — how far the slats have closed, 0 to 100. At 0 the frame is
-  untouched exactly; at 100 it is gone. It starts at 50 so the effect shows you
-  what it does the moment you add it, and at 50 exactly half of every slat has
-  gone.
-- **Direction** — which way the slats run, measured from straight up and turning
-  clockwise. At 0° they are horizontal and the frame closes from the top and
-  bottom of each slat; at 90° they are vertical.
-- **Width** — how wide one slat is, in pixels at composition size. Small numbers
-  give a fine grille; large ones give a few broad bands, which is usually the
-  better transition because the eye can follow it.
-- **Feather** — how soft each slat's edges are, in pixels. A feather wider than
-  the slat itself turns the effect into a gentle overall fade, which is
-  occasionally what you want and more often a sign the width is too small.
-- **Mix** — how much of the effect takes hold, as distinct from how far the
-  blinds have closed. See [Linear wipe](/effects/transition/linear-wipe/).
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**There is no centre, and there does not need to be.** The slats sit on the
-middle of the frame. Moving a rank of identical stripes by one slat gives back
-exactly the picture you started with, so a centre control would only ever be a
-way of nudging the phase — Direction and Width are the whole geometry. (After
-Effects has no centre here either.)
-
-**Width is measured at composition size**, not in raster pixels, so a
-Half-resolution preview shows the same slats as the export rather than twice as
-many.
+- **Completion** is how far the slats have closed, as a percentage.
+- **Direction** sets the direction the slats run.
+- **Width** is how wide one slat is.
+- **Feather** softens each slat's edges.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

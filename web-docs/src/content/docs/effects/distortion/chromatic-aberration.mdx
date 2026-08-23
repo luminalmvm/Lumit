@@ -1,32 +1,34 @@
 ---
 title: "Chromatic aberration"
-description: "The radial colour fringe a real lens leaves toward the frame's edges."
+description: "Radial colour fringing."
 ---
 
 Chromatic aberration is a [Distortion](/effects/distortion/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The colour error real glass has. A lens does not bend every wavelength by quite
-the same amount, so a picture taken through one shows coloured fringes that grow
-toward the edges of the frame and vanish at its centre.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Chromatic aberration is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/chromatic-aberration.webp"
+      alt="The same frame with Chromatic aberration applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Chromatic aberration</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Chromatic aberration. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Chromatic aberration is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-That is exactly what this effect does: three tinted samples offset radially from
-the middle of the frame, so the centre stays clean and the corners fringe most.
-It is the difference between footage that looks captured and footage that looks
-generated, and a small amount of it goes a long way — most of the time you want
-it to be felt rather than seen.
+{/* END GENERATED */}
 
-Use it on a whole montage from an adjustment layer to give everything the same
-lens, and push it hard for a few frames as an impact effect when you want the
-fringe to be the point.
+## What it does
 
-Its sibling [RGB split](/effects/distortion/rgb-split/) does the same trick along
-a straight angle you choose. Reach for that one on a beat and this one for
-glass.
+Splits the colour channels based on their distance from the centre of the image.
 
-Like the split, custom tint colours recolour only where the three taps disagree,
-so flat areas keep their original brightness.
+Can be split by simple rgb, or calculate split amount based on a colours physical wavelength.
 
 ## Parameters
 
@@ -52,20 +54,13 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amount** — how far the taps are offset at the frame's edge, in pixels. It is
-  authored in real pixels rather than as a share of the diagonal because a lens's
-  colour error is a physical size; the value is scaled with the preview
-  resolution so a draft scrub still frames like the export.
-- **Colour 1**, **Colour 2** and **Colour 3** — the tints on the inward, centred
-  and outward taps. The defaults reproduce the ordinary red-outward,
-  blue-inward look of real glass; other colours give fringes that no lens would
-  produce but that a montage might want.
-- **Wavelength** — trades the three discrete taps for a smooth dispersion across
-  the same offset. Worth turning on once the amount is large enough that the
-  three taps read as three separate copies.
-- **Samples** — how many taps fill the offset while Wavelength is on. It does
-  nothing otherwise.
-- **Mix** — how much of the fringed picture replaces the original.
+- **Amount** is the amount to scale the offset at the frame's edge.
+- **Colour 1**, **Colour 2** and **Colour 3** tint the inward, centred and
+  outward taps.
+- **Wavelength** changes the rgb stepped aberration for a smooth wavelength-based dispersion.
+- **Samples** is how many taps fill the offset while Wavelength is on. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

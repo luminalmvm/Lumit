@@ -13,6 +13,20 @@ export default defineConfig({
       logo: { src: "./src/assets/lumit-mark.svg", alt: "Lumit" },
       favicon: "/lumit-mark.svg",
       customCss: ["./src/styles/theme.css"],
+      // The before-and-after wipe on every effect page. Each figure carries a
+      // range input across the picture; this points the CSS clip at its value.
+      // Small enough to inline, and the figures degrade to an honest
+      // half-and-half split if it never runs.
+      head: [
+        {
+          tag: "script",
+          content: `addEventListener("DOMContentLoaded",function(){
+document.querySelectorAll(".compare").forEach(function(c){
+var r=c.querySelector(".compare__range");if(!r)return;
+var set=function(){c.style.setProperty("--split",r.value+"%")};
+r.addEventListener("input",set);set()})})`,
+        },
+      ],
       // Git-based per-page dates, shown under the title by the PageTitle
       // override. CI must clone full history or every page shows deploy day.
       lastUpdated: true,

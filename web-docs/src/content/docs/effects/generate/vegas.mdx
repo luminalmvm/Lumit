@@ -1,29 +1,33 @@
 ---
 title: Vegas
-description: "Runs a dashed, marching stroke along a contour it finds in the picture, or round a mask you have drawn."
+description: "Runs a dashed stroke along contours it finds in the picture."
 ---
 
 Vegas is a **Generate** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Outlining what is in the picture, and then making that outline *move*. It finds a
-contour — the line where the picture's brightness, or its transparency, crosses a
-level you choose — and runs a stroke along it. Set **Length** below 100 and the
-stroke becomes dashes; keyframe **Rotation** and the dashes march along the
-contour like the lights around a theatre sign, which is what the effect is named
-for.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Vegas is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/generate/vegas.webp"
+      alt="The same frame with Vegas applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Vegas</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Vegas. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Vegas is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is the quickest way to make a shape announce itself: a logo traced by a
-running highlight, a diagram whose lines light up in turn, a technical readout
-drawing itself around the thing it is measuring.
+{/* END GENERATED */}
 
-Point **Source** at Alpha and it outlines the layer's own shape rather than
-anything in its picture, which is usually what you want on a title or a logo.
+## What it does
 
-Point it at **Mask/Path** and it marches round a mask you have drawn instead of
-hunting for a contour at all — and that half is the more precise of the two, for
-the reason in the notes below.
+Vegas finds a contour where the picture's brightness or transparency crosses a level,
+and draws a stroke along it.
 
 ## Parameters
 
@@ -56,62 +60,20 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Source** — **Luminance** finds the contour in the picture's brightness;
-  **Alpha** finds it at the edge of the layer's own shape; **Mask/Path** ignores
-  the picture and runs the stroke round one of the layer's masks.
-- **Mask** — which mask, while Source is Mask/Path. **First mask** means whichever
-  is first, so you can add the effect before you draw the shape. A mask set to
-  mode **None** is offered like any other.
-- **Threshold** — which contour. On Luminance it is a position on the tone range,
-  so 50 traces the mid-greys and lower values trace the darker parts; on Alpha,
-  50 sits exactly on the shape's edge. Greyed on Mask/Path, where there is no
-  picture to take a level of.
-- **Width** — how thick the stroke is, in pixels at composition size.
-- **Hardness** — how crisp its edges are. 100 is a hard-edged stroke, 0 one that
-  fades out over its own width.
-- **Segment length** — one dash and its gap together, in pixels at composition
-  size. This is where After Effects' *number* of segments becomes a length, for
-  the reason in the notes below — except on Mask/Path, where the two mean the
-  same thing.
-- **Length** — how much of one segment is lit, as a percentage. 100 is a
-  continuous outline with no gaps at all.
-- **Rotation** — marches the dashes along the contour. One full turn moves them
-  on by exactly one segment, so a straight keyframe from 0° to 360° over a second
-  advances them by one segment a second, and looping it is seamless.
-- **Colour** — the stroke's colour. Values above 1 make it bloom under a
-  [Glow](/effects/stylise/glow/).
-- **Opacity** — how strong the stroke is.
-- **Composite on original** — on, the layer that arrived stays under the stroke.
-  Off, the stroke is all there is, which turns the outline into its own element.
-- **Mix** — how much of the effect takes hold.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/). This is how you run the lights round only part of
-  a shape.
-
-## Notes
-
-**A soft picture gives a soft result.** The contour is found from the picture's
-own gradient, so a heavily compressed or very smooth image gives a stroke that
-wanders and breaks up. A small [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
-before Vegas is the standard cure and is exactly what After Effects' Pre-Blur
-control is for.
-
-**On a contour, Segment length is a length rather than a count.** After Effects
-traces the contour into a path and can therefore count segments *around* it; Lumit
-finds the contour where each pixel stands, which is what makes the effect one
-cheap pass, and the price is that spacing has to be a distance instead of a
-number. On a straight contour the two are the same picture; on a tightly curved
-one Lumit's dashes drift in phase where After Effects' stay evenly spaced.
-
-**On a mask, they mean the same thing.** A mask is a real curve, and Lumit
-measures the distance round it on the way in — so the Mask/Path source spaces its
-dashes evenly all the way round, however tight the bend. This is the half to use
-when the dashes must stay regular on a curve, and it is why an imported After
-Effects project using Mask/Path converts its Segments count exactly rather than
-approximately.
-
-**The contour is found on what the eye sees**, not on raw light, so Threshold
-spends its range evenly instead of doing nothing for its first eighty per cent.
+- **Source**: **Luminance** finds the contour from brightness. **Alpha** finds
+  it based on alpha, and **Mask/Path** draws the stroke round one of the layer's masks.
+- **Mask**: which mask, while Source is Mask/Path.
+- **Threshold**: thresholds what counts as a contour. 
+- **Width**: how thick the stroke is.
+- **Hardness**: how crisp edges are.
+- **Segment length**: the length of one dash and gap.
+- **Length**: how much of one segment is lit, as a percentage.
+- **Rotation**: offsets the dashes along the contour.
+- **Colour**: the stroke's colour. 
+- **Opacity**: how strong the stroke is.
+- **Composite on original**: on, the layer the effect is on draws under the stroke.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).pe.
 
 ## Related
 

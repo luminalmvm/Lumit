@@ -5,26 +5,32 @@ description: "Scale how colourful the picture is, evenly."
 
 Saturation is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-How colourful the picture is. At zero it is greyscale; at the neutral point it
-passes through unchanged; above that the colours intensify.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Saturation is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/saturation.webp"
+      alt="The same frame with Saturation applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Saturation</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Saturation. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Saturation is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-The scale is even: every pixel's colourfulness is multiplied by the same amount,
-whether it started grey or vivid. That is what you want for an overall lift or
-for a deliberate desaturated look, and it is what you do not want when the
-picture already has saturated areas that will clip while the muted ones are
-still catching up. For that,
-[Vibrancy](/effects/colour/vibrancy/) is the better tool.
+{/* END GENERATED */}
 
-Common uses: a modest lift so a montage reads punchier than the capture, a
-heavy pull-down for a moody or monochrome section, and taking a layer to
-greyscale so it can serve as a matte or a texture rather than as a picture.
+## What it does
 
-It scales colour about the picture's own brightness, using the standard
-broadcast weighting, so pulling saturation out leaves brightness where it was
-rather than darkening the greens and lightening the blues.
+Adjust how colourful the output is. At zero it's greyscale.
 
+
+Every pixel's colourfulness is multiplied by the same amount, regardless of it's
+input saturation.
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
@@ -46,13 +52,16 @@ In the Effect Controls panel:
 
 - **Saturation** — the multiplier on colourfulness, as a percentage. Zero is
   greyscale and the neutral point passes through untouched. There is no real
-  ceiling: the slider reaches a heavy boost and typing goes further, because the
-  mix between grey and colour keeps extrapolating past it — which is a
-  legitimate, if aggressive, look.
-- **Mix** — how much of the adjusted picture replaces the original. Between this
-  and the control above there are two ways to get a half-strength result; they
-  are not the same, since Mix blends against the untouched picture while
-  Saturation moves the target.
+  ceiling: the slider reaches a heavy lift and typing goes further, because the
+  mix between grey and colour keeps extrapolating past it, which is a legitimate
+  if aggressive look.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+For when a picture already has saturated areas, [Vibrancy](/effects/colour/vibrancy/) is the better tool.
+It preserves already saturated areas while boosting less colourful areas.
 
 ## Related
 

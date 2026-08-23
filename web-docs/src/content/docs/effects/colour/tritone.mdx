@@ -1,23 +1,32 @@
 ---
 title: Tritone
-description: "Replaces the picture's colours with three of your own — one for the shadows, one for the midtones, one for the highlights."
+description: "Map brightness onto 3 colours."
 ---
 
 Tritone is a **Colour** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The picture's own colours are thrown away and replaced by a ramp of three you
-choose. The darkest pixels take the Shadows colour, the brightest take the
-Highlights colour, and everything between is mixed through the Midtones colour.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Tritone is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/tritone.webp"
+      alt="The same frame with Tritone applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Tritone</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Tritone. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Tritone is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is how a photograph becomes a cyanotype or a sepia print, how a trailer gets
-its two-colour title card, and a fast way to make mismatched footage from four
-sources look like one thing.
+{/* END GENERATED */}
 
-[Tint](/effects/colour/tint/) does the same job with two colours. The middle
-stop is what makes this a duotone *print* rather than a straight fade between
-two ends: it is where the character of the look lives.
+## What it does
+
+Similar to [Tint](/effects/colour/tint/), but with three colours, one for blacks, mid-tones, and whites.
 
 ## Parameters
 
@@ -40,34 +49,13 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Highlights** — the colour the brightest part of the picture takes. Keep it
-  near white for a print, or push it warm for candlelight.
-- **Midtones** — the colour mid-grey takes, and the one that decides what the
-  look is. A warm brown gives sepia, a mid blue gives a cyanotype, a mid green
-  gives night-vision.
-- **Shadows** — the colour the darkest part takes. A deep blue rather than
-  black is the classic film-print choice, and reads as air rather than as a
-  hole.
-- **Mix** — how much of the toned picture replaces the original. This is where
-  an imported After Effects "Blend with original" lands.
-- **Matte** and **Invert** — tone only part of the frame; see
-  [Effects](/use/effects/).
+- **Highlights** — the colour white maps to.
+- **Midtones** — the colour mid-grey maps to.
+- **Shadows** — the colour black maps to.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Notes
-
-**The three stops are placed where the eye puts them**, so Midtones lands on the
-grey a person would point at rather than on half of the light. The default trio
-is a split-toned print — deep blue shadows, warm brown midtones, warm white
-highlights — so the effect does something worth looking at the moment you drop
-it on.
-
-**Highlights above white keep their headroom.** A specular four times brighter
-than white comes back as the Highlights colour four times over, rather than
-being flattened to it — so a toned picture still has something for
-[Glow](/effects/stylise/glow/) to catch.
-
-**Colours are scene-linear and can go above 1**, which is how you get a
-highlight stop that glows rather than one that just sits at white.
 
 **For an even simpler two-colour version**, use [Tint](/effects/colour/tint/).
 For a two-tone stencil with no ramp at all, use

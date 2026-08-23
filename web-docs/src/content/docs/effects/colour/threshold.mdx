@@ -1,18 +1,32 @@
 ---
 title: Threshold
-description: "Cuts every pixel to black or white at a brightness you choose, turning a photograph into a stencil."
+description: "Values above threshold white, otherwise black."
 ---
 
 Threshold is a **Colour** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Every pixel is asked one question — is it brighter than the Level? — and comes
-back white if it is and black if it is not. That turns a photograph into a
-stencil: the two-tone poster, a stamped or screen-printed title, a quick matte
-cut out of a bright object, and the source shape for a
-[Roughen edges](/effects/stylise/roughen-edges/) or a
-[Drop shadow](/effects/stylise/drop-shadow/) treatment.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Threshold is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/threshold.webp"
+      alt="The same frame with Threshold applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Threshold</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Threshold. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Threshold is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
+
+{/* END GENERATED */}
+
+## What it does
+
+If a pixel is brighter than the threshold value it becomes white, otherwise it becomes black.
 
 ## Parameters
 
@@ -34,30 +48,15 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Level** — where the cut sits. **50** is mid-grey; lower it and more of the
-  picture comes back white, raise it and more comes back black. Animating it
-  sweeps the stencil open or shut, which is a good title reveal.
+- **Level** — the cutoff point.
 - **Softness** — how wide the crossing between black and white is. **0** is a
-  hard cut, and raising it gives a gradient between the two tones — useful for
-  a smoky or airbrushed stencil.
-- **Mix** — how much of the stencil replaces the original picture.
-- **Matte** and **Invert** — threshold only part of the frame; see
-  [Effects](/use/effects/).
+  hard cut. Greater than this creates a gradient either side of the level value. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Notes
 
-**Level is where you think it is.** 50 lands on the grey a person would point
-at, not on half of the light — Lumit works in scene-linear light, where half is
-very nearly white, so the control is placed perceptually instead.
-
-**Transparency survives the cut.** A thresholded layer keeps its shape: the
-effect decides what colour a pixel is, never whether it is there. Drop it on a
-keyed layer and you get a black-and-white version of the key, not a white
-rectangle.
-
-**Even at Softness 0 the cut is antialiased.** The crossing is a thousandth of
-the tone range wide, which is far under a pixel on any real edge, so the stencil
-has clean diagonals rather than staircases.
+**Transparency is not affected.** The alpha channel is not included in the threshold
 
 **For a colour version of the same idea**, use
 [Posterize](/effects/colour/posterize/) at a low Levels count, or

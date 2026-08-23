@@ -1,38 +1,37 @@
 ---
 title: "Fast motion blur"
-description: "Smear each pixel along the motion measured in the footage."
+description: "Smear each pixel along motion in footage."
 ---
 
 Fast motion blur is a [Temporal](/effects/temporal/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Game capture has no natural motion blur. Every frame is a perfectly sharp instant,
-which is the reason engine footage reads as a game and not as film, and it is
-what makes fast movement strobe rather than flow.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Fast motion blur is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/temporal/fast-motion-blur.webp"
+      alt="The same frame with Fast motion blur applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Fast motion blur</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Fast motion blur. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Fast motion blur is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
+
+{/* END GENERATED */}
+
+## What it does
 
 This effect measures where every pixel moved between one frame and the next, and
-smears each one along its own path. Unlike the layer's motion blur switch, which
-only knows about the layer's own animated transform, this catches motion that is
-*inside* the picture: a player running across frame, a car passing, a camera whip
-that was recorded rather than keyframed.
+smears each one along its own path. 
 
-It is the cheap kind. For the correct, whole-scene kind that re-renders
-everything at sub-frame moments, use
-[Motion blur](/effects/temporal/motion-blur/) — at several times the cost.
-
-Measured motion is never perfect. Where the measurement is unsure — at the edges
-of moving objects, where things pass behind one another — the effect does not
-switch off and leave a sharp patch in the middle of a blurred frame. It borrows
-the motion of the surrounding area instead, so uncertain pixels follow their
-neighbourhood. Blur therefore survives everywhere except where the neighbourhood
-itself is genuinely still, which is where you want sharpness anyway.
-
-It works on footage layers, since it needs real frames to measure between.
-
-:::note[One flow measurement per layer]
-Measuring motion is expensive, so a layer computes it once per frame and shares
-it. If a layer carries both this and
+:::caution[One flow measurement per layer]
+Measuring motion is expensive. A layer computes it once per frame and shares it,
+so where a layer carries both this and
 [Datamosh](/effects/distortion/datamosh/), whichever comes first in the stack
 gets the measurement and the other does nothing. Put them on separate layers if
 you need both.
@@ -60,26 +59,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Shutter angle** — how long the imaginary shutter is open, and so how long the
-  streak is. The streak covers that fraction of a full turn of the movement
-  between frames, which means the film-standard half-turn gives you half the
-  inter-frame motion — the setting that looks like footage rather than like an
-  effect. Larger angles smear further; a full turn and beyond is a stylised
-  choice.
-- **Samples** — the *cap* on how many taps the smear may spend. The effect already
-  spends fewer on short streaks, so this is a ceiling for the expensive frames
-  rather than a fixed cost on every one. Raise it if long streaks show as
-  separate stacked copies; lower it to buy back time.
-- **Quality** — High halves the spacing between taps and bends each streak to
-  follow the curve of the motion rather than running straight. On rotating or
-  swirling movement the difference is obvious; on straight-line motion it is
-  slight.
-- **View** — a diagnostic display. Motion vectors shows the measured movement as
-  colour, Confidence shows in greyscale where the measurement is trusted, and
+- **Shutter angle** sets how long the imaginary shutter is open.
+- **Samples** is a *maximum* on the number of samples the blur combines.
+- **Quality**: increasing gives higher quality blur, for increased render time.
+- **View** is a diagnostic display. Motion vectors show measured movement
+  as colour. Confidence shows where the measurement is likely correct in white, and
   Dominant motion shows the neighbourhood motion an uncertain pixel borrows.
-  These are the fastest way to understand why a region smeared the way it did.
-  Leave it on Rendered for output.
-- **Mix** — how much of the smeared picture replaces the original.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

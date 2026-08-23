@@ -1,26 +1,35 @@
 ---
 title: Shadow highlight
-description: "Opens up dark regions and holds back bright ones, judging each pixel by how bright its surroundings are."
+description: "Adjust shadows and highlights."
 ---
 
 Shadow highlight is a **Colour** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Someone standing in front of a window comes out as a silhouette: the camera
-exposed for the window, and the face went to nothing. Lifting the whole picture
-would blow the window out. This lifts the dark *regions* and pulls down the
-bright ones, and leaves the rest alone.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Shadow highlight is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/shadow-highlight.webp"
+      alt="The same frame with Shadow highlight applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Shadow highlight</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Shadow highlight. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Shadow highlight is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-The word doing the work is **regions**. Whether a pixel is treated as a shadow
-is decided by how bright its *surroundings* are, not how bright it is — so a
-white shirt button inside a dark jacket is lifted along with the jacket instead
-of being singled out and left behind. That is what makes the result look like a
-better exposure rather than a washed-out one.
+{/* END GENERATED */}
 
-Everyday uses: rescuing a backlit interview, opening up crushed blacks in
-graded footage, holding a blown sky, and putting a bit of local contrast into a
-flat log clip.
+## What it does
+
+The effect lifts dark *regions* of a picture, and can pulls bright regions down.
+
+Whether a pixel counts as a shadow or highlight is based on how bright its 
+*surroundings* are, and not just its own brightness. 
 
 ## Parameters
 
@@ -48,51 +57,22 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Shadow amount** — how hard the dark regions are lifted. 100 trebles them.
-- **Shadow tonal width** — how far up the tone range counts as shadow. Low keeps
-  the lift in the deepest darks; high reaches into the midtones and starts to
-  look like an overall brightening.
-- **Highlight amount** — how hard the bright regions are pulled down. 100 takes
-  them to a third.
-- **Highlight tonal width** — how far down the range counts as highlight.
-- **Radius** — how large a neighbourhood decides whether a pixel is in shadow.
-  Small values pick out local contrast and can look gritty; large values behave
-  more like an overall tone curve. It is a per cent of the composition diagonal,
-  so it survives a change of resolution.
-- **Colour correction** — how much saturation is put back where the picture
-  moved. Opening a shadow reads as desaturated; this is the cure. 0 leaves
-  colour exactly alone.
-- **Midtone contrast** — the contrast the two lifts flatten, put back by hand.
-  0 is neutral; a little positive is usually worth having after a strong rescue.
-- **Mix** — how much of the corrected picture replaces the original. This is
-  where an imported After Effects "Blend with original" lands.
-- **Matte** and **Invert** — correct only part of the frame; see
-  [Effects](/use/effects/).
+- **Shadow amount** — amount to lift dark regions.
+- **Shadow tonal width** — range that counts as a shadow. 
+- **Highlight amount** — amount to pull down highligh regions.
+- **Highlight tonal width** — range that counts as a highlight.
+- **Radius** — the area to compare against to determine if a pixel is a shadow/highlight.
+- **Colour correction** — how much saturation is added back where the picture was adjusted.
+- **Midtone contrast** — adjusts contrast of midtones, since they can be otherwise end up crushed.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Notes
 
-**Nothing is softened.** The effect looks at a blurred copy of the picture to
-decide what is a shadow, but it never takes any colour from it — the blur is a
-question, not an answer. Detail comes out exactly as sharp as it went in.
-
-**If you see a halo, lower Radius or lower the amounts.** A bright ring around a
-dark object against a bright background is the signature of a local tone
-correction pushed too far, and it is the one artefact to watch for. The default
-pair is deliberately mild.
-
-**Amounts at 0 turn the effect off exactly**, and it does not even do the blur,
-so a disabled instance costs nothing.
-
-**There is no automatic mode.** After Effects picks its amounts from the frame's
-own histogram and then smooths that choice across neighbouring frames, which
-makes a grade whose answer at one frame depends on the shot around it. Lumit's
-amounts are yours, and stay where you put them; an imported project arrives with
-After Effects' default pair written in.
-
 **For a global lift rather than a local one**, use
 [Levels](/effects/colour/levels/), [Curves](/effects/colour/curves/) or
-[Exposure](/effects/colour/exposure/) — they are cheaper and more predictable
-when the whole picture needs the same treatment.
+[Exposure](/effects/colour/exposure/). They are cheaper and more predictable
+if the whole picture needs the same adjustment.
 
 ## Related
 

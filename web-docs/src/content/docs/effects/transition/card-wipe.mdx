@@ -1,23 +1,33 @@
 ---
 title: Card wipe
-description: "Turns the frame away as a grid of cards, one wave at a time."
+description: "Turns the frame away as a grid of cards."
 ---
 
 Card wipe is a **Transition** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Taking the layer away as a grid of cards, each one turning edge-on and
-disappearing. A wave of flips crosses the frame in the order you choose, and
-because each card turns in perspective — the near edge growing, the far edge
-shrinking, the picture on it sliding as it goes — the whole thing reads as a
-departures board changing rather than as a grid of rectangles fading out.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Card wipe is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/transition/card-wipe.webp"
+      alt="The same frame with Card wipe applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Card wipe</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Card wipe. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Card wipe is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Keyframe **Completion** from 0 to 100 and the shot flips away. The two controls
-that decide what it feels like are **Transition width**, which says how much the
-cards overlap in time, and **Randomness**, which shuffles the order: at 0 the
-wave is a clean sweep, at 100 the cards go in no order at all and it reads as a
-scatter.
+{/* END GENERATED */}
+
+## What it does
+
+Transitions the layer as a grid of cards, each one turning and
+disappearing. This works as a wave across the frame.
 
 ## Parameters
 
@@ -46,57 +56,17 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Completion** — how far through the wipe we are, 0 to 100. At 0 the frame is
-  untouched exactly; at 100 every card has gone. It starts at 50 so the effect
-  shows you what it does the moment you add it.
-- **Transition width** — how much of the whole wipe one card's own flip takes.
-  At 100 every card turns together and the effect is a single move; at a few per
-  cent they go strictly one after another and it is a hard travelling wave. The
-  middle is where it looks like a departures board.
-- **Rows** and **Columns** — how many cards there are. A coarse grid reads as
-  panels turning, a fine one as a texture dissolving. Both go past their sliders
-  by typing, up to 256.
-- **Flip axis** — which line each card turns about. **Horizontal axis** tips the
-  card's top and bottom edges (a departures-board flap); **Vertical axis** swings
-  its left and right edges (a page turning). **Random** picks one per card from
-  the Seed, which stops the grid reading as a machine.
-- **Flip direction** — which way each card turns. **Forwards** brings the leading
-  edge towards you, so it grows before the card vanishes; **Backwards** sends it
-  away. **Random** picks per card. The difference is visible because the cards
-  are drawn in perspective — with a flat projection this control would do
-  nothing.
-- **Flip order** — which side the wave starts from.
-- **Randomness** — how far each card's turn is shuffled away from Flip order. At
-  0 the order is exactly what Flip order says, which is After Effects' default;
-  at 100 it is entirely the Seed's.
-- **Seed** — which shuffle you get, and which way the Random axis and direction
-  fall. Same seed, same answer, on any machine and in any render.
-- **Mix** — how much of the effect takes hold, as distinct from how far the wipe
-  has got. See [Linear wipe](/effects/transition/linear-wipe/).
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**There is no camera, and that is deliberate.** After Effects' Card Wipe carries
-a whole camera system — camera position, corner pins, lights, materials, position
-and rotation jitter — so that its grid can be looked at from an angle. Lumit
-keeps cameras on the composition rather than inside an effect, so every card here
-is drawn in its own little frame from the same fixed viewing distance. What you
-lose is the ability to fly around the grid; what you keep is the flip itself, its
-direction, and a control set you can read in one glance. An imported After
-Effects instance converts its grid, timing and flip settings and reports the
-camera controls as not carried.
-
-**There is no back layer either.** In After Effects a card that passes ninety
-degrees shows whatever you put on the Back Layer, and the default is nothing.
-Lumit's cards turn to nothing, which is that default exactly. To flip *to*
-something, put the second layer underneath and let the cards reveal it.
-
-**Cards never overlap.** Each one is drawn inside its own cell, which is what
-keeps the grid clean. At shallow angles a card's near edge would reach about six
-per cent past its cell and is trimmed there instead — briefly, and while the card
-is nearly full, so it is not something you will catch.
+- **Completion** is how far from beginning to end the wipe is.
+- **Transition width** sets how much of the whole wipe one card's own flip
+  takes.
+- **Rows** and **Columns** set how many cards there are.
+- **Flip axis** chooses which line each card turns about. 
+- **Flip direction** chooses which way each card turns. 
+- **Flip order** sets which side the wave starts from.
+- **Randomness** sets how far each card's turn is shuffled away from Flip order.
+- **Seed** randomises the shuffle.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

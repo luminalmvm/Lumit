@@ -1,45 +1,30 @@
 ---
-title: The FX console
-description: The Ctrl+Space menu - a radial menu around your pointer, with an effect search bar above it.
+title: Effects console
+description: The Ctrl+Space menu, a radial menu around your pointer with an effect search bar above it.
 sidebar:
-  order: 9
+  order: 9.25
 ---
 
-Press **Ctrl+Space** anywhere - over the Timeline, over the picture in the
-Viewer - and the FX console opens around your mouse: a **ring of choices**
-centred on the pointer, with a **search bar** floating above it. It is the
-fastest route to the things you do constantly: apply an effect, key a
-property, make a layer.
-
-If you have used Video Copilot's FX Console in After Effects, the search half
-will feel familiar. If you have used Blender's pie menus, the ring will. If
-you have used neither, give it a minute - it is one of those tools that feels
-odd for ten minutes and then becomes the way you work.
+Press **Ctrl+Space** anywhere, and the effects console opens on your mouse: a **ring 
+of choices** centred around the cursor, with a **search bar** floating above it.
 
 ## The ring
 
-The ring puts each choice in a fixed **direction** rather than a fixed spot in
-a list. That is the whole trick: after a few uses your hand learns "duplicate
-is up" and you stop reading the menu. Press the chord, flick towards the
-choice, release - done.
+Every choice in the ring stays in a fixed **direction** from the centre.
 
-- **Flick, or click.** Press and drag in a direction and release: the slice in
-  that direction runs, however far you dragged. Clicking a slice directly
-  works too.
-- **The middle cancels.** Release with the pointer still in the centre and
-  nothing happens. Opening the menu costs nothing.
-- **Escape closes it**, from anywhere, whatever has focus.
-- A dimmed slice is one that cannot run right now. It keeps its place so the
-  direction keeps its meaning.
+- **Flick, or click.** Press and drag in a direction and release: the option in
+  that direction runs, however far you dragged. Clicking a option directly works
+  too.
+- **The middle cancels.** Release with the pointer still in the centre and nothing
+  happens.
+- **Escape closes it**.
 
-Some slices carry a small caret: choosing one **expands the ring in place**
-into a ring of its own. The centre names where you are and clicking it steps
-back out (Escape steps back too, one level at a time).
+Some options open submenus. Choose one to **expand the ring in place** replacing the existing radial menu. 
+Clicking the centre steps back to the previous menu; Escape steps back to, one level at a time.
 
 ## What is in the ring
 
-The ring follows your selection, so it offers what you were probably about to
-do:
+The ring displays options relevant to the item you currently have focused:
 
 | You have | The ring offers |
 | --- | --- |
@@ -49,52 +34,36 @@ do:
 | A composition, nothing selected | The new-layer menu: solid, text, camera, adjustment, null, import |
 | Nothing open | New composition, import footage |
 
-**New ▸** expands into the same entries as the Layer ▸ New menu, in the same
-order, so the two surfaces teach the same directions.
+**New ▸** expands into the same entries as the Layer ▸ New menu, in the same order.
 
 ## The Keyframe slice
 
-With a layer selected, **Keyframe ▸** expands into one slice per transform
-row: Anchor point, Position, Scale, Rotation, Opacity. Choosing one:
+With a layer selected, **Keyframe ▸** expands into an option per transform
+row: Anchor point, Position, Scale, Rotation, Opacity. Choosing one adds a 
+keyframe at the playhead holding the value the property currently has.
 
-1. plants a keyframe at the playhead, holding the value the property already
-   has - nothing on screen moves;
-2. brings the Timeline to the front with that row twirled open, so the key
-   you just made is sitting there under the playhead.
-
-It is the flick-sized version of opening the layer, finding the row, and
-pressing its diamond. A row already keyed at this frame is not keyed twice -
-choosing it just shows the row. A row driven by an expression is dimmed,
-because writing keys over an expression would erase it. See
-[Keyframes](/use/keyframes/) for what to do with the key once it exists.
+A row driven by an expression is dimmed, because writing keyframess over an expression 
+would erase it. See [Keyframes](/use/keyframes/).
 
 ## The search bar
 
-The bar starts empty and shows nothing - the ring is the offer. Start typing
-and a dropdown appears under the bar with everything that matches:
+Type, and a dropdown appears under the bar with everything that matches:
 
-- **Effects first, compositions after a divider.** A composition never
-  outranks an effect, however well it matches - the reason you opened this is
-  nearly always an effect.
+- **Effects first, compositions after a divider.**
 - Matching is loose: type `gau` and Gaussian blur is the top row. The letters
   only have to appear in order, so `db` finds Directional blur.
-- **Enter applies the top match to every selected layer**, exactly as the
-  Effect menu would. Choosing a composition brings it to the front instead.
-- The arrow keys move the highlight; Escape clears the search first and
-  closes second, so a mistyped query never costs you the whole console.
+- **Enter applies the top match to every selected layer.**
+- The arrow keys move the selected option; Escape clears the search first and
+  closes second.
 
 ## The snapshot button
 
 The camera button beside the search field saves the frame you are looking at
-as a PNG - one press, no export dialogue. Snapshots land in a `Snapshots`
-folder beside your saved project (or in your Pictures folder if the project
-has never been saved). Use it to compare two versions of a look: snapshot,
-change something, snapshot again.
+as a PNG. One press, and no export dialogue. Snapshots land in a `Snapshots`
+folder beside your saved project, or in your Pictures folder if the project has
+never been saved.
 
 ## Not the command palette
 
-**Ctrl+Shift+P** still opens the command palette, and the two answer different
-questions: the palette is *every command by name*; the console is effects,
-fast, plus the thing you were about to do. Both build their lists from the
-same source as the menus, so they can never drift out of step with what the
-menus mean.
+**Ctrl+Shift+P** opens the command palette. The palette is *every command by name*; 
+the console is largely effects and context relevant options.

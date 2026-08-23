@@ -1,15 +1,10 @@
 ---
-// A screenshot slot.
-//
-// Drop a file into src/assets/shots/ with the name this slot asks for and it
-// appears. No markdown edit, no import, nothing to switch on - until then the
-// page shows a labelled placeholder naming the file it wants.
-//
-//   <Shot file="timeline-outline.png" caption="The outline columns." />
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
 
 const shots = import.meta.glob<{ default: ImageMetadata }>(
-  "../assets/shots/*.{png,jpg,jpeg,webp,avif}",
-  { eager: true },
+  '/src/assets/shots/*.{png,jpg,jpeg,webp,avif}',
+  { eager: true }
 );
 
 interface Props {
@@ -19,16 +14,25 @@ interface Props {
   caption: string;
   /** Alt text, when it should differ from the caption. */
   alt?: string;
+  /** Set on the first screenshot of a page so it loads immediately. */
+  eager?: boolean;
 }
 
-const { file, caption, alt } = Astro.props;
-const hit = shots[`../assets/shots/${file}`];
+const { file, caption, alt, eager = false } = Astro.props;
+const hit = shots[`/src/assets/shots/${file}`];
 ---
 
 {
   hit ? (
     <figure class="shot">
-      <img src={hit.default.src} width={hit.default.width} height={hit.default.height} alt={alt ?? caption} loading="lazy" />
+      <Image
+        src={hit.default}
+        alt={alt ?? caption}
+        loading={eager ? 'eager' : 'lazy'}
+        fetchpriority={eager ? 'high' : 'auto'}
+        decoding={eager ? 'sync' : 'async'}
+        densities={[1, 2]}
+      />
       <figcaption>{caption}</figcaption>
     </figure>
   ) : (

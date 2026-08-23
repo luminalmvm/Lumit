@@ -1,46 +1,37 @@
 ---
 title: Time and precision
-description: Why Lumit stores time as exact fractions.
+description: Storing time as exact fractions.
 sidebar:
   order: 3
 ---
 
-## The problem with decimals
+## The issue with float framerates.
 
-At 29.97 frames per second, one frame is 1001/30000 of a second. As a decimal that is
-0.033366666… - it does not terminate.
-
-Store times as decimals and small errors accumulate. After an hour a frame lands a
-frame early or late. Editors know this as drift.
+If a footage or a composition is 29.97 frames per second, then one frame is exactly 
+1001/30000 of a second long, which is equivalent to a non-terminating decimal value. 
+If we attempt to store this as a float value then we won't store the length of a frame 
+perfectly, and in longer compositions, the footage will begin drift apart from the 
+frame it should actually be displaying at a specific timecode.
 
 ## What Lumit does
 
-Lumit stores time as an **exact fraction** - a whole-number numerator over a
-whole-number denominator. 1001/30000 is stored as exactly that, not as an
-approximation.
+To resolve this we instead store the length of time to display a frame as the exact
+fraction, as demonstrated above. This requires two integer values, the numerator and
+denominator. As per the example above, we can now store the frame time for a 29.97 fps
+composition exactly, where numerator = 1001, and denominator = 30000. For simpler 
+framerates, such as 60 fps, this can be calculated as 1/60.
 
-Arithmetic on fractions stays exact. There is no drift to accumulate, however long the
-project or however many nested retimes it passes through.
+## References to time
 
-## Four timebases
+"Time" itself can reference to several different parts of a project, which is 
+why internally they are separated into the following:
 
-Time means different things at different depths, so Lumit names them separately:
-
-| Timebase | Measured from |
+| Time type | Measured from |
 | --- | --- |
-| **Source time** | The start of the media file, before any retiming. |
-| **Clip time** | The start of a clip, inside a Sequence layer. |
-| **Layer time** | A layer's in point. |
+| **Source time** | The start of the decoded media file. |
+| **Clip time** | The start of an individual clip, inside a Sequence layer. |
+| **Layer time** | The start of a layer within a composition. |
 | **Comp time** | The start of the composition. |
-
-Keeping them distinct is what stops a nested retime inside a precomp inside a sequence
-from quietly losing a frame.
-
-## What this buys you
-
-- A [speed ramp](/use/retime/) lands on the frame you asked for.
-- Changing a composition's frame rate does not move your keyframes.
-- Nesting does not accumulate error.
 
 ## Related
 

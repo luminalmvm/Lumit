@@ -1,47 +1,46 @@
 ---
 title: Troubleshooting
-description: What common problems look like, and what to do.
+description: Common problems.
 sidebar:
   order: 3
 ---
 
 ## The app will not start
 
-Lumit is GPU-first: the whole render pipeline lives on the graphics card and there is
-no software-rendering fallback. You need a GPU that supports Vulkan, Direct3D 12 or
-Metal - in practice, any card or integrated graphics from roughly 2016 onwards. On an
-older machine, Lumit cannot run.
+Lumit requires a GPU for rendering. You need a GPU that supports D3D12, Vulkan, or
+Metal.
 
 ## Windows shows "Windows protected your PC"
 
-The build is not code-signed yet, so SmartScreen warns on first run. Choose
+The build is not code-signed on windows, so SmartScreen warns on first run. Choose
 **More info → Run anyway**. See [Installation](/start/install/).
-
-## macOS refuses to open the app
-
-The macOS build is not notarised, so Gatekeeper refuses a double-click. Right-click
-the app in Finder, choose **Open**, and confirm at the prompt. This only has to be
-done once. The macOS build is experimental - see [Installation](/start/install/).
 
 ## Media shows as missing
 
-The project stores a reference to the file's path, not the file itself. If the file
-moves, the asset reports that it is missing. Relink it to the new path and every
-layer using it recovers. See [Importing media](/use/importing/).
+The project stores a reference to the file's path. If that file is moved or deleted, 
+Lumit will be unable to find it and the asset reports it as missing.
 
-## Playback is slow, or quality drops while you work
+To fix this, click the Relink button, and this allows you to locate the file to 
+recover it. See [Importing media](/use/importing/).
 
-Under load, Lumit reduces quality on its own to keep responding - it may drop
-resolution or skip effects while you interact. This is adaptive degradation, and it
-only happens during interaction. To get smoother playback: lower the preview
-resolution, let the cache fill on a first pass, turn off heavy effects while you block
-out timing, or precompose a finished section. See [Preview and playback](/use/preview/).
+## Playback is slow, or quality drops while working
 
-## The export might look worse than the degraded preview did
+Under load, or while scrubbing values to try and provide realtime previews, Lumit 
+may reduce quality. For smoother playback, lower the preview resolution and let the
+cache fill on a first pass. See [Preview and playback](/use/preview/).
 
-It does not. Adaptive degradation and preview resolution affect preview only; an
-export always renders at full quality. What you saw degraded was the preview, never
-the file. See [Exporting](/use/export/).
+Lumit is a compositior, if you have chosen to render every frame, Lumit will do so as
+efficiently as possible, unfortunately you will be limited by your own hardware, but
+where possible increase cache sizes to let Lumit reduce the need to render. Despite 
+previews not always being realtime or taking time to render, Lumit aims to provide a
+responsive interface regardless of what's rendering.
+
+## Does exporting look the same as what I see in the viewer?
+
+It may not. Exporting allows you to change certain options, including resolution and 
+framerate. Despite this, export will always render at full quality. Any adjustments 
+you've made to the viewer, such as changing the preview resolution, exposure, displayed
+grids, etc. are not seen by the export. See [Exporting](/use/export/).
 
 ## Related
 

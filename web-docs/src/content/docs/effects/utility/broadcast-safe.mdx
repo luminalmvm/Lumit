@@ -1,24 +1,36 @@
 ---
 title: Broadcast safe
-description: "Measures each pixel's composite signal amplitude and pulls the illegal ones back — or shows you which they are."
+description: "Measures and displays illegal pixels."
 ---
 
 Broadcast safe is a **Utility** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Analogue television carried brightness and colour along a single wire, added
-together, and a transmitter would distort or refuse a signal whose total swung
-too far. A saturated yellow is the classic offender: its brightness is already
-nearly white, and its colour adds a large amount on top, so the two together
-reach about a third again past the legal peak — even though neither half is
-unusual on its own.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Broadcast safe is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/utility/broadcast-safe.webp"
+      alt="The same frame with Broadcast safe applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Broadcast safe</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Broadcast safe. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Broadcast safe is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This effect measures that total for every pixel and either pulls the pixel back
-until it is legal, drains colour out of it until it is, or simply shows you which
-pixels the problem is in. It is a delivery tool rather than a look, which is why
-it sits here with [Set matte](/effects/utility/set-matte/) rather than with the
-colour effects.
+{/* END GENERATED */}
+
+## What it does
+
+Analogue television carried brightness and colour along a single wire, and a 
+transmitter distorts or refuses a signal where the total peak is too great.
+
+This effect measures the peak for every pixel. It can then pull pixels back
+to legal values, or display which pixels aren't legal.
 
 ## Parameters
 
@@ -41,51 +53,15 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Standard** — which television system's signal is being measured. NTSC's black
-  sits a little way up the scale (the "setup" pedestal) and PAL's does not, so the
-  same Maximum signal number means a slightly different thing in each. Pick the
-  one your delivery specification names.
-- **How to treat** — what happens to a pixel that is over the limit.
-  - **Reduce brightness** darkens it until it fits, keeping its colour. This is
-    the safe default and the one that usually looks right.
-  - **Reduce saturation** drains colour out of it until it fits, keeping its
-    brightness. Better for graphics, where a logo's brightness matters more than
-    its exact hue.
-  - **Key out unsafe** removes the illegal pixels, leaving the legal picture with
-    holes in it — a diagnostic view.
-  - **Key out safe** removes the legal ones, leaving *only* the problem. Put this
-    on an adjustment layer above your shot and the offending areas stand out.
-- **Maximum signal** — the largest total allowed, in IRE. 110 is the usual
-  broadcaster's figure and the default; 100 is the strict limit; above 110 is for
-  a delivery spec that explicitly allows more.
-- **Mix** — how much of the clamped picture replaces the original. Leave it at
-  100 for a real delivery; anything less is not safe.
-- **Matte** and **Invert** — limit the clamp to a region; see
-  [Effects](/use/effects/).
-
-## Notes
-
-**Put it last.** This belongs at the very end of the chain, on an adjustment
-layer above everything, after the grade and after every title. Anything applied
-after it can push the signal back out of range.
-
-**Check before you fix.** Set **How to treat** to *Key out safe* first: whatever
-is left on screen is what is illegal. If it is a corner of a logo, fix the logo;
-if it is half the shot, fix the grade. Reaching straight for a clamp hides the
-problem rather than solving it.
-
-**Reducing saturation cannot rescue a pixel that is simply too bright.** If the
-brightness alone is over the limit, the colour runs all the way out and the pixel
-is still hot — you get a legal-luma grey that is not legal. Use Reduce brightness,
-or go back and fix the grade. The effect does not pretend otherwise.
-
-**This is a limiter, not a legaliser for HDR.** It measures an analogue composite
-amplitude, which is the specification most broadcasters still quote. It is not a
-substitute for a proper HDR delivery pass.
-
-**A frame that is already legal comes back untouched.** Both repair modes leave a
-pixel under the limit exactly as it arrived, so leaving this effect on a shot that
-does not need it costs nothing but the pass.
+- **Standard**: which television system's signal is being measured.
+- **How to treat**: what happens to a pixel that is over the limit.
+  - **Reduce brightness** darkens until it fits, keeping colour.
+  - **Reduce saturation** drains colour until it fits, keeping brightness.
+  - **Key out unsafe** removes illegal pixels and leaves transparent holes.
+  - **Key out safe** removes legal ones, leaving *only* illegal pixels.
+- **Maximum signal**: the largest total allowed, in IRE.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

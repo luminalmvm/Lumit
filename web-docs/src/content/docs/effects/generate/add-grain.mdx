@@ -1,24 +1,32 @@
 ---
 title: Add grain
-description: "Lays film grain over the picture, with a size, a softness and a response that follows the tone."
+description: "Lays film grain over the picture."
 ---
 
 Add grain is a **Generate** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Putting film grain on a picture that has none, or matching the grain of a picture
-that has. It is the thing that makes a clean graphic sit convincingly on top of
-shot footage, and the thing that stops a computer-made image announcing itself as
-computer-made.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Add grain is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/generate/add-grain.webp"
+      alt="The same frame with Add grain applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Add grain</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Add grain. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Add grain is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-[Noise](/effects/generate/noise/) does the plain version — one random value per
-pixel. Three things separate grain from that, and they are the first three
-controls here. Grain has a **size**, because a silver clump is bigger than a
-pixel. It has a **softness**, because a clump is not a square. And it follows the
-**tone**: real film is grainiest in the mid tones and nearly clean at both ends
-of the range, which is why the three tonal controls are here rather than in a
-matte.
+{/* END GENERATED */}
+
+## What it does
+
+Add film grain onto a layer.
 
 ## Parameters
 
@@ -50,57 +58,23 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Intensity** — how strong the grain is. 50 is a visible but polite stock;
-  single figures are the "stop it looking computer-made" dose. At 0 the picture
-  comes through exactly as it arrived.
-- **Size** — how big one grain is, in pixels at composition size. 1 to 2 is
-  35 mm; 4 or 5 is a fast stock or a blow-up.
-- **Softness** — 0 gives hard-edged square cells, which reads as digital
-  scan-grain; 100 gives a soft organic mottle. Halfway is film.
-- **Red**, **Green** and **Blue** — how much grain each channel gets, as a
-  percentage of Intensity. Real stocks are not even: the blue layer is usually the
-  grainiest, and pushing Blue up while pulling Red down is the quickest way to
-  make grain read as film rather than as noise.
-- **Monochrome** — off, the three channels get three independent grain fields,
-  which is what colour film does. On, one field is used for all three, so the
-  grain is purely light and dark and cannot tint anything.
-- **Shadows**, **Midtones** and **Highlights** — how much grain each part of the
-  tone range gets. At the default 100 each they are exactly neutral and the grain
-  is even. Pull Shadows and Highlights down and the grain lives in the mid tones,
-  which is what film does. Pull Midtones and Highlights to 0 and you have grain
-  only in the blacks, which is what a pushed stock does.
-- **Animate** — on, a fresh draw every frame, which is what grain does. Off, one
-  draw frozen in place, which reads as dirt on the lens rather than grain in the
-  stock.
-- **Seed** — which grain. Two Add grain effects with the same seed produce the
-  same grain; change one if they are meant to be independent.
-- **Mix** — how much of the grained picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Intensity**: how strong the grain is.
+- **Size**: how big a grain is.
+- **Softness**: 0 gives hard-edged square cells.
+- **Red**, **Green** and **Blue**: how much grain each channel gets, as a percentage of
+  Intensity.
+- **Monochrome**: if enabled the grain is monochrome.
+- **Shadows**, **Midtones** and **Highlights**: how much grain each part of the tone range
+  gets. 
+- **Animate**: changes the grain pattern each frame automatically if enabled.
+- **Seed**: which random grain pattern to use.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Notes
 
-**The grain is added where the eye is.** Added to raw light instead, the same
-amount of grain would be invisible in the shadows and a blizzard in the
-highlights, because linear light spends most of its range on the top stop. The
-effect works on a perceptual version of the picture and puts it back afterwards,
-which is what makes Intensity mean one thing across the whole frame.
-
-**The three tonal weights add up to one.** At 100/100/100 they are provably
-neutral — no combination of them can put a seam in a gradient, and turning one
-down cannot brighten or darken anything.
-
-**Softness is not a blur.** It is a crossfade between the same random field read
-two ways: one value per cell for the hard end, and the same lattice smoothly
-interpolated for the soft one. That costs one extra lookup instead of a second
-pass over the frame.
-
-**Grain is applied before the layer's transparency**, so it lies evenly over the
-picture rather than fading out across a soft edge along with the coverage.
-
-**There is no Remove Grain.** Taking grain *off* is a denoiser, which is a
-different piece of software living inside an effect's clothes; it is not
-scheduled as one.
+[Noise](/effects/generate/noise/) does a greyscale version, but lacks some controls that 
+Add grain has.
 
 ## Related
 

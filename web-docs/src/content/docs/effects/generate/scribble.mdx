@@ -1,25 +1,32 @@
 ---
 title: Scribble
-description: "Fills a mask you have drawn with pencil strokes, the way a hand shades a shape."
+description: "Fills a mask with pencil strokes."
 ---
 
 Scribble is a **Generate** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Shading a shape in by hand. You draw a mask; Scribble fills it with parallel
-pencil strokes at whatever angle you choose, running a little past the edges the
-way a hand does and wavering as they go.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Scribble is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/generate/scribble.webp"
+      alt="The same frame with Scribble applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Scribble</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Scribble. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Scribble is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is the fastest route to anything that should look drawn rather than rendered:
-a highlight scribbled over a word, a rough fill behind a title, an annotation
-that appears to have been done with a marker. Keyframe **End** from 0 and the
-shading draws itself on, stroke by stroke, because the strokes are one continuous
-line rather than a stack of separate ones.
+{/* END GENERATED */}
 
-Scribble reads the mask's **shape**, not the hole it cuts. That is why it needs a
-mask rather than a matte: a matte says which pixels are inside, and a hatch has to
-know where the boundary *runs* to know where each stroke stops.
+## What it does
+
+Scribble fills a mask with parallel pencil strokes at whatever angle you choose.
 
 ## Parameters
 
@@ -53,60 +60,20 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Mask** — which of the layer's masks to fill. **First mask** means whichever
-  is first, so you can add the effect before you draw the shape. A mask set to
-  mode **None** is offered like any other: that mode means "drawn, but gates
-  nothing", which is exactly the mask you draw for an effect to use.
-- **Colour** — the pencil's colour. Values above 1 make it bloom under a
-  [Glow](/effects/stylise/glow/).
-- **Angle** — which way the strokes run.
-- **Stroke width** — how thick one pencil stroke is, in pixels at composition
-  size.
-- **Spacing** — how far apart the strokes are laid. Below the stroke width they
-  merge into a solid fill; well above it the shape reads as open hatching.
-- **Path overlap** — how far each stroke runs past the mask's edge. Positive is
-  the loose, hand-drawn look; negative keeps the strokes short of the edge, which
-  reads as deliberate and neat.
-- **Start** and **End** — where the pen begins and stops, as percentages of the
-  whole drawing's length. Keyframe **End** from 0 to draw it on.
-- **Wiggle type** — how the waver moves. **Static** holds one arrangement;
-  **Jagged** snaps to a new one several times a second, which is the pencil-test
-  look; **Wiggly** drifts between them continuously.
-- **Wiggles per second** — how fast it moves. Greyed while the type is Static,
-  which is not moving at all.
-- **Seed** — which waver. Two Scribbles on one shape with different seeds are two
-  different hands.
-- **Opacity** — how strong the pencil is.
-- **Composite on original** — on, the layer that arrived stays under the
-  scribble. Off, the scribble is all there is, which turns the fill into its own
-  element.
-- **Mix** — how much of the effect takes hold.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The strokes are one continuous line.** The pen crosses the shape, hops down the
-edge and comes back, which is what makes Start and End behave like somebody
-drawing rather than like a pair of clipping edges. Where a shape has a notch in
-it the pen lifts rather than flying across the gap, so a C or a star shades
-correctly.
-
-**The waver is always there, and it is tied to the Spacing.** There is no
-amplitude control because the waver must never walk one stroke into its
-neighbour: it is a fixed fraction of the gap you set, so it stays proportionate
-whatever density you shade at. **Static** does not mean "no waver" — it means the
-waver holds still.
-
-**A very fine hatch opens its own spacing.** There is a ceiling on how many
-strokes one Scribble can lay down. Past it the spacing widens slightly rather
-than the fill stopping half way down the shape, so you get a slightly coarser
-whole picture instead of half of a fine one.
-
-**After Effects' extras are not carried.** Its Curviness, the three Variation
-sliders and the multi-mask Fill Types have no counterpart here — the single
-waver does the job of the variations, and a fill spanning several masks at once
-needs a control that names more than one, which Lumit's does not.
+- **Mask**: which of the layer's masks to fill.
+- **Colour**: the pencil's colour. 
+- **Angle**: direction strokes run.
+- **Stroke width**: how thick a stroke is.
+- **Spacing**: how far apart strokes are laid.
+- **Path overlap**: how far each stroke runs over the mask's edge.
+- **Start** and **End**: where the pen begins and stops.
+- **Wiggle type**: how the stroke wobbles.
+- **Wiggles per second**: how frequency of wiggles. Disabled while the type is Static.
+- **Seed**: randomises the wiggles.
+- **Opacity**: how strong the pencil is.
+- **Composite on original**: on, the layer the effect on draws under the scribble. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,31 +1,32 @@
 ---
 title: "Echo"
-description: "Composite a run of earlier frames for trails and speed lines."
+description: "Composite a run of earlier frames for trails."
 ---
 
 Echo is a [Temporal](/effects/temporal/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Lays a run of the layer's own earlier frames over or behind the present one, each
-fainter than the last. Anything that moves leaves a trail behind it; anything
-still stays exactly as it was.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Echo is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/temporal/echo.webp"
+      alt="The same frame with Echo applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Echo</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Echo. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Echo is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the speed-line and ghosting effect. On a fast pan it is motion made
-visible; on a character crossing frame it is the trailing after-image that
-anime uses constantly; at a low decay with a light blend mode it is a soft
-luminous smear that reads as energy rather than as copies.
+{/* END GENERATED */}
 
-The **Mode** control is what decides the character, and it is worth
-experimenting with before touching anything else. The first two entries are
-compositing *orders* — whether each echo sits behind the trail or over it — and
-everything after the divider is a light-combine blend, the same set a layer
-offers. Screen is the default because a screened trail adds light without
-darkening anything, which is what most trails want.
+## What it does
 
-It reads the layer's **source** frames rather than the output of the effects
-above it in the stack, so a grade applied before Echo will not appear in the
-trail. It works on footage layers.
+Lays a run of the layer's own earlier frames over or behind the present one.
 
 ## Parameters
 
@@ -48,19 +49,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Echoes** — how many earlier frames are laid down. Each is one frame further
-  back, so this is both the length of the trail and the count of copies in it. On
-  a fast-moving subject a few echoes read as a trail; a full run reads as a smear.
-- **Decay** — how quickly each successive echo fades. Each one is multiplied down
-  again, so a low value means the trail is gone after two or three copies while a
-  high one keeps the oldest frames almost as strong as the newest. This is the
-  control that separates a subtle after-image from a long ghosting tail.
-- **Mode** — how each echo is combined into the trail. **Behind** puts each echo
-  behind the ones after it, which gives clean ghosting where the subject stays
-  solid; **In front** lays them over. After the divider come the light-combine
-  blends — Add and Screen build light, Multiply and Darken build shadow,
-  Difference and Exclusion give the inverted, electric look.
-- **Mix** — how much of the trailed picture replaces the original.
+- **Echoes** sets how many earlier frames are displayed.
+- **Decay** governs how quickly each successive echo fades.
+- **Mode** says how each echo is combined into the trail. **Behind** puts each
+  echo behind the ones after it; **In front** lays them over.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

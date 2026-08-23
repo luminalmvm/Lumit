@@ -128,9 +128,12 @@ Until the file exists, the page shows a labelled placeholder that names what it 
 `src/assets/shots/README.md` lists every outstanding screenshot with its page and
 subject. PNG, JPEG, WebP and AVIF all work. Capture at the size you actually use the
 app, because the page scales down.
+(I had to add the eager param since astro's audit tool called it out, basically this
+is used to eager load the first image on a page, since otherwise it lays the page out
+then loads the image and has to do more re-arranging afaik)
 
 ```
-<Shot file="timeline-outline.png" caption="The outline columns." />
+<Shot file="timeline-outline.png" caption="The outline columns." eager />
 ```
 
 ## Task: change navigation

@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const REFERENCE = join(here, "../../crates/lumit-core/fx-reference.json");
 const OUT = join(here, "../src/content/docs/effects");
+// Where gen-effect-shots.mjs puts the example pictures.
+const SHOTS = join(here, "../public/effects");
 
 // MDX has no HTML comments - `{/* ... */}` is the expression-comment that
 // compiles to nothing. The opening marker is found by its `GENERATED:<tag>`
@@ -46,6 +48,7 @@ const CONTROL = {
   file: "File",
   layer: "Layer",
   mask_path: "Masks",
+  curve: "Curve",
 };
 
 const UNIT = {
@@ -70,7 +73,7 @@ function rangeCell(p) {
       else if (p.hard_min < p.slider_min) past.push(`down to ${n(p.hard_min)}`);
       if (p.hard_max === undefined) past.push("higher");
       else if (p.hard_max > p.slider_max) past.push(`up to ${n(p.hard_max)}`);
-      return past.length ? `${s}; ${past.join(" and ")} by typing` : s;
+      return past.length ? `${s}; ${past.join(" and ")}` : s;
     }
     case "angle":
       return `Any angle; snaps every ${n(p.dial_step)}\u00b0 while a modifier is held`;
@@ -88,6 +91,8 @@ function rangeCell(p) {
       return "Any layer in the composition";
     case "mask_path":
       return "This layer's masks";
+    case "curve":
+      return "2 to 16 points in the unit square";
     default:
       return "-";
   }
@@ -114,6 +119,8 @@ function defaultCell(p) {
       return p.self_default ? "This layer" : "None";
     case "mask_path":
       return p.self_default ? "First mask" : "None";
+    case "curve":
+      return "The identity diagonal";
     default:
       return "-";
   }
@@ -185,10 +192,9 @@ function panelNotes(effect) {
   if (matteRow) {
     const meaning =
       effect.matte?.meaning ??
-      "scales how much of the effect each pixel gets: white applies it in full, " +
-        "black leaves the pixel as it arrived, grey part way";
+      "is an input to an effect, scaling the strength. ";
     const invert = effect.params.find((p) => p.kind === "bool" && p.label === "Invert");
-    const swap = invert ? ` **${invert.label}** reads the matte the other way round, light for dark.` : "";
+    const swap = invert ? ` **${invert.label}** inverts the mattes for calculating strength.` : "";
     out.push(`- **${matteRow.label}** ${meaning}.${swap}`);
   }
 
@@ -208,13 +214,28 @@ function splice(existing, tag, block) {
   return existing.slice(0, a) + block + existing.slice(b + END.length);
 }
 
+/**
+ * Where a block that a page does not carry yet should be inserted. A page
+ * written before the block existed has no marker to splice into, and leaving it
+ * behind for ever is how half a manual ends up with a figure and half without.
+ * The anchor is a line the scaffold guarantees; the block lands above it.
+ */
+function insertAt(existing, anchor, block) {
+  const at = existing.indexOf(anchor);
+  if (at === -1) return null;
+  return `${existing.slice(0, at)}${block}
+
+${existing.slice(at)}`;
+}
+
 const changed = [];
 const stranded = [];
-function put(path, tag, scaffold, block) {
+function put(path, tag, scaffold, block, anchor) {
   const existing = existsSync(path) ? readFileSync(path, "utf8") : null;
   let next = scaffold;
   if (existing !== null) {
     next = splice(existing, tag, block);
+    if (next === null && anchor) next = insertAt(existing, anchor, block);
     if (next === null) {
       stranded.push(path);
       return;
@@ -230,13 +251,74 @@ function put(path, tag, scaffold, block) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * A page's own `description:`, which is the one-line summary its author already
+ * wrote. The category tables reuse it rather than asking for a second summary
+ * that would drift away from the first.
+ */
+function description(path) {
+  if (!existsSync(path)) return "";
+  const m = /^description:\s*(.*)$/m.exec(readFileSync(path, "utf8"));
+  if (!m) return "";
+  return m[1].trim().replace(/^["'](.*)["']$/s, "$1").trim();
+}
+
+/**
+ * One category's effects as a table. The second column is each page's own
+ * description, so the row says what the effect is for and not merely that it
+ * exists.
+ */
+function effectTable(effects) {
+  return [
+    "| Effect | What it does |",
+    "| --- | --- |",
+    ...effects.map((e) => {
+      const page = join(OUT, e.category_slug, `${e.slug}.mdx`);
+      const link = `[${e.label}](/effects/${e.category_slug}/${e.slug}/)`;
+      return `| ${cell(link)} | ${cell(description(page))} |`;
+    }),
+  ].join("\n");
+}
+
+/**
+ * The example picture, rendered by `npm run docs:effect-shots` and served from
+ * `public/`. Plain HTML rather than a component: a figure that needs an import
+ * line at the top of every page is a figure that goes missing from half of
+ * them, and a `public/` path costs nothing when the file is not there yet.
+ */
+function exampleFigure(e) {
+  // A couple of effects have no picture and cannot have one: Posterize time is a
+  // change to the clock, and Matte key wants a screen the example frame does not
+  // contain. The harness says so and writes nothing, and an absent file means an
+  // absent figure rather than a broken image.
+  const file = join(SHOTS, e.category_slug, `${e.slug}.webp`);
+  if (!existsSync(file)) return "";
+  const size = `width="1280" height="544" loading="lazy" decoding="async"`;
+  return [
+    `<figure class="example">`,
+    `  <div class="compare" style="--split:50%">`,
+    `    <img src="/effects/plate.webp" alt="The frame before ${e.label} is applied" ${size} />`,
+    `    <img class="compare__after" src="/effects/${e.category_slug}/${e.slug}.webp"`,
+    `      alt="The same frame with ${e.label} applied" ${size} />`,
+    `    <span class="compare__handle" aria-hidden="true"></span>`,
+    `    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>`,
+    `    <span class="compare__label compare__label--b" aria-hidden="true">${e.label}</span>`,
+    `    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"`,
+    `      aria-label="Reveal ${e.label}. Left of the handle is the original frame, the right has the ${e.label} applied." />`,
+    `  </div>`,
+    `  <figcaption>Drag the handle. ${e.label} applied on the right, the original frame on the left. </figcaption>`,
+    `</figure>`,
+  ].join("\n");
+}
+
 const ref = JSON.parse(readFileSync(REFERENCE, "utf8"));
 const byCategory = new Map(ref.categories.map((c) => [c.slug, []]));
 for (const e of ref.effects) byCategory.get(e.category_slug)?.push(e);
 
 // One page per effect.
 for (const e of ref.effects) {
-  const block = marked("parameters", `${paramTable(e)}${panelNotes(e)}`);
+  const table = marked("parameters", `${paramTable(e)}${panelNotes(e)}`);
+  const figure = marked("example", exampleFigure(e));
   const scaffold = `---
 title: ${e.label}
 description: What ${e.label} does, and what each of its controls means.
@@ -244,11 +326,13 @@ description: What ${e.label} does, and what each of its controls means.
 
 ${e.label} is a **${e.category}** effect.
 
-## What it is for
+${figure}
+
+## What it does
 
 ## Parameters
 
-${block}
+${table}
 
 ## What each control does
 
@@ -259,16 +343,15 @@ ${e.params.map((p) => `- **${p.label}**`).join("\n")}
 - [${e.category}](/effects/${e.category_slug}/)
 - [Effects](/use/effects/)
 `;
-  put(join(OUT, e.category_slug, `${e.slug}.mdx`), "parameters", scaffold, block);
+  const path = join(OUT, e.category_slug, `${e.slug}.mdx`);
+  put(path, "parameters", scaffold, table);
+  put(path, "example", scaffold, figure, "## What it does");
 }
 
 // One page per category.
 for (const c of ref.categories) {
   const effects = byCategory.get(c.slug) ?? [];
-  const block = marked(
-    "list",
-    effects.map((e) => `- [${e.label}](/effects/${e.category_slug}/${e.slug}/)`).join("\n"),
-  );
+  const block = marked("list", effectTable(effects));
   const scaffold = `---
 title: ${c.label}
 description: The ${c.label} effects, and what the family is for.
@@ -290,19 +373,21 @@ ${block}
   put(join(OUT, c.slug, "index.mdx"), "list", scaffold, block);
 }
 
-// The section index.
+// The section index: every category, what it is for, and its own table.
 {
-  const block = marked(
-    "list",
-    ref.categories
-      .map((c) => {
-        const names = (byCategory.get(c.slug) ?? [])
-          .map((e) => `[${e.label}](/effects/${c.slug}/${e.slug}/)`)
-          .join(", ");
-        return `**[${c.label}](/effects/${c.slug}/)** - ${names}.`;
-      })
-      .join("\n\n"),
-  );
+  const body = ref.categories
+    .map((c) => {
+      const effects = byCategory.get(c.slug) ?? [];
+      const summary = description(join(OUT, c.slug, "index.mdx"));
+      const count = `${effects.length} effect${effects.length === 1 ? "" : "s"}.`;
+      return [
+        `### [${c.label}](/effects/${c.slug}/)`,
+        summary ? `${summary} ${count}` : count,
+        effectTable(effects),
+      ].join("\n\n");
+    })
+    .join("\n\n");
+  const block = marked("list", body);
   const scaffold = `---
 title: Effects
 description: Every built-in effect, what it is for, and what each parameter does.
@@ -314,6 +399,17 @@ Every effect Lumit ships with has a page here: what it is for, and a table of
 every parameter with its range, its default and its unit. The tables come
 straight from the engine's own catalogue, so they cannot drift from the
 application.
+
+Each page also carries a picture of the effect on one frame of footage. Every
+one of those pictures is rendered by the engine, through the walk the Viewer
+uses, from the frame below.
+
+<figure class="example">
+  <img src="/effects/plate.webp" alt="The untouched frame every example picture starts from"
+    width="1280" height="544" loading="lazy" decoding="async" />
+  <figcaption>The untouched frame. Every example on these pages is this frame with one
+  effect on it.</figcaption>
+</figure>
 
 For applying effects, ordering a stack and using adjustment layers, see
 [Effects](/use/effects/).

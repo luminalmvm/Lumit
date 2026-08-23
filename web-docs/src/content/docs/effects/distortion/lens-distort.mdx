@@ -1,30 +1,32 @@
 ---
 title: Lens distort
-description: "Adds or removes the bow a wide lens puts in straight lines, described by field of view."
+description: "Bends the edges of a layer."
 ---
 
 Lens distort is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Bending the picture the way a real lens does — or unbending it. A wide lens bows
-straight lines outward: the wider it is, the more a horizon curves and the more
-the corners stretch. This effect adds that bow, and with **Reverse** on it takes
-the same bow away.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Lens distort is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/lens-distort.webp"
+      alt="The same frame with Lens distort applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Lens distort</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Lens distort. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Lens distort is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Both directions get used constantly:
+{/* END GENERATED */}
 
-- **Removing it.** Footage from an action camera or a phone ultra-wide has
-  visible barrel distortion. Straighten it before tracking or before adding a
-  graphic, or the graphic will slide against the plate.
-- **Adding it.** A clean render, a title, or a screen replacement dropped onto
-  distorted footage looks pasted on because it is too straight. Give it the same
-  field of view as the plate and it sits into the shot.
+## What it does
 
-The control is an angle rather than an abstract strength, because a lens has a
-field of view written on it. At Orientation Horizontal, 40° means "the width of
-this frame sees 40° of the world" — the number you can look up for the lens the
-shot was taken on.
+Bends the edges of a layer, supporting both concave and convex warping.
 
 ## Parameters
 
@@ -50,49 +52,16 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Field of view** — how wide the lens is, in degrees, across whichever side
-  **Orientation** names. 0 does nothing at all. Around 30–50° is a normal lens
-  and bends gently; 90° and beyond is the action-camera look, with the corners
-  visibly pulled in. It is the only strength control there is: everything else
-  says where and which way.
-- **Reverse** — off adds the bow (barrel: straight lines bow outward, more of the
-  world squeezed into the frame); on removes it (pincushion: lines bow inward).
-  The two are exact opposites, so a Lens distort and a reversed Lens distort at
-  the same Field of view, Orientation and Centre hand the picture back.
-- **Orientation** — which side of the frame the angle spans: the **width**
-  (Horizontal, the usual meaning of a lens specification), the **height**, or the
-  **diagonal**. On a wide frame the same number bends much harder at Vertical
-  than at Horizontal, so this is not a cosmetic choice.
-- **Centre X** and **Centre Y** — the optical centre the bend is about. Usually
-  the middle of the frame; move it when the plate was shot on a shifted lens, or
-  when it has been cropped off centre.
-- **Edges** — what the corners read when the bend pulls in content from outside
-  the frame. **Transparent** is honest and is the default. **Repeat** holds the
-  border pixel outward, which fills the corner with a streak — sometimes usable
-  under a vignette. **Mirror** folds the picture back on itself, which fills the
-  corner with plausible content and is the best cheat when the corners must not
-  be empty.
-- **Mix** — how much of the bent picture replaces the original. Blending the two
-  shows both, so use Field of view rather than Mix to bend less.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**Match the plate, then check a straight line.** The practical workflow is to put
-a straight edge in the shot — a door frame, a horizon, a temporary guide layer —
-turn Reverse on, and raise Field of view until the line is straight. Whatever
-number you land on is the plate's, and any element you need to marry into the
-shot gets the same number with Reverse off.
-
-**The layer does not get bigger.** Removing distortion pulls the picture inward
-and leaves the corners empty; Lumit renders effects at the frame's own size and
-has no per-effect resize. If you need the recovered corners, scale the layer down
-inside a larger composition first.
-
-**After Effects users:** this is the counterpart of Optics Compensation, and its
-Field of View, Reverse Lens Distortion, FOV Orientation and View Center all map
-across. AE's Resize / Optimal Pixels has no equivalent, for the reason above.
+- **Field of view** changes how wide the lens is.
+- **Reverse**, when off, adds the bow. On, it removes the bow
+  instead, giving a pincushion effect.
+- **Orientation** picks which side of the frame the angle spans.
+- **Centre X** and **Centre Y** place the optical centre to bend around.
+- **Edges** adjusts what to fill resulting transparent pixels with. 
+  **Transparent** is the default. **Repeat** smears the border pixel outward. 
+  **Mirror** folds the picture back on itself.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

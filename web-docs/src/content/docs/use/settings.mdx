@@ -1,16 +1,15 @@
 ---
 title: Settings
-description: The settings window, page by page.
+description: The settings window.
 sidebar:
   order: 19.5
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-Open the settings window from **Edit ▸ Settings…**. A sidebar of pages sits on the
-left; each page is a stack of sections.
+Open the settings window from **Edit ▸ Settings…**.
 
-<Shot file="settings.png" caption="The settings window, on the Appearance page." />
+<Shot file="settings.png" caption="The settings window, on the Appearance page." eager/>
 
 ## General
 
@@ -18,37 +17,34 @@ Reset the panel layout to its default arrangement.
 
 ## Appearance
 
-- **Colour scheme** - seven built-in schemes, grouped dark and light.
-- **Custom colours** - start from any scheme and edit every colour in the theme editor.
-  Custom themes can be renamed and deleted here too.
-- **Corners** and **Motion** - how rounded controls are, and how much they animate.
-- **Scopes** and **Viewer surround** - both default to neutral colours so a grade can be
-  judged; either can opt into the theme's colours instead.
+- **Colour scheme**: seven built-in schemes, grouped dark and light.
+- **Custom colours**: allows you to alter the colour scheme according to your own preferences for complete customisation.
+  If it also possible to import and export themes.
+- **Corners** and **Motion**: Corners change the style of the application, and motion can be reduced or off if you'd prefer.
+- **Scopes** and **Viewer surround**: both default to neutral colours but can use the theme's colours instead.
 
 ## Interface
 
 - **Interface scale** and **tooltips**.
-- **Transform in Effect controls** - repeat a layer's Transform rows above its effects.
-- **Editing** - whether Retime opens to the Speed lens, whether video arrives as a
-  Sequence layer, whether the playhead stays where playback stopped, and whether
-  pasted layers keep their original time rather than landing at the playhead.
+- **Transform in Effect controls**: displays a layer's Transform properties in the effect controls.
+- **Editing**: whether Retime opens to the Value or Speed lens, whether video footage is automatically
+  placed in a sequence layer when adding to a composition, whether the playhead stays where playback paused, 
+  and whether pasted layers keep their original time positioning rather than pasting at the playhead.
 
 ## Keymap
 
-Every shortcut, grouped by where it is live, with a search field. Rebind by clicking a
-chord; clashes are flagged. Two presets ship - **Lumit default** and **After Effects**
-- and a keymap can be exported and imported as a file.
+Allows viewing of shortcuts and rebinding. Rebind by clicking a chord; conflicts are flagged. 
+Keymaps can be exported and imported.
 
 ## Performance
 
-- **Playback** - Adaptive (keeps time, softens the picture) or Every frame.
-- **Cache budgets** for all three tiers: rendered frames in memory, preview frames on
-  the graphics card, and frames parked on disk - including where the disk cache lives,
+- **Playback**: Every frame, or Adaptive resolution.
+- **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
+  graphics card, and frames parked on disk. The disk cache's location is set here as well,
   per machine or per project.
 
 :::note[Not built yet]
-Colour management, the preview-mode toggle, a plugins and decoder page, the autosave
-interval, and export defaults are planned pages.
+Colour management, plugins, autosave interval, and export defaults are planned.
 :::
 
 ## Related

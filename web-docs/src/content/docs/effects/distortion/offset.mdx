@@ -1,27 +1,32 @@
 ---
 title: Offset
-description: "Slides the picture, wrapping round — what leaves one side arrives at the other."
+description: "Slides and wrap the picture."
 ---
 
 Offset is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Sliding the picture sideways or up and down, with the frame treated as a loop:
-what leaves the left edge comes back in on the right. Nothing is ever revealed
-and nothing is ever lost.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Offset is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/offset.webp"
+      alt="The same frame with Offset applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Offset</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Offset. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Offset is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-That wrap is the whole point. It gives you two things nothing else does:
+{/* END GENERATED */}
 
-- **A scrolling background out of a single still.** Keyframe Shift x across the
-  shot and a seamless texture scrolls forever, with no second copy to line up and
-  no join to hide.
-- **A way to move a pattern without breaking it.** A tiled or procedural texture
-  can be repositioned to sit better under the subject, and it stays seamless
-  because the wrap is exact.
+## What it does
 
-It is also the standard first step when checking whether a texture really is
-seamless: offset it by half the frame, and any join you cannot see was not there.
+Slide the input, and wraps around to the other side.
 
 ## Parameters
 
@@ -43,33 +48,18 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Shift x** — how far the picture moves to the right, in pixels at composition
-  size. Negative moves it left. A shift of exactly the frame's width puts the
-  picture back where it started, so a scroll that loops is a keyframe pair from 0
-  to the frame width.
-- **Shift y** — how far the picture moves down; negative moves it up.
-- **Mix** — how much of the shifted picture replaces the original. Because this
-  *blends* rather than shortens the shift, a mid Mix shows both pictures at once,
-  which is a double exposure rather than a smaller move. To move less, use a
-  smaller shift.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Shift x**, how far the picture moves to the right.
+- **Shift y**, how far the picture moves down.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Notes
 
-**This is not the Transform effect.** [Transform](/effects/utility/transform/)
-moves a layer and leaves emptiness behind it; Offset moves the picture *within*
-its own frame and fills the gap with the other side of itself. Reach for
-Transform to reposition a layer, and for Offset to reposition a texture.
-
-**A whole-pixel shift is exact** — no resampling, no softening, however many times
-it is applied. A fractional shift is sampled and therefore very slightly softer,
-like any sub-pixel move.
-
-**After Effects users:** AE's Offset asks for "Shift Center To", the point that
-should end up in the middle. Lumit stores the shift itself, which is that point
-minus the frame centre, because a shift is what keyframes sensibly — two linear
-keys give a constant scrolling speed. An imported AE Offset is converted.
+**Offset and the Transform effect do different jobs.**
+[Transform](/effects/utility/transform/) moves a layer and leaves emptiness
+behind it. Offset moves the picture *within* its own frame and fills the gap with
+the other side of itself. Use Transform to reposition a layer, and Offset to
+reposition a texture.
 
 ## Related
 

@@ -1,28 +1,32 @@
 ---
 title: Set matte
-description: "Takes a channel of another layer as this layer's transparency."
+description: "Takes a channel of another layer as transparency."
 ---
 
 Set matte is a **Utility** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Giving one layer the shape of another. Pick a layer in the **Matte** row, pick
-which of its channels to read, and that channel becomes this layer's
-transparency — so a title takes the shape of a cloud, a colour fill takes the
-shape of a gradient, or a video takes the shape of a logo.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Set matte is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/utility/set-matte.webp"
+      alt="The same frame with Set matte applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Set matte</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Set matte. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Set matte is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is the everyday tool for building a matte out of something that was never
-meant to be one. A [Fractal noise](/effects/generate/fractal-noise/) layer
-becomes an organic dissolve. A [Gradient](/effects/generate/gradient/) becomes a
-falloff. A luma pass out of a game capture becomes a mask nobody had to draw.
+{/* END GENERATED */}
 
-**Its Matte row means something different from every other effect's.** On the
-rest of the catalogue, the Matte row is a *strength*: the effect runs everywhere
-and is faded back where the matte is dark. Here the matte **is** the answer —
-the channel you choose becomes the coverage, full stop. The difference is easy
-to see: point a strength matte at a white disc and you get the whole frame with
-a faint ring in it; point Set matte at the same disc and you get a disc.
+## What it does
+
+Applies the alpha or any other channel from a layer as the alpha on the source layer.
 
 ## Parameters
 
@@ -44,47 +48,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Matte** — the layer whose channel becomes this layer's transparency. Until
-  you pick one the effect does nothing at all, which is the honest behaviour: a
-  layer you have to supply cannot have a sensible default. It is rendered on its
-  own at this composition's size, so nothing needs aligning or stretching, and
-  the **Layer source** dropdown beside it decides whether you read that layer's
-  raw content, its masks, or its finished picture with its own effects applied.
-- **Invert** — read the matte the other way round: dark where it was light. This
-  is the switch you reach for about half the time, since a matte drawn as "the
-  bit I want" and one drawn as "the bit I want gone" look identical until you
-  try one.
-- **Channel** — which number in the matte layer carries the shape.
-  **Luminance** (the default) is the brightness of the picture, which is what
-  you want from a greyscale pass, a noise or a ramp. **Alpha** is the matte
-  layer's own transparency, which is what you want when the matte is itself a
-  shape or a keyed subject. **Red**, **Green** and **Blue** read one channel
-  alone — useful when someone has packed three separate masks into one image,
-  which is common in game and 3D output.
-- **Combine with existing alpha** — intersect instead of replace. Off, the layer
-  takes the matte's shape outright and forgets its own. On, it keeps its own
-  edge and is *further* cut by the matte, so a shape that was already soft stays
-  soft. Reach for it when the layer arrived with transparency worth keeping.
-- **Mix** — how much of the new transparency takes hold. Animating it from 0 to
-  100 is a dissolve *into* the matte's shape, which is a nicer reveal than a
-  plain fade.
-
-## Notes
-
-**It changes coverage, not colour.** The effect works on straight (unmultiplied)
-values, so making a pixel half-transparent does not also make it half as bright.
-That sounds obvious and is exactly what goes wrong when it is done the other way:
-edges darken and thin.
-
-**A matte pointed at this layer reads this layer.** Point the row at the layer
-the effect is on and it does not render a second copy — it reads the picture as
-it stands at that point in the stack. On an adjustment layer that is everything
-underneath, which is how you cut a whole stack of layers to one shape at once.
-
-**Set matte or a track matte?** A track matte (in the timeline) is the right tool
-when one layer's whole job is to shape the layer below it. Set matte is the right
-tool when the shaping is one step inside a stack of effects — before a glow, say,
-or after a grade — because it happens exactly where you put it.
+- **Matte**: the layer whose channel becomes transparency.
+- **Invert**: read the matte the other way round.
+- **Channel**: which colour or alpha channel to use as the source for the new alpha.
+- **Combine with existing alpha**: intersects the new and existing alphas.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,26 +1,32 @@
 ---
 title: Linear wipe
-description: "Sweeps a straight edge across the frame, removing everything behind it."
+description: "Sweeps a straight edge across the frame."
 ---
 
 Linear wipe is a **Transition** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-Taking the layer away along a straight line. **Completion** is how far the line
-has travelled — keyframe it from 0 to 100 and the layer leaves the frame; from
-100 to 0 and it arrives.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Linear wipe is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/transition/linear-wipe.webp"
+      alt="The same frame with Linear wipe applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Linear wipe</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Linear wipe. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Linear wipe is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is the plainest transition there is, and the most useful, because the two
-controls beside Completion turn it into a dozen different moves. Angle it and it
-becomes a diagonal sweep. Feather it and it becomes a soft dissolve with a
-direction. Put a second one on the layer at the opposite angle and you have a
-band that opens.
+{/* END GENERATED */}
 
-It is also not only a transition. A hard-edged Linear wipe at a fixed Completion
-is a **split-screen** — the fastest way to reveal half of one shot over another
-— and one with a wide feather is a directional falloff for anything you want to
-fade out towards an edge.
+## What it does
+
+Wipes the layer away along a straight line.
 
 ## Parameters
 
@@ -45,37 +51,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Wipe centre x** and **Wipe centre y** — where the line pivots. At the
-  default (the middle of the frame) Completion 50 puts the edge dead centre.
-  Moving the centre shifts where "halfway" is, which is how you make a wipe
-  linger over one part of the shot.
-- **Completion** — how far the edge has travelled, 0 to 100. At 0 the whole
-  frame is there, exactly; at 100 none of it is. It starts at 50 so that
-  dropping the effect on a layer shows you what it does.
-- **Wipe angle** — which way the edge runs, and therefore which side goes first.
-  **Measured from straight up, turning clockwise**: at 90° (the default) the
-  edge is vertical and the **left** half goes first; at 270° it is vertical and
-  the right half goes; at 0° the top goes first.
-- **Feather** — how soft the edge is, in pixels. At 0 it is a hard line. Wide
-  feathers turn the wipe into a gradient sweep, and are how a transition stops
-  reading as a wipe and starts reading as light passing over the shot.
-- **Mix** — how much of the wipe takes effect. It is not the same control as
-  Completion: Completion moves the edge, Mix fades the *whole* result back
-  towards the untouched frame, so at Mix 50 the removed half is half there.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The wipe genuinely starts and finishes.** At Completion 0 the frame is
-untouched to the last bit even with a wide feather, and at 100 it is completely
-gone. That takes a little care internally — the edge has to travel slightly past
-each end of the frame — and it is what stops a soft wipe from leaving a faint
-ghost at the end of the keyframe pair.
-
-**Ease the keyframes.** A linear Completion ramp is the most obvious-looking
-transition in the world. An Easy ease at both ends, or an ease out of the last
-key only, is what makes it feel deliberate.
+- **Wipe centre x** and **Wipe centre y** sets the line pivot centre.
+- **Completion** is how far the edge has travelled as a percentage.
+- **Wipe angle** sets the direction the edge runs.
+- **Feather** softens the edge.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

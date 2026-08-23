@@ -1,24 +1,32 @@
 ---
 title: "Exposure"
-description: "Brightness in photographic stops."
+description: "Adjust exposure."
 ---
 
 Exposure is a [Colour](/effects/colour/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The brightness lever, in the unit a camera uses. One stop is a doubling of the
-light, so plus one makes the picture twice as bright and minus one halves it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Exposure is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/colour/exposure.webp"
+      alt="The same frame with Exposure applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Exposure</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Exposure. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Exposure is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-This is the first move in most grades: get the picture to a sensible brightness
-before deciding anything about its colour. It is also the cleanest way to match
-two shots captured minutes apart, or to bring a dark capture up without the crushing
-that a contrast control would cause.
+{/* END GENERATED */}
 
-It scales the light rather than remapping it, so nothing is clipped on the way
-through. Highlights pushed above white stay above white and keep their detail,
-which matters if anything downstream — a [Glow](/effects/stylise/glow/), a
-[LUT](/effects/colour/lut/) — is going to read them.
+## What it does
+
+Exposure multiplies lightness light rather than being additive, so blacks remain black.
 
 ## Parameters
 
@@ -39,11 +47,9 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Stops** — the doubling count. Whole numbers are doublings and halvings, and
-  fractional values are the fine adjustments you will actually spend most of
-  your time on. The slider covers the range worth dragging and you can type
-  further in either direction for a badly exposed source.
-- **Mix** — how much of the exposed picture replaces the original.
+- **Stops** is the amount to increase or decrease exposure by. This is equivalent to doublings and halvings.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

@@ -1,23 +1,32 @@
 ---
 title: Roughen edges
-description: "Chews the outline of a shape with a cloud of fractal noise, so a clean cut-out stops looking cut out."
+description: "Chews the outline of a shape with fractal noise."
 ---
 
 Roughen edges is a **Stylise** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The outline of a shape gets eaten into by a cloud of noise, so a clean cut-out
-stops looking cut out. Nothing inside the shape moves — this changes only where
-the shape stops.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Roughen edges is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/roughen-edges.webp"
+      alt="The same frame with Roughen edges applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Roughen edges</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Roughen edges. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Roughen edges is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Three shapes of chewing are on offer: **Roughen** is a soft irregular edge,
-**Cut** takes hard bites out of it, and **Spiky** grows sharp points. Turn
-**Colour edge** on and the chewed border is painted, which is how a burnt or
-photocopied edge is made.
+{/* END GENERATED */}
 
-The everyday uses are torn paper, burnt film, grime on a key, rust and corrosion,
-an ink-stamped title, and taking the plastic off a logo.
+## What it does
+
+The outline of a shape gets warped by fractal noise .
 
 ## Parameters
 
@@ -54,57 +63,20 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Edge type** — **Roughen** for a soft irregular outline, **Cut** for hard bites
-  with a crisp edge, **Spiky** for sharp points.
-- **Border** — how deep the chewing reaches, in pixels at composition size. It also
-  sets the width of the band the effect works in, so raising it makes the chewing
-  both deeper and broader. **0** turns the effect off exactly.
-- **Edge sharpness** — how crisp the chewed edge is. 100 is hard, 0 fades away
-  across the whole border. Ignored when Edge type is Cut, which is always hard.
-- **Fractal influence** — how far the noise moves the outline. 0 does not turn the
-  effect off; it re-cuts the outline where it already was, which sharpens a soft
-  matte. Above 100 the bites reach as deep as the band allows.
-- **Scale** — the size of one lump of noise, in pixels at composition size. Small
-  values give a fine crumbly edge, large ones give a few big bites.
-- **Offset x** and **Offset y** — where the noise pattern sits. Animate them to
-  drift the chewing along the edge.
-- **Complexity** — how many octaves of detail are summed. Two reads as torn paper;
-  more reads as corrosion.
-- **Evolution** — turn it and the noise churns through itself rather than sliding.
-  One full turn is one step through the pattern.
-- **Cycle evolution** and **Cycle** — make Evolution loop seamlessly after a whole
-  number of turns, so an animation can be tiled end to end.
-- **Colour edge** and **Edge colour** — paint the chewed band in one colour. Edge
-  colour is scene-linear and can go above 1 for a border that glows.
-- **Seed** — which noise pattern this instance uses. Two Roughen edges on two
-  layers should have different seeds, or they will chew identically.
-- **Mix** — how much of the roughened picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**It needs an outline to work on.** A full-frame opaque layer has no edge except
-the frame's own, and that is what gets chewed — which is a real look, but probably
-not the one you meant. Put the effect on a title, a shape, a logo, or a keyed
-layer.
-
-**The middle of the shape is never touched**, at any setting. The chewing is
-confined to a band around the outline whose width is Border, so no amount of
-Fractal influence will punch a hole in the middle of a solid layer.
-
-**Border does two jobs.** It is both how deep a bite can be and how wide the band
-is. If the chewing looks too shallow, raise Border rather than Fractal influence;
-if it looks too broad, lower Border and raise Fractal influence to keep the depth.
-
-**Colour edge paints the band, not the whole shape.** The colour is strongest right
-on the outline and fades away inward and outward, which is how a burnt or scorched
-edge behaves. For a flat colour across the whole shape, use
-[Fill](/effects/generate/fill/).
-
-**Nothing here reads the clock.** The pattern is a function of Seed and Evolution
-only, so the same frame roughens the same way in the preview and in the export,
-and on every machine.
+- **Edge type**: **Roughen** for a soft irregular outline, **Cut** for hard edges, 
+  **Spiky** for sharp points.
+- **Border**: intensity of how much is removed from the edges.
+- **Edge sharpness**: how crisp the edge is.
+- **Fractal influence**: how far the noise moves the outline.
+- **Scale**: the scale of the noise.
+- **Offset x** and **Offset y**: adjusts the position of the noise.
+- **Complexity**: how many octaves of detail are summed in the noise.
+- **Evolution**: changes the phase of the noise.
+- **Cycle evolution** and **Cycle**: make Evolution loop after a whole number.
+- **Colour edge** and **Edge colour**: paint the roughened edge in one colour.
+- **Seed**: randomises the noise pattern used.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

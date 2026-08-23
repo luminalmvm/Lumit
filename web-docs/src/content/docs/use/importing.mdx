@@ -8,32 +8,28 @@ sidebar:
 Everything you import becomes an **asset** in the Project panel. An asset that points
 at a media file is a **footage item**.
 
-Lumit never modifies the file on disk. The project stores a reference to the path,
-plus how to interpret it.
+Imported footage never modifies the original file. The project references the files path,
+as well as how to interpret what it finds there.
 
 ## Import files
 
 1. Choose **File ▸ Import**.
 2. Select one or more files.
 
-You can also drag files from your file manager onto the Project panel.
+Dragging files from your file manager onto the Project panel works as well.
 
 ## Organise the panel
 
 Use **folders** to group assets. A folder groups assets in the panel and nothing more;
-it does not exist on disk.
-
-Lumit says *folder*, never *bin*.
+it does not create folders on your computer.
 
 ## Interpretation
 
-Lumit reads the frame rate, alpha, and colour space from the file and uses what it
-finds.
+Frame rate and alpha are read from the file itself. So is the colour space, and Lumit
+uses what it finds.
 
 :::note[Not built yet]
-Overriding that reading - forcing a frame rate, choosing straight or premultiplied
-alpha, assuming a different colour space - is planned but not built. There is nowhere
-to set it today.
+Overriding the interpreted values is planned. Currently there is no way to do this.
 :::
 
 ## Missing files
@@ -43,13 +39,20 @@ every layer using it recovers.
 
 ## Proxies
 
-A **proxy** is a smaller stand-in for a footage item that keeps preview fast. Lumit
-generates it in the background and you toggle it globally, so a proxy never reaches
-your export.
+A **proxy** is a smaller stand-in for a footage item that keeps preview fast. Generation
+happens in the background, and because the toggle is global, a proxy never reaches your
+export.
 
 :::note[Partly built]
-Proxy generation is not finished.
+Proxy generation is not complete.
 :::
+
+## After Effects projects
+
+A whole After Effects project can be imported via **File ▸ Import ▸ After Effects project**.
+This will attempt to import the entire project, with support for all compositions, markers, 
+layers, keyframes, and built-in effects. 3rd part effects currently won't be imported, but
+won't affect the rest of the project being imported.
 
 ## Related
 

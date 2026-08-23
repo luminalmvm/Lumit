@@ -1,24 +1,33 @@
 ---
 title: "Sharpen"
-description: "The plain sharpen, with one amount and one distance."
+description: "The simple, basic sharpen."
 ---
 
 Sharpen is a [Blur & sharpen](/effects/blur-sharpen/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The blunt one. It exaggerates the difference between each pixel and its four
-neighbours, which crisps the picture without any of the judgement
-[Unsharp mask](/effects/blur-sharpen/unsharp-mask/) applies.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Sharpen is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/sharpen.webp"
+      alt="The same frame with Sharpen applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Sharpen</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Sharpen. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Sharpen is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Use it when you want a quick crispening and you are watching the result — a
-touch on a graphic, a lift on a layer that has been scaled down, a last nudge at
-the top of a stack. When the footage is noisy or heavily compressed, use Unsharp
-mask instead: this effect has no threshold, so it sharpens grain as
-enthusiastically as it sharpens detail.
+{/* END GENERATED */}
 
-It leaves transparency alone and never invents dark detail at the frame's
-border.
+## What it does
+
+It exaggerates the difference between each pixel and its 
+neighbours, which crisps the image.
 
 ## Parameters
 
@@ -40,16 +49,9 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amount** — how far the difference from the neighbours is exaggerated. At zero
-  the picture passes through untouched, and the useful range is short: this
-  control climbs into crunch quickly, which is the honest character of a plain
-  sharpen.
-- **Radius** — how far out the four neighbours are taken, in whole pixels. One
-  pixel sharpens the finest detail there is. Larger distances skip past fine
-  texture and lift coarser structure instead, which is a way to crisp a picture
-  that has already been scaled up without emphasising its softness.
-- **Mix** — how much of the sharpened picture replaces the original.
-
+- **Amount** changes the amount the difference from neighbours is exaggerated.
+- **Radius** is how far out the four neighbours are taken.
+- **Mix**: how much of the result replaces the original.
 ## Related
 
 - [Unsharp mask](/effects/blur-sharpen/unsharp-mask/)

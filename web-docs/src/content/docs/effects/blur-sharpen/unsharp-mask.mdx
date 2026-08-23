@@ -1,27 +1,32 @@
 ---
 title: "Unsharp mask"
-description: "A radius-controlled detail lift, with a threshold to spare the grain."
+description: "A radius-controlled detail lift."
 ---
 
 Unsharp mask is a [Blur & sharpen](/effects/blur-sharpen/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-The controlled way to sharpen. It compares the picture against a blurred copy of
-itself and adds back the difference, so what gets lifted is detail at the size
-you choose rather than every pixel-to-pixel step.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Unsharp mask is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/blur-sharpen/unsharp-mask.webp"
+      alt="The same frame with Unsharp mask applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Unsharp mask</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Unsharp mask. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Unsharp mask is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-Reach for it after anything that costs sharpness: a scale-down, a Retime, a
-blur elsewhere in the stack, or heavy compression on the source capture. It is
-also the honest fix for footage that was simply shot or streamed soft.
+{/* END GENERATED */}
 
-The reason to prefer it over plain [Sharpen](/effects/blur-sharpen/sharpen/) is
-the pair of controls that keep it from ruining the picture: a radius, so you
-choose which scale of detail is lifted, and a threshold, so flat areas are left
-alone and compression noise is not amplified into a moving crust.
+## What it does
 
-Sharpening is a local exaggeration, so it is easy to overdo. Bright and dark
-halos along high-contrast edges are the tell.
+The picture is compared against a blurred copy of itself and the difference is added back.
 
 ## Parameters
 
@@ -45,20 +50,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amount** — how strongly the recovered detail is added back. Past a point this
-  stops reading as sharpness and starts reading as edge haloes.
-- **Radius** — the size of detail that gets lifted, as a share of the composition
-  diagonal. Small values sharpen fine texture; larger ones lift broader shapes
-  and read more as local contrast than as sharpness.
-- **Threshold** — how much difference a pixel must show before it is lifted at
-  all. This is what protects flat sky, skin and compression blocks from having
-  their noise amplified: raise it until the grain stops crawling, and leave the
-  real edges to sail past it.
-- **Luminance only** — sharpens brightness while leaving colour alone. On
-  compressed capture, whose colour is stored at lower resolution than its
-  brightness, this avoids pulling coloured fringes out along every edge. It is
-  usually the right choice on game footage.
-- **Mix** — how much of the sharpened picture replaces the original.
+- **Amount** sets how strongly recovered detail is added back.
+- **Radius** is the size of detail that gets lifted.
+- **Threshold** is how different a pixel must be to be lifted.
+- **Luminance only** sharpens brightness while leaving colour alone.
+- **Mix**: how much of the result replaces the original.
 
 ## Related
 

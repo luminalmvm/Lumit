@@ -1,21 +1,33 @@
 ---
 title: Mosaic
-description: "Cuts the frame into a grid of rectangles and paints each one a single flat colour."
+description: "Cuts the frame into rectangles and paints each a single colour."
 ---
 
 Mosaic is a **Stylise** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Mosaic is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/mosaic.webp"
+      alt="The same frame with Mosaic applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Mosaic</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Mosaic. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Mosaic is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
+
+{/* END GENERATED */}
+
+## What it does
 
 The frame is cut into a grid of rectangles and every one is painted a single
-colour. It is the pixelation effect: the anonymised face, the censored logo, the
-retro-console look, and the transition where a shot dissolves into blocks before
-it cuts.
-
-Two flavours. By default each block takes the **average** colour of the picture
-underneath it, which is smooth and is what most people mean by a mosaic. Turn
-**Sharp colours** on and each block takes the colour of the single pixel at its
-centre instead, which is crisper on graphic material and noisier on film.
+colour. It is the pixelation effect.
 
 ## Parameters
 
@@ -38,42 +50,12 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Horizontal blocks** and **Vertical blocks** — how many blocks span the frame
-  across and down. The defaults are near-square on a 16:9 frame; matching them to
-  the frame's shape is usually what you want, and deliberately not matching them
-  gives long letterbox blocks.
-- **Sharp colours** — off, each block is the average of what is under it; on,
-  each block is its centre pixel's colour.
-- **Mix** — how much of the blocked picture replaces the original. Animate it
-  from 0 to 100 for a mosaic that fades in without the block size changing.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  this is how you blur a single face rather than the whole frame. See
-  [Effects](/use/effects/).
-
-## Notes
-
-**Animate the block counts, not the Mix, for a pixelate-out.** Taking Horizontal
-and Vertical blocks from a few hundred down to two over a second is the
-transition; fading the Mix instead cross-dissolves a blocky picture over a sharp
-one, which reads as a double exposure rather than as a pixelation.
-
-**Blocks stay put when the layer moves.** The grid is fixed to the frame, not to
-the picture, so a moving subject slides through a still grid — which is exactly
-what you want for anonymising, and exactly what makes an animated block count
-look like a transition rather than a texture.
-
-**To anonymise something that moves**, put Mosaic on the layer and point its
-**Matte** at a shape layer you have animated over the face. The mosaic then only
-exists where the shape is.
-
-**The alpha is blocked too.** A cut-out layer gets blocky *edges* rather than
-smooth edges around a blocky middle, which is the honest reading of "the picture
-is made of blocks".
-
-**Very fine grids are an exact average.** Once a block is under about eight
-pixels across, the average is taken over every pixel of it. Above that the block
-is sampled on a grid rather than read in full — the same flat colour for a
-fraction of the work.
+- **Horizontal blocks** and **Vertical blocks**: how many blocks span the frame
+  across and down.
+- **Sharp colours**: off, each block is the average of what is under it; on, each
+  block is its centre pixel's colour.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

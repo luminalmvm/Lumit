@@ -1,23 +1,33 @@
 ---
 title: Bezier warp
-description: "Bends the four edges of the picture with twelve draggable points, and fills the inside smoothly."
+description: "Warp with twelve draggable points."
 ---
 
 Bezier warp is a **Distortion** effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-[Corner pin](/effects/distortion/corner-pin/) lets you drag the four corners of
-the picture and keeps the edges between them straight. Bezier warp gives each
-edge two handles as well, so the edges can bow, and fills the inside smoothly
-between them.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Bezier warp is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/distortion/bezier-warp.webp"
+      alt="The same frame with Bezier warp applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Bezier warp</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Bezier warp. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Bezier warp is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-That is what you need to wrap a flat picture onto something curved: a label onto
-a bottle, a graphic onto a curved screen, artwork onto a page as it turns, a
-title onto a banner sagging between two poles.
+{/* END GENERATED */}
 
-The four corners carry the same names and the same units Corner pin uses, so
-swapping one effect for the other costs no dragging.
+## What it does
+
+Bezier warp gives each edge two handles, so an edge can bow, and the inside fills smoothly
+between the bowed edges.
 
 ## Parameters
 
@@ -66,41 +76,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Upper left**, **Upper right**, **Lower right**, **Lower left** — the four
-  corners, in pixels at composition size. A fresh Bezier warp starts with them on
-  the frame's own corners.
-- **Top edge**, **Right edge**, **Bottom edge**, **Left edge** — each holds the two
-  handles that bow that edge. They start closed, because most work begins with the
-  corners. A handle sits a third of the way along its edge to begin with, which is
-  the arrangement that makes a perfectly straight edge.
-- **Quality** — how hard the effect works to place each pixel exactly. The default
-  of 8 is well past the point where an ordinary warp stops moving; raise it if a
-  very extreme bend looks approximate, lower it only if you are chasing speed.
-- **Mix** — how much of the warped picture replaces the original.
-- **Matte** and **Invert** — drive the effect from another layer's brightness;
-  see [Effects](/use/effects/).
-
-## Notes
-
-**The default is exactly the identity.** With every point where it starts, the
-picture comes back untouched — not softened by a resample, but pixel for pixel the
-same. You can leave the effect on a layer while you decide what to do with it.
-
-**Outside the bent shape is transparent.** The point of the effect is the shape,
-so the frame around it is empty rather than smeared. Put whatever should be behind
-it on a layer below.
-
-**Quality is accuracy, not style.** It does not change the shape of the warp, only
-how precisely each pixel finds its place, so it is not a control to animate.
-
-**It cannot do perspective.** A Bezier warp bends edges; it does not make a plane
-recede. If parallel lines in the picture need to converge, use
-[Corner pin](/effects/distortion/corner-pin/) — and note that a Bezier warp with
-its handles left at the thirds *is* a corner pin without the perspective.
-
-**Pull a shape inside out and it stops.** A patch dragged so far that it folds
-over itself has no single answer for the pixels in the fold; those come back
-empty rather than as garbage.
+- **Upper left**, **Upper right**, **Lower right**, **Lower left** are the four
+  corners, in pixels at composition size. Bezier warp starts with them on
+  the layers's own corners.
+- **Top edge**, **Right edge**, **Bottom edge**, **Left edge** each hold the two
+  handles that bow that edge.
+- **Quality** adjusts the math required to position each pixel.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the warp of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 

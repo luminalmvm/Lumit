@@ -7,44 +7,46 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-**Preview** is playback inside Lumit. It never writes files.
+**Preview** is playback inside Lumit.
 
-<Shot file="cache-bar.png" caption="The cache bar filling above the Timeline." />
+<Shot file="cache-bar.png" caption="The cache bar filling above the Timeline." eager/>
 
 ## Play
 
-Press play. The playhead moves and the Viewer shows each frame.
-
-Lumit says *playhead*, never *CTI*.
+Press play, or `space` by default. The playhead will begin moving and the Viewer will update.
 
 ## The cache
 
-Lumit stores rendered frames so it does not compute them twice. The **cache bar** under
-the time ruler shows which frames are ready.
+The cache has three tiers: VRAM, RAM and disk. You can alter the memory allocated to each of 
+these individually under **Edit ▸ Settings ▸ Performance**.
 
-Cache entries are keyed by the content that made them, not by their position in time.
-Move a layer and the frames that did not change stay cached.
-
-There are three tiers: VRAM, RAM, and disk.
+Lumit stores rendered frames to help speedup plaback. Frames that are cached are shown by 
+the **cache bar** under the time ruler, VRAM and Ram display as a green line, frames stored
+on the disk are blue.
 
 ## Preview resolution
 
-Lower the preview resolution to get more speed: full, half, third, quarter, or auto.
-This is real downsampling, and it applies per composition. It never affects export.
+Lower the preview resolution to render previews faster: full, half, third, quarter, or auto. 
+Changing the preview resolution has no impact when exporting.
+
+Lumit also has two preview resolution options in the viewer bar. **Every frame** will render
+each frame in the composition, pausing audio if playback isn't realtime. **Adaptive res** will
+instead dynamically alter the resolution to try and maintain realtime playback. Sometimes in very 
+intensive compositions even at quater resolution this won't be enough, at which point adaptive res
+will only display frames it manages to render in time.
+
+Personally I'd normally recommend **Every Frame** as the default option to use.
 
 ## The progress bar
 
-When a frame you are waiting on - a scrub, a playhead move, a value drag - takes
-longer than a moment, a thin bar appears and fills as the frame passes through
-decoding, building, and compositing. Ordinary frames stay silent, and playback never
-shows it: the bar exists to separate a slow frame from a stuck one.
+Depending on what you're working on frames can take a while to render. While waiting, a 
+progress bar appears in the bar at the bottom of the viewer, and fills as the frame passes through
+decoding, building, and compositing.
 
 ## Adaptive degradation
 
-Under load, Lumit reduces quality on its own to keep responding - it may drop
-resolution or skip effects while you interact.
-
-This only happens during interaction. It can never affect an export.
+Under load, Lumit reduces quality on its own to keep responding. It may drop resolution while scrubbing
+effect values as you change them to try and give you an idea of what the value you change will look like.
 
 ## If playback is slow
 

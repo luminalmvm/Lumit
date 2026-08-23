@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "docs:effects": "node scripts/gen-effect-pages.mjs",
+    "docs:effect-shots": "node scripts/gen-effect-shots.mjs",
     "build": "astro build",
     "preview": "astro preview"
   },

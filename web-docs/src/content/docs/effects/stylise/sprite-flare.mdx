@@ -1,35 +1,32 @@
 ---
 title: "Sprite flare"
-description: "The drawn flare: a glow, a train of ghosts and an anamorphic streak."
+description: "The cheap lens flare."
 ---
 
 Sprite flare is a [Stylise](/effects/stylise/) effect.
 
-## What it is for
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-A flare that is drawn rather than simulated. You give it a position, and it puts
-a glow there, marches a train of ghosts along the line from that point through
-the centre of the frame, and lays an anamorphic streak across it.
+<figure class="example">
+  <div class="compare" style="--split:50%">
+    <img src="/effects/plate.webp" alt="The frame before Sprite flare is applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <img class="compare__after" src="/effects/stylise/sprite-flare.webp"
+      alt="The same frame with Sprite flare applied" width="1280" height="544" loading="lazy" decoding="async" />
+    <span class="compare__handle" aria-hidden="true"></span>
+    <span class="compare__label compare__label--a" aria-hidden="true">Original</span>
+    <span class="compare__label compare__label--b" aria-hidden="true">Sprite flare</span>
+    <input class="compare__range" type="range" min="0" max="100" step="0.1" value="50"
+      aria-label="Reveal Sprite flare. Left of the handle is the untouched frame, right of it is the effect." />
+  </div>
+  <figcaption>Drag the handle. Sprite flare is on the right, the untouched frame on the left,
+  at settings chosen to make the effect plain rather than subtle.</figcaption>
+</figure>
 
-It is deliberately a separate effect from
-[Lens flare](/effects/stylise/lens-flare/) rather than a mode of it, because the
-two answer different questions. That one asks what a real lens would do; this one
-asks you what you want and does exactly that, every time, for almost no cost.
+{/* END GENERATED */}
 
-Reach for it when the flare is a design element: on a title, over a graphic, on a
-tracked point in a montage where predictability matters more than physics. Reach
-for the simulated one when the flare has to behave like glass.
+## What it does
 
-Two things make it read as a flare rather than as three overlapping shapes. The
-ghosts march through the frame's *centre*, which is where a real lens puts its
-reflections — so as the light crosses the middle of frame the train swings round
-to the far side, exactly as it should. And their spacing is a fraction of the
-distance from the light to the centre, so the train stretches and gathers as the
-light moves rather than sliding along rigidly.
-
-**Nothing is read from the picture.** There is no brightness threshold for a
-source to cross, so nothing pops in and out as grain or motion changes the frame
-underneath. That predictability is the point of the effect.
+A very simple lens flare effect. Generally recommended to use the physically based lens flare for high quality flares.
 
 ## Parameters
 
@@ -65,40 +62,29 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Light x** and **Light y** — where the light is, in pixels. Both are open past
-  the frame's edges, because a light just off-screen still throws its ghosts
-  across the picture, and that is much of what this effect is for. Animate the
-  pair and the whole flare follows the light.
-- **Intensity** — the master gain on everything the effect draws. At zero nothing
-  is added at all, so this is the control to keyframe.
-- **Tint** — the colour of the whole flare. It is scene-linear and can be set
-  above white, which pushes the flare hotter than the plate beneath it.
-- **Mix** — how much of the flared picture replaces the original.
+- **Light x** and **Light y**: where the light is positioned.
+- **Intensity**: the gain on the lens flare.
+- **Tint**: the colour of the flare.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
-The **Glow** group is the halo on the light itself:
+The **Glow** group:
 
-- **Glow size** — its radius, in pixels.
-- **Glow intensity** — its gain. Turn it down to nothing when you want only the
-  ghost train and the streak.
+- **Glow size**: its radius, in pixels.
+- **Glow intensity**: its gain.
 
-The **Ghosts** group is the train of iris shapes:
+The **Ghosts** group:
 
-- **Ghosts** — how many discs march along the axis. None is a legal setting.
-- **Ghost spacing** — how far apart they sit, as a fraction of the distance from
-  the light to the centre of frame rather than as a fixed length. That is what
-  makes the train behave: it stretches as the light moves out and gathers as it
-  comes in.
-- **Ghost size** — their base radius, in pixels.
-- **Ghost intensity** — their gain. Ghosts read best well below the glow; at equal
-  strength the train stops looking like reflections and starts looking like a row
-  of circles.
+- **Ghosts**: how many discs march along the axis.
+- **Ghost spacing**: how far apart they sit.
+- **Ghost size**: their base radius.
+- **Ghost intensity**: their gain. 
 
-The **Streak** group is the anamorphic bar through the light:
+The **Streak** group:
 
-- **Streak length** — how far it reaches from the light, in pixels.
-- **Streak intensity** — its gain.
-- **Streak angle** — which way it runs. Horizontal is the anamorphic look that
-  most people picture when they think of a lens streak.
+- **Streak length**: how far it reaches from the light.
+- **Streak intensity**: its gain.
+- **Streak angle**: direction it runs in.
 
 ## Related
 

@@ -7571,10 +7571,8 @@ would be wrong within a month: somebody changes a default, and the manual quietl
 keeps showing what the effect used to do.
 
 So the engine draws them. `npm run docs:effect-shots`, run from `web-docs/`, does
-three things in a row. First it asks **ffmpeg** to turn the one committed
-photograph into a three-second clip with a slow sideways pan across it, because
-the handful of effects that read motion — motion blur, echo, datamosh — have
-nothing to show on a still. Then it runs a test in the Rust engine
+three things in a row. First it works out what the source footage is (below).
+Then it runs a test in the Rust engine
 (`crates/lumit-render/tests/effect_examples.rs`) which builds a tiny project in
 memory, one composition with that clip on a single layer, puts one effect on the
 layer, renders a frame, and does it again for the next effect. The walk it uses
@@ -7582,7 +7580,18 @@ is the Viewer's own walk, so a figure on the website is a frame the application
 would genuinely produce. Last, **sharp** encodes the results as WebP into
 `web-docs/public/effects/`, where the pages look for them.
 
-Two details are worth knowing, because both are deliberate.
+The source comes in two grades, and the difference reaches about four pictures.
+The good grade is a real recording: two short clips of the actual footage and its
+depth pass, plus a real `.cube` grade for the LUT page. Those three files sit in
+`web-docs/src/assets/` and are **gitignored**, partly because megabytes of video
+are not what a repository is for, and partly because the LUT is somebody else's
+work to give away. The grade that ships is a pair of stills, which the script pans
+sideways so that at least something moves. Every picture except the temporal
+handful is identical either way; Fast motion blur, Echo and Datamosh all smear
+motion the footage already contains, and a panned still gives them far less to
+work with than a running firefight does.
+
+Three details are worth knowing, because all three are deliberate.
 
 The engine hands the pictures over as *raw* pixels, one uncompressed file each.
 Nothing in the Rust workspace can write a PNG or a WebP, and writing an image
@@ -7602,8 +7611,31 @@ impossible.
 A few effects get special handling for honest reasons. Drop shadow and light wrap
 need an outline to work from, so their frame is masked to an oval first. Depth of
 field, displacement map, set matte and texturize each read a second picture, so
-the project gains a hidden gradient layer for them to point at. Posterize time is
-skipped outright and says so: it holds one frame for several, which only exists in
-motion, and a still of it would be a still of the plate wearing a misleading
-caption.
+the project gains the plate's own depth pass to point at, which is why the depth of
+field picture blurs the scene rather than a ramp somebody invented.
+
+One effect gets a fourth kind of help. Fast motion blur smears movement that is
+already inside the footage, so its example plays the plate at triple speed through
+the frame everything else is rendered at: two seconds of source crossing the
+middle two thirds of a second of the composition. The retime is written as two
+plain keyframes rather than a speed ramp, because a ramp has to be integrated to
+know where it lands, and landing on a different frame from the rest of the manual
+is the one thing that example must not do.
+
+Two effects are skipped outright and say so. Posterize time holds one frame for
+several, which only exists in motion, and a still of it would be a still of the
+plate wearing a misleading caption. Matte key wants a screen to pull and the
+example frame has none, so every setting of it either did nothing or keyed
+something arbitrary. Neither gets a figure: the page generator leaves the picture
+out whenever there is no file on disk, so nothing links to an image that is not
+there.
+
+Finally, the figures are not plain pictures. Each one lays the effect over the
+untouched frame and clips it down the middle, with a handle the reader drags left
+and right to wipe between the two. It is built from a range input stretched
+invisibly across the whole picture, which is what makes it work with a finger, a
+mouse and the arrow keys without any of that being written by hand; a few lines of
+script in `astro.config.mjs` point a CSS clip at the input's value. With the script
+switched off the figure is still an honest half-and-half split, because the
+starting position is written into the markup rather than applied afterwards.
 
