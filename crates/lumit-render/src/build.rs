@@ -581,27 +581,6 @@ pub fn build_comp_draws_at(
         })
     };
 
-    /// The parameter a built-in names its auxiliary-layer input by, or `None` for
-    /// an effect that takes no layer (docs/impl/layer-input.md §2).
-    ///
-    /// One place, because two lists have to agree exactly or the slots and the ops
-    /// drift apart silently: `build.rs` fills a slot per matching effect, and
-    /// `fxops::run_ops` consumes one per matching op, in the same order.
-    fn layer_input_param(match_name: &str) -> Option<&'static str> {
-        match match_name {
-            // Light wrap's Background (K-358) — the plate whose light spills
-            // round the foreground's edge. Depth of field's depth pass used to
-            // be here too, and K-395 moved it onto the one matte carriage, where
-            // it is simply this effect's matte with a deeper meaning.
-            "light_wrap" => Some("background"),
-            // Texturize's Texture (K-405, docs/08 §3.68): the layer pressed into
-            // this one as relief. Not its matte — that row is still the generic
-            // strength dissolve, which is how "only over the sky" is said.
-            "texturize" => Some("texture"),
-            _ => None,
-        }
-    }
-
     // One referenced layer resolved into an input slot — the body
     // `dof_inputs_for` and `mattes_for` share (docs/impl/layer-input.md §2): the
     // span gate, the K-266 nested-precomp render, and the K-142
@@ -674,24 +653,29 @@ pub fn build_comp_draws_at(
         })
     };
 
+    // **The auxiliary-layer inputs** (K-123, docs/impl/layer-input.md §2): one
+    // slot per enabled built-in whose declaration names a Layer row that is not
+    // its matte — Light wrap's Background, Texturize's Texture, Fast motion
+    // blur's Motion vectors, Set matte's source — AND that resolves to an op at
+    // all, exactly the pair of conditions `mattes_for` below applies, so this
+    // list stays 1:1 with the ops `run_ops` walks.
+    //
+    // The parameter comes from the schema's own
+    // [`EffectSchema::layer_input`] rather than a table of match names here
+    // (K-429): a table is a second rule, and a second rule is a thing to forget
+    // when an effect gains a layer row.
     let dof_inputs_for =
         |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance]| -> Vec<LayerInputDraw> {
             use lumit_core::model::EffectNamespace;
             effects
                 .iter()
-                // "One slot per effect op that declares a Layer parameter"
-                // (docs/impl/layer-input.md §2) — the contract has always been
-                // general; this is the list of built-ins that take one, paired
-                // with the parameter each names it by. Every one resolves to
-                // exactly one op, so the 1:1 ordering with `run_ops`'s counter
-                // holds across all of them.
-                .filter(|e| {
-                    e.enabled
-                        && e.effect.namespace == EffectNamespace::Builtin
-                        && layer_input_param(&e.effect.match_name).is_some()
+                .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+                .filter_map(|e| {
+                    let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                    let param = def.schema().layer_input()?;
+                    def.is_image_op().then_some((e, param))
                 })
-                .map(|e| {
-                    let param = layer_input_param(&e.effect.match_name).unwrap_or("depth");
+                .map(|(e, param)| {
                     // "This layer" (K-288): a reference to the layer the effect
                     // is ON is not a second render — it is the effect's own
                     // input, which `run_ops` already holds.
@@ -973,7 +957,29 @@ pub fn build_comp_draws_at(
                     frame_t,
                     pixels_by_layer,
                     visited,
-                );
+                )
+                .map(|mut ab| {
+                    // Its Matte (K-429), rendered by the same helper every
+                    // other matte and layer input goes through. It is filled in
+                    // here rather than inside `accumulation_mb_below` because
+                    // that is a free function and this is where `layer_slot`
+                    // lives. Pointed at the adjustment itself (K-288), the
+                    // matte is the composite below — which is what an
+                    // adjustment layer's own input is.
+                    if let Some(e) = layer.effects.iter().find(|e| {
+                        e.enabled
+                            && e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
+                            && e.effect.match_name == "accumulation_mb"
+                    }) {
+                        ab.matte = if e.layer_ref(lumit_core::fx::MATTE_PARAM) == Some(layer.id) {
+                            LayerInputDraw::ThisLayer
+                        } else {
+                            layer_slot(e, lumit_core::fx::MATTE_PARAM)
+                                .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                        };
+                    }
+                    ab
+                });
                 if fx.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
                     continue;
                 }
@@ -1512,6 +1518,12 @@ pub fn accumulation_mb_below(
     Some(AccumulationBelow {
         samples,
         mix: p.mix as f32,
+        // Filled in by the caller, which has the layer-rendering helper this
+        // free function does not (K-429).
+        matte: LayerInputDraw::Absent,
+        matte_channel: p.matte_channel,
+        matte_invert: p.matte_invert,
+        anchor: p.shutter_anchor() as f32,
     })
 }
 

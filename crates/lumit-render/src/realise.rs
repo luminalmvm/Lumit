@@ -442,10 +442,43 @@ impl Realiser<'_> {
         // The sub-frames and `below` are all at the ACTUAL raster size; the
         // combine is a full-frame identity pass, so it runs at that size too.
         let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
-        // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
-        let weight = 1.0 / frames.len() as f32;
-        let avg_layers: Vec<(&wgpu::Texture, f32)> = frames.iter().map(|f| (f, weight)).collect();
-        let average = self.compositor.accumulate(&self.ctx, tw, th, &avg_layers);
+        // **The Matte scales Shutter angle per pixel** (K-429). With none bound
+        // — the default, and every project saved before this — the equal-weight
+        // hardware pass below runs exactly as it always did, byte for byte
+        // (K-258). With one, each pixel's weights come from how far open its
+        // own shutter is, and the average is taken over a shorter slice of the
+        // same N moments, shrunk toward the frame's own instant.
+        let matte = self
+            .render_layer_inputs(std::slice::from_ref(&ab.matte), tw, th)
+            .into_iter()
+            .next()
+            .and_then(|slot| slot.texture(below).cloned());
+        let average = if let Some(matte) = matte {
+            // Channel and Invert, once, before anything reads it (K-425). The
+            // dispatch seam does this for every other effect; this one has no
+            // dispatch, so it does it here.
+            let matte =
+                if lumit_core::fx::cpu::matte_needs_prepare(ab.matte_channel, ab.matte_invert) {
+                    self.fx.matte_prepare(
+                        &self.ctx,
+                        &matte,
+                        tw,
+                        th,
+                        ab.matte_channel,
+                        ab.matte_invert,
+                    )
+                } else {
+                    matte
+                };
+            self.fx
+                .accumulate_with_shutter(&self.ctx, &frames, &matte, tw, th, ab.anchor)
+        } else {
+            // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
+            let weight = 1.0 / frames.len() as f32;
+            let avg_layers: Vec<(&wgpu::Texture, f32)> =
+                frames.iter().map(|f| (f, weight)).collect();
+            self.compositor.accumulate(&self.ctx, tw, th, &avg_layers)
+        };
         if ab.mix >= 1.0 {
             average
         } else {

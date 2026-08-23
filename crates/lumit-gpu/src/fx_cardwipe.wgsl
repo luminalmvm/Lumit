@@ -46,7 +46,7 @@ struct Params {
     randomness: f32,        // 0..1
     seed: u32,
     mix_amt: f32,           // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,          // 1 = the matte scales Completion per pixel (K-429)
     _pad1: f32,
     _pad2: f32,
 };
@@ -55,6 +55,25 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // == cpu::card_span. The ceilings are the exact inverse of (x·n) / len, which
 // cpu::mosaic_span's floors are not — a card is DRAWN to its span, so the last
@@ -114,7 +133,15 @@ fn card_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let base = p.order_bias + p.order_scale * along;
     let shuffled = base + (nc_hash01(p.seed, 0u, i, j, 0) - base) * p.randomness;
-    let t = clamp((p.completion - shuffled * p.one_minus_width) * p.inv_width, 0.0, 1.0);
+    // The matte pulls Completion toward 0 per pixel, before the turn is worked
+    // out (K-429) — asked per PIXEL and not per card, so a matte can leave one
+    // half of a card standing while the other half has flipped away. Read at
+    // the destination pixel, where the card's point is standing (K-427).
+    var completion = p.completion;
+    if (p.matte_on != 0.0) {
+        completion = matte_toward(p.completion, 0.0, matte_k(xy));
+    }
+    let t = clamp((completion - shuffled * p.one_minus_width) * p.inv_width, 0.0, 1.0);
 
     var v = o;
     if (t >= 1.0) {

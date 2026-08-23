@@ -33,6 +33,14 @@ use lumit_fx_macros::Effect;
     roi = FullFrame,
     // The 16-frame window (FX-17/K-149, raised from 8) the render decodes for.
     temporal = &[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16],
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Decay per pixel: the trail dies away sooner where the matte is \
+         dark and reaches its full length where it is white, so the ghosts are \
+         genuinely shorter rather than faded back",
+    ),
 )]
 pub struct Echo {
     /// Count of trailing frames; each is one comp frame further back (v1 fixed

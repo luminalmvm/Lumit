@@ -301,9 +301,15 @@ the boundary frame, matching Overrun semantics in [04-RETIMING.md](04-RETIMING.m
 Every built-in effect has a **Matte** input: a layer whose brightness says *how much of the
 effect* each pixel gets. It is one row, in the same place, on all of them — the layer
 picker with an **Invert** checkbox beside it and a **Channel** choice (K-425), labelled
-"Matte" / "Invert" / "Channel". The Matte key alone carries none (K-425): a keyer's
-subject is the picture it keys, and a strength matte over a key is a garbage matte,
-which is a mask's job.
+"Matte" / "Invert" / "Channel". **Two effects carry none.** The Matte key (K-425): a
+keyer's subject is the picture it keys, and a strength matte over a key is a garbage
+matte, which is a mask's job. And **Set matte** (K-429): every Matte row answers "how much
+of me happens here", and Set matte has no answer to give — what it takes from another
+layer is the coverage itself, so the row it shows is its own source picker, riding the
+ordinary auxiliary-layer carriage beside Light wrap's Background rather than the universal
+one. Both keep their stored ids, so a project saved before either drop loads exactly as it
+did (K-065, K-258 — the forward-migration walk only appends what a schema has *grown*, and
+carries a row nobody declares any more along untouched).
 
 **The Channel choice says which channel of the matte layer drives the effect**: Luminance
 (the default — the premultiplied Rec. 709 luma every kernel has always read), Red, Green,
@@ -343,8 +349,9 @@ every effect from the day it landed rather than on the handful someone remembere
 **Effects may override with a deeper meaning** where the matte belongs inside the maths.
 An override takes the same row and the same labels, keeps its stored parameter id (K-065 —
 a save is a save), and documents what its matte means in its own schema prose, which is
-what the manual's parameter tables generate from. Seven effects do for a reason of their
-own, and each is a picture the dissolve above cannot produce:
+what the manual's parameter tables generate from. Six effects do for a reason of their
+own, and each is a picture the dissolve above cannot produce (Set matte was a seventh
+until K-429 took its Matte row away altogether):
 
 | Effect | What its matte means |
 |---|---|
@@ -353,7 +360,6 @@ own, and each is a picture the dissolve above cannot produce:
 | Glow (§3.3) | gates which pixels may **seed** the halo, before the bright pass — only the lit part of the matte blooms, but its halo still spills outward across the dark part |
 | Depth of field (§3.22) | a **depth** pass: the luma is how far away each pixel is, and the blur widens with the distance from focus, so a mid-grey matte can be perfectly sharp |
 | Lens flare (§3.27) | where the flare **detects its light sources**, in Matte source mode |
-| Set matte (§3.44) | **is the alpha**: the chosen channel of the matte becomes this layer's coverage, which is the whole effect rather than a strength applied to one |
 | Displacement map (§3.49) | **is the map**: its chosen channels say which way and how far each pixel is pushed, mid-grey meaning no push — the effect's subject rather than a strength applied to one (K-402) |
 
 **And the matte scales the amount of every blur, sharpen and colour effect (K-426, the
@@ -433,6 +439,37 @@ alone", and honestly so, since the matte turns Relief down rather than turning E
 `k` is read at the **destination** pixel for these too, which for Drop shadow means where
 the shadow *falls* rather than where the shape stands: paint the matte over the wall and it
 is the shadow on the wall that goes.
+
+**And the matte scales the shutter, the decay and the completion (K-429, the same rule a
+fourth time).** In the Temporal family the amount is a *duration*: how long the shutter was
+open, how long a trail lasts. **Echo**'s matte scales its **Decay**, so the ghosts are
+genuinely fewer and shorter where the matte is dark — and because `(decay·k)^(i+1)`
+factorises as `decay^(i+1) · k^(i+1)`, a half matte draws *exactly* the half-decay trail. A
+tap the matte has taken to nothing is **skipped** rather than folded in at zero, because a
+zero-weight tap is not a no-op under every combine mode (Multiply by nothing is black).
+Both motion blurs scale their **Shutter angle**: **Fast motion blur** (§3.2) reads `k` at
+the destination pixel and spends it everywhere the shutter is spent — this pixel's own
+vector, the neighbourhood's dominant sweep, and each tap's reach — so a half matte is
+exactly the half-shutter streak, a genuinely shorter smear and not a long one faded back
+over a sharp picture. **Motion blur** (accumulation, §3.26) has no kernel to claim it
+inside, so it claims it in the **combine**: the same N sub-frame re-renders are averaged
+over a shorter slice of the open shutter, shrunk toward the frame's own moment, so black is
+the unblurred frame and grey is a genuinely shorter exposure. **Posterize time** keeps the
+strength dissolve: it holds a time rather than drawing an amount, and its own output is
+what a dissolve blends.
+
+In the Transition family the amount is **Completion**, and scaling it per pixel is what
+turns a wipe into a **gradient wipe**: paint a ramp and the edge follows the ramp instead of
+the schema's straight line. **Linear wipe**, **Radial wipe**, **Venetian blinds** and **Card
+wipe** each scale Completion toward 0, so black holds the frame back and white lets the wipe
+finish; the Card wipe asks it per *pixel* rather than per card, so one half of a card can be
+standing while the other half has flipped away. The **Iris wipe** has no Completion at all —
+**the radius is the transition** (§3.71) — so it scales that instead, which is the same
+sentence about the same thing: the polygon opens wide where the matte is white and shuts to
+nothing where it is black, and a black matte is the same exact identity Outer radius 0
+already is. Outside those families **Transform** and **Broadcast safe** keep the strength
+dissolve, because scaling their amount *is* that dissolve, and the **Camera track** carries
+no row at all (K-417): it draws nothing for a matte to gate.
 
 The difference is worth stating once, because it is the whole reason the hook exists. The
 dissolve can only change *how much of a finished effect* survives; it cannot change what
@@ -701,6 +738,28 @@ exactly as they are for Echo. Without a depth buffer the reconstruction cannot t
 foreground from a fast background, so a *small* static object entirely surrounded by fast
 motion receives its neighbours' smear (large static regions do not — the reach is a tile or
 two plus the streak); the fix, if ever wanted, is a depth input rather than a constant.
+
+**Its matte scales Shutter angle per pixel** (K-429, §2.6), read at the destination pixel
+and spent everywhere the shutter is spent — this pixel's own vector, the neighbourhood's
+dominant sweep, and each tap's reach — so a grey matte is a genuinely shorter streak
+rather than a long one faded back over a sharp picture.
+
+**A Motion vectors layer may stand in for the measured flow** (K-429). A **Motion vectors**
+Layer row names a layer whose **red and green channels are the per-pixel motion**, in the
+encoding every engine's velocity pass and every renderer's vector pass already uses: red is
+sideways, green is up-and-down, and **mid-grey (0.5) is standing still**, so the motion in
+pixels is `(r − ½) · Vector scale` across and `(g − ½) · Vector scale` down. Blue and alpha
+are not read, and confidence comes out at 1 everywhere — a supplied vector is not a
+measurement that can have failed to match. **Vector scale** (px@comp, default 32, greyed
+until a layer is picked) is what makes one engine's normalisation agree with the frame it
+came from; different passes normalise differently, and this is the dial that reconciles
+them. The layer is an ordinary auxiliary layer input on the K-387 carriage (§1.2, K-123),
+so a matte may be given as well; unset is the labelled no-op, and the measured flow is
+used. Bound, it is also the one way this effect works on a layer that has no measured
+flow at all — a solid, a shape, a comp — because the field no longer has to be measured
+from two decoded frames. The conversion is one pass, `cpu::motion_vectors_field` and its
+WGSL twin, and everything downstream reads one kind of field and knows nothing about where
+it came from.
 
 ### 3.3 Glow — exposure-aware bloom (Deep Glow-class)
 
@@ -1273,6 +1332,13 @@ It reads the layer's
 **source** frames, not the upstream stack's output at those times (full temporal stacking is
 later), and echoes footage layers only — Sequence-clip and adjustment-layer temporal effects
 are deferred. Marker-triggerable intensity spikes come with the §1.4 wiring already in place.
+
+**The Matte scales Decay (K-429, §2.6):** the trail dies away sooner where the matte is
+dark and reaches its full length where it is white, so the ghosts are genuinely shorter
+rather than faded back. Because `(decay·k)^(i+1)` factorises as `decay^(i+1) · k^(i+1)`, a
+half matte draws *exactly* the half-decay trail; and a tap the matte has taken to nothing is
+skipped rather than folded in at zero, since a zero-weight tap is not a no-op under every
+combine mode.
 
 ### 3.14 Vignette
 
@@ -1926,6 +1992,23 @@ temporal, Category **Temporal**.
 effect (a particle system) is pinned to the playhead while the rest of the scene holds. The
 split is `lumit_core::fx::resolve_stack_temporal`; with the frame and held times equal it is
 byte-identical to the plain resolve, so an ordinary render is unchanged.
+
+**The Matte scales Shutter angle per pixel (K-429, §2.6).** This is the one effect that
+claims its matte in the **combine** rather than in a kernel, because it has no kernel: it
+orchestrates a re-render, so it resolves to no op and the matte carriage `run_ops` walks
+skips it on both sides. The matte is instead carried on the sub-frame plan itself, rendered
+by the same helper every other matte goes through, and its Channel and Invert applied once
+before the combine reads it. What the combine then does is treat the samples as *cells* —
+sample *k* owns the span `[k/N, (k+1)/N]` of the open shutter — and average over the window
+`[0, 1]` scaled toward the **shutter anchor**, the point where the frame's own time falls
+across the open span (`−phase ÷ shutter`, clamped, which the standard −90° phase on a 180°
+shutter puts in the middle). A cell's weight is how much of it that window covers, over the
+window's own width, so the weights sum to one at every strength. At white the window is the
+whole span and every cell is fully inside it — the equal-weight average the effect has
+always drawn. At black it has shrunk to the frame's own instant, which is the unblurred
+frame. Between, it is a genuinely shorter exposure over a shorter slice of the same N
+moments, which is not the same picture as a blurred frame faded back. **No matte bound runs
+the old hardware equal-weight pass unchanged, byte for byte** (K-258).
 
 ### 3.27 Lens flare — physically-based lens flare (Realflare-class)
 
@@ -2934,6 +3017,16 @@ layer-input effect follows (§1.2) — the one sanctioned exception to the no-op
 rule, since a layer the user must supply cannot have a tasteful default. Mix 0 is the
 bit-exact identity.
 
+**This effect carries no universal Matte row (K-429, §2.6).** The row above is its **own**
+source picker and always was in spirit: every other effect's Matte answers "how much of me
+happens here", and Set matte has no answer to give, because what it takes from another layer
+is the coverage itself rather than an amount of it. It used to claim the universal row
+(K-395/K-400); it now declares its own, on the ordinary auxiliary-layer carriage beside
+Light wrap's Background and Texturize's Texture, so no dissolve stands beside the kernel,
+the Channel above is the only channel pick there is, and Invert is applied once, inside the
+kernel. The stored ids are unchanged — a save is a save (K-065) — and a project saved
+before the change loads exactly as it did (K-258).
+
 **Not in v1:** AE's "Stretch Matte to Fit" (Lumit renders the matte at this raster, so
 there is nothing to stretch) and "Premultiply Matte Layer" (Lumit's compositing is
 premultiplied throughout, §2.1, so the question does not arise).
@@ -3008,6 +3101,11 @@ Three notes:
 
 `trivial` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
 
+**The Matte scales Completion per pixel (K-429, §2.6),** which is what turns a wipe into a
+**gradient wipe**: the edge is further along where the matte is bright, so a grey ramp
+sweeps the frame in the ramp's own shape rather than the schema's straight line, and a black
+matte holds the frame back entirely.
+
 ### 3.47 Radial wipe — a hand sweeping round a clock
 
 **Parameters:** Wipe centre x and Wipe centre y (px@comp, default 960, 540), Completion
@@ -3053,6 +3151,10 @@ Four notes:
   oracle is judged on absolute difference for it.
 
 `cheap` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
+
+**The Matte scales Completion per pixel (K-429, §2.6):** the hand has swept further where
+the matte is bright, so a grey ramp opens the wedge unevenly and a black matte holds the
+frame back.
 
 AE's Venetian Blinds, Iris Wipe and Card Wipe landed in this category as §3.70–§3.72. The
 rest of AE's Transition family (Block Dissolve, Gradient Wipe) is still Tier B
@@ -4269,6 +4371,9 @@ Four notes:
 
 `trivial` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
 
+**The Matte scales Completion per pixel (K-429, §2.6):** the slats stand further open where
+the matte is bright, so one part of the frame can be shut while another is wide open.
+
 ### 3.71 Iris wipe — a polygon or a star opened out of the middle
 
 Maps AE's Iris Wipe ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Transition** effect, and the
@@ -4315,8 +4420,9 @@ Five notes:
   toggle therefore costs nothing per pixel, and Inner radius is greyed out until it is on.
 - **The iris removes what is inside it**, which is AE's behaviour: the effect opens a hole and
   the hole grows. To reveal *through* an iris instead, the Matte row's Invert is the wrong tool
-  (it inverts the strength) — use §3.44 Set matte with this effect on the matte layer, or an
-  Outer radius large enough to leave only the star.
+  (it inverts which parts of the frame the iris opens in, not which side of the edge is kept)
+  — use §3.44 Set matte with this effect on the matte layer, or an Outer radius large enough
+  to leave only the star.
 - **The two radii and the centre are all px@comp** (K-419): a radius is a *size* that the
   preview scaling keeps consistent across a reframe, a centre is a *place* the user clicks.
   AE's are both layer pixels, so the import carries them unchanged.
@@ -4326,6 +4432,14 @@ Five notes:
 
 `cheap` cost — one `atan2` a pixel, §3.47's admission again (K-399) — `Exact` ROI. Mix 0 and
 Outer radius 0 are both the bit-exact identity.
+
+**The Matte scales the iris radius per pixel (K-429, §2.6),** this being the one transition
+with no Completion to scale — which is the same sentence about the same thing, since the
+radius *is* the transition. It costs one multiply: the solved sector's vertex is the only
+place a radius survives into the expression, so scaling it scales the outer and inner radii
+together and leaves the edge's direction, and so the normal, alone. A half matte draws
+*exactly* the half-radius iris, and a black matte is the same exact identity Outer radius 0
+already is.
 
 ### 3.72 Card wipe — the frame as a grid of cards, turning away
 
@@ -4396,17 +4510,27 @@ Five decisions:
   camera it does not have. The import reports all of it. **Back Layer, Card Scale, Position
   Jitter and Rotation Jitter are not carried either**; a card turns to nothing, which is AE's
   own picture when the back layer is empty.
-- **Flip order's Gradient is not carried**, and the reason is §3.68's test. AE picks the order
-  from a gradient *layer*; the only layer row this effect has is the universal Matte (§2.6),
-  and a card wipe plainly wants to say "only over the sky" as well as "in this order" — two
-  things about *where*, which one row cannot say. Randomness plus Seed covers the intent that
-  is left, and a gradient order can arrive later on a row of its own without moving anything.
+- **Flip order's Gradient needs no row of its own** (revised by K-429). It used to be
+  declined here on §3.68's test: AE picks the order from a gradient *layer*, the only layer
+  row this effect has is the universal Matte (§2.6), and a card wipe wanted to say "only over
+  the sky" as well as "in this order" — two things about *where*, which one row could not
+  say. The owner's rule for mattes settled which of the two the row says: the Matte scales
+  **Completion** per pixel, so painting a ramp on it *is* the gradient order, and "only over
+  the sky" is what a mask on the layer is for. Randomness plus Seed still covers a shuffle
+  nobody wants to paint.
 
 A card never reads outside its own cell, so nothing bleeds between cards; at shallow angles the
 near edge would reach about 6 % past the cell and is cropped there, which is what drawing each
 card in its own frame costs. Premultiplied (§2.2). `cheap` cost, `FullFrame` ROI (one column is
 a card the width of the frame). Mix 0 and Completion 0 are both the bit-exact identity, and
 Completion 100 is the exactly empty frame.
+
+**The Matte scales Completion per pixel (K-429, §2.6):** the cards have turned further where
+the matte is bright. Note the grain — it is asked per *pixel*, not per card, so a matte can
+leave one half of a card standing while the other half has flipped away, and it is read at
+the **destination** pixel, where the card's point is standing rather than where the picture
+was fetched from (K-427's rule for every gather). Painting a ramp on the matte is therefore
+AE's **gradient flip order**, which is what settled the fourth decision above.
 
 ---
 

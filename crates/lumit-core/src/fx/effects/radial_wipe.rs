@@ -24,6 +24,14 @@ pub const WIPE_OPTIONS: &[&str] = &["Clockwise", "Anticlockwise", "Both"];
     cost = Cheap,
     roi = Exact,
     premultiplied = true,
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Completion per pixel: the hand has swept further where the \
+         matte is bright, so a grey ramp opens the wedge unevenly and a \
+         black matte holds the frame back",
+    ),
 )]
 pub struct RadialWipe {
     /// Where the hand pivots, px@comp (K-260: point parameters are PIXELS). The

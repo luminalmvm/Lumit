@@ -1026,7 +1026,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             &MarkerContext::NONE
         )
         .packed(),
-        (0.5, 16, 1.0, MbView::Rendered, MbQuality::Normal)
+        (0.5, 16, 1.0, MbView::Rendered, MbQuality::Normal, 32.0)
     );
     // A custom stack: 90° halves the streak; Samples rounds and clamps.
     let mut e = instantiate("motion_blur").unwrap();
@@ -1047,7 +1047,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             &MarkerContext::NONE
         )
         .packed(),
-        (0.25, 8, 0.5, MbView::Rendered, MbQuality::Normal)
+        (0.25, 8, 0.5, MbView::Rendered, MbQuality::Normal, 32.0)
     );
     // The View row resolves the diagnostic choices (FX-19).
     let mut e = instantiate("motion_blur").unwrap();
@@ -1056,7 +1056,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
             p.value = EffectValue::Choice(2);
         }
     }
-    let (.., view, quality) = resolve_migrated::<effects::motion_blur::MotionBlur>(
+    let (_, _, _, view, quality, _) = resolve_migrated::<effects::motion_blur::MotionBlur>(
         &[e],
         0.0,
         1000.0,
@@ -1079,7 +1079,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
                 p.value = EffectValue::Choice(stored);
             }
         }
-        let (.., q) = resolve_migrated::<effects::motion_blur::MotionBlur>(
+        let (_, _, _, _, q, _) = resolve_migrated::<effects::motion_blur::MotionBlur>(
             &[e],
             0.0,
             1000.0,
@@ -9785,6 +9785,9 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            // What a full channel of a Motion vectors layer means, in pixels
+            // of movement (K-429).
+            ("motion_blur", "vector_scale"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -10565,19 +10568,46 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
-        // The Matte key opts out too (K-425, the owner's rule for mattes): a
-        // keyer's subject is the picture it keys, and a strength matte over it
-        // would be a garbage matte, which is a mask's job. It is the one image
-        // effect that carries no row.
-        if s.match_name == "matte_key" {
+        // **Two image effects opt out** (K-425 and K-429, the owner's rule for
+        // mattes), and each has its own reason.
+        //
+        // The **Matte key**: a keyer's subject is the picture it keys, and a
+        // strength matte over a key is a garbage matte, which is a mask's job.
+        //
+        // **Set matte**: every Matte row answers "how much of me happens here",
+        // and this effect has no answer to give — what it takes from another
+        // layer is the coverage itself, which is the whole effect rather than
+        // an amount of one. The row it shows is its own source picker, on the
+        // ordinary auxiliary-layer carriage that `layer_input` is the predicate
+        // for.
+        //
+        // Anything else that wants to opt out is argued for here, in these
+        // words, before it may.
+        if matches!(s.match_name, "matte_key" | "set_matte") {
             assert_eq!(
                 s.matte,
                 MatteRole::None,
-                "the Matte key carries no matte row"
+                "{} carries no matte row",
+                s.match_name
             );
             assert!(
-                !s.params.iter().any(|p| p.id == MATTE_PARAM),
-                "the Matte key must not carry a matte row"
+                !s.matte_channel(),
+                "{} — no matte row means no injected Channel row either",
+                s.match_name
+            );
+            // The Matte key carries no such row at all; Set matte's is its own,
+            // and is the auxiliary layer the render threads to it.
+            assert_eq!(
+                s.layer_input().is_some(),
+                s.match_name == "set_matte",
+                "{} — Set matte keeps its source on the layer-input carriage",
+                s.match_name
+            );
+            assert_eq!(
+                s.params.iter().any(|p| p.id == MATTE_PARAM),
+                s.match_name == "set_matte",
+                "{} — only Set matte declares a row under that id, and it is its own",
+                s.match_name
             );
             continue;
         }
@@ -10598,7 +10628,13 @@ fn every_effect_carries_a_matte_row() {
         // flare and Light wrap keep the dissolve there, because each adds a
         // linear amount to the picture and scaling it IS the dissolve; Fill,
         // Gradient, Fractal noise, Beam, Mosaic and Find edges have no amount
-        // of their own to scale.
+        // of their own to scale. Temporal and Transition claim it once more
+        // (K-429): Echo's Decay, both motion blurs' Shutter angle, and every
+        // wipe's Completion — the Iris wipe scaling its radius instead, having
+        // no Completion to scale (§3.71: the radius IS the transition).
+        // Posterize time keeps the dissolve, holding a time rather than drawing
+        // an amount, and so do Transform and Broadcast safe, because scaling
+        // their amount IS that dissolve.
         let claims = matches!(
             s.match_name,
             "dof"
@@ -10620,7 +10656,6 @@ fn every_effect_carries_a_matte_row() {
                 | "blur"
                 | "glow"
                 | "turbulent_displace"
-                | "set_matte"
                 | "displacement_map"
                 | "directional_blur"
                 | "radial_blur"
@@ -10650,6 +10685,14 @@ fn every_effect_carries_a_matte_row() {
                 | "median"
                 | "emboss"
                 | "texturize"
+                | "echo"
+                | "motion_blur"
+                | "accumulation_mb"
+                | "linear_wipe"
+                | "radial_wipe"
+                | "venetian_blinds"
+                | "iris_wipe"
+                | "card_wipe"
         );
         assert_eq!(
             !s.matte.generic(),
@@ -10718,14 +10761,12 @@ fn every_effect_carries_a_matte_row() {
             s.match_name
         );
         // The Channel choice (K-425) rides beside the injected pair on every
-        // effect that does not pick its matte's channels itself. The four that
+        // effect that does not pick its matte's channels itself. The three that
         // do — Depth of field (`depth_channel`), Displacement map (its two
-        // channel choices), Set matte (`channel`) and the Lens flare (source
-        // detection) — carry none, and the seam leaves their matte raw.
-        let owns_channel = matches!(
-            s.match_name,
-            "dof" | "displacement_map" | "set_matte" | "lens_flare"
-        );
+        // channel choices) and the Lens flare (source detection) — carry none,
+        // and the seam leaves their matte raw. Set matte used to be a fourth,
+        // and carries no Matte row at all now (K-429).
+        let owns_channel = matches!(s.match_name, "dof" | "displacement_map" | "lens_flare");
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(
             channel.is_some(),
@@ -12075,5 +12116,83 @@ fn the_camera_track_declares_a_handle_not_a_look() {
     for (n, entry) in DENSITY.iter().enumerate() {
         assert!(entry > &previous, "density {n} is not denser than the last");
         previous = *entry;
+    }
+}
+
+/// **A project saved before an effect dropped a parameter still loads** (K-258,
+/// K-429). The Matte key gave its Matte row up when K-425 ruled a keyer needs
+/// none, and Set matte gave the universal row up when K-429 ruled the effect
+/// that *is* a matte carries none — so a save made before either carries three
+/// ids the schema no longer declares.
+///
+/// The forward-migration walk only ever *appends* what a schema has grown, and
+/// that is exactly what makes it tolerant here: it never asks whether a stored
+/// row is still declared, so a row nobody declares any more is carried along
+/// untouched. It is inert on the way out too — the panel draws the schema, and
+/// `set_value` answers to declared ids — so the save round-trips rather than
+/// being quietly rewritten. That is deliberate, and it is the same courtesy
+/// Gaussian blur's unread `mode` and Posterize time's unread `scope` already
+/// get; `migrate_lens_flare_background` is the other shape, for a value that
+/// had somewhere new to *go*, and neither of these has.
+#[test]
+fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
+    use crate::model::{EffectParam, EffectValue};
+    for name in ["matte_key", "set_matte"] {
+        let mut e = instantiate(name).expect("instantiates");
+        // Strip whatever the fresh instance wrote under those ids, then put
+        // back what a project saved before the drop would hold.
+        e.params
+            .retain(|p| !p.id.starts_with(crate::fx::MATTE_PARAM));
+        for (id, value) in [
+            (crate::fx::MATTE_PARAM, EffectValue::Layer(None)),
+            (crate::fx::MATTE_INVERT_PARAM, EffectValue::Bool(true)),
+            (crate::fx::MATTE_CHANNEL_PARAM, EffectValue::Choice(3)),
+        ] {
+            e.params.push(EffectParam {
+                id: id.to_owned(),
+                value,
+                extra: serde_json::Map::new(),
+            });
+        }
+        let mut list = vec![e];
+        crate::fx::backfill_builtin_params(&mut list);
+        let e = &list[0];
+
+        // Every row the schema declares is present, at a readable value.
+        let s = BUILTIN_DEFS.get(name).expect("declared").schema();
+        for p in s.params {
+            assert!(
+                e.param(p.id).is_some(),
+                "{name}: the backfill left {} missing",
+                p.id
+            );
+        }
+        // The rows the schema dropped are still carried, untouched — a save is
+        // a save, and a load that silently threw part of one away would be the
+        // worse failure of the two.
+        assert_eq!(
+            e.param(crate::fx::MATTE_INVERT_PARAM),
+            Some(&EffectValue::Bool(true)),
+            "{name}: the stored Invert was thrown away"
+        );
+        assert_eq!(
+            e.param(crate::fx::MATTE_CHANNEL_PARAM),
+            Some(&EffectValue::Choice(3)),
+            "{name}: the dropped Channel was rewritten"
+        );
+
+        // And it resolves: the stack builds, the effect keeps its op, and
+        // nothing about the undeclared rows reaches it.
+        let (ids, ops) = super::resolve_stack_temporal_named(
+            &list,
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        assert_eq!(ids.len(), 1, "{name}: the effect resolved to no op");
+        assert_eq!(ops.len(), 1, "{name}: the effect resolved to no op");
     }
 }

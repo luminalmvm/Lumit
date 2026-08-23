@@ -23,6 +23,14 @@ use lumit_fx_macros::Effect;
     // "less of this pixel" — all four channels, no round trip (§3.34's
     // reasoning).
     premultiplied = true,
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Completion per pixel: the wipe is further along where the \
+         matte is bright, so a grey ramp is a gradient wipe and a black \
+         matte holds the frame back",
+    ),
 )]
 pub struct LinearWipe {
     /// Where the wipe line pivots, px@comp (K-260: point parameters are PIXELS).

@@ -160,6 +160,10 @@ impl FxEngine {
                         },
                         count: None,
                     },
+                    // The Matte (K-429), on this layout rather than the shared
+                    // one because Motion blur has three sampled inputs of its
+                    // own before it gets to a matte.
+                    texture_entry(5),
                 ],
             });
         let mb_pl = ctx
@@ -365,6 +369,8 @@ impl FxEngine {
         let echo_mod = module(include_str!("../fx_echo.wgsl"), "fx-echo");
         let motion_blur_mod = module(include_str!("../fx_motionblur.wgsl"), "fx-motion-blur");
         let mb_tilemax_mod = module(include_str!("../fx_mb_tilemax.wgsl"), "fx-mb-tilemax");
+        let accum_shutter_mod =
+            module(include_str!("../fx_accum_shutter.wgsl"), "fx-accum-shutter");
         let datamosh_mod = module(include_str!("../fx_datamosh.wgsl"), "fx-datamosh");
         let dof_mod = module(include_str!("../fx_dof.wgsl"), "fx-dof");
         let adjust_mod = module(include_str!("../fx_adjust.wgsl"), "fx-adjust");
@@ -471,6 +477,7 @@ impl FxEngine {
         let block_glitch = pipeline(&block_glitch_mod, "fx-block-glitch", "block_glitch");
         let scanlines = pipeline(&scanlines_mod, "fx-scanlines", "scanlines");
         let echo_accumulate = pipeline(&echo_mod, "fx-echo-accumulate", "echo_accumulate");
+        let accum_shutter = pipeline(&accum_shutter_mod, "fx-accum-shutter", "accum_shutter");
         let echo_mix = pipeline(&echo_mod, "fx-echo-mix", "echo_mix");
         let motion_blur = ctx
             .device
@@ -489,6 +496,19 @@ impl FxEngine {
                 layout: Some(&mb_tile_pl),
                 module: &mb_tilemax_mod,
                 entry_point: Some("mb_tilemax"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+        // The supplied Motion vectors layer read as a flow field (K-429): the
+        // same layout, since it is also "a picture in, an rgba32float field
+        // out", and so no seam of its own.
+        let mb_vectors = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-mb-vectors"),
+                layout: Some(&mb_tile_pl),
+                module: &mb_tilemax_mod,
+                entry_point: Some("mb_vectors"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -651,9 +671,11 @@ impl FxEngine {
             block_glitch,
             scanlines,
             echo_accumulate,
+            accum_shutter,
             echo_mix,
             motion_blur,
             mb_tilemax,
+            mb_vectors,
             datamosh,
             dof,
             adjust,

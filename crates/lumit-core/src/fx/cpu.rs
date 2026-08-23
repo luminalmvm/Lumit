@@ -2742,6 +2742,33 @@ pub fn echo(
     mode: u32,
     mix: f32,
 ) -> Vec<f32> {
+    echo_matted(current, neighbours, weights, mode, mix, &[])
+}
+
+/// [`echo`] driven by a matte (K-429, docs/08 §2.6): each pixel's matte
+/// strength scales its **Decay** — the trail dies away faster where the matte
+/// is dark and reaches its full length where it is white, so the ghosts are
+/// genuinely shorter rather than a full-length trail faded back.
+///
+/// `weights[i]` is still the whole-frame `decay^(i+1)` the host computed, and
+/// its being above zero is still what decides whether the tap runs at all (the
+/// GPU dispatches one pass per live tap, and a matte can only shorten a trail,
+/// never lengthen one). What this adds is the per-pixel factor: scaling Decay
+/// by `k` scales tap *i* by `k^(i+1)`, so the tap's weight is `weights[i]`
+/// multiplied by `k` exactly `i + 1` times — the running product, spelled the
+/// same way in `fx_echo.wgsl`, and exactly `weights[i]` at `k = 1`. A tap whose
+/// weight the matte has taken to zero is **skipped**, the same `continue` a
+/// dead tap already takes, because a zero-weight tap is not a no-op under every
+/// combine mode (Multiply by nothing is black). An empty matte reads `k = 1`
+/// everywhere and is the unmatted path to the byte (K-258).
+pub fn echo_matted(
+    current: &[f32],
+    neighbours: &[(i32, &[f32])],
+    weights: [f32; 16],
+    mode: u32,
+    mix: f32,
+    matte: &[f32],
+) -> Vec<f32> {
     let mut out = current.to_vec();
     for (px_idx, o) in out.chunks_exact_mut(4).enumerate() {
         let mut acc = [
@@ -2750,6 +2777,7 @@ pub fn echo(
             current[px_idx * 4 + 2],
             current[px_idx * 4 + 3],
         ];
+        let k = matte_strength(matte, px_idx * 4);
         for (i, &weight) in weights.iter().enumerate() {
             if weight <= 0.0 {
                 continue;
@@ -2758,6 +2786,13 @@ pub fn echo(
             let Some((_, buf)) = neighbours.iter().find(|(oo, _)| *oo == offset) else {
                 continue;
             };
+            let mut weight = weight;
+            for _ in 0..=i {
+                weight *= k;
+            }
+            if weight <= 0.0 {
+                continue;
+            }
             let base = px_idx * 4;
             let n = [
                 buf[base] * weight,
@@ -3140,6 +3175,76 @@ pub fn motion_blur(
     view: MbView,
     quality: MbQuality,
 ) {
+    motion_blur_matted(
+        rgba,
+        w,
+        h,
+        u,
+        v,
+        conf,
+        shutter_frac,
+        samples,
+        mix,
+        view,
+        quality,
+        &[],
+    );
+}
+
+/// The per-pixel motion carried by a **Motion vectors** layer (K-429, docs/08
+/// §3.2), turned into the same `(u, v, conf)` field the flow engine measures.
+///
+/// **In plain terms.** A game engine, a 3D renderer or a plugin can output the
+/// motion it already knows about as a picture: red is sideways movement, green
+/// is up-and-down, and mid-grey is standing still. This reads that picture.
+/// `scale` is how many pixels a full channel means, so `(r − ½)·scale` is the
+/// horizontal motion and `(g − ½)·scale` the vertical. Confidence is 1
+/// everywhere, because a supplied vector is not a guess the way a measured one
+/// is — nothing was matched, so nothing can have failed to match.
+///
+/// `layer` is premultiplied linear RGBA at the working raster. A layer shorter
+/// than the frame leaves the rest still: degrade, never fault
+/// (14-ENGINEERING-RULES §4).
+#[must_use]
+pub fn motion_vectors_field(layer: &[f32], n: usize, scale: f32) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let mut u = vec![0.0f32; n];
+    let mut v = vec![0.0f32; n];
+    for i in 0..n {
+        if let Some(px) = layer.get(i * 4..i * 4 + 2) {
+            u[i] = (px[0] - 0.5) * scale;
+            v[i] = (px[1] - 0.5) * scale;
+        }
+    }
+    (u, v, vec![1.0f32; n])
+}
+
+/// [`motion_blur`] driven by a matte (K-429, docs/08 §2.6): each pixel's matte
+/// strength scales its **Shutter angle** — the streak is genuinely shorter
+/// where the matte is dark, gathering from nearer along the motion, rather
+/// than a full-length streak faded back over a sharp picture. It is read at
+/// the destination pixel and used everywhere the shutter is: for this pixel's
+/// own vector, for the neighbourhood's dominant sweep, and at every tap where
+/// the sample's reach is worked out, so both sides of the weighting still
+/// speak the same language about how far a thing moves.
+///
+/// An empty matte reads `k = 1` everywhere and multiplies the shutter by one,
+/// which is the unmatted path to the byte (K-258). The diagnostic views are
+/// untouched: they show the field, and the field is not the shutter.
+#[allow(clippy::too_many_arguments)]
+pub fn motion_blur_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    u: &[f32],
+    v: &[f32],
+    conf: &[f32],
+    shutter_frac: f32,
+    samples: i32,
+    mix: f32,
+    view: MbView,
+    quality: MbQuality,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let cap = samples.max(1);
     let spacing = quality.tap_spacing();
@@ -3150,12 +3255,13 @@ pub fn motion_blur(
     // `lend` is the *borrowed* motion (smooth, consensus-driven), never the
     // neighbour-max — see [`tile_bilinear`] for why those must not be the same
     // number.
-    let blended = |uu: f32, vv: f32, c: f32, lend: (f32, f32)| {
+    // `sf` is this pixel's shutter fraction, which the matte scales (K-429).
+    let blended = |uu: f32, vv: f32, c: f32, lend: (f32, f32), sf: f32| {
         let c = c.clamp(0.0, 1.0);
         let borrow = MB_DOM_TEMPER * (1.0 - c);
         (
-            lend.0 * shutter_frac * borrow + uu * shutter_frac * c,
-            lend.1 * shutter_frac * borrow + vv * shutter_frac * c,
+            lend.0 * sf * borrow + uu * sf * c,
+            lend.1 * sf * borrow + vv * sf * c,
         )
     };
     for y in 0..h {
@@ -3167,11 +3273,14 @@ pub fn motion_blur(
             // what the neighbourhood agrees it is doing (what to borrow).
             let dom = neighbour_max(&tiles, tiles_x, tiles_y, x / MB_TILE, y / MB_TILE);
             let lend = tile_bilinear(&tiles, tiles_x, tiles_y, x, y);
+            // The matte scales Shutter angle per pixel (K-429), read at the
+            // destination and spent everywhere the shutter is.
+            let sf = shutter_frac * matte_strength(matte, i);
             let out: [f32; 4] = match view {
                 MbView::Rendered => {
                     let pos = (x as f32 + 0.5, y as f32 + 0.5);
-                    let sv = blended(u[idx], v[idx], conf[idx], lend);
-                    let dom_s = (dom.0 * shutter_frac, dom.1 * shutter_frac);
+                    let sv = blended(u[idx], v[idx], conf[idx], lend, sf);
+                    let dom_s = (dom.0 * sf, dom.1 * sf);
                     let len_sv = (sv.0 * sv.0 + sv.1 * sv.1).sqrt();
                     let len_dom = (dom_s.0 * dom_s.0 + dom_s.1 * dom_s.1).sqrt();
                     // Adaptive taps (§4): enough to keep them `spacing` apart
@@ -3196,7 +3305,7 @@ pub fn motion_blur(
                             let (mx, my) = (pos.0 + 0.5 * t * sv.0, pos.1 + 0.5 * t * sv.1);
                             let (mu, mv) = bilinear_uv(u, v, w, h, mx, my);
                             let mc = bilinear_scalar(conf, w, h, mx, my);
-                            blended(mu, mv, mc, lend)
+                            blended(mu, mv, mc, lend, sf)
                         } else {
                             sv
                         };
@@ -3207,7 +3316,7 @@ pub fn motion_blur(
                         // that lets a fast object reach out over a still one.
                         let (tu, tv) = bilinear_uv(u, v, w, h, sx, sy);
                         let tc = bilinear_scalar(conf, w, h, sx, sy);
-                        let tap = blended(tu, tv, tc, lend);
+                        let tap = blended(tu, tv, tc, lend, sf);
                         let len_tap = (tap.0 * tap.0 + tap.1 * tap.1).sqrt();
                         let wt = mb_cone(d, len_tap)
                             + mb_cone(d, len_sv)
@@ -5513,11 +5622,22 @@ pub struct LinearWipeParams {
 /// The edge travels half a feather *past* each end of the frame, which is what
 /// makes Completion 0 keep the whole frame exactly and 100 remove it exactly. A
 /// wipe that cannot fully finish is not a transition.
+///
+/// `completion` is passed rather than read off `p` because the matte scales it
+/// per pixel (K-429): the wipe's own Completion for an unmatted pixel, and
+/// [`matte_toward`]`(p.completion, 0, k)` where a matte says otherwise.
 #[must_use]
-pub fn linear_wipe_keep(px: f32, py: f32, w: f32, h: f32, p: &LinearWipeParams) -> f32 {
+pub fn linear_wipe_keep(
+    px: f32,
+    py: f32,
+    w: f32,
+    h: f32,
+    completion: f32,
+    p: &LinearWipeParams,
+) -> f32 {
     let d = (px - p.centre[0]) * p.normal[0] + (py - p.centre[1]) * p.normal[1];
     let extent = 0.5 * ((w * p.normal[0]).abs() + (h * p.normal[1]).abs());
-    let edge = -(extent + p.band * 0.5) + p.completion * (2.0 * extent + p.band);
+    let edge = -(extent + p.band * 0.5) + completion * (2.0 * extent + p.band);
     ((d - edge) / p.band + 0.5).clamp(0.0, 1.0)
 }
 
@@ -5525,11 +5645,21 @@ pub fn linear_wipe_keep(px: f32, py: f32, w: f32, h: f32, p: &LinearWipeParams) 
 /// is scaled by its kept fraction, all four channels, which is the
 /// premultiplied form of "less of this pixel".
 pub fn linear_wipe(rgba: &mut [f32], w: u32, h: u32, p: &LinearWipeParams) {
+    linear_wipe_matted(rgba, w, h, p, &[]);
+}
+
+/// [`linear_wipe`] driven by a matte (K-429, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Completion toward 0** ([`matte_toward`]) before the
+/// edge is placed, so the matte's own grey is where the wipe has got to — a
+/// gradient wipe, which a strength dissolve cannot produce. An empty matte is
+/// the unmatted path to the byte (K-258).
+pub fn linear_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &LinearWipeParams, matte: &[f32]) {
     let (fw, fh) = (w as f32, h as f32);
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let keep = linear_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, p);
+            let completion = matte_toward(p.completion, 0.0, matte_strength(matte, d));
+            let keep = linear_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, completion, p);
             // Written as `1 − mix·(1 − keep)` rather than `(1−mix) + keep·mix`
             // so a fully kept pixel scales by *exactly* 1 at any Mix: the
             // second form rounds twice and Completion 0 would stop being the
@@ -5568,8 +5698,11 @@ pub struct RadialWipeParams {
 /// The wrap into −π..π uses `floor(x + ½)` and **not** `round`: Rust rounds
 /// halves away from zero, WGSL rounds them to even, and one pixel landing on the
 /// wrong side of the wedge is exactly what §1.6 exists to catch.
+///
+/// `completion` is passed rather than read off `p`, for [`linear_wipe_keep`]'s
+/// reason (K-429).
 #[must_use]
-pub fn radial_wipe_keep(px: f32, py: f32, p: &RadialWipeParams) -> f32 {
+pub fn radial_wipe_keep(px: f32, py: f32, completion: f32, p: &RadialWipeParams) -> f32 {
     use std::f32::consts::{PI, TAU};
     let dx = px - p.centre[0];
     let dy = py - p.centre[1];
@@ -5581,7 +5714,7 @@ pub fn radial_wipe_keep(px: f32, py: f32, p: &RadialWipeParams) -> f32 {
     let band = (p.feather / r.max(1.0)).clamp(1e-4, PI);
     // The wedge's half-width, with a half-band lead-in at each end so
     // Completion 0 and 100 are the exact identity and the exact empty frame.
-    let hw = p.completion * (PI + band) - band * 0.5;
+    let hw = completion * (PI + band) - band * 0.5;
     let mid = p.start + hw * p.dir;
     let mut delta = phi - mid;
     delta -= TAU * (delta / TAU + 0.5).floor();
@@ -5590,10 +5723,18 @@ pub fn radial_wipe_keep(px: f32, py: f32, p: &RadialWipeParams) -> f32 {
 
 /// Radial wipe (docs/08 §3.47) — the CPU reference and §1.6 oracle.
 pub fn radial_wipe(rgba: &mut [f32], w: u32, h: u32, p: &RadialWipeParams) {
+    radial_wipe_matted(rgba, w, h, p, &[]);
+}
+
+/// [`radial_wipe`] driven by a matte (K-429, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Completion toward 0** ([`matte_toward`]) before the
+/// wedge is opened. An empty matte is the unmatted path to the byte (K-258).
+pub fn radial_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &RadialWipeParams, matte: &[f32]) {
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let keep = radial_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, p);
+            let completion = matte_toward(p.completion, 0.0, matte_strength(matte, d));
+            let keep = radial_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, completion, p);
             // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
@@ -5632,11 +5773,20 @@ pub struct VenetianBlindsParams {
 ///
 /// The fold is `floor(x + ½)` and **not** `round`, for [`radial_wipe_keep`]'s
 /// reason: Rust rounds halves away from zero and WGSL rounds them to even.
+/// `completion` is passed rather than read off `p`, for [`linear_wipe_keep`]'s
+/// reason (K-429).
 #[must_use]
-pub fn venetian_blinds_keep(px: f32, py: f32, w: f32, h: f32, p: &VenetianBlindsParams) -> f32 {
+pub fn venetian_blinds_keep(
+    px: f32,
+    py: f32,
+    w: f32,
+    h: f32,
+    completion: f32,
+    p: &VenetianBlindsParams,
+) -> f32 {
     let d = (px - w * 0.5) * p.normal[0] + (py - h * 0.5) * p.normal[1];
     let u = d - p.period * (d / p.period + 0.5).floor();
-    let hw = p.completion * (p.period * 0.5 + p.band) - p.band * 0.5;
+    let hw = completion * (p.period * 0.5 + p.band) - p.band * 0.5;
     ((u.abs() - hw) / p.band + 0.5).clamp(0.0, 1.0)
 }
 
@@ -5644,11 +5794,26 @@ pub fn venetian_blinds_keep(px: f32, py: f32, w: f32, h: f32, p: &VenetianBlinds
 /// picture is scaled by its kept fraction, all four channels, which is the
 /// premultiplied form of "less of this pixel".
 pub fn venetian_blinds(rgba: &mut [f32], w: u32, h: u32, p: &VenetianBlindsParams) {
+    venetian_blinds_matted(rgba, w, h, p, &[]);
+}
+
+/// [`venetian_blinds`] driven by a matte (K-429, docs/08 §2.6): each pixel's
+/// matte strength pulls its **Completion toward 0** ([`matte_toward`]) before
+/// the gap in its slat is opened, so the blinds stand further open where the
+/// matte is bright. An empty matte is the unmatted path to the byte (K-258).
+pub fn venetian_blinds_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &VenetianBlindsParams,
+    matte: &[f32],
+) {
     let (fw, fh) = (w as f32, h as f32);
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let keep = venetian_blinds_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, p);
+            let completion = matte_toward(p.completion, 0.0, matte_strength(matte, d));
+            let keep = venetian_blinds_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, completion, p);
             // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
@@ -5691,10 +5856,18 @@ pub struct IrisWipeParams {
 /// straight edge the host solved. What comes out is a **true perpendicular
 /// distance in pixels**, which is what lets Feather be a width rather than an
 /// angle.
+///
+/// `k` is the matte's strength at this pixel (K-429), and it scales the whole
+/// polygon about its centre: the sector's solved vertex is the only place a
+/// radius survives into this expression, and scaling it scales the outer and
+/// inner radii together, leaving the edge's direction — and therefore the
+/// normal — untouched. `k = 1` multiplies the vertex by one and is the
+/// unmatted expression to the bit; `k = 0` is a polygon of no radius, which is
+/// the same exact identity Outer radius 0 already is.
 #[must_use]
-pub fn iris_wipe_keep(px: f32, py: f32, p: &IrisWipeParams) -> f32 {
+pub fn iris_wipe_keep(px: f32, py: f32, k: f32, p: &IrisWipeParams) -> f32 {
     use std::f32::consts::PI;
-    if !p.active {
+    if !p.active || k <= 0.0 {
         return 1.0;
     }
     let dx = px - p.centre[0];
@@ -5706,16 +5879,27 @@ pub fn iris_wipe_keep(px: f32, py: f32, p: &IrisWipeParams) -> f32 {
     // `floor(x + ½)`, never `round` — [`radial_wipe_keep`]'s reason.
     let a = (phi - p.period * (phi / p.period + 0.5).floor()).abs();
     let point = [r * a.cos(), r * a.sin()];
-    let dist = (point[0] - p.vertex[0]) * p.normal[0] + (point[1] - p.vertex[1]) * p.normal[1];
+    let dist =
+        (point[0] - p.vertex[0] * k) * p.normal[0] + (point[1] - p.vertex[1] * k) * p.normal[1];
     (dist / p.band + 0.5).clamp(0.0, 1.0)
 }
 
 /// Iris wipe (docs/08 §3.71) — the CPU reference and §1.6 oracle.
 pub fn iris_wipe(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams) {
+    iris_wipe_matted(rgba, w, h, p, &[]);
+}
+
+/// [`iris_wipe`] driven by a matte (K-429, docs/08 §2.6). This is the one
+/// transition with no Completion — **the radius is the transition** (§3.71) —
+/// so the matte scales *that* instead: the iris opens wide where the matte is
+/// white and stays shut where it is black, which is the same sentence the
+/// other four wipes say about Completion. An empty matte is the unmatted path
+/// to the byte (K-258).
+pub fn iris_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams, matte: &[f32]) {
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let keep = iris_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, p);
+            let keep = iris_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, matte_strength(matte, d), p);
             // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
@@ -5778,8 +5962,14 @@ pub fn card_span(x: i32, len: i32, n: i32) -> (i32, i32) {
 
 /// How far the card at `(i, j)` has turned, 0 (not started) to 1 (gone) —
 /// written once so [`card_wipe`] and the WGSL twin cannot disagree.
+///
+/// `completion` is passed rather than read off `p`, for [`linear_wipe_keep`]'s
+/// reason (K-429). Note what that means here: the turn is asked per *pixel*,
+/// not per card, so a matte can leave one half of a card standing while the
+/// other half has flipped away — the grain of the matte, not the grain of the
+/// grid.
 #[must_use]
-pub fn card_wipe_progress(i: i32, j: i32, p: &CardWipeParams) -> f32 {
+pub fn card_wipe_progress(i: i32, j: i32, completion: f32, p: &CardWipeParams) -> f32 {
     let along = if p.order_axis == 0 {
         (i as f32 + 0.5) / p.grid[0] as f32
     } else {
@@ -5787,7 +5977,7 @@ pub fn card_wipe_progress(i: i32, j: i32, p: &CardWipeParams) -> f32 {
     };
     let base = p.order_bias + p.order_scale * along;
     let shuffled = base + (super::noise::hash01(p.seed, 0, i, j, 0) - base) * p.randomness;
-    ((p.completion - shuffled * p.one_minus_width) * p.inv_width).clamp(0.0, 1.0)
+    ((completion - shuffled * p.one_minus_width) * p.inv_width).clamp(0.0, 1.0)
 }
 
 /// Card wipe (docs/08 §3.72) — the CPU reference and §1.6 oracle.
@@ -5801,6 +5991,17 @@ pub fn card_wipe_progress(i: i32, j: i32, p: &CardWipeParams) -> f32 {
 /// the exactly empty frame — both ends are *tested for* rather than arrived at
 /// through a cosine, because `cos(½π)` in `f32` is 6·10⁻⁸ and not zero.
 pub fn card_wipe(rgba: &mut [f32], w: u32, h: u32, p: &CardWipeParams) {
+    card_wipe_matted(rgba, w, h, p, &[]);
+}
+
+/// [`card_wipe`] driven by a matte (K-429, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Completion toward 0** ([`matte_toward`]) before the
+/// card's turn is worked out, so the flip travels across the frame the way the
+/// matte's grey does. Read at the **destination** pixel — where the card's
+/// point is standing, not where the picture was fetched from — for the reason
+/// every distortion reads it there (K-427). An empty matte is the unmatted
+/// path to the byte (K-258).
+pub fn card_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &CardWipeParams, matte: &[f32]) {
     use std::f32::consts::PI;
     let (wi, hi) = (w as i32, h as i32);
     if wi <= 0 || hi <= 0 {
@@ -5817,7 +6018,8 @@ pub fn card_wipe(rgba: &mut [f32], w: u32, h: u32, p: &CardWipeParams) {
             let (x0, x1) = card_span(x, wi, cols);
             let i = (x * cols) / wi;
             let o = ((y as i64 * i64::from(wi) + i64::from(x)) * 4) as usize;
-            let t = card_wipe_progress(i, j, p);
+            let completion = matte_toward(p.completion, 0.0, matte_strength(matte, o));
+            let t = card_wipe_progress(i, j, completion, p);
             let v = if t <= 0.0 {
                 [src[o], src[o + 1], src[o + 2], src[o + 3]]
             } else if t >= 1.0 {

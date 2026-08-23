@@ -22,10 +22,28 @@ struct Params {
     // 10 = Difference, 11 = Exclusion, 12 = Subtract, 13 = Divide. Unused by
     // echo_mix.
     mode: u32,
-    _pad0: f32,
-    _pad1: f32,
+    // 1 = the matte scales Decay per pixel (K-429). Unused by echo_mix.
+    matte_on: f32,
+    // Which tap this dispatch is folding in: 0 for the echo one frame back,
+    // 1 for two frames back, and so on. It is the exponent the per-pixel
+    // decay is raised to, and it is why the matte can be read here at all --
+    // the host runs one pass per tap, so the pass knows which it is.
+    tap: i32,
 }
 @group(0) @binding(3) var<uniform> params: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // W3C soft-light D(d) helper (== the compositor's `soft_light_d`).
 fn echo_soft_light_d(d: vec4<f32>) -> vec4<f32> {
@@ -85,7 +103,25 @@ fn echo_accumulate(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let p = vec2<i32>(i32(gid.x), i32(gid.y));
     let a = textureLoad(src, p, 0);
-    let n = textureLoad(other, p, 0) * params.weight;
+    // The matte scales Decay per pixel (K-429): scaling decay by k scales tap
+    // i by k^(i+1), so the whole-frame weight is multiplied by k exactly
+    // tap + 1 times — the same running product cpu::echo_matted spells, and
+    // exactly the whole-frame weight at k = 1. A tap the matte has taken to
+    // zero is SKIPPED rather than folded in at zero, because a zero-weight tap
+    // is not a no-op under every combine mode (Multiply by nothing is black),
+    // which is the same `continue` the oracle takes.
+    var weight = params.weight;
+    if (params.matte_on != 0.0) {
+        let k = matte_k(p);
+        for (var j = 0; j <= params.tap; j++) {
+            weight = weight * k;
+        }
+        if (weight <= 0.0) {
+            textureStore(dst, p, a);
+            return;
+        }
+    }
+    let n = textureLoad(other, p, 0) * weight;
     textureStore(dst, p, echo_blend(params.mode, a, n));
 }
 

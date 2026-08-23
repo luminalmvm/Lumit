@@ -385,17 +385,18 @@ fn flow_and_blur_frame_cost() {
                 mix: 1.0,
                 view: MbView::Rendered.code(),
                 quality: quality.code(),
+                vector_scale: 0.0,
             };
             // Waiting on the device — not reading the picture back — is what
             // isolates the kernel: a 4k readback costs an order of magnitude
             // more than the blur, so timing one against the other measures the
             // copy and calls it the shader.
-            let warm = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+            let warm = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
             drop(readback_linear_f32(&ctx, &warm, w, h)); // shaders, pipeline
             let blurs = 20u32;
             let started = Instant::now();
             for _ in 0..blurs {
-                let _ = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+                let _ = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
                 ctx.device.poll(wgpu::Maintain::Wait);
             }
             let each = started.elapsed().as_secs_f64() * 1000.0 / f64::from(blurs);

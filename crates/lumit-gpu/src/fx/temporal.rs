@@ -24,7 +24,11 @@ pub struct EchoOp {
 struct EchoParams {
     weight: f32,
     mode: u32,
-    _pad: [f32; 2],
+    /// 1 = the matte scales Decay per pixel (K-429).
+    matte_on: f32,
+    /// Which tap this dispatch folds in (0 = one frame back): the exponent
+    /// the per-pixel decay is raised to.
+    tap: i32,
 }
 
 /// Side of the square tiles the dominant-motion reduction works in, in pixels
@@ -58,6 +62,9 @@ pub struct MotionBlurOp {
     /// Reconstruction tier: the `lumit_core::fx::MbQuality::code()` integer
     /// (0 Normal, 1 High — curved trails and half the tap spacing).
     pub quality: i32,
+    /// px@raster a full **Motion vectors** channel means (K-429). Read only
+    /// when a vectors layer is bound; the measured flow is already in pixels.
+    pub vector_scale: f32,
 }
 
 #[repr(C)]
@@ -69,14 +76,19 @@ struct MotionBlurParams {
     view: i32,
     tile: i32,
     quality: i32,
-    _pad: [i32; 2],
+    /// 1 = the matte scales Shutter angle per pixel (K-429).
+    matte_on: f32,
+    _pad: i32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct MbTileParams {
     tile: i32,
-    _pad: [i32; 3],
+    /// px@raster a full Motion vectors channel means, read by `mb_vectors`
+    /// alone (K-429); the reduction ignores it.
+    vector_scale: f32,
+    _pad: [i32; 2],
 }
 
 /// One resolved Datamosh pass (docs/08 §3.12, K-104; its own effect since
@@ -117,6 +129,7 @@ impl FxEngine {
     /// in each live tap's neighbour (looked up by offset `-(i+1)`), then mixes
     /// the trail back toward the current frame. A missing neighbour or a zero
     /// weight is skipped, so the pass cost tracks the live tap count.
+    #[allow(clippy::too_many_arguments)]
     pub fn echo(
         &self,
         ctx: &GpuContext,
@@ -124,12 +137,17 @@ impl FxEngine {
         neighbours: &[(i32, &wgpu::Texture)],
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &EchoOp,
     ) -> wgpu::Texture {
-        let params = |weight: f32, mode: u32| EchoParams {
+        // The Matte scales Decay per pixel (K-429): it rides on the tap
+        // dispatches alone. The accumulator's first copy and the final Mix are
+        // not the decay, so they take none.
+        let params = |weight: f32, mode: u32, tap: i32, matted: bool| EchoParams {
             weight,
             mode,
-            _pad: [0.0; 2],
+            matte_on: f32::from(matted),
+            tap,
         };
         // acc := current (weight 0 add = a + n*0 = a).
         let mut acc = work_texture(ctx, w, h, "fx-echo-acc");
@@ -141,7 +159,7 @@ impl FxEngine {
             &acc,
             w,
             h,
-            bytemuck::bytes_of(&params(0.0, 0)),
+            bytemuck::bytes_of(&params(0.0, 0, 0, false)),
         );
         for (i, &weight) in op.weights.iter().enumerate() {
             if weight <= 0.0 {
@@ -152,15 +170,16 @@ impl FxEngine {
                 continue;
             };
             let next = work_texture(ctx, w, h, "fx-echo-acc");
-            self.dispatch(
+            self.dispatch_matted(
                 ctx,
                 &self.echo_accumulate,
                 &acc,
                 tex,
+                matte,
                 &next,
                 w,
                 h,
-                bytemuck::bytes_of(&params(weight, op.mode)),
+                bytemuck::bytes_of(&params(weight, op.mode, i as i32, matte.is_some())),
             );
             acc = next;
         }
@@ -173,7 +192,7 @@ impl FxEngine {
             &out,
             w,
             h,
-            bytemuck::bytes_of(&params(op.mix, 0)),
+            bytemuck::bytes_of(&params(op.mix, 0, 0, false)),
         );
         out
     }
@@ -199,6 +218,148 @@ impl FxEngine {
     /// `lumit_core::fx::cpu::motion_blur` reads its `u`/`v` slices, and the
     /// reduction matches `lumit_core::fx::cpu::motion_blur_tiles`, so the two
     /// agree (§1.6).
+    /// Accumulation motion blur's average with a **per-pixel shutter** (docs/08
+    /// §3.26, K-429): the same N sub-frame renders the equal-weight combine
+    /// takes, but each pixel's weights decided by how far open the matte says
+    /// its shutter is.
+    ///
+    /// **In plain terms.** Equal weights average all N moments, which is a fully
+    /// open shutter. Where the matte is darker the average is taken over a
+    /// shorter slice of those moments, shrunk toward `anchor` — where the
+    /// frame's own time falls across the open shutter — so black is the
+    /// unblurred frame and grey is a genuinely shorter exposure, which is not
+    /// the same picture as a blurred frame faded back.
+    ///
+    /// `matte` must already be prepared (Channel picked, Invert applied): this
+    /// effect draws no pass of its own, so it has no dispatch seam to do that
+    /// at, and the caller does it once. `samples` must not be empty — a caller
+    /// with nothing to average has nothing to call this for.
+    pub fn accumulate_with_shutter(
+        &self,
+        ctx: &GpuContext,
+        samples: &[wgpu::Texture],
+        matte: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        anchor: f32,
+    ) -> wgpu::Texture {
+        #[repr(C)]
+        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+        struct AccumShutterParams {
+            anchor: f32,
+            n: f32,
+            k: f32,
+            first: f32,
+        }
+        let n = samples.len().max(1) as f32;
+        let mut acc = work_texture(ctx, w, h, "fx-accum-shutter");
+        for (k, frame) in samples.iter().enumerate() {
+            let next = work_texture(ctx, w, h, "fx-accum-shutter");
+            self.dispatch_matted(
+                ctx,
+                &self.accum_shutter,
+                &acc,
+                frame,
+                Some(matte),
+                &next,
+                w,
+                h,
+                bytemuck::bytes_of(&AccumShutterParams {
+                    anchor,
+                    n,
+                    k: k as f32,
+                    first: f32::from(k == 0),
+                }),
+            );
+            acc = next;
+        }
+        acc
+    }
+
+    /// A supplied **Motion vectors** layer read as a dense flow field (K-429,
+    /// docs/08 §3.2) — the GPU twin of
+    /// `lumit_core::fx::cpu::motion_vectors_field`.
+    ///
+    /// **In plain terms.** A game engine or a 3D renderer already knows how
+    /// every pixel moved and can hand that over as a picture: red is sideways,
+    /// green is up-and-down, mid-grey is standing still. This turns that
+    /// picture into the same field the flow engine measures, so
+    /// [`Self::motion_blur`] and its tile reduction read one kind of field and
+    /// know nothing about where it came from.
+    ///
+    /// `scale` is how many raster pixels a full channel means. Confidence comes
+    /// out at 1 everywhere: a supplied vector is not a measurement that can
+    /// have failed to match.
+    pub fn motion_vectors_field(
+        &self,
+        ctx: &GpuContext,
+        vectors: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        scale: f32,
+    ) -> wgpu::Texture {
+        use wgpu::util::DeviceExt;
+        let field = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("fx-mb-vectors-field"),
+            size: wgpu::Extent3d {
+                width: w.max(1),
+                height: h.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            // f32, as the measured field is: these vectors are compared
+            // bit-for-bit against an f32 oracle.
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+            view_formats: &[],
+        });
+        let ubuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-mb-vectors-params"),
+                contents: bytemuck::bytes_of(&MbTileParams {
+                    tile: MB_TILE as i32,
+                    vector_scale: scale,
+                    _pad: [0; 2],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-mb-vectors-bind"),
+            layout: &self.mb_tile_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view(vectors)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view(&field)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: ubuf.as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = ctx.encoder("fx-mb-vectors-enc");
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-mb-vectors-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.mb_vectors);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
+        drop(enc);
+        field
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn motion_blur(
         &self,
         ctx: &GpuContext,
@@ -206,6 +367,7 @@ impl FxEngine {
         flow: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &MotionBlurOp,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -234,7 +396,8 @@ impl FxEngine {
                 label: Some("fx-mb-tile-params"),
                 contents: bytemuck::bytes_of(&MbTileParams {
                     tile: tile as i32,
-                    _pad: [0; 3],
+                    vector_scale: op.vector_scale,
+                    _pad: [0; 2],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
@@ -249,7 +412,8 @@ impl FxEngine {
                     view: op.view,
                     tile: tile as i32,
                     quality: op.quality,
-                    _pad: [0; 2],
+                    matte_on: f32::from(matte.is_some()),
+                    _pad: 0,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
@@ -295,6 +459,12 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
+                },
+                // The Matte (K-429). `None` binds `src` in its place, the same
+                // "bound but not read" convention `dispatch_matted` uses.
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(&view(matte.unwrap_or(src))),
                 },
             ],
         });
@@ -379,6 +549,14 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
+                },
+                // The Matte slot Motion blur added to this shared layout
+                // (K-429). This kernel never reads it, so `cur` stands in it:
+                // a binding cannot be left empty, and it is the same
+                // "bound but not read" convention `dispatch_matted` uses.
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(&view(cur)),
                 },
             ],
         });

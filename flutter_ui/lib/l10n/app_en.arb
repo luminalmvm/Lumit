@@ -600,6 +600,10 @@
   "@fxUseInnerRadius": {
     "description": "Effect controls — a switch on Iris wipe that turns the polygon into a star."
   },
+  "fxVectorScale": "Vector scale",
+  "@fxVectorScale": {
+    "description": "Fast motion blur parameter label in the Effect Controls panel — how many pixels of movement a full channel of the Motion vectors layer stands for."
+  },
   "fxVegas": "Vegas",
   "@fxVegas": {
     "description": "Effect name in the Add effect menu — runs marching lights along the picture's contours."

@@ -58,14 +58,27 @@ is not a table anyone maintains — it falls out of the schema's `MatteRole`
   two of the four effects that claim the matte inside their own maths; they had a list each
   before, and the consolidation is the point — a matte is a matte, and only the *meaning*
   differs.
-- **The layer-input list** carries what is not a matte. Two effects take one. Light wrap's
-  **Background** is a *plate* whose light spills round the foreground's edge, and
-  Texturize's **Texture** (K-405, docs/08 §3.68) is a surface pressed into the picture;
-  neither is a picture that says how much of the effect each pixel gets, and both sit
-  beside their effect's own (generic) Matte row rather than instead of it. **The test for
-  the next effect that wants a layer**: it belongs here, and not on the Matte row, exactly
-  when the effect still has a second thing to say about *where* — which is why §3.49's
-  displacement map is a matte and §3.68's texture is not.
+- **The layer-input list** carries what is not a matte. Four effects take one. Light wrap's
+  **Background** is a *plate* whose light spills round the foreground's edge; Texturize's
+  **Texture** (K-405, docs/08 §3.68) is a surface pressed into the picture; Fast motion
+  blur's **Motion vectors** (K-429, docs/08 §3.2) is a *field*, a picture whose red and
+  green are how far each pixel moved; and Set matte's own source row (K-429, docs/08 §3.44)
+  is the coverage itself, which is why that effect carries no universal Matte row at all.
+  None of the four says how much of the effect each pixel gets, and the first three sit
+  beside their effect's own Matte row rather than instead of it. **The test for the next
+  effect that wants a layer**: it belongs here, and not on the Matte row, exactly when the
+  effect still has a second thing to say about *where* — which is why §3.49's displacement
+  map is a matte and §3.68's texture is not.
+
+**Which list an effect uses is the schema's own answer, not a table** (K-429). The matte
+list is enumerated by `EffectSchema::matte.param()` and the layer-input list by
+`EffectSchema::layer_input()` — the first `ParamKind::Layer` row that is *not* the matte.
+`build.rs` fills a slot per op that answers `Some`, `fxops::run_ops` consumes one per op that
+answers `Some`, in the same order, and there is no list of match names in between for anyone
+to forget when an effect gains a layer row. The layer input is a **field on the aux slot**
+beside the matte and the mask path, not an `AuxKind` variant, for the reason those two are
+fields: Fast motion blur reads a whole flow field *and* a Motion vectors layer *and* a matte,
+and a variant per pair is a seam the first effect that wanted two things would have to add.
 
 Everything below applies to both — one helper renders a referenced layer alone at the
 effect's raster, and both lists are counted by the same "the k-th consuming op binds the

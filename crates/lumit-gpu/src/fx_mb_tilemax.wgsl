@@ -24,8 +24,8 @@ const SCORE_FLOOR: f32 = 0.25; // lumit_core::fx::cpu::MB_SCORE_FLOOR
 // Scalars, not a vec3 tail: a vec3<i32> aligns to 16 bytes and would silently
 // make this struct 32 bytes against the host's 16.
 struct Params {
-    tile: i32,  // MB_TILE: tile side in pixels
-    pad0: i32,
+    tile: i32,          // MB_TILE: tile side in pixels
+    vector_scale: f32,  // px@raster a full Motion vectors channel means (K-429)
     pad1: i32,
     pad2: i32,
 };
@@ -33,6 +33,33 @@ struct Params {
 @group(0) @binding(0) var flow: texture_2d<f32>;
 @group(0) @binding(1) var tiles: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(2) var<uniform> p: Params;
+
+// A supplied **Motion vectors** layer read as a flow field (K-429, docs/08
+// §3.2) — the twin of lumit_core::fx::cpu::motion_vectors_field. Red is
+// sideways, green is up-and-down, mid-grey is standing still, and
+// `vector_scale` says how many pixels a full channel means. Confidence is 1
+// everywhere: a supplied vector is not a measurement that can have failed.
+//
+// It shares this file's layout (a picture in, an rgba32float field out, one
+// uniform) so it needs no seam of its own: `flow` is the vectors layer here
+// and `tiles` is the field. Everything downstream — the reduction above, the
+// blur itself — then reads one kind of field and knows nothing about where it
+// came from.
+@compute @workgroup_size(8, 8)
+fn mb_vectors(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = vec2<i32>(textureDimensions(tiles));
+    let xy = vec2<i32>(gid.xy);
+    if (xy.x >= size.x || xy.y >= size.y) {
+        return;
+    }
+    let m = textureLoad(flow, xy, 0);
+    textureStore(tiles, xy, vec4<f32>(
+        (m.r - 0.5) * p.vector_scale,
+        (m.g - 0.5) * p.vector_scale,
+        1.0,
+        0.0,
+    ));
+}
 
 @compute @workgroup_size(8, 8)
 fn mb_tilemax(@builtin(global_invocation_id) gid: vec3<u32>) {

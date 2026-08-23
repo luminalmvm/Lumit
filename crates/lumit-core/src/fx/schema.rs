@@ -688,4 +688,29 @@ impl EffectSchema {
             _ => None,
         })
     }
+
+    /// The **auxiliary layer** this effect samples beside its own input
+    /// (K-123, K-387, [impl/layer-input.md](../../../docs/impl/layer-input.md)):
+    /// the first [`ParamKind::Layer`] row that is not the effect's matte.
+    ///
+    /// **The one predicate**, exactly as [`EffectSchema::mask_path`] is one:
+    /// `build.rs` renders a slot per op that answers `Some` and
+    /// `fxops::run_ops` consumes one per op that answers `Some`, in the same
+    /// order, so the two lists cannot drift apart silently. It replaced a table
+    /// of match names in `build.rs` (K-429) — a table is a second rule, and a
+    /// second rule is a thing to forget when an effect gains a layer row.
+    ///
+    /// It is deliberately *independent* of the matte carriage and of whatever
+    /// else the effect consumes: Fast motion blur reads a whole flow field and
+    /// a Motion vectors layer and a matte, and Set matte reads a layer and no
+    /// matte at all. An effect takes at most one auxiliary layer, because a
+    /// second would need a second carriage and nothing has asked for one.
+    #[must_use]
+    pub fn layer_input(&self) -> Option<&'static str> {
+        let matte = self.matte.param();
+        self.params
+            .iter()
+            .find(|p| matches!(p.kind, ParamKind::Layer { .. }) && Some(p.id) != matte)
+            .map(|p| p.id)
+    }
 }

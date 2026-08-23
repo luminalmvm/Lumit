@@ -117,8 +117,10 @@ the table of the effects that claim their matte. The matte injection is conditio
 the struct not already declaring a `matte` field, which is how the Lens flare keeps the
 row it wrote itself (K-065) without getting a second one under the same id;
 `matte_channel = false` keeps the Channel off an effect that picks its matte's channels
-itself (Depth of field, Displacement map, Set matte, the Lens flare), and `matte = false`
-drops the row entirely (the Controls, the Camera track, the Matte key). The Blend is
+itself (Depth of field, Displacement map, the Lens flare), and `matte = false` drops the
+row entirely (the Controls, the Camera track, the Matte key, and — since K-429 — Set
+matte, whose picker is its own source row on the auxiliary-layer carriage and not a
+matte at all). The Blend is
 injected right after `mix` in schema order — the panel draws it on the Mix row — on every
 effect that declares a `mix` and no `blend` of its own (the Lens flare keeps its older
 one); an effect with no Mix touches no pixel and gets none.
@@ -341,7 +343,7 @@ cannot drift. Registry dispatch keeps that contract by making the consumption a
 declaration:
 
 ```rust
-pub enum AuxKind { None, Lut, LayerInput, LensFile, Neighbours, FlowField }
+pub enum AuxKind { None, Lut, LensFile, Neighbours, FlowField }
 
 pub trait GpuEffect {
     ...
@@ -354,10 +356,18 @@ pub trait GpuEffect {
 
 `AuxSlot` is the borrowed slot (or the whole list, for Neighbours/FlowField, which were
 never per-op). The Registry arm advances the counter its `aux()` names and hands the
-slot over; the enumeration predicate in `build.rs` matches instance `match_name`s, the
-consumption matches def `match_name`s, and they are the same names — the one-predicate,
-one-order rule survives unchanged. A missing slot stays a passthrough (degrade, never
-fault), exactly the convention every list already had.
+slot over; the enumeration predicate in `build.rs` and the consumption in `run_ops` read
+the same schema, so the one-predicate, one-order rule survives unchanged. A missing slot
+stays a passthrough (degrade, never fault), exactly the convention every list already had.
+
+**The auxiliary layer is no longer a kind** (K-429). `AuxKind::LayerInput` and the
+`layer_input_param` table of match names in `build.rs` are both gone, replaced by
+`EffectSchema::layer_input()` — the first `ParamKind::Layer` row that is not the effect's
+matte. It is the same shape as the matte carriage below and the mask-path one: one
+predicate the schema answers, walked by both sides in the same order, and the slot is a
+**field** on `AuxSlot` rather than a variant. That is what lets Fast motion blur read a
+whole flow field *and* a Motion vectors layer *and* a matte, without a variant per pair —
+the combinatorial seam §2.5b was written to keep the matte out of.
 
 ### 2.5b The one matte carriage (K-395)
 
@@ -727,18 +737,20 @@ Parity, throughout:
 Side tables (§2.5a, K-387) — every one of these fails as a *picture*, never as a crash,
 which is why each is written down:
 
-14. `a_side_table_effect_declares_the_list_it_consumes` (lumit-render) — an effect declaring
-    a `File` or `Layer` row must return something other than `AuxKind::None`, because
-    `resolve_into_arena` drops those kinds and the input would otherwise never arrive. The
-    only place both halves are visible. Its lumit-core twin is
-    `the_arena_carries_no_file_slot_or_layer_binding`, which pins the silence.
+14. `a_side_table_effect_declares_the_list_it_consumes` (lumit-render) — an effect
+    declaring a `File` row must return something other than `AuxKind::None`, and one
+    declaring a `Layer` row that is not its matte must be found by
+    `EffectSchema::layer_input()` (K-429), because `resolve_into_arena` drops those kinds
+    and the input would otherwise never arrive. The only place both halves are visible.
+    Its lumit-core twin is `the_arena_carries_no_file_slot_or_layer_binding`, which pins
+    the silence.
 15. `the_kth_lut_op_binds_the_kth_slot` and
     `depth_of_field_and_light_wrap_share_one_layer_input_counter` (lumit-render) — the
     counting contract itself, once per counter. In both, the **first slot is deliberately
     empty**: an implementation that advances a counter only when it has something to bind
     passes the test with one slot and grades (or wraps) the wrong effect with two. The
     second also proves the counter is shared across two *different* effects, which is what
-    `build.rs`'s single `layer_input_param` predicate promises.
+    `build.rs`'s single `EffectSchema::layer_input` predicate promises.
 16. `echo_receives_the_decoded_neighbours` (lumit-render) — the whole-list shape, asserted
     on the trail rather than on the plumbing: an empty list where the render decoded four
     frames renders a perfectly ordinary picture, and nothing else notices.

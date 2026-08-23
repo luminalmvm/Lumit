@@ -296,6 +296,19 @@ pub fn run_ops(
         } else {
             None
         };
+        // The auxiliary layer's own counter (K-429), on the schema's own
+        // `layer_input` predicate — the one `build.rs` fills by. It is read
+        // here rather than inside the `AuxKind` match below because an effect
+        // may want a layer input *and* something else: Fast motion blur reads a
+        // whole flow field and a Motion vectors layer, and a variant per pair
+        // is the combinatorial seam the matte was kept out of.
+        let layer_input = if resolved.def.schema().layer_input().is_some() {
+            let slot = layer_inputs.get(dof_i);
+            dof_i += 1;
+            slot
+        } else {
+            None
+        };
         // Only a bound matte costs anything: the input texture is held (a
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
@@ -359,11 +372,6 @@ pub fn run_ops(
                     lut_i += 1;
                     AuxData::Lut(slot)
                 }
-                AuxKind::LayerInput => {
-                    let slot = layer_inputs.get(dof_i).and_then(|o| o.texture(&tex));
-                    dof_i += 1;
-                    AuxData::LayerInput(slot)
-                }
                 AuxKind::LensFile => {
                     let lens = flare_lens.get(flare_i).and_then(|o| o.as_ref());
                     flare_i += 1;
@@ -382,7 +390,12 @@ pub fn run_ops(
                 w,
                 h,
                 params,
-                AuxSlot::new(data, own_matte, mask_path),
+                AuxSlot::new(
+                    data,
+                    own_matte,
+                    layer_input.and_then(|l| l.texture(&tex)),
+                    mask_path,
+                ),
             );
             if let (Some((mode, mix, _)), Some(input)) = (blend, blend_input) {
                 tex = fx.blend_mix(ctx, &input, &tex, w, h, mode, mix);

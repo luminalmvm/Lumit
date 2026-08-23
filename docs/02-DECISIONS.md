@@ -11408,3 +11408,118 @@ the whole effect takes at Radius 0.
 **Held by** `check_matte_claim` per effect (parity under a ramp, bit-stability, the empty
 matte equal to the old function to the byte, a flat half matte *not* equal to the generic
 dissolve, and parity there too), plus the three equalities above. No new strings.
+
+## K-429 — The matte scales shutter, decay and completion, and the keyers carry no matte row
+
+**Status: DECIDED (2026-08-23).** The owner's rule for mattes (K-426, K-427, K-428) applied
+to the last two families, Temporal and Transition, and the last two opt-outs settled in
+Utility. Numbered K-429 because K-425..K-428 are taken on main and K-420..K-424 are reserved
+by another branch.
+
+**Temporal: the amount is a duration.** **Echo** scales its **Decay**, so the ghosts are
+genuinely fewer and shorter where the matte is dark rather than a long trail faded back.
+Because `(decay·k)^(i+1)` factorises as `decay^(i+1) · k^(i+1)`, the per-pixel weight is the
+whole-frame weight multiplied by `k` exactly `i + 1` times, which makes a white matte the
+unmatted picture *to the bit* and a half matte *exactly* the half-decay trail. A tap the
+matte has taken to nothing is **skipped**, the same `continue` a dead tap already takes,
+because a zero-weight tap is not a no-op under every combine mode — Multiply by nothing is
+black. The kernel can read the matte at all because the host already runs one dispatch per
+tap, so the pass knows which tap it is; the tap index joins the uniform.
+
+**Fast motion blur** (§3.2) scales its **Shutter angle**, read at the destination pixel and
+spent everywhere the shutter is spent — this pixel's own vector, the neighbourhood's dominant
+sweep, and each tap's reach — so both sides of the McGuire weighting still speak the same
+language about how far a thing moves, and a half matte is exactly the half-shutter streak.
+It reads the matte on its own bind layout rather than the shared one, because it has three
+sampled inputs before it gets to a matte; Depth of field and Datamosh share that layout and
+bind their own source in the new slot, unread.
+
+**Motion blur (accumulation, §3.26) scales its Shutter angle in the combine**, because it
+has no kernel to claim it inside: it orchestrates a re-render, resolves to no op, and is
+skipped by the matte carriage `run_ops` walks on both sides. The matte therefore rides on the
+sub-frame plan (`AccumulationBelow`), rendered by the same helper every other matte goes
+through, with its Channel and Invert applied once before the combine reads it — the seam's
+job, done by hand where there is no seam. The combine treats the samples as cells (sample *k*
+owns `[k/N, (k+1)/N]` of the open shutter) and averages over the whole span scaled toward the
+**shutter anchor**, `−phase ÷ shutter` clamped to 0..1, which is where the frame's own time
+falls. That anchor is the whole of the design: black has to mean *the frame*, and with the
+standard −90° phase on a 180° shutter that is the middle of the span, not the instant the
+shutter opened. A cell's weight is its overlap with that window over the window's own width,
+clamped, so the weights sum to one at every strength; the window is floored at a thousandth
+of the span, because `hi − lo` at 1e-6 loses more than a per cent of the answer to
+cancellation. With no matte bound the old equal-weight hardware pass runs unchanged, byte for
+byte (K-258).
+
+**Posterize time keeps the strength dissolve**, by the rule's own test: it holds a time
+rather than drawing an amount, and its own output is what a dissolve blends.
+
+**Transition: the amount is Completion, and scaling it makes a gradient wipe.** Linear wipe,
+Radial wipe, Venetian blinds and Card wipe each scale **Completion** toward 0 — the edge is
+further along where the matte is bright, so a painted ramp sweeps the frame in the ramp's own
+shape. The Card wipe asks it per *pixel* and not per card, so one half of a card can stand
+while the other half has flipped away; that also settles §3.72's fourth decision, which
+declined AE's **gradient flip order** for want of a row to put it on. Painting a ramp on the
+matte *is* that order now, and "only over the sky" is what a mask is for.
+
+**The Iris wipe has no Completion** — the radius is the transition (§3.71) — so it scales
+**that**, which is the same sentence about the same thing. It costs one multiply: the solved
+sector's vertex is the only place a radius survives into the expression, so scaling it scales
+the outer and inner radii together and leaves the edge's direction, and so the normal, alone.
+A half matte draws exactly the half-radius iris; a black matte takes the same exact identity
+short-circuit Outer radius 0 already takes. **Transform** and **Broadcast safe** keep the
+dissolve, because scaling their amount *is* it, and the **Camera track** carries no row at
+all (K-417).
+
+**A Motion vectors layer may stand in for the measured flow** (backlog 7.48). Fast motion
+blur gains a **Motion vectors** Layer row whose red and green channels are the per-pixel
+motion in the encoding every velocity and vector pass already uses — red sideways, green
+up-and-down, **mid-grey standing still** — so the motion in pixels is `(r − ½) · Vector
+scale` and `(g − ½) · Vector scale`. Blue and alpha are not read, and confidence comes out at
+1 everywhere: a supplied vector is not a measurement that can have failed to match. **Vector
+scale** (px@comp, default 32, greyed until a layer is picked) reconciles one engine's
+normalisation with the frame it came from. The layer is converted to the same field the flow
+engine measures, in one pass on each path, *before* the tile reduction — so everything
+downstream reads one kind of field and knows nothing about where it came from, and the effect
+works for the first time on a layer that has no measured flow at all.
+
+**Utility: two effects carry no matte row.** The Matte key already did (K-425). **Set matte**
+joins it. Every Matte row answers "how much of me happens here", and Set matte has no answer
+to give: what it takes from another layer is the coverage itself, which is the whole effect
+rather than an amount of one. So it stops claiming the universal row and declares its **own**
+source picker instead, under the same ids and the same labels, riding the ordinary
+auxiliary-layer carriage beside Light wrap's Background. No dissolve stands beside the kernel,
+no injected Channel row duplicates the one it already had, and Invert is applied once, inside
+the kernel. A project saved before this loads exactly as it did (K-065): the
+forward-migration walk only ever *appends* what a schema has grown, so a row nobody declares
+any more — the Matte key's three, or a Channel this effect no longer injects — is carried
+along untouched rather than rewritten. That is the deliberate half of K-258, and the same
+courtesy Gaussian blur's unread `mode` and Posterize time's unread `scope` already get;
+`migrate_lens_flare_background` is the other shape, for a value that had somewhere new to
+*go*, and none of these has.
+
+**Which list a layer arrives on is the schema's answer, not a table.** The layer-input
+carriage was a `match` on match names in `build.rs` and an `AuxKind::LayerInput` in
+`run_ops`; both are gone. `EffectSchema::layer_input()` — the first `ParamKind::Layer` row
+that is not the matte — is the one predicate both sides walk, exactly as `matte.param()` and
+`mask_path()` already are, and the slot is a **field** on the aux slot beside them rather
+than a kind. That is what lets Fast motion blur read a whole flow field *and* a Motion
+vectors layer *and* a matte at once: a variant per pair is the combinatorial seam the matte
+was kept out of in the first place.
+
+**Mechanics are K-426's, unchanged.** `matte_toward` on each path, `_matted` CPU twins with
+the old names kept as the `&[]` wrappers, a `matte_on` in each uniform reading binding 4,
+`dispatch_matted`, `aux.matte()`. The five wipes' `*_keep` helpers take their completion as
+an argument now instead of reading it off the params struct, since a uniform cannot be
+rewritten per pixel.
+
+**Held by** `check_matte_claim` per effect (parity under a ramp, bit-stability, the empty
+matte equal to the old function to the byte, a flat half matte *not* equal to the generic
+dissolve, and parity there too), plus four equalities a dissolve cannot produce: a half matte
+on a radius-8 iris is the radius-4 iris to the bit, a half matte on decay 0.6 is the
+decay-0.3 trail to the bit, a half matte on a 360° shutter is the 180° streak to the bit, and
+a black matte on Echo under Multiply leaves the frame alone rather than turning it black. The
+accumulation combine is held to three of its own (white is the equal-weight average, black is
+the sample at the frame's own moment, half is the middle-half average and *not* the dissolve
+between them), the Motion vectors layer to a round trip through the measured-flow blur, and
+the two keyers to a load of a save that still holds their dropped rows. One new string:
+`fxVectorScale`.

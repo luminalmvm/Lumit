@@ -152,9 +152,42 @@ pub struct AccumulationMbParams {
     /// transform-smeared. The comp is never mutated — the forced shutter rides
     /// on the sample-render's cloned comp only.
     pub force_all: bool,
+    /// Which channel of the Matte layer drives the per-pixel shutter (K-425,
+    /// `CHANNEL_OPTIONS` index: 0 luminance, 1 alpha, 2 R, 3 G, 4 B), and
+    /// whether it is read the other way round. This effect draws no pass of
+    /// its own, so nothing prepares its matte at the dispatch seam — the
+    /// combine does it itself, once, before reading (K-429).
+    pub matte_channel: u32,
+    /// See [`matte_channel`](Self::matte_channel).
+    pub matte_invert: bool,
 }
 
 impl AccumulationMbParams {
+    /// Where the **frame's own time** sits across the open shutter, 0..1
+    /// (K-429): the point the matte shrinks the shutter toward.
+    ///
+    /// **In plain terms.** The samples are spread across the time the shutter
+    /// is open, and one moment in that span is the frame the viewer asked for
+    /// — with the standard −90° phase on a 180° shutter, the middle. A matte
+    /// that scales the shutter angle has to shrink the span toward *that*
+    /// moment and no other, because black must mean "no motion blur here",
+    /// which is the frame itself and not some sub-frame instant a quarter of a
+    /// frame early.
+    ///
+    /// Clamped to 0..1: a phase that puts the frame outside the open shutter
+    /// altogether (the shutter opens after the frame, or shuts before it)
+    /// shrinks toward the nearest end of the span it has. A closed shutter has
+    /// no span at all and answers the middle, which costs nothing because
+    /// every sample is at the same instant anyway.
+    #[must_use]
+    pub fn shutter_anchor(&self) -> f64 {
+        let open = self.shutter_angle / 360.0;
+        if open == 0.0 {
+            return 0.5;
+        }
+        (-(self.shutter_phase / 360.0) / open).clamp(0.0, 1.0)
+    }
+
     /// The sub-frame sample offsets in *frames* across the open shutter, reusing
     /// the shared per-layer motion-blur shutter maths ([`crate::model::
     /// MotionBlur::sample_offsets`]) so the two derive the identical centred
@@ -225,6 +258,17 @@ pub fn stack_accumulation_mb(
                 shutter_phase,
                 mix,
                 force_all,
+                // The Matte's Channel and Invert (K-425). Read here rather than
+                // at the dispatch seam because this effect has no dispatch: it
+                // orchestrates a re-render, and the combine prepares its own
+                // matte.
+                matte_channel: match e.param(crate::fx::MATTE_CHANNEL_PARAM) {
+                    Some(crate::model::EffectValue::Choice(c)) => {
+                        (*c).min(crate::fx::CHANNEL_OPTIONS.len() as u32 - 1)
+                    }
+                    _ => 0,
+                },
+                matte_invert: e.bool_of(crate::fx::MATTE_INVERT_PARAM).unwrap_or(false),
             }
         })
 }

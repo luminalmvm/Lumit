@@ -319,6 +319,14 @@ impl FxEngine {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
                 },
+                // The Matte slot Motion blur added to this shared layout
+                // (K-429). This kernel never reads it, so `src` stands in it:
+                // a binding cannot be left empty, and it is the same
+                // "bound but not read" convention `dispatch_matted` uses.
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(&view(src)),
+                },
             ],
         });
         let mut enc = ctx.encoder("fx-dof-enc");

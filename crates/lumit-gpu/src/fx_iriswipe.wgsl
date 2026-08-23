@@ -29,13 +29,32 @@ struct Params {
     has_shape: f32,      // 0 when Outer radius is 0 — there is no polygon
                          // (`active` is a WGSL reserved keyword, K-405's `target` again)
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,       // 1 = the matte scales the polygon's radius per pixel (K-429)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 @compute @workgroup_size(8, 8)
 fn iris_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -53,10 +72,20 @@ fn iris_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = sqrt(dx * dx + dy * dy);
     let a = abs(phi - p.period * floor(phi / p.period + 0.5));
     let point = vec2<f32>(r * cos(a), r * sin(a));
-    let dist = (point.x - p.vertex.x) * p.normal.x + (point.y - p.vertex.y) * p.normal.y;
+    // The matte scales the whole polygon about its centre (K-429): the solved
+    // vertex is the only place a radius survives into this expression, so one
+    // multiply moves the outer and inner radii together and leaves the edge's
+    // direction — and so the normal — alone. k = 1 multiplies by one.
+    var k = 1.0;
+    if (p.matte_on != 0.0) {
+        k = matte_k(xy);
+    }
+    let dist = (point.x - p.vertex.x * k) * p.normal.x
+             + (point.y - p.vertex.y * k) * p.normal.y;
     var keep = clamp(dist / p.band + 0.5, 0.0, 1.0);
     // No polygon, no edge: the frame passes through untouched (§3.71's fifth
-    // note). A uniform test, so nothing diverges.
-    keep = select(1.0, keep, p.has_shape > 0.5);
+    // note). A polygon the matte has scaled to nothing is the same identity,
+    // and the same exact one Outer radius 0 is. A uniform test either way.
+    keep = select(1.0, keep, p.has_shape > 0.5 && k > 0.0);
     textureStore(dst, xy, o * (1.0 - p.mix_amt * (1.0 - keep)));
 }

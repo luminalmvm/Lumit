@@ -171,6 +171,23 @@ pub struct AccumulationBelow {
     pub samples: Vec<(Vec<CompLayerDraw>, Option<lumit_core::model::CameraPose>)>,
     /// Averaged-over-original blend, 0..1 (1 = full accumulation blur).
     pub mix: f32,
+    /// **The Matte, scaling Shutter angle per pixel** (K-429, docs/08 §2.6).
+    /// [`LayerInputDraw::Absent`] is the whole of the old behaviour: equal
+    /// weights, one hardware additive pass, byte for byte what it was (K-258).
+    /// It is carried here rather than on the effect's op because this effect
+    /// resolves to no op at all — it orchestrates a re-render — so the matte
+    /// carriage `run_ops` walks skips it on both sides.
+    pub matte: LayerInputDraw,
+    /// The Matte's Channel and Invert (K-425), applied by the combine itself:
+    /// nothing prepares this matte at the dispatch seam, because there is no
+    /// dispatch.
+    pub matte_channel: u32,
+    /// See [`matte_channel`](Self::matte_channel).
+    pub matte_invert: bool,
+    /// Where the frame's own time falls across the open shutter, 0..1
+    /// (`AccumulationMbParams::shutter_anchor`): the point a darker matte
+    /// shrinks the shutter toward, so black is the unblurred frame.
+    pub anchor: f32,
 }
 
 pub struct CompLayerDraw {

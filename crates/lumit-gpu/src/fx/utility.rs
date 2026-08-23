@@ -59,7 +59,8 @@ struct LinearWipeParams {
     completion: f32,
     band: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = the matte scales Completion per pixel (K-429).
+    matte_on: f32,
 }
 
 /// One resolved Radial wipe (docs/08 §3.47). Mirrors
@@ -90,7 +91,8 @@ struct RadialWipeParams {
     completion: f32,
     feather: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = the matte scales Completion per pixel (K-429).
+    matte_on: f32,
 }
 
 impl FxEngine {
@@ -141,14 +143,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &LinearWipeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-linear-wipe-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.linear_wipe,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -157,7 +161,7 @@ impl FxEngine {
                 completion: op.completion,
                 band: op.band,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -172,14 +176,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RadialWipeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-radial-wipe-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.radial_wipe,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -190,7 +196,7 @@ impl FxEngine {
                 completion: op.completion,
                 feather: op.feather,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -221,7 +227,9 @@ struct VenetianBlindsParams {
     completion: f32,
     band: f32,
     mix_amt: f32,
-    _pad: [f32; 2],
+    /// 1 = the matte scales Completion per pixel (K-429).
+    matte_on: f32,
+    _pad0: f32,
 }
 
 /// One resolved Iris wipe (docs/08 §3.71). Mirrors
@@ -258,7 +266,8 @@ struct IrisWipeParams {
     band: f32,
     active: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = the matte scales the polygon's radius per pixel (K-429).
+    matte_on: f32,
 }
 
 /// One resolved Card wipe (docs/08 §3.72). Mirrors
@@ -307,7 +316,9 @@ struct CardWipeParams {
     randomness: f32,
     seed: u32,
     mix_amt: f32,
-    _pad: [f32; 3],
+    /// 1 = the matte scales Completion per pixel (K-429).
+    matte_on: f32,
+    _pad: [f32; 2],
 }
 
 impl FxEngine {
@@ -319,14 +330,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &VenetianBlindsOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-venetian-blinds-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.venetian_blinds,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -336,7 +349,8 @@ impl FxEngine {
                 completion: op.completion,
                 band: op.band,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
             }),
         );
         out
@@ -351,14 +365,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &IrisWipeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-iris-wipe-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.iris_wipe,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -371,7 +387,7 @@ impl FxEngine {
                 band: op.band,
                 active: f32::from(op.active),
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -386,14 +402,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &CardWipeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-card-wipe-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.card_wipe,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -411,7 +429,8 @@ impl FxEngine {
                 randomness: op.randomness,
                 seed: op.seed,
                 mix_amt: op.mix,
-                _pad: [0.0; 3],
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 2],
             }),
         );
         out

@@ -38,6 +38,14 @@ pub const IRIS_WIPE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     roi = Exact,
     premultiplied = true,
     enabled_when = IRIS_WIPE_ENABLED_WHEN,
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales the iris radius per pixel: the polygon opens wide where the \
+         matte is bright and shuts to nothing where it is black, this \
+         effect having no Completion to scale",
+    ),
 )]
 pub struct IrisWipe {
     /// Where the iris opens, px@comp (K-260: point parameters are PIXELS). The

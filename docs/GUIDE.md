@@ -1137,6 +1137,62 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   own at all — they replace the picture — so they keep the fade too. Glow keeps
   its cleverer seed gate and the Lens flare its source detection.
 
+  **For time, the knob is a duration; for a transition, it is how far along it
+  is (K-429).** The last two groups. In the Temporal group the amount an effect
+  has is a length of time. **Echo** has a Decay — how fast the trail of ghosts
+  fades — and the matte scales that, so the trail is genuinely shorter where the
+  matte is dark rather than a long trail half hidden; a half-grey matte draws
+  exactly the trail a half Decay would. Both motion blurs have a **Shutter
+  angle**, which is how long the shutter was open, and the matte scales that:
+  the smear is genuinely shorter, gathering from nearer along the movement,
+  instead of a long smear laid over a sharp frame at half strength.
+
+  The accumulation Motion blur is worth a paragraph on its own, because it is the
+  only effect that claims its matte somewhere other than in a shader. That effect
+  does not draw anything — it asks the engine to render the whole scene several
+  times at moments spread across the open shutter, and then averages the results.
+  So the matte is spent in the **averaging**: where it is dark, the average is
+  taken over a shorter slice of those moments, closed in toward the frame the
+  viewer actually asked for. Fully white is the ordinary average, which is what
+  the effect has always drawn; fully black is the one render at the frame's own
+  moment, which is no blur at all; grey is a genuinely shorter exposure. Closing
+  in on *the frame's own moment* rather than on the middle of the list is the
+  detail that makes black mean "not blurred here", and it is why the plan carries
+  a number saying where in the open shutter that moment falls.
+
+  In the Transition group the amount is **Completion** — how far the wipe has
+  got. Scaling it per pixel turns any wipe into a **gradient wipe**: paint a soft
+  ramp on the matte and the edge follows the ramp's shape instead of the straight
+  line the effect would otherwise draw. The Card wipe asks the question per
+  *pixel* rather than per card, so half a card can still be standing while the
+  other half has flipped away. The Iris wipe has no Completion at all — for it,
+  growing the hole *is* the transition — so the matte scales the hole's radius,
+  which is the same sentence about the same thing.
+
+  **A motion field somebody else already knew (K-429).** Fast motion blur
+  normally works out the movement itself, by comparing this frame of the footage
+  with the next. Game engines and 3D renderers do not have to guess: they already
+  know exactly how far every pixel moved, and most of them can hand that over as
+  a picture. Point Fast motion blur's new **Motion vectors** row at such a layer
+  and it uses that instead. The picture is read the way everyone writes it — red
+  is sideways movement, green is up and down, and a flat mid-grey means standing
+  still — with a **Vector scale** slider saying how many pixels a full channel
+  stands for, because different engines scale their vector passes differently.
+  Two things come with it. The blur is exact rather than measured, so it does not
+  wobble where the guessing is hard; and the effect works for the first time on a
+  layer with no footage to measure at all — a solid, a shape, a nested
+  composition.
+
+  **The two effects that carry no Matte row at all (K-429).** Every effect has
+  one, with two exceptions, and both are about keying. The **Matte key** is a
+  greenscreen keyer: what a strength matte over a key would be is a garbage
+  matte, which is a mask's job, so it has none. **Set matte** takes another
+  layer's brightness and makes it this layer's transparency — and that layer is
+  not "how much of the effect happens here", it *is* the effect. So Set matte's
+  picker is now its own row rather than the shared Matte one; it looks and reads
+  exactly the same, holds the same thing in the same place in a saved project,
+  and simply stops pretending to be a control it never was.
+
   **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
   picture, and a picture is the wrong thing for some effects. Think of a brush
   that travels along a line you have drawn, from 20 % of the way along to 80 %,

@@ -55,6 +55,14 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
     // describes the reach (§3.65's reasoning).
     roi = FullFrame,
     premultiplied = true,
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Completion per pixel: the cards have turned further where the \
+         matte is bright, and it is asked per pixel, so a card can be half \
+         flipped and half standing",
+    ),
     seeded = true,
 )]
 pub struct CardWipe {

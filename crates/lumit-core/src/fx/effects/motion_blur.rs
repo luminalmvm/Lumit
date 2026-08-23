@@ -16,8 +16,18 @@
 //! §1.6 oracle is [`crate::fx::cpu::motion_blur`], exercised directly from the
 //! lumit-gpu test, which can upload one.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, MbQuality, MbView};
+use crate::fx::{
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, MbQuality, MbView,
+};
 use lumit_fx_macros::Effect;
+
+/// Vector scale means nothing until a Motion vectors layer is picked (K-429):
+/// with none, the field is the measured flow, which is already in pixels.
+pub const MOTION_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "vector_scale",
+    on: "motion_vectors",
+    cond: EnabledCond::LayerSet,
+}];
 
 /// Fast motion blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -32,6 +42,15 @@ use lumit_fx_macros::Effect;
     // them. The +1 neighbour is fetched by the same decode planner Echo's
     // negative offsets use.
     temporal = &[0, 1],
+    enabled_when = MOTION_BLUR_ENABLED_WHEN,
+    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Shutter angle per pixel: the streak is genuinely shorter where \
+         the matte is dark, gathering from nearer along the motion, rather \
+         than a long streak faded back over a sharp picture",
+    ),
 )]
 pub struct MotionBlur {
     /// Degrees (§3.2: 0–720, default 180): the fraction of the frame interval
@@ -62,6 +81,45 @@ pub struct MotionBlur {
     )]
     pub quality: u32,
 
+    /// **A motion field somebody else already knew** (K-429, docs/08 §3.2).
+    /// Point this at a layer whose red and green channels carry the per-pixel
+    /// motion — a game engine's velocity pass, a 3D renderer's vector pass, a
+    /// plugin's output — and the streak follows *that* instead of the flow the
+    /// decode measured. The encoding is the one every such pass uses: **red is
+    /// sideways, green is up-and-down, and mid-grey (0.5) is standing still**,
+    /// so `(r − ½)·Vector scale` is the horizontal motion in pixels and
+    /// `(g − ½)·Vector scale` the vertical. Blue and alpha are not read.
+    /// Confidence comes out at 1 everywhere, because a supplied vector is not
+    /// a measurement that can have failed to match.
+    ///
+    /// Unset is the default and the labelled no-op: the measured flow is used,
+    /// exactly as before this row existed. It is the ordinary auxiliary-layer
+    /// input (K-387), which is why a layer can be given here *and* a Matte
+    /// above.
+    ///
+    /// **Always `false` here, by design**, as every Layer row is: the binding
+    /// is decided by the caller, so the picture arrives at the GPU pass as its
+    /// aux slot rather than as a value.
+    #[layer(label = "Motion vectors", self_default = false)]
+    pub motion_vectors: bool,
+
+    /// px@comp: how far a full channel of the Motion vectors layer means —
+    /// what `r = 1` (or `r = 0`) stands for in pixels of movement. Different
+    /// engines normalise their vector passes differently, so this is the dial
+    /// that makes one agree with the frame it came from. Declared `Px`, so it
+    /// scales with the preview raster like every other distance (§2.3, K-419).
+    /// Greyed until a layer is picked, since the measured flow is already in
+    /// pixels.
+    #[slider(
+        min = 0.0,
+        max = 200.0,
+        default = 32.0,
+        hard_min = 0.0,
+        hard_max = 4000.0,
+        unit = Px
+    )]
+    pub vector_scale: f32,
+
     /// Diagnostic outputs (FX-19): the blurred picture, the flow vectors
     /// colour-coded (red +x, green +y), the confidence as greyscale (white =
     /// trusted, black = suspect — where the streak is steered by its
@@ -91,10 +149,12 @@ impl MotionBlur {
     /// clamped to the 2..=64 range both the kernel and the CPU oracle bound
     /// themselves by, the view and the quality tier as their wire codes (an
     /// unknown stored index falls back to Rendered and to Normal rather than to
-    /// a diagnostic or to the expensive tier), and Mix as a plain 0..1 fraction.
+    /// a diagnostic or to the expensive tier), Mix as a plain 0..1 fraction,
+    /// and Vector scale floored at zero (a negative scale would read a supplied
+    /// field backwards, which is a thing to say with the field, not here).
     /// Both render paths read this one method, so the CPU reference and the WGSL
     /// kernel cannot drift apart.
-    pub fn packed(self) -> (f32, i32, f32, MbView, MbQuality) {
+    pub fn packed(self) -> (f32, i32, f32, MbView, MbQuality, f32) {
         (
             (self.shutter_angle / 360.0).max(0.0),
             (self.samples.round() as i32).clamp(2, 64),
@@ -109,6 +169,7 @@ impl MotionBlur {
                 1 => MbQuality::High,
                 _ => MbQuality::Normal,
             },
+            self.vector_scale.max(0.0),
         )
     }
 }

@@ -43,7 +43,7 @@ struct Params {
     view: i32,         // 0 Rendered, 1 Motion vectors, 2 Confidence, 3 Dominant motion
     tile: i32,         // MB_TILE: tile side in pixels
     quality: i32,      // 0 Normal, 1 High (curved trails, half the tap spacing)
-    pad0: i32,
+    matte_on: f32,     // 1 = the matte scales Shutter angle per pixel (K-429)
     pad1: i32,
 };
 
@@ -52,6 +52,19 @@ struct Params {
 @group(0) @binding(2) var flow: texture_2d<f32>;
 @group(0) @binding(3) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6) on this kernel's own layout, read only
+// under `matte_on` — bound to `src` when there is none, since a texture
+// binding cannot be left empty.
+@group(0) @binding(5) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // Clamp-addressed bilinear at continuous pixel-centre coordinates (== the
 // cpu::bilinear rule the reference uses, same arithmetic order): the texel at
@@ -151,10 +164,11 @@ fn tile_bilinear(pos: vec2<f32>, tdim: vec2<i32>) -> vec2<f32> {
 // learn that sample's reach, so both sides of the weighting speak the same
 // language about how far a thing moves. `lend` is the borrowed motion, never
 // the neighbour-max.
-fn blended(uv: vec2<f32>, c: f32, lend: vec2<f32>) -> vec2<f32> {
+// `sf` is this pixel's shutter fraction, which the matte scales (K-429).
+fn blended(uv: vec2<f32>, c: f32, lend: vec2<f32>, sf: f32) -> vec2<f32> {
     let cc = clamp(c, 0.0, 1.0);
     let borrow = DOM_TEMPER * (1.0 - cc);
-    return lend * p.shutter_frac * borrow + uv * p.shutter_frac * cc;
+    return lend * sf * borrow + uv * sf * cc;
 }
 
 // Spelled out rather than `length()` so the arithmetic is literally the CPU
@@ -217,8 +231,17 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
         textureStore(dst, xy, vec4<f32>(r, g, 0.5, 1.0));
         return;
     }
-    let sv = blended(fl.xy, conf, lend);
-    let dom_s = dom * p.shutter_frac;
+    // The matte scales Shutter angle per pixel (K-429), read at the destination
+    // and spent everywhere the shutter is: this pixel's own vector, the
+    // neighbourhood's dominant sweep, and every tap's reach. k = 1 multiplies
+    // by one, so an unbound row is the unmatted picture to the bit.
+    var mk = 1.0;
+    if (p.matte_on != 0.0) {
+        mk = matte_k(xy);
+    }
+    let sf = p.shutter_frac * mk;
+    let sv = blended(fl.xy, conf, lend, sf);
+    let dom_s = dom * sf;
     let len_sv = mb_len(sv);
     let len_dom = mb_len(dom_s);
     let spacing = select(2.0, 1.0, p.quality == 1);
@@ -242,7 +265,7 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
                 // Only the own-direction taps bend — the dominant sweep is one
                 // direction by construction.
                 let m = bilinear_flow3(pos.x + 0.5 * t * sv.x, pos.y + 0.5 * t * sv.y, size);
-                dir = blended(m.xy, m.z, lend);
+                dir = blended(m.xy, m.z, lend, sf);
             }
         }
         let off = t * dir;
@@ -251,7 +274,7 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
         // What the sample found there is moving by — the term that lets a fast
         // object reach out over a still one.
         let tf = bilinear_flow3(s.x, s.y, size);
-        let len_tap = mb_len(blended(tf.xy, tf.z, lend));
+        let len_tap = mb_len(blended(tf.xy, tf.z, lend, sf));
         let wt = mb_cone(d, len_tap)
             + mb_cone(d, len_sv)
             + 2.0 * mb_cylinder(d, len_tap) * mb_cylinder(d, len_sv);

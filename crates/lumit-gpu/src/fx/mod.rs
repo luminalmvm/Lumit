@@ -256,6 +256,12 @@ pub struct FxEngine {
     block_glitch: wgpu::ComputePipeline,
     scanlines: wgpu::ComputePipeline,
     echo_accumulate: wgpu::ComputePipeline,
+    /// Accumulation motion blur's per-pixel shutter (docs/08 §3.26,
+    /// K-429): one dispatch per sub-frame render, folding it into the
+    /// average at a weight the Matte decides. On the shared fx layout,
+    /// because it is the ordinary shape — two pictures in, one out, and
+    /// a matte.
+    accum_shutter: wgpu::ComputePipeline,
     echo_mix: wgpu::ComputePipeline,
     motion_blur: wgpu::ComputePipeline,
     /// The dominant-motion tile reduction Motion blur runs first (K-390,
@@ -264,6 +270,12 @@ pub struct FxEngine {
     /// own [`Self::mb_tile_layout`] because the tile texture is rgba32float —
     /// those vectors are judged bit-for-bit against an f32 oracle.
     mb_tilemax: wgpu::ComputePipeline,
+    /// A supplied **Motion vectors** layer turned into a flow field
+    /// (K-429, docs/08 §3.2): the same layout as the reduction above,
+    /// because it is the same shape of pass — a picture in, an
+    /// rgba32float field out. Everything downstream then reads one kind
+    /// of field and knows nothing about where it came from.
+    mb_vectors: wgpu::ComputePipeline,
     /// Datamosh (docs/08 §3.12, K-104): shares [`Self::mb_layout`]/`mb_pl`
     /// with Motion blur — both need exactly three sampled inputs (the
     /// current frame, one extra neighbour-derived texture, and a flow

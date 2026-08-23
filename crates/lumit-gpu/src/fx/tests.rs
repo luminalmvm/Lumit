@@ -2843,7 +2843,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
     ] {
         let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, weights, mode, mix);
         let op = EchoOp { weights, mode, mix };
-        let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+        let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
         eprintln!("echo mode={mode} mix={mix}: worst {worst} ulp");
@@ -2851,7 +2851,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
             worst <= bound,
             "mode {mode} mix {mix}: worst {worst} fp16 ULP (bound {bound})"
         );
-        let out2 = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+        let out2 = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, None, &op);
         assert_eq!(
             gpu,
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -2881,7 +2881,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
             mix: 1.0,
         };
         let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, op.weights, op.mode, op.mix);
-        let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, &op);
+        let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
         eprintln!("echo mode=13 (divide): worst {worst} ulp");
@@ -2895,6 +2895,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         &gpu_neighbours,
         w,
         h,
+        None,
         &EchoOp {
             weights: [0.0; 16],
             mode: 0,
@@ -3028,13 +3029,14 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
             mix,
             view: MbView::Rendered.code(),
             quality: quality.code(),
+            vector_scale: 0.0,
         };
-        let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+        let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
         eprintln!("motion blur {name}: worst {worst} ulp");
         assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
-        let out2 = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+        let out2 = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
         assert_eq!(
             gpu,
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -3067,8 +3069,9 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
             mix: 1.0,
             view: view.code(),
             quality: MbQuality::Normal.code(),
+            vector_scale: 0.0,
         };
-        let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, &op);
+        let out = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
         assert!(worst <= 2, "view {view:?}: worst {worst} fp16 ULP");
@@ -3083,12 +3086,14 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         &zero,
         w,
         h,
+        None,
         &MotionBlurOp {
             shutter_frac: 0.5,
             samples: 16,
             mix: 1.0,
             view: MbView::Rendered.code(),
             quality: MbQuality::Normal.code(),
+            vector_scale: 0.0,
         },
     );
     assert_eq!(
@@ -3103,12 +3108,14 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         &moving,
         w,
         h,
+        None,
         &MotionBlurOp {
             shutter_frac: 0.0,
             samples: 16,
             mix: 1.0,
             view: MbView::Rendered.code(),
             quality: MbQuality::Normal.code(),
+            vector_scale: 0.0,
         },
     );
     assert_eq!(
@@ -7956,7 +7963,7 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
         let p = l.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::linear_wipe(&mut cpu, w, h, &p);
-        let out = fx.linear_wipe(&ctx, &tex, w, h, &op_of(l));
+        let out = fx.linear_wipe(&ctx, &tex, w, h, None, &op_of(l));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("linear_wipe {name}: worst {worst}");
@@ -7977,7 +7984,7 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
 
     // **Which side goes first.** At the default 90° the edge is vertical and the
     // LEFT half is removed; the right half is untouched to the bit.
-    let out = fx.linear_wipe(&ctx, &tex, w, h, &op_of(base));
+    let out = fx.linear_wipe(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for y in 0..h {
         for x in 0..w {
@@ -8070,7 +8077,7 @@ fn wgsl_radial_wipe_matches_the_cpu_oracle() {
         let p = r.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::radial_wipe(&mut cpu, w, h, &p);
-        let out = fx.radial_wipe(&ctx, &tex, w, h, &op_of(r));
+        let out = fx.radial_wipe(&ctx, &tex, w, h, None, &op_of(r));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("radial_wipe {name}: worst {worst}");
@@ -8093,7 +8100,7 @@ fn wgsl_radial_wipe_matches_the_cpu_oracle() {
     // Clockwise takes the right of the frame and Anticlockwise the left; Both
     // takes the top and leaves the bottom, symmetric about the vertical.
     let read = |r: RadialWipe| {
-        let out = fx.radial_wipe(&ctx, &tex, w, h, &op_of(r));
+        let out = fx.radial_wipe(&ctx, &tex, w, h, None, &op_of(r));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
     let alpha = |px: &[f32], x: u32, y: u32| px[((y * w + x) * 4 + 3) as usize];
@@ -8184,7 +8191,7 @@ fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
         let p = v.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::venetian_blinds(&mut cpu, w, h, &p);
-        let out = fx.venetian_blinds(&ctx, &tex, w, h, &op_of(v));
+        let out = fx.venetian_blinds(&ctx, &tex, w, h, None, &op_of(v));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("venetian_blinds {name}: worst {worst}");
@@ -8206,7 +8213,7 @@ fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
     // **A rank, not one edge.** At Direction 0 the coverage depends only on the
     // row, and over an 8-pixel slat there must be rows that are gone and rows
     // that are whole — a single wipe edge has exactly one crossing.
-    let out = fx.venetian_blinds(&ctx, &tex, w, h, &op_of(wide));
+    let out = fx.venetian_blinds(&ctx, &tex, w, h, None, &op_of(wide));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let alpha = |y: u32| gpu[((y * w + 5) * 4 + 3) as usize];
     for y in 0..h {
@@ -8307,7 +8314,7 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
         let p = i.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::iris_wipe(&mut cpu, w, h, &p);
-        let out = fx.iris_wipe(&ctx, &tex, w, h, &op_of(i));
+        let out = fx.iris_wipe(&ctx, &tex, w, h, None, &op_of(i));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("iris_wipe {name}: worst {worst}");
@@ -8323,7 +8330,7 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
     // **Inside gone, outside kept** — the sign of the distance, which no parity
     // check can establish.
     let removed = |i: IrisWipe| {
-        let out = fx.iris_wipe(&ctx, &tex, w, h, &op_of(i));
+        let out = fx.iris_wipe(&ctx, &tex, w, h, None, &op_of(i));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         (
             gpu[((h / 2 * w + w / 2) * 4 + 3) as usize],
@@ -8399,7 +8406,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
         }
     };
     let read = |c: CardWipe| {
-        let out = fx.card_wipe(&ctx, &tex, w, h, &op_of(c));
+        let out = fx.card_wipe(&ctx, &tex, w, h, None, &op_of(c));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
     };
 
@@ -14192,4 +14199,616 @@ fn the_matte_scales_the_texturize_relief() {
             tol: 2e-2,
         },
     );
+}
+
+// ---------------------------------------------------------------------------
+// The matte scales the amount (K-429, docs/08 §2.6): the temporal and
+// transition claims — Echo's Decay, both motion blurs' Shutter angle, and
+// every wipe's Completion.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_matte_scales_the_linear_wipe_completion() {
+    use lumit_core::fx::effects::linear_wipe::LinearWipe;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let l = {
+        let mut l = LinearWipe::read(Params::EMPTY);
+        l.centre_x = w as f32 * 0.5;
+        l.centre_y = h as f32 * 0.5;
+        l.feather = 6.0;
+        l
+    };
+    let p = l.packed();
+    let op = LinearWipeOp {
+        centre: p.centre,
+        normal: p.normal,
+        completion: p.completion,
+        band: p.band,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "linear_wipe",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::linear_wipe_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::linear_wipe(px, w, h, &p),
+            gpu: &|t, m| fx.linear_wipe(&ctx, t, w, h, m, &op),
+            tol: 2e-3,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_radial_wipe_completion() {
+    use lumit_core::fx::effects::radial_wipe::RadialWipe;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let r = {
+        let mut r = RadialWipe::read(Params::EMPTY);
+        r.centre_x = w as f32 * 0.5;
+        r.centre_y = h as f32 * 0.5;
+        r.feather = 4.0;
+        r
+    };
+    let p = r.packed();
+    let op = RadialWipeOp {
+        centre: p.centre,
+        start: p.start,
+        dir: p.dir,
+        completion: p.completion,
+        feather: p.feather,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "radial_wipe",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::radial_wipe_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::radial_wipe(px, w, h, &p),
+            gpu: &|t, m| fx.radial_wipe(&ctx, t, w, h, m, &op),
+            tol: 2e-3,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_venetian_blinds_completion() {
+    use lumit_core::fx::effects::venetian_blinds::VenetianBlinds;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let v = {
+        let mut v = VenetianBlinds::read(Params::EMPTY);
+        v.width = 9.0;
+        v.feather = 3.0;
+        v
+    };
+    let p = v.packed();
+    let op = VenetianBlindsOp {
+        normal: p.normal,
+        period: p.period,
+        completion: p.completion,
+        band: p.band,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "venetian_blinds",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::venetian_blinds_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::venetian_blinds(px, w, h, &p),
+            gpu: &|t, m| fx.venetian_blinds(&ctx, t, w, h, m, &op),
+            // A shade looser than the unmatted parity check: a ramp matte puts
+            // a slat's soft edge under every column, so far more pixels sit on
+            // the feather where fp16 rounds hardest.
+            tol: 6e-3,
+        },
+    );
+}
+
+/// The Iris wipe has no Completion — **the radius is the transition** (§3.71) —
+/// so its matte scales that instead, which is the same sentence about the same
+/// thing (K-429). Beyond the four facts every claim is held to, one equality no
+/// dissolve can reach: a flat half matte on a radius-8 iris draws *exactly* the
+/// radius-4 picture, a genuinely smaller hole.
+#[test]
+fn the_matte_scales_the_iris_wipe_radius() {
+    use lumit_core::fx::effects::iris_wipe::IrisWipe;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let base = {
+        let mut i = IrisWipe::read(Params::EMPTY);
+        i.centre_x = w as f32 * 0.5;
+        i.centre_y = h as f32 * 0.5;
+        i.outer_radius = 8.0;
+        i.inner_radius = 4.0;
+        i
+    };
+    let op_of = |i: IrisWipe| {
+        let p = i.packed();
+        IrisWipeOp {
+            centre: p.centre,
+            vertex: p.vertex,
+            normal: p.normal,
+            period: p.period,
+            rotation: p.rotation,
+            band: p.band,
+            active: p.active,
+            mix: p.mix,
+        }
+    };
+    let p = base.packed();
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "iris_wipe",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::iris_wipe_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::iris_wipe(px, w, h, &p),
+            gpu: &|t, m| fx.iris_wipe(&ctx, t, w, h, m, &op_of(base)),
+            tol: 2e-3,
+        },
+    );
+
+    // **A half matte IS the half-radius iris**, to the bit. A dissolve cannot
+    // move an edge; this does.
+    let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
+    let img = q(&img);
+    let n = (w * h) as usize;
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
+    let mut halved = img.clone();
+    lumit_core::fx::cpu::iris_wipe_matted(&mut halved, w, h, &p, &flat);
+    let mut smaller = base;
+    smaller.outer_radius = 4.0;
+    smaller.inner_radius = 2.0;
+    let mut want = img.clone();
+    lumit_core::fx::cpu::iris_wipe(&mut want, w, h, &smaller.packed());
+    assert_eq!(
+        halved, want,
+        "a half matte on a radius-8 iris must BE the radius-4 iris"
+    );
+
+    // And a black matte leaves the frame exactly alone — the same exact
+    // identity Outer radius 0 already is.
+    let black: Vec<f32> = (0..n).flat_map(|_| [0.0, 0.0, 0.0, 1.0]).collect();
+    let mut shut = img.clone();
+    lumit_core::fx::cpu::iris_wipe_matted(&mut shut, w, h, &p, &black);
+    assert_eq!(shut, img, "a black matte must be the bit-exact identity");
+}
+
+#[test]
+fn the_matte_scales_the_card_wipe_completion() {
+    use lumit_core::fx::effects::card_wipe::CardWipe;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let c = {
+        let mut c = CardWipe::read(Params::EMPTY);
+        c.seed = 12_345;
+        c
+    };
+    let p = c.packed();
+    let op = CardWipeOp {
+        grid: p.grid,
+        completion: p.completion,
+        inv_width: p.inv_width,
+        one_minus_width: p.one_minus_width,
+        order_axis: p.order_axis,
+        order_bias: p.order_bias,
+        order_scale: p.order_scale,
+        axis: p.axis,
+        direction: p.direction,
+        randomness: p.randomness,
+        seed: p.seed,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "card_wipe",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::card_wipe_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::card_wipe(px, w, h, &p),
+            gpu: &|t, m| fx.card_wipe(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+/// Echo's Decay, per pixel (K-429). Beyond the four facts, one equality a
+/// dissolve cannot reach: a flat half matte on decay 0.6 draws *exactly* the
+/// decay-0.3 trail — genuinely shorter ghosts, not a long trail faded back.
+#[test]
+fn the_matte_scales_the_echo_decay() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (24u32, 16u32);
+    let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
+    let current = q(&corpus(w, h));
+    // Two neighbours that are the current frame shifted along, so a trail is
+    // visibly a trail rather than a brightening.
+    let shifted = |by: usize| -> Vec<f32> {
+        let n = (w * h) as usize;
+        let mut out = vec![0.0f32; n * 4];
+        for i in 0..n {
+            let src = (i + by * 3) % n;
+            out[i * 4..i * 4 + 4].copy_from_slice(&current[src * 4..src * 4 + 4]);
+        }
+        out
+    };
+    let n1 = shifted(1);
+    let n2 = shifted(2);
+    let n1_t = upload_linear_f32(&ctx, &n1, w, h);
+    let n2_t = upload_linear_f32(&ctx, &n2, w, h);
+    let gpu_neighbours: [(i32, &wgpu::Texture); 2] = [(-1, &n1_t), (-2, &n2_t)];
+    let cpu_neighbours: [(i32, &[f32]); 2] = [(-1, &n1), (-2, &n2)];
+
+    let weights_for = |decay: f32| {
+        let mut ws = [0.0f32; 16];
+        ws[0] = decay;
+        ws[1] = decay * decay;
+        ws
+    };
+    // Screen, the schema's default combine, at full Mix.
+    let (mode, mix) = (3u32, 1.0f32);
+    let weights = weights_for(0.6);
+    let op = EchoOp { weights, mode, mix };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "echo",
+            w,
+            h,
+            img: &current,
+            cpu: &|px, m| {
+                let out =
+                    lumit_core::fx::cpu::echo_matted(px, &cpu_neighbours, weights, mode, mix, m);
+                px.copy_from_slice(&out);
+            },
+            plain: &|px| {
+                let out = lumit_core::fx::cpu::echo(px, &cpu_neighbours, weights, mode, mix);
+                px.copy_from_slice(&out);
+            },
+            gpu: &|t, m| fx.echo(&ctx, t, &gpu_neighbours, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+
+    // **A half matte IS the half-decay trail.** `(decay·k)^(i+1)` factorises as
+    // `decay^(i+1) · k^(i+1)`, which is why this is exact rather than close.
+    let n = (w * h) as usize;
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
+    let halved =
+        lumit_core::fx::cpu::echo_matted(&current, &cpu_neighbours, weights, mode, mix, &flat);
+    let want = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, weights_for(0.3), mode, mix);
+    assert_eq!(
+        halved, want,
+        "a half matte on decay 0.6 must BE the decay-0.3 trail"
+    );
+
+    // And a black matte skips every tap, leaving the current frame exactly —
+    // which a zero-weight tap folded in would NOT do under Multiply.
+    let black: Vec<f32> = (0..n).flat_map(|_| [0.0, 0.0, 0.0, 1.0]).collect();
+    let none = lumit_core::fx::cpu::echo_matted(&current, &cpu_neighbours, weights, 4, mix, &black);
+    assert_eq!(
+        none, current,
+        "a black matte must leave the frame alone, Multiply included"
+    );
+}
+
+/// Fast motion blur's Shutter angle, per pixel (K-429).
+#[test]
+fn the_matte_scales_the_fast_motion_blur_shutter() {
+    use lumit_core::fx::{MbQuality, MbView};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let n = (w * h) as usize;
+    let u = vec![3.0f32; n];
+    let v = vec![1.5f32; n];
+    let conf = vec![1.0f32; n];
+    let flow_t = upload_flow_field(&ctx, &u, &v, &conf, w, h);
+    let (shutter, samples, mix) = (1.0f32, 16i32, 1.0f32);
+    let op = MotionBlurOp {
+        shutter_frac: shutter,
+        samples,
+        mix,
+        view: MbView::Rendered.code(),
+        quality: MbQuality::Normal.code(),
+        vector_scale: 0.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "motion_blur",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::motion_blur_matted(
+                    px,
+                    w,
+                    h,
+                    &u,
+                    &v,
+                    &conf,
+                    shutter,
+                    samples,
+                    mix,
+                    MbView::Rendered,
+                    MbQuality::Normal,
+                    m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::motion_blur(
+                    px,
+                    w,
+                    h,
+                    &u,
+                    &v,
+                    &conf,
+                    shutter,
+                    samples,
+                    mix,
+                    MbView::Rendered,
+                    MbQuality::Normal,
+                );
+            },
+            gpu: &|t, m| fx.motion_blur(&ctx, t, &flow_t, w, h, m, &op),
+            tol: 3e-2,
+        },
+    );
+
+    // **A half matte IS the half-shutter streak**, which is a genuinely shorter
+    // smear rather than a long one faded back over a sharp frame.
+    let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };
+    let img = q(&img);
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
+    let mut halved = img.clone();
+    lumit_core::fx::cpu::motion_blur_matted(
+        &mut halved,
+        w,
+        h,
+        &u,
+        &v,
+        &conf,
+        shutter,
+        samples,
+        mix,
+        MbView::Rendered,
+        MbQuality::Normal,
+        &flat,
+    );
+    let mut want = img.clone();
+    lumit_core::fx::cpu::motion_blur(
+        &mut want,
+        w,
+        h,
+        &u,
+        &v,
+        &conf,
+        shutter * 0.5,
+        samples,
+        mix,
+        MbView::Rendered,
+        MbQuality::Normal,
+    );
+    assert_eq!(
+        halved, want,
+        "a half matte on a 360° shutter must BE the 180° streak"
+    );
+}
+
+/// **A Motion vectors layer stands in for the measured flow** (K-429, 7.48).
+/// The layer's red and green are the per-pixel motion, centred at ½ and scaled
+/// by Vector scale; the GPU conversion is the op-for-op twin of
+/// `cpu::motion_vectors_field`, and the blur that follows is the same blur.
+#[test]
+fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
+    use lumit_core::fx::{MbQuality, MbView};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };
+    let img = q(&corpus(w, h));
+    let src = upload_linear_f32(&ctx, &img, w, h);
+    let n = (w * h) as usize;
+    // A vector pass: red ramps left to right, green is a constant lift, both
+    // about the standing-still mid-grey. Quantised first, so the CPU oracle
+    // reads exactly what the texture holds.
+    let vectors = q(&(0..n)
+        .flat_map(|i| {
+            let x = (i % w as usize) as f32 / (w - 1) as f32;
+            [0.5 + 0.25 * x, 0.6, 0.5, 1.0]
+        })
+        .collect::<Vec<f32>>());
+    let vec_t = upload_linear_f32(&ctx, &vectors, w, h);
+    let scale = 24.0f32;
+    let (u, v, conf) = lumit_core::fx::cpu::motion_vectors_field(&vectors, n, scale);
+
+    let (samples, mix) = (16i32, 1.0f32);
+    let op = MotionBlurOp {
+        shutter_frac: 0.5,
+        samples,
+        mix,
+        view: MbView::Rendered.code(),
+        quality: MbQuality::Normal.code(),
+        vector_scale: scale,
+    };
+    let field = fx.motion_vectors_field(&ctx, &vec_t, w, h, scale);
+    let out = fx.motion_blur(&ctx, &src, &field, w, h, None, &op);
+    let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+    let mut cpu = img.clone();
+    lumit_core::fx::cpu::motion_blur(
+        &mut cpu,
+        w,
+        h,
+        &u,
+        &v,
+        &conf,
+        0.5,
+        samples,
+        mix,
+        MbView::Rendered,
+        MbQuality::Normal,
+    );
+    let worst = worst_diff(&cpu, &gpu);
+    eprintln!("motion vectors layer: worst {worst}");
+    assert!(worst < 3e-2, "the supplied field drifted by {worst}");
+    assert_ne!(gpu, img, "a supplied field must actually smear the picture");
+
+    // Mid-grey everywhere is standing still: the field is zero and the blur is
+    // the picture back.
+    let still = q(&(0..n)
+        .flat_map(|_| [0.5, 0.5, 0.5, 1.0])
+        .collect::<Vec<f32>>());
+    let still_t = upload_linear_f32(&ctx, &still, w, h);
+    let field = fx.motion_vectors_field(&ctx, &still_t, w, h, scale);
+    let out = fx.motion_blur(&ctx, &src, &field, w, h, None, &op);
+    assert_eq!(
+        readback_linear_f32(&ctx, &out, w, h).unwrap(),
+        img,
+        "a mid-grey vector pass is standing still, so the picture must come back"
+    );
+}
+
+/// Accumulation motion blur's Shutter angle, per pixel (docs/08 §3.26, K-429).
+///
+/// This one has no kernel of its own — it orchestrates a re-render — so the
+/// claim is checked on the combine that averages the sub-frame pictures. Three
+/// facts: a white matte is the equal-weight average; a black matte is the
+/// sample at the frame's own moment, so nothing is blurred; and a half matte is
+/// neither, and is not the dissolve between them either.
+#[test]
+fn the_matte_scales_the_accumulation_shutter() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (16u32, 8u32);
+    let n = (w * h) as usize;
+    let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };
+    // Five sub-frame renders, each a flat grey — the moving scene reduced to the
+    // one thing the combine can see. Five and not four so the frame's own
+    // moment lands inside a sample's span rather than on the seam between two,
+    // and deliberately lopsided so a shorter exposure, the full average and the
+    // dissolve between them are three visibly different numbers.
+    let levels = [0.05f32, 0.1, 0.2, 0.8, 0.9];
+    let frames: Vec<wgpu::Texture> = levels
+        .iter()
+        .map(|l| {
+            let px = q(&(0..n).flat_map(|_| [*l, *l, *l, 1.0]).collect::<Vec<f32>>());
+            upload_linear_f32(&ctx, &px, w, h)
+        })
+        .collect();
+    let flat = |v: f32| {
+        let px = q(&(0..n).flat_map(|_| [v, v, v, 1.0]).collect::<Vec<f32>>());
+        upload_linear_f32(&ctx, &px, w, h)
+    };
+    // The default − 90° phase on a 180° shutter puts the frame's own time in
+    // the middle of the open span.
+    let anchor = 0.5f32;
+    let read = |m: &wgpu::Texture| {
+        let out = fx.accumulate_with_shutter(&ctx, &frames, m, w, h, anchor);
+        readback_linear_f32(&ctx, &out, w, h).unwrap()[0]
+    };
+
+    // Fully open: the equal-weight average, which is what the effect has always
+    // drawn.
+    let mean = levels.iter().sum::<f32>() / levels.len() as f32;
+    let white = read(&flat(1.0));
+    assert!(
+        (white - mean).abs() < 2e-3,
+        "a white matte must be the equal-weight average: {white} vs {mean}"
+    );
+
+    // Shut: the shutter has closed to the frame's own instant, so the picture
+    // is the sub-frame render at that instant and nothing is blurred at all.
+    let black = read(&flat(0.0));
+    assert!(
+        (black - levels[2]).abs() < 2e-3,
+        "a black matte must be the one sample at the frame's own moment: {black} vs {}",
+        levels[2]
+    );
+
+    // Half open: the average over the middle half of the span — weights 0.3,
+    // 0.4, 0.3 across samples 1, 2 and 3. **Not** the dissolve between the
+    // blurred and the sharp picture, which is the one thing a strength matte on
+    // this effect could ever have produced.
+    let half = read(&flat(0.5));
+    let want = 0.3 * levels[1] + 0.4 * levels[2] + 0.3 * levels[3];
+    assert!(
+        (half - want).abs() < 3e-3,
+        "a half matte must average the middle half of the span: {half} vs {want}"
+    );
+    let dissolve = 0.5 * mean + 0.5 * black;
+    assert!(
+        (half - dissolve).abs() > 1e-2,
+        "a half matte gave the dissolve between the blurred and the sharp frame          ({half} vs {dissolve}) — which is not a shorter exposure"
+    );
+
+    // Bit-stable, run to run (§2.4).
+    assert_eq!(half, read(&flat(0.5)), "the combine must be bit-stable");
 }

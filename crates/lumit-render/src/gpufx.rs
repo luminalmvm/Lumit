@@ -46,12 +46,6 @@ pub enum AuxKind {
     None,
     /// The parallel LUT list (docs/08 §3.11): one parsed cube per `lut` op.
     Lut,
-    /// The parallel layer-input list (docs/impl/layer-input.md): one rendered
-    /// layer per consuming op — Light wrap's Background plate and Texturize's
-    /// Texture. Depth of field's depth pass used to be a third; it moved to the
-    /// generic matte carriage when K-395 made it one of the effects that claim
-    /// the matte inside their own maths.
-    LayerInput,
     /// The Lens flare's custom prescription (K-264): one `.lens` file per flare
     /// op. Its Matte source used to be counted off this same index; since K-395
     /// it is the generic matte, and rides on [`AuxSlot::matte`].
@@ -79,6 +73,7 @@ pub enum AuxKind {
 pub struct AuxSlot<'a> {
     data: AuxData<'a>,
     matte: Option<&'a Tex>,
+    layer: Option<&'a Tex>,
     path: Option<&'a lumit_core::mask::MaskPolyline>,
 }
 
@@ -95,10 +90,6 @@ pub enum AuxData<'a> {
     /// This op's parsed cube, or `None` when the file was unset, missing, 1D or
     /// unreadable.
     Lut(Option<&'a LoadedLut>),
-    /// This op's layer input, already resolved against the picture the chain is
-    /// carrying (so [`crate::fxops::LayerInput::ThisLayer`] is a real texture by
-    /// the time it arrives here).
-    LayerInput(Option<&'a Tex>),
     /// The flare's custom prescription (content hash and text), absent when the
     /// `.lens` row is unset or the file would not parse. Its Matte source is
     /// **not** here: since K-395 that is the generic matte every effect can
@@ -119,13 +110,20 @@ pub enum AuxData<'a> {
 }
 
 impl<'a> AuxSlot<'a> {
-    /// Bundle one op's aux data with its generic matte and its mask path.
+    /// Bundle one op's aux data with its generic matte, its auxiliary layer
+    /// and its mask path.
     pub fn new(
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
+        layer: Option<&'a Tex>,
         path: Option<&'a lumit_core::mask::MaskPolyline>,
     ) -> Self {
-        Self { data, matte, path }
+        Self {
+            data,
+            matte,
+            layer,
+            path,
+        }
     }
 
     /// **This op's mask path** (K-408): the layer's chosen mask, flattened at
@@ -176,14 +174,19 @@ impl<'a> AuxSlot<'a> {
         }
     }
 
-    /// This op's layer input — Light wrap's background plate — already resolved
-    /// against the picture the chain is carrying. `None` for an unset, missing
-    /// or cyclic reference: the labelled no-op.
+    /// **This op's auxiliary layer** (K-123, K-429) — Light wrap's background
+    /// plate, Texturize's Texture, Fast motion blur's Motion vectors, Set
+    /// matte's source — already resolved against the picture the chain is
+    /// carrying, so a reference to the effect's own layer (K-288) is a real
+    /// texture by the time it arrives here.
+    ///
+    /// A field beside the matte rather than an [`AuxKind`] variant, for the
+    /// reason the matte and the mask path are fields: an effect may want a
+    /// layer *and* a flow field, and a variant per pair is a seam the first
+    /// effect that wanted two things would have to add. `None` for an unset,
+    /// missing or cyclic reference: the labelled no-op.
     pub fn layer_input(self) -> Option<&'a Tex> {
-        match self.data {
-            AuxData::LayerInput(t) => t,
-            _ => None,
-        }
+        self.layer
     }
 
     /// The decoded neighbour frames, empty when there are none — from either of
@@ -577,13 +580,11 @@ impl GpuEffect for LightWrap {
         "light_wrap"
     }
     /// The Background plate is another layer, rendered alone at this raster —
-    /// the layer-input list (K-358, K-387). It is a *plate*, not a matte: the
-    /// light in it spills round the foreground's edge, so it is not the same
-    /// input as the Matte row this effect also carries, which dissolves the
-    /// wrap's strength generically.
-    fn aux(&self) -> AuxKind {
-        AuxKind::LayerInput
-    }
+    /// the layer-input carriage (K-358, K-387), which since K-429 is a field on
+    /// the slot rather than a kind, read straight off `aux.layer_input()`. It is
+    /// a *plate*, not a matte: the light in it spills round the foreground's
+    /// edge, so it is not the same input as the Matte row this effect also
+    /// carries, which dissolves the wrap's strength generically.
     fn run(
         &self,
         fx: &FxEngine,
@@ -2151,10 +2152,11 @@ impl GpuEffect for SetMatte {
     fn match_name(&self) -> &'static str {
         "set_matte"
     }
-    /// **Set matte's matte IS its output** (K-395/K-400): the referenced layer
-    /// rendered alone at this raster, arriving on the one matte carriage every
-    /// effect's matte uses. It declares no other aux, so this stays
-    /// [`AuxKind::None`].
+    /// **Set matte's source is not a matte** (K-429): it is this effect's own
+    /// Layer row, rendered alone at this raster and arriving on the ordinary
+    /// auxiliary-layer carriage beside Light wrap's Background. The effect
+    /// carries no universal Matte row at all, so no dissolve stands beside this
+    /// kernel and Invert is applied once, inside it.
     fn run(
         &self,
         fx: &FxEngine,
@@ -2171,7 +2173,7 @@ impl GpuEffect for SetMatte {
             tex,
             w,
             h,
-            aux.matte(),
+            aux.layer_input(),
             &lumit_gpu::fx::SetMatteOp {
                 channel,
                 combine,
@@ -2195,7 +2197,7 @@ impl GpuEffect for LinearWipe {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let l = effects::linear_wipe::LinearWipe::read(p).packed();
         fx.linear_wipe(
@@ -2203,6 +2205,7 @@ impl GpuEffect for LinearWipe {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::LinearWipeOp {
                 centre: l.centre,
                 normal: l.normal,
@@ -2227,7 +2230,7 @@ impl GpuEffect for RadialWipe {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let r = effects::radial_wipe::RadialWipe::read(p).packed();
         fx.radial_wipe(
@@ -2235,6 +2238,7 @@ impl GpuEffect for RadialWipe {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::RadialWipeOp {
                 centre: r.centre,
                 start: r.start,
@@ -2260,7 +2264,7 @@ impl GpuEffect for VenetianBlinds {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let v = effects::venetian_blinds::VenetianBlinds::read(p).packed();
         fx.venetian_blinds(
@@ -2268,6 +2272,7 @@ impl GpuEffect for VenetianBlinds {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::VenetianBlindsOp {
                 normal: v.normal,
                 period: v.period,
@@ -2292,7 +2297,7 @@ impl GpuEffect for IrisWipe {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let i = effects::iris_wipe::IrisWipe::read(p).packed();
         fx.iris_wipe(
@@ -2300,6 +2305,7 @@ impl GpuEffect for IrisWipe {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::IrisWipeOp {
                 centre: i.centre,
                 vertex: i.vertex,
@@ -2327,7 +2333,7 @@ impl GpuEffect for CardWipe {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let c = effects::card_wipe::CardWipe::read(p).packed();
         fx.card_wipe(
@@ -2335,6 +2341,7 @@ impl GpuEffect for CardWipe {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::CardWipeOp {
                 grid: c.grid,
                 completion: c.completion,
@@ -2695,6 +2702,7 @@ impl GpuEffect for Echo {
             &by_offset,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::EchoOp { weights, mode, mix },
         )
     }
@@ -2721,25 +2729,34 @@ impl GpuEffect for MotionBlur {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        // With no field (a plain layer, or a decode that dropped the neighbour)
-        // it is a passthrough — never a fault.
-        let Some(flow) = aux.flow_field() else {
+        let (shutter_frac, samples, mix, view, quality, vector_scale) =
+            effects::motion_blur::MotionBlur::read(p).packed();
+        // A supplied Motion vectors layer stands in for the measured flow
+        // (K-429): it is turned into the same field here, so everything below
+        // reads one kind of field. It is also the one way this effect works on
+        // a layer that has no measured flow at all.
+        let supplied = aux
+            .layer_input()
+            .map(|v| fx.motion_vectors_field(ctx, v, w, h, vector_scale));
+        // With no field of either kind (a plain layer, or a decode that dropped
+        // the neighbour) it is a passthrough — never a fault.
+        let Some(flow) = supplied.as_ref().or(aux.flow_field()) else {
             return tex.clone();
         };
-        let (shutter_frac, samples, mix, view, quality) =
-            effects::motion_blur::MotionBlur::read(p).packed();
         fx.motion_blur(
             ctx,
             tex,
             flow,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::MotionBlurOp {
                 shutter_frac,
                 samples,
                 mix,
                 view: view.code(),
                 quality: quality.code(),
+                vector_scale,
             },
         )
     }
@@ -3130,14 +3147,11 @@ impl GpuEffect for Texturize {
         "texturize"
     }
     /// The Texture is another layer, rendered alone at this raster — the
-    /// layer-input list (K-387), as Light wrap's Background is. It is **not**
-    /// the Matte row this effect also carries: §3.49's map is its matte because
-    /// a map has nothing else it could be, and a texture is not, because
+    /// layer-input carriage (K-387, K-429), as Light wrap's Background is. It is
+    /// **not** the Matte row this effect also carries: §3.49's map is its matte
+    /// because a map has nothing else it could be, and a texture is not, because
     /// "press this canvas in" and "only over the sky" are two statements
     /// (docs/08 §3.68 decision 1).
-    fn aux(&self) -> AuxKind {
-        AuxKind::LayerInput
-    }
     fn run(
         &self,
         fx: &FxEngine,
@@ -3542,24 +3556,45 @@ mod tests {
             // older `depth_invert`, which is the same switch under K-065's
             // stored id.
             let matte_row = def.schema().matte.param();
-            let side_input = def.schema().params.iter().any(|p| {
+            let has_file = def
+                .schema()
+                .params
+                .iter()
+                .any(|p| matches!(p.kind, ParamKind::File { .. }));
+            // A Layer row that is not the matte is the **auxiliary-layer**
+            // carriage, and since K-429 the schema is its own predicate: both
+            // `build.rs` and `run_ops` walk `EffectSchema::layer_input`, so
+            // what has to hold is that the schema finds the row — not that the
+            // effect names a kind. That is what lets Fast motion blur take a
+            // Motion vectors layer while its `aux()` is still the flow field.
+            let extra_layer = def.schema().params.iter().any(|p| {
                 let is_matte = matte_row.is_some_and(|m| p.id == m || p.id.starts_with(m));
                 !is_matte
                     && p.id != lumit_core::fx::MATTE_INVERT_PARAM
-                    && matches!(p.kind, ParamKind::File { .. } | ParamKind::Layer { .. })
+                    && matches!(p.kind, ParamKind::Layer { .. })
             });
-            if !side_input {
+            if !has_file && !extra_layer {
                 continue;
             }
             let gpu = gpu_effect(name).unwrap_or_else(|| {
                 panic!("{name} takes a file or layer input but has no GPU pass to receive it")
             });
-            assert_ne!(
-                gpu.aux(),
-                AuxKind::None,
-                "{name} declares a file or layer row, but its GPU pass claims no list — \
-                 the input it was given would never arrive"
-            );
+            if has_file {
+                assert_ne!(
+                    gpu.aux(),
+                    AuxKind::None,
+                    "{name} declares a file row, but its GPU pass claims no list — \
+                     the input it was given would never arrive"
+                );
+            }
+            if extra_layer {
+                assert!(
+                    def.schema().layer_input().is_some(),
+                    "{name} declares a layer row that is not its matte, but \
+                     EffectSchema::layer_input does not find it — the render would \
+                     fill no slot for it and the picture would quietly ignore it"
+                );
+            }
         }
     }
 
@@ -4106,6 +4141,198 @@ mod tests {
             rendered(&stack(false), &absent),
             fresh,
             "an unset Matte row must not be a dissolve by one"
+        );
+    }
+
+    /// **Set matte's source arrives on the layer-input carriage** (K-429).
+    ///
+    /// This one has a real way to fail silently. The effect used to take its
+    /// picture off the Matte list and now takes it off the layer-input list;
+    /// both are `Vec<LayerInput>` of the same shape, so a wrong wiring compiles,
+    /// renders, and simply hands the kernel nothing — which is the documented
+    /// no-op, and looks exactly like a project whose row is unset. So the test
+    /// pins the whole route: a texture bound on the layer-input list must reach
+    /// the kernel and cut the picture to it, the same texture on the *matte*
+    /// list must reach nothing at all, and the schema must agree that this
+    /// effect takes no matte.
+    #[test]
+    fn set_matte_reads_the_layer_input_carriage_and_no_matte() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        // Opaque white, so any change in the picture is the coverage changing.
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
+        // A left half that shows and a right half that does not.
+        let shape: Vec<f32> = (0..(w * h))
+            .flat_map(|i| {
+                let lit = f32::from(i % w < w / 2);
+                [lit, lit, lit, 1.0]
+            })
+            .collect();
+        let shape_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &shape, w, h);
+
+        let inst = lumit_core::fx::instantiate("set_matte").expect("a built-in");
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            ((w * w + h * h) as f32).sqrt(),
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        let schema = ops.iter().next().expect("one op").def.schema();
+        assert_eq!(
+            schema.matte,
+            lumit_core::fx::MatteRole::None,
+            "Set matte carries no Matte row (K-429)"
+        );
+        assert_eq!(
+            schema.layer_input(),
+            Some(lumit_core::fx::MATTE_PARAM),
+            "its source is the layer-input carriage, under its own stored id"
+        );
+
+        let rendered = |layers: &[crate::fxops::LayerInput],
+                        mattes: &[crate::fxops::LayerInput]| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                &ops,
+                &[],
+                None,
+                &[],
+                layers,
+                &[],
+                mattes,
+                &[],
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+
+        // Bound on the layer-input list: the picture wears the shape.
+        let cut = rendered(&[crate::fxops::LayerInput::Texture(shape_tex.clone())], &[]);
+        for y in 0..h {
+            let left = ((y * w) * 4 + 3) as usize;
+            let right = ((y * w + w - 1) * 4 + 3) as usize;
+            assert_eq!(cut[left], 1.0, "the lit half must stay opaque");
+            assert_eq!(cut[right], 0.0, "the dark half must be cut away");
+        }
+
+        // Unset: the labelled no-op, and the picture back untouched.
+        let absent = rendered(&[crate::fxops::LayerInput::Absent], &[]);
+        assert_eq!(absent, source, "an unset source must be the identity");
+
+        // The same texture on the *matte* list reaches nothing: this effect
+        // takes no slot off it, so a wiring that read it there would be reading
+        // whichever effect's matte happened to sit above.
+        assert_eq!(
+            rendered(
+                &[crate::fxops::LayerInput::Absent],
+                &[crate::fxops::LayerInput::Texture(shape_tex)],
+            ),
+            source,
+            "Set matte must consume nothing from the matte carriage"
+        );
+    }
+
+    /// **Fast motion blur reads a flow field, a Motion vectors layer and a
+    /// matte, all three** (K-429). The reason the auxiliary layer became a field
+    /// on the slot rather than a sixth `AuxKind`: this effect already names the
+    /// flow field, so a kind could not also carry its layer.
+    ///
+    /// Run it through `run_ops` on a layer with **no measured flow at all** and
+    /// a vectors layer bound, which is the case the row exists for. It must
+    /// smear; with the row unset and no field either it must be the documented
+    /// passthrough.
+    #[test]
+    fn fast_motion_blur_takes_a_vectors_layer_beside_its_flow_field() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 16u32);
+        // A hard vertical edge, so a sideways smear is unmistakable.
+        let source: Vec<f32> = (0..(w * h))
+            .flat_map(|i| {
+                let lit = f32::from(i % w < w / 2);
+                [lit, lit, lit, 1.0]
+            })
+            .collect();
+        // Red well above the standing-still mid-grey: everything moves sideways.
+        let vectors: Vec<f32> = (0..(w * h)).flat_map(|_| [0.9f32, 0.5, 0.5, 1.0]).collect();
+        let vec_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vectors, w, h);
+
+        let inst = lumit_core::fx::instantiate("motion_blur").expect("a built-in");
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            ((w * w + h * h) as f32).sqrt(),
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        let schema = ops.iter().next().expect("one op").def.schema();
+        assert_eq!(
+            schema.layer_input(),
+            Some("motion_vectors"),
+            "the vectors row is the auxiliary layer, not the matte"
+        );
+        assert_eq!(
+            schema.matte.param(),
+            Some(lumit_core::fx::MATTE_PARAM),
+            "and the Matte row is still there beside it"
+        );
+
+        let rendered = |layers: &[crate::fxops::LayerInput]| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                &ops,
+                &[],
+                None,
+                &[],
+                layers,
+                &[],
+                &[],
+                &[],
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+
+        // No field of either kind: the documented passthrough, never a fault.
+        assert_eq!(
+            rendered(&[crate::fxops::LayerInput::Absent]),
+            source,
+            "with no field at all the effect must pass the picture through"
+        );
+        // The layer alone is a field, on a layer that has no measured flow.
+        let smeared = rendered(&[crate::fxops::LayerInput::Texture(vec_tex)]);
+        assert_ne!(
+            smeared, source,
+            "a supplied vectors layer must smear a layer with no measured flow"
+        );
+        // And the smear is sideways: the edge has spread across columns that
+        // were flat before.
+        let row = (h / 2) as usize;
+        let at = |x: usize| smeared[(row * w as usize + x) * 4];
+        let mid = (w / 2) as usize;
+        assert!(
+            (at(mid) - at(mid + 3)).abs() > 1e-3,
+            "the edge did not spread along the vector"
         );
     }
 

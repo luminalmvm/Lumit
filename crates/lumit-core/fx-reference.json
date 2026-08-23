@@ -8790,7 +8790,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Decay per pixel: the trail dies away sooner where the matte is dark and reaches its full length where it is white, so the ghosts are genuinely shorter rather than faded back"
+      }
     },
     {
       "slug": "posterize-time",
@@ -8976,7 +8980,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Shutter angle per pixel: the open shutter shrinks toward the frame's own moment where the matte is dark, so part of the picture is blurred over half a frame and part is not blurred at all"
+      }
     },
     {
       "slug": "fast-motion-blur",
@@ -9019,6 +9027,24 @@
             "High"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "motion_vectors",
+          "label": "Motion vectors",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "vector_scale",
+          "label": "Vector scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 32.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 4000.0
         },
         {
           "id": "view",
@@ -9111,7 +9137,18 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "vector_scale",
+          "on": "motion_vectors",
+          "cond": "layer_set"
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Shutter angle per pixel: the streak is genuinely shorter where the matte is dark, gathering from nearer along the motion, rather than a long streak faded back over a sharp picture"
+      }
     },
     {
       "slug": "matte-key",
@@ -9423,11 +9460,7 @@
           "default": false
         }
       ],
-      "groups": [],
-      "matte": {
-        "param": "matte",
-        "meaning": "is the alpha: the chosen channel of the matte layer becomes this layer's coverage, which is the whole effect rather than a strength applied to one"
-      }
+      "groups": []
     },
     {
       "slug": "broadcast-safe",
@@ -13736,7 +13769,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Completion per pixel: the wipe is further along where the matte is bright, so a grey ramp is a gradient wipe and a black matte holds the frame back"
+      }
     },
     {
       "slug": "radial-wipe",
@@ -13883,7 +13920,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Completion per pixel: the hand has swept further where the matte is bright, so a grey ramp opens the wedge unevenly and a black matte holds the frame back"
+      }
     },
     {
       "slug": "venetian-blinds",
@@ -14009,7 +14050,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Completion per pixel: the slats stand further open where the matte is bright, so one part of the frame can be shut while another is wide open"
+      }
     },
     {
       "slug": "iris-wipe",
@@ -14178,7 +14223,11 @@
           "cond": "bool_is",
           "value": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the iris radius per pixel: the polygon opens wide where the matte is bright and shuts to nothing where it is black, this effect having no Completion to scale"
+      }
     },
     {
       "slug": "card-wipe",
@@ -14366,7 +14415,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Completion per pixel: the cards have turned further where the matte is bright, and it is asked per pixel, so a card can be half flipped and half standing"
+      }
     },
     {
       "slug": "slider-control",

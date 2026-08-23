@@ -24,6 +24,17 @@ use lumit_fx_macros::Effect;
     // ≈ N× a full comp render.
     cost = Heavy,
     roi = FullFrame,
+    // K-429: the matte scales the amount, and here that amount is the open
+    // shutter itself. It is spent in the combine that averages the sub-frame
+    // renders (`realise::accumulate_below`) rather than in a kernel, because
+    // this effect has no kernel — but it is the same claim, so the generic
+    // strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Shutter angle per pixel: the open shutter shrinks toward the \
+         frame's own moment where the matte is dark, so part of the picture is \
+         blurred over half a frame and part is not blurred at all",
+    ),
 )]
 pub struct AccumulationMb {
     /// Sub-frame renders of the scene below across the open shutter (≥ 2 to

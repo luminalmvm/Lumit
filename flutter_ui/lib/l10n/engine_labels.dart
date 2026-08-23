@@ -619,6 +619,7 @@ Map<String, String> get _table => {
       "Use source colour": l10n.fxUseSourceColour,
       "Utility": l10n.fxUtility,
       "Value": l10n.fxValue,
+      "Vector scale": l10n.fxVectorScale,
       "Vegas": l10n.fxVegas,
       "Venetian blinds": l10n.fxVenetianBlinds,
       "Vertical": l10n.fxVertical,

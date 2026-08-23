@@ -577,6 +577,7 @@ Use masks
 Use source colour
 Utility
 Value
+Vector scale
 Vegas
 Venetian blinds
 Vertical
