@@ -10581,6 +10581,13 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
+        // The owner's rule for mattes (K-426): the matte scales the amount.
+        // Every blur, sharpen and colour effect whose scaled amount is not
+        // already a straight lerp of the input claims it; the rest (Tritone,
+        // Black and white, Tint, Curves, Levels, Invert, LUT, Broadcast safe,
+        // Contrast, Vignette) keep the strength dissolve because scaling
+        // their amount IS that dissolve, and Threshold because it has no
+        // honest per-pixel form.
         let claims = matches!(
             s.match_name,
             "dof"
@@ -10590,11 +10597,28 @@ fn every_effect_carries_a_matte_row() {
                 | "turbulent_displace"
                 | "set_matte"
                 | "displacement_map"
+                | "directional_blur"
+                | "radial_blur"
+                | "sharpen"
+                | "sharpen_simple"
+                | "channel_blur"
+                | "exposure"
+                | "saturation"
+                | "gamma"
+                | "temperature"
+                | "vibrancy"
+                | "hue_shift"
+                | "brightness"
+                | "colour_balance"
+                | "hue_saturation"
+                | "photo_filter"
+                | "shadow_highlight"
+                | "posterize"
         );
         assert_eq!(
             !s.matte.generic(),
             claims,
-            "{} — only Depth of field, the Lens flare, the Gaussian blur, the Glow,              Turbulent displace, Set matte and Displacement map claim the matte              inside their own maths; anything else that wants a deeper meaning must              say so here too",
+            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426); anything else that wants a deeper meaning              must say so here too",
             s.match_name
         );
         // Every image effect takes one, whatever it means by it.

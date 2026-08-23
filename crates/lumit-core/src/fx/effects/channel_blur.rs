@@ -22,6 +22,13 @@ use lumit_fx_macros::Effect;
     // exactly as the Gaussian blur declares its own (§3.8).
     roi = PaddedPctDiag(25.0),
     premultiplied = true,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales all four blur radii per pixel: white blurs each channel at \
+         its full radius, grey narrower, black not at all",
+    ),
 )]
 pub struct ChannelBlur {
     /// Red's kernel half-width, px@comp (§2.3), scaled to the raster in play so

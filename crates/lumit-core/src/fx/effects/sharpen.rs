@@ -19,6 +19,13 @@ use lumit_fx_macros::Effect;
     roi = PaddedPctDiag(4.0),
     // §2.2: operates on unpremultiplied colour.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white adds the full Amount of detail \
+         back, black none",
+    ),
 )]
 pub struct Sharpen {
     /// Per cent of the detail signal added back (§3.9: 0–300 %).

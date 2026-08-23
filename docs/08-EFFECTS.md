@@ -343,8 +343,8 @@ every effect from the day it landed rather than on the handful someone remembere
 **Effects may override with a deeper meaning** where the matte belongs inside the maths.
 An override takes the same row and the same labels, keeps its stored parameter id (K-065 —
 a save is a save), and documents what its matte means in its own schema prose, which is
-what the manual's parameter tables generate from. Seven effects do, and each is a picture
-the dissolve above cannot produce:
+what the manual's parameter tables generate from. Seven effects do for a reason of their
+own, and each is a picture the dissolve above cannot produce:
 
 | Effect | What its matte means |
 |---|---|
@@ -355,6 +355,27 @@ the dissolve above cannot produce:
 | Lens flare (§3.27) | where the flare **detects its light sources**, in Matte source mode |
 | Set matte (§3.44) | **is the alpha**: the chosen channel of the matte becomes this layer's coverage, which is the whole effect rather than a strength applied to one |
 | Displacement map (§3.49) | **is the map**: its chosen channels say which way and how far each pixel is pushed, mid-grey meaning no push — the effect's subject rather than a strength applied to one (K-402) |
+
+**And the matte scales the amount of every blur, sharpen and colour effect (K-426, the
+owner's rule for mattes).** The matte is not a mask: where an effect has an amount — a
+Length, a Gamma, a Density — the matte multiplies *that control* per pixel, toward its
+neutral value, before the maths runs: white keeps the control where it was set, black puts
+it at the value that does nothing, grey lands between. Seventeen more effects claim their
+matte that way, each naming the control in its declaration (and so in the manual's Matte
+row): Directional blur's Length, Radial blur's Amount, Unsharp mask's and Sharpen's Amount,
+Channel blur's four radii, Exposure's Stops toward 0, Saturation toward 100, Gamma toward 1,
+Temperature toward 0, Vibrancy's Amount, Hue shift's Angle toward 0, Brightness's two
+controls toward neutral, Colour balance's Lift toward 0 and Gamma and Gain toward 1, every
+range of Hue and saturation toward 0, Photo filter's Density, Shadow highlight's two amounts,
+and Posterize's Levels toward 256 (black matte: a step too fine to see). Where scaling the
+amount is *mathematically* the dissolve — the output is a straight lerp of the input —
+nothing changes and the effect keeps the strength semantic: Contrast and Vignette are
+exactly that, as are Tritone, Black and white, Tint, Curves, Levels, Invert, LUT and
+Broadcast safe at Mix; Threshold stays there because a cut has no honest per-pixel form that
+returns the colour picture at black (the only formula is the lerp). The formula is one
+helper on each path (`cpu::matte_toward` and its WGSL twin): `neutral·(1 − k) + value·k`,
+spelled so that k = 1 is the value to the bit, which is what keeps an empty matte
+byte-identical to the effect before the claim (K-258).
 
 The difference is worth stating once, because it is the whole reason the hook exists. The
 dissolve can only change *how much of a finished effect* survives; it cannot change what
@@ -888,8 +909,10 @@ it, and black not at all. Both separable passes read the *destination* pixel's m
 two halves agree on that pixel's kernel width. This is a different picture from dissolving a
 full-width blur, and the difference is the point: a dissolve leaves every pixel gathered
 from the full radius away and merely fades that back, so it reads as a veil over a sharp
-image, where a radius ramp reads as a lens racking focus. Directional and Radial take the
-generic strength dissolve — a per-pixel *length* is the same idea and is not implemented.
+image, where a radius ramp reads as a lens racking focus. **Directional and Radial claim it
+the same way (K-426):** the matte scales Directional blur's Length and Radial blur's Amount
+per pixel — the same host-computed taps, packed closer — so the streak or the sweep is
+genuinely shorter where the matte is grey, not a long one faded back.
 
 **Edges (K-137).** The old effect carried one shared Transparent / Repeat / Mirror control
 across every mode. The split keeps that control **only on Radial** (the sweep most often wants
@@ -918,6 +941,10 @@ and run in linear light on unpremultiplied colour (§2.2).
   ≥ 0, re-premultiplies by the centre alpha, and keeps alpha. Amount 0 (whatever the Mix) and
   Mix 0 are the bit-exact passthrough. Cheap; the honest "just sharpen it" control beside the
   Unsharp mask's knobs.
+
+**The Matte scales Amount on both (K-426, §2.6):** less detail is added back where the matte
+is grey, which differs from fading a finished sharpen wherever the full Amount undershot
+past zero and was clipped.
 
 ### 3.10 The colour effects — Colour balance, Saturation, and the preset browser (Magic Bullet-class)
 
@@ -957,6 +984,12 @@ frame under the playhead, Magic Bullet Looks-style. Thumbnails are rendered by t
 engine at thumbnail resolution through the real effect — never approximations. Ships with
 ≥ 40 presets across the genre families (clean/bright, teal-orange, moody desat, anime
 vibrance, VHS warm). Selecting a preset sets parameters; it never locks editing.
+
+**The Matte scales the amount of each (K-426, §2.6):** Colour balance's Lift is pulled
+toward 0 and its Gamma and Gain toward 1 per pixel before the grade runs; Saturation is
+pulled toward 100; Vibrancy's Amount is scaled. A grey matte is a gentler grade, not a full
+grade faded back — which differs wherever the full grade clipped, or (Colour balance) wherever
+Gamma is not 1.
 
 ### 3.11 LUT — .cube loader
 
@@ -1258,6 +1291,9 @@ bit-exact neutral point, pinned by test); Mix 0 is likewise the identity. Distin
 balance's three-channel Gain: a single, animatable, photographic-stops control — the common
 one-knob exposure move.
 
+**The Matte scales Stops toward 0 (K-426, §2.6):** the gain under a matte of strength k is
+`2^(stops·k)`, so a half-grey matte on +2 stops is +1 stop, not a blend of +2 and none.
+
 ### 3.17 Hue shift
 
 **Parameters:** Angle (degrees, default 0, slider −180..+180, wraps), Preserve luminance
@@ -1290,6 +1326,10 @@ pinned by test — and Mix 0 is likewise the identity. Hue rotation runs in the 
 scene-linear working space (not gamma), consistent with every other grade here. (Note: the
 constant-luminance mode is a Rec.709-weighted linear-RGB rotation, in the spirit of K-034's
 perceptual hue handling but not literally an Oklab rotation — see docs/GUIDE.md.)
+
+**The Matte scales Angle toward 0 (K-426, §2.6):** the rotation matrix for `Angle·k` is built
+per pixel in the kernel from the same coefficients, so a half-grey matte on 90° turns the hue
+45° — where a fade would mix the turned colour with the original and desaturate it.
 
 ### 3.18 Contrast
 
@@ -1342,6 +1382,9 @@ Gamma, so a 0..1 image stays in range, while scene-linear highlights above 1 are
 and never clipped (§2.1). Distinct from Colour balance's three-channel Gamma: a single,
 animatable mid-tone control — the common one-knob gamma move.
 
+**The Matte pulls Gamma toward 1 (K-426, §2.6):** a half-grey matte on Gamma 2 curves by
+`pow(x, 1/1.5)` — a genuinely gentler curve — and not `lerp(x, pow(x, 1/2), ½)`.
+
 ### 3.20 Temperature
 
 **Parameters:** Temperature (a plain number, default 0, slider −150..+150, hard ±200), Mix.
@@ -1371,6 +1414,10 @@ point, pinned by test); Mix 0 is likewise the identity. This is the simple monta
 warmth lever — a per-channel ±0.75·k R/B gain with green held (K-135) — not the fuller white
 balance sketched for Tier 2 (§3.10: a Bradford-adapted CCT shift with a Tint axis); it is the
 common one-click warm/cool move, animatable like every other grade.
+
+**The Matte scales Temperature toward 0 (K-426, §2.6):** the two gains are rebuilt per pixel
+from `Temperature·k` rather than lerped, because the blue gain floors at 0 past ±133 and a
+lerp of a floored gain is not the gain of a smaller Temperature.
 
 ### 3.21 Matte key — Keylight-style colour-difference keyer (greenscreen removal)
 
@@ -2194,6 +2241,10 @@ Mix 0 likewise. A neutral default is the grade family's sanctioned exception to 
 "no no-op default" rule (§3.10: a grade's tasteful default is a preset choice), the same
 one Exposure, Contrast and Gamma take.
 
+**The Matte pulls both controls toward neutral (K-426, §2.6):** Brightness toward 0 and
+Contrast toward 0 per pixel before the grade, which with both set is not a fade of the
+finished grade (the offset rides through the scaled contrast).
+
 ### 3.33 Hue and saturation — the master and the six colour ranges
 
 **Parameters:** seven groups of three. **Master** (open) and six colour ranges —
@@ -2238,6 +2289,11 @@ controls that discards the source hue entirely. That is a different effect weari
 panel — §3.24 Tint already maps luma to colour, which is the same picture by a shorter
 route — so it is not built until someone wants the exact AE behaviour; the import reports
 a colourised instance rather than approximating it.
+
+**The Matte scales every range's Hue, Saturation and Lightness toward 0 (K-426, §2.6):**
+applied to the pixel's summed adjustment, which is the same number as scaling all twenty-one
+controls first, so a grey matte turns the hue part of the way rather than fading a turned
+colour over the original.
 
 ### 3.34 Fill — flood the alpha with one colour
 
@@ -2811,6 +2867,10 @@ Three notes:
 
 `moderate` cost, `PaddedPctDiag(25)` ROI — the largest radius any one channel can reach.
 Mix 0 is the bit-exact identity, and so are four zero radii.
+
+**The Matte scales all four radii (K-426, §2.6):** Gaussian blur's own override four times
+over — each channel's blur is genuinely narrower where the matte is grey, both passes reading
+the destination pixel's matte.
 
 ### 3.46 Linear wipe — a straight edge swept across the frame
 
@@ -3508,6 +3568,10 @@ Unpremultiplied (§2.2) — quantising premultiplied colour would band a soft ed
 bit-exact identity; there is no neutral level, because Levels 2 is a real setting and 255 is
 the effect doing almost nothing rather than nothing at all.
 
+**The Matte pulls Levels toward 256 (K-426, §2.6):** the step count is lerped per pixel from
+255 (a black matte: the 8-bit ladder, a step too fine to see) to `Levels − 1` (white), so a
+dark matte means finer rungs rather than a coarse ladder faded back over the picture.
+
 ### 3.59 Threshold — every pixel to black or to white
 
 Maps AE's Threshold ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Colour** effect.
@@ -3608,6 +3672,10 @@ Two things worth stating:
 
 Density 0 is the bit-exact identity on both paths, and so is Mix 0. Unpremultiplied (§2.2);
 alpha untouched. `cheap` cost, `Exact` ROI.
+
+**The Matte scales Density (K-426, §2.6):** thinner glass where the matte is grey, which with
+Preserve luminosity on is a different picture from a fade, since the luma put back depends on
+how dark the glass was.
 
 ### 3.62 Black and white — six weights, one grey
 
@@ -3710,6 +3778,9 @@ AE's default pair written in.
 Blurring means `PaddedPctDiag(25)` ROI and `moderate` cost. Unpremultiplied (§2.2); alpha
 untouched. **Both amounts and Midtone contrast at 0 short-circuits to the bit-exact identity**
 on both paths — the blur is not even run — and Mix 0 likewise.
+
+**The Matte scales Shadow amount and Highlight amount (K-426, §2.6):** a grey matte lifts and
+pulls less, the neighbourhood blur, the widths and Midtone contrast untouched by it.
 
 ### 3.64 Median — the middle value of a neighbourhood
 

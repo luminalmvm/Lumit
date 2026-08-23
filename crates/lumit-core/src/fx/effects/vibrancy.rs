@@ -14,6 +14,13 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: grading premultiplied shifts matte edges.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white applies the full Amount, grey a \
+         fraction of it, black none",
+    ),
 )]
 pub struct Vibrancy {
     /// Per cent: 0 = neutral (bit-exact identity), higher lifts the

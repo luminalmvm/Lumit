@@ -405,7 +405,7 @@ impl GpuEffect for DirectionalBlur {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (length_px, angle_deg, edge, mix) =
             effects::directional_blur::DirectionalBlur::read(p).packed();
@@ -418,6 +418,7 @@ impl GpuEffect for DirectionalBlur {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::DirBlurOp {
                 dx,
                 dy,
@@ -443,7 +444,7 @@ impl GpuEffect for RadialBlur {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (centre_frac, amount_px, spin, edge, mix) =
             effects::radial_blur::RadialBlur::read(p).packed();
@@ -452,6 +453,7 @@ impl GpuEffect for RadialBlur {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::RadialBlurOp {
                 centre_frac,
                 amount_px,
@@ -477,7 +479,7 @@ impl GpuEffect for Sharpen {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, radius_px, threshold, luma_only, mix) =
             effects::sharpen::Sharpen::read(p).packed();
@@ -486,6 +488,7 @@ impl GpuEffect for Sharpen {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::SharpenOp {
                 amount,
                 radius_px,
@@ -510,7 +513,7 @@ impl GpuEffect for SharpenSimple {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, radius, mix) = effects::sharpen_simple::SharpenSimple::read(p).packed();
         fx.sharpen_simple(
@@ -518,6 +521,7 @@ impl GpuEffect for SharpenSimple {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::SharpenSimpleOp {
                 amount,
                 radius,
@@ -758,7 +762,7 @@ impl GpuEffect for ColourBalance {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (lift, gamma, gain, mix) = effects::colour_balance::ColourBalance::read(p).packed();
         fx.colour_balance(
@@ -766,6 +770,7 @@ impl GpuEffect for ColourBalance {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::ColourBalanceOp {
                 lift,
                 gamma,
@@ -789,7 +794,7 @@ impl GpuEffect for Saturation {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (saturation, mix) = effects::saturation::Saturation::read(p).packed();
         fx.saturation(
@@ -797,6 +802,7 @@ impl GpuEffect for Saturation {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::SaturationOp { saturation, mix },
         )
     }
@@ -815,10 +821,17 @@ impl GpuEffect for Vibrancy {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (amount, mix) = effects::vibrancy::Vibrancy::read(p).packed();
-        fx.vibrancy(ctx, tex, w, h, &lumit_gpu::fx::VibrancyOp { amount, mix })
+        fx.vibrancy(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::VibrancyOp { amount, mix },
+        )
     }
 }
 
@@ -903,10 +916,22 @@ impl GpuEffect for Exposure {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let (factor, mix) = effects::exposure::Exposure::read(p).packed();
-        fx.exposure(ctx, tex, w, h, &lumit_gpu::fx::ExposureOp { factor, mix })
+        let e = effects::exposure::Exposure::read(p);
+        let (factor, mix) = e.packed();
+        fx.exposure(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::ExposureOp {
+                stops: e.stops,
+                factor,
+                mix,
+            },
+        )
     }
 }
 
@@ -923,10 +948,23 @@ impl GpuEffect for HueShift {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let (m, mix) = effects::hue_shift::HueShift::read(p).packed();
-        fx.hue_shift(ctx, tex, w, h, &lumit_gpu::fx::HueShiftOp { m, mix })
+        let e = effects::hue_shift::HueShift::read(p);
+        let (m, mix) = e.packed();
+        fx.hue_shift(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::HueShiftOp {
+                angle_rad: e.angle.to_radians(),
+                preserve: e.preserve_luminance,
+                m,
+                mix,
+            },
+        )
     }
 }
 
@@ -963,10 +1001,17 @@ impl GpuEffect for Gamma {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (gamma, mix) = effects::gamma::Gamma::read(p).packed();
-        fx.gamma(ctx, tex, w, h, &lumit_gpu::fx::GammaOp { gamma, mix })
+        fx.gamma(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::GammaOp { gamma, mix },
+        )
     }
 }
 
@@ -1655,10 +1700,17 @@ impl GpuEffect for Brightness {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (b, k, mix) = effects::brightness::Brightness::read(p).packed();
-        fx.brightness(ctx, tex, w, h, &lumit_gpu::fx::BrightnessOp { b, k, mix })
+        fx.brightness(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::BrightnessOp { b, k, mix },
+        )
     }
 }
 
@@ -1675,7 +1727,7 @@ impl GpuEffect for HueSaturation {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (bands, mix) = effects::hue_saturation::HueSaturation::read(p).packed();
         fx.hue_saturation(
@@ -1683,6 +1735,7 @@ impl GpuEffect for HueSaturation {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::HueSaturationOp { bands, mix },
         )
     }
@@ -1701,10 +1754,17 @@ impl GpuEffect for Posterize {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (n, mix) = effects::posterize::Posterize::read(p).packed();
-        fx.posterize(ctx, tex, w, h, &lumit_gpu::fx::PosterizeOp { n, mix })
+        fx.posterize(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::PosterizeOp { n, mix },
+        )
     }
 }
 
@@ -1782,7 +1842,7 @@ impl GpuEffect for PhotoFilter {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let f = effects::photo_filter::PhotoFilter::read(p).packed();
         fx.photo_filter(
@@ -1790,6 +1850,7 @@ impl GpuEffect for PhotoFilter {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::PhotoFilterOp {
                 filter: f.filter,
                 density: f.density,
@@ -1844,7 +1905,7 @@ impl GpuEffect for ShadowHighlight {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let s = effects::shadow_highlight::ShadowHighlight::read(p).packed();
         // Nothing to lift, pull or steepen: the identity, and the gaussian is
@@ -1857,6 +1918,7 @@ impl GpuEffect for ShadowHighlight {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::ShadowHighlightOp {
                 shadow: s.shadow,
                 highlight: s.highlight,
@@ -1884,15 +1946,18 @@ impl GpuEffect for Temperature {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let (gain_r, gain_b, mix) = effects::temperature::Temperature::read(p).packed();
+        let e = effects::temperature::Temperature::read(p);
+        let (gain_r, gain_b, mix) = e.packed();
         fx.temperature(
             ctx,
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::TemperatureOp {
+                t: e.t(),
                 gain_r,
                 gain_b,
                 mix,
@@ -2020,7 +2085,7 @@ impl GpuEffect for ChannelBlur {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (radii, edge, mix) = effects::channel_blur::ChannelBlur::read(p).packed();
         fx.channel_blur(
@@ -2028,6 +2093,7 @@ impl GpuEffect for ChannelBlur {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::ChannelBlurOp { radii, edge, mix },
         )
     }

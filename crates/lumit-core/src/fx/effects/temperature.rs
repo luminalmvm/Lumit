@@ -12,6 +12,13 @@ use lumit_fx_macros::Effect;
     category = Colour,
     cost = Cheap,
     roi = Exact,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Temperature toward 0 per pixel: white applies the full \
+         shift, grey a milder one, black none",
+    ),
 )]
 pub struct Temperature {
     /// A plain number: negative cools (blue up, red down), positive warms (red
@@ -47,8 +54,15 @@ impl Temperature {
     /// at 0 so an extreme never drives a channel negative. Temperature 0 → k 0 →
     /// gains exactly (1.0, 1.0), the neutral point.
     pub fn gains(self) -> (f32, f32) {
-        let k = (self.temperature / 100.0).clamp(-2.0, 2.0);
-        ((1.0 + 0.75 * k).max(0.0), (1.0 - 0.75 * k).max(0.0))
+        cpu::temperature_gains(self.t())
+    }
+
+    /// Temperature ÷ 100, clamped to the ±2 hard range: the one number the
+    /// gains are made from, and what the matted kernel rebuilds them from per
+    /// pixel (K-395).
+    #[must_use]
+    pub fn t(self) -> f32 {
+        (self.temperature / 100.0).clamp(-2.0, 2.0)
     }
 
     /// The two gains the kernel multiplies by, and the mix

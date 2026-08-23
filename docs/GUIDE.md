@@ -1061,6 +1061,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   both at their defaults nothing extra runs at all, and a project saved before
   the two controls existed renders the same bytes it did.
 
+  **The matte turns the effect's own knob (K-426).** The rule the owner set for
+  mattes is short: the matte multiplies the *amount* of the effect, per pixel.
+  It is not a mask laid over the result. Point a Gamma's Matte at a soft
+  gradient and where the gradient is mid-grey the Gamma is genuinely half as
+  strong — the curve the pixel goes through is gentler — rather than the full
+  curve applied and then half hidden. For a blur that means a shorter streak;
+  for Exposure, fewer stops; for Hue shift, a smaller turn of the colour wheel;
+  for Posterize, finer steps (a black matte means steps too fine to see, which
+  is the same as leaving the picture alone). Every blur, sharpen and colour
+  effect now works this way, and each one's Matte row says in words which
+  control it scales. Three do not, for an honest reason. Contrast and Vignette
+  are left alone because for them turning the knob down and fading the result
+  are the *same* picture — the maths is a straight line — so there was nothing
+  to change. Threshold is left alone because a cut is either made or not: the
+  only way to get the colour picture back where the matte is black is to fade
+  to it, which is what the Matte row already did. None of this changes a saved
+  project: an effect with no matte bound runs the very same code it always did.
+
   **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
   picture, and a picture is the wrong thing for some effects. Think of a brush
   that travels along a line you have drawn, from 20 % of the way along to 80 %,

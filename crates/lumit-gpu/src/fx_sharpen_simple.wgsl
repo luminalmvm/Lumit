@@ -11,13 +11,26 @@ struct Params {
     amount: f32,   // high-pass strength; 0 = passthrough, 1 = classic 5/-1 kernel
     radius: f32,   // neighbour distance in pixels (1 = 3x3 kernel)
     mix_amt: f32,  // 0..1, blended against the unprocessed input
-    _pad1: f32,
+    matte_on: f32,     // 1 = the matte drives the control below (K-395)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
@@ -57,7 +70,12 @@ fn sharpen_simple(@builtin(global_invocation_id) gid: vec3<u32>) {
     let left = tap(xy.x - r, xy.y, size);
     let right = tap(xy.x + r, xy.y, size);
     let hp = 4.0 * c - up - down - left - right;
-    let sharpened = max(c + p.amount * hp, vec3<f32>(0.0)) * o.a;
+    // The matte scales Amount per pixel (K-395).
+    var amount = p.amount;
+    if (p.matte_on != 0.0) {
+        amount = amount * matte_k(xy);
+    }
+    let sharpened = max(c + amount * hp, vec3<f32>(0.0)) * o.a;
     let outv = o.rgb * (1.0 - p.mix_amt) + sharpened * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, o.a));
 }

@@ -11265,3 +11265,34 @@ implemented once at the dispatch seam so no kernel learns about either:
 
 No new strings: "Channel", "Blend" and every option label already had `app_en.arb` and
 `engine_labels.dart` entries from Set matte, the Lens flare and the layer Mode dropdown.
+
+## K-426 — The matte scales the amount of every blur, sharpen and colour effect
+
+**Status: DECIDED (2026-08-23).** Numbered K-426 because K-425 is already taken on main
+(the channel and blend seam) and K-420..K-424 are reserved by another branch.
+
+**Decision.** The owner's rule for mattes, applied to the Blur & sharpen and Colour
+categories: **the matte multiplies the effect's amount per pixel, toward its neutral
+value, before the maths runs.** It is not a mask. Seventeen effects claim their matte on
+that basis (docs/08 §2.6 lists them and the control each scales); Gaussian blur and Depth
+of field keep their earlier claims. Where scaling the amount is mathematically the generic
+dissolve — the output is a straight lerp of the input — the effect keeps `MatteRole::
+Strength` and nothing changes: **Contrast and Vignette** are exactly that (so the rulings
+that named them are not carried out, by the rule's own test), as are Tritone, Black and
+white, Tint, Curves, Levels, Invert, LUT and Broadcast safe. **Threshold** stays on
+`Strength` because a cut has no honest per-pixel form that returns the colour picture
+where the matte is black; the only formula is the lerp the row already applies.
+
+**Mechanics.** One helper per path — `cpu::matte_toward` and its WGSL twin, `neutral·(1 −
+k) + value·k`, spelled so k = 1 is the value to the bit — so an empty matte reproduces
+the pre-claim function byte for byte (K-258) without a second code path. Three controls
+carry the raw number into the kernel because a lerp of the host's derived numbers would
+not be "the control scaled": Exposure's gain is `exp2(stops·k)`, Temperature's gains are
+rebuilt from `t·k` (the blue gain floors at 0), Hue shift builds the matrix for `angle·k`
+in the kernel. Beside a non-Normal Blend the order is the one K-425 gives for every
+override: the kernel (with the matte inside it) first, then the blend, then the Mix — so a
+black matte under Multiply squares the source, exactly as an effect at amount 0 does.
+
+**Held by** `check_matte_claim` (`lumit-gpu/src/fx/tests.rs`): per effect, parity under a
+ramp matte and bit-stability, the empty matte equal to the old function to the byte, a
+flat half matte *not* equal to the generic dissolve, and parity there too.

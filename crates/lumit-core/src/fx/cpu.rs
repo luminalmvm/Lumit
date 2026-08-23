@@ -249,17 +249,39 @@ pub fn transform_average(
 /// the unpremultiply divide. Negative light clamps at zero (that is
 /// what a crushing lift means); highlights are never clipped (§2.1).
 pub fn colour_balance(rgba: &mut [f32], lift: [f32; 3], gamma: [f32; 3], gain: [f32; 3], mix: f32) {
+    colour_balance_matted(rgba, lift, gamma, gain, mix, &[]);
+}
+
+/// [`colour_balance`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength pulls its **Lift toward 0, Gamma toward 1 and Gain toward 1**
+/// ([`matte_toward`]) before the grade runs, so a grey matte is a gentler grade
+/// and not a full grade faded back. An empty matte is the unmatted path to the
+/// byte (K-258).
+pub fn colour_balance_matted(
+    rgba: &mut [f32],
+    lift: [f32; 3],
+    gamma: [f32; 3],
+    gain: [f32; 3],
+    mix: f32,
+    matte: &[f32],
+) {
     if lift == [0.0; 3] && gamma == [1.0; 3] && gain == [1.0; 3] {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let k = matte_strength(matte, i * 4);
         let a = px[3];
         let u = unpremult(px);
         let mut v = [0.0f32; 3];
         for c in 0..3 {
-            let mut x = (u[c] * gain[c] + lift[c]).max(0.0);
-            if gamma[c] != 1.0 {
-                x = x.powf(1.0 / gamma[c]);
+            let (lf, gm, gn) = (
+                matte_toward(lift[c], 0.0, k),
+                matte_toward(gamma[c], 1.0, k),
+                matte_toward(gain[c], 1.0, k),
+            );
+            let mut x = (u[c] * gn + lf).max(0.0);
+            if gm != 1.0 {
+                x = x.powf(1.0 / gm);
             }
             v[c] = x;
         }
@@ -276,15 +298,24 @@ pub fn colour_balance(rgba: &mut [f32], lift: [f32; 3], gamma: [f32; 3], gain: [
 /// the whole effect (bit-exact identity); 0 collapses to true greyscale.
 /// Named `saturate` so the parameter can keep the plain name.
 pub fn saturate(rgba: &mut [f32], saturation: f32, mix: f32) {
+    saturate_matted(rgba, saturation, mix, &[]);
+}
+
+/// [`saturate`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Saturation toward 1** (the 100 % neutral,
+/// [`matte_toward`]) before the scale runs. An empty matte is the unmatted
+/// path to the byte (K-258).
+pub fn saturate_matted(rgba: &mut [f32], saturation: f32, mix: f32, matte: &[f32]) {
     if saturation == 1.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let sat = matte_toward(saturation, 1.0, matte_strength(matte, i * 4));
         let a = px[3];
         let u = unpremult(px);
         let luma = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
         for c in 0..3 {
-            let v = (luma + (u[c] - luma) * saturation).max(0.0);
+            let v = (luma + (u[c] - luma) * sat).max(0.0);
             let s = v * a;
             px[c] = px[c] * (1.0 - mix) + s * mix;
         }
@@ -301,10 +332,18 @@ pub fn saturate(rgba: &mut [f32], saturation: f32, mix: f32) {
 /// colour then scales about Rec. 709 luma exactly as Saturation does, so the
 /// two share their premultiply handling and the WGSL twin matches op-for-op.
 pub fn vibrance(rgba: &mut [f32], amount: f32, mix: f32) {
+    vibrance_matted(rgba, amount, mix, &[]);
+}
+
+/// [`vibrance`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength scales its **Amount** before the boost is worked out. An empty
+/// matte is the unmatted path to the byte (K-258).
+pub fn vibrance_matted(rgba: &mut [f32], amount: f32, mix: f32, matte: &[f32]) {
     if amount == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let amount = amount * matte_strength(matte, i * 4);
         let a = px[3];
         let u = unpremult(px);
         let luma = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
@@ -480,12 +519,29 @@ pub fn matte_key(rgba: &mut [f32], p: &MatteKeyParams) {
 /// bit-exact neutral point (the WGSL twin matches its early return); Mix 0
 /// is likewise the identity.
 pub fn exposure(rgba: &mut [f32], factor: f32, mix: f32) {
+    exposure_matted(rgba, factor, 0.0, mix, &[]);
+}
+
+/// [`exposure`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength `k` scales its **Stops toward 0**, so the gain there is
+/// `2^(stops·k)` — a half-grey matte on +2 stops is +1 stop, not a fade
+/// between +2 and none. `factor` stays the host's `2^stops` and is what an
+/// unmatted pixel multiplies by; `stops` is only read under a matte, which is
+/// what keeps the empty-matte path byte-identical (K-258; `exp2` would not
+/// promise to reproduce the host's `f64` power).
+pub fn exposure_matted(rgba: &mut [f32], factor: f32, stops: f32, mix: f32, matte: &[f32]) {
     if factor == 1.0 {
         return;
     }
-    for px in rgba.chunks_exact_mut(4) {
+    let matted = !matte.is_empty();
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let f = if matted {
+            (stops * matte_strength(matte, i * 4)).exp2()
+        } else {
+            factor
+        };
         for ch in &mut px[..3] {
-            let scaled = *ch * factor;
+            let scaled = *ch * f;
             *ch = *ch * (1.0 - mix) + scaled * mix;
         }
     }
@@ -497,10 +553,72 @@ pub fn exposure(rgba: &mut [f32], factor: f32, mix: f32) {
 /// so no unpremultiply round trip. The identity matrix is the bit-exact
 /// neutral point (the WGSL twin matches); Mix 0 is likewise the identity.
 pub fn hue_shift(rgba: &mut [f32], m: [f32; 9], mix: f32) {
+    hue_shift_matted(rgba, m, 0.0, true, mix, &[]);
+}
+
+/// The hue-rotation matrix for `rad` radians in `f32`, the per-pixel twin of
+/// [`super::hue_matrix`] / [`super::hue_matrix_rgb`] (same coefficients, same
+/// order of operations) that the matted [`hue_shift_matted`] builds under a
+/// matte and `fx_hue.wgsl` builds op-for-op. The host keeps computing the
+/// unmatted matrix in `f64`; this only ever runs where a matte has changed the
+/// angle, so the unmatted path never depends on it.
+fn hue_matrix_px(rad: f32, preserve: bool) -> [f32; 9] {
+    let (s, c) = rad.sin_cos();
+    if preserve {
+        let (lr, lg, lb) = (LUMA[0], LUMA[1], LUMA[2]);
+        [
+            lr + c * (1.0 - lr) - s * lr,
+            lg - c * lg - s * lg,
+            lb - c * lb + s * (1.0 - lb),
+            lr - c * lr + s * 0.143,
+            lg + c * (1.0 - lg) + s * 0.140,
+            lb - c * lb - s * 0.283,
+            lr - c * lr - s * (1.0 - lr),
+            lg - c * lg + s * lg,
+            lb + c * (1.0 - lb) + s * lb,
+        ]
+    } else {
+        let a = (1.0 - c) / 3.0;
+        let b = s / 3.0f32.sqrt();
+        [
+            c + a,
+            a - b,
+            a + b,
+            a + b,
+            c + a,
+            a - b,
+            a - b,
+            a + b,
+            c + a,
+        ]
+    }
+}
+
+/// [`hue_shift`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength `k` scales its **Angle toward 0**, and the rotation matrix for
+/// `angle·k` is built per pixel ([`hue_matrix_px`]) — a half-grey matte on a
+/// 90° shift turns the hue 45°, where a fade would mix the 90°-turned colour
+/// with the original and desaturate it. `m` stays the host's matrix and is what
+/// an unmatted pixel multiplies by; `angle_rad` and `preserve` are only read
+/// under a matte, which keeps the empty-matte path byte-identical (K-258).
+pub fn hue_shift_matted(
+    rgba: &mut [f32],
+    m: [f32; 9],
+    angle_rad: f32,
+    preserve: bool,
+    mix: f32,
+    matte: &[f32],
+) {
     if m == [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0] {
         return;
     }
-    for px in rgba.chunks_exact_mut(4) {
+    let matted = !matte.is_empty();
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let m = if matted {
+            hue_matrix_px(angle_rad * matte_strength(matte, i * 4), preserve)
+        } else {
+            m
+        };
         let (r, g, b) = (px[0], px[1], px[2]);
         let nr = m[0] * r + m[1] * g + m[2] * b;
         let ng = m[3] * r + m[4] * g + m[5] * b;
@@ -554,11 +672,20 @@ pub fn contrast(rgba: &mut [f32], k: f32, mix: f32) {
 /// input ≥ 0, so it is safe under the §1.6 fp16 ULP oracle. `gamma` is
 /// clamped ≥ 0.01 at resolve so `1/gamma` stays finite; alpha is untouched.
 pub fn gamma(rgba: &mut [f32], gamma: f32, mix: f32) {
+    gamma_matted(rgba, gamma, mix, &[]);
+}
+
+/// [`gamma`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength `k` pulls its **Gamma toward 1** ([`matte_toward`]) before the
+/// curve runs, so a half-grey matte on Gamma 2 gives `pow(x, 1/1.5)` — a
+/// genuinely gentler curve — and not `lerp(x, pow(x, 1/2), ½)`. An empty matte
+/// is the unmatted path to the byte (K-258).
+pub fn gamma_matted(rgba: &mut [f32], gamma: f32, mix: f32, matte: &[f32]) {
     if gamma == 1.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    let inv = 1.0 / gamma;
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let inv = 1.0 / matte_toward(gamma, 1.0, matte_strength(matte, i * 4));
         let a = px[3];
         let u = unpremult(px);
         for c in 0..3 {
@@ -583,10 +710,43 @@ pub fn gamma(rgba: &mut [f32], gamma: f32, mix: f32) {
 /// so it is safe under the §1.6 fp16 ULP oracle; highlights are never
 /// clipped (§2.1).
 pub fn temperature(rgba: &mut [f32], gain_r: f32, gain_b: f32, mix: f32) {
+    temperature_matted(rgba, gain_r, gain_b, 0.0, mix, &[]);
+}
+
+/// The two channel gains for a Temperature of `t` (the slider ÷ 100, clamped
+/// to ±2): `(1 ± 0.75·t)` floored at 0 — `Temperature::gains` in `f32`, which
+/// is what [`temperature_matted`] and `fx_temperature.wgsl` evaluate per pixel
+/// under a matte.
+#[must_use]
+pub fn temperature_gains(t: f32) -> (f32, f32) {
+    ((1.0 + 0.75 * t).max(0.0), (1.0 - 0.75 * t).max(0.0))
+}
+
+/// [`temperature`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength `k` scales its **Temperature toward 0**, and the two gains
+/// are rebuilt from `t·k` ([`temperature_gains`]) — not lerped, because the
+/// blue gain floors at 0 past ±133 and a lerp of a floored gain is not the
+/// gain of a smaller temperature. `gain_r`/`gain_b` stay the host's and are
+/// what an unmatted pixel multiplies by; `t` is only read under a matte, which
+/// keeps the empty-matte path byte-identical (K-258).
+pub fn temperature_matted(
+    rgba: &mut [f32],
+    gain_r: f32,
+    gain_b: f32,
+    t: f32,
+    mix: f32,
+    matte: &[f32],
+) {
     if gain_r == 1.0 && gain_b == 1.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    let matted = !matte.is_empty();
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let (gain_r, gain_b) = if matted {
+            temperature_gains(t * matte_strength(matte, i * 4))
+        } else {
+            (gain_r, gain_b)
+        };
         let sr = px[0] * gain_r;
         let sb = px[2] * gain_b;
         px[0] = px[0] * (1.0 - mix) + sr * mix;
@@ -919,10 +1079,20 @@ pub fn levels(rgba: &mut [f32], r: [[f32; 4]; 5], mix: f32) {
 /// Purely continuous — no round/clamp/quantize — and highlights are never
 /// clipped (§2.1). Alpha is untouched.
 pub fn brightness(rgba: &mut [f32], b: f32, k: f32, mix: f32) {
+    brightness_matted(rgba, b, k, mix, &[]);
+}
+
+/// [`brightness`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Brightness toward 0 and Contrast toward 1**
+/// ([`matte_toward`]) before the grade runs. An empty matte is the unmatted
+/// path to the byte (K-258).
+pub fn brightness_matted(rgba: &mut [f32], b: f32, k: f32, mix: f32, matte: &[f32]) {
     if b == 0.0 && k == 1.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let m = matte_strength(matte, i * 4);
+        let (b, k) = (matte_toward(b, 0.0, m), matte_toward(k, 1.0, m));
         let a = px[3];
         let u = unpremult(px);
         for c in 0..3 {
@@ -998,13 +1168,23 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
 /// twenty-one adjustments at zero short-circuits the whole effect (bit-exact
 /// identity; the WGSL twin matches). Alpha is untouched.
 pub fn hue_saturation(rgba: &mut [f32], bands: [[f32; 4]; 7], mix: f32) {
+    hue_saturation_matted(rgba, bands, mix, &[]);
+}
+
+/// [`hue_saturation`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales **every range's Hue, Saturation and Lightness toward
+/// 0**. The scale is applied to the pixel's summed adjustment, which is the
+/// same number as scaling all twenty-one controls first (the sum is linear in
+/// them). An empty matte is the unmatted path to the byte (K-258).
+pub fn hue_saturation_matted(rgba: &mut [f32], bands: [[f32; 4]; 7], mix: f32, matte: &[f32]) {
     if bands
         .iter()
         .all(|b| b[0] == 0.0 && b[1] == 0.0 && b[2] == 0.0)
     {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let k = matte_strength(matte, i * 4);
         let a = px[3];
         let u = unpremult(px);
         let v = u[0].max(u[1]).max(u[2]);
@@ -1027,6 +1207,8 @@ pub fn hue_saturation(rgba: &mut [f32], bands: [[f32; 4]; 7], mix: f32) {
             ds += w * band[1];
             dl += w * band[2];
         }
+        // The matte, after the sum and before the turn (the twin matches).
+        let (dh, ds, dl) = (dh * k, ds * k, dl * k);
         // Folded into 0..360 by the subtract-the-floor form rather than
         // `rem_euclid`, because that is the form WGSL can spell op-for-op.
         let turned = h + dh;
@@ -1237,6 +1419,28 @@ fn matte_strength(matte: &[f32], i: usize) -> f32 {
         Some(m) => (m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2]).clamp(0.0, 1.0),
         None => 1.0,
     }
+}
+
+/// A control pulled toward its neutral value by one pixel's matte strength
+/// (docs/08 §2.6, the owner's rule for mattes): `neutral·(1 − k) + value·k`.
+///
+/// **In plain terms.** The matte scales the *amount* of an effect, not its
+/// result: white keeps the control where the user set it, black puts it at
+/// the value that does nothing (an Amount of 0, a Gamma of 1, a Saturation
+/// of 100), grey lands between. Every kernel in the blur, sharpen and colour
+/// families applies this to its named control *before* its maths runs, which
+/// is what makes a half-grey matte on Gamma give `pow(x, 1/lerp(1, g, ½))`
+/// rather than a fade between the graded and the ungraded picture.
+///
+/// Spelled in exactly this form, and the WGSL twins spell it the same way
+/// (never `mix()`), because at `k = 1` it is `value` to the bit — `v·1 + n·0`
+/// — so an empty matte, which [`matte_strength`] reads as 1 everywhere,
+/// leaves every number the kernel multiplies by byte-identical to the
+/// unmatted path (K-258). At `k = 0` it is `neutral` to the bit for the same
+/// reason.
+#[inline]
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    neutral * (1.0 - k) + value * k
 }
 
 /// One resolved Turbulent displace (docs/08 §3.38), reduced to what both paths
@@ -3595,6 +3799,35 @@ pub fn sharpen(
     luma_only: bool,
     mix: f32,
 ) {
+    sharpen_matted(
+        rgba,
+        w,
+        h,
+        amount,
+        radius_px,
+        threshold,
+        luma_only,
+        mix,
+        &[],
+    );
+}
+
+/// [`sharpen`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength scales its **Amount** — less detail added back, not full detail
+/// faded back. The unsharp gaussian is not affected. An empty matte is the
+/// unmatted path to the byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn sharpen_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount: f32,
+    radius_px: f32,
+    threshold: f32,
+    luma_only: bool,
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     // Unpremultiplied colour buffer, alpha carried along for the ride.
     let mut blurred = vec![0.0f32; rgba.len()];
@@ -3604,6 +3837,7 @@ pub fn sharpen(
     }
     blur_gaussian(&mut blurred, w, h, radius_px, 1, 1.0);
     for i in (0..rgba.len()).step_by(4) {
+        let amount = amount * matte_strength(matte, i);
         let o = &original[i..i + 4];
         let u = unpremult(o);
         let b = &blurred[i..i + 3];
@@ -3643,6 +3877,21 @@ pub fn sharpen(
 /// bit-exact, so the neutral case returns early — the WGSL twin matches with
 /// its own early store). Mix 0 is likewise the identity.
 pub fn sharpen_simple(rgba: &mut [f32], w: u32, h: u32, amount: f32, radius: f32, mix: f32) {
+    sharpen_simple_matted(rgba, w, h, amount, radius, mix, &[]);
+}
+
+/// [`sharpen_simple`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales its **Amount** before the high-pass is added. An
+/// empty matte is the unmatted path to the byte (K-258).
+pub fn sharpen_simple_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    amount: f32,
+    radius: f32,
+    mix: f32,
+    matte: &[f32],
+) {
     if amount == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
@@ -3659,6 +3908,7 @@ pub fn sharpen_simple(rgba: &mut [f32], w: u32, h: u32, amount: f32, radius: f32
     for y in 0..hi {
         for x in 0..wi {
             let i = ((y * wi + x) * 4) as usize;
+            let amount = amount * matte_strength(matte, i);
             let a = original[i + 3];
             let c = at(x, y);
             let up = at(x, y - r);
@@ -4184,6 +4434,26 @@ pub fn blur_directional(
     edge: u32,
     mix: f32,
 ) {
+    blur_directional_matted(rgba, w, h, length_px, angle_deg, edge, mix, &[]);
+}
+
+/// [`blur_directional`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales its **Length**, so the streak is genuinely shorter
+/// where the matte is grey — the same evenly spaced taps, packed closer. The
+/// tap count stays the host's (from the full Length), so the two paths sample
+/// the same number of times whatever the matte says. An empty matte is the
+/// unmatted path to the byte (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn blur_directional_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    length_px: f32,
+    angle_deg: f32,
+    edge: u32,
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let (dx, dy) = super::rgb_split_offset(1.0, angle_deg); // unit vector
     let n = dir_blur_taps(length_px);
@@ -4191,6 +4461,7 @@ pub fn blur_directional(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let length_px = length_px * matte_strength(matte, i);
             let pos = (x as f32 + 0.5, y as f32 + 0.5);
             let mut acc = [0.0f32; 4];
             for k in 0..n {
@@ -4237,11 +4508,31 @@ pub fn blur_radial(
     edge: u32,
     mix: f32,
 ) {
+    blur_radial_matted(rgba, w, h, centre_frac, amount_px, spin, edge, mix, &[]);
+}
+
+/// [`blur_radial`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales its **Amount**, so the sweep is genuinely shorter
+/// where the matte is grey. The tap count stays the host's, as the
+/// directional blur's does. An empty matte is the unmatted path to the byte
+/// (K-258).
+#[allow(clippy::too_many_arguments)]
+pub fn blur_radial_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    centre_frac: [f32; 2],
+    amount_px: f32,
+    spin: bool,
+    edge: u32,
+    mix: f32,
+    matte: &[f32],
+) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
     let centre = (centre_frac[0] * fw, centre_frac[1] * fh);
     let diag = (fw * fw + fh * fh).sqrt();
-    let k = if diag > 0.0 {
+    let k_full = if diag > 0.0 {
         amount_px / (0.5 * diag)
     } else {
         0.0
@@ -4251,6 +4542,7 @@ pub fn blur_radial(
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
+            let k = k_full * matte_strength(matte, i);
             let pos = (x as f32 + 0.5, y as f32 + 0.5);
             let d = (pos.0 - centre.0, pos.1 - centre.1);
             // Zoom steps along d itself (a ray through Centre); Spin
@@ -4645,25 +4937,48 @@ pub fn blur_gaussian_matted(
 /// the same arrangement [`blur_gaussian_matted`] uses, and the arrangement the
 /// WGSL twin mirrors op-for-op (§1.6).
 pub fn channel_blur(rgba: &mut [f32], w: u32, h: u32, radii: [f32; 4], edge: u32, mix: f32) {
+    channel_blur_matted(rgba, w, h, radii, edge, mix, &[]);
+}
+
+/// [`channel_blur`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales **all four radii**, so every channel's blur is
+/// genuinely narrower where the matte is grey — the Gaussian blur's own
+/// override, four times over. Both passes read the destination pixel's matte,
+/// as [`blur_gaussian_matted`] does. An empty matte is the unmatted path to
+/// the byte (K-258): the radius is `radius · 1`, and the tap count and σ fall
+/// out of it exactly as the host computed them.
+#[allow(clippy::too_many_arguments)]
+pub fn channel_blur_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    radii: [f32; 4],
+    edge: u32,
+    mix: f32,
+    matte: &[f32],
+) {
     let (wi, hi) = (w as i64, h as i64);
     let original = rgba.to_vec();
     let mut pass = vec![0.0f32; rgba.len()];
-    // Per channel: how far the gather reaches, and the σ it falls off over.
-    let taps: [i64; 4] = std::array::from_fn(|c| radii[c].ceil() as i64);
-    let sigma: [f32; 4] = std::array::from_fn(|c| (radii[c] * 0.5).max(1e-3));
+    // Per channel at this pixel: how far the gather reaches, and the σ it
+    // falls off over — the WGSL's `ceil` and `max(σ, 1e-3)` in that order.
+    let kernel = |d: usize, c: usize| -> (i64, f32) {
+        let rad = radii[c] * matte_strength(matte, d);
+        (rad.ceil() as i64, (rad * 0.5).max(1e-3))
+    };
     // Horizontal, then vertical: the same loop over a different axis.
     for y in 0..hi {
         for x in 0..wi {
             let d = ((y * wi + x) * 4) as usize;
             for c in 0..4 {
-                let r = taps[c];
+                let (r, sigma) = kernel(d, c);
                 if r == 0 {
                     pass[d + c] = original[d + c];
                     continue;
                 }
                 let (mut acc, mut wsum) = (0.0f32, 0.0f32);
                 for i in -r..=r {
-                    let dd = i as f32 / sigma[c];
+                    let dd = i as f32 / sigma;
                     let wt = (-0.5 * dd * dd).exp();
                     wsum += wt;
                     if let Some(sx) = edge_index(x + i, wi, edge) {
@@ -4678,13 +4993,13 @@ pub fn channel_blur(rgba: &mut [f32], w: u32, h: u32, radii: [f32; 4], edge: u32
         for x in 0..wi {
             let d = ((y * wi + x) * 4) as usize;
             for c in 0..4 {
-                let r = taps[c];
+                let (r, sigma) = kernel(d, c);
                 let v = if r == 0 {
                     pass[d + c]
                 } else {
                     let (mut acc, mut wsum) = (0.0f32, 0.0f32);
                     for i in -r..=r {
-                        let dd = i as f32 / sigma[c];
+                        let dd = i as f32 / sigma;
                         let wt = (-0.5 * dd * dd).exp();
                         wsum += wt;
                         if let Some(sy) = edge_index(y + i, hi, edge) {
@@ -5483,10 +5798,25 @@ pub fn perceptual(v: f32) -> f32 {
 /// `n` is `Levels − 1`, computed host-side. Unpremultiplied (§2.2); alpha is
 /// untouched. Mix 0 is the bit-exact identity.
 pub fn posterize(rgba: &mut [f32], n: f32, mix: f32) {
+    posterize_matted(rgba, n, mix, &[]);
+}
+
+/// The rung count a black matte posterizes to: 256 levels, which is `n = 255`
+/// steps — the ladder of an 8-bit picture, where no step is visible.
+pub const POSTERIZE_UNMATTED_STEPS: f32 = 255.0;
+
+/// [`posterize`] driven by a matte (K-395, docs/08 §2.6): each pixel's matte
+/// strength pulls its **Levels toward 256** ([`matte_toward`] on the step
+/// count, from [`POSTERIZE_UNMATTED_STEPS`]), so a dark matte means finer
+/// rungs and a black one none a person can see — not a coarse ladder faded
+/// back over the picture. An empty matte is the unmatted path to the byte
+/// (K-258).
+pub fn posterize_matted(rgba: &mut [f32], n: f32, mix: f32, matte: &[f32]) {
     if n <= 0.0 {
         return;
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let n = matte_toward(n, POSTERIZE_UNMATTED_STEPS, matte_strength(matte, i * 4));
         let a = px[3];
         let u = unpremult(px);
         for c in 0..3 {
@@ -5592,15 +5922,23 @@ pub struct PhotoFilterParams {
 /// Unpremultiplied (§2.2); alpha is untouched. Density 0 and Mix 0 are both the
 /// bit-exact identity.
 pub fn photo_filter(rgba: &mut [f32], p: &PhotoFilterParams) {
+    photo_filter_matted(rgba, p, &[]);
+}
+
+/// [`photo_filter`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales its **Density** — thinner glass, not a full filter
+/// faded back. An empty matte is the unmatted path to the byte (K-258).
+pub fn photo_filter_matted(rgba: &mut [f32], p: &PhotoFilterParams, matte: &[f32]) {
     if p.density == 0.0 {
         return; // no glass: bit-exact identity (the WGSL twin matches)
     }
-    for px in rgba.chunks_exact_mut(4) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let density = p.density * matte_strength(matte, i * 4);
         let a = px[3];
         let u = unpremult(px);
         let mut v = [0.0f32; 3];
         for c in 0..3 {
-            v[c] = u[c] + (u[c] * p.filter[c] - u[c]) * p.density;
+            v[c] = u[c] + (u[c] * p.filter[c] - u[c]) * density;
         }
         let before = u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2];
         let after = v[0] * LUMA[0] + v[1] * LUMA[1] + v[2] * LUMA[2];
@@ -5720,6 +6058,21 @@ pub struct ShadowHighlightParams {
 /// The blurred picture is a *question*, not an answer: it never contributes a
 /// colour, so nothing here softens the picture.
 pub fn shadow_highlight(rgba: &mut [f32], w: u32, h: u32, p: &ShadowHighlightParams) {
+    shadow_highlight_matted(rgba, w, h, p, &[]);
+}
+
+/// [`shadow_highlight`] driven by a matte (K-395, docs/08 §2.6): each pixel's
+/// matte strength scales its **Shadow amount and Highlight amount** before the
+/// gain is worked out, so a grey matte lifts less rather than fading a full
+/// lift back. The neighbourhood blur, the widths and the midtone contrast are
+/// untouched by it. An empty matte is the unmatted path to the byte (K-258).
+pub fn shadow_highlight_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &ShadowHighlightParams,
+    matte: &[f32],
+) {
     if !p.active {
         return;
     }
@@ -5742,7 +6095,8 @@ pub fn shadow_highlight(rgba: &mut [f32], w: u32, h: u32, p: &ShadowHighlightPar
         let ms = 1.0 - smoothstep_between(0.0, p.shadow_width, t);
         let mh = smoothstep_between(1.0 - p.highlight_width, 1.0, t);
         // A multiply, not a gamma (§3.63): monotone, no clamp, no inverse.
-        let lifted = l * (1.0 + ms * p.shadow) / (1.0 + mh * p.highlight);
+        let m = matte_strength(matte, d);
+        let lifted = l * (1.0 + ms * (p.shadow * m)) / (1.0 + mh * (p.highlight * m));
         // Midtone contrast about the perceptual middle.
         let q = ((perceptual(lifted) - 0.5) * p.contrast + 0.5).max(0.0);
         let out_l = q * q;

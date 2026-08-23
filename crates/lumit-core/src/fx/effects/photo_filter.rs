@@ -34,6 +34,13 @@ pub const PHOTO_FILTER_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     // premultiplied alpha.
     premultiplied = false,
     enabled_when = PHOTO_FILTER_ENABLED_WHEN,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Density per pixel: white holds the full Density of glass in \
+         front of the lens, black none",
+    ),
 )]
 pub struct PhotoFilter {
     /// Which glass. The twenty named ones are Lumit's own chromaticities under

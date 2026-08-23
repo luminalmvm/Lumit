@@ -12,6 +12,13 @@ use lumit_fx_macros::Effect;
     category = Colour,
     cost = Cheap,
     roi = Exact,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Angle toward 0 per pixel: white turns the hue by the full \
+         Angle, grey part of the way, black not at all",
+    ),
 )]
 pub struct HueShift {
     /// Degrees on a dial (docs/07 §6): a hue shift is a rotation about the

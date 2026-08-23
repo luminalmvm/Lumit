@@ -29,6 +29,13 @@ use lumit_fx_macros::Effect;
     // §2.2: quantising premultiplied colour would band a soft edge by its
     // coverage and fringe it.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "pulls Levels toward 256 per pixel: white cuts the ladder at \
+         Levels, black leaves a step too fine to see",
+    ),
 )]
 pub struct Posterize {
     /// How many rungs each channel keeps. 2 is the two-tone print, 8 is the

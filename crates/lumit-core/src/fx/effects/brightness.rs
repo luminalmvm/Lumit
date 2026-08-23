@@ -21,6 +21,13 @@ use lumit_fx_macros::Effect;
     // §2.2: an affine grade does not commute with premultiplied alpha,
     // exactly as Contrast's `− pivot` does not.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "pulls Brightness toward 0 and Contrast toward 0 per pixel: white \
+         applies both in full, black neither",
+    ),
 )]
 pub struct Brightness {
     /// Per cent, added to every channel: ±100 is ±1.0 of scene-linear light.

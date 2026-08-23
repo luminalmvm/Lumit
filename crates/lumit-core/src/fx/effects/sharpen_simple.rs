@@ -22,6 +22,13 @@ use lumit_fx_macros::Effect;
     roi = PaddedPctDiag(1.0),
     // §2.2: sharpening premultiplied haloes matte edges.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white sharpens by the full Amount, black \
+         not at all",
+    ),
 )]
 pub struct SharpenSimple {
     /// High-pass strength: 1 is the classic 5/−1 sharpen kernel, 0 a no-op.

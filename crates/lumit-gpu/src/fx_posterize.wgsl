@@ -11,7 +11,7 @@
 struct Params {
     n: f32,        // Levels - 1, computed host-side
     mix_amt: f32,  // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,     // 1 = the matte drives the control below (K-395)
     _pad1: f32,
 };
 
@@ -19,6 +19,25 @@ struct Params {
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// A control pulled toward its neutral by k (== cpu::matte_toward), spelled out
+// rather than `mix()` so that k = 1 is the value to the bit.
+fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
+    return neutral * (1.0 - k) + value * k;
+}
 
 // The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
@@ -46,8 +65,14 @@ fn posterize(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let u = unpremult(o);
-    let t = perceptual(u) * p.n;
-    let step_v = floor(t + vec3<f32>(0.5)) / p.n;
+    // The matte pulls the step count toward 255 (256 levels, the 8-bit
+    // ladder nobody can see) per pixel (K-395, == cpu::posterize_matted).
+    var n = p.n;
+    if (p.matte_on != 0.0) {
+        n = matte_toward(n, 255.0, matte_k(xy));
+    }
+    let t = perceptual(u) * n;
+    let step_v = floor(t + vec3<f32>(0.5)) / n;
     let v = step_v * step_v;
     let outv = o.rgb * (1.0 - p.mix_amt) + v * o.a * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, o.a));

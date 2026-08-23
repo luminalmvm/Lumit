@@ -12,13 +12,26 @@ struct Params {
     density: f32,       // Density / 100; 0.0 = identity
     preserve: f32,      // 1 to restore the pixel own luma, 0 to let it cost light
     mix_amt: f32,       // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    matte_on: f32,     // 1 = the matte drives the control below (K-395)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
 
@@ -43,7 +56,12 @@ fn photo_filter(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let u = unpremult(o);
-    let v = u + (u * p.glass.rgb - u) * p.density;
+    // The matte scales Density per pixel (K-395): thinner glass.
+    var density = p.density;
+    if (p.matte_on != 0.0) {
+        density = density * matte_k(xy);
+    }
+    let v = u + (u * p.glass.rgb - u) * density;
     let before = dot(u, LUMA);
     let after = dot(v, LUMA);
     // A filter dark enough to take the luma to nothing has nothing to restore.

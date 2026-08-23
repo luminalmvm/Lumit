@@ -415,7 +415,7 @@ fn wgsl_sharpen_matches_the_cpu_oracle() {
             luma_only,
             mix,
         };
-        let out = fx.sharpen(&ctx, &tex, w, h, &op);
+        let out = fx.sharpen(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
@@ -428,7 +428,7 @@ fn wgsl_sharpen_matches_the_cpu_oracle() {
                  luma {luma_only} mix {mix}: worst diff {worst}"
         );
 
-        let out2 = fx.sharpen(&ctx, &tex, w, h, &op);
+        let out2 = fx.sharpen(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU sharpen must be bit-stable");
     }
@@ -468,7 +468,7 @@ fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
             radius,
             mix,
         };
-        let out = fx.sharpen_simple(&ctx, &tex, w, h, &op);
+        let out = fx.sharpen_simple(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -478,7 +478,7 @@ fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact passthrough");
         }
 
-        let out2 = fx.sharpen_simple(&ctx, &tex, w, h, &op);
+        let out2 = fx.sharpen_simple(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU sharpen_simple must be bit-stable");
     }
@@ -742,7 +742,7 @@ fn wgsl_colour_balance_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::colour_balance(&mut cpu, op.lift, op.gamma, op.gain, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.colour_balance(&ctx, &tex, w, h, &op);
+        let out = fx.colour_balance(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -752,7 +752,7 @@ fn wgsl_colour_balance_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "neutral balance must be the bit-exact identity");
         }
 
-        let out2 = fx.colour_balance(&ctx, &tex, w, h, &op);
+        let out2 = fx.colour_balance(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU colour balance must be bit-stable");
     }
@@ -813,7 +813,7 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::saturate(&mut cpu, op.saturation, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.saturation(&ctx, &tex, w, h, &op);
+        let out = fx.saturation(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -826,7 +826,7 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
             );
         }
 
-        let out2 = fx.saturation(&ctx, &tex, w, h, &op);
+        let out2 = fx.saturation(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU saturation must be bit-stable");
     }
@@ -880,7 +880,7 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::vibrance(&mut cpu, op.amount, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.vibrancy(&ctx, &tex, w, h, &op);
+        let out = fx.vibrancy(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -890,7 +890,7 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "neutral vibrancy must be the bit-exact identity");
         }
 
-        let out2 = fx.vibrancy(&ctx, &tex, w, h, &op);
+        let out2 = fx.vibrancy(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU vibrancy must be bit-stable");
     }
@@ -1168,6 +1168,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         (
             "neutral",
             ExposureOp {
+                stops: 0.0,
                 factor: 1.0,
                 mix: 1.0,
             },
@@ -1175,6 +1176,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         (
             "brighten",
             ExposureOp {
+                stops: 0.0,
                 factor: 2.0,
                 mix: 1.0,
             },
@@ -1182,6 +1184,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         (
             "darken",
             ExposureOp {
+                stops: 0.0,
                 factor: 0.5,
                 mix: 1.0,
             },
@@ -1189,6 +1192,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         (
             "mixed",
             ExposureOp {
+                stops: 0.0,
                 factor: 1.7,
                 mix: 0.5,
             },
@@ -1196,6 +1200,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         (
             "mix-zero",
             ExposureOp {
+                stops: 0.0,
                 factor: 3.0,
                 mix: 0.0,
             },
@@ -1205,7 +1210,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::exposure(&mut cpu, op.factor, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.exposure(&ctx, &tex, w, h, &op);
+        let out = fx.exposure(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1215,7 +1220,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
 
-        let out2 = fx.exposure(&ctx, &tex, w, h, &op);
+        let out2 = fx.exposure(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU exposure must be bit-stable");
     }
@@ -1274,6 +1279,7 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
     ] {
         let (gain_r, gain_b) = gains(temp);
         let op = TemperatureOp {
+            t: 0.0,
             gain_r,
             gain_b,
             mix,
@@ -1282,7 +1288,7 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::temperature(&mut cpu, op.gain_r, op.gain_b, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.temperature(&ctx, &tex, w, h, &op);
+        let out = fx.temperature(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1292,7 +1298,7 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
 
-        let out2 = fx.temperature(&ctx, &tex, w, h, &op);
+        let out2 = fx.temperature(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU temperature must be bit-stable");
     }
@@ -1569,7 +1575,7 @@ fn wgsl_gamma_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::gamma(&mut cpu, op.gamma, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.gamma(&ctx, &tex, w, h, &op);
+        let out = fx.gamma(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1579,7 +1585,7 @@ fn wgsl_gamma_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
 
-        let out2 = fx.gamma(&ctx, &tex, w, h, &op);
+        let out2 = fx.gamma(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU gamma must be bit-stable");
     }
@@ -1617,12 +1623,17 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
         } else {
             lumit_core::fx::hue_matrix_rgb(deg)
         };
-        let op = HueShiftOp { m, mix };
+        let op = HueShiftOp {
+            angle_rad: 0.0,
+            preserve: true,
+            m,
+            mix,
+        };
         let mut cpu = img.clone();
         lumit_core::fx::cpu::hue_shift(&mut cpu, op.m, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.hue_shift(&ctx, &tex, w, h, &op);
+        let out = fx.hue_shift(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1632,7 +1643,7 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
 
-        let out2 = fx.hue_shift(&ctx, &tex, w, h, &op);
+        let out2 = fx.hue_shift(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU hue shift must be bit-stable");
     }
@@ -2304,7 +2315,7 @@ fn wgsl_dir_blur_matches_the_cpu_oracle() {
                 edge,
                 mix,
             };
-            let out = fx.dir_blur(&ctx, &tex, w, h, &op);
+            let out = fx.dir_blur(&ctx, &tex, w, h, None, &op);
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
             let worst = worst_f16_ulp(&cpu, &gpu);
@@ -2315,7 +2326,7 @@ fn wgsl_dir_blur_matches_the_cpu_oracle() {
                      worst {worst} fp16 ULP"
             );
 
-            let out2 = fx.dir_blur(&ctx, &tex, w, h, &op);
+            let out2 = fx.dir_blur(&ctx, &tex, w, h, None, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU directional blur must be bit-stable");
         }
@@ -2360,7 +2371,7 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
                 edge,
                 mix,
             };
-            let out = fx.radial_blur(&ctx, &tex, w, h, &op);
+            let out = fx.radial_blur(&ctx, &tex, w, h, None, &op);
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
             let worst = worst_f16_ulp(&cpu, &gpu);
@@ -2376,7 +2387,7 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
                 assert_eq!(gpu, img, "amount 0 must be the bit-exact passthrough");
             }
 
-            let out2 = fx.radial_blur(&ctx, &tex, w, h, &op);
+            let out2 = fx.radial_blur(&ctx, &tex, w, h, None, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU radial blur must be bit-stable");
         }
@@ -6341,7 +6352,7 @@ fn wgsl_brightness_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::brightness(&mut cpu, op.b, op.k, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.brightness(&ctx, &tex, w, h, &op);
+        let out = fx.brightness(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -6351,7 +6362,7 @@ fn wgsl_brightness_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
 
-        let out2 = fx.brightness(&ctx, &tex, w, h, &op);
+        let out2 = fx.brightness(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU brightness must be bit-stable");
     }
@@ -6415,7 +6426,7 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
         lumit_core::fx::cpu::hue_saturation(&mut cpu, op.bands, op.mix);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.hue_saturation(&ctx, &tex, w, h, &op);
+        let out = fx.hue_saturation(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -6427,7 +6438,7 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the grade must actually do something");
         }
 
-        let out2 = fx.hue_saturation(&ctx, &tex, w, h, &op);
+        let out2 = fx.hue_saturation(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU hue and saturation must be bit-stable");
     }
@@ -7575,7 +7586,7 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::channel_blur(&mut cpu, w, h, radii, edge, mix);
         let op = ChannelBlurOp { radii, edge, mix };
-        let out = fx.channel_blur(&ctx, &tex, w, h, &op);
+        let out = fx.channel_blur(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("channel_blur {name}: worst {worst}");
@@ -7597,7 +7608,7 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
             );
         }
 
-        let out2 = fx.channel_blur(&ctx, &tex, w, h, &op);
+        let out2 = fx.channel_blur(&ctx, &tex, w, h, None, &op);
         assert_eq!(
             gpu,
             readback_linear_f32(&ctx, &out2, w, h).unwrap(),
@@ -7617,6 +7628,7 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
             &dot_tex,
             w,
             h,
+            None,
             &ChannelBlurOp {
                 radii: [0.0, 0.0, r, 0.0],
                 edge: 1,
@@ -9795,7 +9807,7 @@ fn wgsl_posterize_matches_the_cpu_oracle() {
         let (n, mix) = q.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::posterize(&mut cpu, n, mix);
-        let out = fx.posterize(&ctx, &tex, w, h, &PosterizeOp { n, mix });
+        let out = fx.posterize(&ctx, &tex, w, h, None, &PosterizeOp { n, mix });
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -9807,7 +9819,7 @@ fn wgsl_posterize_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the picture must actually band");
         }
 
-        let out2 = fx.posterize(&ctx, &tex, w, h, &PosterizeOp { n, mix });
+        let out2 = fx.posterize(&ctx, &tex, w, h, None, &PosterizeOp { n, mix });
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU posterize must be bit-stable");
     }
@@ -10012,7 +10024,7 @@ fn wgsl_photo_filter_matches_the_cpu_oracle() {
             preserve: p.preserve,
             mix: p.mix,
         };
-        let out = fx.photo_filter(&ctx, &tex, w, h, &op);
+        let out = fx.photo_filter(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -10024,7 +10036,7 @@ fn wgsl_photo_filter_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the glass must actually colour");
         }
 
-        let out2 = fx.photo_filter(&ctx, &tex, w, h, &op);
+        let out2 = fx.photo_filter(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU photo filter must be bit-stable");
     }
@@ -10229,7 +10241,7 @@ fn wgsl_shadow_highlight_matches_the_cpu_oracle() {
         let p = s.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::shadow_highlight(&mut cpu, w, h, &p);
-        let out = fx.shadow_highlight(&ctx, &tex, w, h, &op_of(s));
+        let out = fx.shadow_highlight(&ctx, &tex, w, h, None, &op_of(s));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
@@ -10241,7 +10253,7 @@ fn wgsl_shadow_highlight_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the picture must actually move");
         }
 
-        let out2 = fx.shadow_highlight(&ctx, &tex, w, h, &op_of(s));
+        let out2 = fx.shadow_highlight(&ctx, &tex, w, h, None, &op_of(s));
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU shadow highlight must be bit-stable");
     }
@@ -12021,5 +12033,802 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
         run(&moved.packed(&ellipse, 1.0, 9.0)),
         run(&pick("scribble-moved")),
         "a Wiggly waver must move with time"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The matte scales the amount (K-426, docs/08 §2.6): the blur, sharpen and
+// colour claims.
+// ---------------------------------------------------------------------------
+
+/// One effect's claim on the matte, checked four ways by [`check_matte_claim`].
+struct MatteClaim<'a> {
+    name: &'static str,
+    w: u32,
+    h: u32,
+    /// Scene-linear premultiplied RGBA, fp16-quantised by the harness.
+    img: &'a [f32],
+    /// The §1.6 oracle with a matte; an empty one is the unmatted path.
+    cpu: &'a dyn Fn(&mut [f32], &[f32]),
+    /// The unmatted oracle as it was before the claim — what an empty matte
+    /// must reproduce to the byte (K-258).
+    plain: &'a dyn Fn(&mut [f32]),
+    /// The GPU pass, the matte bound or not.
+    gpu: &'a dyn Fn(&wgpu::Texture, Option<&wgpu::Texture>) -> wgpu::Texture,
+    /// Absolute parity tolerance. The corpus carries an HDR spike at 6.0, so
+    /// the Moderate-class epsilon of the matted blur applies across the board.
+    tol: f32,
+}
+
+/// **Every claim is held to the same four facts** (K-426, K-258, §1.6).
+///
+/// 1. Under a left-to-right ramp matte the WGSL kernel agrees with the CPU
+///    oracle op-for-op, and is bit-stable run to run.
+/// 2. An empty matte IS the pre-claim function — the oracle's empty-matte path
+///    reproduces the old function to the byte, and the GPU's unbound path
+///    tracks it.
+/// 3. A flat half matte is **not** the generic dissolve: the picture the
+///    kernel makes differs from `matte_mix(full, input, ½)`, which is the one
+///    thing a strength matte cannot do and the whole reason the effect claims
+///    its matte instead of taking the dissolve.
+/// 4. At that flat matte the two paths still agree.
+fn check_matte_claim(ctx: &GpuContext, c: &MatteClaim<'_>) {
+    let n = (c.w * c.h) as usize;
+    let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
+    let readback = |t: &wgpu::Texture| readback_linear_f32(ctx, t, c.w, c.h).unwrap();
+    let img = q(c.img);
+    let tex = upload_linear_f32(ctx, &img, c.w, c.h);
+
+    // 1. Parity and stability under a ramp.
+    let ramp: Vec<f32> = (0..n)
+        .flat_map(|i| {
+            let k = (i % c.w as usize) as f32 / (c.w - 1) as f32;
+            [k, k, k, 1.0]
+        })
+        .collect();
+    let ramp = q(&ramp);
+    let mtex = upload_linear_f32(ctx, &ramp, c.w, c.h);
+    let mut cpu = img.clone();
+    (c.cpu)(&mut cpu, &ramp);
+    let gpu = readback(&(c.gpu)(&tex, Some(&mtex)));
+    let worst = worst_diff(&cpu, &gpu);
+    assert!(
+        worst < c.tol,
+        "{}: matted kernel drifted from the oracle by {worst}",
+        c.name
+    );
+    assert_eq!(
+        gpu,
+        readback(&(c.gpu)(&tex, Some(&mtex))),
+        "{}: the matted kernel must be bit-stable",
+        c.name
+    );
+
+    // 2. An empty matte is the old function.
+    let mut empty = img.clone();
+    (c.cpu)(&mut empty, &[]);
+    let mut plain = img.clone();
+    (c.plain)(&mut plain);
+    assert_eq!(
+        empty, plain,
+        "{}: the oracle's empty-matte path must BE the pre-claim function",
+        c.name
+    );
+    let unbound = readback(&(c.gpu)(&tex, None));
+    let worst = worst_diff(&plain, &unbound);
+    assert!(
+        worst < c.tol,
+        "{}: the unbound GPU path drifted from the unmatted oracle by {worst}",
+        c.name
+    );
+    assert_ne!(
+        plain, img,
+        "{}: the effect must actually do something",
+        c.name
+    );
+
+    // 3. A flat half matte is not the dissolve.
+    let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
+    let mut half = img.clone();
+    (c.cpu)(&mut half, &flat);
+    let mut dissolved = plain.clone();
+    lumit_core::fx::cpu::matte_mix(&mut dissolved, &img, &flat, false);
+    let apart = worst_diff(&half, &dissolved);
+    assert!(
+        apart > 1e-3,
+        "{}: a half matte gave the generic dissolve (worst difference {apart}) — \
+         the matte is not scaling the amount inside the maths, which is the \
+         whole reason this effect claims it",
+        c.name
+    );
+
+    // 4. And the two paths agree there too.
+    let ftex = upload_linear_f32(ctx, &flat, c.w, c.h);
+    let gpu_half = readback(&(c.gpu)(&tex, Some(&ftex)));
+    let worst = worst_diff(&half, &gpu_half);
+    assert!(
+        worst < c.tol,
+        "{}: at a flat half matte the kernel drifted from the oracle by {worst}",
+        c.name
+    );
+}
+
+/// A corpus for the colour claims: a gradient between two saturated colours,
+/// a transparent half, partial alpha and an HDR spike — and, in row 1, a run
+/// of near-primary colours whose grades clip, which is where scaling an
+/// amount and fading a clipped result part company.
+fn claim_corpus(w: u32, h: u32) -> Vec<f32> {
+    let mut img = corpus_with_partials(w, h);
+    let q = |v: f32| f16_to_f32(f16_bits(v));
+    for x in 0..w.min(8) {
+        let i = ((w + x) * 4) as usize;
+        let t = x as f32 / 8.0;
+        img[i] = q(1.0);
+        img[i + 1] = q(0.1 * t);
+        img[i + 2] = q(0.05);
+        img[i + 3] = 1.0;
+    }
+    img
+}
+
+#[test]
+fn the_matte_scales_the_directional_blur_length() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let (length, angle, edge, mix) = (9.5f32, 33.0f32, 1u32, 0.8f32);
+    let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, angle);
+    let op = DirBlurOp {
+        dx,
+        dy,
+        length_px: length,
+        taps: lumit_core::fx::cpu::dir_blur_taps(length),
+        edge,
+        mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "directional_blur",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::blur_directional_matted(px, w, h, length, angle, edge, mix, m);
+            },
+            plain: &|px| lumit_core::fx::cpu::blur_directional(px, w, h, length, angle, edge, mix),
+            gpu: &|t, m| fx.dir_blur(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_radial_blur_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    for spin in [false, true] {
+        let (centre, amount, edge, mix) = ([0.4f32, 0.6f32], 12.0f32, 1u32, 1.0f32);
+        let op = RadialBlurOp {
+            centre_frac: centre,
+            amount_px: amount,
+            taps: lumit_core::fx::cpu::radial_blur_taps(amount),
+            spin,
+            edge,
+            mix,
+        };
+        check_matte_claim(
+            &ctx,
+            &MatteClaim {
+                name: if spin {
+                    "radial_blur (spin)"
+                } else {
+                    "radial_blur (zoom)"
+                },
+                w,
+                h,
+                img: &img,
+                cpu: &|px, m| {
+                    lumit_core::fx::cpu::blur_radial_matted(
+                        px, w, h, centre, amount, spin, edge, mix, m,
+                    );
+                },
+                plain: &|px| {
+                    lumit_core::fx::cpu::blur_radial(px, w, h, centre, amount, spin, edge, mix);
+                },
+                gpu: &|t, m| fx.radial_blur(&ctx, t, w, h, m, &op),
+                tol: 2e-2,
+            },
+        );
+    }
+}
+
+#[test]
+fn the_matte_scales_the_unsharp_mask_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    // An Amount big enough to undershoot past zero at the spike: that clip is
+    // where scaling the Amount and fading a clipped result differ.
+    let op = SharpenOp {
+        amount: 3.0,
+        radius_px: 3.0,
+        threshold: 0.0,
+        luma_only: false,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "sharpen",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::sharpen_matted(
+                    px,
+                    w,
+                    h,
+                    op.amount,
+                    op.radius_px,
+                    op.threshold,
+                    op.luma_only,
+                    op.mix,
+                    m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::sharpen(
+                    px,
+                    w,
+                    h,
+                    op.amount,
+                    op.radius_px,
+                    op.threshold,
+                    op.luma_only,
+                    op.mix,
+                );
+            },
+            gpu: &|t, m| fx.sharpen(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_sharpen_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let op = SharpenSimpleOp {
+        amount: 2.0,
+        radius: 1.0,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "sharpen_simple",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::sharpen_simple_matted(
+                    px, w, h, op.amount, op.radius, op.mix, m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::sharpen_simple(px, w, h, op.amount, op.radius, op.mix)
+            },
+            gpu: &|t, m| fx.sharpen_simple(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_all_four_channel_blur_radii() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    let op = ChannelBlurOp {
+        radii: [6.0, 2.0, 0.0, 4.0],
+        edge: 1,
+        mix: 0.9,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "channel_blur",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::channel_blur_matted(px, w, h, op.radii, op.edge, op.mix, m);
+            },
+            plain: &|px| lumit_core::fx::cpu::channel_blur(px, w, h, op.radii, op.edge, op.mix),
+            gpu: &|t, m| fx.channel_blur(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_exposure_stops_toward_zero() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let stops = 2.0f32;
+    let op = ExposureOp {
+        stops,
+        factor: 2f64.powf(f64::from(stops)) as f32,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "exposure",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::exposure_matted(px, op.factor, stops, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::exposure(px, op.factor, op.mix),
+            gpu: &|t, m| fx.exposure(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+    // A half matte on +2 stops is +1 stop — x2, not the dissolve's x2.5.
+    let mut px = vec![0.25f32, 0.25, 0.25, 1.0];
+    let flat = [0.5f32, 0.5, 0.5, 1.0];
+    lumit_core::fx::cpu::exposure_matted(&mut px, op.factor, stops, 1.0, &flat);
+    assert!(
+        (px[0] - 0.5).abs() < 1e-6,
+        "half of +2 stops must be +1 stop, got {}",
+        px[0]
+    );
+}
+
+#[test]
+fn the_matte_pulls_saturation_toward_neutral() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    // 300 %: the near-primaries in row 1 clip to zero in full, which a fade
+    // keeps at a fraction of the input and a scaled Saturation does not.
+    let op = SaturationOp {
+        saturation: 3.0,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "saturation",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::saturate_matted(px, op.saturation, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::saturate(px, op.saturation, op.mix),
+            gpu: &|t, m| fx.saturation(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_pulls_gamma_toward_one() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let op = GammaOp {
+        gamma: 2.0,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "gamma",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::gamma_matted(px, op.gamma, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::gamma(px, op.gamma, op.mix),
+            gpu: &|t, m| fx.gamma(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+    // The owner's worked example: a half matte on Gamma 2 is pow(x, 1/1.5),
+    // not lerp(x, pow(x, 1/2), ½).
+    let x = 0.25f32;
+    let mut px = vec![x, x, x, 1.0];
+    lumit_core::fx::cpu::gamma_matted(&mut px, 2.0, 1.0, &[0.5, 0.5, 0.5, 1.0]);
+    let want = x.powf(1.0 / 1.5);
+    let lerp = 0.5 * x + 0.5 * x.sqrt();
+    assert!(
+        (px[0] - want).abs() < 1e-6,
+        "got {}, want pow(x, 1/1.5) = {want}",
+        px[0]
+    );
+    assert!(
+        (px[0] - lerp).abs() > 1e-3,
+        "that is the dissolve's {lerp}, not a gentler curve"
+    );
+}
+
+#[test]
+fn the_matte_scales_temperature_toward_zero() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    // 150: past the blue gain's floor, where rebuilding the gains from a
+    // smaller Temperature is not a lerp of the floored gains.
+    let t = 1.5f32;
+    let (gain_r, gain_b) = lumit_core::fx::cpu::temperature_gains(t);
+    let op = TemperatureOp {
+        t,
+        gain_r,
+        gain_b,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "temperature",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::temperature_matted(px, gain_r, gain_b, t, op.mix, m);
+            },
+            plain: &|px| lumit_core::fx::cpu::temperature(px, gain_r, gain_b, op.mix),
+            gpu: &|tex, m| fx.temperature(&ctx, tex, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_vibrancy_amount() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let op = VibrancyOp {
+        amount: 3.0,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "vibrancy",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::vibrance_matted(px, op.amount, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::vibrance(px, op.amount, op.mix),
+            gpu: &|t, m| fx.vibrancy(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_the_hue_shift_angle() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    for preserve in [true, false] {
+        let deg = 90.0f32;
+        let m = if preserve {
+            lumit_core::fx::hue_matrix(f64::from(deg))
+        } else {
+            lumit_core::fx::hue_matrix_rgb(f64::from(deg))
+        };
+        let op = HueShiftOp {
+            angle_rad: deg.to_radians(),
+            preserve,
+            m,
+            mix: 1.0,
+        };
+        check_matte_claim(
+            &ctx,
+            &MatteClaim {
+                name: if preserve {
+                    "hue_shift"
+                } else {
+                    "hue_shift (rgb)"
+                },
+                w,
+                h,
+                img: &img,
+                cpu: &|px, mt| {
+                    lumit_core::fx::cpu::hue_shift_matted(
+                        px,
+                        m,
+                        op.angle_rad,
+                        preserve,
+                        op.mix,
+                        mt,
+                    );
+                },
+                plain: &|px| lumit_core::fx::cpu::hue_shift(px, m, op.mix),
+                gpu: &|t, mt| fx.hue_shift(&ctx, t, w, h, mt, &op),
+                tol: 5e-2,
+            },
+        );
+    }
+    // A half matte on 90° is the 45° matrix, to the precision of f32
+    // trigonometry: the hue genuinely turns half way rather than fading.
+    let mut px = vec![1.0f32, 0.0, 0.0, 1.0];
+    lumit_core::fx::cpu::hue_shift_matted(
+        &mut px,
+        lumit_core::fx::hue_matrix(90.0),
+        90f32.to_radians(),
+        true,
+        1.0,
+        &[0.5, 0.5, 0.5, 1.0],
+    );
+    let mut want = vec![1.0f32, 0.0, 0.0, 1.0];
+    lumit_core::fx::cpu::hue_shift(&mut want, lumit_core::fx::hue_matrix(45.0), 1.0);
+    assert!(
+        worst_diff(&px, &want) < 1e-5,
+        "half of 90° must be the 45° turn: got {px:?}, want {want:?}"
+    );
+}
+
+#[test]
+fn the_matte_pulls_brightness_and_contrast_toward_neutral() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    // Both set: scaling the pair is `b·k` through `(1 + (c − 1)·k)`, which a
+    // fade of the finished grade is not (with one of them neutral it would be).
+    let op = BrightnessOp {
+        b: 0.3,
+        k: 1.8,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "brightness",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::brightness_matted(px, op.b, op.k, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::brightness(px, op.b, op.k, op.mix),
+            gpu: &|t, m| fx.brightness(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_pulls_colour_balance_toward_neutral() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let op = ColourBalanceOp {
+        lift: [0.05, 0.0, -0.05],
+        gamma: [1.3, 1.0, 0.8],
+        gain: [1.2, 1.0, 0.9],
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "colour_balance",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::colour_balance_matted(
+                    px, op.lift, op.gamma, op.gain, op.mix, m,
+                );
+            },
+            plain: &|px| {
+                lumit_core::fx::cpu::colour_balance(px, op.lift, op.gamma, op.gain, op.mix);
+            },
+            gpu: &|t, m| fx.colour_balance(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_every_hue_and_saturation_range_toward_zero() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let mut bands = [[0.0f32; 4]; 7];
+    bands[0] = [120.0, 40.0, -20.0, 0.0];
+    bands[1] = [-60.0, 80.0, 10.0, 0.0];
+    bands[3] = [30.0, -50.0, 0.0, 0.0];
+    let op = HueSaturationOp { bands, mix: 1.0 };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "hue_saturation",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::hue_saturation_matted(px, bands, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::hue_saturation(px, bands, op.mix),
+            gpu: &|t, m| fx.hue_saturation(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_photo_filter_density() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    // Preserve luminosity on: the luma put back depends on how dark the glass
+    // was, which is what makes thinner glass a different picture from a fade.
+    let p = lumit_core::fx::cpu::PhotoFilterParams {
+        filter: [0.9, 0.5, 0.1],
+        density: 0.8,
+        preserve: 1.0,
+        mix: 1.0,
+    };
+    let op = PhotoFilterOp {
+        filter: p.filter,
+        density: p.density,
+        preserve: p.preserve,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "photo_filter",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::photo_filter_matted(px, &p, m),
+            plain: &|px| lumit_core::fx::cpu::photo_filter(px, &p),
+            gpu: &|t, m| fx.photo_filter(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_scales_shadow_and_highlight_amounts() {
+    use lumit_core::fx::effects::shadow_highlight::ShadowHighlight;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let mut s = ShadowHighlight::read(Params::EMPTY);
+    s.radius = 3.0;
+    s.shadow_amount = 100.0;
+    s.highlight_amount = 100.0;
+    s.shadow_tonal_width = 100.0;
+    let p = s.packed();
+    let op = ShadowHighlightOp {
+        shadow: p.shadow,
+        highlight: p.highlight,
+        shadow_width: p.shadow_width,
+        highlight_width: p.highlight_width,
+        radius_px: p.radius_px,
+        contrast: p.contrast,
+        colour_correction: p.colour_correction,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "shadow_highlight",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::shadow_highlight_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::shadow_highlight(px, w, h, &p),
+            gpu: &|t, m| fx.shadow_highlight(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+}
+
+#[test]
+fn the_matte_pulls_posterize_levels_toward_256() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    let op = PosterizeOp { n: 3.0, mix: 1.0 };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "posterize",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::posterize_matted(px, op.n, op.mix, m),
+            plain: &|px| lumit_core::fx::cpu::posterize(px, op.n, op.mix),
+            gpu: &|t, m| fx.posterize(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+    // A black matte is 256 levels: the 8-bit ladder, which on this corpus is
+    // a step nobody can see rather than the untouched picture to the bit.
+    let mut px = img.clone();
+    let black: Vec<f32> = (0..(w * h) as usize)
+        .flat_map(|_| [0.0, 0.0, 0.0, 1.0])
+        .collect();
+    lumit_core::fx::cpu::posterize_matted(&mut px, op.n, op.mix, &black);
+    let worst = worst_diff(&px, &img);
+    assert!(
+        worst < 1.0 / 64.0,
+        "a black matte must be a step too fine to see, not {worst}"
     );
 }

@@ -46,7 +46,9 @@ struct ColourBalanceParams {
     gamma: [f32; 4],
     gain: [f32; 4],
     mix_amt: f32,
-    _pad: [f32; 3],
+    /// 1 = pull Lift toward 0 and Gamma and Gain toward 1 by the matte (K-395).
+    matte_on: f32,
+    _pad: [f32; 2],
 }
 
 /// One resolved saturation (docs/08 §3.10 as amended by K-090): scale about
@@ -64,7 +66,9 @@ pub struct SaturationOp {
 struct SaturationParams {
     saturation: f32,
     mix_amt: f32,
-    _pad: [f32; 2],
+    /// 1 = pull Saturation toward 1 by the matte (K-395).
+    matte_on: f32,
+    _pad0: f32,
 }
 
 /// One resolved vibrancy (docs/08 §3.10, K-152): a saturation boost weighted
@@ -82,7 +86,9 @@ pub struct VibrancyOp {
 struct VibrancyParams {
     amount: f32,
     mix_amt: f32,
-    _pad: [f32; 2],
+    /// 1 = scale Amount by the matte (K-395).
+    matte_on: f32,
+    _pad0: f32,
 }
 
 /// One resolved exposure (docs/08 §3.16): a single scene-linear gain on the
@@ -91,6 +97,8 @@ struct VibrancyParams {
 /// untouched. `factor == 1.0` (0 stops) is the bit-exact neutral point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExposureOp {
+    /// The Stops the factor was made from, for the matted branch (K-395).
+    pub stops: f32,
     /// The linear gain, `2^stops`. 1.0 is the neutral point.
     pub factor: f32,
     /// 0..1, blended against the unprocessed input.
@@ -102,8 +110,11 @@ pub struct ExposureOp {
 struct ExposureParams {
     factor: f32,
     mix_amt: f32,
-    _pad0: f32,
-    _pad1: f32,
+    /// The stops behind `factor`, read only under a matte: the gain there is
+    /// `exp2(stops * k)` (K-395).
+    stops: f32,
+    /// 1 = scale Stops toward 0 by the matte.
+    matte_on: f32,
 }
 
 /// One resolved temperature (docs/08 §3.20): a warm/cool white-balance shift as
@@ -117,6 +128,8 @@ struct ExposureParams {
 /// unpremultiply round trip.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TemperatureOp {
+    /// Temperature / 100 clamped to +-2, for the matted branch (K-395).
+    pub t: f32,
     /// The scene-linear red gain. 1.0 (with `gain_b` 1.0) is the neutral point.
     pub gain_r: f32,
     /// The scene-linear blue gain. 1.0 (with `gain_r` 1.0) is the neutral point.
@@ -131,7 +144,12 @@ struct TemperatureParams {
     gain_r: f32,
     gain_b: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// Temperature / 100, read only under a matte: the gains there are
+    /// rebuilt from `t * k` (K-395).
+    t: f32,
+    /// 1 = scale Temperature toward 0 by the matte.
+    matte_on: f32,
+    _pad: [f32; 3],
 }
 
 /// One resolved invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − u`
@@ -219,7 +237,8 @@ pub struct GammaOp {
 struct GammaParams {
     gamma: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = pull Gamma toward 1 by the matte (K-395).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -299,7 +318,8 @@ struct BrightnessParams {
     b: f32,
     k: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = pull Brightness toward 0 and Contrast toward 1 by the matte (K-395).
+    matte_on: f32,
 }
 
 /// One resolved Hue and saturation (docs/08 §3.33): seven bands of
@@ -318,7 +338,9 @@ pub struct HueSaturationOp {
 struct HueSaturationParams {
     bands: [[f32; 4]; 7],
     mix_amt: f32,
-    _pad: [f32; 3],
+    /// 1 = scale every adjustment toward 0 by the matte (K-395).
+    matte_on: f32,
+    _pad: [f32; 2],
 }
 
 /// One resolved hue shift (docs/08 §3.17): a row-major linear 3×3 colour
@@ -327,6 +349,10 @@ struct HueSaturationParams {
 /// matrix is the neutral point; alpha is untouched.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HueShiftOp {
+    /// The Angle in radians and which matrix it makes (K-136), for the matted
+    /// branch (K-395); `m` is the host matrix for the unmatted one.
+    pub angle_rad: f32,
+    pub preserve: bool,
     /// Row-major 3×3: `[m00,m01,m02, m10,m11,m12, m20,m21,m22]`.
     pub m: [f32; 9],
     /// 0..1, blended against the unprocessed input.
@@ -338,8 +364,13 @@ pub struct HueShiftOp {
 struct HueParams {
     m: [f32; 9],
     mix_amt: f32,
-    _pad0: f32,
-    _pad1: f32,
+    /// 1 = scale Angle toward 0 by the matte (K-395): the kernel then builds
+    /// the matrix for `angle_rad * k` itself, from the same coefficients.
+    matte_on: f32,
+    angle_rad: f32,
+    /// 1 = the constant-luminance matrix, 0 = the plain-RGB spin (K-136).
+    preserve: f32,
+    _pad: [f32; 3],
 }
 
 impl FxEngine {
@@ -383,15 +414,17 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ColourBalanceOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-colour-balance-out");
         let v4 = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.colour_balance,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -400,7 +433,8 @@ impl FxEngine {
                 gamma: v4(op.gamma),
                 gain: v4(op.gain),
                 mix_amt: op.mix,
-                _pad: [0.0; 3],
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 2],
             }),
         );
         out
@@ -416,21 +450,24 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &SaturationOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-saturation-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.saturation,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&SaturationParams {
                 saturation: op.saturation,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
             }),
         );
         out
@@ -446,21 +483,24 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &VibrancyOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-vibrancy-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.vibrancy,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&VibrancyParams {
                 amount: op.amount,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
             }),
         );
         out
@@ -476,22 +516,24 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ExposureOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-exposure-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.exposure,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&ExposureParams {
                 factor: op.factor,
                 mix_amt: op.mix,
-                _pad0: 0.0,
-                _pad1: 0.0,
+                stops: op.stops,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -508,14 +550,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &TemperatureOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-temperature-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.temperature,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -523,7 +567,9 @@ impl FxEngine {
                 gain_r: op.gain_r,
                 gain_b: op.gain_b,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                t: op.t,
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 3],
             }),
         );
         out
@@ -635,21 +681,23 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &GammaOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-gamma-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.gamma,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&GammaParams {
                 gamma: op.gamma,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -733,14 +781,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &BrightnessOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-brightness-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.brightness,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -748,7 +798,7 @@ impl FxEngine {
                 b: op.b,
                 k: op.k,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -765,21 +815,24 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &HueSaturationOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-hue-saturation-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.hue_saturation,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&HueSaturationParams {
                 bands: op.bands,
                 mix_amt: op.mix,
-                _pad: [0.0; 3],
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 2],
             }),
         );
         out
@@ -794,22 +847,26 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &HueShiftOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-hue-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.hue_shift,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&HueParams {
                 m: op.m,
                 mix_amt: op.mix,
-                _pad0: 0.0,
-                _pad1: 0.0,
+                matte_on: f32::from(matte.is_some()),
+                angle_rad: op.angle_rad,
+                preserve: f32::from(op.preserve),
+                _pad: [0.0; 3],
             }),
         );
         out
@@ -831,7 +888,8 @@ pub struct PosterizeOp {
 struct PosterizeParams {
     n: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = pull the step count toward 255 by the matte (K-395).
+    matte_on: f32,
     _pad1: f32,
 }
 
@@ -897,7 +955,8 @@ struct PhotoFilterParams {
     density: f32,
     preserve: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Density by the matte (K-395).
+    matte_on: f32,
 }
 
 /// One resolved Black and white (docs/08 §3.62): the six weights as fractions
@@ -958,7 +1017,8 @@ struct ShadowHighlightParams {
     contrast: f32,
     colour_correction: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale Shadow amount and Highlight amount by the matte (K-395).
+    matte_on: f32,
 }
 
 /// Wave 2's Stylise I batch (docs/08 §3.58–§3.63, K-404): six tone and colour
@@ -974,21 +1034,23 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &PosterizeOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-posterize-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.posterize,
             src,
             src,
+            matte,
             &out,
             w,
             h,
             bytemuck::bytes_of(&PosterizeParams {
                 n: op.n,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
             }),
         );
@@ -1065,14 +1127,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &PhotoFilterOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-photo-filter-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.photo_filter,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -1081,7 +1145,7 @@ impl FxEngine {
                 density: op.density,
                 preserve: op.preserve,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -1130,6 +1194,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ShadowHighlightOp,
     ) -> wgpu::Texture {
         let soft = self.blur(
@@ -1147,11 +1212,12 @@ impl FxEngine {
             },
         );
         let out = work_texture(ctx, w, h, "fx-shadow-highlight-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.shadow_highlight,
             src,
             &soft,
+            matte,
             &out,
             w,
             h,
@@ -1163,7 +1229,7 @@ impl FxEngine {
                 contrast: op.contrast,
                 colour_correction: op.colour_correction,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out

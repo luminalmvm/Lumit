@@ -437,6 +437,28 @@ The four that claim it, and why each is a different picture from a strength diss
 | Depth of field | `depth` | a **depth** pass: how far away each pixel is, so the blur widens with distance from focus |
 | Lens flare | `matte` | where the flare **detects its light sources**, in Matte source mode |
 
+**And the blur, sharpen and colour families claim it by the owner's rule (K-426, docs/08
+§2.6):** the matte scales the effect's *amount* per pixel, toward its neutral value, before
+the maths runs. Seventeen effects declare `matte = ("matte", "<what it scales>")` on that
+basis — Directional blur's Length, Radial blur's Amount, both sharpens' Amount, Channel
+blur's four radii, Exposure's Stops, Saturation, Gamma, Temperature, Vibrancy, Hue shift's
+Angle, Brightness, Colour balance, Hue and saturation, Photo filter's Density, Shadow
+highlight's two amounts and Posterize's Levels. The shape is the same for every one of them:
+the CPU reference grows a `_matted` twin taking `matte: &[f32]` (the old name stays as the
+`&[]` wrapper), the kernel's uniform gains a `matte_on` and reads binding 4 under it, the
+`FxEngine` method takes `matte: Option<&wgpu::Texture>` and dispatches through
+`dispatch_matted`, and the `GpuEffect` hands it `aux.matte()`. The per-pixel pull is one
+helper on each path, `cpu::matte_toward` and its WGSL twin — `neutral·(1 − k) + value·k`,
+spelled so that k = 1 is the value to the bit — which is why an empty matte reproduces the
+pre-claim function byte for byte without a second code path (K-258;
+`check_matte_claim` in `lumit-gpu/src/fx/tests.rs` pins all four facts per effect). Three
+controls cannot be pulled by a lerp of the host's numbers and carry the raw control into
+the kernel instead: Exposure's factor is `exp2(stops·k)`, Temperature's gains are rebuilt
+from `t·k` (the blue gain floors), and Hue shift builds the matrix for `angle·k` from the
+same coefficients in `f32` (`cpu::hue_matrix_px`). Contrast and Vignette stay on
+`Strength` because scaling their amount *is* the dissolve, and Threshold because a cut has
+no honest per-pixel form that returns the colour picture at black.
+
 Each one's sentence lives in its own declaration and reaches `fx-reference.json`, so the
 manual's parameter table prints what that effect's matte does rather than the generic
 sentence (K-395: an override documents its meaning in the schema prose). The macro will

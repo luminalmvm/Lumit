@@ -21,6 +21,13 @@ use lumit_fx_macros::Effect;
     category = BlurSharpen,
     cost = Moderate,
     roi = FullFrame,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "scales Amount per pixel: white sweeps the full Amount, grey a \
+         shorter one, black not at all",
+    ),
 )]
 pub struct RadialBlur {
     /// Peak tap spread, px@comp (§2.3), reached at the farthest corner from

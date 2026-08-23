@@ -14,6 +14,13 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: grading premultiplied shifts matte edges.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "pulls Saturation toward 100 per pixel: white applies the full \
+         Saturation, black leaves the colour as it was",
+    ),
 )]
 pub struct Saturation {
     /// Per cent about Rec. 709 luma: 0 = greyscale, 100 = neutral, 200 =

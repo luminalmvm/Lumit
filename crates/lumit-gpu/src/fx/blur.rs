@@ -45,7 +45,9 @@ struct DirBlurParams {
     taps: i32,
     edge: u32,
     mix_amt: f32,
-    _pad: [f32; 2],
+    /// 1 = scale Length by the matte (K-395).
+    matte_on: f32,
+    _pad0: f32,
 }
 
 /// One resolved radial blur — Blur's Radial mode (docs/08 §3.8, schema
@@ -80,7 +82,8 @@ struct RadialBlurParams {
     spin: u32,
     edge: u32,
     mix_amt: f32,
-    _pad: f32,
+    /// 1 = scale Amount by the matte (K-395).
+    matte_on: f32,
 }
 
 /// One resolved sharpen (docs/08 §3.9), amounts already fractional and the
@@ -123,6 +126,9 @@ struct SharpenParams {
     threshold: f32,
     luma_only: u32,
     mix_amt: f32,
+    /// 1 = scale Amount by the matte (K-395); the combine pass alone reads it.
+    matte_on: f32,
+    _pad: [f32; 3],
 }
 
 /// One resolved simple 3×3 sharpen (docs/08 §3.9, K-138): a high-pass
@@ -144,7 +150,8 @@ struct SharpenSimpleParams {
     amount: f32,
     radius: f32,
     mix_amt: f32,
-    _pad: [f32; 1],
+    /// 1 = scale Amount by the matte (K-395).
+    matte_on: f32,
 }
 
 /// One resolved light wrap (docs/08 §3.28, K-358): the background's light
@@ -330,14 +337,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &DirBlurOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-dir-blur-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.dir_blur,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -348,7 +357,8 @@ impl FxEngine {
                 taps: op.taps,
                 edge: op.edge,
                 mix_amt: op.mix,
-                _pad: [0.0; 2],
+                matte_on: f32::from(matte.is_some()),
+                _pad0: 0.0,
             }),
         );
         out
@@ -364,14 +374,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &RadialBlurOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-radial-blur-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.radial_blur,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -382,7 +394,7 @@ impl FxEngine {
                 spin: u32::from(op.spin),
                 edge: op.edge,
                 mix_amt: op.mix,
-                _pad: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -400,6 +412,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &SharpenOp,
     ) -> wgpu::Texture {
         let un = work_texture(ctx, w, h, "fx-sharpen-un");
@@ -411,6 +424,8 @@ impl FxEngine {
             threshold: op.threshold,
             luma_only: u32::from(op.luma_only),
             mix_amt: op.mix,
+            matte_on: f32::from(matte.is_some()),
+            _pad: [0.0; 3],
         };
         self.dispatch(
             ctx,
@@ -443,11 +458,12 @@ impl FxEngine {
                 }),
             );
         }
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.sharpen_combine,
             &blurred,
             src,
+            matte,
             &out,
             w,
             h,
@@ -580,14 +596,16 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &SharpenSimpleOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-sharpen-simple-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.sharpen_simple,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -595,7 +613,7 @@ impl FxEngine {
                 amount: op.amount,
                 radius: op.radius,
                 mix_amt: op.mix,
-                _pad: [0.0; 1],
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out
@@ -709,6 +727,9 @@ struct ChannelBlurParams {
     dir: [f32; 2],
     mix_amt: f32,
     edge: u32,
+    /// 1 = scale all four radii by the matte (K-395); both passes read it.
+    matte_on: f32,
+    _pad: [f32; 3],
 }
 
 /// One resolved Drop shadow (docs/08 §3.43). Mirrors
@@ -752,6 +773,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ChannelBlurOp,
     ) -> wgpu::Texture {
         let tmp = work_texture(ctx, w, h, "fx-chanblur-tmp");
@@ -764,11 +786,12 @@ impl FxEngine {
             (src, src, &tmp, [1.0, 0.0], 1.0),
             (&tmp, src, &out, [0.0, 1.0], op.mix),
         ] {
-            self.dispatch(
+            self.dispatch_matted(
                 ctx,
                 &self.channel_blur,
                 pass_src,
                 pass_orig,
+                matte,
                 pass_dst,
                 w,
                 h,
@@ -778,6 +801,8 @@ impl FxEngine {
                     dir,
                     mix_amt: mix,
                     edge: op.edge,
+                    matte_on: f32::from(matte.is_some()),
+                    _pad: [0.0; 3],
                 }),
             );
         }

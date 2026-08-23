@@ -417,9 +417,11 @@ fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
 /// **The Blend row combines the effect with its input, end to end** (K-425).
 /// An Exposure of +1 stop on mid grey, blended Multiply: the lifted grey
 /// multiplied by the source grey, 0.5 x 0.25 = 0.125 in linear, darker than
-/// the source — where Normal lifts it. Under the matte's dark half the
-/// dissolve still returns the untouched source, so the blend and the matte
-/// compose in the order docs/08 §2.6 gives: blend, then matte.
+/// the source — where Normal lifts it. Exposure claims its matte (K-426): under
+/// the dark half its Stops are scaled to 0, so the kernel hands the blend the
+/// untouched grey and Multiply squares it, 0.25 x 0.25 = 0.0625 — the same
+/// answer an Exposure at 0 stops under Multiply gives with no matte at all,
+/// which is what "the matte scales the amount" means beside a blend.
 #[test]
 fn a_multiply_blend_darkens_where_normal_lifts() {
     let Ok(mut r) = HeadlessRenderer::new() else {
@@ -429,7 +431,7 @@ fn a_multiply_blend_darkens_where_normal_lifts() {
     let (doc, comp) = project_with(false, None, Some(2), false);
     let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
     let multiplied = lumit_core::pixels::srgb_encode(0.125);
-    let source = lumit_core::pixels::srgb_encode(0.25);
+    let squared = lumit_core::pixels::srgb_encode(0.0625);
     for x in LIT {
         let got = px(&rgba, w, x);
         assert!(
@@ -438,10 +440,10 @@ fn a_multiply_blend_darkens_where_normal_lifts() {
         );
     }
     for x in DARK {
-        assert_eq!(
-            px(&rgba, w, x),
-            source,
-            "column {x}: the matte still holds it off"
+        let got = px(&rgba, w, x);
+        assert!(
+            (i16::from(got) - i16::from(squared)).abs() <= 1,
+            "column {x}: Multiply of the unlifted grey with itself, got {got} want {squared}"
         );
     }
 }

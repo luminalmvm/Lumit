@@ -18,12 +18,29 @@ struct Params {
     dir: vec2<f32>,      // (1,0) horizontal pass, (0,1) vertical pass
     mix_amt: f32,        // 0..1, blended against `orig` (1 on the h-pass)
     edge: u32,           // 0 transparent, 1 repeat
+    matte_on: f32,     // 1 = the matte drives the control below (K-395)
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // == cpu::edge_index. -1 means transparent (no tap, full weight).
 fn edge_idx(i: i32, len: i32) -> i32 {
@@ -49,6 +66,13 @@ fn channel_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
     var here = textureLoad(src, xy, 0);
     var rad = p.radius;
     var sig = p.sigma;
+    // The matte scales all four radii per pixel (K-395): the destination
+    // pixel's, on both passes, so the two halves agree on its kernel width
+    // (== cpu::channel_blur_matted, the same ceil and floor as the host).
+    if (p.matte_on != 0.0) {
+        rad = rad * matte_k(xy);
+        sig = max(rad * 0.5, vec4<f32>(1e-3));
+    }
     let axis_len = select(size.y, size.x, p.dir.x > 0.5);
     let along = select(xy.y, xy.x, p.dir.x > 0.5);
     var acc = vec4<f32>(0.0);

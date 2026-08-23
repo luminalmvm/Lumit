@@ -14,6 +14,13 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: a non-linear curve shifts matte edges.
     premultiplied = false,
+    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // rule for mattes); the generic strength dissolve does not also run.
+    matte = (
+        "matte",
+        "pulls Gamma toward 1 per pixel: white applies the full Gamma, grey \
+         a gentler curve, black none",
+    ),
 )]
 pub struct Gamma {
     /// The power curve raises to 1/gamma. 1 is neutral; hard floor 0.01 keeps

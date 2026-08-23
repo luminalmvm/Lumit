@@ -247,7 +247,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Length per pixel: white streaks the full Length, grey a shorter one, black not at all"
+      }
     },
     {
       "slug": "radial-blur",
@@ -387,7 +391,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white sweeps the full Amount, grey a shorter one, black not at all"
+      }
     },
     {
       "slug": "unsharp-mask",
@@ -514,7 +522,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white adds the full Amount of detail back, black none"
+      }
     },
     {
       "slug": "sharpen",
@@ -621,7 +633,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white sharpens by the full Amount, black not at all"
+      }
     },
     {
       "slug": "sprite-flare",
@@ -1652,7 +1668,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "pulls Lift toward 0 and Gamma and Gain toward 1 per pixel: white applies the full grade, black none"
+      }
     },
     {
       "slug": "saturation",
@@ -1749,7 +1769,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "pulls Saturation toward 100 per pixel: white applies the full Saturation, black leaves the colour as it was"
+      }
     },
     {
       "slug": "vibrancy",
@@ -1846,7 +1870,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Amount per pixel: white applies the full Amount, grey a fraction of it, black none"
+      }
     },
     {
       "slug": "vignette",
@@ -2082,7 +2110,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Stops toward 0 per pixel: white applies the full Stops, grey a fraction of them, black none"
+      }
     },
     {
       "slug": "hue-shift",
@@ -2184,7 +2216,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Angle toward 0 per pixel: white turns the hue by the full Angle, grey part of the way, black not at all"
+      }
     },
     {
       "slug": "contrast",
@@ -2378,7 +2414,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "pulls Gamma toward 1 per pixel: white applies the full Gamma, grey a gentler curve, black none"
+      }
     },
     {
       "slug": "temperature",
@@ -2476,7 +2516,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Temperature toward 0 per pixel: white applies the full shift, grey a milder one, black none"
+      }
     },
     {
       "slug": "lut",
@@ -3075,7 +3119,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales all four blur radii per pixel: white blurs each channel at its full radius, grey narrower, black not at all"
+      }
     },
     {
       "slug": "transform",
@@ -10264,7 +10312,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "pulls Brightness toward 0 and Contrast toward 0 per pixel: white applies both in full, black neither"
+      }
     },
     {
       "slug": "hue-and-saturation",
@@ -10611,7 +10663,11 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales every range's Hue, Saturation and Lightness toward 0 per pixel: white applies them in full, black none"
+      }
     },
     {
       "slug": "posterize",
@@ -10709,7 +10765,11 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "pulls Levels toward 256 per pixel: white cuts the ladder at Levels, black leaves a step too fine to see"
+      }
     },
     {
       "slug": "threshold",
@@ -11104,7 +11164,11 @@
           "cond": "choice_is",
           "value": 20
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Density per pixel: white holds the full Density of glass in front of the lens, black none"
+      }
     },
     {
       "slug": "black-and-white",
@@ -11451,7 +11515,11 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Shadow amount and Highlight amount per pixel: white applies both in full, black neither"
+      }
     },
     {
       "slug": "lens-flare",

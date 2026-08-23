@@ -12,12 +12,29 @@ struct Params {
     threshold: f32,  // linear-light soft gate
     luma_only: u32,  // 1 = sharpen Rec. 709 luma only
     mix_amt: f32,    // 0..1, blended against `orig`
+    matte_on: f32,     // 1 = the matte drives the control below (K-395)
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
+
+// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// read only under `matte_on` — bound to `src` when there is none, since a
+// texture binding cannot be left empty.
+@group(0) @binding(4) var matte: texture_2d<f32>;
+
+// This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
+// luma, clamped. The Channel pick and Invert already happened, once, at the
+// seam (fx_matte_prepare.wgsl, K-425).
+fn matte_k(xy: vec2<i32>) -> f32 {
+    let m = textureLoad(matte, xy, 0);
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
 
 // Rec. 709 luma weights, in linear light (== cpu::LUMA).
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
@@ -67,6 +84,11 @@ fn sharpen_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(orig, xy, 0);
     let b = textureLoad(src, xy, 0).rgb;
     let u = unpremult(o);
+    // The matte scales Amount per pixel (K-395): less detail added back.
+    var amount = p.amount;
+    if (p.matte_on != 0.0) {
+        amount = amount * matte_k(xy);
+    }
     var v: vec3<f32>;
     if (p.luma_only == 1u) {
         let d = soft_gate(
@@ -74,12 +96,12 @@ fn sharpen_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
                 - (b.r * LUMA.r + b.g * LUMA.g + b.b * LUMA.b),
             p.threshold,
         );
-        v = u + vec3<f32>(p.amount * d);
+        v = u + vec3<f32>(amount * d);
     } else {
         v = vec3<f32>(
-            u.r + p.amount * soft_gate(u.r - b.r, p.threshold),
-            u.g + p.amount * soft_gate(u.g - b.g, p.threshold),
-            u.b + p.amount * soft_gate(u.b - b.b, p.threshold),
+            u.r + amount * soft_gate(u.r - b.r, p.threshold),
+            u.g + amount * soft_gate(u.g - b.g, p.threshold),
+            u.b + amount * soft_gate(u.b - b.b, p.threshold),
         );
     }
     // Undershoot clamps at zero (no negative light); re-premultiply.
