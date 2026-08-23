@@ -50,7 +50,7 @@
 //! 3. **`layer.time_remap_enabled` on camera and light layers** — scripting
 //!    does not offer the switch on a rig, so the golden has no value to compare
 //!    against; the parser leaves it absent for exactly the same reason.
-//! 4. **Footage interpretation** (`path`, `fps`, `native_fps`, `duration`,
+//! 4. **Footage interpretation** (`fps`, `native_fps`, `duration`,
 //!    `fps_override`, `alpha`, `premul_colour`, `invert_alpha`, `loop`,
 //!    `fields`, `remove_pulldown`, `is_still`, `is_placeholder`,
 //!    `is_missing`) — the golden project contains no file footage at all, only
@@ -58,7 +58,9 @@
 //!    Effects. Reading them unchecked is precisely the silently-wrong import
 //!    this route exists to avoid, so the parser does not read them and this
 //!    test does not pretend otherwise. Owed: a fixture with real footage
-//!    (docs/TODO.md).
+//!    (docs/TODO.md). `path` is **not** in this list: it comes out of the
+//!    self-naming JSON in `LIST Als2` ▸ `alas` rather than out of an offset,
+//!    and `aep::tests` covers it directly.
 //! 5. **A negative-stretch layer's `in_point` and `out_point`** — compared
 //!    within one frame instead of exactly. The file stores the layer
 //!    unstretched (in 0, out 10) and After Effects reports the reflection, but

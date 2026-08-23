@@ -416,11 +416,17 @@ project that opens and is wrong:
   whatever the layer's 3D switch says. All of it is asserted against After
   Effects' own numbers in the differential test.
 
-**Owed, and honest about it.** (1) The **footage interpretation** fields — path,
-frame rate, alpha, fields, pulldown, loop, missing — are not read at all: the
-golden project is solids and comps with no file footage in it, so not one offset
-could be checked against AE, and an unchecked offset is the silently-wrong
-import this route exists to avoid. A fixture with real footage is owed.
+**Owed, and honest about it.** (1) The **footage interpretation** fields — frame
+rate, alpha, fields, pulldown, loop, missing — are not read at all: the golden
+project is solids and comps with no file footage in it, so not one offset could
+be checked against AE, and an unchecked offset is the silently-wrong import this
+route exists to avoid. A fixture with real footage is owed. The **path** is the
+exception and is read, because it is not an offset: `LIST Als2` ▸ `alas` holds a
+small JSON object and the key names itself (`fullpath`). The item's **name**
+comes from it too — AE leaves the name chunk empty until somebody renames the
+item and shows the file name instead — without which a project of file footage
+imports as a list of blank rows pointing nowhere. An AE *placeholder* ("Original
+Source Deleted") has neither, and keeps neither.
 (2) A **reflected layer's** ends land 1/3000 s further out in AE's arithmetic
 than in the file's (`−0.000333` / `−10.000333` rather than `−0` / `−10`), as if
 AE reflects inclusive indices on an internal grid — one sample is not enough to

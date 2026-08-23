@@ -328,17 +328,35 @@ fn read_folder<'a>(
 /// first four bytes are `Soli`; a solid's colour and its *name* both live in
 /// there, which is why a solid's own `Utf8` chunk is empty.
 ///
-/// The interpretation fields (path, frame rate, alpha handling, fields,
-/// pulldown, loop) are deliberately absent: the golden fixture is a
-/// solids-and-comps project with no file footage in it, so nothing here could
-/// be checked against what After Effects said, and an unchecked offset is
-/// exactly the silently-wrong import this route exists to avoid. They are owed
-/// a fixture with real footage (docs/TODO.md).
+/// **The file on disk** is the one interpretation field that is read, and it is
+/// read from `LIST Als2` ▸ `alas`, which holds a small JSON object with a
+/// `fullpath` key. That is not an offset anybody could get quietly wrong — the
+/// field names itself — which is why it is here while the rest of the
+/// interpretation (frame rate, alpha handling, fields, pulldown, loop) is not:
+/// those are byte offsets, the golden fixture is a solids-and-comps project
+/// with no file footage in it, and an unchecked offset is exactly the
+/// silently-wrong import this route exists to avoid. They are owed a fixture
+/// with real footage (docs/TODO.md).
+///
+/// **A footage item's name is its file's name.** After Effects writes an empty
+/// `Utf8` for an item nobody renamed and displays the file name in the Project
+/// panel instead, so an item with no name of its own takes the base name of its
+/// path — without which a forty-eight-clip project imports as forty-eight blank
+/// rows, and every layer drawing from one arrives blank too (a layer with no
+/// name of its own falls back to its source item's).
 fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'_>]) -> Item {
     let pin = inside.iter().find(|chunk| chunk.is_list(b"Pin "));
     let within: Vec<Chunk<'_>> = pin.map(|p| p.children().ok().collect()).unwrap_or_default();
     let settings = within.iter().find(|chunk| chunk.id == *b"sspc");
     let asset = within.iter().find(|chunk| chunk.id == *b"opti");
+    let path = within
+        .iter()
+        .find(|chunk| chunk.is_list(b"Als2"))
+        .and_then(|list| list.children().ok().find(|chunk| chunk.id == *b"alas"))
+        .and_then(|chunk| serde_json::from_str::<serde_json::Value>(&chunk.text()).ok())
+        .and_then(|alias| alias.get("fullpath")?.as_str().map(str::to_string))
+        .filter(|path| !path.is_empty());
+    let name = name.filter(|name| !name.is_empty());
 
     let solid = asset.filter(|chunk| chunk.body.get(..4) == Some(b"Soli"));
     let (kind, name, colour) = match solid {
@@ -356,7 +374,20 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
                 f64::from(f32_at(chunk.body, 22).unwrap_or_default()),
             ]),
         ),
-        None => ("footage", name, None),
+        // The file's own name, taken apart by hand rather than by `Path`: the
+        // path in the file is written in the separator of the machine that
+        // wrote it, and a Windows path handed to `Path::file_name` on macOS
+        // comes back whole.
+        None => (
+            "footage",
+            name.or_else(|| {
+                path.as_deref()
+                    .and_then(|path| path.rsplit(['/', '\\']).next())
+                    .filter(|base| !base.is_empty())
+                    .map(str::to_string)
+            }),
+            None,
+        ),
     };
 
     Item {
@@ -364,6 +395,7 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
         name,
         parent_id: Some(parent_id),
         kind: Some(kind.to_string()),
+        path,
         colour,
         width: settings
             .and_then(|chunk| u16_at(chunk.body, 32))
@@ -965,6 +997,57 @@ mod tests {
         assert_eq!(layer.out_point, Some(9.0));
     }
 
+    /// **A footage item takes its file's path, and its name from that file.**
+    ///
+    /// After Effects leaves an item's own name chunk empty until somebody
+    /// renames it and shows the file name in the Project panel instead. Without
+    /// the path there is nothing to show and nothing to relink from: a
+    /// forty-eight-clip project imports as forty-eight blank rows pointing
+    /// nowhere, and every layer drawing from one arrives blank too.
+    #[test]
+    fn a_footage_item_is_named_and_pathed_from_its_file() {
+        // The JSON escapes its backslashes, exactly as After Effects writes it.
+        let alias =
+            br#"{"ascendcount_base":1,"fullpath":"C:\\Clips\\Cine1\\Depth.avi","platform":1}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 11);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.kind.as_deref(), Some("footage"));
+        assert_eq!(item.path.as_deref(), Some(r"C:\Clips\Cine1\Depth.avi"));
+        assert_eq!(
+            item.name.as_deref(),
+            Some("Depth.avi"),
+            "a Windows path is taken apart by hand, so this holds on macOS too"
+        );
+    }
+
+    /// **A footage item somebody *did* rename keeps the name they gave it.**
+    #[test]
+    fn a_renamed_footage_item_keeps_its_own_name() {
+        let alias = br#"{"fullpath":"/media/Depth.avi"}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 11);
+        item.extend(chunk(b"Utf8", b"the deep one"));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.name.as_deref(), Some("the deep one"));
+        assert_eq!(item.path.as_deref(), Some("/media/Depth.avi"));
+    }
+
     /// **A project with no item tree is refused, not half-imported.**
     ///
     /// The one structural failure that is worth failing on: a container that
@@ -1053,5 +1136,6 @@ mod tests {
     }
 
     const ITEM_FOLDER_KIND: u16 = enums::ITEM_FOLDER;
+    const ITEM_FOOTAGE_KIND: u16 = enums::ITEM_FOOTAGE;
     const ITEM_COMP_KIND: u16 = enums::ITEM_COMP;
 }
