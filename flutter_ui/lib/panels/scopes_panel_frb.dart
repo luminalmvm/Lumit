@@ -33,10 +33,6 @@ enum ScopeKind { waveform, parade, vectorscope, histogram }
 /// The engine's fixed trace size.
 const int _traceEdge = 256;
 
-/// No more than one trace request in flight per this long. A trace is a real
-/// render, so a scrub must not queue one per frame it passes through.
-const Duration _throttle = Duration(milliseconds: 120);
-
 class ScopesPanelFrb extends StatefulWidget {
   const ScopesPanelFrb({super.key});
 
@@ -49,9 +45,13 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   ui.Image? _trace;
   StreamSubscription<WorkerResponse>? _responses;
 
-  final Stopwatch _since = Stopwatch()..start();
-  Duration _lastRequest = Duration.zero;
   int _lastFrame = -1;
+
+  /// The value of [LumitUiState.frameArrived] the last request was made at.
+  /// Part of the memo with [_lastFrame], because a new *picture* of the frame
+  /// already traced is exactly as worth tracing as a new frame number — a
+  /// value drag holds the playhead still and changes the picture under it.
+  int _lastArrival = -1;
 
   @override
   void initState() {
@@ -104,103 +104,115 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
 
     return ValueListenableBuilder<int>(
       valueListenable: ui_.playheadFrame,
-      builder: (context, frame, _) {
-        _requestIfDue(ui_, frame);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              height: 26,
-              color: t.surface1,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              // Scrolls sideways when docked narrow, the same answer the
-              // Timeline toolbar gives — an overflow stripe is a layout fault.
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 110,
-                      child: BareDropdown<ScopeKind>(
-                        key: const ValueKey('scope-kind'),
-                        value: _kind,
-                        options: ScopeKind.values,
-                        label: _label,
-                        onChanged: (k) => setState(() {
-                          _kind = k;
-                          // A new trace kind is worth an immediate request
-                          // rather than waiting out the throttle on a picture
-                          // the user just asked to change.
-                          _lastFrame = -1;
-                        }),
-                      ),
-                    ),
-                    // No frame readout here: the playhead's position is the
-                    // Timeline's and the Viewer's to state, and repeating it in
-                    // the scope's own toolbar only competes with the trace.
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                color: t.surface0,
-                child: Center(
-                  child: _trace == null
-                      ? Text(l10n.scopesWaiting, style: t.small)
-                      : AspectRatio(
-                          aspectRatio: 1,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              RawImage(
-                                key: const ValueKey('scope-trace'),
-                                image: _trace,
-                                fit: BoxFit.contain,
-                                filterQuality: FilterQuality.none,
-                              ),
-                              // The graticule: what the trace is measured
-                              // against. Drawn here rather than baked into the
-                              // engine's picture so it stays crisp at any panel
-                              // size — the trace is a fixed 256x256 and would
-                              // carry its labels up scaled and soft.
-                              CustomPaint(
-                                key: const ValueKey('scope-graticule'),
-                                painter: _GraticulePainter(
-                                  kind: _kind,
-                                  line: t.hairlineStrong,
-                                  label: t.small.copyWith(color: t.textMuted),
-                                ),
-                              ),
-                            ],
-                          ),
+      builder: (context, frame, _) => ValueListenableBuilder<int>(
+        // A rendered frame reaching the Viewer is the other reason to trace
+        // again: an edit at a stationary playhead moves neither the playhead
+        // nor this panel's own state, and without this the trace kept showing
+        // the picture from before the edit.
+        valueListenable: ui_.frameArrived,
+        builder: (context, arrived, __) {
+          _requestIfDue(ui_, frame, arrived);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 26,
+                color: t.surface1,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                // Scrolls sideways when docked narrow, the same answer the
+                // Timeline toolbar gives — an overflow stripe is a layout fault.
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 110,
+                        child: BareDropdown<ScopeKind>(
+                          key: const ValueKey('scope-kind'),
+                          value: _kind,
+                          options: ScopeKind.values,
+                          label: _label,
+                          onChanged: (k) => setState(() {
+                            _kind = k;
+                            // A new trace kind is worth a request of its own:
+                            // neither the frame nor the picture of it has
+                            // moved, so nothing else here would ask.
+                            _lastFrame = -1;
+                          }),
                         ),
+                      ),
+                      // No frame readout here: the playhead's position is the
+                      // Timeline's and the Viewer's to state, and repeating it in
+                      // the scope's own toolbar only competes with the trace.
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+              Expanded(
+                child: Container(
+                  color: t.surface0,
+                  child: Center(
+                    child: _trace == null
+                        ? Text(l10n.scopesWaiting, style: t.small)
+                        : AspectRatio(
+                            aspectRatio: 1,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                RawImage(
+                                  key: const ValueKey('scope-trace'),
+                                  image: _trace,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.none,
+                                ),
+                                // The graticule: what the trace is measured
+                                // against. Drawn here rather than baked into the
+                                // engine's picture so it stays crisp at any panel
+                                // size — the trace is a fixed 256x256 and would
+                                // carry its labels up scaled and soft.
+                                CustomPaint(
+                                  key: const ValueKey('scope-graticule'),
+                                  painter: _GraticulePainter(
+                                    kind: _kind,
+                                    line: t.hairlineStrong,
+                                    label: t.small.copyWith(color: t.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  /// Ask for a trace when the frame has moved and the throttle has elapsed.
+  /// Ask for a trace when the frame has moved, or when a new picture of it has
+  /// reached the Viewer.
   ///
   /// Called from `build`, so it must never call `setState` — it only sends, and
   /// the reply arrives on the worker stream.
-  void _requestIfDue(LumitUiState state, int frame) {
+  ///
+  /// [arrived] is [LumitUiState.frameArrived]'s count. Together with [frame] it
+  /// is the whole memo: the same frame and the same picture of it is nothing to
+  /// ask for, and every other rebuild — a hover, a resize, the trace landing —
+  /// therefore costs no render. Every rebuild used to ask once a throttle had
+  /// elapsed, which was a trace the engine had to make each time; then the
+  /// throttle went and the same-frame test alone swallowed a value drag, which
+  /// changes the picture without moving the playhead. Once per arrival is the
+  /// rule, never once per rebuild. `_lastFrame = -1` is how the kind picker
+  /// forces one through.
+  void _requestIfDue(LumitUiState state, int frame, int arrived) {
     final comp = state.selectedComp;
     if (comp == null) return;
-    // Same frame, and too soon — nothing to ask for. A *different* frame is
-    // always worth a request, and so is `_lastFrame = -1`, which is how the
-    // kind picker forces one through without waiting out the throttle. A second
-    // unconditional throttle check used to sit here and swallow both.
-    if (frame == _lastFrame && _since.elapsed - _lastRequest < _throttle) {
-      return;
-    }
+    if (frame == _lastFrame && arrived == _lastArrival) return;
 
     _lastFrame = frame;
-    _lastRequest = _since.elapsed;
+    _lastArrival = arrived;
     final t = ThemeScope.of(context).theme;
     comp.renderScope(
       frame: BigInt.from(frame),

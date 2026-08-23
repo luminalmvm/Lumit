@@ -1069,11 +1069,12 @@ rather than all showing a dash; and an engine that refuses the switch MUST say s
 status line rather than leaving a lit clock over a column that will never fill.
 
 Measuring makes the engine wait for the graphics card at every node: an honest millisecond,
-at the price of the overlap a brisk preview lives on, and a measured frame MUST be
-composited rather than served from a cache — a held frame cost a copy and has no per-layer
-cost to report, so the column would otherwise stay empty on exactly the compositions worth
-profiling. Switching measuring on MUST ask for the frame under the playhead again, so the
-numbers appear where the user is looking.
+at the price of the overlap a brisk preview lives on. Only a composited frame has per-layer
+costs to report — a held frame cost a copy — but a held frame MUST still be served at once
+and composited again, measured, when the worker is next idle (K-420): the cache bar's green
+is a promise that the frame is ready, and the column filling a moment later is the price of
+the numbers, not the picture. Switching measuring on MUST ask for the frame under the
+playhead again, so the numbers appear where the user is looking.
 Playback MUST never be measured whatever the switch says, and switching off MUST drop
 the numbers rather than leave a stale frame's costs on screen. The same per-effect number
 appears on the effect's title row in the Effect controls panel (§6), from the same

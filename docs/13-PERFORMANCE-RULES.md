@@ -314,14 +314,17 @@ A built-in profiler, surfaced in the UI — After Effects' composition profiler 
   it waits for the graphics card at each node before reading the clock, because GPU work is
   *submitted* rather than performed and an unfenced span would time the paperwork. That is a
   true per-node number at the cost of the processor/card overlap for the frame measured, so
-  it is opt-in (the Timeline column's stopwatch), never on during playback, and off by
-  default. Measuring also gives up the one-command-buffer-per-frame batching (§7.0, K-290) and
-  hands work over layer by layer, because a fence over a queue that has not been submitted
-  waits for nothing — the same processor/card overlap, paid in a second place. A measured frame
-  is also a **composited** frame: while the switch is on the
-  cache ladder is stepped over, because a frame served from a tier costs a copy and so
-  has nothing to say about what its layers cost. Timestamp queries are what would make it continuous and free; TODO tracks the
-  upgrade, and until then the honest description of this rung is "measured when asked".
+  it is never on during playback, and it is **on by default** (K-276 revision 8) with the
+  clock in the bottom strip as the switch for the session — only the frame the user is
+  waiting on is measured. Measuring also gives up the one-command-buffer-per-frame batching
+  (§7.0, K-290) and hands work over layer by layer, because a fence over a queue that has
+  not been submitted waits for nothing — the same processor/card overlap, paid in a second
+  place. Only a **composited** frame yields numbers, and a frame served from a tier costs
+  a copy and so has none to give — but the cache ladder is not stepped over for it:
+  **the held frame is served at once and composited again, measured, on the next idle
+  turn** (K-420), so the picture is never made to wait for its own numbers. Timestamp
+  queries are what would make it continuous and free; TODO tracks the upgrade, and until
+  then the honest description of this rung is "measured when asked".
 - Timeline column: per-layer render time for the current frame, sortable, with effect-level
   drill-down in a profiler panel ([07-UI-SPEC.md](07-UI-SPEC.md)). **Built (K-276):** the
   column shows each layer's own picture (its source — a Precomp's whole comp included — and

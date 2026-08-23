@@ -298,6 +298,16 @@ pub struct LensFlareFx {
     /// than the one its parameters name, so the caller must not file it under
     /// a name that says otherwise — see `FxEngine::flare_bake_generation`.
     pub(super) generation: AtomicU64,
+    /// Bumped each time a frame actually drew **something other than** the
+    /// bake its parameters name — the deferred fallback to the previous lens,
+    /// or no flare at all because there is no previous lens yet (K-431).
+    ///
+    /// This is the precise form of the question the generation could only
+    /// answer roughly. The generation moves when a bake is *queued*, which
+    /// says a bake is being made somewhere, not that this frame drew the
+    /// wrong optics — and while a keyframed aperture keeps one queued, that
+    /// was every frame of every comp, flare or no flare.
+    pub(super) substitutions: AtomicU64,
 }
 
 /// The bake thread and its two channels.
@@ -1033,6 +1043,7 @@ impl LensFlareFx {
             in_flight: Mutex::new(HashSet::new()),
             landed: Mutex::new(Vec::new()),
             generation: AtomicU64::new(0),
+            substitutions: AtomicU64::new(0),
         }
     }
 
@@ -1082,6 +1093,11 @@ impl LensFlareFx {
         }
 
         self.queue(op.bake_key, bake);
+
+        // From here the frame draws something its parameters do not name, so
+        // it is not a frame anybody may bank (K-431). Counted once, whether a
+        // previous lens stands in or nothing does.
+        self.substitutions.fetch_add(1, Ordering::Relaxed);
 
         // The lens the last frame drew. Not "any cached bake": stepping back
         // and forth through the picker must show the lens you just left, not

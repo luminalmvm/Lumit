@@ -48,6 +48,10 @@ struct Parts {
     compositor: lumit_gpu::Compositor,
     fx: lumit_gpu::fx::FxEngine,
     lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
+    /// The per-effect intermediate cache (K-421), VRAM only. Lives here
+    /// rather than beside `frame_textures` because its entries are textures
+    /// the effect engine made, and they go with it.
+    fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
 }
 
 /// One footage item's probe result, cached so a scrub does not re-probe. Slate
@@ -505,6 +509,7 @@ impl HeadlessRenderer {
             compositor: lumit_gpu::Compositor::new(&gpu),
             fx: lumit_gpu::fx::FxEngine::new(&gpu),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
+            fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
         };
         let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         // Flow runs on this same device rather than opening one of its own
@@ -574,16 +579,50 @@ impl HeadlessRenderer {
         self.measuring = measuring;
     }
 
+    /// Whether the renders from here on may add to the per-effect cache
+    /// (K-421). On for a committed document's scrub and edit renders; off for
+    /// a drag's provisional values and for playback, which would only churn
+    /// the budget. Lookups happen either way.
+    pub fn keep_effect_outputs(&mut self, keep: bool) {
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().keep_outputs(keep);
+        }
+    }
+
+    /// Resize the per-effect cache (K-421), evicting down to the new budget.
+    pub fn set_effect_cache_budget(&mut self, bytes: usize) {
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().set_budget(bytes);
+        }
+    }
+
+    /// `(used_bytes, budget_bytes, entries)` of the per-effect cache, and
+    /// `(kernels run, ops served held)` since the renderer was made.
+    #[must_use]
+    pub fn effect_cache_stats(&self) -> ((usize, usize, usize), (u64, u64)) {
+        self.parts.as_ref().map_or(((0, 0, 0), (0, 0)), |parts| {
+            let c = parts.fx_cache.borrow();
+            (c.stats(), c.counts())
+        })
+    }
+
+    /// `(nested frames realised, nested frames served held)` since the
+    /// renderer was made (K-422).
+    #[must_use]
+    pub fn nested_frame_counts(&self) -> (u64, u64) {
+        self.parts
+            .as_ref()
+            .map_or((0, 0), |parts| parts.fx_cache.borrow().nested_counts())
+    }
+
     /// Whether the frames from here on are being measured **and** there is
     /// somewhere for the numbers to go.
     ///
-    /// The caller that owns the tiers above this renderer asks, because a
-    /// measured frame has to be a *composited* one: a frame served from a cache
-    /// costs nothing and therefore reveals nothing, and the whole point of the
-    /// switch is to find out what the composite costs. Without this a warm
-    /// composition — one the idle fill has already made — showed no numbers at
-    /// all however long you looked at it (found on macOS, and it is every
-    /// platform).
+    /// The caller that owns the tiers above this renderer asks, because only a
+    /// *composited* frame yields numbers: a frame served from a cache costs
+    /// nothing and therefore reveals nothing. The cache is still allowed to
+    /// answer a measured request (K-420) — the caller notes that it did, and
+    /// composites the frame again for its numbers when the editor is idle.
     #[must_use]
     pub fn measuring(&self) -> bool {
         self.measuring && self.profile.is_some()
@@ -751,11 +790,10 @@ impl HeadlessRenderer {
     /// what keeps K-031's preview-equals-export identity true and an export
     /// bit-for-bit what it was. The Viewer's renderer turns it on.
     ///
-    /// While a bake is being made, frames are **unnameable** (see
-    /// [`Self::frame_key`]) — the same mechanism unprobed footage and a
-    /// non-neutral display view use, and for the same reason: a frame drawn
-    /// with the previous lens must not be filed under a name that says it was
-    /// drawn with this one.
+    /// A frame drawn with the previous lens must not be filed under a name
+    /// that says it was drawn with this one, so such a frame is made and not
+    /// kept — see [`Self::flare_substitutions`], which says exactly which
+    /// frames those were (K-431).
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx.set_deferred_flare_bakes(deferred);
@@ -774,8 +812,17 @@ impl HeadlessRenderer {
             .map_or(0, |parts| parts.fx.flare_bake_generation())
     }
 
-    /// Whether a flare bake is being made right now — while it is, frames are
-    /// unnameable.
+    /// How many times a frame has drawn a lens flare with other optics than
+    /// its parameters name (K-431). Read either side of a render: unmoved
+    /// means the frame may be banked under the name taken before it.
+    #[must_use]
+    pub fn flare_substitutions(&self) -> u64 {
+        self.parts
+            .as_ref()
+            .map_or(0, |parts| parts.fx.flare_substitutions())
+    }
+
+    /// Whether a flare bake is being made right now.
     #[must_use]
     pub fn flare_bake_pending(&self) -> bool {
         self.parts
@@ -799,13 +846,14 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Option<u128> {
-        // A flare bake in flight means any frame made now may be drawing the
-        // lens before it (K-350). Unnameable rather than misnamed: the tiers
-        // are keyed by what is *in* a frame (K-178), so an entry that lies
-        // about that outlives every edit and undo that could have fixed it.
-        if self.flare_bake_pending() {
-            return None;
-        }
+        // A flare bake in flight used to make this answer `None` (K-350) —
+        // for every comp, whether or not it held a flare. A keyframed
+        // aperture keeps a bake in flight for as long as it plays, so that
+        // rule stopped the whole project caching (K-431). The name is taken
+        // here and the frame is *checked* afterwards instead: see
+        // [`Self::flare_substitutions`], which counts the frames that
+        // actually drew other optics than they name, and those alone are the
+        // frames nobody banks.
         let comp = doc.comp(comp_id)?;
         self.sync_items(doc, comp);
         crate::cache::frame_key(
@@ -901,7 +949,40 @@ impl HeadlessRenderer {
         // The frame's recorder: absent unless somebody is drawing a bar for
         // this frame or reading its numbers (docs/13 §7.1).
         let watcher = self.profiler_for(comp_id, frame);
-        let jobs = plan_comp_frame(doc, comp, t, quality, &ProbeView(&self.probe_cache));
+        // The nested-frame store (K-422): what the builder names each Precomp
+        // by, and what the planner asks before decoding into one. Both use
+        // the one keyer, so the name the plan found held is the name the
+        // realiser asks for. A measured frame realises every Precomp so its
+        // inner rows get numbers (see `Realiser::realise_nested`), so it must
+        // not skip their decodes either.
+        let probes = ProbeView(&self.probe_cache);
+        let keys = crate::cache::NestedKeys {
+            doc,
+            probes: &probes,
+            quality,
+        };
+        let jobs = {
+            let held = |nested: &Composition, lt: f64| -> bool {
+                let Some(parts) = self.parts.as_ref() else {
+                    return false;
+                };
+                let Some(key) = crate::cache::NestedKeyer::nested_key(&keys, nested, lt) else {
+                    return false;
+                };
+                let scale = composite_scale(quality);
+                let samples = self.gpu.sample_count(doc.anti_aliasing.samples());
+                parts
+                    .fx_cache
+                    .borrow_mut()
+                    .pin_nested(crate::fxops::nested_texture_key(key, scale, samples))
+            };
+            if let Some(parts) = self.parts.as_ref() {
+                parts.fx_cache.borrow_mut().unpin_nested();
+            }
+            let held: Option<crate::plan::HeldNested<'_>> =
+                if watcher.is_none() { Some(&held) } else { None };
+            crate::plan::plan_comp_frame_held(doc, comp, t, quality, &probes, held)
+        };
         if let Some(w) = &watcher {
             w.planned();
         }
@@ -943,6 +1024,7 @@ impl HeadlessRenderer {
                 compositor: &parts.compositor,
                 fx: &parts.fx,
                 lut_cache: &parts.lut_cache,
+                fx_cache: &parts.fx_cache,
                 render_scale: composite_scale(quality),
                 // The project's setting, resolved against what this adapter
                 // will actually give (K-274). Preview and export both read the
@@ -961,8 +1043,16 @@ impl HeadlessRenderer {
             if let Some(w) = &watcher {
                 w.building();
             }
-            let draws =
-                crate::build::build_comp_draws(doc, comp, t, &pixels_by_layer, &mut visited);
+            let draws = crate::build::build_comp_draws_at(
+                doc,
+                comp,
+                t,
+                t,
+                &pixels_by_layer,
+                &mut visited,
+                Some(&keys),
+                false,
+            );
             // The comp's backdrop is a way of viewing, not a layer (K-241);
             // with the transparency grid up the Viewer asks for none at all,
             // so what nothing covers arrives with zero alpha and the grid
@@ -1334,12 +1424,13 @@ impl HeadlessRenderer {
         name: Option<u128>,
     ) -> Result<PreparedFrame, String> {
         let key = name.map(|k| (k, bgra));
-        // A measured frame is composited even when one is already held: a cache
-        // hit is free, so it has nothing to say about what the layers cost, and
-        // a column of numbers that only fills in on frames nobody has visited
-        // is worse than no column. The re-render is the price of asking, and
-        // the switch is off unless somebody is (see [`Self::measuring`]).
-        if let Some(key) = key.filter(|_| !self.measuring()) {
+        // A held frame is served whether or not this frame is being measured
+        // (K-420). A cache hit has nothing to say about what the layers cost,
+        // but refusing it meant a frame the bar showed green was composited
+        // again — and fenced at every layer — on arrival. The owner of the
+        // tiers measures such a frame afterwards, in an idle moment, rather
+        // than making the user wait for the numbers.
+        if let Some(key) = key {
             if let Some(held) = self.frame_textures.get(&key) {
                 self.frame_texture_hits += 1;
                 return Ok(PreparedFrame {
@@ -1348,15 +1439,16 @@ impl HeadlessRenderer {
             }
         }
         let started = std::time::Instant::now();
-        // A flare bake queued *during* this composite means the picture just
-        // made may be of the previous lens (K-350). The name was taken before
-        // the render, so it has to be dropped afterwards — the alternative is
-        // an entry that lies about its own content, which no later edit or
-        // undo can clear (K-178).
-        let bakes_before = self.flare_bake_generation();
+        // A flare that fell back to the previous lens during this composite
+        // (K-350) made a picture of a lens its name does not describe. The
+        // name was taken before the render, so it has to be dropped
+        // afterwards — the alternative is an entry that lies about its own
+        // content, which no later edit or undo can clear (K-178). Counted, so
+        // only the frames it actually happened to are dropped (K-431).
+        let subs_before = self.flare_substitutions();
         let (texture, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, bgra)?;
-        let key = key.filter(|_| self.flare_bake_generation() == bakes_before);
+        let key = key.filter(|_| self.flare_substitutions() == subs_before);
         let texture = std::sync::Arc::new(texture);
         if let Some(key) = key {
             // What it actually cost, so the store's cost-aware eviction has
@@ -1617,6 +1709,26 @@ impl HeadlessRenderer {
         Some(PreparedFrame { texture })
     }
 
+    /// Read a held frame's pixels back off the card, as tight 8-bit bytes in
+    /// the channel order it is held in — `(width, height, bytes)`.
+    ///
+    /// For the Scopes: a frame the Viewer is showing from the card is the frame
+    /// they should trace, and reading it back is a copy where compositing it
+    /// again was a render. This one waits for the card, which is the right
+    /// trade for a trace — it is throttled to a few a second and was paying
+    /// for a whole composite — and the wrong one for anything on the
+    /// preview's critical path, which is what [`Self::start_backup`] and the
+    /// demotions use the asynchronous read-back for. Does not touch the
+    /// entry's eviction recency. `None` when the frame is not held, or the
+    /// read-back fails.
+    #[must_use]
+    pub fn read_back_frame_texture(&self, key: u128, bgra: bool) -> Option<(u32, u32, Vec<u8>)> {
+        let held = self.frame_textures.peek(&(key, bgra))?;
+        let parts = self.parts.as_ref()?;
+        let bytes = parts.colour.readback8(&self.gpu, &held.texture).ok()?;
+        Some((held.texture.width(), held.texture.height(), bytes))
+    }
+
     /// How many times the held set has changed — bumped by every insert, every
     /// clear and every resize.
     ///
@@ -1641,6 +1753,11 @@ impl HeadlessRenderer {
     /// and these are keyed by position, or the user asked (Clear cache).
     pub fn clear_frame_textures(&mut self) {
         self.frame_textures.clear();
+        // The per-effect intermediates go with the frames (K-421): a user
+        // who asked for an empty cache meant all of it.
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx_cache.borrow_mut().clear();
+        }
         // Give the memory on the card back as well: the pool exists to make
         // promotions cheap, and after a clear there is nothing to promote.
         self.upload_pool.clear();
@@ -2395,6 +2512,46 @@ mod tests {
         (DocumentStore::new(doc), comp_id)
     }
 
+    /// A stand-in bake: the smallest thing `warm_flare_bake` will accept, so a
+    /// test of the *naming rules* costs a channel send rather than half a
+    /// second of real optics.
+    fn stub_bake() -> lumit_gpu::fx::FlareBake {
+        std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
+            surfaces: Vec::new(),
+            ghosts: Vec::new(),
+            spreads: Vec::new(),
+            sensor_z_mm: 0.0,
+            focal_mm: 1.0,
+            native_fstop: 1.0,
+            pupil_mm: 1.0,
+            start_z_mm: 0.0,
+            energy_gain: 1.0,
+            reflectance: Vec::new(),
+            starburst: Vec::new(),
+            sb_res: 1,
+            sb_fields: 1,
+        }) as lumit_gpu::fx::FlareBake
+    }
+
+    /// [`doc_with_solid`] with a Lens flare on the layer, `edit` given the
+    /// fresh instance to set whichever rows the test is about.
+    fn doc_with_flare(
+        edit: impl FnOnce(&mut lumit_core::model::EffectInstance),
+    ) -> (DocumentStore, Uuid) {
+        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 32, 32);
+        let mut doc = (*store.snapshot()).clone();
+        let mut flare = lumit_core::fx::instantiate("lens_flare").expect("the flare is a builtin");
+        edit(&mut flare);
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == comp_id {
+                    c.layers[0].effects.push(flare.clone());
+                }
+            }
+        }
+        (DocumentStore::new(doc), comp_id)
+    }
+
     /// A footage item in the Project panel, on no layer anywhere. Returns its
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
@@ -3028,12 +3185,17 @@ mod tests {
         );
     }
 
-    /// A frame made while a lens is baking is **unnameable**, so nothing files
-    /// it under a name that says it was drawn with a lens it was not (K-350,
-    /// K-178). The same mechanism unprobed footage and a non-neutral display
-    /// view already use.
+    /// A lens baking somewhere **does not stop the rest of the project being
+    /// named** (K-431, superseding the K-350 rule it replaces).
+    ///
+    /// The regression: `frame_key` used to answer `None` for every comp while
+    /// any bake was in flight. A keyframed f-stop asks for a slightly
+    /// different iris on every frame, so a bake was in flight for as long as
+    /// it played — and nothing anywhere in the project could be named, banked
+    /// or filled in the background. What matters is whether a frame *drew*
+    /// other optics than it names, which is counted rather than guessed at.
     #[test]
-    fn a_baking_flare_makes_frames_unnameable() {
+    fn a_baking_flare_does_not_unname_other_frames() {
         let mut r = match HeadlessRenderer::new() {
             Ok(r) => r,
             Err(_) => {
@@ -3043,10 +3205,8 @@ mod tests {
         };
         let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 8, 8);
         let doc = store.snapshot();
-        assert!(
-            r.frame_key(&doc, comp_id, 0, Quality::default()).is_some(),
-            "an ordinary frame of a solid names itself"
-        );
+        let named = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(named.is_some(), "an ordinary frame of a solid names itself");
 
         // Queue a bake by hand: the effect engine is the authority the name
         // asks, and driving it directly keeps this a test of the *rule*
@@ -3056,29 +3216,122 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-                surfaces: Vec::new(),
-                ghosts: Vec::new(),
-                spreads: Vec::new(),
-                sensor_z_mm: 0.0,
-                focal_mm: 1.0,
-                native_fstop: 1.0,
-                pupil_mm: 1.0,
-                start_z_mm: 0.0,
-                energy_gain: 1.0,
-                reflectance: Vec::new(),
-                starburst: Vec::new(),
-                sb_res: 1,
-                sb_fields: 1,
-            }) as lumit_gpu::fx::FlareBake;
-            parts.fx.warm_flare_bake(0xfeed_face, &bake)
+            parts.fx.warm_flare_bake(0xfeed_face, &stub_bake())
         };
         if !queued {
             return; // no bake thread on this machine
         }
+        assert_eq!(
+            r.frame_key(&doc, comp_id, 0, Quality::default()),
+            named,
+            "a bake in flight elsewhere leaves this frame's name exactly as it was"
+        );
+        assert_eq!(
+            r.flare_substitutions(),
+            0,
+            "and nothing was stood in for, so the frame is one to keep"
+        );
+    }
+
+    /// **A keyframed aperture names, and keeps, every frame it draws**
+    /// (K-431). Ten frames of an animated f-stop, with a bake in flight the
+    /// whole time: each frame takes its own name, and no two frames share one
+    /// — the aperture is part of the picture, so it is part of the name.
+    #[test]
+    fn a_keyframed_aperture_names_every_frame() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_flare(|flare| {
+            for param in &mut flare.params {
+                if param.id == "fstop" {
+                    param.value = lumit_core::model::EffectValue::Float(ramp(2.0, 8.0, 1));
+                }
+            }
+        });
+        let doc = store.snapshot();
+        r.set_deferred_flare_bakes(true);
+        let queued = {
+            let Some(parts) = r.parts.as_ref() else {
+                return;
+            };
+            parts.fx.warm_flare_bake(0x0f57_09ba, &stub_bake())
+        };
+        if !queued {
+            return; // no bake thread on this machine
+        }
+        let names: Vec<Option<u128>> = (0..10)
+            .map(|f| r.frame_key(&doc, comp_id, f, Quality::default()))
+            .collect();
         assert!(
-            r.frame_key(&doc, comp_id, 0, Quality::default()).is_none(),
-            "while a lens is baking, no frame may be named"
+            names.iter().all(Option::is_some),
+            "every frame of an animated aperture names itself: {names:?}"
+        );
+        let mut distinct: Vec<u128> = names.into_iter().flatten().collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(
+            distinct.len(),
+            10,
+            "and each f-stop is a different picture under a different name"
+        );
+    }
+
+    /// **Editing a .lens file on disk renames the frames that read it**
+    /// (K-431). The bake keys on the file's CONTENT, so before this the edited
+    /// prescription rebaked and drew different optics under the old file's
+    /// name — a cached frame no edit or undo could ever clear.
+    #[test]
+    fn an_edited_lens_file_renames_frames() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let path = dir.path().join("mine.lens");
+        std::fs::write(
+            &path,
+            "name: one
+focal_length: 50
+",
+        )
+        .expect("write");
+        let text = path.to_string_lossy().into_owned();
+        let (store, comp_id) = doc_with_flare(|flare| {
+            for param in &mut flare.params {
+                if param.id == "lens_file" {
+                    param.value = lumit_core::model::EffectValue::File(
+                        lumit_core::model::FileParam::single(text.clone()),
+                    );
+                }
+            }
+        });
+        let doc = store.snapshot();
+        let before = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(before.is_some(), "a flare reading a real file names itself");
+
+        // A different prescription at the same path — a longer one, so the
+        // name moves whatever the filesystem's clock granularity is.
+        std::fs::write(
+            &path,
+            "name: two
+focal_length: 85
+surfaces:
+",
+        )
+        .expect("rewrite");
+        let after = r.frame_key(&doc, comp_id, 0, Quality::default());
+        assert!(after.is_some(), "and still names itself afterwards");
+        assert_ne!(
+            before, after,
+            "an edited prescription is a different picture and takes a different name"
         );
     }
 
@@ -3106,22 +3359,7 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-                surfaces: Vec::new(),
-                ghosts: Vec::new(),
-                spreads: Vec::new(),
-                sensor_z_mm: 0.0,
-                focal_mm: 1.0,
-                native_fstop: 1.0,
-                pupil_mm: 1.0,
-                start_z_mm: 0.0,
-                energy_gain: 1.0,
-                reflectance: Vec::new(),
-                starburst: Vec::new(),
-                sb_res: 1,
-                sb_fields: 1,
-            }) as lumit_gpu::fx::FlareBake;
-            parts.fx.warm_flare_bake(0xdead_beef, &bake)
+            parts.fx.warm_flare_bake(0xdead_beef, &stub_bake())
         };
         if !queued {
             return; // no bake thread on this machine
@@ -3744,6 +3982,129 @@ mod tests {
 
         assert_eq!((w, h), (w2, h2));
         assert_eq!(without, with, "a Null layer must contribute no pixels");
+    }
+
+    /// **Layers under a full-frame opaque solid are not rendered** (K-423), and
+    /// the picture cannot tell. The same comp is rendered with the cull live
+    /// and with it refused — a Null on top whose matte names the bottom layer
+    /// is a reference to a layer below, which switches the cull off without
+    /// adding a pixel — and the two must be byte-identical, for a solid
+    /// underneath and (where ffmpeg can write the fixture) for footage. The
+    /// draw list proves the cull engaged; the export path stays identical to
+    /// the interactive one (K-031).
+    #[test]
+    fn layers_under_a_full_frame_opaque_solid_are_culled_without_changing_a_pixel() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        // A reference from above to the bottom layer refuses the cull, and a
+        // Null draws nothing, so the picture is the same either way.
+        let refuse_cull = |doc: &mut Document, comp_id: Uuid| {
+            let comp = doc.comp_mut(comp_id).expect("comp");
+            let bottom = comp.layers.last().expect("a layer").id;
+            let mut null = matrix_layer("Ref", LayerKind::Null, cw, ch);
+            null.matte = Some(lumit_core::model::MatteRef {
+                layer: bottom,
+                channel: lumit_core::model::MatteChannel::Alpha,
+                inverted: false,
+                source: Default::default(),
+            });
+            comp.layers.insert(0, null);
+        };
+        let cover = |doc: &mut Document, comp_id: Uuid| {
+            let solid = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid,
+                name: "Cover".into(),
+                colour: LinearColour([0.1, 0.6, 0.2, 1.0]),
+                width: cw,
+                height: ch,
+                extra: serde_json::Map::new(),
+            }));
+            let layer = matrix_layer("Cover", LayerKind::Solid { def: solid }, cw, ch);
+            doc.comp_mut(comp_id).expect("comp").layers.insert(0, layer);
+        };
+
+        let mut scenes: Vec<(&str, Document, Uuid)> = Vec::new();
+        let (solid_doc, solid_comp, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+        scenes.push(("a solid underneath", solid_doc, solid_comp));
+        let dir = std::env::temp_dir().join("lumit-occlusion-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        match lumit_media::index::tests_support::fixture(&dir) {
+            Some(clip) => {
+                let mut doc = Document::new();
+                let item = Uuid::now_v7();
+                doc.items.push(ProjectItem::Footage(FootageItem {
+                    id: item,
+                    name: "fixture.mp4".into(),
+                    media: lumit_core::model::MediaRef {
+                        relative_path: "fixture.mp4".into(),
+                        absolute_path: clip.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                }));
+                let comp_id = push_comp(&mut doc, "Scene", cw, ch);
+                let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
+                doc.comp_mut(comp_id).expect("comp").layers.push(clip_layer);
+                scenes.push(("footage underneath", doc, comp_id));
+            }
+            None => eprintln!("no ffmpeg CLI: the footage row is skipped"),
+        }
+
+        for (name, mut doc, comp_id) in scenes {
+            cover(&mut doc, comp_id);
+            let mut refused = doc.clone();
+            refuse_cull(&mut refused, comp_id);
+            let (culled, refused) = (Arc::new(doc), Arc::new(refused));
+
+            let comp = culled.comp(comp_id).expect("comp");
+            assert_eq!(
+                lumit_core::occlusion::occluder_index(&culled, comp, 0.0),
+                Some(0),
+                "{name}: the cover must be recognised as the occluder"
+            );
+            let refused_comp = refused.comp(comp_id).expect("comp");
+            assert_eq!(
+                lumit_core::occlusion::occluder_index(&refused, refused_comp, 0.0),
+                None,
+                "{name}: a reference to the bottom layer must refuse the cull"
+            );
+            let draws = |doc: &Arc<Document>, comp: &Composition| {
+                let pixels = HashMap::new();
+                crate::build::build_comp_draws(doc, comp, 0.0, &pixels, &mut vec![comp.id]).len()
+            };
+            assert_eq!(draws(&culled, comp), 1, "{name}: only the cover is built");
+            assert!(
+                draws(&refused, refused_comp) >= 1,
+                "{name}: the refused comp builds at all"
+            );
+
+            let (with_cull, w, h) = r
+                .render_rgba(&culled, comp_id, 0, 1.0)
+                .unwrap_or_else(|e| panic!("{name}: culled render failed: {e}"));
+            let (without_cull, w2, h2) = r
+                .render_rgba(&refused, comp_id, 0, 1.0)
+                .unwrap_or_else(|e| panic!("{name}: unculled render failed: {e}"));
+            assert_eq!((w, h), (w2, h2));
+            assert_eq!(
+                with_cull, without_cull,
+                "{name}: the cull must not change a pixel"
+            );
+            let (preview, _, _) = r
+                .render_preview(&culled, comp_id, 0, crate::plan::Quality::default(), 1.0)
+                .expect("preview render");
+            assert_eq!(
+                preview, with_cull,
+                "{name}: preview and export agree (K-031)"
+            );
+        }
     }
 
     /// One layer for the matrix scenarios: full-frame span, centred over its
@@ -4566,6 +4927,263 @@ mod tests {
             reports.last().map(|p| p.stage),
             Some(crate::profile::RenderStage::Presenting)
         ));
+    }
+
+    /// **Editing the last effect of a layer re-runs only that effect, and the
+    /// picture is byte-for-byte the cold one** (K-421, K-031).
+    ///
+    /// End to end through the draw builder: a solid's stack is named from its
+    /// colour, size and masks, so after a committed render the blur's output
+    /// is held, and a render with the exposure changed runs one kernel. The
+    /// warm picture must equal what a renderer that has never seen the comp
+    /// makes of the same document — the export path is that cold renderer.
+    #[test]
+    fn editing_the_last_effect_serves_the_held_prefix_and_matches_a_cold_render() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_solid(LinearColour([0.8, 0.3, 0.1, 1.0]), 16, 16);
+        let layer_id = store.snapshot().comp(comp_id).expect("comp").layers[0].id;
+        let blur = lumit_core::fx::instantiate("blur").expect("blur exists");
+        let exposure = |stops: f64| {
+            let mut e = lumit_core::fx::instantiate("exposure").expect("exposure exists");
+            for p in &mut e.params {
+                if p.id == "stops" {
+                    p.value = lumit_core::model::EffectValue::Float(
+                        lumit_core::anim::Property::fixed(stops),
+                    );
+                }
+            }
+            e
+        };
+        store
+            .commit(lumit_core::Op::SetLayerEffects {
+                comp: comp_id,
+                layer: layer_id,
+                effects: vec![blur.clone(), exposure(0.0)],
+            })
+            .expect("effects on");
+
+        r.keep_effect_outputs(true);
+        let _ = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        let (_, (runs, hits)) = r.effect_cache_stats();
+        assert_eq!((runs, hits), (2, 0), "a cold frame runs the whole stack");
+
+        store
+            .commit(lumit_core::Op::SetLayerEffects {
+                comp: comp_id,
+                layer: layer_id,
+                effects: vec![blur, exposure(1.0)],
+            })
+            .expect("the last effect edited");
+        let doc = store.snapshot();
+        let warm = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        let (_, (runs, hits)) = r.effect_cache_stats();
+        assert_eq!(
+            (runs, hits),
+            (3, 1),
+            "the blur's output was held; only the exposure ran"
+        );
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let cold = cold.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(warm, cold, "a warm preview is the picture an export makes");
+
+        r.clear_frame_textures();
+        assert_eq!(
+            r.effect_cache_stats().0 .2,
+            0,
+            "Clear cache empties the intermediates with the frames"
+        );
+    }
+
+    /// **A precomp's frames are cached as one unit** (K-422, K-031).
+    ///
+    /// A nested comp is realised once and then served by its own name: a
+    /// parent edit, and a second parent frame the nested comp is static
+    /// across, both serve it held; an edit inside it realises it again; the
+    /// warm picture is byte-for-byte what a cold renderer (the export path)
+    /// makes; a collapsed Precomp is never cached, since its inner draws
+    /// composite against the parent's stack; and Clear cache empties it.
+    #[test]
+    fn a_nested_comp_is_realised_once_and_served_by_its_own_name() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.1, 0.8, 1.0]);
+        let (mut doc, comp_id, _) = matrix_base(16, 16, red);
+        let (child_doc, child_id, child_solid) = matrix_base(16, 16, blue);
+        for item in child_doc.items {
+            doc.items.push(item);
+        }
+        let layer = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, 16, 16);
+        let layer_id = layer.id;
+        doc.comp_mut(comp_id).unwrap().layers.insert(0, layer);
+        let store = DocumentStore::new(doc);
+
+        r.keep_effect_outputs(true);
+        let _ = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!(r.nested_frame_counts(), (1, 0), "a cold frame realises it");
+
+        // A parent-only edit: the Precomp layer turns, the nested comp does not.
+        store
+            .commit(lumit_core::Op::SetTransformProperty {
+                comp: comp_id,
+                layer: layer_id,
+                prop: lumit_core::model::TransformProp::Rotation,
+                animation: lumit_core::anim::Animation::Static(30.0),
+            })
+            .expect("rotated");
+        let doc = store.snapshot();
+        let warm = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(r.nested_frame_counts(), (1, 1), "served by its own name");
+        let _ = r.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (1, 2),
+            "a second parent frame the nested comp is static across is served too"
+        );
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let cold = cold.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(warm, cold, "a warm preview is the picture an export makes");
+
+        // An edit inside the nested comp renames its frame.
+        store
+            .commit(lumit_core::Op::SetSolidDef {
+                def: child_solid,
+                name: "Base".into(),
+                colour: LinearColour([0.1, 0.8, 0.1, 1.0]),
+                width: 16,
+                height: 16,
+            })
+            .expect("recoloured");
+        let inner = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (2, 2),
+            "an inner edit realises it again"
+        );
+        assert_ne!(inner, warm, "and the picture changed");
+
+        // A collapsed Precomp is spliced into the parent, never named.
+        store
+            .commit(lumit_core::Op::SetLayerCollapse {
+                comp: comp_id,
+                layer: layer_id,
+                collapse: true,
+            })
+            .expect("collapsed");
+        let doc = store.snapshot();
+        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (2, 2),
+            "a collapsed precomp is never cached"
+        );
+
+        r.clear_frame_textures();
+        assert_eq!(r.effect_cache_stats().0 .2, 0, "Clear cache empties it");
+    }
+
+    /// **A parent edit does not decode the footage inside a held precomp**
+    /// (K-422), and the picture it serves is the cold one. The planner skips
+    /// the nested comp's jobs on the store's word, and the realiser then finds
+    /// the texture the planner pinned — so a frame rendered with no nested
+    /// pixels in hand is still the right frame. Skips without an ffmpeg CLI to
+    /// write the fixture.
+    #[test]
+    fn a_parent_edit_does_not_decode_the_footage_inside_a_held_precomp() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items
+            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                id: item,
+                name: "fixture.mp4".into(),
+                media: lumit_core::model::MediaRef {
+                    relative_path: "fixture.mp4".into(),
+                    absolute_path: clip.to_string_lossy().into_owned(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+            }));
+        let (inner_doc, inner_id, _) = matrix_base(32, 24, LinearColour([0.0, 0.0, 0.0, 0.0]));
+        for it in inner_doc.items {
+            doc.items.push(it);
+        }
+        doc.comp_mut(inner_id).unwrap().layers =
+            vec![matrix_layer("Clip", LayerKind::Footage { item }, 32, 24)];
+        let (outer_doc, comp_id, _) = matrix_base(32, 24, LinearColour([0.2, 0.2, 0.2, 1.0]));
+        for it in outer_doc.items {
+            doc.items.push(it);
+        }
+        let pre = matrix_layer("Nested", LayerKind::Precomp { comp: inner_id }, 32, 24);
+        let pre_id = pre.id;
+        doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
+        let store = DocumentStore::new(doc);
+        let q = crate::plan::Quality::default();
+
+        r.keep_effect_outputs(true);
+        r.render_preview(&store.snapshot(), comp_id, 3, q, 1.0)
+            .expect("cold");
+        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
+        assert_eq!(decoded, 1, "the nested footage is what this comp decodes");
+
+        store
+            .commit(lumit_core::Op::SetTransformProperty {
+                comp: comp_id,
+                layer: pre_id,
+                prop: lumit_core::model::TransformProp::Rotation,
+                animation: lumit_core::anim::Animation::Static(20.0),
+            })
+            .expect("rotated");
+        let doc = store.snapshot();
+        let (warm, w, h) = r.render_preview(&doc, comp_id, 3, q, 1.0).expect("warm");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (1, 1),
+            "served from the pinned texture"
+        );
+        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
+        assert_eq!(decoded, 0, "and the plan asked for no decode at all");
+
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let (cold, cw, ch) = cold.render_preview(&doc, comp_id, 3, q, 1.0).expect("cold");
+        assert_eq!((w, h), (cw, ch));
+        assert_eq!(
+            warm, cold,
+            "the held nested frame is the picture a cold walk makes"
+        );
     }
 
     /// A measured frame lands its milliseconds on the right rows: the layer

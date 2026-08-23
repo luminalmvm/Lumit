@@ -149,7 +149,7 @@ pub fn parent_world_placement(
         let Some(a) = comp.layers.iter().find(|l| l.id == *ancestor_id) else {
             continue;
         };
-        let alt = t_comp - a.start_offset.0.to_f64();
+        let alt = lumit_core::time::layer_time(t_comp, a.start_offset.0);
         let tr = &a.transform;
         // An ancestor's own expressions are about the ancestor: `layer()`,
         // `cut_in` and `cut_out` must resolve to the layer being evaluated, not
@@ -210,13 +210,12 @@ pub fn motion_blur_samples(
         return Vec::new();
     }
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-    let start_offset = layer.start_offset.0.to_f64();
     let tr = &layer.transform;
 
     offsets
         .iter()
         .map(|off| {
-            let lt = t_comp + off * dt - start_offset;
+            let lt = lumit_core::time::layer_time(t_comp + off * dt, layer.start_offset.0);
             // Each shutter sample is a different moment, so an expression that
             // reads `time` has to be evaluated at that moment. Reusing the
             // frame's context would return the same placement for every sample
@@ -283,7 +282,7 @@ pub fn shading_lights(
         return Vec::new();
     }
     if lights.len() > lumit_gpu::fx::MAX_LIT_LIGHTS {
-        let lt = t_comp - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         let (lx, ly) = (
             layer.transform.position_x.value_at(lt),
             layer.transform.position_y.value_at(lt),
@@ -363,7 +362,9 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
 /// Bottom-up order; matte sources come from decoded pixels (precomp mattes
 /// await the GPU mask pass, mirroring export). The ordinary render entry: draws
 /// at comp time `t_comp` with every effect resolved at `t_comp` too — a thin
-/// wrapper over [`build_comp_draws_at`] with the sample and frame times equal.
+/// wrapper over [`build_comp_draws_at`] with the sample and frame times equal
+/// and no nested-frame keyer, so every Precomp realises afresh (the test
+/// entry; the renderer calls [`build_comp_draws_at`] with its keyer).
 pub fn build_comp_draws(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -371,7 +372,16 @@ pub fn build_comp_draws(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> Vec<CompLayerDraw> {
-    build_comp_draws_at(doc, comp, t_comp, t_comp, pixels_by_layer, visited)
+    build_comp_draws_at(
+        doc,
+        comp,
+        t_comp,
+        t_comp,
+        pixels_by_layer,
+        visited,
+        None,
+        false,
+    )
 }
 
 /// Build a comp's draw list at sample comp time `t_comp`, resolving each layer's
@@ -384,6 +394,16 @@ pub fn build_comp_draws(
 /// the rest of the scene is sampled. `frame_t` threads through nested Precomps
 /// (each layer's own `start_offset` subtracted) so the flag is honoured at every
 /// depth.
+///
+/// `keys` names each non-collapsed Precomp's frame (K-422) so the realiser can
+/// serve it from the nested-frame store; `None` leaves every nested draw
+/// unnamed, which realises it every time.
+///
+/// `spliced` says this comp is being spliced into its parent by a collapsed
+/// Precomp layer (docs/06 §1.4): its layers are not clipped to its own
+/// rectangle, so a layer that covers *this* comp's frame proves nothing about
+/// the parent's, and the occlusion cull (K-423) is switched off.
+#[allow(clippy::too_many_arguments)]
 pub fn build_comp_draws_at(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -391,11 +411,18 @@ pub fn build_comp_draws_at(
     frame_t: f64,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
+    keys: Option<&dyn crate::cache::NestedKeyer>,
+    spliced: bool,
 ) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
+    // Occlusion cull (K-423, docs/06 §1.1): the same question the decode
+    // planner asks, so a layer skipped here was never decoded either.
+    let occluder = (!spliced)
+        .then(|| lumit_core::occlusion::occluder_index(doc, comp, t_comp))
+        .flatten();
 
     // The caller's Arc: an expression context takes an owned handle, and this
     // shares one rather than deep-cloning the project per build (and per
@@ -494,7 +521,7 @@ pub fn build_comp_draws_at(
         // The layer's own clock, the same one its transform and effects are
         // read at (K-213) — a keyframed mask on a layer dragged along the
         // timeline travels with the layer.
-        let lt = t_comp - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         raw.map(|(mut rgba, w, h, natural)| {
             // Paint first, masks second: a stroke is part of the layer's
             // picture, and a mask gates the picture (K-227, docs/06 render
@@ -555,18 +582,27 @@ pub fn build_comp_draws_at(
                 return None;
             }
             let nested = doc.comp(*nested_id)?;
-            let slt = t_comp - src.start_offset.0.to_f64();
-            let frame_slt = frame_t - src.start_offset.0.to_f64();
+            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+            let frame_slt = lumit_core::time::layer_time(frame_t, src.start_offset.0);
             let mut path = visited_path.clone();
             path.push(*nested_id);
-            let draws =
-                build_comp_draws_at(doc, nested, slt, frame_slt, pixels_by_layer, &mut path);
+            let draws = build_comp_draws_at(
+                doc,
+                nested,
+                slt,
+                frame_slt,
+                pixels_by_layer,
+                &mut path,
+                keys,
+                false,
+            );
             Some(Box::new(crate::draw::NestedInputDraw {
                 width: nested.width,
                 height: nested.height,
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
                 camera: crate::track::camera_pose(doc, nested, slt),
+                key: keys.and_then(|k| k.nested_key(nested, slt)),
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -615,7 +651,7 @@ pub fn build_comp_draws_at(
         // px@comp radii stay honest), the same resolve export uses
         // (K-031). Empty otherwise.
         let (fx, lut_files) = if mode.folds_effects() && src.switches.fx {
-            let slt = t_comp - src.start_offset.0.to_f64();
+            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
             let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
             let scale = tex_w as f32 / natural.0.max(1.0);
             let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
@@ -788,11 +824,15 @@ pub fn build_comp_draws_at(
         if !layer.switches.visible || !in_span(layer) || (any_solo && !layer.switches.solo) {
             continue;
         }
-        let lt = t_comp - layer.start_offset.0.to_f64();
+        // Under a full-frame opaque layer: never seen, so never built.
+        if occluder.is_some_and(|o| idx > o) {
+            continue;
+        }
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         // The true frame time in this layer's own time base, for effects a
         // held/sub-frame re-render must not re-sample (docs/impl/
         // temporal-rerender.md §5). Equal to `lt` on an ordinary render.
-        let frame_lt = frame_t - layer.start_offset.0.to_f64();
+        let frame_lt = lumit_core::time::layer_time(frame_t, layer.start_offset.0);
         // This layer's effects (docs/08 §3.25): a Posterize time scoped to *this
         // layer* holds this layer's OWN effect stack on the coarse grid — its
         // effects sample the held time while the transform and source below stay
@@ -803,7 +843,7 @@ pub fn build_comp_draws_at(
             &layer.effects,
             layer.switches.fx,
             lt,
-            layer.start_offset.0.to_f64(),
+            layer.start_offset.0,
         );
         let tr = &layer.transform;
 
@@ -824,8 +864,16 @@ pub fn build_comp_draws_at(
                     lumit_core::model::CollapseState::Active
                 ) {
                     visited.push(*nested_id);
-                    let mut inner =
-                        build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited);
+                    let mut inner = build_comp_draws_at(
+                        doc,
+                        nested,
+                        lt,
+                        frame_lt,
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                        true,
+                    );
                     visited.pop();
 
                     let own = lumit_gpu::place_matrix(
@@ -884,8 +932,16 @@ pub fn build_comp_draws_at(
                     continue;
                 }
                 visited.push(*nested_id);
-                let nested_draws =
-                    build_comp_draws_at(doc, nested, lt, frame_lt, pixels_by_layer, visited);
+                let nested_draws = build_comp_draws_at(
+                    doc,
+                    nested,
+                    lt,
+                    frame_lt,
+                    pixels_by_layer,
+                    visited,
+                    keys,
+                    false,
+                );
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -900,6 +956,10 @@ pub fn build_comp_draws_at(
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws: nested_draws,
                         camera: crate::track::camera_pose(doc, nested, lt),
+                        // The nested frame's own name (K-422). `lt` is on the
+                        // flick grid already (`layer_time`), so a Precomp
+                        // layer moved by whole frames keeps its names.
+                        key: keys.and_then(|k| k.nested_key(nested, lt)),
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -1045,6 +1105,9 @@ pub fn build_comp_draws_at(
                     // The adjust stack resolves at comp scale but runs on
                     // the render target (K-266) — realise rescales.
                     fx_ref_width: Some(comp.width as f32),
+                    // The composite below has no name of its own in v1
+                    // (K-421): an adjustment's stack runs uncached.
+                    fx_input_key: None,
                     // An adjustment layer is a staging point, not a picture —
                     // motion blur has no image of its own to smear (docs/06 §4).
                     mb: Vec::new(),
@@ -1099,7 +1162,7 @@ pub fn build_comp_draws_at(
                 bare.masks.clear();
                 pixels_for(&bare)?
             };
-            let mlt = t_comp - src.start_offset.0.to_f64();
+            let mlt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
             let mtr = &src.transform;
             // Effects and masks matte (K-142): resolve the matte source's own
             // stack at its layer time so gpu.rs runs it on the matte texture
@@ -1204,6 +1267,17 @@ pub fn build_comp_draws_at(
             DrawSource::Nested { width, .. } => Some(*width as f32),
             DrawSource::Pixels { .. } | DrawSource::Adjust => None,
         };
+        // The name the per-effect cache files this stack's outputs under
+        // (K-421): a picture made from bytes, or — since K-422 named it — a
+        // nested comp's frame, whose texture is exactly what the stack runs on
+        // (`op_keys` folds in the raster size, so the render scale is covered).
+        let fx_input_key = match &source {
+            DrawSource::Pixels { tex_w, tex_h, .. } => {
+                fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
+            }
+            DrawSource::Nested { key, .. } => *key,
+            DrawSource::Adjust => None,
+        };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack.
         let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
@@ -1283,6 +1357,7 @@ pub fn build_comp_draws_at(
             mask_paths: mask_paths_for(layer, lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
+            fx_input_key,
             // Per-layer motion blur (docs/06 §4, K-120): the layer's own
             // transform sampled across the open shutter, empty unless it blurs.
             // Built the same way export does, so the two smear identically.
@@ -1296,6 +1371,54 @@ pub fn build_comp_draws_at(
         });
     }
     draws
+}
+
+/// The content name of the picture a layer's effect stack runs on (K-421,
+/// [`CompLayerDraw::fx_input_key`]): what the source is, then everything
+/// `pixels_for` bakes into it before the stack sees it — the paint strokes,
+/// the masks at this layer time — and the raster it was made at. Footage and
+/// Sequence layers name their source by the decode job's identity
+/// ([`CompLayerPixels::source_key`]); a solid by its colour and size. `None`
+/// for the kinds nothing names yet (text, shapes), which run uncached.
+///
+/// The masks and paint go in serialised, as the file format writes them: a
+/// keyframed mask is named by its whole animation plus the time it is read
+/// at, which is coarser than the evaluated shape but never wrong.
+fn fx_input_key(
+    doc: &lumit_core::model::Document,
+    layer: &lumit_core::model::Layer,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    lt: f64,
+    tex_w: u32,
+    tex_h: u32,
+) -> Option<u128> {
+    use lumit_core::model::LayerKind;
+    let mut h = blake3::Hasher::new();
+    h.update(b"fxinput/1/");
+    match &layer.kind {
+        LayerKind::Footage { .. } | LayerKind::Sequence { .. } => {
+            h.update(b"footage/");
+            h.update(&pixels_by_layer.get(&layer.id)?.source_key.to_le_bytes());
+        }
+        LayerKind::Solid { def } => {
+            let sd = doc.solid(*def)?;
+            h.update(b"solid/");
+            for ch in sd.colour.0 {
+                h.update(&ch.to_le_bytes());
+            }
+            h.update(&sd.width.to_le_bytes());
+            h.update(&sd.height.to_le_bytes());
+        }
+        _ => return None,
+    }
+    h.update(&bincode::serialize(&layer.masks).ok()?);
+    h.update(&bincode::serialize(&layer.paint).ok()?);
+    h.update(&lt.to_le_bytes());
+    h.update(&tex_w.to_le_bytes());
+    h.update(&tex_h.to_le_bytes());
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    Some(u128::from_le_bytes(k))
 }
 
 /// The ordered file paths of a layer's enabled built-in `lut` effects
@@ -1419,7 +1542,18 @@ pub fn below_draws_at(
             l.switches.motion_blur = true;
         }
     }
-    let mut draws = build_comp_draws_at(doc, &below_comp, tau, frame_t, pixels_by_layer, visited);
+    // No nested-frame keyer (K-422): a held re-render strips the temporal
+    // inputs below, so a Precomp in it is not the picture its name would claim.
+    let mut draws = build_comp_draws_at(
+        doc,
+        &below_comp,
+        tau,
+        frame_t,
+        pixels_by_layer,
+        visited,
+        None,
+        false,
+    );
     strip_temporal_inputs(&mut draws);
     (draws, crate::track::camera_pose(doc, comp, tau))
 }
@@ -1441,7 +1575,7 @@ pub fn posterize_below(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> Option<TemporalBelow> {
-    let lt = t_comp - layer.start_offset.0.to_f64();
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let p = lumit_core::fx::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
     // The below-render reach is implied by the carrier (K-166): only an
     // adjustment layer's Posterize holds the composite beneath it.
@@ -1487,7 +1621,7 @@ pub fn accumulation_mb_below(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> Option<AccumulationBelow> {
-    let lt = t_comp - layer.start_offset.0.to_f64();
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let p = lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)?;
     let offsets = p.sample_offsets();
     if offsets.is_empty() {
@@ -1639,6 +1773,43 @@ mod parent_placement_tests {
         assert_eq!(world, expected);
     }
 
+    /// Backlog 7.53: a keyframed parent slid three frames along the timeline
+    /// places its child at frame f+3 exactly as it did at frame f before the
+    /// move — bit for bit — because layer time is taken on the flick grid
+    /// rather than as an f64 subtraction.
+    #[test]
+    fn a_moved_keyframed_parent_places_its_child_bit_identically() {
+        use lumit_core::anim::{Animation, Keyframe, SideInterp};
+        let kf = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let mut parent = layer(0.0, 0.0, None);
+        parent.transform.position_x = Property {
+            extra: serde_json::Map::new(),
+            animation: Animation::Keyframed(vec![kf(0, 0.0), kf(1, 37.0), kf(4, 100.0)]),
+        };
+        let child = layer(5.0, 5.0, Some(parent.id));
+        let before = comp(vec![parent.clone(), child.clone()]);
+        let fr = before.frame_rate;
+        let three = fr.time_of_frame(3).unwrap();
+        let mut moved = parent.clone();
+        moved.start_offset = three;
+        moved.in_point = three;
+        moved.out_point = CompTime(moved.out_point.0.checked_add(three.0).unwrap());
+        let after = comp(vec![moved, child.clone()]);
+        for f in 0..120 {
+            let t0 = fr.time_of_frame(f).unwrap().0.to_f64();
+            let t3 = fr.time_of_frame(f + 3).unwrap().0.to_f64();
+            let ctx = || Arc::new(ExpressionContext::detached());
+            let a = parent_world_placement(&before, &child, t0, ctx()).unwrap();
+            let b = parent_world_placement(&after, &child, t3, ctx()).unwrap();
+            assert_eq!(a, b, "frame {f}");
+        }
+    }
+
     /// The point of a Null: it draws nothing, yet a layer parented to it is
     /// placed by its transform exactly as it would be by any other parent's.
     /// If the parent walk ever skipped the pixel-less kinds, a whole rig would
@@ -1776,12 +1947,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -1875,12 +2048,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -1983,12 +2158,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -2340,12 +2517,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,
@@ -2514,12 +2693,14 @@ mod render_below_at_tests {
         let compositor = lumit_gpu::Compositor::new(&ctx);
         let fx = lumit_gpu::fx::FxEngine::new(&ctx);
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
             engine: &engine,
             compositor: &compositor,
             fx: &fx,
             lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
             render_scale: 1.0,
             samples: 1,
             profiler: None,

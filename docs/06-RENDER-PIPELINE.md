@@ -36,6 +36,21 @@ evaluates at whatever time the retime/nesting maths resolves to.
 Identical subgraphs (same footage, same leading effects) compile to a single shared node by
 content-hash deduplication; two layers sharing a source and grade evaluate it once.
 
+**Occlusion (K-423).** A layer that provably paints every pixel of the frame hides the layers
+beneath it, and those are not decoded, uploaded, effected or composited. The draw builder and
+the decode planner ask one predicate (`lumit_core::occlusion::occluder_index`) so they skip
+exactly the same layers, and the cull must be invisible in the picture, so the predicate is
+deliberately narrow. v1 accepts only a Solid layer whose colour has alpha 1, visible and in
+span (soloed if anything is), 2D with zero rotation, Normal blend at 100% opacity, with no
+masks, paint, enabled effects or motion blur, whose axis-aligned placement — its own transform
+and its parent chain, none rotated, 3D, or driven by an expression — covers the comp rectangle.
+It refuses whenever the comp has an active camera, a visible Adjustment layer sits above the
+candidate, or any visible layer above it names a layer below as a matte or an effect's layer
+input; and it is off inside a collapsed Precomp's splice (§1.4), whose layers are not clipped
+to their own comp. Footage that the probe reports as alpha-free is a later extension: the
+predicate lives in `lumit-core`, which knows no probe. The frame key keeps hashing culled
+layers (over-keying is safe); preview and export stay byte-identical (K-031).
+
 ### 1.2 Render order for one layer
 
 For a visual layer at comp time `t`, the compiled subgraph is, in order:
@@ -460,7 +475,23 @@ on the card and in memory, and it is offered again later.
 outlives the session. The rungs between them are built both ways: a frame evicted from VRAM
 is read back off the card and lands in RAM and on disk, and a frame held below is uploaded
 straight back into a texture rather than composited again. What the tiers hold is
-**final comp frames only** — node-output caching is the evaluator's, and is not built.
+**final comp frames only**, plus one further store that is not a tier of the ladder: the
+**per-effect intermediate cache** (K-421). It lives in the realiser, VRAM only, and holds
+every effect's output under a content name (§5.2). It never demotes and nothing is promoted
+into it; its purpose is the seconds between two edits of one stack, so that editing the last
+effect of a layer re-runs that effect and no other. It is bounded (256 MB by default, a
+setter beside the frame budget), empties with Clear cache, and is written only by committed,
+non-playback renders — a drag and a playback run read it and leave it alone. The same store
+holds **nested frames** (K-422): a non-collapsed Precomp's finished linear texture, filed
+under the nested comp's own frame key (§5.2) mixed with the exact render scale and sample
+count the texture was made at, and served wherever that comp is realised — as a layer, as a
+matte, as an effect's layer input. The decode planner asks the store before it plans a
+nested comp's decodes, and plans none for a held frame; what it says is held it pins until
+the frame is realised, so its answer cannot be evicted out from under the realiser. A
+collapsed Precomp is never cached: its inner draws are spliced into the parent's list and
+composite against the parent's stack, so there is no one picture to keep. The general
+node-output cache the K-178 evaluator will own is still not built; these are the
+effect-stack and precomp slices of it, ahead of the evaluator, built where the work runs.
 
 **"Ahead of the playhead" applies to BOTH lower rungs, and neither used to.** The ring renders
 ahead of the clock, so a frame is composited before it is shown — but the trip *up* the ladder
@@ -569,7 +600,38 @@ The decode width now comes from the same rounded scale the tag does (`Quality::k
 thus the width in the name is the width the pixels were decoded at.
 
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
-nowhere, so an entry can never be a promise the renderer did not keep.
+nowhere, so an entry can never be a promise the renderer did not keep. A **file parameter**
+(a `.cube` LUT, a `.lens` prescription) joins the key by path, size and last-modified time
+(K-431) — the loaders identify a file by more than its path, so a name that mentioned only
+the path could outlive an edit to the file itself.
+
+**A nested comp is named on its own (K-422).** The key used to fold a Precomp layer's comp
+into the parent's hasher inline, so the nested frame had no name of its own. It is now made
+with a fresh hasher — `comp_frame_key` of the nested comp at the layer's time on the flick
+grid, at the same quality tier — and the parent folds in that 16-byte name. The parent's
+semantics are unchanged (an inner edit still renames every parent frame that shows the
+comp), and the nested name is the same whichever parent asks, at whatever comp time, which
+is what "the same nested comp used in five places renders once" above rests on. The
+builder carries the name on the nested draw, the realiser files and serves the texture
+under it, and the decode planner skips a held comp's decodes by it. `ALGO_VERSION` 4.
+
+**The per-effect names (K-421).** An intermediate is named exactly as the formula above says
+a node is, with the chain made explicit: `key_k = H(input, raster, flare substitutions,
+op_0 … op_k)`, where each op contributes its effect name and algorithm version, every
+resolved parameter value (post-expression, post-rescale — the numbers the kernel is handed),
+and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
+content hash, a mask path by its vertices. The flare term counts the frames a Lens flare
+drew other optics than its parameters name (K-431); it was the bake *generation*, which
+moves the moment any bake is queued, so a keyframed aperture renamed every op in the
+project on every frame. The input is the layer's source *by identity*,
+not by its bytes — the decode job's fields for footage, the colour and size for a solid —
+plus the masks and paint baked into it and the raster size; a nested comp's input is its own
+frame key (K-422). A text or shape layer and an adjustment layer's composite have no name
+yet and run their stacks uncached. And an op that binds a picture nobody named — another layer's
+texture as a plate or a matte, the neighbour frames, the flow field — **breaks the chain**:
+it and everything after it have no name, because a name that omitted an input would be a
+wrong picture filed under a true-looking label. `ThisLayer` and an unset reference are
+functions of the chain itself and do not break it.
 
 **A render probes what its composition can show, and nothing else** — the footage its layers
 name, the footage its Sequence layers' clips name, and the same again through every composition
@@ -664,8 +726,20 @@ disk). It yields to any interactive request via epoch cancellation and is the fi
 degradation ladder pauses. Concurrency adapts to measured per-frame cost and memory headroom
 (the MFR lesson) — never a fixed thread count.
 
-**As built.** The fill renders one frame per idle turn, forward-biased two frames ahead for
-each one behind, after a ~200 ms lull.
+**As built (K-424).** The fill renders one frame per idle turn, forward-biased two frames
+ahead for each one behind, after a ~200 ms lull — **into VRAM first**, the same tier a
+scrub renders into. Both walks **wrap at the ends of the work area**: playback loops it, so
+the frame after the last is the first, and the forward walk carries on there rather than
+stopping; the walk ends when every frame has been visited once. Once the card is full the
+fill **keeps going into RAM**: each further render pushes the card's stalest frame out, and
+an eviction is a read-back into memory (and on to disk), so what the walk leaves behind is
+the card full and the rest of the work area held below it — a loop that fits in VRAM plus
+RAM plays warm from end to end. The reach is the two budgets together divided by one
+frame's bytes at the current preview scale, so the walk never cycles frames through disk.
+The LRU stays the eviction authority; the fill never chooses a victim. A frame already
+held in memory is climbed back onto the card only while the card has room — promoting one
+into a full card would push another down, and the next turn would promote that one, for
+ever — otherwise it counts as warm where it is and goes up when playback asks for it.
 
 **And a second job runs on the same lull: the idle backup.** A frame reached the disk tier by
 one route only — pushed out of the VRAM cache, read back on the way down, parked. That route

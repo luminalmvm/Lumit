@@ -120,6 +120,12 @@ pub struct WorkerState {
     /// one layer at a time and a pointer drag asks for the same one on every
     /// move.
     layer_sample: Option<LayerSample>,
+    /// A frame the user asked for while the render-time column was measuring,
+    /// that a tier served instead of a composite — so it has no numbers yet.
+    /// The idle turn composites it once more, measured, and discards the
+    /// picture (K-420: serve the hit, measure afterwards). One slot: only the
+    /// frame being looked at is worth the numbers.
+    pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
 }
 
 /// One outstanding ask to the disk tier: where the frame sits (for the upload
@@ -245,13 +251,22 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     let budget = crate::framecache::vram::budget();
     if budget != state.applied_vram_budget {
         state.applied_vram_budget = budget;
-        state.renderer.set_frame_texture_budget(budget);
+        // One VRAM budget, shared: a quarter holds the per-effect and nested
+        // intermediates (K-421, K-422), the rest holds finished frames. Without
+        // the split the intermediates sat outside the number the user set.
+        let intermediates = budget / 4;
+        state.renderer.set_effect_cache_budget(intermediates);
+        state
+            .renderer
+            .set_frame_texture_budget(budget - intermediates);
         state.fill_exhausted = false;
     }
     // What the cache is holding to, read back from the cache itself rather than
     // from the wish above — so the meter cannot claim a budget the renderer
-    // never took.
-    crate::framecache::vram::publish_applied(state.renderer.frame_texture_stats().1);
+    // never took. Both stores count: the frames and the intermediates.
+    crate::framecache::vram::publish_applied(
+        state.renderer.frame_texture_stats().1 + state.renderer.effect_cache_stats().0 .1,
+    );
     let clears = crate::framecache::vram::clears();
     if clears != state.seen_vram_clears {
         state.seen_vram_clears = clears;
@@ -969,17 +984,13 @@ fn prepare_frame(
     let name = cacheable
         .then(|| state.renderer.frame_key(document, comp, frame, quality))
         .flatten();
-    // While the render-time column is measuring, the ladder is stepped over
-    // entirely: a frame promoted from memory or read off disk cost a copy, not
-    // a composite, so it has no per-layer numbers to give — and a column that
-    // only ever fills in on frames the cache has not already made is a column
-    // that looks broken (docs/13 §7.1). The renderer skips its own held
-    // textures for the same reason.
+    // A held frame is served even while the render-time column is measuring
+    // (K-420). A frame promoted from memory cost a copy, not a composite, so
+    // it has no per-layer numbers to give; the worker notes that below and
+    // composites it again for the numbers when it is next idle, rather than
+    // making the user wait for a picture the bar already shows as held.
     let measuring = state.renderer.measuring();
-    if let Some(key) = name
-        .filter(|_| !measuring)
-        .filter(|key| !state.renderer.has_frame_texture(*key, bgra))
-    {
+    if let Some(key) = name.filter(|key| !state.renderer.has_frame_texture(*key, bgra)) {
         let provenance = lumit_render::FrameProvenance {
             comp,
             frame,
@@ -1012,6 +1023,9 @@ fn prepare_frame(
                         frame,
                         provenance.scale_q,
                     );
+                    if measuring {
+                        state.pending_measure = Some((comp, frame, quality));
+                    }
                     return Ok(prepared);
                 }
             }
@@ -1035,9 +1049,15 @@ fn prepare_frame(
     }
     // Named once, above: hashing the composition again here would be the same
     // walk twice per frame.
+    let hits_before = state.renderer.frame_texture_hits();
     let prepared = state
         .renderer
         .render_prepared_named(document, comp, frame, quality, bgra, name);
+    // Answered from the card: no numbers were made, so note the frame for the
+    // idle measure (K-420).
+    if measuring && state.renderer.frame_texture_hits() > hits_before {
+        state.pending_measure = Some((comp, frame, quality));
+    }
     // A nameable frame that rendered was banked in the same breath: the strip
     // hears it now rather than when the sweep next comes past.
     if prepared.is_ok() && name.is_some() {
@@ -1051,6 +1071,59 @@ fn prepare_frame(
         );
     }
     prepared
+}
+
+/// Composite the frame a tier served while the column was measuring, measured
+/// this time, and throw the picture away (K-420: serve the hit, measure
+/// afterwards).
+///
+/// The picture on screen is already right — it came from a tier, and a tier
+/// holds exactly what a composite would make — so nothing is published here.
+/// Only the numbers are wanted, and the profile sink carries those as they
+/// are made. Rendered unnamed, so it neither displaces the held frame nor
+/// banks a second copy of it. Nothing is measured unless the column still
+/// wants numbers, and a frame whose composition has gone is simply dropped.
+#[frb(ignore)]
+fn measure_pending(state: &mut WorkerState) {
+    let Some((comp, frame, quality)) = state.pending_measure.take() else {
+        return;
+    };
+    if !crate::profiling::wanted() {
+        return;
+    }
+    let Ok(document) = state.project.state() else {
+        return;
+    };
+    let Ok(document) = document.read() else {
+        return;
+    };
+    let document = document.store.snapshot();
+    measure_frame(&mut state.renderer, &document, comp, frame, quality);
+}
+
+/// The measured composite itself — apart from the worker's state so a test
+/// can drive it with a renderer alone.
+#[frb(ignore)]
+fn measure_frame(
+    renderer: &mut HeadlessRenderer,
+    document: &std::sync::Arc<lumit_core::Document>,
+    comp: Uuid,
+    frame: u64,
+    quality: lumit_render::Quality,
+) {
+    renderer.measure_frames(true);
+    // The result is the numbers, which the profile sink has already carried
+    // off; the texture is dropped. A fault here is a fault the scrub will
+    // report in its own right.
+    _ = renderer.render_prepared_named(
+        document,
+        comp,
+        frame,
+        quality,
+        zero_copy_wants_bgra(),
+        None,
+    );
+    renderer.measure_frames(false);
 }
 
 /// Copy ONE held frame down to disk while the editor is idle — so a session
@@ -1220,25 +1293,35 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         state.fill_exhausted = true;
         return;
     }
-    // **What the fill keeps is a WINDOW around the playhead**, as many frames as
-    // the budget holds, in `fill_order`'s forward-biased shape. It used to stop
-    // outright as soon as the cache was within one frame of full — which meant
-    // that once the cache filled, moving the playhead banked nothing ever again:
-    // the frames it wanted were new, and the ones in the way were far off and
-    // stale. Letting it render inside the window puts the eviction decision
-    // where it belongs, with the LRU, which drops the stalest and largest first
-    // — the far side of where you now are. It still terminates: the walk is
-    // bounded, and every frame in the window ends up held.
-    let window = (budget / frame_bytes).max(1);
+    // **The fill does not stop at the card.** It used to keep a window around
+    // the playhead, as many frames as the card's budget holds, and stop there
+    // — which meant playback looping a work area longer than the window
+    // re-rendered its far side every pass, while the worker sat idle. Now the
+    // walk carries on: a frame rendered once the card is full pushes the
+    // card's stalest frame out, and an eviction is a read-back into the RAM
+    // tier (and on to disk). The eviction decision stays with the LRU, which
+    // drops the stalest and cheapest first. What the walk leaves behind is the
+    // card full and the rest of the work area held below it, so a loop that
+    // fits in VRAM plus RAM plays warm from end to end. The reach is bounded
+    // by both budgets, so the walk never cycles frames through disk.
+    //
+    // A frame held below is **climbed only while the card has room**. Once it
+    // is full, promoting one would push another down — and the next turn
+    // would promote that one, for ever. A frame in memory is warm enough; it
+    // goes up when playback asks for it.
+    let (_, ram_budget, _, _, _) = crate::framecache::stats();
+    // ponytail: the RAM budget is shared with every other comp and scale; a
+    // fill that counts only its own frames can over-reach by what they hold.
+    let reach = (budget + ram_budget) / frame_bytes;
     // Frames the disk holds are asked for as the walk passes them, and the walk
     // carries on. A load is a message to another thread, thus queueing several
     // costs nothing here — and by the time the fill comes round again they have
     // arrived and gone onto the card, which is what makes a re-opened project
     // warm up by *reading* rather than by rendering everything a second time.
-    // The window's names are all of this one snapshot: probe it once, then
+    // The walk's names are all of this one snapshot: probe it once, then
     // each name is computed at most once per edit (see `frame_name`).
     state.renderer.presync_items(&document, comp_ref.id);
-    for frame in crate::playback::fill_order(anchor, first, last).take(window) {
+    for frame in crate::playback::fill_order(anchor, first, last).take(reach) {
         // Naming the frame is what tells the fill whether there is anything to
         // do — and under content keying the name is the same one every tier files
         // it under, so a frame already held anywhere is skipped without a render.
@@ -1254,7 +1337,18 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // frame is due *now* and wrong here. After a re-opened project this
             // is the difference between reading a session's cache back and
             // rendering the whole of it a second time.
-            if crate::framecache::contains(key) || state.disk.contains(key) {
+            let in_memory = crate::framecache::contains(key);
+            if in_memory || state.disk.contains(key) {
+                let (used, budget, _) = state.renderer.frame_texture_stats();
+                let room = used + frame_bytes <= budget;
+                // A full card climbs nothing, from memory or from disk: a
+                // promotion would push another frame down, and the next turn
+                // would promote that one, round and round through the disk
+                // for ever. Frames below stay where they are until playback
+                // or a scrub asks for them.
+                if !room {
+                    continue;
+                }
                 let provenance = lumit_render::FrameProvenance {
                     comp: comp_ref.id,
                     frame,
@@ -2068,6 +2162,7 @@ fn worker_loop(
         last_request: std::time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
+        pending_measure: None,
     };
 
     loop {
@@ -2110,6 +2205,10 @@ fn worker_loop(
                     let lull =
                         state.last_request.elapsed() >= std::time::Duration::from_millis(200);
                     if lull {
+                        // The numbers for the frame on screen, if a tier served
+                        // it unmeasured (K-420) — before the fill, so the column
+                        // fills one idle turn after the picture.
+                        measure_pending(&mut state);
                         if !state.fill_exhausted {
                             idle_fill(&mut state, &mut stream);
                         }
@@ -2824,6 +2923,9 @@ fn profile_of(p: &lumit_render::FrameProfile) -> crate::api::state::BridgeFrameP
 /// not the idle cache fill, not a scope trace. That is the whole rule
 /// (docs/07 §2.5: the bar never appears during playback), and keeping it here
 /// rather than in each render path is what stops a later caller forgetting it.
+/// The one other measured render is [`measure_pending`]'s: the same frame
+/// this one asked for, composited again in an idle moment because a tier
+/// served it without numbers (K-420).
 ///
 /// The closing report is sent whatever happened inside, including a frame that
 /// faulted or one served straight from the cache with no report at all: a bar
@@ -3050,65 +3152,83 @@ fn trace_scope(
     // keeps claiming the position it was made for. Asked at the quality each
     // candidate was made at, so a Half-resolution frame is judged by the Half
     // name and not by the Full one.
+    // The card first: on a zero-copy build the frame the Viewer shows lives
+    // there and nowhere else, so a frame the bar showed green was composited
+    // a second time for every trace of it. Reading it back is a copy.
+    let quality = quality_for(req.scale);
+    let bgra = zero_copy_wants_bgra();
+    let on_card = state
+        .renderer
+        .frame_key(&document, req.comp.id, req.frame, quality)
+        .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
+        .map(|(width, height, mut bytes)| {
+            if bgra {
+                // The Scopes bin R, G and B by name.
+                for px in bytes.chunks_exact_mut(4) {
+                    px.swap(0, 2);
+                }
+            }
+            (width, height, bytes)
+        });
     let still_current = |key: u128, quality: lumit_render::Quality| {
         state
             .renderer
             .frame_key_presynced(&document, req.comp.id, req.frame, quality)
             == Some(key)
     };
-    let (width, height, rgba) =
-        match crate::framecache::best_frame(req.comp.id, req.frame, still_current) {
-            Some(held) => held,
-            None => {
-                // Nothing held for this frame — the zero-copy Viewer keeps no bytes,
-                // so on that path the trace still has to make its own. Cached under
-                // the frame's content name, so a second trace of the same frame is
-                // free; an unnameable frame (footage still being probed) is traced
-                // without banking anything.
-                let quality = quality_for(req.scale);
-                let key = state
-                    .renderer
-                    .frame_key(&document, req.comp.id, req.frame, quality);
-                let provenance = lumit_render::FrameProvenance {
-                    comp: req.comp.id,
-                    frame: req.frame,
-                    scale_q: lumit_render::preview_scale_q(quality),
-                    quality,
-                };
-                let made = match key.and_then(crate::framecache::get) {
-                    Some(hit) => Some(hit),
-                    None => {
-                        // A flare bake queued *during* the render means the
-                        // picture is of the previous lens (K-350), so the name
-                        // taken before it no longer describes what was made.
-                        // Banked only when nothing moved.
-                        let bakes_before = state.renderer.flare_bake_generation();
-                        let made = state
-                            .renderer
-                            .render_preview(
-                                &document,
-                                req.comp.id,
-                                req.frame,
-                                quality_for(req.scale),
-                                req.scale,
-                            )
-                            .ok()
-                            .map(|(rgba, width, height)| (width, height, rgba));
-                        if let (Some(key), Some((w, h, px))) = (key, made.as_ref()) {
-                            if state.renderer.flare_bake_generation() == bakes_before {
-                                crate::framecache::put_rendered(key, provenance, *w, *h, px);
-                            }
+    let held =
+        on_card.or_else(|| crate::framecache::best_frame(req.comp.id, req.frame, still_current));
+    let (width, height, rgba) = match held {
+        Some(held) => held,
+        None => {
+            // Nothing held for this frame — the zero-copy Viewer keeps no bytes,
+            // so on that path the trace still has to make its own. Cached under
+            // the frame's content name, so a second trace of the same frame is
+            // free; an unnameable frame (footage still being probed) is traced
+            // without banking anything.
+            let key = state
+                .renderer
+                .frame_key(&document, req.comp.id, req.frame, quality);
+            let provenance = lumit_render::FrameProvenance {
+                comp: req.comp.id,
+                frame: req.frame,
+                scale_q: lumit_render::preview_scale_q(quality),
+                quality,
+            };
+            let made = match key.and_then(crate::framecache::get) {
+                Some(hit) => Some(hit),
+                None => {
+                    // A flare that fell back to the previous lens during the
+                    // render (K-350) made a picture the name taken before it
+                    // no longer describes. Banked only when no flare stood
+                    // anything in (K-431).
+                    let subs_before = state.renderer.flare_substitutions();
+                    let made = state
+                        .renderer
+                        .render_preview(
+                            &document,
+                            req.comp.id,
+                            req.frame,
+                            quality_for(req.scale),
+                            req.scale,
+                        )
+                        .ok()
+                        .map(|(rgba, width, height)| (width, height, rgba));
+                    if let (Some(key), Some((w, h, px))) = (key, made.as_ref()) {
+                        if state.renderer.flare_substitutions() == subs_before {
+                            crate::framecache::put_rendered(key, provenance, *w, *h, px);
                         }
-                        made
                     }
-                };
-                let Some(made) = made else {
-                    eprintln!("Scope render failed, dropping the trace");
-                    return Ok(());
-                };
-                made
-            }
-        };
+                    made
+                }
+            };
+            let Some(made) = made else {
+                eprintln!("Scope render failed, dropping the trace");
+                return Ok(());
+            };
+            made
+        }
+    };
 
     match state
         .renderer
@@ -3211,9 +3331,10 @@ fn sample_pixels(
                     // A frame that cannot be named yet (its footage is still
                     // being probed, or a flare bake is being made) is rendered
                     // and not banked: an entry under a name the renderer did
-                    // not keep is worse than no entry. The bake can also start
-                    // *during* the render, which only the render can report —
-                    // hence the check either side of it (K-350).
+                    // not keep is worse than no entry. A flare can also fall
+                    // back to the previous lens *during* the render, which
+                    // only the render can report — hence the count read
+                    // either side of it (K-350, K-431).
                     let provenance = lumit_render::FrameProvenance {
                         comp: req.comp.id,
                         frame: req.frame,
@@ -3223,7 +3344,7 @@ fn sample_pixels(
                     let made = match name.and_then(crate::framecache::get) {
                         Some(hit) => Some(hit),
                         None => {
-                            let bakes_before = state.renderer.flare_bake_generation();
+                            let subs_before = state.renderer.flare_substitutions();
                             let made = state
                                 .renderer
                                 .render_preview(
@@ -3236,7 +3357,7 @@ fn sample_pixels(
                                 .ok()
                                 .map(|(rgba, width, height)| (width, height, rgba));
                             if let (Some(key), Some((w, h, px))) = (name, made.as_ref()) {
-                                if state.renderer.flare_bake_generation() == bakes_before {
+                                if state.renderer.flare_substitutions() == subs_before {
                                     crate::framecache::put_rendered(key, provenance, *w, *h, px);
                                 }
                             }
@@ -3412,7 +3533,17 @@ fn publish_frame(
         all(target_os = "linux", feature = "shared-texture-linux"),
         all(target_os = "macos", feature = "shared-texture-macos")
     ))]
-    publish_zero_copy(state, comp, frame, scale, document, stream, mode, cacheable);
+    {
+        // Everything that reaches here is a scrub, an edit's render or a drag
+        // — never playback or the idle fill, which call `prepare_frame`
+        // directly. Of those, only a committed document's render may add to
+        // the per-effect cache (K-421); a drag's provisional pictures read
+        // from it and leave it alone. Off again afterwards, so the flag can
+        // never leak into a playback run.
+        state.renderer.keep_effect_outputs(cacheable);
+        publish_zero_copy(state, comp, frame, scale, document, stream, mode, cacheable);
+        state.renderer.keep_effect_outputs(false);
+    }
 
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
@@ -3616,6 +3747,315 @@ mod tests {
                 "every-frame playback ignores the tier"
             );
         }
+    }
+
+    /// A worker's state around a real renderer, built as `worker_loop` builds
+    /// it. `None` where there is no graphics adapter to build one on.
+    fn worker_state(project: crate::api::project::ProjectReference) -> Option<super::WorkerState> {
+        let Ok(renderer) = super::HeadlessRenderer::new() else {
+            eprintln!("no graphics adapter; skipping");
+            return None;
+        };
+        Some(super::WorkerState {
+            project,
+            renderer,
+            preview_engine: super::PreviewEngine::default(),
+            playback: None,
+            prefetcher: crate::prefetch::Prefetcher::default(),
+            last_shown: None,
+            disk: lumit_render::diskio::spawn(),
+            disk_wanted: std::collections::HashMap::new(),
+            names: crate::names::NameCache::default(),
+            applied_disk_budget: 0,
+            seen_disk_clears: crate::framecache::disk::clears(),
+            seen_disk_location: (u64::MAX, None),
+            applied_vram_budget: 0,
+            seen_vram_clears: crate::framecache::vram::clears(),
+            published_vram: (0, 0),
+            published_bar: None,
+            bar_strip: Vec::new(),
+            bar_refined_to: 0,
+            bar_dirty: false,
+            bar_published_at: std::time::Instant::now() - super::BAR_MIN_INTERVAL,
+            fill_exhausted: true,
+            backup_exhausted: true,
+            last_request: std::time::Instant::now(),
+            bakes_seen: 0,
+            layer_sample: None,
+            pending_measure: None,
+        })
+    }
+
+    /// A project with one composition holding one solid layer, and the
+    /// composition's id.
+    fn project_with_solid() -> (crate::api::project::ProjectReference, Uuid) {
+        project_with_solid_of(60)
+    }
+
+    /// The same, `frames` frames long at 30 fps.
+    fn project_with_solid_of(frames: i64) -> (crate::api::project::ProjectReference, Uuid) {
+        use lumit_core::model::{Composition, LinearColour, ProjectItem};
+        use lumit_core::time::{Duration, FrameRate, Rational};
+
+        let project =
+            crate::api::state::LumitBridgeState::new_project(None).expect("a new project");
+        let comp = Composition {
+            id: Uuid::now_v7(),
+            name: "Scene".into(),
+            width: 64,
+            height: 32,
+            frame_rate: FrameRate::new(30, 1).expect("30 fps"),
+            duration: Duration(Rational::new(frames, 30).expect("a duration")),
+            background: LinearColour([0.0, 0.0, 0.0, 0.0]),
+            work_area: None,
+            layers: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp_id = comp.id;
+        {
+            let state = project.state().expect("state");
+            let state = state.write().expect("write");
+            state
+                .store
+                .commit(lumit_core::Op::AddItem {
+                    index: 0,
+                    item: Box::new(ProjectItem::Composition(comp)),
+                })
+                .expect("comp added");
+        }
+        CompositionReference::new(project.id, comp_id)
+            .add_solid_layer()
+            .expect("a solid layer");
+        (project, comp_id)
+    }
+
+    /// **A held frame is shown at once, and measured afterwards** (K-420).
+    ///
+    /// The regression: render-time measuring is on by default (K-276 rev 8),
+    /// and a measured request stepped over every tier — so a frame the cache
+    /// bar showed green was composited again, fenced at every layer, the
+    /// moment the playhead landed on it. Now the tier answers, and the idle
+    /// turn composites the frame once more for its numbers. Fails without
+    /// either half: the first assertion if the hit is refused, the last if
+    /// the numbers never come.
+    #[test]
+    fn a_held_frame_is_served_while_measuring_and_measured_on_the_idle_turn() {
+        let (project, comp) = project_with_solid();
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let profiles: std::sync::Arc<std::sync::Mutex<Vec<u64>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = std::sync::Arc::clone(&profiles);
+        state
+            .renderer
+            .set_profile_sink(Some(std::sync::Arc::new(move |p| {
+                if let Ok(mut got) = into.lock() {
+                    got.push(p.frame);
+                }
+            })));
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let quality = still_quality(1.0);
+        let bgra = super::zero_copy_wants_bgra();
+
+        // The fill's render: unmeasured, banked on the card.
+        super::prepare_frame(&mut state, &document, comp, 3, quality, bgra, true)
+            .expect("the fill renders");
+        let key = state
+            .renderer
+            .frame_key(&document, comp, 3, quality)
+            .expect("a solid is nameable");
+        assert!(state.renderer.has_frame_texture(key, bgra), "banked");
+        assert!(
+            profiles.lock().expect("profiles").is_empty(),
+            "the fill is never measured"
+        );
+
+        // The user lands on it with the column measuring, as `watched` does.
+        state.renderer.measure_frames(true);
+        let hits = state.renderer.frame_texture_hits();
+        super::prepare_frame(&mut state, &document, comp, 3, quality, bgra, true)
+            .expect("the scrub is served");
+        state.renderer.measure_frames(false);
+        assert_eq!(
+            state.renderer.frame_texture_hits(),
+            hits + 1,
+            "a held frame is served, not composited again, while measuring"
+        );
+        assert!(
+            profiles.lock().expect("profiles").is_empty(),
+            "a hit made no numbers, and must not pretend to"
+        );
+        assert_eq!(state.pending_measure, Some((comp, 3, quality)));
+
+        // The idle turn: the numbers arrive, the frame stays held, the slot
+        // is cleared so it is not measured again and again.
+        super::measure_pending(&mut state);
+        assert_eq!(
+            profiles.lock().expect("profiles").as_slice(),
+            &[3],
+            "the numbers for that frame arrive one idle turn later"
+        );
+        assert!(state.renderer.has_frame_texture(key, bgra), "still held");
+        assert_eq!(state.pending_measure, None);
+        super::measure_pending(&mut state);
+        assert_eq!(profiles.lock().expect("profiles").len(), 1, "measured once");
+    }
+
+    /// **The fill does not stop at the card.** A 50-frame work area with room
+    /// for 20 frames on the card used to end with 20 held and 30 never
+    /// visited, and playback looping the work area re-rendered the far side
+    /// every pass. Now the walk wraps and carries on past the window: what
+    /// the card pushes out lands in memory, and the whole work area ends up
+    /// held in one tier or the other. Fails without the change: the loop
+    /// below ends with thirty frames in neither.
+    #[test]
+    fn the_fill_keeps_going_into_memory_once_the_card_is_full() {
+        let (project, comp) = project_with_solid_of(50);
+        // A still solid names every frame the same (content keying), so the
+        // solid turns: fifty frames, fifty names.
+        {
+            let layer = {
+                let state = project.state().expect("state");
+                let state = state.read().expect("read");
+                state.store.snapshot().comp(comp).expect("comp").layers[0].id
+            };
+            let state = project.state().expect("state");
+            let state = state.write().expect("write");
+            state
+                .store
+                .commit(lumit_core::Op::SetTransformProperty {
+                    comp,
+                    layer,
+                    prop: lumit_core::model::TransformProp::Rotation,
+                    animation: lumit_core::anim::Animation::Expression("time * 90".into()),
+                })
+                .expect("animated");
+        }
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        // Room for twenty 64x32 frames, and a little slack.
+        let frame_bytes = 64 * 32 * 4;
+        state
+            .renderer
+            .set_frame_texture_budget(frame_bytes * 20 + frame_bytes / 2);
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        // The user is looking at frame 7; that is the fill's anchor.
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let quality = still_quality(1.0);
+        let bgra = super::zero_copy_wants_bgra();
+        super::prepare_frame(&mut state, &document, comp, 7, quality, bgra, true)
+            .expect("the shown frame");
+        state.last_shown = Some((CompositionReference::new(state.project.id, comp), 7, 1.0));
+        state.fill_exhausted = false;
+        // Idle turns until the fill has nothing left; each turn also collects
+        // what the card handed back, as the worker loop does.
+        for _ in 0..2_000 {
+            if state.fill_exhausted {
+                break;
+            }
+            super::idle_fill(&mut state, &mut stream);
+            super::drain_demotions(&mut state);
+        }
+        assert!(state.fill_exhausted, "the fill terminates");
+        // Read-backs still in flight land over the next few turns.
+        for _ in 0..200 {
+            super::drain_demotions(&mut state);
+        }
+        let mut on_card = 0;
+        let mut missing = Vec::new();
+        for frame in 0..50u64 {
+            let key = state
+                .renderer
+                .frame_key(&document, comp, frame, quality)
+                .expect("a solid is nameable");
+            if state.renderer.has_frame_texture(key, bgra) {
+                on_card += 1;
+            } else if !crate::framecache::contains(key) {
+                missing.push(frame);
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "held on the card or in memory: missing {missing:?}"
+        );
+        assert!(
+            on_card <= 20,
+            "the card's window is still the card's budget, got {on_card}"
+        );
+
+        // **A full card climbs nothing from disk either.** Move one memory-held
+        // frame down to disk and out of memory, then run the fill again: the
+        // frame must stay on disk. Before the guard covered disk as well as
+        // memory, the fill uploaded it, the card pushed another frame down,
+        // memory pushed a third onto disk, and the next turn found that one
+        // and started again - an idle loop with no fixed point.
+        let keys: Vec<_> = (0..50u64)
+            .map(|f| {
+                state
+                    .renderer
+                    .frame_key(&document, comp, f, quality)
+                    .expect("nameable")
+            })
+            .collect();
+        let parked = keys
+            .into_iter()
+            .find(|k| {
+                !state.renderer.has_frame_texture(*k, bgra) && crate::framecache::contains(*k)
+            })
+            .expect("a frame held in memory only");
+        let (w, h, bytes) = crate::framecache::get(parked).expect("its bytes");
+        // The disk tier parks nothing until it has a folder.
+        let dir = tempfile::tempdir().expect("a folder for the disk tier");
+        state
+            .disk
+            .tx
+            .send(lumit_render::diskio::Cmd::SetRoot(Some(
+                dir.path().to_path_buf(),
+            )))
+            .expect("the disk thread");
+        assert!(state
+            .disk
+            .park(parked, w, h, bgra, std::sync::Arc::new(bytes), 1, 1000));
+        for _ in 0..500 {
+            if state.disk.contains(parked) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(state.disk.contains(parked), "the park landed");
+        crate::framecache::clear();
+        let card_before = state.renderer.frame_texture_stats().0;
+        state.fill_exhausted = false;
+        for _ in 0..200 {
+            if state.fill_exhausted {
+                break;
+            }
+            super::idle_fill(&mut state, &mut stream);
+            super::collect_disk_loads(&mut state);
+            super::drain_demotions(&mut state);
+        }
+        assert!(state.fill_exhausted, "the second pass terminates");
+        assert!(
+            !state.renderer.has_frame_texture(parked, bgra),
+            "a disk-held frame is not climbed onto a full card"
+        );
+        assert_eq!(
+            state.renderer.frame_texture_stats().0,
+            card_before,
+            "the card is untouched"
+        );
     }
 
     fn playback(mode: BridgePlaybackMode, last: u64) -> Playback {

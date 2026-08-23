@@ -69,7 +69,7 @@ pub use build::{
     below_draws_at, build_comp_draws, build_comp_draws_at, patch_layer_effect_param,
     patch_layer_prop, render_below_at,
 };
-pub use cache::{CacheTier, CachedCompFrame};
+pub use cache::{CacheTier, CachedCompFrame, NestedKeyer, NestedKeys};
 pub use decode::{CompFrame, CompJob, CompLayerPixels, PreviewEngine, PreviewResult};
 pub use draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, LayerInputDraw, MatteDraw, TemporalBelow,

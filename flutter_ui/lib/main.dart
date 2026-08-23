@@ -779,6 +779,13 @@ class LumitUiState extends ChangeNotifier {
   /// only the cache bar, which listens to both.
   final ValueNotifier<int> cacheChanged = ValueNotifier(0);
 
+  /// Bumped when a Camera track analysis lands a solve (K-430). Its own
+  /// notifier because a solve moves neither the document's revision nor the
+  /// playhead — and those two are exactly what the Viewer's point cloud is
+  /// keyed by, so without this it had no reason to ask again and the dots did
+  /// not appear until the frame changed.
+  final ValueNotifier<int> solveLanded = ValueNotifier(0);
+
   /// The preview tier the last frame was made at: 1 Full, 2 Half, 3 Third,
   /// 4 Quarter (K-030/K-171).
   ///
@@ -1298,9 +1305,31 @@ class LumitUiState extends ChangeNotifier {
   /// Called by the Viewer as it lays out. Clamped to (0, 1]: rendering *above*
   /// comp resolution would cost more for no visible gain, and a zero or negative
   /// scale is meaningless.
-  void reportViewerScale(double scale) {
+  ///
+  /// **A panel that has changed size asks for the frame again** (K-430). On
+  /// Auto the scale is whatever the panel could show at the moment it laid
+  /// itself out, and the first layout of a session happens at whatever size the
+  /// window opened at — so the first frame stayed at that scale until something
+  /// else moved, because growing a panel is neither an edit nor a move of the
+  /// playhead and nothing else asks. Compared at 1 % granularity, which is how
+  /// the engine keys a frame's scale: a smaller difference would name a frame
+  /// already in hand.
+  ///
+  /// A fixed tier is left alone: it is a raster reduction the user chose, and
+  /// the panel's size has no say in it.
+  ///
+  /// [settled] is false while the Viewer's zoom is in flight. A flight is dozens
+  /// of layouts, and a frame asked for at each of them is dozens of frames
+  /// nobody ever sees.
+  void reportViewerScale(double scale, {bool settled = true}) {
     if (!scale.isFinite || scale <= 0) return;
+    final was = _panelScale;
     _panelScale = scale > 1.0 ? 1.0 : scale;
+    if (!settled || previewResolution.fraction != null) return;
+    if ((_panelScale * 100).round() == (was * 100).round()) return;
+    // After this frame, not during it: this runs from the Viewer's layout, and
+    // a render request made there would rebuild the tree it is measuring.
+    WidgetsBinding.instance.addPostFrameCallback((_) => requestFrame());
   }
 
   /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
@@ -1587,6 +1616,7 @@ class LumitUiState extends ChangeNotifier {
     previewProgress.dispose();
     model.dispose();
     cacheChanged.dispose();
+    solveLanded.dispose();
     previewTier.dispose();
     viewerFrameid.dispose();
     selectedLayer.removeListener(_syncSelection);

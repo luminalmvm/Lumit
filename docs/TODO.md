@@ -363,8 +363,8 @@ imported theme travels with the user rather than the machine's settings.
 
 **Render-time indicator follow-ups (K-276 landed the column).** What ships measures by
 *fencing* — the render waits for the card at each layer and each effect before reading
-the clock, and re-renders held frames to do it — so it is opt-in and never runs during
-playback. §7.1's target is continuous collection at negligible cost, which wants **GPU
+the clock, and composites a held frame again on the idle turn to do it (K-420) — so it
+never runs during playback and only the frame under the playhead is measured. §7.1's target is continuous collection at negligible cost, which wants **GPU
 timestamp queries**: a query set per frame, timestamps written around each node's own
 submission (every effect kernel already submits its own command buffer, so nothing
 inside `lumit-gpu`'s kernels changes), resolved a frame later. With those in the switch

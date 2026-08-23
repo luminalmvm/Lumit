@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/camera_track_display_frb.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_track.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -260,6 +261,105 @@ void main() {
       frame.value = 2;
       await tester.pump();
       expect(asked[0], 3);
+    });
+
+    /// **Switching the effect off takes the cloud with it** (K-430).
+    ///
+    /// The cloud is found in the read model, and the model changing is a thing
+    /// to listen to. It was read outside any listener, so the dots stayed on
+    /// the picture after the effect was disabled until the frame next changed —
+    /// which, paused, could be never.
+    testWidgets('disabling the effect removes the cloud, with no frame change',
+        (tester) async {
+      final p = withTrackedLayer();
+      // Show points is off by default; the cloud is only ever drawn with it on.
+      final effects = p.layer.getEffects();
+      effects.single.setValue(
+          id: 'show_points', value: const BridgeEffectValue.bool(true));
+      p.layer.setEffects(effects: effects);
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final cloudKey =
+          ValueKey<String>('viewer-track-${p.layer.internallayerId}');
+      expect(find.byKey(cloudKey), findsOneWidget,
+          reason: 'Show points is on, so the cloud is drawn');
+
+      final frame = p.uiState.playheadFrame.value;
+      p.layer.setEffectEnabled(
+          effect: p.layer.getEffects().single, enabled: false);
+      // What the Effect Controls panel does after a switch: re-read. Nothing
+      // else moves, and in particular the playhead does not.
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      expect(find.byKey(cloudKey), findsNothing,
+          reason: 'a disabled effect draws nothing');
+      expect(p.uiState.playheadFrame.value, frame,
+          reason: 'and it took no frame change to notice');
+    });
+
+    /// **A solve landing makes the cloud appear** (K-430).
+    ///
+    /// The read is keyed by the frame and the document's revision, and a solve
+    /// moves neither: it is the answer to an analysis, not an edit. Without a
+    /// third key the dots did not arrive until something else did.
+    testWidgets('a landed solve is read without the playhead moving',
+        (tester) async {
+      final p = withTrackedLayer();
+      var solved = false;
+      await tester.pumpWidget(hostPanel(
+        size: const Size(640, 480),
+        state: p.state,
+        uiState: p.uiState,
+        child: ValueListenableBuilder<int>(
+          valueListenable: p.uiState.solveLanded,
+          builder: (context, generation, _) => Stack(children: [
+            Positioned.fill(
+              child: ViewerTrackLayer(
+                tracked: p.layer,
+                selecting: true,
+                fitted: const Rect.fromLTWH(0, 0, 640, 480),
+                compSize: const Size(640, 480),
+                playheadFrame: 0,
+                revision: null,
+                generation: generation,
+                accent: const Color(0xFF00FF00),
+                mark: const Color(0xFFFFFFFF),
+                onChanged: () {},
+                // Nothing until the analysis lands, then the cloud — which is
+                // what the engine does, one solve later.
+                fetch: (_, __) => solved ? cloud() : const <BridgeTrackPoint>[],
+              ),
+            ),
+          ]),
+        ),
+      ));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('viewer-track-points')), findsNothing,
+          reason: 'nothing is solved yet');
+
+      solved = true;
+      // The one thing the Camera track's card does when a solve lands.
+      p.uiState.solveLanded.value++;
+      await tester.pump();
+      await tester.pump();
+
+      final painter = tester
+          .widget<CustomPaint>(
+            find.byKey(const ValueKey('viewer-track-points')),
+          )
+          .painter! as TrackPointPainter;
+      expect(painter.points.length, 3,
+          reason: 'the solve was read without the playhead moving');
+      expect(p.uiState.playheadFrame.value, 0);
     });
 
     testWidgets('a linked camera wears the badge and converts to keyframes',

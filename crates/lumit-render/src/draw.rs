@@ -119,6 +119,9 @@ pub struct NestedInputDraw {
     pub background: [f64; 4],
     pub draws: Vec<CompLayerDraw>,
     pub camera: Option<lumit_core::model::CameraPose>,
+    /// The nested frame's own content name (K-422), as for
+    /// [`DrawSource::Nested::key`]; `None` realises it every time.
+    pub key: Option<u128>,
 }
 
 /// Where a draw's pixels come from: decoded/synthesised bytes, or a nested
@@ -136,6 +139,14 @@ pub enum DrawSource {
         draws: Vec<CompLayerDraw>,
         /// The nested comp's own active camera at this time.
         camera: Option<lumit_core::model::CameraPose>,
+        /// The nested frame's own content name (K-422): the frame key of the
+        /// nested comp at this layer time and quality tier, the same whichever
+        /// parent asks for it, so the realiser can hand back the texture it
+        /// made last time instead of walking `draws` again. `None` — footage
+        /// unprobed, a draft render, a held re-render, or a builder with no
+        /// keyer — realises it every time. A collapsed Precomp never reaches
+        /// here: its inner draws are spliced into the parent's list.
+        key: Option<u128>,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,
@@ -299,6 +310,14 @@ pub struct CompLayerDraw {
     /// (`ResolvedStack::rescale_spatial`) so px@comp parameters land where
     /// the user put them at every preview resolution.
     pub fx_ref_width: Option<f32>,
+    /// The content name of the picture `fx` runs on (K-421): what the source
+    /// is (the decode job's identity for footage, the colour and size for a
+    /// solid), plus the masks and paint baked into it and its raster size. The
+    /// per-effect cache names each op's output from this; a nested comp's is
+    /// its own frame key (K-422); `None` — a text or shape layer, an
+    /// adjustment's composite — runs the stack uncached in v1. Never the pixels themselves: naming by identity is what
+    /// keeps a build free of hashing a frame's worth of bytes.
+    pub fx_input_key: Option<u128>,
     /// Per-layer motion-blur sub-frame placements (docs/06 §4, K-120): the
     /// layer's own transform re-evaluated across the open shutter. Empty unless
     /// the comp master and the layer switch are both on (and samples ≥ 2), in

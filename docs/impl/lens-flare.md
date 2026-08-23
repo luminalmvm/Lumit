@@ -608,12 +608,18 @@ the picked lens; an element with no row keeps the file's own coating.
 
 The **auto-exposure gain** closes the loop (K-258): the bake renders the CPU reference
 at thumbnail size (96×54, fixed frame-time settings so only bake-key inputs steer it)
-with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). The gain ceiling is
+with gain 1 and normalises the mean to `TARGET_PROBE_MEAN` (0.010). **The probe is shot
+at the lens's NATIVE stop** (K-432), never the working one: the gain is a property of the
+glass — how much light this prescription's ghosts put on the sensor when its iris is
+open — and reading the working f-number instead made it roughly `(f/native)²`, an
+exposure that cancelled the stop-down exactly. A lens rendered the same flare brightness
+at f/16 as wide open, which no lens does. **Stopping down now dims the flare**, by the
+square of `stop_scale`, because the iris passes less light and nothing puts it back;
+a user who wants the old brightness at a small aperture raises **Intensity**, which is
+that knob. The gain ceiling is
 **64** (K-261): a wash-only lens has almost no probe energy, and an unbounded loop would
 amplify the residue into a lit-up artefact field — capped, such a lens renders honestly
-dim, which is what that glass does. The bake key hashes lens, f-stop, blades, rotation,
-roundness and iris softness; light position, intensities, dispersion, coating, Ghost
-softness, focus, quality and mix are frame-time and never rebake.
+dim, which is what that glass does. The bake key is §5d.
 
 **The bake costs about 0.66 s** for a 24-surface prescription on a middling CPU, of which
 the exposure probe's trace is roughly 0.5 s and the starburst 0.12 s (K-365's eight field
@@ -639,6 +645,67 @@ all exact, cut it to that figure:
 What remains is the trace itself, near the arithmetic floor for scalar code — which is why
 the fix was never a faster bake but a bake that does not block.
 
+### 5d. The bake key, and what stays per-frame (K-431, amended K-432)
+
+**The bake key holds the lens and the iris, and nothing else.** `bake_key_with` hashes the
+library pick, the `lens_file` override's **content** hash, the per-element coatings
+(K-371), the blade count, and the four continuous iris dials — working f-stop, aperture
+rotation, Roundness, Iris softness. Light position, intensities, dispersion, the Coating
+dial, Ghost softness, focus, quality, Detail, Source size and Mix are **frame-time**:
+animating any of them never rebakes.
+
+**The four continuous iris dials are snapped first** (`bake_params`), and the same snapped
+values are what `bake_with` reads — the key and the bake it names cannot disagree, which is
+the property the 24-entry cache rests on. The steps: the f-number to a **twentieth of a
+stop** (`FSTOP_BAKE_STEP_STOPS`, applied in stops rather than f-numbers, so it is the same
+proportional step wide open and at f/22), aperture rotation to **half a degree**, Roundness
+and Iris softness to **1/256**.
+
+Why at all: an animated aperture would otherwise want its own bake on every single frame,
+none would arrive in time, and no frame would ever be worth keeping — the flare's
+parameters would have made the whole project uncacheable. Snapped, a half-stop ramp needs
+about ten bakes and the cache holds them.
+
+Why it is safe: **nothing the frame computes is snapped.** `fstop_scale`, the iris mask the
+trace weights every pupil corner by, `effective_roundness`'s wide-open blend and
+`ghost_fresnel_number` all read the raw dial, so the ghosts shrink, turn and re-fringe
+continuously. **Exactly one thing comes out of the bake with an iris in it — the starburst
+sprite** — and that steps, by about 1.7% a step.
+
+**What the working f-number is still doing in the key** (K-432 asked, since the exposure
+gain no longer reads it): one thing, the starburst. `bake_aperture_field` takes
+`effective_roundness(p.roundness, p.fstop, native_fstop)`, so the K-260 wide-open blend —
+a real iris's blades retracting behind the circular bore as it opens — decides how round
+the diffracting hole is, and the sprite's spikes with it. That blend is live for any
+working stop under `3 × native`, which is most of the dial's useful range, so the f-number
+stays a bake input and stays snapped. Nothing else in `bake_with` reads it: the pair
+ranking, the spread probes and the reflectance table are the prescription's, and the
+exposure probe is shot at `native_fstop`. Hence the exposure no longer steps at all — the
+gain is one number per lens, whatever the aperture is doing.
+
+**Why the aperture is not simply moved out of the bake**, which is the design that would
+need no steps at all: it cannot be. The sprite is the aperture's Fourier amplitude
+(§5, eight field slices, ~0.12 s), a precomputation of the iris by its nature and not
+shaping that could be applied per frame; a per-frame FFT would spend the effect's entire
+budget on the starburst alone. The snapped key is the second-best answer and is recorded
+as such. (The exposure probe is the other ~0.5 s of the bake and is just as unmovable,
+but it is no longer a *reason for the snap*: it does not read the working stop.)
+
+**A provisional frame is named, and then checked** (K-431, superseding K-350's rule). A
+frame that fell back to the previous lens is still a frame nobody may bank — the tiers are
+keyed by what is *in* a frame (K-178) — but that is now decided by *counting the
+fallbacks*, not by "is any bake in flight?". `FxEngine::flare_substitutions` bumps at the
+one place `baked()` hands back other optics than the key names; callers read it either side
+of a render and drop the name only if it moved. `frame_key` names every frame. The old rule
+took the whole project down with one animated dial.
+
+**A file parameter's key covers the file itself** (K-431): `lumit-eval` folds a `.lens` (or
+`.cube`) path's size and last-modified time into the frame key beside the path string. The
+bake keys on the file's content, so path-alone let an edited prescription draw different
+optics under the old file's name — an entry nothing could clear. Not the bytes: a LUT is
+megabytes and the key is computed per frame. A file rewritten inside one filesystem tick at
+exactly the same length is the recorded limit.
+
 ### 5a. The bake runs beside the frame (K-350)
 
 `LensFlareFx` owns a **bake thread**. A frame that asks for a lens the engine does not hold
@@ -653,11 +720,14 @@ Four invariants, and none of them is optional:
   turns it on, and only the Viewer's renderer does. The exporter builds its own renderer on
   its own device, so an export bakes inside the frame exactly as it always did and stays
   bit-for-bit what it was (K-031 preview-equals-export is untouched).
-- **A provisional frame is unnameable.** `HeadlessRenderer::frame_key` answers `None` while
-  a bake is in flight, and the caches check `FxEngine::flare_bake_generation` either side of
-  a render because a bake can be queued *during* one. A frame drawn with the previous lens
-  and filed under the new lens's name is an entry that lies about its own content, and the
-  tiers are keyed by content (K-178) — nothing later would ever clear it.
+- **A provisional frame is not banked** (K-431, replacing "is unnameable"). A frame drawn
+  with the previous lens and filed under the new lens's name is an entry that lies about
+  its own content, and the tiers are keyed by content (K-178) — nothing later would ever
+  clear it. What changed is how that frame is spotted: `FxEngine::flare_substitutions`
+  counts the frames that actually fell back, read either side of a render because a fallback
+  happens *during* one, and the name is dropped only for those. `frame_key` names every
+  frame. It used to answer `None` for every comp while any bake was in flight, which an
+  animated aperture turned into "the project does not cache" — see §5d.
 - **Cancellation is by supersession and it is exact.** The bake key is a hash of the
   parameters, so a key nothing is asking for any more is a lens the user has moved past.
   The thread takes everything queued behind a job before starting, keeps only the newest,
@@ -958,7 +1028,23 @@ the other cannot silently clamp to Divide.
 7b. **Custom lens file (K-264)**: a bundled lens's text fed through `bake_with` as a
    "custom file" bakes identically to picking it; the bake key separates library /
    custom / edited-custom; unparsable text degrades to the picked lens bit-for-bit
-   (`lens_flare_custom_lens_file_overrides_and_degrades`).
+   (`lens_flare_custom_lens_file_overrides_and_degrades`). Editing the file on disk
+   renames the frames that read it (`an_edited_lens_file_renames_frames`, lumit-render).
+7c. **An animated aperture caches (K-431)**: two f-stops inside one step key the same
+   AND bake bit-identically — both halves, because a shared key with an unshared bake
+   would hand one f-stop the other's optics — while a step apart they differ, and the
+   per-frame stop scale is not snapped
+   (`lens_flare_bakes_are_shared_across_one_step_of_aperture`). A bake in flight leaves
+   every other frame's name and every op's name alone
+   (`a_baking_flare_does_not_unname_other_frames`,
+   `a_bake_in_flight_does_not_rename_every_op`), ten frames of a keyframed f-stop each
+   take their own name (`a_keyframed_aperture_names_every_frame`), and the substitution
+   count is 0 for an exact frame, 1 for the frame that stood the previous lens in, and
+   still 1 once the bake has landed
+   (`lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one`).
+7d. **The exposure is the lens's, not the iris's (K-432)**: two working f-stops on one
+   lens bake bit-identically the same `energy_gain`, and the stopped-down frame renders
+   measurably dimmer for it (`lens_flare_auto_exposure_reads_the_native_stop`).
 8. **Neutrals and blend (K-289)**: Normal shows the element alone on opaque black; Add
    reproduces the historical `in + flare` with saturating alpha; every option resolves
    and an index past the menu clamps; the blend table matches its formulas by hand; the

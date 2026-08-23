@@ -3619,6 +3619,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   frame carries the stamp home, and anything stamped with an old value is thrown away rather
   than shown or filed. It is the render-queue equivalent of binning work that was started
   from an out-of-date brief.
+- **A moved layer keeps its cached frames, even a keyframed one.** A layer's own clock
+  is the composition's clock minus where the layer starts, and computers do that sum in
+  floating point, which is very slightly inexact: ten thirtieths minus three thirtieths
+  comes out a hair's breadth off seven thirtieths. A hair's breadth is enough to nudge every
+  animated value, and a nudged value means a different frame key, so dragging a keyframed
+  layer three frames along the timeline used to throw away nearly all of its cached frames
+  for no visible reason. Lumit now does that one subtraction in exact fractions and only
+  converts the answer afterwards, so the same moment in a layer's life always produces the
+  same numbers, wherever the layer sits.
 - **Mask editing in the Viewer** — select a layer with masks and its outlines draw
   over the picture in clay, with a square handle on every vertex. Drag a handle and
   the outline follows your cursor live; let go and the pixels update — one undo step
@@ -3783,7 +3792,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   (handy after a big edit, or if you just want a clean start) — the on-disk cache is left
   alone since clearing it would mean re-decoding footage from scratch. Beside it, a
   **Background fill** switch controls whether Lumit spends its idle moments quietly decoding
-  the frames around wherever the playhead sits, so scrubbing nearby feels instant — switch it
+  the frames around wherever the playhead sits, so scrubbing nearby feels instant — it
+  works its way round the whole work area (off the end and back to the start, the way a
+  loop plays), filling the graphics card first and then ordinary memory, so a loop that
+  fits in the two together plays warm from end to end — switch it
   off and Lumit does nothing until you actually ask for a frame, trading that warm cache for a
   quieter machine when you're doing something else at the same time. On by default, matching
   what Lumit always did. Underneath that, a **Cache root folder** row shows where the on-disk
@@ -5578,9 +5590,8 @@ forgetting, rather than something you have to remember.
 names every finished frame by a fingerprint of *what is in it* (that is what lets an undo
 find its frames still waiting). A frame drawn with the previous lens but named for the new
 one would be a permanent lie: nothing you did afterwards — no edit, no undo — would ever
-clear it, because nothing would know it was wrong. So while a lens is baking, frames are
-simply **not named at all**. They are drawn and shown and thrown away, exactly as frames
-are while footage is still being read. It costs a re-render; it cannot cost a wrong picture
+clear it, because nothing would know it was wrong. So such a frame is drawn and shown and
+then **thrown away** rather than kept. It costs a re-render; it cannot cost a wrong picture
 that never goes away.
 
 There is one more rule, and it is about not wasting the half-second. If you drag the
@@ -5588,6 +5599,71 @@ aperture slider, every position asks for a different bake. Only the last one is 
 computing, so the bake thread takes everything waiting, keeps the newest, and drops the
 rest before they start — the same "is my work still wanted" habit the rest of the engine
 has.
+
+### When the aperture is animated, not dragged (K-431)
+
+Dragging a slider stops. A **keyframe** does not. Put keyframes on the f-stop and the iris
+is slightly different on every single frame — so every single frame asks for a bake of its
+own, and one is always being made for as long as the comp plays.
+
+That turned the rule above into something much larger than it was meant to be. The old
+version of it was blunt: *while a lens is baking, do not name any frame at all*. Any frame,
+in any composition, whether or not it had a flare anywhere near it. With an animated
+aperture keeping a bake permanently in flight, that meant nothing in the whole project was
+ever named, so nothing was ever kept, and the background job that quietly fills the cache
+bar while you are not typing stood down and never started again. One keyframe on one dial
+switched off caching for the entire project.
+
+Two things fixed it.
+
+**Ask the precise question.** The engine now simply *counts* the frames where a flare
+actually drew the previous lens instead of the one it was asked for. A frame where that
+never happened is a frame that shows exactly what its name says, so it is named and kept —
+even if a bake for some later frame is being made at that very moment. Only the frames that
+really did fall back are dropped. Comps without a flare in them are never affected at all.
+
+**Let a run of frames share one bake.** The heavy part of the bake is genuinely a function
+of the iris: the starburst is a Fourier transform of the hole's shape, and the exposure is
+a small test render. Neither can be moved into the per-frame work — a Fourier transform
+every frame would spend the whole effect's budget on the starburst alone. So instead the
+bake **rounds** the iris dials before it looks at them: the f-number to a twentieth of a
+stop, the iris rotation to half a degree, roundness and softness to a 256th. A half-stop
+ramp then needs about ten bakes rather than one per frame, and the store of recent bakes
+holds all ten.
+
+Nothing you can see moving is rounded. The ghosts read the exact f-stop you set — they
+shrink and turn smoothly as the iris closes, frame by frame. What steps, by about 1.7% at a
+time, is the starburst's shape. That is a deliberate trade, and it is the honest one:
+without it an animated aperture is not a lens that caches badly, it is a lens that cannot
+be cached at all.
+
+### Stopping down dims the flare (K-432)
+
+The flare sets its own overall brightness. Every lens in the library throws a different
+amount of light around inside itself, by factors of hundreds, so when the effect finishes
+working out a lens it renders one tiny test picture and works out how much to multiply by
+to bring that lens into a sensible range. That multiplier is the flare's exposure.
+
+It used to be measured with the iris wherever you had left it — and that quietly undid the
+aperture. Close the iris and the test picture came out dark, so the multiplier went up by
+exactly as much as the iris had taken away, and the flare on screen was the same brightness
+at f/16 as it was wide open. A real lens does not behave like that: a smaller hole passes
+less light and its flare fades with it, which is why photographers stop down to kill one.
+
+The test picture is now always shot with the iris **open** — at the lens's own widest
+f-number — so the multiplier describes the glass and nothing else. Stopping down dims the
+flare, as it should, and the amount is honest: the light falls off with the square of how
+far you closed. If you want a small aperture *and* a bright flare, that is what
+**Intensity** is for. As a side effect the flare's brightness no longer steps at all when
+you animate the f-stop, since the exposure has stopped depending on it.
+
+**And one related hole, closed at the same time.** You can point the flare at your own
+`.lens` file instead of a bundled lens. The bake noticed when you edited that file, because
+it identifies a lens by the file's *contents* — but the frame's name only mentioned the
+file's *path*. So an edited prescription drew new optics under the old file's name: a
+cached frame that was wrong and that nothing could ever clear. A frame's name now includes
+the file's size and the time it was last changed, so editing it renames every frame that
+reads it. The same goes for a colour LUT file.
 
 ### The six and a half seconds nobody was using (K-351)
 
@@ -5794,6 +5870,72 @@ Three things made that split *feel* broken, and all three are fixed:
   was done. So the picture sat one lens behind until you moved the playhead. The check no
   longer needs a frame, and the picture replaces itself the moment the optics are ready.
 
+### Why changing the last effect is cheap now (K-421)
+
+Put a Lens flare on a layer and an Exposure after it, then nudge the exposure. Until now
+the engine ran the whole stack again — the flare included — because the only thing it ever
+kept was the *finished* frame, and a finished frame is no use once any part of it changes.
+
+Now every effect's output is kept for a while, on the graphics card, under a name made from
+everything that went into it: which source, at what size, and every effect up to and
+including this one with all its values. Before a stack runs, the engine asks, starting from
+the *end*: "is the picture after effect N already here? After N−1?" It starts from the first
+one it finds. Change the exposure and the picture after the flare is still there under its
+old name, so only the exposure runs. Change the flare and every name after it changes too,
+so everything from the flare on runs again — which is exactly right.
+
+Three things to know. It is **not** a cache you manage: there is no invalidation, only
+names, so nothing can be stale, and Clear cache empties it along with the frames. It only
+**fills** from committed renders — a drag reads from it (that is the point) but does not
+write, and neither does playback, so a long run cannot push your working stack out. And a
+few things do not take part yet: an effect that reads another layer's picture (a matte, a
+plate, a depth pass), a temporal effect reading neighbouring frames, and stacks on text,
+shapes and adjustment layers. Those run as they always did, and are the follow-up. (Stacks
+on precomps joined in with K-422, below, once a precomp's picture had a name.)
+
+### A precomp's frames are kept as one picture (K-422)
+
+Precompose a finished section and you expect to stop paying for it: the manual says so.
+Until now the engine did not keep that promise. Every time the parent frame was drawn, the
+Precomp layer walked into its comp and drew every layer inside it again — and decoded every
+piece of footage inside it again — even when nothing inside had changed.
+
+Now a nested comp's frame has a name of its own. The frame-naming described above already
+folded the whole nested comp into the parent's name; it now names the nested comp first, on
+its own, and folds that one name into the parent. The parent's name still changes when
+anything inside changes, so nothing is ever stale — but the nested frame's name is the same
+whichever parent asks for it, at whatever position on the parent's timeline, and that name
+is what the finished picture is filed under. Draw a precomp once and the next parent frame
+that wants it — a different frame of the parent, a parent edit, the same precomp used in
+three places — takes the picture off the shelf. The decode planner asks the same question
+before it reads any file, so a held precomp costs no decodes either.
+
+It lives in the same store as the per-effect pictures (K-421), with the same rules: it
+fills only from committed renders, Clear cache empties it, and it is gone with the card's
+memory. Two things stay outside it. A **collapsed** Precomp is never kept, because its
+layers are blended straight into the parent and there is no one picture to keep. And a
+measured frame (the timing columns) draws the precomp in full so its inner rows get their
+numbers, then files what it drew.
+
+### What is hidden is not drawn (K-423)
+
+Put a full-frame solid over a stack of footage and nothing under it can be seen — but until
+now the engine drew it all anyway: every file decoded, every effect run, every layer
+blended, and then the solid painted over the lot. Now both halves of the render (the
+planner that decides which frames to read from disk, and the builder that decides what to
+draw) ask one question first: "which is the topmost layer that provably covers the whole
+frame with opaque pixels?" Everything under that layer is skipped.
+
+The word that matters is *provably*. A wrong answer would change the picture, so the
+question is asked as narrowly as possible and says "no" whenever it is unsure. Only a
+plain solid qualifies: fully opaque, not rotated, not 3D, Normal blend at 100%, no masks,
+paint, effects or motion blur, and placed (with any parent it follows) so that it reaches
+every edge of the comp. And the comp itself must give no layer below a back door: no
+camera, no adjustment layer above the solid, nothing above it using a layer below as a
+matte or as an effect's input, and never inside a collapsed precomp (whose layers spill
+past their own comp's edges). Anything else, and everything is drawn exactly as before.
+Footage that has no transparency could qualify one day; it does not yet.
+
 ### The region of interest — working on one corner (K-362)
 
 On a heavy shot every preview frame costs the whole frame, even when you are
@@ -5951,6 +6093,33 @@ can sit at Quarter while the title card in the next tab stays at Auto, and each
 remembers its own. It is remembered with the project but is not part of the
 work, so it makes no undo step.
 
+**Auto asks again when the panel changes size (K-430).** On Auto the number of
+pixels a frame is made at is decided when the Viewer measures itself, and the
+first measurement of a session happens at whatever size the window opened at.
+Nothing used to notice afterwards: making a panel bigger is not an edit and does
+not move the playhead, so the coarse first frame stayed on screen until
+something else happened to change it — which, paused, could be a long time.
+Lumit now compares the new measurement with the old one and asks for the frame
+again when they differ, rounded to whole percent because that is how finely the
+engine tells one frame's scale from another's. Two things are deliberately left
+out: a fixed tier (Full, Half, Third, Quarter), which is a choice the panel has
+no say in, and the middle of a zoom, which lays the picture out dozens of times
+on its way to where it is going — only the size it lands on is asked for.
+
+**The point cloud follows the switch and the solve (K-430).** When a shot has
+been analysed by the **Camera track** effect, Lumit knows where a few hundred
+features of the scene sit in space, and draws them over the picture as dots
+whenever that effect's **Show points** is on. Which dots to draw is worked out
+from two things: which frame is on screen, and where the document stands. That was enough
+for everything the *user* does to the document — but not for two moments that
+change what should be drawn without changing either. Switching the effect off is
+one: the dots stayed until the frame next changed. An analysis finishing is the
+other: a solve is the answer to minutes of work on the media file, not an edit,
+so the document is where it was and the frame is where it was, and the dots did
+not arrive. Both are now told. The Viewer watches the read model, so the switch
+takes effect at once; and Lumit keeps a small counter that a landing solve bumps,
+which the cloud treats as a third reason to ask the engine again.
+
 **The background swatch** sits next to the transparency grid button, and the
 two are opposite sides of one question — what is behind the picture. The grid
 is a way of *looking* (it changes nothing about the composition). The swatch
@@ -6061,13 +6230,18 @@ row was not in the last measured frame. If the engine refuses the switch, the st
 the console carries one line per switching on and one more on the first frame
 actually measured.
 
-**A measured frame is a re-made frame.** Lumit keeps finished frames — on the
-graphics card, in memory, on disk — so returning to one costs a copy rather
-than a render. A copy has nothing to say about what the layers cost, so while
-the stopwatch is on the engine steps over all of that and composites the frame
-properly. That is why switching it on also re-asks for the frame you are looking
-at: otherwise the column would sit empty until you happened to scrub somewhere
-nothing had been made yet.
+**A held frame is shown first and measured afterwards.** Lumit keeps finished
+frames — on the graphics card, in memory, on disk — so returning to one costs a
+copy rather than a render. A copy has nothing to say about what the layers cost.
+The engine used to refuse the copy while the clock was on and composite the
+frame again, which meant a frame the cache bar showed green still made you wait
+on arrival — with measuring on by default, that was every scrub. Now the held
+frame is shown at once, the worker makes a note of it, and on its next idle
+moment (about a fifth of a second after you stop) it composites that one frame
+again with the stopwatch running and throws the picture away: the numbers land
+in the column a moment after the picture, and the picture never waits for them.
+Switching the clock on still re-asks for the frame you are looking at, so the
+column fills where you are rather than where you next scrub to.
 
 **Why it has a switch.** Work for the graphics card is *handed over*, not
 performed: the call that blurs a layer returns long before the card has blurred

@@ -583,44 +583,56 @@ impl ResolvedStack {
         }
     }
 
-    /// Feed the whole stack into a frame key, field by field.
-    ///
-    /// Never byte-wise: [`Value`] has padding, and an uninitialised byte in a
-    /// cache key is a wrong picture that reproduces on one machine only
-    /// (docs/impl/effect-registry.md §5).
+    /// Feed the whole stack into a frame key, field by field — every op's
+    /// [`ResolvedFx::feed_hash`] in stack order.
     ///
     /// Takes the sink rather than a hasher so the engine root does not gain a
     /// hashing dependency for one method; `lumit-eval` passes its blake3 hasher.
     pub fn feed_hash(&self, feed: &mut dyn FnMut(&[u8])) {
         for fx in self.iter() {
-            feed(fx.def.schema().match_name.as_bytes());
-            feed(b"/");
-            feed(&fx.def.schema().version.to_le_bytes());
-            for (id, value) in fx.params.iter() {
-                feed(&id.0.to_le_bytes());
-                feed(&[value.tag()]);
-                match value {
-                    Value::Float(v) => feed(&v.to_le_bytes()),
-                    Value::Int(v) => feed(&v.to_le_bytes()),
-                    Value::Bool(v) | Value::Layer(v) | Value::MaskPath(v) => feed(&[u8::from(v)]),
-                    Value::Choice(v) | Value::File(v) => feed(&v.to_le_bytes()),
-                    // Four floats, one at a time — the tag above is what keeps a
-                    // Colour and a Vec4 of the same numbers apart.
-                    Value::Colour(c) | Value::Vec4(c) => {
-                        for ch in c {
-                            feed(&ch.to_le_bytes());
-                        }
+            fx.feed_hash(feed);
+        }
+    }
+}
+
+impl ResolvedFx<'_> {
+    /// Feed this one op into a key: its effect's name and algorithm version,
+    /// then every parameter, field by field.
+    ///
+    /// Never byte-wise: [`Value`] has padding, and an uninitialised byte in a
+    /// cache key is a wrong picture that reproduces on one machine only
+    /// (docs/impl/effect-registry.md §5). The instance id is deliberately
+    /// absent — a key names content, never which row it came from (docs/06
+    /// §5.2) — which is what lets the per-effect cache (K-421) serve a
+    /// duplicated layer from its original's intermediates.
+    pub fn feed_hash(&self, feed: &mut dyn FnMut(&[u8])) {
+        feed(self.def.schema().match_name.as_bytes());
+        feed(b"/");
+        feed(&self.def.schema().version.to_le_bytes());
+        for (id, value) in self.params.iter() {
+            feed(&id.0.to_le_bytes());
+            feed(&[value.tag()]);
+            match value {
+                Value::Float(v) => feed(&v.to_le_bytes()),
+                Value::Int(v) => feed(&v.to_le_bytes()),
+                Value::Bool(v) | Value::Layer(v) | Value::MaskPath(v) => feed(&[u8::from(v)]),
+                Value::Choice(v) | Value::File(v) => feed(&v.to_le_bytes()),
+                // Four floats, one at a time — the tag above is what keeps a
+                // Colour and a Vec4 of the same numbers apart.
+                Value::Colour(c) | Value::Vec4(c) => {
+                    for ch in c {
+                        feed(&ch.to_le_bytes());
                     }
-                    // The live points only — the tail of the fixed array is
-                    // padding by another name, and padding never feeds a key.
-                    // The length goes in first, so two curves sharing a
-                    // prefix cannot hash alike.
-                    Value::Curve(c) => {
-                        feed(&c.len.to_le_bytes());
-                        for p in c.points() {
-                            feed(&p[0].to_le_bytes());
-                            feed(&p[1].to_le_bytes());
-                        }
+                }
+                // The live points only — the tail of the fixed array is
+                // padding by another name, and padding never feeds a key.
+                // The length goes in first, so two curves sharing a
+                // prefix cannot hash alike.
+                Value::Curve(c) => {
+                    feed(&c.len.to_le_bytes());
+                    for p in c.points() {
+                        feed(&p[0].to_le_bytes());
+                        feed(&p[1].to_le_bytes());
                     }
                 }
             }

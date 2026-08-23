@@ -44,10 +44,13 @@ pub fn this_layer_effect_time(
     effects: &[EffectInstance],
     fx_on: bool,
     lt: f64,
-    start_offset: f64,
+    start_offset: crate::time::Rational,
 ) -> f64 {
     match stack_posterize(effects, fx_on, lt) {
-        Some(p) => posterize_held_time(lt + start_offset, p.rate, p.phase) - start_offset,
+        Some(p) => crate::time::layer_time(
+            posterize_held_time(lt + start_offset.to_f64(), p.rate, p.phase),
+            start_offset,
+        ),
         None => lt,
     }
 }
@@ -108,7 +111,7 @@ pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
     for layer in layers {
         // Start from the time the adjustments above hold this layer at.
         let mut sample_t = below_hold;
-        let lt = below_hold - layer.start_offset.0.to_f64();
+        let lt = crate::time::layer_time(below_hold, layer.start_offset.0);
         let here = stack_posterize(&layer.effects, layer.switches.fx, lt);
         // A Posterize on this layer holds its own source sampling at the reduced
         // rate, whatever the scope — so applying Posterize to a footage layer

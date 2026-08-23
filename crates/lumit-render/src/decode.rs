@@ -91,6 +91,13 @@ pub struct CompLayerPixels {
     /// Datamosh (§3.12, K-104, offset `-1`) warps the previous frame along the
     /// `(u, v)` and ignores `conf`.
     pub flow_field: Option<(Vec<f32>, Vec<f32>, Vec<f32>)>,
+    /// The content name of this decode (K-421): a hash of the [`CompJob`]
+    /// identity [`crate::plan::same_decode`] compares — item, path, source
+    /// frame, decode width, slate, blend partner, flow settings, temporal
+    /// window. Two jobs that decode the same pixels get the same name, which is
+    /// what lets the per-effect cache recognise a layer's source across
+    /// renders without hashing its bytes.
+    pub source_key: u128,
 }
 
 pub struct CompFrame {
@@ -787,6 +794,7 @@ fn decode_comp(
             natural_h: job.natural_h,
             temporal,
             flow_field,
+            source_key: job.source_key(),
         });
         // One more source frame in hand. Reported after the layer is filed, so
         // "n of m done" is true of what has actually been decoded.

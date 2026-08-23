@@ -11523,3 +11523,202 @@ the sample at the frame's own moment, half is the middle-half average and *not* 
 between them), the Motion vectors layer to a round trip through the measured-flow blur, and
 the two keyers to a load of a save that still holds their dropped rows. One new string:
 `fxVectorScale`.
+
+## K-420 — A cached frame is shown at once and measured afterwards
+
+**DECIDED 2026-08-23.** An
+amendment to K-276 (4) and (8) together. (4) made a measured frame a composited one and
+stepped over the whole cache ladder while the clock was on; (8) then turned the clock on
+by default. Put together, every scrub onto a frame the cache bar showed green composited
+it again — fenced at every layer and every effect — on arrival, and the bar's green was
+a promise the Viewer did not keep. The owner's ruling: keep (8), and **serve the hit,
+measure afterwards.** A held frame on the card, in memory or on disk is served to a
+measured request exactly as to any other; the worker notes that it was, and on its
+next idle lull composites that one frame again with measuring on and discards the
+picture, so the column fills one idle turn after the picture. Idle fill and playback
+stay unmeasured, so nothing is measured that nobody is looking at. Two fixes landed
+beside it: the 1% cache key is taken from the scale rounded to a thousandth first, so
+the bar and the scrub name a frame alike (about one scale in twenty landed on
+different 1% steps before); and the Scopes read a frame held on the card back rather
+than compositing it again, and no longer re-request the frame they already show. This
+number was allocated on the lane3 branch.
+
+## K-421 — Each effect's output is kept, so editing the last one re-runs only that one
+
+**DECIDED 2026-08-23.** The only cache the render path had was the finished comp frame (K-178,
+K-214), so an Exposure after a Lens flare re-ran the flare on every nudge. A per-effect
+intermediate cache now sits in the realiser — VRAM only, 256 MB by default, beside the LUT
+cache — and `run_ops` names each op's output by content (docs/06 §5.2: the input's
+identity, the raster, the flare bake generation, and every op up to that one with its
+resolved values and side inputs), looks for the longest held prefix from the last op
+backwards, and runs only what follows. Only committed, non-playback renders add to it;
+drags and playback read it. v1 boundaries, all recorded in §5.2: only sources made from
+bytes (footage, sequences, solids) are named; an op binding another layer's texture, the
+neighbour frames or the flow field breaks the chain. This is the effect-stack slice of the
+node-output cache the K-178 evaluator will own, built ahead of it where the stacks run,
+and it does not change the evaluator plan. Preview and export remain byte-identical
+(K-031): a held prefix is the same texture a cold walk makes. This number was allocated
+on the lane3 branch.
+
+## K-422 — A precomp's frames are cached as one unit
+
+**DECIDED 2026-08-23.** The manual promised that a
+precomposed section caches as one unit, and docs/06 §5.2 that the same nested comp used in
+five places renders once; neither was true — a non-collapsed Precomp layer walked its comp,
+decoded its footage and realised every inner layer on every parent frame, and the frame
+key folded the nested comp into the parent's hasher inline so the nested frame had no name.
+Now `lumit-eval` names a nested comp with a fresh hasher (its own `comp_frame_key` at the
+layer time on the flick grid, same quality tier) and folds that name into the parent; the
+draw builder carries it on the nested draw; the realiser serves the nested comp's linear
+texture from the K-421 store by that name mixed with the exact render scale and sample
+count, and files it on committed renders; and the decode planner asks the store (through
+a caller-supplied answerer, the one place planning knows a cache exists) and plans no
+decodes for a held comp, pinning what it relies on until the frame is realised. Collapsed
+Precomps are never cached; held re-renders (Posterize, accumulation blur) and draft renders
+carry no name; a measured frame realises the comp in full so its inner rows get numbers.
+Preview and export stay byte-identical (K-031). `ALGO_VERSION` bumped to 4. This number
+was allocated on the lane3 branch.
+
+## K-423 — Layers under a full-frame opaque layer are not rendered
+
+**DECIDED 2026-08-23.** The only gates
+on the comp walk were hidden, out of span and solo, so a full-frame solid over a stack of
+footage still decoded, uploaded, effected and composited everything under it. A single
+predicate in `lumit-core` (`occlusion::occluder_index`, docs/06 §1.1) now names the topmost
+layer that provably covers the frame opaquely, and both the draw builder and the decode
+planner skip every layer below it. The v1 predicate is deliberately narrow — a Solid with
+alpha 1, 2D, unrotated, Normal blend at full opacity, no masks, paint, effects or motion blur,
+its axis-aligned placement (parent chain included, nothing driven by an expression) covering
+the comp rectangle; no active camera; no visible Adjustment above it; nothing visible above
+it referencing a layer below as a matte or a layer input; never inside a collapsed Precomp's
+splice — because a wrong cull costs pixels while a refused one costs only speed. Footage
+whose probe reports no alpha is left for a later extension: the predicate sits below the
+probe and would need the answer threaded down the way K-422's `held` question is. The frame
+key keeps hashing culled layers; preview and export stay byte-identical (K-031). This number
+was allocated on the lane3 branch.
+
+## K-424 — The idle fill wraps the work area and keeps going into RAM
+
+**DECIDED 2026-08-23.** Supersedes
+the bound in K-187 ("bounded by the budget — it stops before the LRU would churn"). The
+fill used to keep a window of VRAM-budget frames around the playhead and stop: it never
+wrapped to the start of the work area, and the far side of a loop longer than the window
+was evicted as the walk went forward, so playback re-rendered it every pass while the
+worker sat idle. Now `fill_order` wraps in both directions (playback loops the work area,
+so the frame after the last is the first) and ends when every frame has been visited once,
+2:1 throughout; and the walk's reach is VRAM plus RAM rather than VRAM alone — once the
+card is full each render evicts its stalest frame into memory, which is the existing
+demotion path, so the whole work area ends up held in one tier or the other. The LRU stays
+the eviction authority. One rule keeps it from churning: a frame held in memory is climbed
+only while the card has room. Regression tests:
+`the_fill_order_is_forward_biased_and_complete` (playback.rs) and
+`the_fill_keeps_going_into_memory_once_the_card_is_full` (worker_thread.rs). This number
+was allocated on the lane3 branch.
+
+## K-430 — The Viewer asks again when it changes size, and the point cloud follows the effect and the solve
+
+**DECIDED 2026-08-23.** Three frontend staleness bugs with one shape: something changed
+what should be on screen, and nothing told the thing that draws it. (1) On Auto the render
+scale is measured by the Viewer's layout, and `LumitUiState.reportViewerScale` only stored
+it — so the first frame of a session was made at the size the window opened at and stayed
+there, because growing a panel is neither an edit nor a move of the playhead. It now
+compares the new scale with the old at 1 % granularity (the engine's own key resolution) and
+schedules one `requestFrame` after the frame; a fixed tier is exempt, and the Viewer passes
+`settled: false` while its zoom animation runs, so a flight asks for the frame it lands on
+rather than one per tick. (2) The point cloud's presence was read outside any listener, so
+disabling the Camera track left the dots on the picture; the block now sits under a
+`ListenableBuilder` on the read model. (3) A landed solve changes what the engine would
+answer while moving neither the playhead nor the document's revision — the cloud's whole
+read memo — so the dots did not appear until the frame changed. A `solveLanded` counter on
+`LumitUiState`, bumped by the Camera track card on the Done transition beside a
+`requestFrame`, is the third key. Regression tests: `a Viewer that grows asks for the frame
+again` (bridge_call_budget_test.dart, where it also holds the budget: one request for the
+change, not one per layout), `disabling the effect removes the cloud, with no frame change`
+and `a landed solve is read without the playhead moving` (camera_track_frb_test.dart). No
+new user-facing strings. This number was allocated on the lane3 branch.
+
+## K-431 — An animated aperture no longer stops the flare's frames from caching
+
+**DECIDED 2026-08-23.**
+Supersedes the second invariant of K-350 ("a provisional frame is unnameable") and the
+K-421 op name that carried the bake generation. K-350 refused to name *any* frame while
+*any* lens flare bake was in flight, which was right for the case it was written for — a
+user picking a lens, one bake, half a second — and wrong for the case that followed. A
+keyframed f-stop (or blades, aperture rotation, softness, roundness, a per-element coating)
+asks for a slightly different iris on every frame, so a bake was in flight for as long as
+it played: every frame of every comp went unnameable, flare or no flare, nothing entered
+any tier, and the idle fill stood down and stayed down.
+
+Three changes, none of which weakens the rule K-350 was protecting — that a frame drawn
+with the previous lens must never be filed under the new lens's name (K-178).
+
+**(1) The question is counted, not guessed at.** `LensFlareFx` bumps a `substitutions`
+counter at the one place a frame draws optics its parameters do not name: the deferred
+fallback to the last drawn bake (or to no flare at all, with none drawn yet). Read either
+side of a render — `FxEngine::flare_substitutions`, `HeadlessRenderer::flare_substitutions`
+— it answers *may this frame be kept?* exactly, where `flare_bake_generation` could only
+answer *is something being baked somewhere?*. `frame_key` no longer refuses to name a
+frame, the frame caches and the effect cache bank on the count instead of the generation,
+and the op names of K-421 carry the count rather than the generation. The generation keeps
+its other job: telling the worker a bake has landed and the picture is worth making again.
+
+**(2) The bake sees a snapped aperture.** The bake precomputes two things from the iris —
+the starburst sprite (a Fourier transform of the hole, eight field slices) and the
+auto-exposure gain — and costs about two thirds of a second. Neither is separable into the
+per-frame pass at any acceptable cost: the sprite is an FFT, and the gain is a thumbnail
+render. So `bake_params` snaps the continuous iris dials before both `bake_key_with` and
+`bake_with` read them — the working f-number to a twentieth of a stop, aperture rotation to
+half a degree, Roundness and Iris softness to 1/256 — and a run of frames shares one bake.
+Nothing the *frame* computes is snapped: the ghost trace's own stop scale, the iris mask it
+draws each rim with and the K-260 wide-open blend all read the raw dial, so the ghosts
+still shrink and turn smoothly. What steps is the starburst's shape and the exposure, by
+about 1.7% a step. The trade is deliberate and stated: a slow f-stop ramp shows the
+exposure in steps rather than a continuous slide, which is the price of the bake being
+shareable at all.
+
+**(3) A file parameter's key covers the file, not just its path.** `lumit-eval` fed the
+path string alone into the frame key, while the flare's bake keys on the file's *content*
+(`lens_text_hash`) — so editing a `.lens` file on disk rebaked, drew different optics, and
+filed the result under the old file's name: a cached frame no edit or undo could clear. The
+key now folds the file's size and last-modified time too (a stat, not the bytes: a LUT is
+megabytes and this runs for every frame key). `ALGO_VERSION` goes to 5, so no frame made
+under the old rules is addressed again. Recorded limit: a file rewritten inside one
+filesystem tick at exactly the same length is not seen.
+
+Regression tests: `a_baking_flare_does_not_unname_other_frames`,
+`a_keyframed_aperture_names_every_frame`, `an_edited_lens_file_renames_frames` (headless.rs),
+`a_bake_in_flight_does_not_rename_every_op` (fxops.rs),
+`lens_flare_bakes_are_shared_across_one_step_of_aperture` (lumit-core fx/tests.rs — both
+halves of the cache's promise: two f-stops inside a step key the same *and* bake
+bit-identically), and the substitution counts added to
+`lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one` (lumit-gpu).
+No new user-facing strings. This number was allocated on the lane3 branch.
+
+## K-432 — The flare's auto-exposure reads the native stop, so stopping down dims it honestly
+
+**DECIDED 2026-08-23.** Amends K-431 (2), which recorded the exposure gain stepping with the snapped
+working f-number as a deliberate trade, and settles the residue that entry left: on a slow
+f-stop ramp the whole flare's brightness stepped about 1.7% at every twentieth-of-a-stop
+boundary, because the auto-exposure probe (K-258) rendered its thumbnail at the working
+aperture and its gain therefore tracked roughly `(f/native)²`.
+
+The fix is the physical one rather than a finer step. **The probe is shot at the lens's
+native (maximum-aperture) f-number.** The gain is a property of the glass — how much light
+this prescription's ghosts put on the sensor with the iris open — and measuring it through
+a closed iris made it cancel the stop-down exactly: a lens rendered the same flare
+brightness at f/16 as wide open, which no lens does. Stopping down now dims the flare by
+the square of `fstop_scale`, as the light the iris passes dims; **Intensity** is the user's
+knob for putting it back, and no shipped parameter moves. The default frame is
+correspondingly dimmer at the default f/2.8 on a fast prime, which is the visible change.
+
+Two consequences worth stating. The exposure no longer steps at all under an animated
+aperture — one gain per lens, whatever the iris is doing. And the working f-number stays a
+bake-key input, but for **one** reason only: `effective_roundness`'s K-260 wide-open blend
+decides how round the diffracting hole is, so it shapes the starburst sprite. The K-431
+snap therefore stays exactly as it is (the sprite is an FFT and cannot move per-frame),
+now documented as covering the sprite alone — impl/lens-flare.md §5c, §5d.
+
+Regression test: `lens_flare_auto_exposure_reads_the_native_stop` (lumit-core fx/tests.rs)
+— two working f-stops on one lens bake bit-identically the same gain, and the stopped-down
+frame renders measurably dimmer. No new user-facing strings. This number was allocated on
+the lane3 branch.

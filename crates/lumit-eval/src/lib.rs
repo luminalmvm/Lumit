@@ -48,7 +48,12 @@ pub mod schedule;
 ///   now covers the project's sample count, and turning the setting on by
 ///   default changes what every comp renders to. Every version-2 frame was made
 ///   without anti-aliasing, so none of them may be served again.
-pub const ALGO_VERSION: u32 = 3;
+/// * 5 — the Lens flare's aperture (K-431). The key now covers a file
+///   parameter's size and modification time, so an edited .lens or .cube
+///   renames the frames that read it; and the flare's bake snaps its
+///   continuous iris dials to a step, which moves the picture very slightly
+///   at every f-stop between two steps.
+pub const ALGO_VERSION: u32 = 5;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -126,13 +131,30 @@ pub fn comp_frame_key(
     quality: Quality,
     stamper: &dyn SourceStamper,
 ) -> Option<FrameKey> {
-    let mut visited = Vec::new();
-    let mut h = blake3::Hasher::new();
     // Takes the document as an `&Arc` because an expression context needs an
     // owned handle on it: the caller's Arc is shared, so naming a frame clones
     // a pointer, never the project. (A deep clone here once cost hundreds of
     // MB per cache-bar refinement turn on a large project.)
-    feed_comp(&mut h, doc, comp, t, quality, stamper, &mut visited)?;
+    comp_key_visited(doc, comp, t, quality, stamper, &mut Vec::new())
+}
+
+/// [`comp_frame_key`] with the ancestor chain threaded through, so a nested
+/// comp's own key (K-422) is made with a fresh hasher — the name it has on its
+/// own, the one `lumit-render` files its finished texture under — while a comp
+/// that contains itself still stops at the cycle. For an acyclic project the
+/// key this makes for a nested comp is exactly `comp_frame_key` of that comp
+/// at that time, which is what lets the builder and the planner name a
+/// Precomp layer's frame without walking the parent at all.
+fn comp_key_visited(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<FrameKey> {
+    let mut h = blake3::Hasher::new();
+    feed_comp(&mut h, doc, comp, t, quality, stamper, visited)?;
     let bytes = h.finalize();
     let mut k = [0u8; 16];
     k.copy_from_slice(&bytes.as_bytes()[..16]);
@@ -238,7 +260,7 @@ fn feed_comp(
         if matches!(layer.kind, LayerKind::Camera { .. }) {
             continue; // folded in through camera_pose above
         }
-        let lt = t - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
     Some(())
@@ -326,17 +348,26 @@ fn feed_effect_stack(
                 EffectValue::File(f) => {
                     // Which file is live at this time (the hold-keyed index
                     // selects it); an unset param feeds a distinct 0 marker.
-                    // The path string is hashed (length-prefixed), not the
-                    // file's bytes — the same policy a footage source path
-                    // follows. Refreshing a file edited on disk is the LUT
-                    // loader's job (specified as path + mtime caching,
-                    // docs/impl/lut.md §4; the shipped caches key by path
-                    // only, so an on-disk edit shows after a restart).
+                    // The path string is hashed length-prefixed, and with it
+                    // the file's **size and last-modified time** (K-431) — so
+                    // editing a .lens or a .cube on disk renames every frame
+                    // that reads it.
+                    //
+                    // Path alone was a real hole rather than a theoretical
+                    // one: the Lens flare's bake keys on the file's CONTENT
+                    // (`lens_text_hash`), so an edited prescription rebaked
+                    // and drew different optics under the name the old file
+                    // had — a cached frame that could never be cleared. Not
+                    // the content itself, because a LUT is megabytes and this
+                    // runs for every frame key; a stat is microseconds, and a
+                    // file rewritten inside one filesystem tick at exactly
+                    // the same length is the recorded limit.
                     match f.path_at(lt) {
                         Some(p) => {
                             h.update(&[1]);
                             h.update(&(p.len() as u64).to_le_bytes());
                             h.update(p.as_bytes());
+                            feed_file_stamp(h, p);
                         }
                         None => {
                             h.update(&[0]);
@@ -409,7 +440,7 @@ fn feed_effect_stack(
                         Some(src) => {
                             h.update(&[1]);
                             h.update(src.id.as_bytes());
-                            let slt = t - src.start_offset.0.to_f64();
+                            let slt = lumit_core::time::layer_time(t, src.start_offset.0);
                             feed_source(h, doc, comp, src, slt, t, quality, stamper, visited)?;
                             let dtr = &src.transform;
                             for v in [
@@ -593,7 +624,7 @@ fn feed_layer(
             .rev()
             .filter_map(|id| comp.layers.iter().find(|l| l.id == *id))
         {
-            let alt = t - ancestor.start_offset.0.to_f64();
+            let alt = lumit_core::time::layer_time(t, ancestor.start_offset.0);
             let atr = &ancestor.transform;
             for v in [
                 atr.position_x.value_at(alt),
@@ -800,7 +831,7 @@ fn feed_layer(
                     // discriminant joins the key (replacing K-125's bool byte).
                     mr.source.key_byte(),
                 ]);
-                let mlt = t - src.start_offset.0.to_f64();
+                let mlt = lumit_core::time::layer_time(t, src.start_offset.0);
                 feed_source(h, doc, comp, src, mlt, t, quality, stamper, visited)?;
                 let mtr = &src.transform;
                 for v in [
@@ -999,11 +1030,17 @@ fn feed_source(
                 h.update(b"nocomp");
                 return Some(());
             };
+            // The nested comp is named on its own (K-422) and the parent
+            // folds in that 16-byte name rather than the nested walk itself.
+            // The parent's semantics are unchanged — an edit inside still
+            // renames every frame that shows it — but the nested frame now
+            // has a key of its own, the one the renderer caches its texture
+            // under, and that key is the same whichever parent asks for it.
             h.update(b"precomp/");
             visited.push(*comp);
-            let r = feed_comp(h, doc, nested, lt, quality, stamper, visited);
+            let r = comp_key_visited(doc, nested, lt, quality, stamper, visited);
             visited.pop();
-            r?;
+            h.update(&r?.0.to_le_bytes());
         }
         LayerKind::Camera { .. } => {
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
@@ -1208,6 +1245,35 @@ fn feed_f64(h: &mut blake3::Hasher, v: f64) {
     // Canonicalise the one f64 equality wrinkle: 0.0 and -0.0 render alike.
     let v = if v == 0.0 { 0.0 } else { v };
     h.update(&v.to_bits().to_le_bytes());
+}
+
+/// A file's size and last-modified time, folded into a key so that editing
+/// the file on disk renames the frames that read it (K-431).
+///
+/// A path a frame key mentions is a path some loader is about to read, so the
+/// stat is warm and costs microseconds. A file the engine cannot stat — gone,
+/// on a disconnected share, permission-denied — feeds a distinct marker and
+/// nothing else: the loader will fail the same way, and a name that says
+/// "this file was unreadable" is as true as any other.
+fn feed_file_stamp(h: &mut blake3::Hasher, path: &str) {
+    let stamp = std::fs::metadata(path).ok().map(|m| {
+        let modified = m
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        (m.len(), modified)
+    });
+    match stamp {
+        Some((len, modified)) => {
+            h.update(&[1]);
+            h.update(&len.to_le_bytes());
+            h.update(&modified.to_le_bytes());
+        }
+        None => {
+            h.update(&[0]);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1504,6 +1570,41 @@ mod tests {
         // Trimming the bar without crossing t changes nothing either.
         let c = comp_with(vec![text_layer("hi", 0.0, 3.0, 0.0)]);
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &c, 1.0));
+    }
+
+    /// Backlog 7.53: moving a *keyframed* layer keeps its keys too. Layer time
+    /// is taken on the flick grid (`lumit_core::time::layer_time`), so the
+    /// opacity sampled at frame f+3 after a three-frame move is bit-identical
+    /// to the one at frame f before — a plain f64 subtraction is a ulp off on
+    /// most frames, and every one of those earned a new key.
+    #[test]
+    fn time_shifted_keyframed_layer_keeps_its_keys() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        let doc = Document::new();
+        let kf = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let fr = FrameRate::new(30, 1).unwrap();
+        let fade = |offset_s: f64| {
+            let mut l = text_layer("hi", offset_s, offset_s + 4.0, offset_s);
+            l.transform.opacity = Property {
+                extra: serde_json::Map::new(),
+                animation: Animation::Keyframed(vec![kf(0, 0.0), kf(1, 37.0), kf(4, 100.0)]),
+            };
+            l
+        };
+        let mut before = comp_with(vec![fade(0.0)]);
+        before.frame_rate = fr;
+        let mut after = comp_with(vec![fade(0.1)]);
+        after.frame_rate = fr;
+        for f in 0..120 {
+            let t0 = fr.time_of_frame(f).unwrap().0.to_f64();
+            let t3 = fr.time_of_frame(f + 3).unwrap().0.to_f64();
+            assert_eq!(key(&doc, &before, t0), key(&doc, &after, t3), "frame {f}");
+        }
     }
 
     /// GEN-3 (K-153): a layer may sit across the comp boundaries — starting

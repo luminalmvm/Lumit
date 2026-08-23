@@ -24,6 +24,11 @@ type Tex = wgpu::Texture;
 pub struct LoadedLut {
     pub texture: Tex,
     pub size: u32,
+    /// Where the cube came from and when that file last changed — the same
+    /// two things [`LutCache`] keys on, carried so the per-effect cache (K-421)
+    /// can name a `lut` op by its file without reading the cube back.
+    pub path: String,
+    pub mtime: Option<std::time::SystemTime>,
     /// `DOMAIN_MIN` / `DOMAIN_MAX` from the file (default `0..1`), carried to
     /// the kernel so the GPU remaps exactly as the CPU oracle does (K-271).
     pub domain_min: [f32; 3],
@@ -86,6 +91,8 @@ impl LutCache {
         let loaded = LoadedLut {
             texture: lumit_gpu::fx::upload_lut_3d(ctx, l.size as u32, &l.data),
             size: l.size as u32,
+            path: path.to_owned(),
+            mtime,
             domain_min: l.domain_min,
             domain_max: l.domain_max,
         };
@@ -106,6 +113,176 @@ impl LutCache {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+}
+
+/// One effect's finished output, held on the card (K-421). Costed as the
+/// `Rgba16Float` work texture it is — eight bytes a pixel — so the budget is
+/// a true count of video memory.
+pub struct CachedTex(pub Tex);
+
+impl lumit_cache::ByteSized for CachedTex {
+    fn byte_size(&self) -> usize {
+        (self.0.width() as usize) * (self.0.height() as usize) * 8
+    }
+}
+
+/// How much video memory the per-effect cache holds by default: a few dozen
+/// 1080p intermediates, which is a handful of layers' worth of stacks around
+/// the playhead. Settable through [`FxCache::set_budget`].
+pub const FX_CACHE_DEFAULT_BUDGET: usize = 256 * 1024 * 1024;
+
+/// The **per-effect intermediate cache** (K-421, docs/06 §5.1): every
+/// effect's output, kept on the card under the content name of *everything
+/// that went into it* — the layer's source, the raster, and each op up to and
+/// including this one. Editing the last effect of a stack then re-runs only
+/// that effect, because the picture the one before it produced is still held
+/// under a name nothing in the edit changed.
+///
+/// The same store holds **nested frames** (K-422): a non-collapsed Precomp's
+/// finished linear texture, under its own frame key mixed with the raster it
+/// was made at ([`nested_texture_key`]). One store, one budget, one set of
+/// clear hooks; the two kinds of entry cannot collide because each name
+/// begins with its own tag.
+///
+/// VRAM only, and deliberately so: an intermediate is worth keeping for the
+/// seconds between two edits of the same stack, not across sessions. It sits
+/// in [`crate::realise::Realiser`] beside the LUT cache and is consulted by
+/// [`run_ops`]; entries are only *added* on committed, non-playback renders
+/// ([`Self::keep_outputs`]), so a drag's provisional pictures and a playback
+/// run's hundreds of frames never churn it — they still read from it.
+pub struct FxCache {
+    lru: lumit_cache::ByteLru<u128, CachedTex>,
+    keep: bool,
+    /// Nested frames the decode planner was told are held for the frame being
+    /// rendered (K-422, [`Self::pin_nested`]). A plan that skipped a nested
+    /// comp's decodes on the strength of a lookup must find the texture still
+    /// here when the realiser asks, whatever this frame's own inserts evict
+    /// in between — so the planner's lookup takes a handle, and the handle
+    /// lives until the next frame's plan drops it.
+    pins: std::collections::HashMap<u128, Tex>,
+    /// Test hooks: how many kernels [`run_ops`] actually ran against this
+    /// cache, and how many ops it skipped because their output was held.
+    runs: u64,
+    hits: u64,
+    /// Test hooks (K-422): nested frames realised, and served held.
+    nested_made: u64,
+    nested_served: u64,
+}
+
+impl Default for FxCache {
+    fn default() -> Self {
+        Self::new(FX_CACHE_DEFAULT_BUDGET)
+    }
+}
+
+impl FxCache {
+    #[must_use]
+    pub fn new(budget_bytes: usize) -> Self {
+        Self {
+            lru: lumit_cache::ByteLru::new(budget_bytes),
+            keep: false,
+            pins: std::collections::HashMap::new(),
+            runs: 0,
+            hits: 0,
+            nested_made: 0,
+            nested_served: 0,
+        }
+    }
+
+    /// The finished texture of a nested comp's frame, by the name the realiser
+    /// files it under (K-422), or `None` when it must be realised. Counted.
+    pub fn nested(&mut self, key: u128) -> Option<Tex> {
+        let held = self
+            .pins
+            .get(&key)
+            .cloned()
+            .or_else(|| self.lru.get(&key).map(|t| t.0.clone()));
+        if held.is_some() {
+            self.nested_served += 1;
+        } else {
+            self.nested_made += 1;
+        }
+        held
+    }
+
+    /// File a nested comp's finished frame under its name (K-422), when the
+    /// cache is taking entries ([`Self::keep_outputs`]).
+    pub fn put_nested(&mut self, key: u128, tex: Tex) {
+        if self.keep {
+            self.lru.insert(key, CachedTex(tex));
+        }
+    }
+
+    /// Whether a nested frame is held, for the decode planner (K-422) — and if
+    /// it is, hold it for the frame about to be rendered (see `pins`).
+    pub fn pin_nested(&mut self, key: u128) -> bool {
+        if let Some(t) = self.lru.get(&key) {
+            self.pins.insert(key, t.0.clone());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Drop the previous frame's pins: called as each frame's plan begins.
+    pub fn unpin_nested(&mut self) {
+        self.pins.clear();
+    }
+
+    /// Whether the renders that follow may *add* to the cache. Lookups always
+    /// happen; this gates inserts to committed, non-playback frames.
+    pub fn keep_outputs(&mut self, keep: bool) {
+        self.keep = keep;
+    }
+
+    pub fn set_budget(&mut self, bytes: usize) {
+        self.lru.set_budget(bytes);
+    }
+
+    pub fn clear(&mut self) {
+        self.lru.clear();
+        self.pins.clear();
+    }
+
+    /// `(used_bytes, budget_bytes, entries)`.
+    #[must_use]
+    pub fn stats(&self) -> (usize, usize, usize) {
+        (
+            self.lru.used_bytes(),
+            self.lru.budget_bytes(),
+            self.lru.len(),
+        )
+    }
+
+    /// `(kernels run, ops served from the cache)` since construction.
+    #[must_use]
+    pub fn counts(&self) -> (u64, u64) {
+        (self.runs, self.hits)
+    }
+
+    /// `(nested frames realised, nested frames served held)` since
+    /// construction (K-422).
+    #[must_use]
+    pub fn nested_counts(&self) -> (u64, u64) {
+        (self.nested_made, self.nested_served)
+    }
+}
+
+/// The name a nested comp's finished texture is filed under (K-422): its
+/// frame key, and the two things that decide the texture's shape which the
+/// key does not — the exact render scale the realiser allocates at (the key
+/// holds the 1% tier, and two scales in one tier can differ by a pixel) and
+/// the sample count the device resolved to.
+#[must_use]
+pub fn nested_texture_key(frame_key: u128, render_scale: f32, samples: u32) -> u128 {
+    let mut h = blake3::Hasher::new();
+    h.update(b"nested/1/");
+    h.update(&frame_key.to_le_bytes());
+    h.update(&render_scale.to_bits().to_le_bytes());
+    h.update(&samples.to_le_bytes());
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    u128::from_le_bytes(k)
 }
 
 /// One layer-input slot as [`run_ops`] receives it — the realised twin of
@@ -234,6 +411,13 @@ pub fn render_layer_input(
 /// matte's: every op takes a matte and almost none takes a path, so one shared
 /// index would hand a path to whichever effect happened to sit above. An empty
 /// polyline is the effect's documented no-op.
+///
+/// `cache` is the per-effect intermediate cache (K-421) and the content name
+/// of `tex` — the layer's source as the draw builder named it. `None` (no
+/// store, or an input nothing can name yet: an adjustment layer's composite, a
+/// nested comp, a text or shape layer) walks the stack exactly as before. With
+/// both, the walk starts after the longest run of ops whose outputs are held,
+/// and files each output it makes when the cache is taking them.
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -250,8 +434,55 @@ pub fn run_ops(
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
     mut timings: Option<&mut Vec<f32>>,
+    cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
     let mut tex = tex;
+    // The name of each op's output (K-421), before anything runs: the input's
+    // name, the raster, the flare substitution count, then op after op — so
+    // the k-th name covers ops 0..=k. `None` from the first op that binds
+    // something the name cannot cover (another layer's picture, the neighbour
+    // frames, the flow field) onwards: an output that depends on a picture
+    // nobody named must not be filed under a name that omits it.
+    let subs_before = fx.flare_substitutions();
+    let keys: Vec<Option<u128>> = cache.map_or_else(
+        || vec![None; ops.len()],
+        |(_, input_key)| {
+            op_keys(
+                input_key,
+                w,
+                h,
+                subs_before,
+                ops,
+                luts,
+                layer_inputs,
+                flare_lens,
+                mattes,
+                mask_paths,
+            )
+        },
+    );
+    // The longest held prefix, found from the *last* op backwards: an edit
+    // to the last effect is the common case, and it is answered by the op
+    // before it in one lookup.
+    let mut start = 0usize;
+    if let Some((store, _)) = cache {
+        let mut store = store.borrow_mut();
+        for i in (0..ops.len()).rev() {
+            let Some(key) = keys.get(i).copied().flatten() else {
+                continue;
+            };
+            if let Some(held) = store.lru.get(&key) {
+                tex = held.0.clone();
+                start = i + 1;
+                store.hits += start as u64;
+                break;
+            }
+        }
+    }
+    // Outputs made this walk, filed at the end rather than as they are made:
+    // a flare bake queued *during* the walk means a picture of the previous
+    // lens, which must not be filed under the name of the new one (K-350).
+    let mut made: Vec<(u128, Tex)> = Vec::new();
     // The k-th `lut` op consumes the k-th `luts` slot (the whole threading
     // contract — see `build.rs`'s `lut_files` and CompLayerDraw's lut_files); a
     // slot is present only when its `.cube` file loaded. The k-th
@@ -280,7 +511,7 @@ pub fn run_ops(
     // advances on exactly that predicate — `EffectSchema::mask_path`, the one
     // both sides call, so there is no second rule to keep in step.
     let mut path_i = 0usize;
-    for resolved in ops.iter() {
+    for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let mask_path = if resolved.def.schema().mask_path().is_some() {
             let slot = mask_paths.get(path_i);
@@ -309,6 +540,23 @@ pub fn run_ops(
         } else {
             None
         };
+        let gpu = crate::gpufx::gpu_effect(resolved.def.schema().match_name);
+        // An op whose output is already held: its counters still advance (the
+        // lists are 1:1 with the ops, held or not; the matte, mask-path and
+        // layer-input slots were read above), its timing is still pushed (the
+        // profiler pairs the list with the stack's ids), and nothing else
+        // happens.
+        if i < start {
+            match gpu.map(|g| g.aux()) {
+                Some(AuxKind::Lut) => lut_i += 1,
+                Some(AuxKind::LensFile) => flare_i += 1,
+                _ => {}
+            }
+            if let Some(into) = timings.as_mut() {
+                into.push(0.0);
+            }
+            continue;
+        }
         // Only a bound matte costs anything: the input texture is held (a
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
@@ -353,7 +601,7 @@ pub fn run_ops(
         // table entry (an orchestration-only effect) passes the texture through
         // — the convention a missing LUT or flow field already uses, never a
         // fault (engine crates do not panic, 14-ENGINEERING-RULES §4).
-        if let Some(gpu) = crate::gpufx::gpu_effect(schema.match_name) {
+        if let Some(gpu) = gpu {
             // The Blend row (K-425): anything but Normal runs the kernel at
             // Mix 100 and applies the blend and the Mix itself, afterwards and
             // once — the same decision `cpu::apply_stack` makes, read from
@@ -414,6 +662,10 @@ pub fn run_ops(
             tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
         }
 
+        if let Some(key) = keys.get(i).copied().flatten() {
+            made.push((key, tex.clone()));
+        }
+
         if let (Some(started), Some(into)) = (started, timings.as_mut()) {
             // Same reason as the per-layer fence in `realise`: a frame's
             // commands are batched, and timing a queue that has not been
@@ -424,7 +676,110 @@ pub fn run_ops(
             into.push(started.elapsed().as_secs_f32() * 1000.0);
         }
     }
+    if let Some((store, _)) = cache {
+        let mut store = store.borrow_mut();
+        store.runs += ops.len().saturating_sub(start) as u64;
+        if store.keep && fx.flare_substitutions() == subs_before {
+            for (key, out) in made {
+                store.lru.insert(key, CachedTex(out));
+            }
+        }
+    }
     tex
+}
+
+/// The content name of each op's output (K-421): `keys[k]` covers the input,
+/// the raster, the flare substitution count (K-431) and ops `0..=k`, with
+/// each op's parameters and the identity of whatever rides beside it. `None`
+/// from the first op that binds a picture nobody named — another layer (a
+/// plate or a matte texture), the neighbour frames, the flow field — through
+/// to the end: the v1 rule is that such an op breaks the chain rather than
+/// being named by a guess.
+/// [`LayerInput::ThisLayer`] and [`LayerInput::Absent`] are functions of the
+/// chain itself, so they do not break it.
+#[allow(clippy::too_many_arguments)]
+fn op_keys(
+    input_key: u128,
+    w: u32,
+    h_px: u32,
+    flare_substitutions: u64,
+    ops: &lumit_core::fx::ResolvedStack,
+    luts: &[Option<LoadedLut>],
+    layer_inputs: &[LayerInput],
+    flare_lens: &[Option<(u64, String)>],
+    mattes: &[LayerInput],
+    mask_paths: &[lumit_core::mask::MaskPolyline],
+) -> Vec<Option<u128>> {
+    let mut h = blake3::Hasher::new();
+    h.update(b"fxcache/1/");
+    h.update(&input_key.to_le_bytes());
+    h.update(&w.to_le_bytes());
+    h.update(&h_px.to_le_bytes());
+    h.update(&flare_substitutions.to_le_bytes());
+    let (mut lut_i, mut dof_i, mut flare_i, mut matte_i, mut path_i) = (0, 0, 0, 0, 0);
+    let mut broken = false;
+    ops.iter()
+        .map(|resolved| {
+            let schema = resolved.def.schema();
+            resolved.feed_hash(&mut |b| {
+                h.update(b);
+            });
+            if schema.mask_path().is_some() {
+                if let Some(p) = mask_paths.get(path_i) {
+                    h.update(&[u8::from(p.closed)]);
+                    for pt in &p.points {
+                        h.update(&pt[0].to_le_bytes());
+                        h.update(&pt[1].to_le_bytes());
+                    }
+                }
+                path_i += 1;
+            }
+            if schema.matte.param().is_some() {
+                if let Some(LayerInput::Texture(_)) = mattes.get(matte_i) {
+                    broken = true;
+                }
+                matte_i += 1;
+            }
+            // The layer-input list moved onto the schema's own predicate when
+            // Fast motion blur gained its Motion vectors row (K-429): an op
+            // may take a layer input beside any other aux, so it is no longer
+            // an AuxKind. A bound plate is a picture nobody named - it breaks
+            // the chain exactly as a bound matte does.
+            if schema.layer_input().is_some() {
+                if let Some(LayerInput::Texture(_)) = layer_inputs.get(dof_i) {
+                    broken = true;
+                }
+                dof_i += 1;
+            }
+            match crate::gpufx::gpu_effect(schema.match_name).map(|g| g.aux()) {
+                Some(AuxKind::Lut) => {
+                    if let Some(Some(lut)) = luts.get(lut_i) {
+                        h.update(lut.path.as_bytes());
+                        let mtime = lut
+                            .mtime
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map_or(0, |d| d.as_nanos());
+                        h.update(&mtime.to_le_bytes());
+                    }
+                    lut_i += 1;
+                }
+                Some(AuxKind::LensFile) => {
+                    if let Some(Some((hash, _))) = flare_lens.get(flare_i) {
+                        h.update(&hash.to_le_bytes());
+                    }
+                    flare_i += 1;
+                }
+                Some(AuxKind::Neighbours | AuxKind::FlowField) => broken = true,
+                Some(AuxKind::None) | None => {}
+            }
+            if broken {
+                return None;
+            }
+            let mut k = [0u8; 16];
+            k.copy_from_slice(&h.clone().finalize().as_bytes()[..16]);
+            Some(u128::from_le_bytes(k))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -578,5 +933,422 @@ mod tests {
                 .any(|(p, _, _)| p == &*path(1).to_string_lossy()),
             "and the least recently used went"
         );
+    }
+
+    // ----- The per-effect cache (K-421) -----
+
+    /// A stack of built-in effects with one float parameter set on each:
+    /// `(match_name, param id, value)`.
+    fn stack(spec: &[(&str, &str, f32)]) -> lumit_core::fx::ResolvedStack {
+        let insts: Vec<_> = spec
+            .iter()
+            .map(|(name, param, value)| {
+                let mut inst = lumit_core::fx::instantiate(name).expect("a built-in");
+                for p in &mut inst.params {
+                    if p.id == *param {
+                        p.value = lumit_core::model::EffectValue::Float(
+                            lumit_core::anim::Property::fixed(f64::from(*value)),
+                        );
+                    }
+                }
+                inst
+            })
+            .collect();
+        lumit_core::fx::resolve_stack(
+            &insts,
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        )
+    }
+
+    const W: u32 = 8;
+    const H: u32 = 8;
+
+    fn source(ctx: &GpuContext) -> Tex {
+        let px: Vec<f32> = (0..(W * H * 4))
+            .map(|i| match i % 4 {
+                3 => 1.0,
+                _ => (i % 13) as f32 / 13.0,
+            })
+            .collect();
+        lumit_gpu::fx::upload_linear_f32(ctx, &px, W, H)
+    }
+
+    /// `run_ops` with every side list empty, through `cache` under `key`.
+    fn run(
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        ops: &lumit_core::fx::ResolvedStack,
+        cache: &std::cell::RefCell<FxCache>,
+        key: u128,
+    ) -> Vec<f32> {
+        let out = run_ops(
+            fx,
+            ctx,
+            source(ctx),
+            W,
+            H,
+            ops,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            Some((cache, key)),
+        );
+        lumit_gpu::fx::readback_linear_f32(ctx, &out, W, H).expect("readback")
+    }
+
+    fn warm_cache() -> std::cell::RefCell<FxCache> {
+        let mut c = FxCache::default();
+        c.keep_outputs(true);
+        std::cell::RefCell::new(c)
+    }
+
+    /// **Editing the last effect re-runs only that one** (K-421) — and the
+    /// picture is the one a cold walk makes.
+    #[test]
+    fn editing_the_last_effect_reruns_only_that_one() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = warm_cache();
+
+        let first = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+        ]);
+        run(&fx, &ctx, &first, &cache, 7);
+        assert_eq!(cache.borrow().counts(), (2, 0), "a cold walk runs both");
+        assert_eq!(cache.borrow().stats().2, 2, "and files both outputs");
+
+        let edited = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 2.0),
+        ]);
+        let warm = run(&fx, &ctx, &edited, &cache, 7);
+        assert_eq!(
+            cache.borrow().counts(),
+            (3, 1),
+            "the saturation's output was held; only the exposure ran"
+        );
+
+        let cold = run(&fx, &ctx, &edited, &warm_cache(), 7);
+        assert_eq!(
+            warm, cold,
+            "a held prefix makes the same picture as a cold walk"
+        );
+    }
+
+    /// An upstream edit renames everything after it: both ops run again.
+    #[test]
+    fn an_upstream_edit_misses() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = warm_cache();
+        run(
+            &fx,
+            &ctx,
+            &stack(&[
+                ("saturation", "saturation", 20.0),
+                ("exposure", "stops", 1.0),
+            ]),
+            &cache,
+            7,
+        );
+        run(
+            &fx,
+            &ctx,
+            &stack(&[
+                ("saturation", "saturation", 50.0),
+                ("exposure", "stops", 1.0),
+            ]),
+            &cache,
+            7,
+        );
+        assert_eq!(cache.borrow().counts(), (4, 0));
+        // A different source under the same stack is a miss too.
+        run(
+            &fx,
+            &ctx,
+            &stack(&[
+                ("saturation", "saturation", 50.0),
+                ("exposure", "stops", 1.0),
+            ]),
+            &cache,
+            8,
+        );
+        assert_eq!(cache.borrow().counts(), (6, 0));
+    }
+
+    /// An op that binds a picture nobody named — another layer's texture as a
+    /// matte, the neighbour frames — breaks the chain: nothing from it on is
+    /// filed, and the same stack runs in full again.
+    #[test]
+    fn a_bound_picture_breaks_the_chain() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+
+        // A matte texture on the first op.
+        let cache = warm_cache();
+        let ops = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+        ]);
+        for _ in 0..2 {
+            run_ops(
+                &fx,
+                &ctx,
+                source(&ctx),
+                W,
+                H,
+                &ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                &[LayerInput::Texture(source(&ctx)), LayerInput::Absent],
+                &[],
+                None,
+                Some((&cache, 7)),
+            );
+        }
+        assert_eq!(
+            cache.borrow().counts(),
+            (4, 0),
+            "nothing after a matte is held"
+        );
+        assert_eq!(cache.borrow().stats().2, 0);
+
+        // The matte on the *second* op: the first op's output is still named.
+        let cache = warm_cache();
+        for _ in 0..2 {
+            run_ops(
+                &fx,
+                &ctx,
+                source(&ctx),
+                W,
+                H,
+                &ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                &[LayerInput::Absent, LayerInput::Texture(source(&ctx))],
+                &[],
+                None,
+                Some((&cache, 7)),
+            );
+        }
+        assert_eq!(
+            cache.borrow().counts(),
+            (3, 1),
+            "the chain holds up to the matte"
+        );
+
+        // Neighbour frames (Echo) break it the same way.
+        let cache = warm_cache();
+        let ops = stack(&[("echo", "decay", 0.5), ("exposure", "stops", 1.0)]);
+        for _ in 0..2 {
+            run_ops(
+                &fx,
+                &ctx,
+                source(&ctx),
+                W,
+                H,
+                &ops,
+                &[(-1, source(&ctx))],
+                None,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+                Some((&cache, 7)),
+            );
+        }
+        assert_eq!(cache.borrow().counts(), (4, 0));
+        assert_eq!(cache.borrow().stats().2, 0);
+    }
+
+    /// A `.cube` edited on disk is a different `lut` op: its mtime is in the
+    /// name (as it is in the LUT cache's, K-271).
+    #[test]
+    fn a_lut_edited_on_disk_misses() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = warm_cache();
+        let lut = |mtime: u64| {
+            let cube = vec![[1.0f32, 0.0, 0.0]; 8];
+            Some(LoadedLut {
+                texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
+                size: 2,
+                domain_min: [0.0; 3],
+                domain_max: [1.0; 3],
+                path: "grade.cube".into(),
+                mtime: Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime)),
+            })
+        };
+        let ops = stack(&[("lut", "mix", 100.0), ("exposure", "stops", 1.0)]);
+        for mtime in [1, 1, 2] {
+            run_ops(
+                &fx,
+                &ctx,
+                source(&ctx),
+                W,
+                H,
+                &ops,
+                &[],
+                None,
+                &[lut(mtime)],
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+                Some((&cache, 7)),
+            );
+        }
+        assert_eq!(
+            cache.borrow().counts(),
+            (4, 2),
+            "same file twice is a hit; the edited file runs both again"
+        );
+    }
+
+    /// A bake merely being **made** renames nothing (K-431, superseding the
+    /// K-350 rule it replaces).
+    ///
+    /// Op outputs used to carry the flare bake *generation*, which moves the
+    /// moment any bake is queued — so with a keyframed aperture keeping one
+    /// queued, every walk of every stack in the project threw away its
+    /// predecessor's outputs and re-ran every op. What belongs in the name is
+    /// whether a flare actually stood other optics in, which is counted.
+    #[test]
+    fn a_bake_in_flight_does_not_rename_every_op() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = warm_cache();
+        let ops = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+        ]);
+        run(&fx, &ctx, &ops, &cache, 7);
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(cache.borrow().counts(), (2, 2));
+
+        fx.set_deferred_flare_bakes(true);
+        let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
+            surfaces: Vec::new(),
+            ghosts: Vec::new(),
+            spreads: Vec::new(),
+            sensor_z_mm: 0.0,
+            focal_mm: 1.0,
+            native_fstop: 1.0,
+            pupil_mm: 1.0,
+            start_z_mm: 0.0,
+            energy_gain: 1.0,
+            reflectance: Vec::new(),
+            starburst: Vec::new(),
+            sb_res: 1,
+            sb_fields: 1,
+        }) as lumit_gpu::fx::FlareBake;
+        if !fx.warm_flare_bake(0xfeed_face, &bake) {
+            return; // no bake thread on this machine
+        }
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(
+            cache.borrow().counts(),
+            (2, 4),
+            "a bake in flight leaves every op's name — and so every held output — alone"
+        );
+        assert_eq!(
+            fx.flare_substitutions(),
+            0,
+            "and nothing was stood in for: this stack holds no flare"
+        );
+    }
+
+    /// The budget holds, and holds the most recent: with room for one output,
+    /// the last op's survives, and the next identical walk starts after it.
+    #[test]
+    fn the_budget_evicts_the_oldest_output() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let mut c = FxCache::new((W * H * 8) as usize);
+        c.keep_outputs(true);
+        let cache = std::cell::RefCell::new(c);
+        let ops = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+        ]);
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(cache.borrow().stats().2, 1, "one output fits");
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(cache.borrow().counts(), (2, 2), "and it is the last one");
+
+        cache.borrow_mut().set_budget(0);
+        assert_eq!(cache.borrow().stats().2, 0);
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(cache.borrow().stats().2, 0, "nothing fits in no budget");
+    }
+
+    /// A render that is not committed — a drag, playback — reads the cache
+    /// and never adds to it.
+    #[test]
+    fn an_uncommitted_render_reads_but_never_writes() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = std::cell::RefCell::new(FxCache::default());
+        let ops = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+        ]);
+        run(&fx, &ctx, &ops, &cache, 7);
+        assert_eq!(cache.borrow().stats().2, 0);
+
+        cache.borrow_mut().keep_outputs(true);
+        run(&fx, &ctx, &ops, &cache, 7);
+        cache.borrow_mut().keep_outputs(false);
+        let dragged = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 3.0),
+        ]);
+        run(&fx, &ctx, &dragged, &cache, 7);
+        assert_eq!(
+            cache.borrow().counts(),
+            (5, 1),
+            "the drag was served the prefix"
+        );
+        assert_eq!(cache.borrow().stats().2, 2, "and filed nothing of its own");
     }
 }

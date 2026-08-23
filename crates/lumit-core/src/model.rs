@@ -1084,7 +1084,7 @@ pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
     let LayerKind::Camera { zoom, .. } = &layer.kind else {
         return None;
     };
-    let lt = t - layer.start_offset.0.to_f64();
+    let lt = crate::time::layer_time(t, layer.start_offset.0);
     let tr = &layer.transform;
     Some(CameraPose {
         zoom: zoom.value_at(lt),
@@ -1148,7 +1148,7 @@ impl Composition {
                 if !l.switches.visible || t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
                     return None;
                 }
-                let lt = t - l.start_offset.0.to_f64();
+                let lt = crate::time::layer_time(t, l.start_offset.0);
                 let tr = &l.transform;
                 let gain = light.intensity.value_at(lt).max(0.0) as f32;
                 Some(ResolvedLight {

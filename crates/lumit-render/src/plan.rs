@@ -85,10 +85,19 @@ impl Quality {
     /// step by construction: the width in the name is the width the pixels were
     /// decoded at, whoever asked. It also stops a window resize from re-decoding
     /// for a scale change too small to see.
+    ///
+    /// The scale is taken to the nearest thousandth **first**, because that is
+    /// the form the cache bar asks in (`scale_q`, docs/06 §5.6) while a scrub
+    /// asks with the raw float. Flooring the raw float straight to a 1% step
+    /// put about one scale in twenty on a different step from its own
+    /// thousandth — 0.4296 floors to 42%, its thousandth 0.430 to 43% — so the
+    /// bar named those frames differently from the way they were banked and
+    /// drew them empty. Integer arithmetic throughout, so naming a scale and
+    /// naming its thousandth give the same answer by construction.
     #[must_use]
     pub fn keyed_scale(self) -> f32 {
-        let step = (self.display_scale.clamp(0.05, 1.0) * 100.0) as u32;
-        step as f32 / 100.0
+        let thousandths = (self.display_scale.clamp(0.05, 1.0) * 1000.0).round() as u32;
+        (thousandths / 10) as f32 / 100.0
     }
 
     /// One decode-width policy for requests AND cache keys — if these ever
@@ -123,6 +132,10 @@ impl Quality {
     }
 }
 
+/// The nested-frame question a plan asks (K-422, [`PlanContext::held`]):
+/// "is this comp's frame at this layer time already a finished texture?"
+pub type HeldNested<'a> = &'a dyn Fn(&Composition, f64) -> bool;
+
 /// The inputs a plan walk carries down the Precomp recursion, unchanged at
 /// every depth: what the media is and how coarsely to decode. Bundled so the
 /// recursive walk stays readable.
@@ -130,6 +143,17 @@ pub struct PlanContext<'a> {
     pub doc: &'a Document,
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
+    /// Answers "is this nested comp's frame, at this layer time, already held
+    /// as a finished texture?" (K-422). When it is, the planner asks for none
+    /// of that comp's decodes: the realiser will serve the texture and never
+    /// look at the pixels. This is the one place planning knows a cache exists
+    /// — the module header's "pure and cheap" is kept by making it a question
+    /// the caller answers, and the coupling is worth it because without it a
+    /// held Precomp still cost every source decode inside it, which is most of
+    /// what rendering a Precomp costs. The answerer must *hold* what it says
+    /// yes to until the frame is realised (`FxCache::pin_nested`), or a yes
+    /// here becomes a nested comp realised from no pixels.
+    pub held: Option<HeldNested<'a>>,
 }
 
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
@@ -138,22 +162,38 @@ pub struct PlanContext<'a> {
 ///
 /// The context's `probes` answers what each footage item is; an unprobed item
 /// contributes no job at all and is retried once its probe lands.
+///
+/// `spliced` says this comp is being spliced into its parent by a collapsed
+/// Precomp layer, where the occlusion cull (K-423) does not apply — the same
+/// flag the draw builder takes, so the two skip exactly the same layers.
 pub fn collect_comp_jobs(
     ctx: &PlanContext<'_>,
     comp: &Composition,
     t: f64,
     jobs: &mut Vec<CompJob>,
     visited: &mut Vec<Uuid>,
+    spliced: bool,
 ) {
     let PlanContext {
         doc,
         quality,
         probes,
+        held,
     } = *ctx;
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
+    // Occlusion cull (K-423, docs/06 §1.1): the layers under a full-frame
+    // opaque layer are never seen, so their footage is never decoded. The
+    // predicate refuses whenever anything above could reach a layer below,
+    // so nothing a wanted layer references is ever culled.
+    let occluder = (!spliced)
+        .then(|| lumit_core::occlusion::occluder_index(doc, comp, t))
+        .flatten();
     let mut wanted: Vec<Uuid> = Vec::new();
-    for l in &comp.layers {
+    for (idx, l) in comp.layers.iter().enumerate() {
+        if occluder.is_some_and(|o| idx > o) {
+            continue;
+        }
         if l.switches.visible && in_span(l) {
             wanted.push(l.id);
             if let Some(m) = &l.matte {
@@ -187,7 +227,7 @@ pub fn collect_comp_jobs(
         if !wanted.contains(&layer.id) || !in_span(layer) {
             continue;
         }
-        let lt = sample_times[idx] - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes
             // the composite below; solids/text/cameras rasterise elsewhere).
@@ -257,8 +297,21 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
+                    // A held nested frame wants no decodes (K-422). Asked only
+                    // where the builder will ask by the same name: at the live
+                    // time (a Posterize-held layer is built at another time,
+                    // by a walk with no keyer) and for a Precomp that is not
+                    // collapsed (a collapsed one is spliced in, never named).
+                    let live = sample_times[idx] == t;
+                    let collapsed = matches!(
+                        lumit_core::model::collapse_state(doc, comp, layer, lt),
+                        lumit_core::model::CollapseState::Active
+                    );
+                    if live && !collapsed && held.is_some_and(|held| held(nested, lt)) {
+                        continue;
+                    }
                     visited.push(*nested_id);
-                    collect_comp_jobs(ctx, nested, lt, jobs, visited);
+                    collect_comp_jobs(ctx, nested, lt, jobs, visited, collapsed);
                     visited.pop();
                 }
             }
@@ -391,14 +444,29 @@ pub fn plan_comp_frame(
     quality: Quality,
     probes: &dyn SourceProbes,
 ) -> Vec<CompJob> {
+    plan_comp_frame_held(doc, comp, t, quality, probes, None)
+}
+
+/// [`plan_comp_frame`] with the nested-frame answerer (K-422,
+/// [`PlanContext::held`]).
+#[must_use]
+pub fn plan_comp_frame_held(
+    doc: &Document,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    probes: &dyn SourceProbes,
+    held: Option<HeldNested<'_>>,
+) -> Vec<CompJob> {
     let ctx = PlanContext {
         doc,
         quality,
         probes,
+        held,
     };
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
-    collect_comp_jobs(&ctx, comp, t, &mut jobs, &mut visited);
+    collect_comp_jobs(&ctx, comp, t, &mut jobs, &mut visited, false);
     jobs
 }
 
@@ -426,10 +494,70 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
         })
 }
 
+impl CompJob {
+    /// The content name of the pixels this job decodes (K-421): a hash of
+    /// exactly the fields [`same_decode`] compares, so two jobs that would
+    /// decode the same pixels have the same name. The layer id is left out on
+    /// purpose — a name is about content, never about which row asked — and
+    /// the flow settings go in as their serialised form, which is stable across
+    /// runs where a struct's bytes would not be.
+    #[must_use]
+    pub fn source_key(&self) -> u128 {
+        let mut h = blake3::Hasher::new();
+        h.update(b"decode/1/");
+        h.update(self.item.as_bytes());
+        h.update(self.path.to_string_lossy().as_bytes());
+        h.update(&self.source_frame.to_le_bytes());
+        h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());
+        h.update(&[u8::from(self.slate)]);
+        if let Some((ceil, weight)) = self.blend {
+            h.update(&ceil.to_le_bytes());
+            h.update(&weight.to_le_bytes());
+        }
+        if let Some(flow) = &self.flow {
+            h.update(b"flow/");
+            h.update(&bincode::serialize(flow).unwrap_or_default());
+        }
+        for (offset, frame) in &self.temporal {
+            h.update(&offset.to_le_bytes());
+            h.update(&frame.to_le_bytes());
+        }
+        h.update(&self.flow_neighbour.unwrap_or(i32::MIN).to_le_bytes());
+        let mut k = [0u8; 16];
+        k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+        u128::from_le_bytes(k)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// **A scale and its thousandth are named the same** — the scrub asks with
+    /// the raw float, the cache bar with the scale rounded to a thousandth, and
+    /// a frame banked by one must be found by the other. Flooring the raw float
+    /// to 1% put about one scale in twenty on a different step from its own
+    /// thousandth; fails without the quantise-first step.
+    #[test]
+    fn keyed_scale_agrees_with_its_own_thousandth() {
+        let quality = |scale: f32| Quality {
+            auto_res: true,
+            display_scale: scale,
+            ..Quality::default()
+        };
+        let mut s = 0.05_f32;
+        while s <= 1.0 {
+            let rounded = (s * 1000.0).round() / 1000.0;
+            assert_eq!(
+                quality(s).keyed_scale(),
+                quality(rounded).keyed_scale(),
+                "scale {s} and its thousandth {rounded} must key alike"
+            );
+            assert_eq!(quality(s).tag(), quality(rounded).tag());
+            s += 0.0001;
+        }
+    }
 
     /// **Two scales the tag calls equal must decode to the same width.**
     ///
@@ -751,5 +879,234 @@ mod tests {
             );
             assert_eq!(jobs[0].item, item);
         }
+    }
+
+    /// **Footage under a full-frame opaque solid plans no decode** (K-423) —
+    /// unless something above the solid reaches it: a matte on the
+    /// solid's upper neighbour keeps the footage wanted, so the matte still
+    /// renders. Fails without the occluder gate on the wanted list.
+    #[test]
+    fn footage_under_an_occluder_plans_no_decode_unless_it_is_referenced() {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MatteChannel,
+            MatteRef, MediaRef, SolidDef, Switches, TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        for referenced in [false, true] {
+            let mut doc = Document::new();
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+            }));
+            let solid = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid,
+                name: "s".into(),
+                colour: LinearColour::BLACK,
+                width: 64,
+                height: 64,
+                extra: serde_json::Map::new(),
+            }));
+            let footage = layer(LayerKind::Footage { item });
+            // Anchored at its top-left corner on the comp's origin: covers it.
+            let cover = layer(LayerKind::Solid { def: solid });
+            let mut above = layer(LayerKind::Null);
+            if referenced {
+                above.matte = Some(MatteRef {
+                    layer: footage.id,
+                    channel: MatteChannel::Alpha,
+                    inverted: false,
+                    source: Default::default(),
+                });
+            }
+            let comp = Composition {
+                id: Uuid::now_v7(),
+                name: "c".into(),
+                width: 64,
+                height: 64,
+                frame_rate: FrameRate::new(60, 1).unwrap(),
+                duration: Duration(Rational::new(10, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers: vec![above, cover, footage],
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            };
+            let probes: HashMap<Uuid, crate::SourceProbe> = [(
+                item,
+                crate::SourceProbe::Video {
+                    fps: 60.0,
+                    width: 64,
+                    height: 64,
+                    frames: 600,
+                    audio: false,
+                },
+            )]
+            .into_iter()
+            .collect();
+            let jobs = plan_comp_frame(&doc, &comp, 0.0, Quality::default(), &probes);
+            if referenced {
+                assert_eq!(jobs.len(), 1, "a matte under the occluder is still decoded");
+            } else {
+                assert!(
+                    jobs.is_empty(),
+                    "footage under the occluder plans no decode"
+                );
+            }
+        }
+    }
+
+    /// **A held nested frame wants no decodes** (K-422). A Precomp whose frame
+    /// the store already holds contributes none of its footage jobs — that is
+    /// what makes a parent edit free of the nested comp's decodes — while a
+    /// collapsed Precomp (spliced in, never named) still decodes whatever the
+    /// answerer says. Fails without the `held` question in the Precomp arm.
+    #[test]
+    fn a_held_nested_frame_plans_no_decodes_but_a_collapsed_one_still_does() {
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp = |layers: Vec<Layer>| Composition {
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        }));
+        let inner = comp(vec![layer(LayerKind::Footage { item })]);
+        let inner_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        let outer = comp(vec![layer(LayerKind::Precomp { comp: inner_id })]);
+        let outer_id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+            item,
+            crate::SourceProbe::Video {
+                fps: 60.0,
+                width: 64,
+                height: 64,
+                frames: 600,
+                audio: false,
+            },
+        )]
+        .into_iter()
+        .collect();
+        let asked = std::cell::Cell::new(0usize);
+        let held = |nested: &Composition, lt: f64| {
+            asked.set(asked.get() + 1);
+            assert_eq!(nested.id, inner_id);
+            assert_eq!(lt, 0.0);
+            true
+        };
+        let plan = |doc: &Document, held: Option<HeldNested<'_>>| {
+            plan_comp_frame_held(
+                doc,
+                doc.comp(outer_id).unwrap(),
+                0.0,
+                Quality::default(),
+                &probes,
+                held,
+            )
+        };
+        assert_eq!(
+            plan(&doc, None).len(),
+            1,
+            "no answerer: the footage decodes"
+        );
+        assert!(
+            plan(&doc, Some(&held)).is_empty(),
+            "held: nothing to decode"
+        );
+        assert_eq!(asked.get(), 1);
+
+        doc.comp_mut(outer_id).unwrap().layers[0].switches.collapse = true;
+        assert_eq!(
+            plan(&doc, Some(&held)).len(),
+            1,
+            "a collapsed precomp is never named, so it always decodes"
+        );
+        assert_eq!(asked.get(), 1, "and is never asked about");
     }
 }

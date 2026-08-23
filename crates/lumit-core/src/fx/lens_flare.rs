@@ -2386,6 +2386,65 @@ pub fn effective_roundness(roundness: f32, fstop: f32, native_fstop: f32) -> f32
 // Bake
 // ---------------------------------------------------------------------------
 
+/// A twentieth of a stop — the step [`bake_params`] snaps the working
+/// f-number to. A stop is a factor of √2 in f-number, so the step is
+/// `2^(1/40)`, about 1.7%.
+pub const FSTOP_BAKE_STEP_STOPS: f32 = 0.05;
+
+/// The step the remaining continuous iris dials snap to (degrees for the
+/// rotation, a fraction of the 0..1 range for roundness and softness).
+pub const APERTURE_ROTATION_BAKE_STEP_DEG: f32 = 0.5;
+/// The bake step for Roundness and Iris softness, both 0..1 dials.
+pub const APERTURE_BAKE_STEP: f32 = 1.0 / 256.0;
+
+fn snap(v: f32, step: f32) -> f32 {
+    if !v.is_finite() {
+        return v;
+    }
+    // `+ 0.0` folds -0.0 onto 0.0: a rotation keyframed through zero can land
+    // on the negative one, and the key hashes bits, so the two would ask the
+    // cache for the same iris under different names.
+    (v / step).round() * step + 0.0
+}
+
+/// The aperture the **bake** sees (K-431), which is the frame's aperture with
+/// its continuous dials snapped to a step fine enough not to be seen.
+///
+/// In plain terms: the bake precomputes two things that depend on the iris —
+/// the starburst sprite (a Fourier transform of the hole's shape) and the
+/// auto-exposure gain — and it costs about two thirds of a second. An
+/// *animated* f-stop asks for a slightly different iris on every single
+/// frame, so without this every frame would want its own bake, none would
+/// ever arrive in time, and no frame would ever be worth keeping. Snapping
+/// the dials means a run of frames shares one bake: a half-stop ramp needs
+/// about ten of them, which the 24-entry bake cache holds comfortably.
+///
+/// What is *not* snapped is everything the frame itself computes — the ghost
+/// trace's own stop scale, the iris mask it draws each ghost's rim with, the
+/// K-260 wide-open blend it applies there. Those stay continuous, so the
+/// ghosts move and shrink smoothly as the iris closes; what steps is the
+/// starburst's shape and the exposure, by about 1.7% a step.
+///
+/// Applied inside both [`bake_key_with`] and [`bake_with`], so a key and the
+/// bake it names can never disagree about which aperture was used.
+#[must_use]
+pub fn bake_params(p: &LensFlareParams) -> LensFlareParams {
+    let mut q = *p;
+    q.fstop = if p.fstop.is_finite() && p.fstop > 0.0 {
+        // Stops, not f-numbers: an even step in f-number would be far finer
+        // than it needs to be wide open and far coarser than it may be at
+        // f/22. One stop is a factor of √2, hence the halves.
+        let stops = 2.0 * p.fstop.log2();
+        (snap(stops, FSTOP_BAKE_STEP_STOPS) * 0.5).exp2()
+    } else {
+        p.fstop
+    };
+    q.aperture_rotation_deg = snap(p.aperture_rotation_deg, APERTURE_ROTATION_BAKE_STEP_DEG);
+    q.roundness = snap(p.roundness, APERTURE_BAKE_STEP);
+    q.aperture_softness = snap(p.aperture_softness, APERTURE_BAKE_STEP);
+    q
+}
+
 /// The bake-relevant parameter subset hashed into the cache key: everything
 /// the baked tables depend on, quantised through `to_bits` so equal floats
 /// key equally. Light position, intensities, dispersion, coating, quality
@@ -2399,6 +2458,10 @@ pub fn bake_key(p: &LensFlareParams) -> u64 {
 /// override's content hash folds in, so editing the file (or clearing it)
 /// rebakes and two different files never share a cache slot.
 pub fn bake_key_with(p: &LensFlareParams, lens_text_hash: Option<u64>) -> u64 {
+    // The aperture as the bake will see it (K-431), never as the frame holds
+    // it: two f-stops inside one step bake identically, so they must key
+    // identically or the cache would hand one of them the other's optics.
+    let p = &bake_params(p);
     let mut h = 0xcbf2_9ce4_8422_2325_u64; // FNV offset basis
     let mut fold = |v: u64| {
         h ^= v;
@@ -2904,6 +2967,11 @@ pub fn bake(p: &LensFlareParams) -> FlareBaked {
 /// picked library lens: a labelled fallback, never a fault, and exactly
 /// what an unset parameter renders.
 pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
+    // The snapped aperture (K-431), matching what `bake_key_with` hashed —
+    // the two must read the same dials or a cache slot would hold optics its
+    // name does not describe.
+    let quantised = bake_params(p);
+    let p = &quantised;
     let entry = lens_entry(p.lens);
     let custom = lens_text.and_then(parse_lens);
     let entry_native = if custom.is_some() {
@@ -3163,7 +3231,16 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         light_count: 0,
         intensity: 1.0,
         lens: p.lens,
-        fstop: p.fstop,
+        // The probe is shot at the lens's NATIVE stop, never the working one
+        // (K-432): the gain is a property of the glass, not of how far the
+        // iris is closed. Reading the working stop made the gain roughly
+        // `(f/native)²` and it cancelled the stop-down — a lens rendered the
+        // same brightness at f/16 as wide open, which no lens does — and it
+        // put the working f-number under the exposure half of the bake, so a
+        // ramped aperture stepped the whole flare's brightness at every
+        // snapped step. Stopped down, the flare now dims as the light the
+        // iris passes dims; Intensity is the dial that puts it back.
+        fstop: native_fstop,
         focus_m: 100.0,
         blades: p.blades,
         aperture_rotation_deg: p.aperture_rotation_deg,
