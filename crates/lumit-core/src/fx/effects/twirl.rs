@@ -30,16 +30,15 @@ pub struct Twirl {
     #[dial(default = 90.0, step = 15.0)]
     pub angle: f32,
 
-    /// How wide the twirled circle is, as a per cent of the comp diagonal
-    /// (§2.3). Declared `PctDiag`, so the resolve step converts it to pixels of
-    /// the raster in play and a Half-resolution preview twirls the same part of
-    /// the picture as the export.
+    /// How wide the twirled circle is, px@comp (§2.3). Declared `Px`, so the
+    /// resolve step scales it to the raster in play and a Half-resolution
+    /// preview twirls the same part of the picture as the export.
     #[slider(
         min = 0.0,
-        max = 100.0,
-        default = 30.0,
+        max = 2000.0,
+        default = 650.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub radius: f32,
 

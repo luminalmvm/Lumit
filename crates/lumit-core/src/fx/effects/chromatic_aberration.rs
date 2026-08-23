@@ -52,10 +52,9 @@ pub enum Fringe {
 )]
 pub struct ChromaticAberration {
     /// px@comp (§2.3): peak channel offset, reached at the corner distance from
-    /// the frame centre. Open above (K-135). Where RGB split's Amount is % diag
-    /// — a currency it shares with its Angle-driven linear offset — this effect
-    /// has only the radial shape and one purpose, so "how many pixels of fringe"
-    /// is the honest unit. Declared `Px`, so the resolve step scales it by the
+    /// the frame centre. Open above (K-135). This effect has only the radial
+    /// shape and one purpose, so "how many pixels of fringe" is the honest
+    /// unit. Declared `Px`, so the resolve step scales it by the
     /// §2.3 preview factor and
     /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size —

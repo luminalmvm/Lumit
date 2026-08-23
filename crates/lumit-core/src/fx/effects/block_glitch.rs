@@ -54,27 +54,27 @@ pub struct BlockGlitch {
     )]
     pub block_jitter: f32,
 
-    /// % diag (§2.3), the same currency as Blur's Radius and Length: how far a
-    /// torn block slides.
+    /// px@comp (§2.3), the same currency as Blur's Radius and Length: how far
+    /// a torn block slides.
     #[slider(
         label = "Displacement",
         min = 0.0,
-        max = 15.0,
-        default = 3.0,
+        max = 300.0,
+        default = 60.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 1000.0,
+        unit = Px
     )]
     pub block_amount: f32,
 
-    /// % diag: a per-block hashed RGB split.
+    /// px@comp: a per-block hashed RGB split.
     #[slider(
         min = 0.0,
-        max = 10.0,
-        default = 1.0,
+        max = 200.0,
+        default = 20.0,
         hard_min = 0.0,
-        hard_max = 50.0,
-        unit = PctDiag
+        hard_max = 1000.0,
+        unit = Px
     )]
     pub channel_offset: f32,
 

@@ -246,11 +246,12 @@ among them — §3.12).
 
 Parameters MUST be expressed in units that survive comp resizing and preview resolution:
 
-- **% diag** — percentage of the comp diagonal. Default for radii, distances, displacement.
+- **px@comp** — pixels at composition size, for **every** distance, radius and
+  displacement (K-419). A value is authored against the composition's own raster; the
+  engine scales it by the preview resolution factor to the raster actually in play, and
+  again to a different export size, so Half or Quarter preview frames exactly like the
+  export. No distance in Lumit is a percentage of the composition diagonal.
 - **degrees** — all angles.
-- **px@comp** — physical pixels at full comp resolution, for deliberately pixel-scale
-  looks (scanlines, block sizes). The engine scales these by the preview resolution factor
-  so Half preview matches Full preview framing.
 - **seconds** or **frames** — durations; frames are comp-frame-rate frames.
 
 A raw "pixels of whatever buffer I was handed" parameter is forbidden; previews at Quarter
@@ -650,7 +651,7 @@ effect: it perturbs a virtual camera (translation, rotation, and a per-axis x/y/
 where z is a depth/scale shake) and resamples the layer once — not a pixel-noise effect.
 
 **Algorithm sketch.** Three independent 1D fractal noise generators (fBm over seeded value
-noise, 2–4 octaves) drive x, y (as % diag) and rotation (degrees), sampled at
+noise, 2–4 octaves) drive x, y (as px@comp) and rotation (degrees), sampled at
 `time · frequency`. A style preset sets octave count, lacunarity, and a per-axis frequency
 multiplier. **Trigger mode** gates the noise with an envelope: on each trigger (beat marker
 via §1.4, or manual keyframe on the Trigger parameter) the envelope jumps to 1 and decays
@@ -661,7 +662,7 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Parameter | Range / type | Default |
 |---|---|---|
 | Style | Subtle / Normal / Twitchy / Jumpy | Normal |
-| Amplitude | 0–20 % diag | 1.5 % diag |
+| Amplitude | 0–400 px@comp | 30 px@comp |
 | Frequency | 0.1–30 Hz | 8 Hz |
 | Rotation amount | 0–45° | 1° |
 | *Per-axis wobble* (twirl) | | |
@@ -731,7 +732,7 @@ tinted by the picker sampled as a gradient (Colour 1 → Colour 2 → Colour 3),
 red / green / blue gives a red→green→blue fringe and any other colours re-tint it. Parameters
 are shared between modes.
 
-**Parameters:** Amount (0–10 % diag, default 0.4), Angle (degrees), Red / Green / Blue per-tap
+**Parameters:** Amount (0–200 px@comp, hard 0–500, default 8), Angle (degrees), Red / Green / Blue per-tap
 amounts (%), Colour 1 / 2 / 3 (the three tap tints), Wavelength (Bool), Samples (Wavelength
 mode), Mix. **Linear only (K-161, T17):** RGB split has no Radial mode — the always-radial
 fringe is §3.15 Chromatic aberration's job.
@@ -813,20 +814,20 @@ are unchanged by the split; only the schema and the resolve arms that read it ch
 three are premultiplied (blurring unpremultiplied colour bleeds haloes) and declare `per-tile`
 cancellation.
 
-- **Gaussian blur** (match_name `blur`): Radius (% diag, default 1.5, slider 0–25, hard
-  0–100). Separable two-pass; large radii switch to mip-assisted sampling. ROI
+- **Gaussian blur** (match_name `blur`): Radius (px@comp, default 30, slider 0–500, hard
+  0–2000). Separable two-pass; large radii switch to mip-assisted sampling. ROI
   `padded(radius)`. **Keeps match_name `blur`, so a project saved with the old combined effect
   loads here as Gaussian at its stored Radius, byte-identically** — whatever mode it had saved,
   its now-unread mode/length/centre parameters are simply ignored.
-- **Directional blur** (match_name `directional_blur`): Length (% diag, default 10, slider
-  0–200, **hard-unbounded above** per K-090) and Angle. Line-integral sampling along the
-  angle. Length may now exceed 100 % of the diagonal, since it is its own effect rather than
+- **Directional blur** (match_name `directional_blur`): Length (px@comp, default 200, slider
+  0–2000, **hard-unbounded above** per K-090) and Angle. Line-integral sampling along the
+  angle. Length may exceed the frame, since it is its own effect rather than
   sharing the family's reach; the tap count still clamps (`cpu::dir_blur_taps`), so a long
   streak stays bounded in cost. ROI `full-frame` (an unbounded Length cannot be padded
   statically).
 - **Radial blur** (match_name `radial_blur`): Centre X / Centre Y (% of comp width/height,
   50/50 default — the schema has no Point-shaped `ParamKind`, so this follows Transform's own
-  `anchor_x`/`anchor_y` split), Amount (% diag, default 8, slider 0–100, hard-unbounded above),
+  `anchor_x`/`anchor_y` split), Amount (px@comp, default 150, slider 0–2000, hard-unbounded above),
   Type (Spin / Zoom, default Spin) and **Edges** (Transparent / Repeat / Mirror). Amount is the
   peak per-pixel tap spread, reached at the frame's farthest corner from Centre, and may exceed
   100 % now it is its own effect (the tap count clamps in `cpu::radial_blur_taps`). Both types
@@ -863,7 +864,7 @@ its **label** to **Unsharp mask** (match_name stays `sharpen`, so saved projects
 unchanged) and added a separate plain **Sharpen**. Both are in the **Blur & sharpen** category
 and run in linear light on unpremultiplied colour (§2.2).
 
-- **Unsharp mask** (match_name `sharpen`): Amount (0–300 %), Radius (0.05–2 % diag), Threshold
+- **Unsharp mask** (match_name `sharpen`): Amount (0–300 %), Radius (1–50 px@comp, hard 0–100, default 8), Threshold
   (0–1, suppresses noise amplification), and a luminance-only option (avoids chroma fringing on
   compressed game capture). Algorithm: `input + amount · (input − gaussian(input, radius))`
   gated by threshold — a radius-controlled detail lift.
@@ -963,15 +964,16 @@ Shake and RGB split — their closest siblings (a seeded positional wobble; a ch
 #### Block glitch
 
 **Parameters:** Intensity (0–1, default 0.35, the master dial), Seed, Block size (px@comp,
-default 24), Rows/columns jitter (% of Block size, default 25), Displacement (% diag,
-default 3), Channel offset (% diag, default 1), Slice repeat (%, default 20), Mix.
+default 24), Rows/columns jitter (% of Block size, default 25), Displacement (px@comp, 0..300,
+hard 0..1000, default 60), Channel offset (px@comp, 0..200, hard 0..1000, default 20), Slice
+repeat (%, default 20), Mix.
 
 **Algorithm sketch.** The image is partitioned into a seeded grid (Block size, px@comp);
 per *nominal* block, a hash decides a jitter offset (Rows/columns jitter, scaled by
 Intensity) that picks *which* block's content a pixel actually reads from — a cheap
 stand-in for moving grid lines themselves, which would need a boundary search a single
-pointwise pass cannot do. That block then hashes its own displacement (Displacement, %
-diag), R/B channel split (Channel offset, % diag, alpha follows green exactly like RGB
+pointwise pass cannot do. That block then hashes its own displacement (Displacement,
+px@comp), R/B channel split (Channel offset, px@comp, alpha follows green exactly like RGB
 split, for the same matte-fringing reason), and slice-repeat odds (Slice repeat, scaled by
 Intensity: folds the block's own local Y to a short hashed repeat height instead of a plain
 read). Every hashed quantity is scaled by Intensity, so Intensity 0 is a genuine,
@@ -1188,7 +1190,7 @@ is linear-only — three tinted taps along an Angle — and this effect is the s
 idea grown radially from the frame centre instead. It exists as a single-purpose, one-click
 version: drop it on and it already looks right (§1.2), the same
 shape rule that split the old Grade into Colour balance and Saturation (K-090). Because it has
-no Angle to share a currency with, Amount is authored in raw px@comp (§2.3) instead of % diag —
+no Angle to share a currency with, Amount is authored in px@comp (§2.3) —
 scaled by the preview factor exactly like Block glitch's Block size (§3.12) — and its ROI is
 declared `full-frame` rather than a tight %-diag padding, since a fixed pixel offset cannot be
 bounded as a percentage of the diagonal across every comp resolution ahead of time. Category
@@ -2740,8 +2742,8 @@ premultiplied throughout, §2.1, so the question does not arise).
 
 ### 3.45 Channel blur — a gaussian per channel
 
-**Parameters:** Red blur, Green blur, Blue blur and Alpha blur (all % diag, 0..25, hard
-0..100; defaults 0, 0, 2, 0), Repeat edge pixels (default on), Mix.
+**Parameters:** Red blur, Green blur, Blue blur and Alpha blur (all px@comp, 0..500, hard
+0..2000; defaults 0, 0, 40, 0), Repeat edge pixels (default on), Mix.
 
 **Algorithm sketch.** The separable gaussian of §3.8, four times over, with four radii:
 
@@ -3029,7 +3031,7 @@ oracle is judged on absolute difference over a smooth corpus.
 
 ### 3.51 Twirl — the picture wrung round a point
 
-**Parameters:** Angle (dial, degrees, default 90), Radius (% diag, 0..100, default 30, hard
+**Parameters:** Angle (dial, degrees, default 90), Radius (px@comp, 0..2000, default 650, hard
 min 0), Centre X and Centre Y (px@comp, default the frame centre), Mix.
 
 **Algorithm sketch.**
@@ -3061,7 +3063,7 @@ Three notes:
 
 ### 3.52 Spherize — a glass ball held over the picture
 
-**Parameters:** Radius (% diag, 0..100, default 25, hard min 0), Bulge (per cent, −100..100,
+**Parameters:** Radius (px@comp, 0..2000, default 550, hard min 0), Bulge (per cent, −100..100,
 default 100), Centre X and Centre Y (px@comp, default the frame centre), Mix.
 
 **Algorithm sketch.** One pair of mutually inverse radial maps, blended by Bulge:
@@ -3092,7 +3094,7 @@ Four notes:
   That is what a glass ball looks like and it is deliberate; a formula that eased out
   smoothly there would read as a bulge in cling film.
 - **AE's Spherize is one signed Radius in raster pixels.** Lumit splits it: the size of the
-  ball is a length (in % diag, §2.3, so it survives a resize) and *which way it bends* is its
+  ball is a length (px@comp, §2.3, so it survives a resize) and *which way it bends* is its
   own control, because a negative length is not a thing and a slider that passes through zero
   to mean "inside out" cannot also be resolution-independent. The import converts sign to
   Bulge and magnitude to Radius.
@@ -3104,10 +3106,10 @@ One arc sine or sine a pixel — §3.42's fourth note, K-399's metric.
 
 Maps AE's Ripple ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
 
-**Parameters:** Radius (% diag, 0..100, default 30, hard min 0), Centre X and Centre Y
+**Parameters:** Radius (px@comp, 0..2000, default 650, hard min 0), Centre X and Centre Y
 (px@comp, default the frame centre), Type (Symmetric / Asymmetric, default Asymmetric), Wave
-height (% diag, 0..25, default 1, hard min 0), Wave width (% diag, 0.1..25, default 4, hard
-min 0.1), Evolution (dial, degrees, default 0), Mix.
+height (px@comp, 0..200, default 10, hard min 0), Wave width (px@comp, 1..400, default 90, hard
+min 1), Evolution (dial, degrees, default 0), Mix.
 
 **Algorithm sketch.** One radial sine, inside a circle, under an envelope that is zero at
 both ends of it:
@@ -3143,7 +3145,7 @@ Four things that are decision rather than derivation:
   pixel travels a small circle rather than sliding in and out along the radius. That is what a
   particle of water actually does under a passing wave, and it is the difference between the
   two types: Symmetric is a lens breathing, Asymmetric is water.
-- **Wave height and Wave width are % diag** (§2.3), not per cents of an unnamed base, so a
+- **Wave height and Wave width are px@comp** (§2.3), not per cents of an unnamed base, so a
   ripple survives a resize and a half-resolution preview matches the export — §3.37 decision
   1's reasoning again.
 - **The edges repeat rather than fading**, as §3.38's and §3.54's warps do. A Radius wider
@@ -3613,7 +3615,7 @@ first in the family that reads a pixel's **neighbours** rather than only the pix
 
 **Parameters:** Shadow amount (per cent, 0..100, default 25), Shadow tonal width (per cent,
 0..100, default 50), Highlight amount (0..100, default 25), Highlight tonal width (0..100,
-default 50), Radius (% diag, 0..25, default 1.5, hard max 100), and — in a collapsed *More
+default 50), Radius (px@comp, 0..500, default 30, hard max 2000), and — in a collapsed *More
 options* group — Colour correction (per cent, −100..100, default 20) and Midtone contrast
 (per cent, −100..100, default 0), plus Mix.
 
@@ -4001,9 +4003,9 @@ only one in the family with no Completion: **the radius is the transition**, exa
 is, so the shape is animated by growing it.
 
 **Parameters:** Iris centre x and Iris centre y (px@comp, default 960, 540), Iris points
-(whole number, 6..32, default 6, hard 6..32), Outer radius (% of the comp diagonal, 0..100,
-default 15, hard min 0), Use inner radius (default off), Inner radius (% of the comp
-diagonal, 0..100, default 7.5, hard min 0), Rotation (dial, degrees, default 0), Feather
+(whole number, 6..32, default 6, hard 6..32), Outer radius (px@comp, 0..2000,
+default 330, hard min 0), Use inner radius (default off), Inner radius (px@comp, 0..2000,
+default 165, hard min 0), Rotation (dial, degrees, default 0), Feather
 (px@comp, 0..500, default 0, hard min 0), Mix.
 
 **Algorithm sketch.** The polygon is never rasterised. One sector of it is solved instead,
@@ -4042,10 +4044,9 @@ Five notes:
   the hole grows. To reveal *through* an iris instead, the Matte row's Invert is the wrong tool
   (it inverts the strength) — use §3.44 Set matte with this effect on the matte layer, or an
   Outer radius large enough to leave only the star.
-- **The two radii are per cents of the comp diagonal** and the centre is px@comp — the mixture
-  §3.51 already ships, and for its reason: a radius is a *size* that must survive a reframe,
-  while a centre is a *place* the user clicks. AE's are both layer pixels, so the import
-  divides the radii through by the source comp's diagonal.
+- **The two radii and the centre are all px@comp** (K-419): a radius is a *size* that the
+  preview scaling keeps consistent across a reframe, a centre is a *place* the user clicks.
+  AE's are both layer pixels, so the import carries them unchanged.
 - **Outer radius 0 is the identity by short-circuit.** With no polygon there is no edge, the
   normal is undefined, and a kernel that divided by its length would paint half-grey over the
   frame; both paths test the radius instead. §3.51's and §3.52's short-circuits, a third time.

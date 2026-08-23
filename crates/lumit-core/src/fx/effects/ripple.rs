@@ -29,14 +29,14 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct Ripple {
-    /// How far the rings reach, as a per cent of the comp diagonal (§2.3).
-    /// Outside it the picture is untouched, exactly.
+    /// How far the rings reach, px@comp (§2.3). Outside it the picture is
+    /// untouched, exactly.
     #[slider(
         min = 0.0,
-        max = 100.0,
-        default = 30.0,
+        max = 2000.0,
+        default = 650.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub radius: f32,
 
@@ -57,27 +57,27 @@ pub struct Ripple {
     #[choice(label = "Type", options = ["Symmetric", "Asymmetric"], default = 1)]
     pub wave_type: u32,
 
-    /// % diag: the farthest a pixel moves, at the envelope's peak (§3.53's
+    /// px@comp: the farthest a pixel moves, at the envelope's peak (§3.53's
     /// first note — the `27⁄4` is why this number is literal).
     #[slider(
         label = "Wave height",
         min = 0.0,
-        max = 10.0,
-        default = 0.5,
+        max = 200.0,
+        default = 10.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub wave_height: f32,
 
-    /// % diag: the distance between one crest and the next. Floored so the
+    /// px@comp: the distance between one crest and the next. Floored so the
     /// reciprocal stays finite.
     #[slider(
         label = "Wave width",
-        min = 0.1,
-        max = 20.0,
-        default = 4.0,
-        hard_min = 0.1,
-        unit = PctDiag
+        min = 1.0,
+        max = 400.0,
+        default = 90.0,
+        hard_min = 1.0,
+        unit = Px
     )]
     pub wave_width: f32,
 

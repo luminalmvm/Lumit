@@ -31,21 +31,20 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct Blur {
-    /// Kernel half-width, % of the comp diagonal (§2.3), so a half-res preview
-    /// matches. Default per §1.2's "drop it on and it already looks right".
+    /// Kernel half-width, px@comp (§2.3, K-419). Default per §1.2's "drop it
+    /// on and it already looks right".
     ///
-    /// Declared `PctDiag`, so the resolve step converts it to pixels of the
-    /// raster in play and [`ResolvedStack::rescale_spatial`](crate::fx::
-    /// ResolvedStack::rescale_spatial) moves it again if the stack is reused at
-    /// another size — exactly what the old `Resolved::Blur` arm and `rescale_px`
-    /// did between them.
+    /// Declared `Px`, so the resolve step scales it to the raster in play (a
+    /// Half preview blurs the same part of the picture as the export) and
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// rescale_spatial) moves it again if the stack is reused at another size.
     #[slider(
         min = 0.0,
-        max = 25.0,
-        default = 1.5,
+        max = 500.0,
+        default = 30.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub radius: f32,
 

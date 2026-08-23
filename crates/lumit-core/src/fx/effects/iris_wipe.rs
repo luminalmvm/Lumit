@@ -64,15 +64,15 @@ pub struct IrisWipe {
     )]
     pub points: i32,
 
-    /// How far the corners reach, as a per cent of the comp diagonal (§2.3), so
-    /// the hole survives a reframe. 0 is the exact identity.
+    /// How far the corners reach, px@comp (§2.3), scaled with the preview
+    /// raster so the hole survives a reframe. 0 is the exact identity.
     #[slider(
         label = "Outer radius",
         min = 0.0,
-        max = 100.0,
-        default = 15.0,
+        max = 2000.0,
+        default = 330.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub outer_radius: f32,
 
@@ -81,15 +81,15 @@ pub struct IrisWipe {
     #[toggle(label = "Use inner radius", default = false)]
     pub use_inner_radius: bool,
 
-    /// Where the pulled-in corners sit, % of the comp diagonal; see
+    /// Where the pulled-in corners sit, px@comp; see
     /// [`outer_radius`](Self::outer_radius).
     #[slider(
         label = "Inner radius",
         min = 0.0,
-        max = 100.0,
-        default = 7.5,
+        max = 2000.0,
+        default = 165.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub inner_radius: f32,
 

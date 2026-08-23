@@ -63,19 +63,17 @@ pub enum Split {
     roi = PaddedPctDiag(25.0),
 )]
 pub struct RgbSplit {
-    /// % of the comp diagonal (§2.3); the impact-frame staple is a keyframed
-    /// spike on this. Declared `PctDiag`, so the resolve step converts it to
-    /// pixels of the raster in play and
+    /// px@comp (§2.3); the impact-frame staple is a keyframed spike on this.
+    /// Declared `Px`, so the resolve step scales it to the raster in play and
     /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
-    /// rescale_spatial) moves it again if the stack is reused at another size —
-    /// exactly what the old arm and `rescale_px` did between them.
+    /// rescale_spatial) moves it again if the stack is reused at another size.
     #[slider(
         min = 0.0,
-        max = 10.0,
-        default = 0.4,
+        max = 200.0,
+        default = 8.0,
         hard_min = 0.0,
-        hard_max = 25.0,
-        unit = PctDiag
+        hard_max = 500.0,
+        unit = Px
     )]
     pub amount: f32,
 

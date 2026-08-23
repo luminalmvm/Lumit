@@ -146,9 +146,8 @@ fn render_the_three_transition_effects() {
         write("2-blinds-turned-soft", &to_srgb(&over_grey(&turned)));
 
         // ---- Iris wipe: a hexagon, then a twelve-point star.
-        // The two radii are % of the comp diagonal in the schema; the resolve
-        // step converts them, so a test that calls `packed` directly writes
-        // raster pixels.
+        // The two radii are px@comp in the schema; the resolve step scales
+        // them, so a test that calls `packed` directly writes raster pixels.
         let iw = |points: i32, outer: f32, inner: Option<f32>, rotation: f32, feather: f32| {
             let mut i = IrisWipe::read(Params::EMPTY);
             i.centre_x = fw * 0.5;

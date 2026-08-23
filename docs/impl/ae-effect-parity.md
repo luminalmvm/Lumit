@@ -355,8 +355,8 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   §3.42's and §3.52's short-circuit — which were about an effect turned *off* — extended to the
   far end of the range.
   Three deliberate divergences from AE, all recorded in docs/08: **Venetian blinds' Width is a
-  length in px@comp** where AE's is raster pixels; **Iris wipe's two radii are % diag while its
-  centre is px@comp** (§3.51's split of a size from a place); and **Card wipe loses AE's
+  length in px@comp** where AE's is raster pixels; **Iris wipe's two radii are lengths in px@comp
+  while its centre is a place** (§3.51's split of a size from a place; both px@comp since K-419); and **Card wipe loses AE's
   Gradient flip order**, which needs a gradient *layer* — §3.68's test says a card wipe has a
   second thing to say about *where*, so its one layer row stays the universal Matte, and
   Randomness plus Seed covers the intent that is left. All three took the generic strength
@@ -482,8 +482,8 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   Bezier warp's and Warp's frame-wide geometry, Roughen edges' Border. What a matte is for on
   these is saying *where the effect is*, which is what a dissolve says. To paint a warp's
   strength per pixel, §3.38 is still the effect that does it.
-  Four deliberate divergences from AE, all recorded in docs/08: **Ripple's three lengths are
-  % diag** and **Wave warp's two are px@comp** (§2.3, §3.37 decision 1's reasoning a fourth
+  Four deliberate divergences from AE, all recorded in docs/08: **Ripple's three lengths and
+  Wave warp's two are px@comp** (% diag until K-419) (§2.3, §3.37 decision 1's reasoning a fourth
   and fifth time); **Wave warp ships all eight Pinning combinations** where §3.38 ships four
   and reports the rest, the ramp being per edge here rather than per axis; **Warp's thirteen
   styles are Lumit's own curves** under AE's names, a look-for-look conversion the import

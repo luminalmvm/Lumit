@@ -92,17 +92,17 @@ pub struct ShadowHighlight {
     )]
     pub highlight_tonal_width: f32,
 
-    /// How large a neighbourhood decides whether a pixel is in shadow, % of the
-    /// comp diagonal (§2.3) — the same unit and the same default the Gaussian
-    /// blur's Radius has. Small reaches for local contrast; large behaves like a
+    /// How large a neighbourhood decides whether a pixel is in shadow, px@comp
+    /// (§2.3) — the same unit and the same default the Gaussian blur's Radius
+    /// has. Small reaches for local contrast; large behaves like a
     /// whole-picture tone curve.
     #[slider(
         min = 0.0,
-        max = 25.0,
-        default = 1.5,
+        max = 500.0,
+        default = 30.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub radius: f32,
 
@@ -161,7 +161,7 @@ impl ShadowHighlight {
             highlight,
             shadow_width: (self.shadow_tonal_width / 100.0).max(Self::MIN_WIDTH),
             highlight_width: (self.highlight_tonal_width / 100.0).max(Self::MIN_WIDTH),
-            // Already raster pixels: the declared PctDiag unit converted it.
+            // Already raster pixels: the declared Px unit scaled it.
             radius_px: self.radius.max(0.0),
             contrast: 1.0 + contrast,
             colour_correction: self.colour_correction.max(-100.0) / 100.0,

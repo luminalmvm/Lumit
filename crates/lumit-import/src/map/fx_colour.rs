@@ -14,9 +14,10 @@
 //!
 //! **A dial is converted, not guessed.** Where the two sides measure in
 //! different units the conversion is arithmetic on every value *and on every
-//! keyframe*: a blur radius that After Effects measured in the pixels of its
-//! layer becomes a per cent of the composition's diagonal (docs/08 §2.3),
-//! including the number on each key and the speed of each handle. Where the
+//! keyframe*: a glow threshold that After Effects measured as a display value
+//! becomes scene-linear light, including the number on each key and the speed
+//! of each handle. A blur radius needs no arithmetic — After Effects' pixels
+//! are Lumit's px@comp (docs/08 §2.3, K-419). Where the
 //! conversion is not a straight line — a colour crossing from display space
 //! into scene-linear light — the values are still exact and the *handles* are
 //! not, and that is a report row of its own.
@@ -490,37 +491,25 @@ fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty, bool) {
     )
 }
 
-/// The factor that turns After Effects' raster pixels into a per cent of the
-/// composition diagonal (docs/08 §2.3).
-fn per_cent_of_diagonal(conv: &Conv<'_>) -> f64 {
-    100.0 / conv.diagonal()
-}
-
 // ---------------------------------------------------------------------------
 // Blur and sharpen
 // ---------------------------------------------------------------------------
 
 /// "Gaussian Blur" → **Gaussian blur** (docs/08 §3.8). One control carries the
-/// look and both of the others are switches Lumit's Gaussian does not have:
-/// it always blurs on both axes, and its edge policy is the fixed Repeat that
-/// K-137 settled on.
+/// look — AE's pixels are Lumit's px@comp, so the number is the same — and
+/// both of the others are switches Lumit's Gaussian does not have: it always
+/// blurs on both axes, and its edge policy is the fixed Repeat that K-137
+/// settled on.
 fn gaussian_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, "blur", "Gaussian Blur")?;
-    fx.float(
-        conv,
-        "ADBE Gaussian Blur 2-0001",
-        "radius",
-        per_cent_of_diagonal(conv),
-        0.0,
-    );
-    fx.rebased(conv, "Blurriness");
+    fx.float(conv, "ADBE Gaussian Blur 2-0001", "radius", 1.0, 0.0);
     fx.drop_params(conv, &["Blur Dimensions", "Repeat Edge Pixels"]);
     fx.done()
 }
 
 /// "Directional Blur" → **Directional blur** (docs/08 §3.9). Both controls
-/// carry: the angle is degrees from straight up clockwise on both sides, and
-/// the length crosses from raster pixels to a per cent of the diagonal.
+/// carry unchanged: the angle is degrees from straight up clockwise on both
+/// sides, and the length is pixels on both (px@comp in Lumit).
 fn directional_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -528,33 +517,20 @@ fn directional_blur(
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, "directional_blur", "Directional Blur")?;
     fx.float(conv, "ADBE Motion Blur-0001", "angle", 1.0, 0.0);
-    fx.float(
-        conv,
-        "ADBE Motion Blur-0002",
-        "length",
-        per_cent_of_diagonal(conv),
-        0.0,
-    );
-    fx.rebased(conv, "Blur Length");
+    fx.float(conv, "ADBE Motion Blur-0002", "length", 1.0, 0.0);
     fx.done()
 }
 
-/// "Radial Blur" → **Radial blur** (docs/08 §3.10). Amount and Centre carry;
+/// "Radial Blur" → **Radial blur** (docs/08 §3.10). Amount carries as pixels;
 /// Lumit's centre is a per cent of the frame rather than a point in it, and
 /// AE's antialiasing and seed have no counterpart.
 fn radial_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, "radial_blur", "Radial Blur")?;
-    fx.float(
-        conv,
-        "ADBE Radial Blur-0001",
-        "amount",
-        per_cent_of_diagonal(conv),
-        0.0,
-    );
+    fx.float(conv, "ADBE Radial Blur-0001", "amount", 1.0, 0.0);
     let (w, h) = conv.size;
     fx.float_axis(conv, "ADBE Radial Blur-0002", 0, "centre_x", 100.0 / w, 0.0);
     fx.float_axis(conv, "ADBE Radial Blur-0002", 1, "centre_y", 100.0 / h, 0.0);
-    fx.rebased(conv, "Amount and Center");
+    fx.rebased(conv, "Center");
     // 1 Spin, 2 Zoom — AE's default of 1 is Spin, which is Lumit's 0.
     fx.choice(conv, "ADBE Radial Blur-0003", "radial_type", |v| {
         (u32::from(v == 2), None)
@@ -827,16 +803,15 @@ fn shadow_highlight(
         1.0,
         0.0,
     );
-    // One gaussian, so one radius: the mean of AE's two, in per cent of the
-    // comp diagonal.
+    // One gaussian, so one radius: the mean of AE's two, px@comp.
     let shadow = fx.still("ADBE ShadowHighlight-0008").unwrap_or(30.0);
     let highlight = fx.still("ADBE ShadowHighlight-0010").unwrap_or(30.0);
-    let radius = (shadow + highlight) * 0.5 * per_cent_of_diagonal(conv);
+    let radius = (shadow + highlight) * 0.5;
     fx.set("radius", EffectValue::Float(LumProperty::fixed(radius)));
     fx.approx_named(
         conv,
         "Shadow Radius and Highlight Radius",
-        "one radius at their mean, in per cent of the composition diagonal",
+        "one radius at their mean",
     );
     fx.float(
         conv,

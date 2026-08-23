@@ -199,7 +199,8 @@ fn render_the_six_stylise_one_effects() {
         }
 
         // ---- Shadow highlight: AE's default pair, and a hard rescue. The
-        // Radius is % diag; the resolve step would have made it pixels.
+        // Radius is px@comp; the resolve step would have scaled it to the raster,
+        // so the proof writes raster pixels.
         for (tag, sa, ha, radius, cc) in [
             ("12-shadowhighlight-default", 25.0, 25.0, 0.015, 20.0),
             ("13-shadowhighlight-rescue", 90.0, 70.0, 0.03, 40.0),

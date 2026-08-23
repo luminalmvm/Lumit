@@ -22,14 +22,9 @@ use crate::capture::{Ease, Keyframe as AeKey, Property as AeProp};
 use crate::map::time::TimeBase;
 use crate::report::{ImportReport, Reason};
 
-/// The composition every test converts against. 1920 × 1080 so the diagonal is
-/// not a round number and a conversion that quietly did nothing would show.
+/// The composition every test converts against.
 const W: f64 = 1920.0;
 const H: f64 = 1080.0;
-
-fn diag() -> f64 {
-    (W * W + H * H).sqrt()
-}
 
 // --- building a capture ----------------------------------------------------
 
@@ -222,16 +217,12 @@ fn linear(v: f64) -> f64 {
 // Blur and sharpen
 // ---------------------------------------------------------------------------
 
-/// **A blur radius crosses from After Effects' pixels to a per cent of the
-/// composition diagonal — on the still value, on every key, and on the
-/// handles.**
-///
-/// This is the conversion docs/08 §2.3 exists for: a radius left in raster
-/// pixels would blur a different amount at Half preview than at Full. Because
-/// a bezier handle's speed is in value-units a second, it scales with the
-/// value or the curve between the keys is no longer the curve that was drawn.
+/// **A blur radius carries as pixels — on the still value, on every key, and
+/// on the handles.** After Effects' raster pixels are Lumit's px@comp (docs/08
+/// §2.3, K-419): the number is the same, and Lumit's preview scaling is what
+/// keeps a Half preview looking like the export.
 #[test]
-fn gaussian_blur_converts_its_radius_and_its_keyframes() {
+fn gaussian_blur_carries_its_radius_and_its_keyframes() {
     let ran = run(&effect(
         "ADBE Gaussian Blur 2",
         "Gaussian Blur",
@@ -249,27 +240,29 @@ fn gaussian_blur_converts_its_radius_and_its_keyframes() {
     assert_eq!(ran.inst.effect.match_name, "blur");
     assert_eq!(ran.inst.effect.namespace, EffectNamespace::Builtin);
 
-    let k = 100.0 / diag();
     let keys = ran.keys("radius");
     assert_eq!(keys.len(), 2);
-    assert!(close(keys[0].value, 22.0 * k));
-    assert!(close(keys[1].value, 88.0 * k));
+    assert!(close(keys[0].value, 22.0));
+    assert!(close(keys[1].value, 88.0));
     assert!(matches!(
         keys[0].interp_out,
         SideInterp::Bezier { speed, influence }
-            if close(speed, 5.0 * k) && close(influence, 0.5)
+            if close(speed, 5.0) && close(influence, 0.5)
     ));
 
-    assert!(ran.rebased("Blurriness"));
+    assert!(
+        !ran.rebased("Blurriness"),
+        "pixels are pixels: nothing to report"
+    );
     assert!(ran.dropped("Blur Dimensions"));
     assert!(ran.dropped("Repeat Edge Pixels"));
 }
 
-/// **Directional blur's angle carries unchanged and its length rebases.**
-/// docs/11 §5: the angle is degrees from straight up clockwise on both sides,
-/// so converting it would be the error.
+/// **Directional blur's angle and length both carry unchanged.** docs/11 §5:
+/// the angle is degrees from straight up clockwise on both sides and the
+/// length is pixels on both, so converting either would be the error.
 #[test]
-fn directional_blur_keeps_the_angle_and_rebases_the_length() {
+fn directional_blur_keeps_the_angle_and_the_length() {
     let ran = run(&effect(
         "ADBE Motion Blur",
         "Directional Blur",
@@ -281,8 +274,8 @@ fn directional_blur_keeps_the_angle_and_rebases_the_length() {
 
     assert_eq!(ran.inst.effect.match_name, "directional_blur");
     assert!(close(ran.f("angle"), 37.5));
-    assert!(close(ran.keys("length")[0].value, 64.0 * 100.0 / diag()));
-    assert!(ran.rebased("Blur Length"));
+    assert!(close(ran.keys("length")[0].value, 64.0));
+    assert!(!ran.rebased("Blur Length"));
 }
 
 /// **Radial blur's centre is a point in After Effects and a per cent of the
@@ -304,7 +297,7 @@ fn radial_blur_converts_its_centre_per_axis() {
     ));
 
     assert_eq!(ran.inst.effect.match_name, "radial_blur");
-    assert!(close(ran.keys("amount")[0].value, 30.0 * 100.0 / diag()));
+    assert!(close(ran.keys("amount")[0].value, 30.0));
     assert!(close(ran.f("centre_x"), 25.0));
     assert!(close(ran.f("centre_y"), 75.0));
     // AE's Type 2 is Zoom, Lumit's index 1.
@@ -509,8 +502,8 @@ fn black_and_white_carries_six_weights_and_reports_the_tint() {
     assert!(ran.approximated("Tint Color"));
 }
 
-/// **Shadow/Highlight's two radii average into Lumit's one, in per cent of the
-/// diagonal**, and Blend With Original inverts into Mix.
+/// **Shadow/Highlight's two radii average into Lumit's one, px@comp**, and
+/// Blend With Original inverts into Mix.
 #[test]
 fn shadow_highlight_averages_the_two_radii() {
     let ran = run(&effect(
@@ -532,7 +525,7 @@ fn shadow_highlight_averages_the_two_radii() {
     assert_eq!(ran.inst.effect.match_name, "shadow_highlight");
     assert!(close(ran.keys("shadow_amount")[0].value, 60.0));
     assert!(close(ran.f("highlight_tonal_width"), 55.0));
-    assert!(close(ran.f("radius"), 40.0 * 100.0 / diag()));
+    assert!(close(ran.f("radius"), 40.0));
     assert!(close(ran.f("midtone_contrast"), -10.0));
     assert!(close(ran.f("mix"), 75.0));
     assert!(ran.approximated("Shadow Radius and Highlight Radius"));
@@ -1295,7 +1288,7 @@ fn a_missing_parameter_leaves_the_declared_default() {
     let ran = run(&effect("ADBE Gaussian Blur 2", "Gaussian Blur", vec![]));
     assert!(ran.mapped);
     // Gaussian blur's declared default radius (docs/08 §3.8).
-    assert!(close(ran.f("radius"), 1.5));
+    assert!(close(ran.f("radius"), 30.0));
 }
 
 /// **A mask reference naming a mask that did not come over falls back to the

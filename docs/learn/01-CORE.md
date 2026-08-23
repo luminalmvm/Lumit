@@ -176,8 +176,8 @@ Two details in `params.rs` carry the weight, and both exist to keep properties t
   that only reproduces on one machine. `ResolvedStack::feed_hash` writes the effect name,
   its version, then each parameter's id, a tag byte and its live bytes.
 
-Every numeric parameter also declares a `Unit` (`Raw`, `PctDiag`, `Px`, `Degrees`,
-`Seconds`). That is what turns the old per-variant `rescale_px` into one generic pass
+Every numeric parameter also declares a `Unit` (`Raw`, `Px`, `Degrees`, `Seconds`;
+`PctDiag` exists but no parameter may use it, K-419). That is what turns the old per-variant `rescale_px` into one generic pass
 (`rescale_spatial`): an effect can no longer be *forgotten* there, which is how a preview
 raster and a full-size export come to disagree.
 

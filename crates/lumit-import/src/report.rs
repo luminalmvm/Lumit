@@ -244,9 +244,9 @@ pub enum Reason {
     /// feature that does the job instead.
     EffectSuggestion { match_name: String, instead: String },
     /// The control mapped exactly and its *number* changed, because the two
-    /// sides measure in different bases: After Effects' raster pixels or per
-    /// cents of the layer against Lumit's px@comp and per cents of the comp
-    /// diagonal (docs/08 §2.3). Nothing was approximated — the same length is
+    /// sides measure in different bases: After Effects' per cents of the layer
+    /// or points in the frame against Lumit's px@comp and per cents of the
+    /// frame (docs/08 §2.3). Nothing was approximated — the same length is
     /// spelled differently.
     EffectParamRebased { effect: String, param: String },
 }

@@ -27,17 +27,16 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct Spherize {
-    /// How wide the ball is, as a per cent of the comp diagonal (§2.3).
-    /// Declared `PctDiag`, so the resolve step converts it to pixels of the
-    /// raster in play — **AE's is a signed length in raster pixels**, and
-    /// §3.52's fourth note records why Lumit splits the sign off into
-    /// [`bulge`](Self::bulge).
+    /// How wide the ball is, px@comp (§2.3). Declared `Px`, so the resolve
+    /// step scales it to the raster in play — **AE's is a signed length in
+    /// raster pixels**, and §3.52's fourth note records why Lumit splits the
+    /// sign off into [`bulge`](Self::bulge).
     #[slider(
         min = 0.0,
-        max = 100.0,
-        default = 25.0,
+        max = 2000.0,
+        default = 550.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub radius: f32,
 

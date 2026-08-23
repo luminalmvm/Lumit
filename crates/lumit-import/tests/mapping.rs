@@ -233,10 +233,10 @@ fn a_bezier_and_a_hold_key_come_across_side_by_side() {
         panic!("Radius is a float");
     };
 
-    // Blurriness is raster pixels in After Effects and a per cent of the comp
-    // diagonal in Lumit (docs/08 §2.3), so the values and the handle speeds —
-    // which are value-units a second — arrive multiplied by the same factor.
-    let k = 100.0 / (1920.0f64 * 1920.0 + 1080.0 * 1080.0).sqrt();
+    // Blurriness is raster pixels in After Effects and px@comp in Lumit
+    // (docs/08 §2.3, K-419), so the values and the handle speeds — which are
+    // value-units a second — arrive unchanged.
+    let k = 1.0;
 
     let keys = keys(radius);
     assert_eq!(keys.len(), 3);

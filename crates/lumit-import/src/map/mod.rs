@@ -93,9 +93,10 @@ pub struct Conv<'a> {
     /// animation in the wrong decade.
     pub(crate) offset: Rational,
     /// The composition's raster. Effect parameters need it: After Effects
-    /// measures a radius in the pixels of the layer it was handed and Lumit
-    /// measures one as a per cent of the composition's diagonal (docs/08
-    /// §2.3), so the conversion cannot be done without knowing the frame.
+    /// measures a Twirl radius as a per cent of the layer and a blur centre
+    /// as a point, where Lumit reads px@comp and a per cent of the frame
+    /// (docs/08 §2.3), so those conversions cannot be done without knowing
+    /// the frame.
     pub(crate) size: (f64, f64),
     /// The current layer's own span, in its own timebase. The two clock-reading
     /// After Effects controls (Ripple's Wave Speed, Wave warp's) become
@@ -124,8 +125,8 @@ impl Conv<'_> {
         t.checked_sub(self.offset).unwrap_or(t)
     }
 
-    /// The composition's diagonal in pixels — the base every "% diag"
-    /// parameter is a per cent of (docs/08 §2.3).
+    /// The composition's diagonal in pixels — what After Effects' per cents
+    /// of the layer convert through (docs/08 §2.3).
     pub(crate) fn diagonal(&self) -> f64 {
         let (w, h) = self.size;
         (w * w + h * h).sqrt().max(1.0)

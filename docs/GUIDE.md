@@ -499,8 +499,8 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   **Zoom** streaks it along the straight line from the centre through it instead, like a
   camera punching in. Either way the streak grows the farther a pixel sits from Centre —
   right at Centre nothing moves at all, and the effect gets stronger toward the edges,
-  reaching its full length (set by Amount, in the same "% of frame diagonal" units Radius
-  and Length already use) at the frame's farthest corner. The clever bit is *how* those two
+  reaching its full length (set by Amount, in the same pixels-at-composition-size units
+  Radius and Length already use) at the frame's farthest corner. The clever bit is *how* those two
   streak directions get computed: rather than actually rotating anything (which needs
   trigonometry, and GPU trigonometry is allowed to be slightly imprecise — the same reason
   Transform's matrix arrives pre-computed from the CPU), both Spin and Zoom turn out to be
@@ -575,7 +575,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   recipe that turns (seed, time) into a smooth wander between −1 and 1, so the same
   project shakes identically on every machine and every run — there is no real
   randomness anywhere, only maths that looks random (the engine's seeded-and-stateless
-  rule). Amplitude sets how far it roams (as % of the comp diagonal), Frequency how
+  rule). Amplitude sets how far it roams (in pixels at composition size), Frequency how
   fast, Rotation amount how much twist. A **Per-axis wobble** twirl (a collapsible
   sub-section, see below) tucks the finer controls away: X and Y amount/frequency let you
   bias each axis (they multiply the master values, so leaving them at 1 gives the plain
@@ -1532,8 +1532,8 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   unarguably correct); a GPU program (`lumit-gpu/src/fx_blur.wgsl`) that does the same
   maths fast; and a test that renders a nasty little corpus (gradients, hard alpha edges,
   a brighter-than-white spike) through both and fails if they ever disagree. The radius is
-  measured as a percentage of the comp's diagonal, so half-resolution preview looks the
-  same as full — just smaller.
+  measured in pixels at composition size and scaled to whatever raster is being drawn, so
+  half-resolution preview looks the same as full — just smaller.
 - **Effects, the data side (Phase 3 begins here).** Every layer now carries an ordered
   **effect stack** in the project model: each entry says *which* effect (a stable name +
   a version, so cached frames from older maths retire themselves), whether it's bypassed,
@@ -2211,9 +2211,9 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   import that turns an After Effects effect into the Lumit effect that does the same job.
   It is a list, one entry per effect, and each entry answers the same four questions.
   *Which dial becomes which dial* — AE's "Blurriness" is Lumit's Radius. *What arithmetic
-  turns one number into the other* — AE measured that blur in the pixels of the layer it
-  was handed, and Lumit measures it as a per cent of the composition's diagonal, so the
-  number changes even though the picture does not. That conversion is applied to the
+  turns one number into the other* — AE's Twirl measures its radius as a per cent of the
+  layer, and Lumit measures it in pixels at composition size, so the number changes even
+  though the picture does not. That conversion is applied to the
   keyframes too, and to the *handles* on them: a keyframe handle is a speed, in "so many
   units a second", so if the units change the handle has to change with them or the curve
   between two keys is no longer the curve somebody drew. *Which of AE's dropdown entries
@@ -3880,7 +3880,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   fixed list of every effect — which is what will let an effect have controls nobody wrote
   down when Lumit was built: a slider you added yourself, or one read out of a shader you
   typed. Second, each control now says what its number *means* — a plain number, a
-  percentage of the picture's diagonal, a length in pixels — so the step that shrinks
+  length in pixels at composition size, an angle — so the step that shrinks
   everything for a draft-quality preview can do it for every effect at once, instead of
   needing a line of code per effect that somebody could forget to write. A preview that
   disagreed with the export used to be one forgotten line away.

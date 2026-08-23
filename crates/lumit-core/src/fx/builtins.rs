@@ -117,9 +117,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             ("corner_pin", "lower_left_y" | "lower_right_y") => h * 0.95,
             ("corner_pin", "lower_right_x") => w,
             // Wave 2's Transitions batch (docs/08 §3.71) joins them: an Iris
-            // wipe's centre is px@comp for the same reason, and its two radii
-            // are not here because they are % of the comp diagonal and so need
-            // no raster (§3.71's fourth note).
+            // wipe's centre is px@comp for the same reason; its two radii
+            // are lengths, not positions, so they need no centring.
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_x") => w * 0.5,
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_y") => h * 0.5,
             // The Point control (K-414) is the same default once more: a fresh

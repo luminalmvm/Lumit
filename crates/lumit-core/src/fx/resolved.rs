@@ -332,11 +332,12 @@ pub fn resolve_stack_temporal_named(
 /// its declared default are written in. Only two conversions happen here, and
 /// both are about *rasters* rather than about the effect:
 ///
-/// - `PctDiag` becomes pixels of the raster in play, `v / 100 × diag_px`. The
-///   caller has already scaled `diag_px` by the preview factor, which is why
-///   `px_scale` does not appear again — the old arms did exactly this.
 /// - `Px` is px@comp on the way in (docs/08 §2.3 forbids anything else), so it
-///   is multiplied by `px_scale` to reach the same raster.
+///   is multiplied by `px_scale` to reach the raster in play. Every distance
+///   a built-in declares is this (K-419).
+/// - `PctDiag` would become `v / 100 × diag_px` (the caller has already scaled
+///   `diag_px` by the preview factor). No built-in parameter declares it any
+///   more; the arm stays so the enum resolves completely.
 ///
 /// Both are what [`ResolvedStack::rescale_spatial`] moves again if the stack is
 /// later reused at another size, which is the symmetry the old `rescale_px`

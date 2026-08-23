@@ -1154,9 +1154,9 @@ pub fn build_comp_draws_at(
             })
         });
 
-        // Radius units are % of the comp diagonal (docs/08 §2.3); the effect
-        // runs on the layer's decoded texture, so scale the diagonal by
-        // decode/natural to stay honest under reduced-resolution preview.
+        // Spatial units are px@comp (docs/08 §2.3); the effect runs on the
+        // layer's decoded texture, so the preview factor is decode/natural, to
+        // stay honest under reduced-resolution preview.
         let (fx_ids, fx) = {
             let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
             let scale = match &source {
@@ -2167,9 +2167,9 @@ mod render_below_at_tests {
     // docs/impl/temporal-rerender.md §5: an effect in the held below-stack flagged
     // sample_temporally == false stays pinned to the frame time while the scene's
     // transforms sample the held time. The text below carries a blur whose radius
-    // ramps 0%→100% over a second and opts out of sampling; under a 10 fps
+    // ramps 0→100 px over a second and opts out of sampling; under a 10 fps
     // posterise at t = 0.35 (held tau = 0.3) its transform holds at x = 30 but its
-    // blur resolves at the frame time 0.35 (35% of the diagonal), not 0.3.
+    // blur resolves at the frame time 0.35 (35 px), not 0.3.
     #[test]
     fn a_non_sampling_below_effect_holds_at_the_frame_time_not_the_grid() {
         let mut text = text_layer(0.0);
@@ -2179,7 +2179,7 @@ mod render_below_at_tests {
         for p in &mut blur.params {
             if p.id == "radius" {
                 p.value = lumit_core::model::EffectValue::Float(ramp(0.0, 100.0));
-                // radius% = 100·t
+                // radius px = 100·t
             }
         }
         text.effects = vec![blur];
@@ -2222,16 +2222,14 @@ mod render_below_at_tests {
             "transform held at tau = 0.3; got {}",
             tb.draws[0].position.0
         );
-        // The blur, opting out, resolves at the frame time 0.35 (35% of diag).
-        let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+        // The blur, opting out, resolves at the frame time 0.35 (35 px).
         let radius = blur_radius_px(&tb.draws[0].fx);
         assert!(
-            (radius - 0.35 * diag).abs() < 0.5,
-            "blur must hold at the frame time 0.35 ({}), got {radius}",
-            0.35 * diag
+            (radius - 35.0).abs() < 0.5,
+            "blur must hold at the frame time 0.35 (35 px), got {radius}"
         );
         assert!(
-            (radius - 0.30 * diag).abs() > 5.0,
+            (radius - 30.0).abs() > 4.0,
             "blur must NOT sample the held time 0.30; got {radius}"
         );
     }
@@ -2239,9 +2237,9 @@ mod render_below_at_tests {
     // docs/08 §3.25: a Posterize time scoped to *This layer's effects* holds only
     // the layer's OWN effect stack on the coarse grid — no re-render of others,
     // no adjustment (no orchestration re-entry). The text carries a blur (radius
-    // ramps 0%→100% over a second) and a 10 fps this-layer Posterize; at t = 0.35
+    // ramps 0→100 px over a second) and a 10 fps this-layer Posterize; at t = 0.35
     // its transform stays live (x = 35) while the blur resolves at the held time
-    // 0.3 (30% of the diagonal), not 0.35. GPU-free structural check.
+    // 0.3 (30 px), not 0.35. GPU-free structural check.
     #[test]
     fn this_layer_posterize_holds_the_layers_own_effects_but_not_its_transform() {
         let mut text = text_layer(0.0);
@@ -2250,7 +2248,7 @@ mod render_below_at_tests {
         for p in &mut blur.params {
             if p.id == "radius" {
                 p.value = lumit_core::model::EffectValue::Float(ramp(0.0, 100.0));
-                // % = 100·t
+                // px = 100·t
             }
         }
         let mut post = lumit_core::fx::instantiate("posterize_time").unwrap();
@@ -2297,16 +2295,14 @@ mod render_below_at_tests {
             "transform live at t = 0.35 (x = 35); got {}",
             d.position.0
         );
-        // The blur resolves at the held time 0.3 (30% of diag), not 0.35.
-        let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+        // The blur resolves at the held time 0.3 (30 px), not 0.35.
         let radius = blur_radius_px(&d.fx);
         assert!(
-            (radius - 0.30 * diag).abs() < 0.5,
-            "blur held at the grid time 0.3 ({}); got {radius}",
-            0.30 * diag
+            (radius - 30.0).abs() < 0.5,
+            "blur held at the grid time 0.3 (30 px); got {radius}"
         );
         assert!(
-            (radius - 0.35 * diag).abs() > 5.0,
+            (radius - 35.0).abs() > 4.0,
             "blur must NOT resolve at the live time 0.35; got {radius}"
         );
         // The Posterize itself has no per-pixel op — only the blur survives.

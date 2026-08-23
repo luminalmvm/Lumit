@@ -23,15 +23,15 @@ use lumit_fx_macros::Effect;
     roi = FullFrame,
 )]
 pub struct RadialBlur {
-    /// Peak tap spread, % diag (§2.3), reached at the farthest corner from
+    /// Peak tap spread, px@comp (§2.3), reached at the farthest corner from
     /// Centre. Unbounded above (K-090); the tap count clamps in
     /// [`cpu::radial_blur_taps`], so cost stays bounded.
     #[slider(
         min = 0.0,
-        max = 100.0,
-        default = 8.0,
+        max = 2000.0,
+        default = 150.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub amount: f32,
 

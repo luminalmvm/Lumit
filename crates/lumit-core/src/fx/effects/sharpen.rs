@@ -31,15 +31,15 @@ pub struct Sharpen {
     )]
     pub amount: f32,
 
-    /// % of the comp diagonal (§2.3) — the width of the detail the mask lifts;
-    /// small values crispen, larger add clarity.
+    /// px@comp (§2.3) — the width of the detail the mask lifts; small values
+    /// crispen, larger add clarity.
     #[slider(
-        min = 0.05,
-        max = 2.0,
-        default = 0.4,
+        min = 1.0,
+        max = 50.0,
+        default = 8.0,
         hard_min = 0.0,
-        hard_max = 4.0,
-        unit = PctDiag
+        hard_max = 100.0,
+        unit = Px
     )]
     pub radius: f32,
 

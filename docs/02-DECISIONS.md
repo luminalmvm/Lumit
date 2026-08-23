@@ -11214,3 +11214,17 @@ bundle import stays a first-class citizen forever (studios export where Lumit is
 installed). The Kaitai/licence open question in docs/11 closes: nothing is vendored;
 the MIT parsers are read as documentation and reimplemented under Lumit's own rules,
 with attribution in the impl note.
+
+## K-419 — Distances are pixels at composition size, never a percentage of the diagonal
+
+**DECIDED 2026-08-23** (owner-directed). Every effect parameter that was declared
+`% diag` — the blur family's radii and lengths, RGB split's and Block glitch's offsets,
+Shake's amplitude, Twirl's, Spherize's and Ripple's reaches, Shadow highlight's radius,
+Iris wipe's two radii — is now **px@comp**, with pixel-sized ranges and defaults. The
+resolve step already scales px@comp by the preview factor and again for a different
+export size, so a Half or Quarter preview frames exactly like the export, only softer;
+nothing in any effect's maths changed. `Unit::PctDiag` stays only for ROI padding and the
+reference format, and a test fails the build on any parameter that declares it. Saved
+projects are **not** converted and the format version does not move: none exist in the
+wild yet. This supersedes docs/08 §2.3's old "% diag" default wherever an earlier entry
+(K-135, K-388, K-398, K-400 and the Wave 2 batches) relied on it.

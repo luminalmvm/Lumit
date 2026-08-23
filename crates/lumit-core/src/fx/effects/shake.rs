@@ -11,7 +11,7 @@
 //!   pushed **unit-free** — the raw −1..1 wobble, with no amplitude in it —
 //!   because a derived value carries no declared unit and so would never rescale
 //!   when a stack is reused at another raster size. The amplitude stays a
-//!   declared `PctDiag` row, which does rescale, and the two are multiplied
+//!   declared `Px` row, which does rescale, and the two are multiplied
 //!   together at dispatch in [`Shake::packed`].
 //! - **Its own motion blur** (T18, K-165) needs the same wobble at nine
 //!   sub-frame placements across the shutter. Each is four floats under one id
@@ -67,20 +67,19 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     groups = SHAKE_GROUPS,
 )]
 pub struct Shake {
-    /// % of the comp diagonal (§2.3): how far the wobble roams. Declared
-    /// `PctDiag`, so the resolve step converts it to pixels of the raster in
-    /// play and [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// px@comp (§2.3): how far the wobble roams. Declared `Px`, so the resolve
+    /// step scales it to the raster in play and
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
-    /// The old arm multiplied by the diagonal by hand and `rescale_px` scaled
-    /// the *resolved offsets*; declaring the unit does both, one multiply
-    /// earlier (K-388).
+    /// The old arm scaled the *resolved offsets* by hand; declaring the unit
+    /// does it one multiply earlier (K-388).
     #[slider(
         min = 0.0,
-        max = 20.0,
-        default = 1.5,
+        max = 400.0,
+        default = 30.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub amplitude: f32,
 

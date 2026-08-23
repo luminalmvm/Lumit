@@ -51,12 +51,12 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 1.5,
+          "unit": "px",
+          "default": 30.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "mix",
@@ -102,10 +102,10 @@
           "id": "length",
           "label": "Length",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 10.0,
+          "unit": "px",
+          "default": 200.0,
           "slider_min": 0.0,
-          "slider_max": 200.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -159,10 +159,10 @@
           "id": "amount",
           "label": "Amount",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 8.0,
+          "unit": "px",
+          "default": 150.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -259,12 +259,12 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 0.4,
-          "slider_min": 0.05,
-          "slider_max": 2.0,
+          "unit": "px",
+          "default": 8.0,
+          "slider_min": 1.0,
+          "slider_max": 50.0,
           "hard_min": 0.0,
-          "hard_max": 4.0
+          "hard_max": 100.0
         },
         {
           "id": "threshold",
@@ -639,12 +639,12 @@
           "id": "amount",
           "label": "Amount",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 0.4,
+          "unit": "px",
+          "default": 8.0,
           "slider_min": 0.0,
-          "slider_max": 10.0,
+          "slider_max": 200.0,
           "hard_min": 0.0,
-          "hard_max": 25.0
+          "hard_max": 500.0
         },
         {
           "id": "angle",
@@ -1895,45 +1895,45 @@
           "id": "red",
           "label": "Red blur",
           "kind": "float",
-          "unit": "pct_diag",
+          "unit": "px",
           "default": 0.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "green",
           "label": "Green blur",
           "kind": "float",
-          "unit": "pct_diag",
+          "unit": "px",
           "default": 0.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "blue",
           "label": "Blue blur",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 2.0,
+          "unit": "px",
+          "default": 40.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "alpha",
           "label": "Alpha blur",
           "kind": "float",
-          "unit": "pct_diag",
+          "unit": "px",
           "default": 0.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "repeat_edge_pixels",
@@ -2186,12 +2186,12 @@
           "id": "amplitude",
           "label": "Amplitude",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 1.5,
+          "unit": "px",
+          "default": 30.0,
           "slider_min": 0.0,
-          "slider_max": 20.0,
+          "slider_max": 400.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "frequency",
@@ -2405,23 +2405,23 @@
           "id": "block_amount",
           "label": "Displacement",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 3.0,
+          "unit": "px",
+          "default": 60.0,
           "slider_min": 0.0,
-          "slider_max": 15.0,
+          "slider_max": 300.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 1000.0
         },
         {
           "id": "channel_offset",
           "label": "Channel offset",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 1.0,
+          "unit": "px",
+          "default": 20.0,
           "slider_min": 0.0,
-          "slider_max": 10.0,
+          "slider_max": 200.0,
           "hard_min": 0.0,
-          "hard_max": 50.0
+          "hard_max": 1000.0
         },
         {
           "id": "slice_repeat",
@@ -3413,10 +3413,10 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 30.0,
+          "unit": "px",
+          "default": 650.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -3477,10 +3477,10 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 25.0,
+          "unit": "px",
+          "default": 550.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -3552,10 +3552,10 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 30.0,
+          "unit": "px",
+          "default": 650.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -3592,21 +3592,21 @@
           "id": "wave_height",
           "label": "Wave height",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 0.5,
+          "unit": "px",
+          "default": 10.0,
           "slider_min": 0.0,
-          "slider_max": 10.0,
+          "slider_max": 200.0,
           "hard_min": 0.0
         },
         {
           "id": "wave_width",
           "label": "Wave width",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 4.0,
-          "slider_min": 0.1,
-          "slider_max": 20.0,
-          "hard_min": 0.1
+          "unit": "px",
+          "default": 90.0,
+          "slider_min": 1.0,
+          "slider_max": 400.0,
+          "hard_min": 1.0
         },
         {
           "id": "evolution",
@@ -7827,12 +7827,12 @@
           "id": "radius",
           "label": "Radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 1.5,
+          "unit": "px",
+          "default": 30.0,
           "slider_min": 0.0,
-          "slider_max": 25.0,
+          "slider_max": 500.0,
           "hard_min": 0.0,
-          "hard_max": 100.0
+          "hard_max": 2000.0
         },
         {
           "id": "colour_correction",
@@ -9812,10 +9812,10 @@
           "id": "outer_radius",
           "label": "Outer radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 15.0,
+          "unit": "px",
+          "default": 330.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {
@@ -9829,10 +9829,10 @@
           "id": "inner_radius",
           "label": "Inner radius",
           "kind": "float",
-          "unit": "pct_diag",
-          "default": 7.5,
+          "unit": "px",
+          "default": 165.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 2000.0,
           "hard_min": 0.0
         },
         {

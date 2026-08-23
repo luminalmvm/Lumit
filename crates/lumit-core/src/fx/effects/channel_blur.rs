@@ -24,16 +24,16 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct ChannelBlur {
-    /// Red's kernel half-width, % of the comp diagonal (§2.3), so a half-res
-    /// preview matches.
+    /// Red's kernel half-width, px@comp (§2.3), scaled to the raster in play so
+    /// a half-res preview matches.
     #[slider(
         label = "Red blur",
         min = 0.0,
-        max = 25.0,
+        max = 500.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub red: f32,
 
@@ -41,11 +41,11 @@ pub struct ChannelBlur {
     #[slider(
         label = "Green blur",
         min = 0.0,
-        max = 25.0,
+        max = 500.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub green: f32,
 
@@ -59,11 +59,11 @@ pub struct ChannelBlur {
     #[slider(
         label = "Blue blur",
         min = 0.0,
-        max = 25.0,
-        default = 2.0,
+        max = 500.0,
+        default = 40.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub blue: f32,
 
@@ -72,11 +72,11 @@ pub struct ChannelBlur {
     #[slider(
         label = "Alpha blur",
         min = 0.0,
-        max = 25.0,
+        max = 500.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = PctDiag
+        hard_max = 2000.0,
+        unit = Px
     )]
     pub alpha: f32,
 

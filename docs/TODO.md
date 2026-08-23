@@ -763,7 +763,7 @@ project does not contain).
    twenty-seven match names — the Blur & sharpen, Colour, Generate and Temporal rows of
    docs/11 §5, plus the two rows §5 places at a placeholder on purpose (Remove Grain and
    Timewarp, each reporting what does the job instead). Per-parameter unit conversion
-   (px@comp and % diag), option lists pinned against `tools/ae-audit/
+   (px@comp), option lists pinned against `tools/ae-audit/
    ae-audit-report.json`'s defaults, mask references on the K-408 row, and thirty-three
    conversion tests. Two things are owed:
    - **The golden-frame tests §5 requires of every mapped conversion** — the golden
@@ -784,7 +784,7 @@ project does not contain).
    (phase 2, second half): `crates/lumit-import/src/map/fx_distort.rs` claims twenty-nine
    match names — the Distortion, Stylise, Transition and Utility rows of docs/11 §5, plus
    Channel blur and Median, which no other half claims. Per-parameter unit conversion
-   (px@comp, % of the comp diagonal, AE's per cent of the layer, and the two bare factors
+   (px@comp, AE's per cent of the layer, and the two bare factors
    AE reads as decimals), the option collapses and splits §5 names, layer references onto
    the K-395 matte row, AE's two clock-reading controls as keyframes, and thirty-eight
    conversion tests. Three things are owed:

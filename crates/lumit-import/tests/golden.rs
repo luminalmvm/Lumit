@@ -14,8 +14,8 @@
 //! point of the file.
 //!
 //! **Every expected number is computed here, from the fixture's own inputs.**
-//! The blur radius is 40 After Effects pixels over the composition's own
-//! diagonal, not "5.447"; Drop Shadow's opacity is 180 out of 255, not "70.6".
+//! Drop Shadow's opacity is 180 out of 255, not "70.6"; Tint's colours are the
+//! captured display values pushed through the transfer function.
 //! A conversion factor copied out of the mapper would make the test agree with
 //! whatever the mapper does, which is not agreement at all.
 //!
@@ -166,15 +166,6 @@ fn to_linear(v: f64) -> f64 {
     } else {
         ((v + 0.055) / 1.055).powf(2.4)
     }
-}
-
-/// The composition's diagonal in pixels — the base every "% diag" effect
-/// parameter is a per cent of (docs/08 §2.3). Read off the *mapped*
-/// composition, so a comp that imported at the wrong size fails here too.
-fn diagonal() -> f64 {
-    let c = fixture();
-    let (w, h) = (f64::from(c.width), f64::from(c.height));
-    (w * w + h * h).sqrt()
 }
 
 /// A closed path's perimeter, chord by chord — how AE's *count* of Vegas
@@ -392,9 +383,9 @@ fn the_parenting_chain_the_null_and_the_adjustment_layer() {
 
     let adjustment = layer(c, "adjustment");
     assert_eq!(adjustment.kind, LayerKind::Adjustment);
-    // And its Gaussian blur came with it, converted like any other.
+    // And its Gaussian blur came with it, its pixels carried as px@comp.
     let blur = effect(adjustment, "blur");
-    assert_close(float(blur, "radius"), 6.0 * 100.0 / diagonal());
+    assert_close(float(blur, "radius"), 6.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -971,15 +962,14 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
 ///
 /// Every figure below is worked out here from what `make-fixture.jsx` set and
 /// what the composition is, never copied from the mapper: a blur radius is 40
-/// After Effects pixels over the comp's own diagonal, Fill's opacity is a
+/// After Effects pixels and stays 40 (px@comp, K-419), Fill's opacity is a
 /// bare 0–1 factor where Lumit reads a per cent, and Tint's two colours cross
 /// into scene-linear light.
 #[test]
 fn the_colour_and_generate_effects_convert_every_parameter() {
     let host = layer(fixture(), "fx host");
-    let per_cent_of_diagonal = 100.0 / diagonal();
 
-    // Gaussian Blur: keyframed, and the conversion runs on every key.
+    // Gaussian Blur: keyframed, pixels on both sides, and no rebase row.
     let blur = effect(host, "blur");
     let radius = match blur.param("radius") {
         Some(EffectValue::Float(p)) => p,
@@ -988,9 +978,9 @@ fn the_colour_and_generate_effects_convert_every_parameter() {
     let radius_keys = keys(radius);
     assert_eq!(radius_keys.len(), 2);
     assert_eq!(radius_keys[0].value, 0.0);
-    assert_close(radius_keys[1].value, 40.0 * per_cent_of_diagonal);
+    assert_close(radius_keys[1].value, 40.0);
     assert_eq!(radius_keys[1].time, Rational::new(2, 1).unwrap());
-    assert!(reported(|r| matches!(
+    assert!(!reported(|r| matches!(
         r,
         Reason::EffectParamRebased { effect, param }
             if effect == "Gaussian Blur" && param == "Blurriness"
@@ -1133,7 +1123,7 @@ fn the_report_counts_what_it_says_and_names_both_placeholders() {
         report.summary(),
         Summary {
             imported: 62,
-            adjusted: 61,
+            adjusted: 59,
             placeholders: 2,
             skipped: 1,
         }

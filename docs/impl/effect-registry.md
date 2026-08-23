@@ -69,7 +69,7 @@ pub struct Dof {
     #[layer]
     pub depth: LayerRef,
 
-    #[slider(0.0..=1.0, default = 0.5, unit = PctDiag)]
+    #[slider(0.0..=1.0, default = 0.5)]
     pub focus: f32,
 
     #[toggle(default = false)]
@@ -125,17 +125,17 @@ match:
 | Unit | Meaning | Resolve does |
 |---|---|---|
 | `Raw` | a plain number (a mix, a gamma) | nothing |
-| `PctDiag` | % of the comp diagonal (docs/08 §2.3) | × `diag_px / 100` |
-| `Px` | already pixels of the target raster | × `px_scale` |
+| `Px` | px@comp: pixels at composition size (docs/08 §2.3) — **the unit of every distance, radius and displacement** (K-419) | × `px_scale` |
 | `Degrees` | an angle | nothing |
 | `Seconds` | a duration | nothing (rational time is resolved upstream) |
 
-`diag_px` reaches the resolve step **already scaled by the preview factor**, which is why
-`PctDiag` does not multiply by `px_scale` a second time — the hand-written arms did exactly
-this, and doing both would shrink a preview radius twice.
+`PctDiag` (% of the comp diagonal, × `diag_px / 100`) is still in the enum for the ROI
+padding declarations and the reference format, but **no parameter may declare it**; the
+owner's rule is that no distance in Lumit is a percentage of the diagonal, and
+`no_parameter_is_a_per_cent_of_the_diagonal` in `fx/tests.rs` fails the build on one.
 
 `rescale_px` becomes one generic pass over the bag: rescale every value whose declared unit
-is `PctDiag` or `Px`. An effect cannot forget to be rescaled, which was possible before and
+is spatial (`Px`). An effect cannot forget to be rescaled, which was possible before and
 is how a preview raster and a full-size export could disagree. **Radial blur's Amount is a
 case in point**: the old `rescale_px` skipped it on the mistaken grounds that the whole op
 was frame-relative, so an adjustment stack under reduced-resolution preview blurred too far.
@@ -596,7 +596,7 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    kernel for them. Two changes settled it. `Value` gained a `Vec4`, so a small fixed vector
    is one entry rather than four ids. And Shake's noise became a **unit-free** derived value
    — the raw −1..1 wobble with no amplitude in it — because derived values do not rescale;
-   `amplitude` declares `PctDiag` instead, so the arena holds the rescalable half and
+   `amplitude` declares `Px` instead, so the arena holds the rescalable half and
    `Shake::packed` multiplies the two back together at dispatch, reassembling
    `ShakeWobble::at` step for step. The kernel fork is an enum returned from `packed`, the
    `rgb_split` Wavelength precedent. With it, `Resolved::Shake`, `resolve_one`, `cpu::apply`

@@ -71,12 +71,15 @@ impl ParamId {
 pub enum Unit {
     /// A plain number: a mix, a gamma, a count, a threshold.
     Raw,
-    /// A percentage of the composition diagonal — the resolution-independent
-    /// form docs/08 §2.3 requires of anything spatial.
+    /// A percentage of the composition diagonal. **No parameter may declare
+    /// it** (K-419: every distance is px@comp); it stays for the ROI padding
+    /// declarations and the reference format, and
+    /// `no_parameter_is_a_per_cent_of_the_diagonal` enforces the rule.
     PctDiag,
     /// Pixels at composition size (px@comp), converted to the raster in play by
-    /// the resolve step. Never "pixels of whatever buffer I was handed", which
-    /// §2.3 forbids.
+    /// the resolve step — the resolution-independent form docs/08 §2.3
+    /// requires of anything spatial. Never "pixels of whatever buffer I was
+    /// handed", which §2.3 forbids.
     Px,
     /// Degrees. Unbounded: an angle animates through full turns.
     Degrees,

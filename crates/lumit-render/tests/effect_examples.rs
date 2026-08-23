@@ -131,7 +131,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         "sharpen_simple" => vec![("amount", f(4.0)), ("radius", f(3.0))],
         "sharpen" => vec![
             ("amount", f(250.0)),
-            ("radius", f(1.6)),
+            ("radius", f(33.0)),
             ("threshold", f(0.0)),
         ],
         // A vignette darkens the corners, and only the corners. Roundness has
@@ -164,7 +164,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         "shadow_highlight" => vec![
             ("shadow_amount", f(80.0)),
             ("highlight_amount", f(70.0)),
-            ("radius", f(6.0)),
+            ("radius", f(125.0)),
             ("midtone_contrast", f(25.0)),
         ],
         "texturize" => vec![("relief", f(12.0)), ("texture_contrast", f(180.0))],
@@ -173,7 +173,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // hard enough and the picture reads as a blur rather than a shake, and
         // the reader has to be able to see the frame is knocked off its mark.
         "shake" => vec![
-            ("amplitude", f(4.0)),
+            ("amplitude", f(85.0)),
             ("rotation", f(1.5)),
             ("motion_blur", on(true)),
             ("mb_amount", f(0.3)),
@@ -224,7 +224,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         "radial_wipe" => vec![("completion", f(35.0))],
         "iris_wipe" => vec![
             ("centre_y", f(f64::from(H) / 2.0)),
-            ("outer_radius", f(26.0)),
+            ("outer_radius", f(540.0)),
             ("feather", f(30.0)),
         ],
 

@@ -42,8 +42,7 @@ pub struct ParamSchema {
     pub label: &'static str,
     pub kind: ParamKind,
     /// What the number *means* (docs/impl/effect-registry.md §2.2): a plain
-    /// number, a percentage of the comp diagonal, pixels at comp size, degrees,
-    /// seconds.
+    /// number, pixels at comp size, degrees, seconds.
     ///
     /// Declaring it is what lets the preview-raster rescale be one generic pass
     /// rather than a match that has to know which field of which effect holds a

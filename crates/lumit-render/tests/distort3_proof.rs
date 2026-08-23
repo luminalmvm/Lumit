@@ -137,8 +137,8 @@ fn render_the_five_distort_three_effects() {
         let ripple = |asym: u32, radius: f32, height: f32, width: f32, evo: f32| {
             let mut r = Ripple::read(Params::EMPTY);
             r.wave_type = asym;
-            // The three lengths are % diag; the resolve step would have made
-            // them pixels.
+            // The three lengths are px@comp; the resolve step would have scaled
+            // them to the raster, so the proof writes raster pixels.
             r.radius = radius * diag;
             r.wave_height = height * diag;
             r.wave_width = width * diag;

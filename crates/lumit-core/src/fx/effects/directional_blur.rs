@@ -7,7 +7,7 @@ use lumit_fx_macros::Effect;
 /// Directional blur's controls.
 ///
 /// Length/Angle only, fixed Repeat edge (the Edges control is Radial's alone
-/// now). Length may exceed 100 % of the diagonal (slider to 200,
+/// now). Length may exceed the frame (slider to 2000 px@comp,
 /// hard-unbounded above per K-090); the kernel's tap count still clamps
 /// ([`cpu::dir_blur_taps`]), so a long streak stays bounded in cost. ROI is
 /// full-frame: an unbounded Length cannot be padded statically.
@@ -21,14 +21,14 @@ use lumit_fx_macros::Effect;
     roi = FullFrame,
 )]
 pub struct DirectionalBlur {
-    /// The full streak length, % diag (§2.3). Unbounded above (K-090); the
-    /// slider reaches 200 and typing goes further.
+    /// The full streak length, px@comp (§2.3). Unbounded above (K-090); the
+    /// slider reaches 2000 and typing goes further.
     #[slider(
         min = 0.0,
-        max = 200.0,
-        default = 10.0,
+        max = 2000.0,
+        default = 200.0,
         hard_min = 0.0,
-        unit = PctDiag
+        unit = Px
     )]
     pub length: f32,
 

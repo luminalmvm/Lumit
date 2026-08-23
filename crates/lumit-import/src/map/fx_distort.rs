@@ -15,11 +15,11 @@
 //!
 //! - **Nothing.** An angle is an angle and a per cent is a per cent, so it
 //!   carries across untouched.
-//! - **A change of base.** After Effects measures a blur radius in the pixels of
-//!   whatever picture it was handed; Lumit measures one as a per cent of the
-//!   composition's diagonal, so that a half-resolution preview looks like the
-//!   export (docs/08 §2.3). Same length, different spelling — the import divides
-//!   through, and the report says it did.
+//! - **A change of base.** After Effects measures Twirl's radius as a per cent
+//!   of the layer; Lumit measures every distance in px@comp (docs/08 §2.3,
+//!   K-419), and scales it to the preview raster itself so that a
+//!   half-resolution preview looks like the export. Same length, different
+//!   spelling — the import multiplies through, and the report says it did.
 //! - **A split, a collapse or a refusal.** After Effects' Spherize has one
 //!   signed radius where Lumit has a size and a direction; its Warp has fifteen
 //!   styles where Lumit has thirteen; its Card Wipe has a whole camera rig that
@@ -268,8 +268,7 @@ fn twirl(fx: &mut Fx<'_, '_>) {
 /// as a pinch of the same size.
 fn spherize(fx: &mut Fx<'_, '_>) {
     let sign = fx.sign(1);
-    let scale = sign * 100.0 / fx.conv.diagonal();
-    fx.carry(1, "radius", Unit::Scale(scale));
+    fx.carry(1, "radius", Unit::Scale(sign));
     fx.set("bulge", float(if sign < 0.0 { -100.0 } else { 100.0 }));
     fx.point(2, "centre_x", "centre_y", Unit::Px);
 }
@@ -281,8 +280,8 @@ fn ripple(fx: &mut Fx<'_, '_>) {
     fx.point(2, "centre_x", "centre_y", Unit::Px);
     // AE's Type of Conversion lists Asymmetric first — its default, and Lumit's.
     fx.choice(3, "wave_type", &[1, 0], "Asymmetric");
-    fx.carry(5, "wave_width", Unit::PctDiag);
-    fx.carry(6, "wave_height", Unit::PctDiag);
+    fx.carry(5, "wave_width", Unit::Px);
+    fx.carry(6, "wave_height", Unit::Px);
     fx.clock(4, 7, "evolution");
 }
 
@@ -467,14 +466,13 @@ fn texturize(fx: &mut Fx<'_, '_>) {
     }
 }
 
-/// AE `ADBE Channel Blur` → Channel blur (docs/11 §5): **AE's radii are raster
-/// pixels and Lumit's are % of the comp diagonal**, so the import divides
-/// through by the composition's diagonal.
+/// AE `ADBE Channel Blur` → Channel blur (docs/11 §5): the four radii are
+/// pixels on both sides.
 fn channel_blur(fx: &mut Fx<'_, '_>) {
-    fx.carry(1, "red", Unit::PctDiag);
-    fx.carry(2, "green", Unit::PctDiag);
-    fx.carry(3, "blue", Unit::PctDiag);
-    fx.carry(4, "alpha", Unit::PctDiag);
+    fx.carry(1, "red", Unit::Px);
+    fx.carry(2, "green", Unit::Px);
+    fx.carry(3, "blue", Unit::Px);
+    fx.carry(4, "alpha", Unit::Px);
     fx.toggle(5, "repeat_edge_pixels");
     fx.drop_ae(6); // Blur Dimensions — Lumit's is always both
 }
@@ -497,14 +495,14 @@ fn radial_wipe(fx: &mut Fx<'_, '_>) {
     fx.carry(5, "feather", Unit::Px);
 }
 
-/// AE `ADBE IRIS_WIPE` → Iris wipe (docs/11 §5): the two radii change base,
-/// AE's being layer pixels (docs/08 §3.71's fourth note).
+/// AE `ADBE IRIS_WIPE` → Iris wipe (docs/11 §5): the two radii are pixels on
+/// both sides (docs/08 §3.71's fourth note).
 fn iris_wipe(fx: &mut Fx<'_, '_>) {
     fx.point(1, "centre_x", "centre_y", Unit::Px);
     fx.carry(2, "points", Unit::Direct);
-    fx.carry(3, "outer_radius", Unit::PctDiag);
+    fx.carry(3, "outer_radius", Unit::Px);
     fx.toggle(4, "use_inner_radius");
-    fx.carry(5, "inner_radius", Unit::PctDiag);
+    fx.carry(5, "inner_radius", Unit::Px);
     fx.carry(6, "rotation", Unit::Direct);
     fx.carry(7, "feather", Unit::Px);
 }
@@ -595,11 +593,9 @@ enum Unit {
     /// is the same and the meaning is not: Lumit scales it by the preview
     /// factor, so a Half preview frames like the export.
     Px,
-    /// After Effects' raster pixels become a per cent of the comp diagonal.
-    PctDiag,
-    /// After Effects' per cent *of the layer* becomes a per cent of the comp
-    /// diagonal. AE's 100 is the circle that just contains the layer — its
-    /// half-diagonal — where Lumit's per cent is of the whole diagonal.
+    /// After Effects' per cent *of the layer* becomes px@comp. AE's 100 is the
+    /// circle that just contains the layer — its half-diagonal — so the
+    /// pixel count is that per cent of half the comp's diagonal.
     LayerPct,
     /// A bare factor where Lumit reads a per cent (AE's 1.0 is Lumit's 100).
     Factor,
@@ -618,10 +614,8 @@ impl Unit {
     fn affine(self, diagonal: f64) -> (f64, f64) {
         match self {
             Self::Direct | Self::Px => (1.0, 0.0),
-            Self::PctDiag => (100.0 / diagonal, 0.0),
-            // The two bases written out rather than folded to 0.5, so the
-            // reasoning survives a reader.
-            Self::LayerPct => ((diagonal / 2.0) / diagonal, 0.0),
+            // A per cent of the layer's half-diagonal, in pixels.
+            Self::LayerPct => ((diagonal / 2.0) / 100.0, 0.0),
             Self::Factor => (100.0, 0.0),
             Self::Complement => (-1.0, 100.0),
             Self::Scale(k) => (k, 0.0),
@@ -634,7 +628,7 @@ impl Unit {
     fn rebases(self) -> bool {
         matches!(
             self,
-            Self::PctDiag | Self::LayerPct | Self::Factor | Self::Scale(_) | Self::Shift(_)
+            Self::LayerPct | Self::Factor | Self::Scale(_) | Self::Shift(_)
         )
     }
 }
@@ -1106,8 +1100,8 @@ mod tests {
     const W: f64 = 1920.0;
     const H: f64 = 1080.0;
 
-    /// The base every "% diag" parameter is a per cent of — computed from the
-    /// composition, never copied in as a constant.
+    /// The comp diagonal, the base AE's per-cent-of-layer radii convert
+    /// through — computed from the composition, never copied in as a constant.
     fn diag() -> f64 {
         (W * W + H * H).sqrt()
     }
@@ -1603,10 +1597,10 @@ mod tests {
         assert!(dropped(&r, "Premultiply Matte Layer"));
     }
 
-    /// AE's radii are raster pixels and Lumit's are a per cent of the comp
-    /// diagonal, so the import divides through — keys and handles alike.
+    /// AE's radii are raster pixels and Lumit's are px@comp, so the import
+    /// carries them unchanged — keys and handles alike.
     #[test]
-    fn channel_blur_divides_through_by_the_comp_diagonal() {
+    fn channel_blur_carries_its_radii_as_pixels() {
         let ae = "ADBE Channel Blur";
         let r = run(&fx(
             ae,
@@ -1625,13 +1619,12 @@ mod tests {
                 num(ae, 6, "Blur Dimensions", 2.0),
             ],
         ));
-        let pct = |px: f64| px * 100.0 / diag();
-        assert_eq!(keys_of(&r, "red")[1], (2.0, pct(40.0), pct(20.0)));
-        assert_eq!(f(&r, "green"), pct(10.0));
-        assert_eq!(f(&r, "blue"), pct(20.0));
-        assert_eq!(f(&r, "alpha"), pct(5.0));
+        assert_eq!(keys_of(&r, "red")[1], (2.0, 40.0, 20.0));
+        assert_eq!(f(&r, "green"), 10.0);
+        assert_eq!(f(&r, "blue"), 20.0);
+        assert_eq!(f(&r, "alpha"), 5.0);
         assert!(!boolean(&r, "repeat_edge_pixels"));
-        assert!(rebased(&r, "Red Blurriness") && rebased(&r, "Alpha Blurriness"));
+        assert!(!rebased(&r, "Red Blurriness") && !rebased(&r, "Alpha Blurriness"));
         assert!(dropped(&r, "Blur Dimensions"));
     }
 
@@ -1709,18 +1702,14 @@ mod tests {
                 num(ae, 7, "Feather", 8.0),
             ],
         ));
-        let pct = |px: f64| px * 100.0 / diag();
         assert_eq!((f(&r, "centre_x"), f(&r, "centre_y")), (300.0, 200.0));
         assert_eq!(f(&r, "points"), 12.0);
-        assert_eq!(
-            keys_of(&r, "outer_radius")[1],
-            (2.0, pct(400.0), pct(200.0))
-        );
+        assert_eq!(keys_of(&r, "outer_radius")[1], (2.0, 400.0, 200.0));
         assert!(boolean(&r, "use_inner_radius"));
-        assert_eq!(f(&r, "inner_radius"), pct(100.0));
+        assert_eq!(f(&r, "inner_radius"), 100.0);
         assert_eq!(f(&r, "rotation"), 30.0);
         assert_eq!(f(&r, "feather"), 8.0, "a feather is px@comp on both sides");
-        assert!(rebased(&r, "Outer Radius") && rebased(&r, "Inner Radius"));
+        assert!(!rebased(&r, "Outer Radius") && !rebased(&r, "Inner Radius"));
     }
 
     #[test]
@@ -1925,10 +1914,9 @@ mod tests {
     }
 
     /// AE's Twirl Radius is a per cent of the layer — its 100 is the circle
-    /// that just contains it — where Lumit's is a per cent of the whole
-    /// diagonal.
+    /// that just contains it — where Lumit's is px@comp.
     #[test]
-    fn twirl_rebases_its_radius_onto_the_comp_diagonal() {
+    fn twirl_rebases_its_radius_into_pixels() {
         let ae = "ADBE Twirl";
         let r = run(&fx(
             ae,
@@ -1944,10 +1932,12 @@ mod tests {
                 point(ae, 3, "Twirl Center", 400.0, 500.0),
             ],
         ));
-        let pct = |layer_pct: f64| layer_pct * (diag() / 2.0) / diag();
+        let pct = |layer_pct: f64| layer_pct * (diag() / 2.0) / 100.0;
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         assert_eq!(f(&r, "angle"), 180.0);
-        assert_eq!(keys_of(&r, "radius")[0], (0.0, pct(10.0), 0.0));
-        assert_eq!(keys_of(&r, "radius")[1], (2.0, pct(60.0), pct(25.0)));
+        let keys = keys_of(&r, "radius");
+        assert!(near(keys[0].1, pct(10.0)) && keys[0].2 == 0.0);
+        assert!(keys[1].0 == 2.0 && near(keys[1].1, pct(60.0)) && near(keys[1].2, pct(25.0)));
         assert_eq!((f(&r, "centre_x"), f(&r, "centre_y")), (400.0, 500.0));
         assert!(rebased(&r, "Twirl Radius"));
     }
@@ -1964,7 +1954,7 @@ mod tests {
                 point(ae, 2, "Center of Sphere", 100.0, 200.0),
             ],
         ));
-        assert_eq!(f(&bulging, "radius"), 300.0 * 100.0 / diag());
+        assert_eq!(f(&bulging, "radius"), 300.0);
         assert_eq!(f(&bulging, "bulge"), 100.0);
         assert_eq!(
             (f(&bulging, "centre_x"), f(&bulging, "centre_y")),
@@ -1982,11 +1972,7 @@ mod tests {
                 &[(0.0, -100.0, 0.0), (2.0, -400.0, -150.0)],
             )],
         ));
-        let pct = |px: f64| px * 100.0 / diag();
-        assert_eq!(
-            keys_of(&pinching, "radius")[1],
-            (2.0, pct(400.0), pct(150.0))
-        );
+        assert_eq!(keys_of(&pinching, "radius")[1], (2.0, 400.0, 150.0));
         assert_eq!(f(&pinching, "bulge"), -100.0);
         assert!(rebased(&pinching, "Radius"));
     }
@@ -2009,12 +1995,11 @@ mod tests {
                 num(ae, 7, "Ripple Phase", 90.0),
             ],
         ));
-        let pct = |px: f64| px * 100.0 / diag();
-        assert_eq!(f(&r, "radius"), 50.0 * (diag() / 2.0) / diag());
+        assert_eq!(f(&r, "radius"), 50.0 * (diag() / 2.0) / 100.0);
         assert_eq!((f(&r, "centre_x"), f(&r, "centre_y")), (700.0, 400.0));
         assert_eq!(choice(&r, "wave_type"), 0, "AE's second entry is Symmetric");
-        assert_eq!(keys_of(&r, "wave_width")[1], (2.0, pct(60.0), pct(20.0)));
-        assert_eq!(f(&r, "wave_height"), pct(40.0));
+        assert_eq!(keys_of(&r, "wave_width")[1], (2.0, 60.0, 20.0));
+        assert_eq!(f(&r, "wave_height"), 40.0);
         // Two seconds of layer at one and a half turns a second, from the phase
         // After Effects was sitting at.
         assert_eq!(
@@ -2396,11 +2381,11 @@ mod tests {
     /// one on it is reported rather than quietly wrong.
     #[test]
     fn an_expression_under_a_rebased_parameter_is_reported() {
-        let ae = "ADBE Channel Blur";
-        let mut node = num(ae, 1, "Red Blurriness", 0.0);
+        let ae = "ADBE Twirl";
+        let mut node = num(ae, 2, "Twirl Radius", 0.0);
         node.expression = Some("time * 10".to_string());
         node.expression_enabled = Some(true);
-        let r = run(&fx(ae, "Channel Blur", vec![node]));
-        assert!(approximated(&r, "Red Blurriness"));
+        let r = run(&fx(ae, "Twirl", vec![node]));
+        assert!(approximated(&r, "Twirl Radius"));
     }
 }

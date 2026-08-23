@@ -218,7 +218,9 @@ fn render_the_five_distort_two_effects() {
         let twirl = |angle: f32, radius: f32, cx: f32, cy: f32| {
             let mut t = Twirl::read(Params::EMPTY);
             t.angle = angle;
-            // Radius is % diag; the resolve step would have made it pixels.
+            // Radius is px@comp; the resolve step would have scaled it to the
+            // raster, so the proof writes raster pixels, as a fraction of the
+            // diagonal for a size-independent picture.
             t.radius = radius * (fw * fw + fh * fh).sqrt();
             t.centre_x = cx * fw;
             t.centre_y = cy * fh;

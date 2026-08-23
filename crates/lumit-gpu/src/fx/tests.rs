@@ -8706,7 +8706,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // Radius is PctDiag; the resolve step would have turned it into raster
+    // Radius is px@comp; the resolve step would have scaled it to raster
     // pixels, so the test hands `packed` the pixels directly.
     let base = {
         let mut t = Twirl::read(Params::EMPTY);
@@ -8834,7 +8834,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // Radius is PctDiag; see the Twirl oracle's note.
+    // Radius is px@comp; see the Twirl oracle's note.
     let base = {
         let mut s = Spherize::read(Params::EMPTY);
         s.centre_x = 16.0;
@@ -8954,8 +8954,8 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // Radius and the two wave lengths are PctDiag; the resolve step would have
-    // turned them into raster pixels, so the test hands `packed` the pixels.
+    // Radius and the two wave lengths are px@comp; the resolve step would have
+    // scaled them to raster pixels, so the test hands `packed` the pixels.
     let base = {
         let mut r = Ripple::read(Params::EMPTY);
         r.centre_x = 16.0;
