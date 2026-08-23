@@ -168,6 +168,19 @@
 
           "properties": [
             {
+              "match_name": "ADBE Audio Group",
+              "name": "Audio",
+              "enabled": true,
+              "group": [
+                {
+                  "match_name": "ADBE Audio Levels",
+                  "name": "Audio Levels",
+                  "value_type": "point",
+                  "value": [-6.0, -12.0]
+                }
+              ]
+            },
+            {
               "match_name": "ADBE Transform Group",
               "name": "Transform",
               "enabled": true,

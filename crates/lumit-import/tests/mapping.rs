@@ -459,6 +459,32 @@ fn a_time_stretch_becomes_the_equivalent_retime() {
     )));
 }
 
+/// **A layer's audio level comes across, and an unbalanced pair says so.**
+///
+/// After Effects gives a layer one level per channel and Lumit gives it one,
+/// so a mix that rides the two apart cannot arrive whole — the left channel
+/// does, and the row carries what the right one was. What this really guards
+/// is the flat case underneath it: a level read as 0 dB plays a song mixed
+/// twenty decibels down at full.
+#[test]
+fn a_layers_audio_level_comes_across_and_an_unbalanced_pair_is_reported() {
+    let (doc, report) = mapped("synthetic.lum-bundle");
+    let clip = layer(comp(&doc, "Main"), "clip.mp4");
+    assert!(
+        (clip.volume_db.value_at(0.0) - -6.0).abs() < 1e-9,
+        "the left channel's level, not a flat nought"
+    );
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::AudioLevelsDiffer { left, right }
+            if (left - -6.0).abs() < 1e-9 && (right - -12.0).abs() < 1e-9
+    )));
+
+    // A layer After Effects said nothing about stays at unity.
+    let solid = layer(comp(&doc, "Main"), "Black Solid 1");
+    assert_eq!(solid.volume_db.value_at(0.0), 0.0);
+}
+
 /// **An effect the table does not know imports as a placeholder that keeps
 /// everything, and one it does know imports as the Lumit effect.**
 ///

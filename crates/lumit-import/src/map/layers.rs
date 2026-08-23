@@ -133,7 +133,7 @@ pub(crate) fn map_layer(
         parent: parent(conv, &path, ae, ids),
         label: u8::try_from(ae.label.unwrap_or(0)).unwrap_or(0),
         markers: markers(conv, &ae.markers),
-        volume_db: LumProperty::zero(),
+        volume_db: volume(conv, &path, props),
         audio_only: false,
         retime,
         interpolation,
@@ -342,6 +342,33 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         opacity: scalar(conv, path, props, "ADBE Opacity", 0, 100.0),
         extra: serde_json::Map::new(),
     }
+}
+
+/// The layer's audio level, in decibels, out of `ADBE Audio Group`.
+///
+/// After Effects gives a layer one level per channel and Lumit gives it one
+/// level, so a mix that rides the two apart cannot come across whole: the left
+/// channel is what arrives, and the report says what the right one was. Read as
+/// a flat 0 dB instead — which is what this was — every layer plays at unity
+/// and a song mixed twenty decibels down comes back at full.
+fn volume(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> LumProperty {
+    let audio = group(props, "ADBE Audio Group");
+    let Some(node) = child(audio, "ADBE Audio Levels") else {
+        return LumProperty::zero();
+    };
+    if let (Some(left), Some(right)) = (
+        still(audio, "ADBE Audio Levels", 0),
+        still(audio, "ADBE Audio Levels", 1),
+    ) {
+        if (left - right).abs() > f64::EPSILON {
+            conv.report.row(
+                path.clone(),
+                Outcome::Adjusted,
+                Reason::AudioLevelsDiffer { left, right },
+            );
+        }
+    }
+    from_node(conv, path, node, 0, 0.0)
 }
 
 /// The layer's switches. Lumit has no draft/wireframe quality and no guide

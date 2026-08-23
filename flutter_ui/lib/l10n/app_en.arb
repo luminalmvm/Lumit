@@ -6787,6 +6787,11 @@
   "@aeAudioLayerAsFootage": {
     "description": "Import report row reason, lower case. Lumit has no separate audio layer kind for this case."
   },
+  "aeAudioLevelsDiffer": "audio levels {left} dB left and {right} dB right have one level in Lumit — imported at the left",
+  "@aeAudioLevelsDiffer": {
+    "description": "Import report row reason, lower case. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
+    "placeholders": { "left": { "type": "String" }, "right": { "type": "String" } }
+  },
   "aeGuideLayerNotSupported": "guide layers have no equivalent — imported visible",
   "@aeGuideLayerNotSupported": {
     "description": "Import report row reason, lower case. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."

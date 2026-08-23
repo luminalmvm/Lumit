@@ -159,6 +159,9 @@ pub enum Reason {
     /// An audio layer, which Lumit carries as an ordinary Footage layer
     /// (docs/01 §2 — the audio channel of footage).
     AudioLayerAsFootage,
+    /// After Effects rides a layer's two audio channels apart; Lumit has one
+    /// level, so the left channel is what arrives.
+    AudioLevelsDiffer { left: f64, right: f64 },
     /// A guide layer: Lumit has no guide switch, so the layer imports visible.
     GuideLayerNotSupported,
     /// "Preserve underlying transparency" has no Lumit switch yet.
@@ -319,6 +322,10 @@ impl std::fmt::Display for Reason {
             Self::AudioLayerAsFootage => {
                 write!(f, "imported as a footage layer carrying its audio")
             }
+            Self::AudioLevelsDiffer { left, right } => write!(
+                f,
+                "audio levels {left} dB left and {right} dB right have one level in                  Lumit — imported at the left"
+            ),
             Self::GuideLayerNotSupported => {
                 write!(f, "guide layers have no equivalent — imported visible")
             }

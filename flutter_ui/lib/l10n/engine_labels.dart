@@ -839,6 +839,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLayerSpanRepaired;
     case 'audio_layer_as_footage':
       return l10n.aeAudioLayerAsFootage;
+    case 'audio_levels_differ':
+      return l10n.aeAudioLevelsDiffer(a('left'), a('right'));
     case 'guide_layer_not_supported':
       return l10n.aeGuideLayerNotSupported;
     case 'preserve_transparency_not_supported':
