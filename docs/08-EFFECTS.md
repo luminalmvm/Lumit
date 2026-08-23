@@ -1780,7 +1780,7 @@ cast of real flares comes from.
    **starburst sprite** (Fourier amplitude of the iris image under a Fresnel
    propagation term, integrated across the visible spectrum with CIE
    weights); close the **auto-exposure loop** by rendering a thumbnail **at the lens's
-   native aperture** (K-426), so the gain describes the glass and not how far
+   native aperture** (K-432), so the gain describes the glass and not how far
    the iris happens to be closed.
 2. **Trace** (GPU compute, per frame): for each surviving pair × wavelength,
    a regular grid of rays over the entrance pupil — each corner weighted by
@@ -1808,7 +1808,7 @@ parameters are always authored in comp pixels, K-260),
 **Intensity** (0–4, open above), **F-stop** (0.7–32 — stops the iris down
 from the lens's native f-number; wide open the ghosts are big and round,
 stopped down small, bladed **and dimmer**, since a smaller hole passes less
-light and the auto-exposure is measured wide open — K-426; Intensity is the
+light and the auto-exposure is measured wide open — K-432; Intensity is the
 knob that puts the brightness back), **Lens** (the embedded prescription library,
 K-261, curated to **twenty real lenses** K-264 and re-verified K-265: every
 entry bakes a live ghost train and keeps flaring with the light well

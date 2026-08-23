@@ -3201,7 +3201,7 @@ fn trace_scope(
                     // A flare that fell back to the previous lens during the
                     // render (K-350) made a picture the name taken before it
                     // no longer describes. Banked only when no flare stood
-                    // anything in (K-425).
+                    // anything in (K-431).
                     let subs_before = state.renderer.flare_substitutions();
                     let made = state
                         .renderer
@@ -3334,7 +3334,7 @@ fn sample_pixels(
                     // not keep is worse than no entry. A flare can also fall
                     // back to the previous lens *during* the render, which
                     // only the render can report — hence the count read
-                    // either side of it (K-350, K-425).
+                    // either side of it (K-350, K-431).
                     let provenance = lumit_render::FrameProvenance {
                         comp: req.comp.id,
                         frame: req.frame,

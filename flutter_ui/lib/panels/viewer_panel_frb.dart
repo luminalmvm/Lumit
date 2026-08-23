@@ -674,7 +674,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       _shownScale > fit ? _shownScale : fit,
       // A zoom in flight lays out on every tick of it. The scale it passes
       // through on the way is not one to ask the engine for a frame at
-      // (K-420); the one it lands on is.
+      // (K-430); the one it lands on is.
       settled: !_zoomMotion.isAnimating,
     );
   }
@@ -1118,7 +1118,7 @@ class _Stage extends StatelessWidget {
             // pointer only while that layer is the selected one — a cloud that
             // always took clicks would make the whole shot unselectable.
             //
-            // **Under a listener of its own** (K-420). Two things decide
+            // **Under a listener of its own** (K-430). Two things decide
             // whether there is a cloud at all, and neither of them rebuilds
             // this panel: switching the effect off, which is a change to the
             // model, and an analysis landing, which is a change to nothing the

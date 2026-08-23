@@ -300,7 +300,7 @@ pub struct LensFlareFx {
     pub(super) generation: AtomicU64,
     /// Bumped each time a frame actually drew **something other than** the
     /// bake its parameters name — the deferred fallback to the previous lens,
-    /// or no flare at all because there is no previous lens yet (K-425).
+    /// or no flare at all because there is no previous lens yet (K-431).
     ///
     /// This is the precise form of the question the generation could only
     /// answer roughly. The generation moves when a bake is *queued*, which
@@ -1095,7 +1095,7 @@ impl LensFlareFx {
         self.queue(op.bake_key, bake);
 
         // From here the frame draws something its parameters do not name, so
-        // it is not a frame anybody may bank (K-425). Counted once, whether a
+        // it is not a frame anybody may bank (K-431). Counted once, whether a
         // previous lens stands in or nothing does.
         self.substitutions.fetch_add(1, Ordering::Relaxed);
 

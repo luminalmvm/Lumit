@@ -4459,7 +4459,7 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         after_exact,
         "asking for a lens that is not held queues its bake, and says so"
     );
-    // And says which frame it was (K-425): this one drew the first lens under
+    // And says which frame it was (K-431): this one drew the first lens under
     // the second one's name, so it is the one frame nobody may bank.
     assert_eq!(
         fx.flare_substitutions(),
@@ -4521,7 +4521,7 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     assert_eq!(
         fx.flare_substitutions(),
         stood_in,
-        "and stands nothing in, so the frame is one to keep (K-425)"
+        "and stands nothing in, so the frame is one to keep (K-431)"
     );
 }
 

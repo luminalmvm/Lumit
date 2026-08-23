@@ -793,7 +793,7 @@ impl HeadlessRenderer {
     /// A frame drawn with the previous lens must not be filed under a name
     /// that says it was drawn with this one, so such a frame is made and not
     /// kept — see [`Self::flare_substitutions`], which says exactly which
-    /// frames those were (K-425).
+    /// frames those were (K-431).
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx.set_deferred_flare_bakes(deferred);
@@ -813,7 +813,7 @@ impl HeadlessRenderer {
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
-    /// its parameters name (K-425). Read either side of a render: unmoved
+    /// its parameters name (K-431). Read either side of a render: unmoved
     /// means the frame may be banked under the name taken before it.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
@@ -849,7 +849,7 @@ impl HeadlessRenderer {
         // A flare bake in flight used to make this answer `None` (K-350) —
         // for every comp, whether or not it held a flare. A keyframed
         // aperture keeps a bake in flight for as long as it plays, so that
-        // rule stopped the whole project caching (K-425). The name is taken
+        // rule stopped the whole project caching (K-431). The name is taken
         // here and the frame is *checked* afterwards instead: see
         // [`Self::flare_substitutions`], which counts the frames that
         // actually drew other optics than they name, and those alone are the
@@ -1444,7 +1444,7 @@ impl HeadlessRenderer {
         // name was taken before the render, so it has to be dropped
         // afterwards — the alternative is an entry that lies about its own
         // content, which no later edit or undo can clear (K-178). Counted, so
-        // only the frames it actually happened to are dropped (K-425).
+        // only the frames it actually happened to are dropped (K-431).
         let subs_before = self.flare_substitutions();
         let (texture, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, bgra)?;
@@ -3186,7 +3186,7 @@ mod tests {
     }
 
     /// A lens baking somewhere **does not stop the rest of the project being
-    /// named** (K-425, superseding the K-350 rule it replaces).
+    /// named** (K-431, superseding the K-350 rule it replaces).
     ///
     /// The regression: `frame_key` used to answer `None` for every comp while
     /// any bake was in flight. A keyframed f-stop asks for a slightly
@@ -3234,7 +3234,7 @@ mod tests {
     }
 
     /// **A keyframed aperture names, and keeps, every frame it draws**
-    /// (K-425). Ten frames of an animated f-stop, with a bake in flight the
+    /// (K-431). Ten frames of an animated f-stop, with a bake in flight the
     /// whole time: each frame takes its own name, and no two frames share one
     /// — the aperture is part of the picture, so it is part of the name.
     #[test]
@@ -3282,7 +3282,7 @@ mod tests {
     }
 
     /// **Editing a .lens file on disk renames the frames that read it**
-    /// (K-425). The bake keys on the file's CONTENT, so before this the edited
+    /// (K-431). The bake keys on the file's CONTENT, so before this the edited
     /// prescription rebaked and drew different optics under the old file's
     /// name — a cached frame no edit or undo could ever clear.
     #[test]

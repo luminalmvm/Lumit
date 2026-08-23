@@ -263,7 +263,7 @@ void main() {
       expect(asked[0], 3);
     });
 
-    /// **Switching the effect off takes the cloud with it** (K-420).
+    /// **Switching the effect off takes the cloud with it** (K-430).
     ///
     /// The cloud is found in the read model, and the model changing is a thing
     /// to listen to. It was read outside any listener, so the dots stayed on
@@ -306,7 +306,7 @@ void main() {
           reason: 'and it took no frame change to notice');
     });
 
-    /// **A solve landing makes the cloud appear** (K-420).
+    /// **A solve landing makes the cloud appear** (K-430).
     ///
     /// The read is keyed by the frame and the document's revision, and a solve
     /// moves neither: it is the answer to an analysis, not an edit. Without a

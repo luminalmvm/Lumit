@@ -2407,7 +2407,7 @@ fn snap(v: f32, step: f32) -> f32 {
     (v / step).round() * step + 0.0
 }
 
-/// The aperture the **bake** sees (K-425), which is the frame's aperture with
+/// The aperture the **bake** sees (K-431), which is the frame's aperture with
 /// its continuous dials snapped to a step fine enough not to be seen.
 ///
 /// In plain terms: the bake precomputes two things that depend on the iris —
@@ -2458,7 +2458,7 @@ pub fn bake_key(p: &LensFlareParams) -> u64 {
 /// override's content hash folds in, so editing the file (or clearing it)
 /// rebakes and two different files never share a cache slot.
 pub fn bake_key_with(p: &LensFlareParams, lens_text_hash: Option<u64>) -> u64 {
-    // The aperture as the bake will see it (K-425), never as the frame holds
+    // The aperture as the bake will see it (K-431), never as the frame holds
     // it: two f-stops inside one step bake identically, so they must key
     // identically or the cache would hand one of them the other's optics.
     let p = &bake_params(p);
@@ -2967,7 +2967,7 @@ pub fn bake(p: &LensFlareParams) -> FlareBaked {
 /// picked library lens: a labelled fallback, never a fault, and exactly
 /// what an unset parameter renders.
 pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
-    // The snapped aperture (K-425), matching what `bake_key_with` hashed —
+    // The snapped aperture (K-431), matching what `bake_key_with` hashed —
     // the two must read the same dials or a cache slot would hold optics its
     // name does not describe.
     let quantised = bake_params(p);
@@ -3232,7 +3232,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         intensity: 1.0,
         lens: p.lens,
         // The probe is shot at the lens's NATIVE stop, never the working one
-        // (K-426): the gain is a property of the glass, not of how far the
+        // (K-432): the gain is a property of the glass, not of how far the
         // iris is closed. Reading the working stop made the gain roughly
         // `(f/native)²` and it cancelled the stop-down — a lens rendered the
         // same brightness at f/16 as wide open, which no lens does — and it

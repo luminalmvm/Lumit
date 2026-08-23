@@ -779,7 +779,7 @@ class LumitUiState extends ChangeNotifier {
   /// only the cache bar, which listens to both.
   final ValueNotifier<int> cacheChanged = ValueNotifier(0);
 
-  /// Bumped when a Camera track analysis lands a solve (K-420). Its own
+  /// Bumped when a Camera track analysis lands a solve (K-430). Its own
   /// notifier because a solve moves neither the document's revision nor the
   /// playhead — and those two are exactly what the Viewer's point cloud is
   /// keyed by, so without this it had no reason to ask again and the dots did
@@ -1306,7 +1306,7 @@ class LumitUiState extends ChangeNotifier {
   /// comp resolution would cost more for no visible gain, and a zero or negative
   /// scale is meaningless.
   ///
-  /// **A panel that has changed size asks for the frame again** (K-420). On
+  /// **A panel that has changed size asks for the frame again** (K-430). On
   /// Auto the scale is whatever the panel could show at the moment it laid
   /// itself out, and the first layout of a session happens at whatever size the
   /// window opened at — so the first frame stayed at that scale until something

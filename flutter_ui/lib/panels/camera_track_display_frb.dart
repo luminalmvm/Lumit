@@ -129,7 +129,7 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
     if (was?.stage != BridgeTrackStage.done &&
         next.stage == BridgeTrackStage.done) {
       widget.onChanged();
-      // Re-reading is not enough on its own (K-420). A solve moves neither the
+      // Re-reading is not enough on its own (K-430). A solve moves neither the
       // playhead nor the document's revision, so the picture would still be
       // the one banked before it, and the Viewer's point cloud — keyed by
       // exactly those two — would have no reason to ask the engine again. Both

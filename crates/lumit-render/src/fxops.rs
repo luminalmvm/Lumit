@@ -649,7 +649,7 @@ pub fn run_ops(
 }
 
 /// The content name of each op's output (K-421): `keys[k]` covers the input,
-/// the raster, the flare substitution count (K-425) and ops `0..=k`, with
+/// the raster, the flare substitution count (K-431) and ops `0..=k`, with
 /// each op's parameters and the identity of whatever rides beside it. `None`
 /// from the first op that binds a picture nobody named — another layer (a
 /// plate or a matte texture), the neighbour frames, the flow field — through
@@ -1191,7 +1191,7 @@ mod tests {
         );
     }
 
-    /// A bake merely being **made** renames nothing (K-425, superseding the
+    /// A bake merely being **made** renames nothing (K-431, superseding the
     /// K-350 rule it replaces).
     ///
     /// Op outputs used to carry the flare bake *generation*, which moves the

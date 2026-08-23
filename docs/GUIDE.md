@@ -5443,7 +5443,7 @@ computing, so the bake thread takes everything waiting, keeps the newest, and dr
 rest before they start — the same "is my work still wanted" habit the rest of the engine
 has.
 
-### When the aperture is animated, not dragged (K-425)
+### When the aperture is animated, not dragged (K-431)
 
 Dragging a slider stops. A **keyframe** does not. Put keyframes on the f-stop and the iris
 is slightly different on every single frame — so every single frame asks for a bake of its
@@ -5480,7 +5480,7 @@ time, is the starburst's shape. That is a deliberate trade, and it is the honest
 without it an animated aperture is not a lens that caches badly, it is a lens that cannot
 be cached at all.
 
-### Stopping down dims the flare (K-426)
+### Stopping down dims the flare (K-432)
 
 The flare sets its own overall brightness. Every lens in the library throws a different
 amount of light around inside itself, by factors of hundreds, so when the effect finishes
@@ -5936,7 +5936,7 @@ can sit at Quarter while the title card in the next tab stays at Auto, and each
 remembers its own. It is remembered with the project but is not part of the
 work, so it makes no undo step.
 
-**Auto asks again when the panel changes size (K-420).** On Auto the number of
+**Auto asks again when the panel changes size (K-430).** On Auto the number of
 pixels a frame is made at is decided when the Viewer measures itself, and the
 first measurement of a session happens at whatever size the window opened at.
 Nothing used to notice afterwards: making a panel bigger is not an edit and does
@@ -5949,7 +5949,7 @@ out: a fixed tier (Full, Half, Third, Quarter), which is a choice the panel has
 no say in, and the middle of a zoom, which lays the picture out dozens of times
 on its way to where it is going — only the size it lands on is asked for.
 
-**The point cloud follows the switch and the solve (K-420).** When a shot has
+**The point cloud follows the switch and the solve (K-430).** When a shot has
 been analysed by the **Camera track** effect, Lumit knows where a few hundred
 features of the scene sit in space, and draws them over the picture as dots
 whenever that effect's **Show points** is on. Which dots to draw is worked out

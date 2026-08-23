@@ -48,7 +48,7 @@ pub mod schedule;
 ///   now covers the project's sample count, and turning the setting on by
 ///   default changes what every comp renders to. Every version-2 frame was made
 ///   without anti-aliasing, so none of them may be served again.
-/// * 5 — the Lens flare's aperture (K-425). The key now covers a file
+/// * 5 — the Lens flare's aperture (K-431). The key now covers a file
 ///   parameter's size and modification time, so an edited .lens or .cube
 ///   renames the frames that read it; and the flare's bake snaps its
 ///   continuous iris dials to a step, which moves the picture very slightly
@@ -349,7 +349,7 @@ fn feed_effect_stack(
                     // Which file is live at this time (the hold-keyed index
                     // selects it); an unset param feeds a distinct 0 marker.
                     // The path string is hashed length-prefixed, and with it
-                    // the file's **size and last-modified time** (K-425) — so
+                    // the file's **size and last-modified time** (K-431) — so
                     // editing a .lens or a .cube on disk renames every frame
                     // that reads it.
                     //
@@ -1248,7 +1248,7 @@ fn feed_f64(h: &mut blake3::Hasher, v: f64) {
 }
 
 /// A file's size and last-modified time, folded into a key so that editing
-/// the file on disk renames the frames that read it (K-425).
+/// the file on disk renames the frames that read it (K-431).
 ///
 /// A path a frame key mentions is a path some loader is about to read, so the
 /// stat is warm and costs microseconds. A file the engine cannot stat — gone,

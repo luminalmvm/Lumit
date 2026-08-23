@@ -11215,7 +11215,9 @@ installed). The Kaitai/licence open question in docs/11 closes: nothing is vendo
 the MIT parsers are read as documentation and reimplemented under Lumit's own rules,
 with attribution in the impl note.
 
-**K-420 · DECIDED · A cached frame is shown at once and measured afterwards.** An
+## K-420 — A cached frame is shown at once and measured afterwards
+
+**DECIDED 2026-08-23.** An
 amendment to K-276 (4) and (8) together. (4) made a measured frame a composited one and
 stepped over the whole cache ladder while the clock was on; (8) then turned the clock on
 by default. Put together, every scrub onto a frame the cache bar showed green composited
@@ -11232,8 +11234,9 @@ different 1% steps before); and the Scopes read a frame held on the card back ra
 than compositing it again, and no longer re-request the frame they already show. This
 number was allocated on the lane3 branch.
 
-**K-421 · DECIDED · Each effect's output is kept, so editing the last one re-runs only
-that one.** The only cache the render path had was the finished comp frame (K-178,
+## K-421 — Each effect's output is kept, so editing the last one re-runs only that one
+
+**DECIDED 2026-08-23.** The only cache the render path had was the finished comp frame (K-178,
 K-214), so an Exposure after a Lens flare re-ran the flare on every nudge. A per-effect
 intermediate cache now sits in the realiser — VRAM only, 256 MB by default, beside the LUT
 cache — and `run_ops` names each op's output by content (docs/06 §5.2: the input's
@@ -11248,7 +11251,9 @@ and it does not change the evaluator plan. Preview and export remain byte-identi
 (K-031): a held prefix is the same texture a cold walk makes. This number was allocated
 on the lane3 branch.
 
-**K-422 · DECIDED · A precomp's frames are cached as one unit.** The manual promised that a
+## K-422 — A precomp's frames are cached as one unit
+
+**DECIDED 2026-08-23.** The manual promised that a
 precomposed section caches as one unit, and docs/06 §5.2 that the same nested comp used in
 five places renders once; neither was true — a non-collapsed Precomp layer walked its comp,
 decoded its footage and realised every inner layer on every parent frame, and the frame
@@ -11265,7 +11270,9 @@ carry no name; a measured frame realises the comp in full so its inner rows get 
 Preview and export stay byte-identical (K-031). `ALGO_VERSION` bumped to 4. This number
 was allocated on the lane3 branch.
 
-**K-423 · DECIDED · Layers under a full-frame opaque layer are not rendered.** The only gates
+## K-423 — Layers under a full-frame opaque layer are not rendered
+
+**DECIDED 2026-08-23.** The only gates
 on the comp walk were hidden, out of span and solo, so a full-frame solid over a stack of
 footage still decoded, uploaded, effected and composited everything under it. A single
 predicate in `lumit-core` (`occlusion::occluder_index`, docs/06 §1.1) now names the topmost
@@ -11281,7 +11288,9 @@ probe and would need the answer threaded down the way K-422's `held` question is
 key keeps hashing culled layers; preview and export stay byte-identical (K-031). This number
 was allocated on the lane3 branch.
 
-**K-424 · DECIDED · The idle fill wraps the work area and keeps going into RAM.** Supersedes
+## K-424 — The idle fill wraps the work area and keeps going into RAM
+
+**DECIDED 2026-08-23.** Supersedes
 the bound in K-187 ("bounded by the budget — it stops before the LRU would churn"). The
 fill used to keep a window of VRAM-budget frames around the playhead and stop: it never
 wrapped to the start of the work area, and the far side of a loop longer than the window
@@ -11297,8 +11306,9 @@ only while the card has room. Regression tests:
 `the_fill_keeps_going_into_memory_once_the_card_is_full` (worker_thread.rs). This number
 was allocated on the lane3 branch.
 
-**K-420 · DECIDED · The Viewer asks again when it changes size, and the point cloud follows
-the effect and the solve.** Three frontend staleness bugs with one shape: something changed
+## K-430 — The Viewer asks again when it changes size, and the point cloud follows the effect and the solve
+
+**DECIDED 2026-08-23.** Three frontend staleness bugs with one shape: something changed
 what should be on screen, and nothing told the thing that draws it. (1) On Auto the render
 scale is measured by the Viewer's layout, and `LumitUiState.reportViewerScale` only stored
 it — so the first frame of a session was made at the size the window opened at and stayed
@@ -11318,7 +11328,9 @@ change, not one per layout), `disabling the effect removes the cloud, with no fr
 and `a landed solve is read without the playhead moving` (camera_track_frb_test.dart). No
 new user-facing strings. This number was allocated on the lane3 branch.
 
-**K-425 · DECIDED · An animated aperture no longer stops the flare's frames from caching.**
+## K-431 — An animated aperture no longer stops the flare's frames from caching
+
+**DECIDED 2026-08-23.**
 Supersedes the second invariant of K-350 ("a provisional frame is unnameable") and the
 K-421 op name that carried the bake generation. K-350 refused to name *any* frame while
 *any* lens flare bake was in flight, which was right for the case it was written for — a
@@ -11373,8 +11385,9 @@ bit-identically), and the substitution counts added to
 `lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one` (lumit-gpu).
 No new user-facing strings. This number was allocated on the lane3 branch.
 
-**K-426 · DECIDED · The flare's auto-exposure reads the native stop, so stopping down dims
-it honestly.** Amends K-425 (2), which recorded the exposure gain stepping with the snapped
+## K-432 — The flare's auto-exposure reads the native stop, so stopping down dims it honestly
+
+**DECIDED 2026-08-23.** Amends K-431 (2), which recorded the exposure gain stepping with the snapped
 working f-number as a deliberate trade, and settles the residue that entry left: on a slow
 f-stop ramp the whole flare's brightness stepped about 1.7% at every twentieth-of-a-stop
 boundary, because the auto-exposure probe (K-258) rendered its thumbnail at the working
@@ -11392,7 +11405,7 @@ correspondingly dimmer at the default f/2.8 on a fast prime, which is the visibl
 Two consequences worth stating. The exposure no longer steps at all under an animated
 aperture — one gain per lens, whatever the iris is doing. And the working f-number stays a
 bake-key input, but for **one** reason only: `effective_roundness`'s K-260 wide-open blend
-decides how round the diffracting hole is, so it shapes the starburst sprite. The K-425
+decides how round the diffracting hole is, so it shapes the starburst sprite. The K-431
 snap therefore stays exactly as it is (the sprite is an FFT and cannot move per-frame),
 now documented as covering the sprite alone — impl/lens-flare.md §5c, §5d.
 

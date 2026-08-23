@@ -5329,7 +5329,7 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
-/// **An animated aperture reuses its bakes** (K-425): two f-stops inside one
+/// **An animated aperture reuses its bakes** (K-431): two f-stops inside one
 /// step key the same *and* bake bit-identically, while a step apart they key
 /// differently — and the frame's own stop scale stays continuous, so the
 /// ghosts still shrink smoothly as the iris closes.
@@ -5412,7 +5412,7 @@ fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
     );
 }
 
-/// **The auto-exposure gain belongs to the lens, not to the iris** (K-426):
+/// **The auto-exposure gain belongs to the lens, not to the iris** (K-432):
 /// the probe is shot at the prescription's native stop, so two working
 /// f-stops on one lens close the loop to bit-identically the same gain — and
 /// the frame that is stopped down is honestly dimmer for it, as a real lens

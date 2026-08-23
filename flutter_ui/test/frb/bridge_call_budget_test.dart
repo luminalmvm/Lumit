@@ -587,7 +587,7 @@ void main() {
       );
     });
 
-    /// **A Viewer that has grown asks for the frame again** (K-420).
+    /// **A Viewer that has grown asks for the frame again** (K-430).
     ///
     /// On Auto the scale a frame is rendered at is whatever the panel could
     /// show when it laid itself out, and the first layout of a session happens

@@ -602,7 +602,7 @@ thus the width in the name is the width the pixels were decoded at.
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
 nowhere, so an entry can never be a promise the renderer did not keep. A **file parameter**
 (a `.cube` LUT, a `.lens` prescription) joins the key by path, size and last-modified time
-(K-425) — the loaders identify a file by more than its path, so a name that mentioned only
+(K-431) — the loaders identify a file by more than its path, so a name that mentioned only
 the path could outlive an edit to the file itself.
 
 **A nested comp is named on its own (K-422).** The key used to fold a Precomp layer's comp
@@ -621,7 +621,7 @@ op_0 … op_k)`, where each op contributes its effect name and algorithm version
 resolved parameter value (post-expression, post-rescale — the numbers the kernel is handed),
 and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
 content hash, a mask path by its vertices. The flare term counts the frames a Lens flare
-drew other optics than its parameters name (K-425); it was the bake *generation*, which
+drew other optics than its parameters name (K-431); it was the bake *generation*, which
 moves the moment any bake is queued, so a keyframed aperture renamed every op in the
 project on every frame. The input is the layer's source *by identity*,
 not by its bytes — the decode job's fields for footage, the colour and size for a solid —

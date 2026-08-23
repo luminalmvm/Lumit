@@ -352,7 +352,7 @@ impl FxEngine {
     }
 
     /// How many times a frame has drawn a lens flare with **other** optics
-    /// than its parameters name (K-425) — the deferred fallback to the lens
+    /// than its parameters name (K-431) — the deferred fallback to the lens
     /// the last frame drew, or no flare at all with none drawn yet.
     ///
     /// Read either side of a render, this is the exact answer to *may this
