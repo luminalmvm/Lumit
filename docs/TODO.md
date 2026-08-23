@@ -283,9 +283,6 @@ imported theme travels with the user rather than the machine's settings.
     all the engine can tell it: there is no notice stream to subscribe to, so a
     module that took a long time coming up, or came up degraded, cannot say so
     on the splash. Wants an engine-side boot event stream before it can.
-- **Pop-out panel windows are removed** (K-182). Rebuild from git history
-    (`flutter-frontend-alternative`, pre-K-182) when pop-out is wanted, and land
-    it wired end to end.
 - **Workspace machinery beyond the presets** ([07-UI-SPEC.md](07-UI-SPEC.md)
     §1.6) - user workspaces (save-as/rename/export), the chrome switcher strip,
     and Alt+Shift+1-9.
@@ -379,7 +376,7 @@ it fills unevenly; feeding the profiler's measured costs back as the weights is 
 fix. Also unbuilt: an **export**'s progress still has its own path
 ([07-UI-SPEC.md](07-UI-SPEC.md) §14) rather than sharing this one.
 
-## Now - the redesign programme (K-438..K-446)
+## Now - the redesign programme (K-438..K-448)
 
 The 2026-08-23 redesign lands in five phases, in this order; 15-DESIGN §12A and the
 approved mockups govern the layouts. Phase 1 is Now; each later phase becomes Now when
@@ -388,8 +385,8 @@ the one before it lands. Delete each phase here when it lands, as with everythin
 - **Phase 1 - the Flutter multi-window upgrade** (K-444). The windowing foundation
     lands first, on the current look, so dialogs and pop-ups become real OS windows
     before any of them is redrawn - upgrade regressions stay separable from redesign
-    regressions. This subsumes the old pop-out-panel-windows rebuild item under
-    *Shell and onboarding* above.
+    regressions. The old pop-out-panel-windows rebuild item (K-182) is folded
+    into this phase.
 - **Phase 2 - theme groundwork** (K-438, K-439, K-440): the `animated` token and the
     three-greys-at-rest audit; Hanken Grotesk and Geist Mono bundled (replacing the
     old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
@@ -411,13 +408,16 @@ the one before it lands. Delete each phase here when it lands, as with everythin
     polish list.
 - **Phase 4 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
     second view of the effect stack that can also wire effects together, auto-wire
-    and heal toggles, type-coloured wires from `viz_*`-family tokens, and the Nodes
-    workspace with the small viewer and short timeline. The document-model question
-    stays open until this phase's design step answers it. Particulate (K-446) is
+    and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
+    workspace with the small viewer and short timeline, and the Node preview panel
+    (its own panel, openable in a sidebar of the Effects workspace, K-448). The
+    document-model question stays open until this phase's design step answers it.
+    Particulate (K-446) is
     designed against the points stream this phase's types introduce.
 - **Phase 5 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
-    own download button, screenshot sections and hover-play feature videos.
+    own download button, screenshot sections and hover-play feature videos; type set
+    in Geist, unless a near-neighbour wins the side-by-side comparison.
 
 ## Next - engine/bridge follow-ups
 

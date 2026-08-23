@@ -12083,3 +12083,45 @@ straight to the composite. The same type is what a later grid / scatter / clone-
 connect-points family will share, so Particulate is the first consumer of a points pipeline
 rather than a dead end: separate effect, shared type. Nothing about its feature set is
 decided here beyond the output's shape.
+
+## K-447 — There is no auto-key: the stopwatch is the whole model
+
+**DECIDED 2026-08-23.** Lumit ships no auto-key. The stopwatch model already carries the
+meaning an auto-key mode exists to patch: a property animates exactly while its stopwatch
+is lit — from then on every edit at the playhead is a keyframe — and an edit to an unlit
+property sets its constant value. This settles the open auto-key semantic question by
+removing its subject: there is no record mode to leave on by accident, no "temporary value
+that reverts when the playhead moves" state to explain, and whether an edit keys is always
+visible on the row that takes it. docs/07 §4.3 carries it.
+
+## K-448 — The remaining approved shell rules from the mockup rounds
+
+**DECIDED 2026-08-23.** The redesign's approval rounds settled a set of smaller shell
+rules, recorded together here; each lives in the spec noted.
+
+- **The transport lives in the Viewer bar.** The bar's items may split between a top and a
+  bottom bar by default; a setting gathers everything into one bar, at the top or the
+  bottom (15-DESIGN §12A.6, docs/07 §2.2).
+- **A setting hides shortcut hints throughout the UI**, the main menu excluded (docs/07
+  settings inventory).
+- **The Timeline's bottom bar carries a toggle for the switches / modes / parent columns**
+  (15-DESIGN §12A.1).
+- **No toolbar swatches**: project colours appear inside the colour picker, never as a
+  swatch strip in the toolbar (docs/07 §6.1).
+- **The Node preview is its own panel**, openable in a sidebar of the Effects workspace —
+  beside, not replacing, the Nodes workspace's small viewer (K-445).
+- **First click selects, always**: selection lands immediately on the first click, and a
+  double-click's action stacks on top of that selection (docs/07 §14).
+- **macOS keeps its native menu bar**, so the wordmark and the workspace tabs move into
+  the toolbar row (docs/07 §1.8).
+- **The Settings section over the Viewer's own toggles is titled "Viewer"**, not "Viewer
+  chrome".
+- **The welcome screen** carries the New, Blank and Open project cards, with Manual and
+  What's new as outlined buttons, and no "free and open source" line; with nothing open,
+  the same three cards repeat in the empty Viewer until a composition is viewed (docs/07
+  §13.2).
+- **The Project panel gains a bottom bar with Folder and Composition** (dropping an asset
+  on Composition makes a comp to match); colour tags tint the item icon's strokes rather
+  than adding a dot; the path column sits at the right of the list; the preview card
+  carries name, size, rate, duration and codec (docs/07 §3.1).
+- **Paired dialog buttons share one width** (15-DESIGN §12A.4).

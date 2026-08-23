@@ -244,7 +244,9 @@ panel layout is.
   keymap rather than carrying a chord of its own (§15, K-199).
 - On **macOS** the bar MUST be the system menu bar, not an in-window strip, with About and
   Settings in the application menu. On Windows and Linux Settings sits under Edit and About
-  under Help. The item tree MUST be shared between the two renderings.
+  under Help. The item tree MUST be shared between the two renderings. With no in-window
+  menu strip on macOS, the wordmark and the workspace tabs move into the toolbar row
+  (K-448).
 - **Window** MUST list every panel with a tick showing whether it is in the arrangement;
   toggling one adds or drops it, and the change persists because the arrangement does. The last
   remaining panel MUST NOT be hideable.
@@ -282,7 +284,9 @@ anywhere, including other monitors.
 
 ### 2.2 Viewer bar
 
-A single compact bar at the bottom of the Viewer. **Arrangement is K-411's**: the bar
+A compact bar at the bottom of the Viewer — the transport lives here, and under the
+redesign (K-448) the bar's items may split between a top and a bottom bar by default, with
+a setting for a single bar at the top or the bottom. **Arrangement is K-411's**: the bar
 reads as instruments — scale (items 1–2), the view toggles as one icon cluster (7, 4,
 6, the layer-controls switch, 10), how the pixels read (3, 12, 13), the snapshot pair
 (14), the clock (11), the transport with its playback-mode dropdown, then the
@@ -809,6 +813,11 @@ The library of assets: footage items, audio items, comps, folders.
 - A folder tree with drag-to-reorganise. Sorting per column; columns: name, type,
   dimensions, frame rate, duration, colour space tag, file path. Column set is configurable
   (workspace state).
+- **Under the redesign (K-448)**: the panel gains a bottom bar with **Folder** and
+  **Composition** buttons — dropping an asset on Composition makes a comp to match it,
+  exactly as the New composition button does today; asset **colour tags** tint the item
+  icon's strokes rather than adding a dot; the **path** column sits at the right of the
+  list; and the preview card carries name, size, rate, duration and codec.
 - A persistent **search field** filters the tree live (name, type, extension). `Ctrl+F`
   focuses it when the panel has focus.
 - Selecting an item shows a header readout: thumbnail, dimensions, fps, duration, codec,
@@ -1100,6 +1109,11 @@ measurement — the panel shows the numbers, it does not turn them on.
   **scrub-drag** and click-to-type numeric entry, expression toggle, and its keyframes as
   diamonds on the lane. Keyframe icons reflect interpolation (hold/linear/bezier), matching
   the graph editor.
+- **There is no auto-key** (K-447): the stopwatch is the whole model. A property animates
+  exactly while its stopwatch is lit — from then on every edit at the playhead is a
+  keyframe — and an edit to an unlit property sets its constant value. There is no record
+  mode to leave on by accident, and whether an edit keys is always visible on the row that
+  takes it.
 - Keyframe interaction on lanes: click to select, box-select, drag to move in time,
   `Alt+drag` a selection's end to scale the group's timing, `Ctrl+click` a lane to add a
   keyframe at that time, right-click for interpolation and *Ease* commands.
@@ -1649,7 +1663,9 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
 **The picker.** A colour swatch opens the house picker: the **R, G and B numbers across the
 top**, each drag-scrubbable and typeable, then the saturation/value square, the hue strip, a
 was/now pair and a hex field. Every one of those edits every other — type a number and the
-square moves; drag in the square and the numbers follow.
+square moves; drag in the square and the numbers follow. **Project colours live inside the
+picker** (K-448): a project-wide swatch row is the picker's own, never a swatch strip in
+the toolbar.
 
 **The numbers are in the scale of the thing being edited**, which is not always 0–255:
 
@@ -2060,13 +2076,18 @@ small image over each choice, remain the destination (polish tracked in TODO).
   *Import footage*, *New composition*, *Open project* — plus recent projects and a note
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
   every panel from first launch.
+- **The welcome screen** (K-448, superseding the card above once the redesigned shell
+  lands): the launch window carries the **New**, **Blank** and **Open** project cards,
+  with **Manual** and **What's new** as outlined buttons, and no "free and open source"
+  line. With nothing open, the same three cards repeat in the empty Viewer until a
+  composition is viewed.
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
   press the new-Sequence-layer / new-Solid shortcuts). Hints disappear at first content
   and never return unprompted.
 - **Tooltips policy**: every icon control has a tooltip with its name and current shortcut,
-  on a ~500 ms hover delay. **A tooltip is a name, not an explanation: under five words,
-  two where two will do** (K-303). *Add keyframe*, not *Add a keyframe here*; *Reset all
-  parameters*, not *Put every parameter back to its default, removing its keyframes*. A
+  on a ~500 ms hover delay. **A tooltip is a name, not an explanation: one or two words,
+  never more** (K-440, tightening this rule's original "under five words"). *Add keyframe*,
+  not *Add a keyframe here*. A
   control whose state changes says the state — *Visible* / *Hidden*, *Locked* / *Lock* —
   rather than narrating the click. Rich tooltips (a sentence + *Learn more* link) are
   reserved for concepts with Lumit-specific behaviour (Retime, overrun, matte, adaptive
@@ -2179,6 +2200,9 @@ Binding, from the household mandate; these override convenience everywhere.
 - **User controls tempo**: nothing auto-advances, auto-plays, or animates the user's
   viewport. No scroll hijack — the wheel never zooms or navigates without an explicit
   modifier (§4.6). Focus never jumps except as the direct result of a user action.
+- **First click selects, always** (K-448): selection lands immediately on the first click,
+  and a double-click's action stacks on top of that selection. No surface waits to see
+  whether a second click is coming before selecting.
 - **Keyboard reachability**: every control MUST be reachable and operable by keyboard.
   `Ctrl+F6`/`Ctrl+Shift+F6` cycle panel focus; `Tab` traverses controls within a panel;
   arrow keys operate lists, trees, and the Timeline outline. All functionality exposed
@@ -2238,7 +2262,8 @@ travel in the `.lum` and are marked below:
   the operating system for ever rather than freezing whichever language it first opened in.
   The list names each language in its own language — Deutsch, Қазақша, Українська, 简体中文,
   繁體中文 — so somebody who has chosen one they cannot read can find their way back.
-- **Keymap**, **Interface** (UI scale, tooltips, reduced motion follows OS or override),
+- **Keymap**, **Interface** (UI scale, tooltips, whether shortcut hints show throughout
+  the UI — the main menu excluded (K-448) — and reduced motion follows OS or override),
   **Autosave** (interval, copies kept), **Plugins** (search paths, disabled list,
   per-plugin overrides).
 

@@ -234,7 +234,7 @@ pub struct Theme {
     // roles (§3.1)
     pub accent: Color32,
     pub accent_hover: Color32,
-    pub animated: Color32,          // keyframe state and selected handles only (K-439)
+    pub animated: Color32,          // the closed K-439 job list (§3.1), nothing else
     pub success: Color32,
     pub warning: Color32,
     pub error: Color32,
@@ -480,9 +480,9 @@ status line's cache meter, where each tier already has its own bar.
 - **Comp markers (shipped, K-254)**: a `marker` token of its own — a plain grey, `#c4c4c4`
   on a dark scheme and `#565656` on a light one, editable in the theme editor like any other
   role. Grey rather than a role colour on purpose: a marker says *here*, not *good* or
-  *careful*, and the ruler already spends the accent on the work area. The flag is an 11×12
-  shape with its **point at the top**, centred on the frame it marks so the point sits on the
-  playhead, hanging into the ruler's lower row. What it says rides in a box of the same
+  *careful*, and the work area already has its own colour (`animated`, §12A.1). The flag is
+  an 11×12 shape with its **point at the top**, centred on the frame it marks so the point
+  sits on the playhead, hanging into the ruler's lower row. What it says rides in a box of the same
   colour flying from the flag's **centre point**, `caption` weight 400 in `surface_0`,
   rather than as loose text over the ticks. Flag and box both carry a 1px `surface_0`
   outline and sit flush with the floor of the ruler. **One marker per frame** — a second
@@ -509,14 +509,16 @@ status line's cache meter, where each tier already has its own bar.
 
 ### 6.5 Selection, focus, drop targets
 
-- **Selection**: `accent` 1px border + `accent` @ 16% fill on clips, layers, keyframes, assets.
+- **Selection**: `accent` 1px border + `accent` @ 16% fill on clips, layers, assets;
+  keyframe selection is `animated` (§6.2).
   The playhead is a 1px `accent` line with an 11×8px `accent` **head** at the top of the
   ruler — a downward triangle, with the line carried up into it as a 1px notch in
   `surface_0` (K-207). A bare hairline is findable only by hunting along the ruler, and at
   a glance it reads as a row seam; the head is the editor idiom for "you are here". The
   grab target stays ≥24px wide (§7.2) whatever the head draws.
 - **Focus ring** (the household `ring-clay` equivalent): every focusable control shows a 1px
-  `accent` stroke offset 1px outside its bounds when keyboard-focused. Focus is never
+  `accent` stroke offset 1px outside its bounds when keyboard-focused — except the focused
+  value field, which draws its focus in `animated` (§3.1). Focus is never
   invisible; the toolkit's focus stroke is set from this token so stock widgets comply.
 - **Drop targets** (asset drags, panel docking, clip insertion points): 1.5px dashed `accent`
   border + `accent` @ 10% fill; an insertion caret between clips is a 2px `accent` line. Dock
@@ -774,7 +776,9 @@ shell is a different theme, not a shape).
 
 The 2026-08-23 redesign (K-441–K-444) fixed the resting layout of the main surfaces. A set of
 approved mockups governs the exact panel layouts; the rules below are the ones binding enough
-to write down. **Sharp is the redesign's reference shape**: every rule here is designed and
+to write down. The mockup sources land in the repository under `docs/redesign/mockups/` with
+the implementation programme's first phase; until then the approved set is held by the owner.
+**Sharp is the redesign's reference shape**: every rule here is designed and
 judged under Sharp first, and Round (§12) is revisited once the Sharp redesign has landed.
 
 ### 12A.1 Timeline (K-441)
@@ -801,6 +805,8 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   leading edge**, so a lane full of layers reads organised rather than carnival, and each
   bar's start still lands with a snap.
 - **Keyframe diamonds on layer rows draw at half the row scale.**
+- **The panel's bottom bar carries a toggle for the switches / modes / parent columns**
+  (K-448), so the outline pares down to names and bars when the columns are not in use.
 
 ### 12A.2 Graph mode (K-442)
 
@@ -843,7 +849,8 @@ in-window overlay, and they all share one pattern:
 - label-left / control-right rows, labels in a fixed 110px column;
 - hairline-separated, kicker-titled groups;
 - a footer strip carrying a summary line (mono, factual: `600 frames · 10.0 s · 1920×1080 ·
-  60 fps`) and **the single filled action**.
+  60 fps`) and **the single filled action**;
+- paired buttons share one width (K-448).
 
 ### 12A.5 Feedback is transient and local (K-439)
 
@@ -852,6 +859,13 @@ drag-scrub modifier ladder shows only while dragging; drop-target highlights app
 over the target; things attached to what is being dragged move with the drag. **Nothing
 changes the resting state** — a panel nobody is touching looks exactly as §2.1's three-greys
 rule says it does.
+
+### 12A.6 Viewer bar (K-448)
+
+**The transport lives in the Viewer bar.** By default the bar's items may split between a
+top and a bottom bar; a setting gathers everything into a single bar, at the top or the
+bottom. K-411's instrument grouping carries over whichever arrangement is set
+([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
 
 ## 13. New-panel checklist
 
@@ -964,3 +978,7 @@ shown while the application boots:
   Decide after the first Timeline prototype.
 - **Wide-gamut / HDR Viewer output.** When the Viewer gains HDR output, the neutrality zone
   rules need restating in display-referred terms; the SDR spec here deliberately ignores it.
+- **`animated`'s closed list.** K-439 closes the token's jobs at six, but two of them — the
+  focused value field and the work-area band — are not keyframe state or a selected handle,
+  and the sparing-use intent behind the token argues for trimming them. Confirm with the
+  owner; if either goes, a superseding decision entry trims the list.

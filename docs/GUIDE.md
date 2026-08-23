@@ -8185,5 +8185,5 @@ to tell apart from the redesign's own changes.
 and approved by the owner before any code moves. When a question comes up about where
 something sits or how big it is, the answer is read off the approved mockup, not
 re-argued in code review. The written rules live in `docs/15-DESIGN.md`; the decisions
-and their reasons are logged as K-438 to K-446 in `docs/02-DECISIONS.md`.
+and their reasons are logged as K-438 to K-448 in `docs/02-DECISIONS.md`.
 
