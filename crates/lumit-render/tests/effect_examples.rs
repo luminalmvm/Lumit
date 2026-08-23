@@ -112,6 +112,10 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("blues_hue", f(45.0)),
             ("reds_saturation", f(70.0)),
         ],
+        // Tint at its defaults maps black to black and white to white, which is
+        // a greyscale conversion and looks like a mistake in a manual. Pulling
+        // the black end to navy makes it read as what it is: a two-colour map.
+        "tint" => vec![("black", colour([0.02, 0.05, 0.18, 1.0]))],
 
         // --- effects the plate is too polite to show at anything gentle ---
         // Sharpening, grain and a vignette are all real at a couple of per cent
@@ -123,10 +127,16 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("radius", f(1.6)),
             ("threshold", f(0.0)),
         ],
+        // A vignette darkens the corners, and only the corners. Roundness has
+        // to come off its default for that: at 1 the falloff is a true circle,
+        // and on a 2.35:1 frame a circle that clears the corners has already
+        // swallowed both side edges, whatever the radius is set to. At 0 it
+        // follows the frame's own shape and the four corners are what is left.
         "vignette" => vec![
-            ("amount", f(1.0)),
-            ("radius", f(0.45)),
-            ("softness", f(0.6)),
+            ("amount", f(0.55)),
+            ("radius", f(0.9)),
+            ("softness", f(0.45)),
+            ("roundness", f(0.0)),
         ],
         "add_grain" => vec![
             ("intensity", f(190.0)),
@@ -152,12 +162,14 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         ],
         "texturize" => vec![("relief", f(12.0)), ("texture_contrast", f(180.0))],
         // A frozen frame of a shake is an offset frame, which teaches nothing
-        // about shaking. The blur is what makes it read as movement.
+        // about shaking, so a little blur goes with it. Only a little: smeared
+        // hard enough and the picture reads as a blur rather than a shake, and
+        // the reader has to be able to see the frame is knocked off its mark.
         "shake" => vec![
-            ("amplitude", f(10.0)),
-            ("rotation", f(6.0)),
+            ("amplitude", f(4.0)),
+            ("rotation", f(1.5)),
             ("motion_blur", on(true)),
-            ("mb_amount", f(1.0)),
+            ("mb_amount", f(0.3)),
         ],
 
         // --- geometry ---
@@ -176,25 +188,33 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // --- the ones that read a second picture, wired in wire_aux ---
         "light_wrap" => vec![("width", f(70.0)), ("intensity", f(2.2))],
         "set_matte" => vec![("channel", choice(0))],
-        // The plate's depth pass is compressed into its top end, which is
-        // exactly the case Gamma exists for. Focus sits on the running figure
-        // and the aperture is wide enough that the far end goes properly soft.
         // Focus is picked by pointing at the running figure rather than by
         // guessing a number, which is the honest way round and the way the
-        // control is meant to be used. The plate's depth pass is compressed into
-        // its top end, so a little Gamma spreads it before it is read.
+        // control is meant to be used.
+        //
+        // Invert is deliberately left off. Focus is read through the same
+        // invert as every other pixel, so with Focus point on the two cancel
+        // and the picture does not move at all. The picture was reading the
+        // wrong way round because the depth pass is crushed into its top end:
+        // at a wide Range the whole near ground plane sat inside focus and only
+        // a mid band softened. A narrow Range with Gamma steepening the falloff
+        // is what separates the figure from what is in front of and behind it.
         "dof" => vec![
             ("use_focus_point", on(true)),
             ("focus_point_x", f(580.0)),
             ("focus_point_y", f(330.0)),
-            ("gamma", f(1.5)),
-            ("range", f(0.2)),
+            ("gamma", f(6.0)),
+            ("range", f(0.02)),
             ("aperture", f(12.0)),
             ("near_aperture", f(12.0)),
             ("far_aperture", f(12.0)),
         ],
 
         // --- the iris is the transition here, so it has to be opened ---
+        // Radial wipe at its half-way default cuts the frame down the middle,
+        // which is the Linear wipe picture mirrored. A third of the way round
+        // leaves a wedge, so the two pages do not show the same figure twice.
+        "radial_wipe" => vec![("completion", f(35.0))],
         "iris_wipe" => vec![
             ("centre_y", f(f64::from(H) / 2.0)),
             ("outer_radius", f(26.0)),
