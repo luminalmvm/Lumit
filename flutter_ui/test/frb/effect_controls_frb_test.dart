@@ -779,6 +779,68 @@ void main() {
       );
     });
 
+    /// **The Matte row picks a channel and the Mix row a blend** (K-425). The
+    /// engine injects `matte_channel` beside the matte pair and `blend` beside
+    /// `mix`; the panel draws each on its parent's row, never on one of its own.
+    testWidgets(
+        'the Channel sits on the Matte row and the Blend on the Mix row',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      final channel =
+          find.byKey(ValueKey<String>('fx-choice-$id-matte_channel'));
+      final blend = find.byKey(ValueKey<String>('fx-choice-$id-blend'));
+      expect(
+        find.descendant(
+            of: find.byKey(ValueKey<String>('fx-row-$id-matte')),
+            matching: channel),
+        findsOneWidget,
+        reason: 'the Channel choice rides on the Matte row',
+      );
+      expect(find.byKey(ValueKey<String>('fx-row-$id-matte_channel')),
+          findsNothing);
+      expect(
+        find.descendant(
+            of: find.byKey(ValueKey<String>('fx-row-$id-mix')),
+            matching: blend),
+        findsOneWidget,
+        reason: 'the Blend choice rides on the Mix row',
+      );
+      expect(find.byKey(ValueKey<String>('fx-row-$id-blend')), findsNothing);
+
+      // A rider writes, from where it lives.
+      await tester.tap(blend);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add').last);
+      await tester.pumpAndSettle();
+      expect(
+        p.layer.getEffects().single.getValue(id: 'blend'),
+        isA<BridgeEffectValue_Choice>()
+            .having((v) => v.field0, 'blend', isNot(0)),
+        reason: 'picking a blend mode reached the document',
+      );
+    });
+
+    /// An effect that picks its matte's channel itself takes no Channel rider.
+    testWidgets('depth of field has no Channel on its Matte row',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'dof');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      expect(find.byKey(ValueKey<String>('fx-row-$id-depth')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-choice-$id-matte_channel')),
+          findsNothing);
+      expect(find.byKey(ValueKey<String>('fx-choice-$id-depth_channel')),
+          findsNothing);
+    });
+
     /// Depth of field owned the idea first, under its own ids (K-065 keeps
     /// them). K-395 gives it the shared row and the shared words: `depth` is
     /// labelled **Matte**, `depth_invert` is labelled **Invert**, and the two
@@ -936,9 +998,19 @@ void main() {
               BridgeVertex(
                   x: x, y: 0, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
               BridgeVertex(
-                  x: x + 10, y: 0, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+                  x: x + 10,
+                  y: 0,
+                  tanInX: 0,
+                  tanInY: 0,
+                  tanOutX: 0,
+                  tanOutY: 0),
               BridgeVertex(
-                  x: x + 10, y: 8, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+                  x: x + 10,
+                  y: 8,
+                  tanInX: 0,
+                  tanInY: 0,
+                  tanOutX: 0,
+                  tanOutY: 0),
             ],
             closed: true,
             inverted: false,

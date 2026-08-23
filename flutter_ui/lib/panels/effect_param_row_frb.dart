@@ -121,20 +121,19 @@ class EffectParamRowFrb extends StatelessWidget {
   /// Empty is a fair default — the row then simply offers no dropper.
   final Map<String, BridgeEffectValue> siblings;
 
-  /// The Invert switch that rides beside a Matte layer picker on the **same
-  /// row** (K-395), or null on every other row.
+  /// Parameters that ride beside this row's control on the **same row**, in
+  /// drawing order, each with its current value (staged drag included): the
+  /// Matte row's Channel choice and Invert switch (K-395, K-425), the Mix
+  /// row's Blend choice (K-425). Empty on every other row.
   ///
-  /// The matte row is one row everywhere — picker, then the switch that flips
-  /// what the matte says — so it is one widget rather than two rows that
-  /// happen to be adjacent. The switch keeps its own parameter id, so the key
-  /// it draws under and the value it writes are the ones a separate row would
-  /// have used; only the layout is shared.
-  final BridgeParamInfo? invertParam;
-
-  /// [invertParam]'s current value, staged drag included. Null draws the switch
-  /// off, the same reading an absent parameter gets everywhere else (K-258:
-  /// a saved project from before the pair simply has none).
-  final BridgeEffectValue? invertValue;
+  /// The matte row is one row everywhere — picker, then what to read from it
+  /// and whether to flip it — so it is one widget rather than rows that
+  /// happen to be adjacent. A rider keeps its own parameter id, so the key it
+  /// draws under and the value it writes are the ones a separate row would
+  /// have used; only the layout is shared. A null value draws a switch off
+  /// and a choice at its first option, the reading an absent parameter gets
+  /// everywhere else (K-258: a project saved before the rider simply has none).
+  final List<(BridgeParamInfo, BridgeEffectValue?)> riders;
 
   /// An **Action** row's press (K-417): a button, so an event rather than a
   /// value. Null leaves the button drawn but dead, which is what a row shown
@@ -160,8 +159,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
-    this.invertParam,
-    this.invertValue,
+    this.riders = const [],
     this.onAction,
   });
 
@@ -212,7 +210,8 @@ class EffectParamRowFrb extends StatelessWidget {
       ),
     );
 
-    final control = _greyed(_control(context, t, id, value, frame));
+    final control =
+        _greyed(_withRiders(t, id, _control(context, t, id, value, frame)));
 
     // **An Action is a button, and a button says its own name** (K-417). Drawn
     // in the value column with the name column left empty, rather than as a
@@ -517,7 +516,7 @@ class EffectParamRowFrb extends StatelessWidget {
 
       case BridgeParamKind_Layer():
         if (value case BridgeEffectValue_Layer(:final field0)) {
-          return _matteRow(context, t, id, _layerPicker(context, id, field0));
+          return _layerPicker(context, id, field0);
         }
         return Text('—', style: t.small);
 
@@ -1078,46 +1077,85 @@ class EffectParamRowFrb extends StatelessWidget {
     );
   }
 
-  /// The picker with its Invert switch beside it — the uniform Matte row
-  /// (K-395), which every effect has and which the two that owned the idea
-  /// first (Depth of field's depth pass, the Lens flare's source matte) now
-  /// share. Without an [invertParam] this is the picker alone, which is what
-  /// the flare draws: it has no invert of its own to offer.
+  /// The row's control with its [riders] beside it — the uniform Matte row
+  /// (K-395, K-425: picker, Channel, Invert), which every effect has and which
+  /// the two that owned the idea first (Depth of field's depth pass, the Lens
+  /// flare's source matte) share, and the Mix row with its Blend (K-425).
+  /// Without riders this is the control alone.
   ///
-  /// The switch's word is drawn here rather than in the name column because the
-  /// name column already holds this row's word, "Matte". Two controls on one
-  /// row need two labels, and the second one goes where the second control is.
-  Widget _matteRow(
-      BuildContext context, LumitTheme t, UuidValue id, Widget picker) {
-    final inv = invertParam;
-    if (inv == null) return picker;
-    final on = switch (invertValue) {
-      BridgeEffectValue_Bool(:final field0) => field0,
-      _ => false,
-    };
+  /// A switch's word is drawn here rather than in the name column because the
+  /// name column already holds this row's word. Two controls on one row need
+  /// two labels, and the second one goes where the second control is. A choice
+  /// says its own value, and a one-word tooltip names it.
+  Widget _withRiders(LumitTheme t, UuidValue id, Widget control) {
+    if (riders.isEmpty) return control;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        picker,
-        const SizedBox(width: 10),
-        HouseCheckbox(
-          // The key a row of its own would have drawn under: the switch moved
-          // house, it did not become a different control.
-          key: ValueKey<String>('fx-bool-$id-${inv.id}'),
-          value: on,
-          onChanged: (next) =>
-              onWrite(effectId, inv.id, BridgeEffectValue.bool(next)),
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            engineLabel(inv.label),
-            style: t.small,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        // Flexible, so a narrow panel shrinks the host and its riders rather
+        // than overflowing the row; at the panel's working width every one
+        // of them gets its natural size.
+        Flexible(flex: 3, child: control),
+        for (final (p, v) in riders) ...[
+          const SizedBox(width: 6),
+          ..._rider(t, id, p, v),
+        ],
       ],
     );
+  }
+
+  List<Widget> _rider(
+      LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v) {
+    // The key a row of its own would have drawn under: the control moved
+    // house, it did not become a different control.
+    switch (p.kind) {
+      case BridgeParamKind_Bool():
+        final on = switch (v) {
+          BridgeEffectValue_Bool(:final field0) => field0,
+          _ => false,
+        };
+        return [
+          HouseCheckbox(
+            key: ValueKey<String>('fx-bool-$id-${p.id}'),
+            value: on,
+            onChanged: (next) =>
+                onWrite(effectId, p.id, BridgeEffectValue.bool(next)),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              engineLabel(p.label),
+              style: t.small,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ];
+      case BridgeParamKind_Choice(:final options):
+        final index = switch (v) {
+          BridgeEffectValue_Choice(:final field0)
+              when field0 < options.length =>
+            field0.toInt(),
+          _ => 0,
+        };
+        return [
+          Flexible(
+            flex: 2,
+            child: LumitTooltip(
+              message: engineLabel(p.label),
+              child: BareDropdown<int>(
+                key: ValueKey<String>('fx-choice-$id-${p.id}'),
+                value: index,
+                options: [for (var i = 0; i < options.length; i++) i],
+                label: (i) => engineLabel(options[i]),
+                onChanged: (i) =>
+                    onWrite(effectId, p.id, BridgeEffectValue.choice(i)),
+              ),
+            ),
+          ),
+        ];
+      default:
+        return const [];
+    }
   }
 }
 

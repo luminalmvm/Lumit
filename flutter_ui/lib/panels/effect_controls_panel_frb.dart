@@ -790,23 +790,44 @@ class _EffectSection extends StatelessWidget {
     };
     final disabled = disabledParams(info.name, shown);
 
-    // **The uniform Matte row** (K-395). A Layer picker carries its Invert
-    // switch beside it on one row, and the switch never gets a row of its own.
-    // The pair is found by id convention — `matte` + `matte_invert`, and Depth
-    // of field's older `depth` + `depth_invert`, whose stored ids K-065 keeps —
-    // so the injected pair and the effects that predate it fold the same way
-    // without a table here naming them. It costs no bridge call: `params` is
-    // the cached schema this method already read.
-    final byId = {for (final p in params) p.id: p};
-    BridgeParamInfo? invertFor(BridgeParamInfo p) =>
-        p.kind is BridgeParamKind_Layer ? byId['${p.id}_invert'] : null;
+    // **The uniform Matte row** (K-395, K-425) and **the Mix row**. A Layer
+    // picker carries its Channel choice and Invert switch beside it on one
+    // row, a Mix slider its Blend choice, and none of the riders gets a row of
+    // its own. A rider is found by id convention among the parameters the
+    // schema places RIGHT AFTER its host — `matte` + `matte_invert` +
+    // `matte_channel`, Depth of field's older `depth` + `depth_invert`, whose
+    // stored ids K-065 keeps, and `mix` + `blend` — so the injected rows and
+    // the effects that predate them fold the same way without a table here
+    // naming them, and a channel an effect declares elsewhere for itself
+    // (Depth of field's `depth_channel`, three twirls down) stays the row it
+    // always was, as does the Lens flare's own `blend`, which sits BEFORE its
+    // Mix. Choices draw before switches so the row reads picker, Channel,
+    // Invert. It costs no bridge call: `params` is the cached schema this
+    // method already read.
+    List<BridgeParamInfo> ridersFor(BridgeParamInfo p) {
+      final names = switch (p.kind) {
+        BridgeParamKind_Layer() => {'${p.id}_invert', '${p.id}_channel'},
+        BridgeParamKind_Float() when p.id == 'mix' => {'blend'},
+        _ => const <String>{},
+      };
+      final out = <BridgeParamInfo>[];
+      for (var i = params.indexOf(p) + 1;
+          i < params.length && names.contains(params[i].id);
+          i++) {
+        out.add(params[i]);
+      }
+      out.sort((a, b) =>
+          (a.kind is BridgeParamKind_Bool ? 1 : 0) -
+          (b.kind is BridgeParamKind_Bool ? 1 : 0));
+      return out;
+    }
+
     final folded = <String>{
       for (final p in params)
-        if (invertFor(p) case final inv?) inv.id,
+        for (final r in ridersFor(p)) r.id,
     };
 
     Widget rowFor(BridgeParamInfo param) {
-      final inv = invertFor(param);
       return EffectParamRowFrb(
         key: ValueKey<String>('fx-row-$id-${param.id}'),
         effectId: id,
@@ -825,9 +846,10 @@ class _EffectSection extends StatelessWidget {
         // depends on a sibling (the depth-of-field dropper reads the
         // effect's own `depth` layer).
         siblings: values,
-        invertParam: inv,
-        invertValue:
-            inv == null ? null : stagedValue(id, inv.id) ?? values[inv.id],
+        riders: [
+          for (final r in ridersFor(param))
+            (r, stagedValue(id, r.id) ?? values[r.id]),
+        ],
         onAction: onAction,
       );
     }
@@ -838,7 +860,7 @@ class _EffectSection extends StatelessWidget {
       var i = 0;
       while (i < run.length) {
         final param = run[i];
-        // Already drawn, beside its picker on the Matte row.
+        // Already drawn, beside its picker or slider on the Matte or Mix row.
         if (folded.contains(param.id)) {
           i += 1;
           continue;
@@ -936,7 +958,7 @@ class _EffectSection extends StatelessWidget {
       } else if (memberOf.containsKey(param.id)) {
         // A group member reached out of order (a schema whose group is not
         // contiguous): render it plainly rather than losing it — unless it is
-        // an Invert already drawn on its picker's row.
+        // a rider already drawn on its picker's or slider's row.
         if (!folded.contains(param.id)) rows.add(rowFor(param));
         i += 1;
       } else {
