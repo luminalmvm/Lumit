@@ -64,7 +64,6 @@ const CONTROL = {
 
 const UNIT = {
   raw: "-",
-  pct_diag: "Per cent of the composition diagonal",
   px: "Pixels at composition size",
   degrees: "Degrees",
   seconds: "Seconds",
