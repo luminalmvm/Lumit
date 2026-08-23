@@ -54,6 +54,21 @@ const REFERENCE = {
       groups: [],
       params: [{ id: "matte", label: "Matte", kind: "layer", unit: "raw" }],
     },
+    {
+      // Set matte's shape: no universal matte, yet rows called Matte and
+      // Invert that are the effect's own subject. The strength sentence would
+      // be false on it.
+      slug: "own-matte",
+      label: "Own matte",
+      category: "Stylise",
+      category_slug: "stylise",
+      groups: [],
+      matte_role: "none",
+      params: [
+        { id: "matte", label: "Matte", kind: "layer", unit: "raw" },
+        { id: "invert", label: "Invert", kind: "bool", unit: "raw", default: false },
+      ],
+    },
   ],
 };
 
@@ -150,6 +165,20 @@ test("the table matches the catalogue, with the repeated rows collapsed", () => 
       ["| **Intensity**", "| **Element 1**", "| **Element ...**", "| **Element 4**", "| **Matte**", "| **Invert**"],
     );
     assert.ok(f.page().includes("| **Intensity** | Slider | 0 to 4; any value by typing | 1 | - |"));
+  } finally {
+    rmSync(f.dir, { recursive: true, force: true });
+  }
+});
+
+test("an effect with no universal matte gets no matte sentence", () => {
+  const f = fixture();
+  try {
+    f.run();
+    const page = readFileSync(join(f.out, "stylise", "own-matte.mdx"), "utf8");
+    assert.ok(
+      !page.includes("scaling the strength"),
+      "the strength sentence must not appear on a matte_role none effect",
+    );
   } finally {
     rmSync(f.dir, { recursive: true, force: true });
   }

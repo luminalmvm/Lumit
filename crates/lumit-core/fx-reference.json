@@ -139,7 +139,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the blur radius per pixel: white blurs at the full Radius, grey blurs narrowly, black not at all — a blur whose width varies across the frame, which a strength dissolve cannot produce"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "directional-blur",
@@ -251,7 +252,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Length per pixel: white streaks the full Length, grey a shorter one, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "radial-blur",
@@ -395,7 +397,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white sweeps the full Amount, grey a shorter one, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "unsharp-mask",
@@ -526,7 +529,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white adds the full Amount of detail back, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "sharpen",
@@ -637,7 +641,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white sharpens by the full Amount, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "sprite-flare",
@@ -884,7 +889,8 @@
           ],
           "collapsed": false
         }
-      ]
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "light-wrap",
@@ -998,7 +1004,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "rgb-split",
@@ -1198,7 +1205,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white splits the channels the full distance, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "chromatic-aberration",
@@ -1359,7 +1367,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white fringes at the full Amount, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "flash",
@@ -1547,7 +1556,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "colour-balance",
@@ -1680,7 +1690,8 @@
       "matte": {
         "param": "matte",
         "meaning": "pulls Lift toward 0 and Gamma and Gain toward 1 per pixel: white applies the full grade, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "saturation",
@@ -1781,7 +1792,8 @@
       "matte": {
         "param": "matte",
         "meaning": "pulls Saturation toward 100 per pixel: white applies the full Saturation, black leaves the colour as it was"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "vibrancy",
@@ -1882,7 +1894,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Amount per pixel: white applies the full Amount, grey a fraction of it, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "vignette",
@@ -2022,7 +2035,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "exposure",
@@ -2122,7 +2136,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Stops toward 0 per pixel: white applies the full Stops, grey a fraction of them, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "hue-shift",
@@ -2228,7 +2243,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Angle toward 0 per pixel: white turns the hue by the full Angle, grey part of the way, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "contrast",
@@ -2325,7 +2341,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "gamma",
@@ -2426,7 +2443,8 @@
       "matte": {
         "param": "matte",
         "meaning": "pulls Gamma toward 1 per pixel: white applies the full Gamma, grey a gentler curve, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "temperature",
@@ -2528,7 +2546,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Temperature toward 0 per pixel: white applies the full shift, grey a milder one, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "lut",
@@ -2625,7 +2644,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "depth-of-field",
@@ -2989,7 +3009,8 @@
       "matte": {
         "param": "depth",
         "meaning": "a depth pass, not a strength: its luma is how far away each pixel is, and the blur widens with the distance from the focus depth — so a mid-grey matte can be perfectly sharp"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "channel-blur",
@@ -3131,7 +3152,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales all four blur radii per pixel: white blurs each channel at its full radius, grey narrower, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "transform",
@@ -3291,7 +3313,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "glow",
@@ -3437,7 +3460,8 @@
       "matte": {
         "param": "matte",
         "meaning": "gates which pixels may seed the halo, before the bright pass: light only escapes from where the matte is bright, but it still spills outward across dark matte — which fading the finished glow cannot do"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "shake",
@@ -3679,7 +3703,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "block-glitch",
@@ -3841,7 +3866,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Intensity per pixel: white glitches at the full Intensity, grey gently, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "scanlines",
@@ -3969,7 +3995,8 @@
       "matte": {
         "param": "matte",
         "meaning": "widens Line period per pixel: white keeps the set period, grey spreads the lines apart, black spreads them too far to see"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "datamosh",
@@ -4097,7 +4124,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "turbulent-displace",
@@ -4312,7 +4340,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the displacement per pixel: white warps at the full Amount, grey warps a little, black not at all — where a strength dissolve would blend a fully-warped picture over an unwarped one and show both edges at once"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "tile",
@@ -4479,7 +4508,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "offset",
@@ -4588,7 +4618,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the shift per pixel, read where the pixel lands: white slides the full distance, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "mirror",
@@ -4701,7 +4732,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "lens-distort",
@@ -4854,7 +4886,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the distortion per pixel, read where the pixel lands: white bends at the full Field of view, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "corner-pin",
@@ -5030,7 +5063,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the pull from the frame's own corners per pixel, read where the pixel lands: white moves it all the way to the pinned position, grey part way, black leaves it where it was"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "displacement-map",
@@ -5167,7 +5201,8 @@
       "matte": {
         "param": "matte",
         "meaning": "is the displacement map: the chosen channels of the matte layer say which way and how far each pixel is pushed, mid-grey meaning no push at all — the effect's subject rather than a strength applied to one"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "polar-coordinates",
@@ -5277,7 +5312,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "twirl",
@@ -5404,7 +5440,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Angle per pixel: white twirls the full Angle, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "spherize",
@@ -5534,7 +5571,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Bulge per pixel: white bulges the full amount, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "ripple",
@@ -5693,7 +5731,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Wave height per pixel: white ripples the full height, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "wave-warp",
@@ -5852,7 +5891,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Wave height per pixel: white slides the full height, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "bezier-warp",
@@ -6211,7 +6251,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the bend from the straight frame per pixel, read where the pixel lands: white bends it all the way, grey part way, black leaves it where it was"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "warp",
@@ -6358,7 +6399,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Bend and both distortions per pixel: white bends the full amount, grey less, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "fill",
@@ -6459,7 +6501,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "gradient",
@@ -6639,7 +6682,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "noise",
@@ -6768,7 +6812,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "fractal-noise",
@@ -7088,7 +7133,8 @@
           "cond": "bool_is",
           "value": true
         }
-      ]
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "beam",
@@ -7299,7 +7345,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "lightning",
@@ -7554,7 +7601,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the bolt's opacity per pixel: white draws the core and glow in          full, grey faintly, black nothing at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "radio-waves",
@@ -7820,7 +7868,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Opacity per pixel: white draws the waves in full, grey faintly,          black nothing at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "vegas",
@@ -8038,7 +8087,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Opacity per pixel: white draws the stroke in full, grey faintly,          black nothing at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "add-grain",
@@ -8240,7 +8290,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Intensity per pixel: white grains at the full Intensity, grey          more finely, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "scribble",
@@ -8466,7 +8517,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Opacity per pixel: white draws the scribble in full, grey          faintly, black nothing at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "stroke",
@@ -8655,7 +8707,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "echo",
@@ -8794,7 +8847,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Decay per pixel: the trail dies away sooner where the matte is dark and reaches its full length where it is white, so the ghosts are genuinely shorter rather than faded back"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "posterize-time",
@@ -8853,7 +8907,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "motion-blur",
@@ -8984,7 +9039,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Shutter angle per pixel: the open shutter shrinks toward the frame's own moment where the matte is dark, so part of the picture is blurred over half a frame and part is not blurred at all"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "fast-motion-blur",
@@ -9148,7 +9204,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Shutter angle per pixel: the streak is genuinely shorter where the matte is dark, gathering from nearer along the motion, rather than a long streak faded back over a sharp picture"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "matte-key",
@@ -9366,7 +9423,8 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte_role": "none"
     },
     {
       "slug": "set-matte",
@@ -9460,7 +9518,8 @@
           "default": false
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "broadcast-safe",
@@ -9584,7 +9643,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "camera-track",
@@ -9634,7 +9694,8 @@
           "default": true
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "invert",
@@ -9721,7 +9782,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "tint",
@@ -9836,7 +9898,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "curves",
@@ -10003,7 +10066,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "levels",
@@ -10319,7 +10383,8 @@
           ],
           "collapsed": true
         }
-      ]
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "brightness",
@@ -10429,7 +10494,8 @@
       "matte": {
         "param": "matte",
         "meaning": "pulls Brightness toward 0 and Contrast toward 0 per pixel: white applies both in full, black neither"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "hue-and-saturation",
@@ -10780,7 +10846,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales every range's Hue, Saturation and Lightness toward 0 per pixel: white applies them in full, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "posterize",
@@ -10882,7 +10949,8 @@
       "matte": {
         "param": "matte",
         "meaning": "pulls Levels toward 256 per pixel: white cuts the ladder at Levels, black leaves a step too fine to see"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "threshold",
@@ -10990,7 +11058,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "tritone",
@@ -11119,7 +11188,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "photo-filter",
@@ -11281,7 +11351,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Density per pixel: white holds the full Density of glass in front of the lens, black none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "black-and-white",
@@ -11457,7 +11528,8 @@
           "cond": "bool_is",
           "value": true
         }
-      ]
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "shadow-highlight",
@@ -11632,7 +11704,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Shadow amount and Highlight amount per pixel: white applies both in full, black neither"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "lens-flare",
@@ -12620,7 +12693,8 @@
       "matte": {
         "param": "matte",
         "meaning": "where the flare looks for its light sources, in Matte source mode: the parts of the matte brighter than Detect threshold are the lights, and everything else contributes nothing"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "drop-shadow",
@@ -12771,7 +12845,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the shadow's Opacity per pixel, read where the shadow falls:          white casts it in full, black casts none"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "roughen-edges",
@@ -13021,7 +13096,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Border per pixel: white chews the outline at the full Border,          grey takes finer bites, black leaves it alone"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "median",
@@ -13130,7 +13206,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Radius per pixel: white takes the middle of the full window,          grey of a smaller one, black leaves the pixel alone"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "mosaic",
@@ -13246,7 +13323,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "find-edges",
@@ -13340,7 +13418,8 @@
           "dividers_after": []
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "emboss",
@@ -13459,7 +13538,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Relief per pixel: white raises the full relief, grey a shallower          one, black leaves the sheet flat"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "texturize",
@@ -13635,7 +13715,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Relief per pixel: white lights the full relief, grey a shallower          one, black leaves the surface flat"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "linear-wipe",
@@ -13773,7 +13854,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Completion per pixel: the wipe is further along where the matte is bright, so a grey ramp is a gradient wipe and a black matte holds the frame back"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "radial-wipe",
@@ -13924,7 +14006,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Completion per pixel: the hand has swept further where the matte is bright, so a grey ramp opens the wedge unevenly and a black matte holds the frame back"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "venetian-blinds",
@@ -14054,7 +14137,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Completion per pixel: the slats stand further open where the matte is bright, so one part of the frame can be shut while another is wide open"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "iris-wipe",
@@ -14227,7 +14311,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales the iris radius per pixel: the polygon opens wide where the matte is bright and shuts to nothing where it is black, this effect having no Completion to scale"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "card-wipe",
@@ -14419,7 +14504,8 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Completion per pixel: the cards have turned further where the matte is bright, and it is asked per pixel, so a card can be half flipped and half standing"
-      }
+      },
+      "matte_role": "own"
     },
     {
       "slug": "slider-control",
@@ -14439,7 +14525,8 @@
           "slider_max": 100.0
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "angle-control",
@@ -14458,7 +14545,8 @@
           "dial_step": 15.0
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "checkbox-control",
@@ -14476,7 +14564,8 @@
           "default": false
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "colour-control",
@@ -14501,7 +14590,8 @@
           "slider_max": 4.0
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     },
     {
       "slug": "point-control",
@@ -14530,7 +14620,8 @@
           "slider_max": 2160.0
         }
       ],
-      "groups": []
+      "groups": [],
+      "matte_role": "none"
     }
   ]
 }

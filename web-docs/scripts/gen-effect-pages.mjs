@@ -243,7 +243,13 @@ function panelNotes(effect) {
   // comes from the effect's own declaration and a page cannot describe a matte
   // the engine stopped honouring. Either sentence supplies its own full stop
   // when it already ends in one, so the page never gets two.
-  const matteRow = effect.params.find((p) => p.id === (effect.matte?.param ?? "matte"));
+  // An effect with no universal matte (matte_role "none") owns any row that
+  // happens to be called Matte - Set matte's is the effect's subject - and the
+  // strength sentence would be false on it.
+  const matteRow =
+    effect.matte_role === "none"
+      ? undefined
+      : effect.params.find((p) => p.id === (effect.matte?.param ?? "matte"));
   if (matteRow) {
     const meaning = (
       effect.matte?.meaning ?? "is an input to an effect, scaling the strength."

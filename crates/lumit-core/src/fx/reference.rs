@@ -63,6 +63,12 @@ pub struct Effect {
     /// thirty-odd times in thirty-odd tables.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matte: Option<Matte>,
+    /// The Matte row's role, spelled out: "strength", "own" or "none". The
+    /// manual needs the third value: Set matte declares no universal matte
+    /// (K-429) yet owns rows *called* Matte and Invert, and without the role
+    /// a generator that finds a param named `matte` prints the strength
+    /// sentence for an effect the dissolve never runs on.
+    pub matte_role: &'static str,
 }
 
 /// What one effect's Matte row means, when it is not simply strength.
@@ -338,6 +344,11 @@ fn effect(schema: &'static EffectSchema) -> Effect {
         matte: match schema.matte {
             super::schema::MatteRole::Own { param, meaning } => Some(Matte { param, meaning }),
             _ => None,
+        },
+        matte_role: match schema.matte {
+            super::schema::MatteRole::None => "none",
+            super::schema::MatteRole::Strength => "strength",
+            super::schema::MatteRole::Own { .. } => "own",
         },
         enabled_when: schema
             .enabled_when
