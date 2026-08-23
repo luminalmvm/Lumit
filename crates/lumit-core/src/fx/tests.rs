@@ -4,6 +4,7 @@ use super::*;
 use crate::anim::{Animation, Property};
 use crate::expression::ExpressionContext;
 use crate::model::{Composition, EffectInstance, EffectNamespace, EffectValue, Layer};
+use crate::time::Rational;
 
 // These tests are about *parameter resolution*, not about expressions, so they
 // call the resolvers without an expression context and get the detached one.
@@ -367,21 +368,26 @@ fn this_layer_effect_time_holds_the_stack_on_the_grid() {
         }
     }
     // 10 fps grid, no offset: t = 0.35 holds at 0.3.
-    assert!((this_layer_effect_time(std::slice::from_ref(&e), true, 0.35, 0.0) - 0.3).abs() < 1e-9);
+    assert!(
+        (this_layer_effect_time(std::slice::from_ref(&e), true, 0.35, Rational::ZERO) - 0.3).abs()
+            < 1e-9
+    );
     // The hold is computed on comp time `lt + start_offset` and mapped back, so a
     // layer offset by 1.0s still lands its held effects on the same comp grid:
     // held comp time floor(3.5)/10 = 0.3, minus the offset → -0.7.
     assert!(
-        (this_layer_effect_time(std::slice::from_ref(&e), true, -0.65, 1.0) - (-0.7)).abs() < 1e-9
+        (this_layer_effect_time(std::slice::from_ref(&e), true, -0.65, Rational::ONE) - (-0.7))
+            .abs()
+            < 1e-9
     );
     // Bypassed or plain stacks are untouched.
     assert_eq!(
-        this_layer_effect_time(std::slice::from_ref(&e), false, 0.35, 0.0),
+        this_layer_effect_time(std::slice::from_ref(&e), false, 0.35, Rational::ZERO),
         0.35
     );
     let blur = instantiate("blur").unwrap();
     assert_eq!(
-        this_layer_effect_time(std::slice::from_ref(&blur), true, 0.35, 0.0),
+        this_layer_effect_time(std::slice::from_ref(&blur), true, 0.35, Rational::ZERO),
         0.35
     );
 }
@@ -4566,7 +4572,7 @@ fn marker_context_builds_layer_local_ordered_beats() {
     // The local translation matches the resolver's own lt subtraction
     // exactly: a beat at comp second 1 and a frame evaluated there land
     // on the identical f64.
-    let lt = 1.0 - layer.start_offset.0.to_f64();
+    let lt = crate::time::layer_time(1.0, layer.start_offset.0);
     assert_eq!(ctx.beats[0], lt);
     // The obvious no-marker default (§1.4 graceful fallback).
     assert_eq!(MarkerContext::NONE.beats, Vec::<f64>::new());

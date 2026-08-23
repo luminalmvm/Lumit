@@ -3462,6 +3462,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   frame carries the stamp home, and anything stamped with an old value is thrown away rather
   than shown or filed. It is the render-queue equivalent of binning work that was started
   from an out-of-date brief.
+- **A moved layer keeps its cached frames, even a keyframed one.** A layer's own clock
+  is the composition's clock minus where the layer starts, and computers do that sum in
+  floating point, which is very slightly inexact: ten thirtieths minus three thirtieths
+  comes out a hair's breadth off seven thirtieths. A hair's breadth is enough to nudge every
+  animated value, and a nudged value means a different frame key, so dragging a keyframed
+  layer three frames along the timeline used to throw away nearly all of its cached frames
+  for no visible reason. Lumit now does that one subtraction in exact fractions and only
+  converts the answer afterwards, so the same moment in a layer's life always produces the
+  same numbers, wherever the layer sits.
 - **Mask editing in the Viewer** — select a layer with masks and its outlines draw
   over the picture in clay, with a square handle on every vertex. Drag a handle and
   the outline follows your cursor live; let go and the pixels update — one undo step

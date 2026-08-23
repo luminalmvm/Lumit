@@ -187,7 +187,7 @@ pub fn collect_comp_jobs(
         if !wanted.contains(&layer.id) || !in_span(layer) {
             continue;
         }
-        let lt = sample_times[idx] - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes
             // the composite below; solids/text/cameras rasterise elsewhere).

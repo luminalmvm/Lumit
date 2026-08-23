@@ -194,12 +194,12 @@ impl MarkerContext {
     /// (the v1 §1.4 scope — named-layer binding and label filters follow),
     /// each translated into the layer's local time, sorted ascending.
     pub fn for_layer(comp: &Composition, layer: &Layer) -> Self {
-        let off = layer.start_offset.0.to_f64();
+        let off = layer.start_offset.0;
         let mut beats: Vec<f64> = comp
             .markers
             .iter()
             .filter(|m| m.is_beat())
-            .map(|m| m.time.0.to_f64() - off)
+            .map(|m| crate::time::layer_time(m.time.0.to_f64(), off))
             .collect();
         beats.sort_by(f64::total_cmp);
         Self {

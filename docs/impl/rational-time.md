@@ -76,6 +76,15 @@ to 2⁵³, and den stays far below that (§3). Never convert f64 → Rational ex
 explicit grid-quantisation function (`Rational::from_f64_on_grid(x, grid_den)`), which
 rounds half-to-even on the grid. There must be **no** general `From<f64>`.
 
+A layer's local time is `comp time − start_offset`, and that subtraction is taken **on the
+grid**, not in f64: `lumit_core::time::layer_time(t, start_offset)` quantises `t` onto the
+flick grid, subtracts the rational offset exactly and converts once. In f64,
+`10/30 − 3/30` is a ulp away from `7/30`, and a ulp is enough to change every continuously
+sampled value (keyframes, seeds, source times, animated masks) and with it the frame key —
+so a moved keyframed layer would re-render frames whose picture had not changed. On-grid
+times with a zero offset come back bit-identical to the old subtraction, so banked keys
+survived the change without an algorithm-version bump.
+
 ## 5. Timebase newtypes
 
 ```rust

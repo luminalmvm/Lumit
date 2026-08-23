@@ -135,6 +135,21 @@ impl Rational {
     }
 }
 
+/// A layer's local time for comp time `t`: `t − start_offset`, taken on the
+/// flick grid rather than in f64 (docs/impl/rational-time.md §4). Plain f64
+/// subtraction is not exact — `10/30 − 3/30` differs from `7/30` in its last
+/// bit — so a moved keyframed layer would sample every animated value a ulp
+/// off and earn a different frame key for the same picture. Quantising `t`
+/// onto the grid, subtracting exactly and converting once gives bit-identical
+/// local time for equal rationals, so cached frames survive a move. An
+/// off-grid or overflowing `t` falls back to the plain subtraction.
+#[inline]
+pub fn layer_time(t: f64, start_offset: Rational) -> f64 {
+    Rational::from_f64_on_grid(t, Rational::FLICK_DEN)
+        .and_then(|q| q.checked_sub(start_offset))
+        .map_or(t - start_offset.to_f64(), Rational::to_f64)
+}
+
 fn round_ties_even(x: f64) -> f64 {
     let r = x.round();
     if (x - x.trunc()).abs() == 0.5 && r % 2.0 != 0.0 {
@@ -377,5 +392,46 @@ mod tests {
             let q = Rational::from_f64_on_grid(t.0.to_f64(), Rational::FLICK_DEN).unwrap();
             prop_assert_eq!(fr.frame_at(CompTime(q)), n);
         }
+    }
+
+    #[test]
+    fn layer_time_is_exact_and_preserves_on_grid_times() {
+        // The motivating case: 10/30 − 3/30 is not 7/30 in f64, but it is here.
+        let t = rat(10, 30).to_f64();
+        assert_ne!(t - rat(3, 30).to_f64(), rat(7, 30).to_f64());
+        assert_eq!(layer_time(t, rat(3, 30)), rat(7, 30).to_f64());
+        // With no offset, every on-grid frame time at every common rate comes
+        // back bit-identical to the old `t − 0.0`, so banked keys survive.
+        for (num, den) in [
+            (24, 1),
+            (25, 1),
+            (30, 1),
+            (50, 1),
+            (60, 1),
+            (120, 1),
+            (24000, 1001),
+            (30000, 1001),
+            (60000, 1001),
+        ] {
+            let fr = FrameRate::new(num, den).unwrap();
+            for f in 0..20_000 {
+                let t = fr.time_of_frame(f).unwrap().0.to_f64();
+                assert_eq!(layer_time(t, Rational::ZERO).to_bits(), t.to_bits());
+                if den == 1 {
+                    let t = f as f64 / fr.fps();
+                    assert_eq!(layer_time(t, Rational::ZERO).to_bits(), t.to_bits());
+                }
+            }
+        }
+        // Shifting by whole frames lands exactly on the unshifted local time.
+        let fr = FrameRate::new(30000, 1001).unwrap();
+        let off = fr.time_of_frame(3).unwrap().0;
+        for f in 0..2_000 {
+            let before = layer_time(fr.time_of_frame(f).unwrap().0.to_f64(), Rational::ZERO);
+            let after = layer_time(fr.time_of_frame(f + 3).unwrap().0.to_f64(), off);
+            assert_eq!(before.to_bits(), after.to_bits());
+        }
+        // Off the grid, it is the plain subtraction.
+        assert!(layer_time(f64::NAN, rat(1, 2)).is_nan());
     }
 }

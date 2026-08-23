@@ -265,7 +265,7 @@ fn tracked_source_at(
         return None;
     }
     let l = comp.layers.iter().find(|l| l.id == layer)?;
-    let lt = t - l.start_offset.0.to_f64();
+    let lt = crate::time::layer_time(t, l.start_offset.0);
     match &l.kind {
         LayerKind::Footage { item } => Some((*item, l.source_time_at(lt))),
         LayerKind::Precomp { comp: nested } => descend(doc, *nested, l.source_time_at(lt), depth),

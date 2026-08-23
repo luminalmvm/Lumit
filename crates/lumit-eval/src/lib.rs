@@ -238,7 +238,7 @@ fn feed_comp(
         if matches!(layer.kind, LayerKind::Camera { .. }) {
             continue; // folded in through camera_pose above
         }
-        let lt = t - layer.start_offset.0.to_f64();
+        let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
     Some(())
@@ -409,7 +409,7 @@ fn feed_effect_stack(
                         Some(src) => {
                             h.update(&[1]);
                             h.update(src.id.as_bytes());
-                            let slt = t - src.start_offset.0.to_f64();
+                            let slt = lumit_core::time::layer_time(t, src.start_offset.0);
                             feed_source(h, doc, comp, src, slt, t, quality, stamper, visited)?;
                             let dtr = &src.transform;
                             for v in [
@@ -593,7 +593,7 @@ fn feed_layer(
             .rev()
             .filter_map(|id| comp.layers.iter().find(|l| l.id == *id))
         {
-            let alt = t - ancestor.start_offset.0.to_f64();
+            let alt = lumit_core::time::layer_time(t, ancestor.start_offset.0);
             let atr = &ancestor.transform;
             for v in [
                 atr.position_x.value_at(alt),
@@ -800,7 +800,7 @@ fn feed_layer(
                     // discriminant joins the key (replacing K-125's bool byte).
                     mr.source.key_byte(),
                 ]);
-                let mlt = t - src.start_offset.0.to_f64();
+                let mlt = lumit_core::time::layer_time(t, src.start_offset.0);
                 feed_source(h, doc, comp, src, mlt, t, quality, stamper, visited)?;
                 let mtr = &src.transform;
                 for v in [
@@ -1504,6 +1504,41 @@ mod tests {
         // Trimming the bar without crossing t changes nothing either.
         let c = comp_with(vec![text_layer("hi", 0.0, 3.0, 0.0)]);
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &c, 1.0));
+    }
+
+    /// Backlog 7.53: moving a *keyframed* layer keeps its keys too. Layer time
+    /// is taken on the flick grid (`lumit_core::time::layer_time`), so the
+    /// opacity sampled at frame f+3 after a three-frame move is bit-identical
+    /// to the one at frame f before — a plain f64 subtraction is a ulp off on
+    /// most frames, and every one of those earned a new key.
+    #[test]
+    fn time_shifted_keyframed_layer_keeps_its_keys() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        let doc = Document::new();
+        let kf = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let fr = FrameRate::new(30, 1).unwrap();
+        let fade = |offset_s: f64| {
+            let mut l = text_layer("hi", offset_s, offset_s + 4.0, offset_s);
+            l.transform.opacity = Property {
+                extra: serde_json::Map::new(),
+                animation: Animation::Keyframed(vec![kf(0, 0.0), kf(1, 37.0), kf(4, 100.0)]),
+            };
+            l
+        };
+        let mut before = comp_with(vec![fade(0.0)]);
+        before.frame_rate = fr;
+        let mut after = comp_with(vec![fade(0.1)]);
+        after.frame_rate = fr;
+        for f in 0..120 {
+            let t0 = fr.time_of_frame(f).unwrap().0.to_f64();
+            let t3 = fr.time_of_frame(f + 3).unwrap().0.to_f64();
+            assert_eq!(key(&doc, &before, t0), key(&doc, &after, t3), "frame {f}");
+        }
     }
 
     /// GEN-3 (K-153): a layer may sit across the comp boundaries — starting
